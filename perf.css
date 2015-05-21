@@ -1,0 +1,105 @@
+@font-face {
+    font-family: 'Fira Sans';
+    font-style: normal;
+    font-weight: 300;
+    src: local('Fira Sans Light'), url("http://www.ncameron.org/fonts/FiraSans-Light.woff") format('woff');
+}
+@font-face {
+    font-family: 'Fira Sans';
+    font-style: normal;
+    font-weight: 400;
+    src: local('Fira Sans'), url("http://www.ncameron.org/fonts/FiraSans-Regular.woff") format('woff');
+}
+@font-face {
+    font-family: 'Fira Sans';
+    font-style: normal;
+    font-weight: 500;
+    src: local('Fira Sans Medium'), url("http://www.ncameron.org/fonts/FiraSans-Medium.woff") format('woff');
+}
+
+div.clear {
+    clear: both;
+}
+body {
+    font-family: 'Fira Sans', "Helvetica Neue", Helvetica, Arial, sans-serif;
+    margin-top: 20px;
+    margin-bottom: 10px;
+    max-width: 1000px;
+}
+@media (min-width: 992px) {
+    body {
+        margin-left: 5%;
+    }
+}
+p {
+    margin-top: 1.2em;
+    margin-bottom: 1.2em;
+}
+p.narrow {
+    max-width: 640px;
+}
+span.settings {
+    display: inline-block;
+    vertical-align: top;
+    padding: 10px;
+}
+div.submit {
+    padding: 20px;
+    text-align: right;
+}
+li {
+    max-width: 580px;
+}
+a {
+  color: #428bca;
+  text-decoration: none;
+}
+a:hover,
+a:focus {
+  color: #2a6496;
+  text-decoration: underline;
+}
+a:focus {
+  outline: thin dotted;
+  outline: 5px auto -webkit-focus-ring-color;
+  outline-offset: -2px;
+}
+li {
+    margin-bottom: .5em;
+}
+h1 {
+    font-size: 2em;
+    margin-top: 1.2em;
+    margin-bottom: 0.5em;
+}
+
+ul {
+    padding-left: 30px;
+}
+
+h2 {
+    font-weight: 500;
+    font-size: 18.5px; /* gridfit */
+}
+h3 {
+    font-weight: 500;
+}
+
+img {
+  border: 0;
+}
+.container {
+  padding-right: 15px;
+  padding-left: 15px;
+  margin-right: auto;
+  margin-left: auto;
+}
+@media (min-width: 768px) {.container {
+    width: 750px;
+  }}
+@media (min-width: 992px) {.container {
+    width: 970px;
+  }}
+@media (min-width: 1200px) {.container {
+    width: 1170px;
+  }}

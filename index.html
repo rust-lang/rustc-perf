@@ -1,0 +1,182 @@
+<html>
+<head>
+<meta charset="utf-8">
+<title>rustc performance data</title>
+<link rel="stylesheet" type="text/css" href="perf.css">
+</head>
+<body class="container">
+    <div id="loading">loading...</div>
+    <canvas id="graph" width="1000" height="600" style="display: none">
+        Your web browser is old and weak and does not support Canvas. You should get a <a href="https://www.mozilla.org/en-US/firefox/new/">new one</a>.
+    </canvas>
+    <div id="legend"></div>
+    <div id="settings">
+        <span id="crates-outer" class="settings">
+            <h3>Crates</h3>
+            <div id="crates">loading...</div>
+        </span>
+        <span id="phases-outer" class="settings">
+            <h3>Phases</h3>
+            <div id="phases">loading...</div>
+        </span>
+        <span id="groupBy" class="settings">
+            <h3>Group by</h3>
+            <input type="radio" name="groupBy" id="group-by-crate" value="crate" checked="true">group by crate</input><br>
+            <input type="radio" name="groupBy" id="group-by-phase" value="phase">group by phase</input>
+        </span>
+        <span id="dates" class="settings">
+            <h3>Dates</h3>
+            start date: <input placeholder="yyyy-mm-dd" id="start-date"></input><br>
+            end date: <input placeholder="yyyy-mm-dd" id="end-date"></input>
+            <div class="submit">
+            <a href="#" onClick="remake_graph(); return false;">Submit</a>
+            </div>
+        </span>
+    </div>
+</body>
+    <script src="libs/Chart.min.js"></script>
+    <script src="libs/fetch.js"></script>
+    <script src="graph.js"></script>
+    <script>
+    // Get lists of the available crates and phases from the server and make
+    // the lists of checkboxes and other settings.
+    // Assumes the initial graph is total/total/by crate
+    function make_settings() {
+        return fetch("http://www.ncameron.org/perf/info", {}).then(function(response) {
+            response.json().then(function(data) {
+                var crates_html = "";
+                data.crates.sort();
+                for (c in data.crates) {
+                    var crate = data.crates[c];
+                    crates_html += "<input type=\"checkbox\" name=\"check-crate\" id=\"" + crate + "\">" + crate + "</input></br>";
+                }
+                crates_html += "<input checked=\"true\" type=\"checkbox\" id=\"check-crate-total\">total</input></br>";
+
+                var crate_div = document.getElementById("crates");
+                crate_div.innerHTML = crates_html;
+
+                var phases_html = "";
+                data.phases.sort();
+                for (p in data.phases) {
+                    var phase = data.phases[p];
+                    if (phase != "total") {
+                        phases_html += "<input type=\"checkbox\" name=\"check-phase\" id=\"" + phase + "\">" + phase + "</input></br>";
+                    }
+                }
+                phases_html += "<input checked=\"true\" type=\"checkbox\" id=\"check-phase-total\">total</input></br>";
+
+                var phase_div = document.getElementById("phases");
+                phase_div.innerHTML = phases_html;
+
+                document.getElementById("group-by-crate").checked = true;
+            });
+        }, function(err) {
+            document.getElementById("settings").innerHTML = "Error fetching info";
+            console.log("Error fetching info:");
+            console.log(err);
+        });        
+    }
+
+    // Make a graph!
+    function make_graph(crates, phases, group_by, start_date, end_date) {
+        var body = {
+            start: start_date,
+            end: end_date,
+            crates: crates,
+            phases: phases,
+            group_by: group_by
+        };
+        var init = {
+            method: "POST",
+            body: JSON.stringify(body),
+            mode: "cors"
+        };
+        fetch("http://www.ncameron.org/perf/data", init).then(function(response) {
+            response.json().then(function(data) {
+                var series = crates;
+                if (group_by == "phase") {
+                    series = phases;
+                }
+                init_graph(data, series);
+                document.getElementById("loading").style.display = "none";
+                document.getElementById("graph").style.display = "block";
+            });
+        }, function(err) {
+            document.getElementById("loading").innerHTML = "Error loading data";
+            console.log("Error fetching data:");
+            console.log(err);
+        });
+    }
+
+    // Read the various settings, then call make_graph.
+    function remake_graph() {
+        document.getElementById("loading").style.display = "block";
+        document.getElementById("graph").style.display = "none";
+
+        // crates and phases
+        function gatherChecks(name) {
+            var result = [];
+            var elements = document.getElementsByName(name);
+            for (var i = 0, l = elements.length; i < l; i++)
+            {
+                if (elements[i].checked)
+                {
+                    result.push(elements[i].id);
+                }
+            }
+            if (document.getElementById(name + "-total").checked) {
+                if (result.length == 0) {
+                    result = ["total"];
+                } else {
+                    document.getElementById(name + "-total").checked = false;
+                }
+            }
+
+            return result;
+        }
+
+        var crates = gatherChecks("check-crate");
+        var phases = gatherChecks("check-phase");
+
+        // dates
+        function getDate(id) {
+            var result = document.getElementById(id).value;
+            if (result) {
+                var as_date = new Date(result);
+                if (isNaN(as_date.getTime())) {
+                    result = "";
+                    document.getElementById(id).value = "Invalid date";
+                } else {
+                    result = as_date.toDateString();
+                }
+            }
+
+            return result;
+        }
+
+        var start_date = getDate("start-date");
+        var end_date = getDate("end-date");
+
+        // group by
+        var group_by;
+        var elements = document.getElementsByName("groupBy");
+        for (var i = 0, l = elements.length; i < l; i++)
+        {
+            if (elements[i].checked)
+            {
+                group_by = elements[i].value;
+                break;
+            }
+        }
+        if (!group_by) {
+            group_by = "crate";
+            document.getElementById("group-by-crate").checked = true;
+        }
+
+        make_graph(crates, phases, group_by, start_date, end_date);
+    }
+
+    make_settings();
+    make_graph(["total"], ["total"], "crate", "", "");
+    </script>
+</html>
