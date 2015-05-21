@@ -22,12 +22,14 @@ var async = require('async');
 var path = require("path");
 var fs = require('fs');
 var nodegit = require('nodegit');
+var sortedList = require('sortedlist');
 
 // Data stored by test name and date, each date maps to a table storing the times by crate and by phase.
 // See make_data() for the object layout.
 var data = {};
-data['rustc'] = {};
-data['benchmarks'] = {};
+var opts = { compare: function(x, y) { return x.date - y.date; }}
+data['rustc'] = sortedList.create(opts);
+data['benchmarks'] = sortedList.create(opts);
 var benchmarks = [];
 
 var last_date;
@@ -84,42 +86,55 @@ function read_files(repo_loc) {
             var contents = JSON.parse(fs.readFileSync(full_name, 'utf8'));
             var header = contents.header;
             var times = contents.times;
+            if (times.length == 0) {
+                return;
+            }
             var test_name = filename.substring(0, filename.indexOf('--'));
 
-            var date = new Date(header.date);
-            if (!data[test_name]) {
-                data[test_name] = {};
-                if (test_name != 'rustc') {
+            var date_components = [0, 0, 0, 0, 0, 0];
+            var actual_components = header.date.split('-');
+            for (i in actual_components) {
+                date_components[i] = parseInt(actual_components[i], 10);
+            }
+            if (date_components[1] > 0) {
+                date_components[1] -= 1;
+            }
+
+            var date = new Date(date_components[0],
+                                date_components[1],
+                                date_components[2],
+                                date_components[3],
+                                date_components[4],
+                                date_components[5]);
+
+            if (test_name == 'rustc') {
+                data['rustc'].insertOne(make_data(date, header, times, true));
+            } else {
+                if (benchmarks.indexOf(test_name) < 0) {
                     benchmarks.push(test_name);
                 }
-            }
-            if (test_name == 'rustc') {
-                data['rustc'][date] = make_data(header, times, true);
-            } else {
-                if (!data['benchmarks'][date]) {
-                    data['benchmarks'][date] = make_data(header, times, false);
+                var key = data['benchmarks'].key({date: date});
+                if (!key) {
+                    data['benchmarks'].insertOne(make_data(date, header, times, false));
                 } else {
-                    data['benchmarks'][date].by_crate[test_name] = make_times(times, false)[times[0].crate];
+                    data['benchmarks'][key].by_crate[test_name] = make_times(times, false)[times[0].crate];
                 }
             }
             if (!last_date || last_date < date) {
                 last_date = date;
             }
         });
-
-        console.log(benchmarks);
-        console.log(crate_list);
     });
 }
 
 
-function make_data(header, times, rustc_crate) {
+function make_data(date, header, times, rustc_crate) {
     if (!header || !times || times.length == 0) {
         return {};
     }
 
     return {
-        'date': header.date,
+        'date': date,
         'commit': header.commit,
         'by_crate': make_times(times, rustc_crate),
     };
@@ -166,6 +181,16 @@ function start_server() {
                 try {
                     var json = JSON.parse(body);
                     get_data(json, res);
+                } catch(e) {
+                    res.writeHead(200, {"Content-Type": "text/plain", "Access-Control-Allow-Origin": "*"});
+                    res.end("Error: " + e);
+                }
+            });
+        } else if (pathname == '/stats') {
+            combine_chunks(req, function(body) {
+                try {
+                    var json = JSON.parse(body);
+                    get_stats(json, res);
                 } catch(e) {
                     res.writeHead(200, {"Content-Type": "text/plain", "Access-Control-Allow-Origin": "*"});
                     res.end("Error: " + e);
@@ -247,28 +272,157 @@ function get_info(response) {
 //     start: Date,     // optional
 //     end: Date,       // optional
 //     crates: [str],   // crate == benchmarks for benchmark mode
+//     phases: [str]
+// }
+// crate (rustc only) or phase can be 'total'
+function get_stats(body, response) {
+    try {
+        var dates = start_and_end_dates(body);
+        var start = dates[0];
+        var end = dates[1];
+
+        var kind = body.kind;
+        if (kind != 'rustc' && kind != 'benchmarks') {
+            response.writeHead(200, {"Content-Type": "text/plain", "Access-Control-Allow-Origin": "*"});
+            response.end("Error: bad value kind: " + kind);
+            return;
+        }
+        var crates = body.crates;
+        var phases = body.phases;
+
+        if (kind != 'rustc' && crates.indexOf('total') >= 0) {
+            response.writeHead(200, {"Content-Type": "text/plain", "Access-Control-Allow-Origin": "*"});
+            response.end("Error: bad value crate for benchmarks");
+            return;
+        }
+
+        var result = {};
+        result.startDate = start;
+        result.endDate = end;
+
+        var counted = [];
+        var first_idx = 0;
+        var last_idx = 0;
+        // Iterate over date range.
+        var start_idx = mk_start_idx(start, kind);
+        var end_idx = mk_end_idx(end, kind);
+        for (var i = start_idx; i <= end_idx; ++i) {
+            var today_data = data[kind][i];
+            counted.push(today_data);
+
+            var empty = today_data.by_crate.length == 0;
+            if (!empty) {
+                last_idx = i;
+                if (first_idx == 0) {
+                    first_idx = i;
+                }
+            }
+        }
+        // Trim the data
+        counted = counted.slice(first_idx, last_idx+1);
+
+        result.crates = {};
+        for (var c in crates) {
+            result.crates[crates[c]] = mk_stats(counted, crates[c], phases);
+        }
+
+        response.writeHead(200, {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"});
+        response.end(JSON.stringify(result));
+    } catch (e) {
+        console.log(e);
+        response.writeHead(200, {"Content-Type": "text/plain", "Access-Control-Allow-Origin": "*"});
+        response.end("Error: " + e);
+    }
+}
+
+function mk_stats(data, crate, phases) {
+    var len = data.length;
+    var result = {};
+    if (len == 0) {
+        result.min = 0;
+        result.max = 0;
+        result.mean = 0;
+        result.variance = 0;
+        result.first = 0;
+        result.last = 0;
+        result.trend = 0;
+        result.trend_b = 0;
+        return result;
+    }
+    var min = sumTimes(data[0], crate, phases);
+    var max = min;
+    var q1 = Math.floor(len / 4);
+    var q4 = Math.floor(3 * len / 4);
+    var total = 0;
+    var q1Total = 0;
+    var q4Total = 0;
+    var sums = data.map(function(d) { return sumTimes(d, crate, phases) });
+    for (var i in data) {
+        var cur = sums[i];
+        total += cur;
+        if (cur < min) {
+            min = cur;
+        }
+        if (cur > max) {
+            max = cur;
+        }
+        if (i < q1) {
+            q1Total += cur;
+        }
+        if (i >= q4) {
+            q4Total += cur;
+        }
+    }
+
+    // Calculate the variance
+    result.mean = total / len;
+    var varTotal = 0;
+    for (var i in data) {
+        var diff = sums[i] - result.mean;
+        varTotal += diff * diff;
+    }
+    result.variance = varTotal / (len - 1);
+
+    result.min = min;
+    result.max = max;
+    result.first = sumTimes(data[0], crate, phases);
+    result.last = sumTimes(data[len-1], crate, phases);
+    if (len >= 10) {
+        var q1Mean = q1Total / q1;
+        var q4Mean = q4Total / (len - q4);
+        result.trend = 100 * (q4Mean - q1Mean) / result.mean;
+    } else {
+        result.trend = 0;
+    }
+    result.trend_b = 100 * (result.last - result.first) / result.mean;
+
+    return result;
+}
+
+function sumTimes(data, crate, phases) {
+    var c = data.by_crate[crate];
+    var sum = 0;
+    for (var p in phases) {
+        sum += c[phases[p]]['time'];
+    }
+
+    return sum;
+}
+
+// Expected fields on body: {
+//     kind: 'rustc' | 'benchmarks',
+//     start: Date,     // optional
+//     end: Date,       // optional
+//     crates: [str],   // crate == benchmarks for benchmark mode
 //     phases: [str],
 //     group_by: 'crate' | 'phase'
 // }
-// crate or phase can be 'total'
+// crate (rustc only) or phase can be 'total'
 function get_data(body, response) {
     try {
-        // Handle missing end by using the last available date.
-        var end = body.end;
-        if (end) {
-            end = new Date(end);
-        } else {
-            end = last_date;
-        }
-        end.setHours(23,59,59,999);
-        // Handle missing start by returning 60 days before end.
-        var start = body.start;
-        if (start) {
-            start = new Date(start);
-        } else {
-            start = new Date();
-            start.setDate(end.getDate() - 60);
-        }
+        var dates = start_and_end_dates(body);
+        var start = dates[0];
+        var end = dates[1];
 
         var kind = body.kind;
         if (kind != 'rustc' && kind != 'benchmarks') {
@@ -285,12 +439,20 @@ function get_data(body, response) {
             return;
         }
 
+        if (kind != 'rustc' && (crates.indexOf('total') >= 0 || group_by == 'crate')) {
+            response.writeHead(200, {"Content-Type": "text/plain", "Access-Control-Allow-Origin": "*"});
+            response.end("Error: bad value crate for benchmarks");
+            return;
+        }
+
         var result = [];
         var first_idx = 0;
         var last_idx = 0;
         // Iterate over date range.
-        for (var d = start, i = 0; start <= end; d.setDate(d.getDate() + 1, ++i)) {
-            var today_data = get_data_for_date(kind, d, crates, phases, group_by);
+        var start_idx = mk_start_idx(start, kind);
+        var end_idx = mk_end_idx(end, kind);
+        for (var i = start_idx; i <= end_idx; ++i) {
+            var today_data = get_data_for_date(kind, i, crates, phases, group_by);
             result.push(today_data);
 
             var empty = Object.keys(today_data.data).length == 0;
@@ -301,37 +463,64 @@ function get_data(body, response) {
                 }
             }
         }
-
         // Trim the data
         result = result.slice(first_idx, last_idx+1);
 
         response.writeHead(200, {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"});
         response.end(JSON.stringify(result));
-        return;
     } catch (e) {
         console.log(e);
         response.writeHead(200, {"Content-Type": "text/plain", "Access-Control-Allow-Origin": "*"});
         response.end("Error: " + e);
-        return;
     }
 }
 
-function get_data_for_date(kind, date, crates, phases, group_by) {
-    var day = data[kind][date];
-    if (!day || Object.keys(day).length == 0) {
-        // No data for that date.
-        return {
-            'date': date.toDateString(),
-            'commit': '',
-            'data': {},
-        };
+function mk_start_idx(start, kind) {
+    var start_idx = data[kind].bsearch({date: start});
+    if (start_idx < 0) {
+        start_idx = 0;
+    }
+    return start_idx;
+}
+
+function mk_end_idx(end, kind) {
+    var end_idx = data[kind].bsearch({date: end});
+    if (end_idx < 0 || end_idx >= data[kind].length) {
+        end_idx = data[kind].length - 1;
+    }
+    return end_idx;
+}
+
+function start_and_end_dates(body) {
+    // Handle missing end by using the last available date.
+    var end = body.end;
+    if (end) {
+        end = new Date(end);
+    } else {
+        end = last_date;
     }
 
+    // Handle missing start by returning 60 days before end.
+    var start = body.start;
+    if (start) {
+        start = new Date(start);
+    } else {
+        start = new Date();
+        start.setDate(end.getDate() - 60);
+    }
+
+    return [start, end];
+}
+
+function get_data_for_date(kind, index, crates, phases, group_by) {
+    var day = data[kind][index];
+
     var result = {
-        'date': day.date,
+        'date': day.date.toString(),
         'commit': day.commit,
         'data': {},
     };
+
     if (group_by == 'crate') {
         for (var c in crates) {
             var crate = crates[c];
