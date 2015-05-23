@@ -114,7 +114,7 @@ function read_files(repo_loc) {
                     benchmarks.push(test_name);
                 }
                 var key = data['benchmarks'].key({date: date});
-                if (!key) {
+                if (key == null) {
                     data['benchmarks'].insertOne(make_data(date, header, times, false));
                 } else {
                     data['benchmarks'][key].by_crate[test_name] = make_times(times, false)[times[0].crate];
@@ -146,7 +146,7 @@ function make_times(times, rustc_crate) {
     times.map(function(t) {
         by_crate[t.crate] = t.times;
         by_crate[t.crate]['total'] = {
-            "percent": 100, 
+            "percent": 100,
             "time": t.total
         };
         for (var phase in by_crate[t.crate]) {
@@ -233,6 +233,9 @@ function on_push(json) {
     // to read the added file from json and just read that file, adding it to data.
     console.log("received onpush hook")
     data = {};
+    data['rustc'] = sortedList.create(opts);
+    data['benchmarks'] = sortedList.create(opts);
+    benchmarks = [];
     init(get_repo_arg(), function() {});
 }
 
@@ -297,11 +300,12 @@ function get_stats(body, response) {
         }
 
         var result = {};
+        // These should get overwritten with more accurate data later.
         result.startDate = start;
         result.endDate = end;
 
         var counted = [];
-        var first_idx = 0;
+        var first_idx = -1;
         var last_idx = 0;
         // Iterate over date range.
         var start_idx = mk_start_idx(start, kind);
@@ -313,13 +317,15 @@ function get_stats(body, response) {
             var empty = today_data.by_crate.length == 0;
             if (!empty) {
                 last_idx = i;
-                if (first_idx == 0) {
+                result.endDate = today_data.date;
+                if (first_idx < 0) {
                     first_idx = i;
+                    result.startDate = today_data.date;
                 }
             }
         }
         // Trim the data
-        counted = counted.slice(first_idx, last_idx+1);
+        counted = counted.slice(Math.max(first_idx, 0), last_idx+1);
 
         result.crates = {};
         for (var c in crates) {
@@ -336,9 +342,19 @@ function get_stats(body, response) {
 }
 
 function mk_stats(data, crate, phases) {
-    var len = data.length;
     var result = {};
-    if (len == 0) {
+    var len = data.length;
+    var count = 0;
+    var skip_list = data.map(function(d) {
+        if (d.by_crate[crate] && Object.keys(d.by_crate[crate]).length > 0) {
+            count += 1;
+            return false;
+        } else {
+            return true;
+        }
+    });
+
+    if (count == 0) {
         result.min = 0;
         result.max = 0;
         result.mean = 0;
@@ -347,17 +363,37 @@ function mk_stats(data, crate, phases) {
         result.last = 0;
         result.trend = 0;
         result.trend_b = 0;
+        result.n = 0;
         return result;
     }
-    var min = sumTimes(data[0], crate, phases);
-    var max = min;
+
+    var first = 0;
+    for (var i in skip_list) {
+        if (!skip_list[i]) {
+            first = i;
+            break;
+        }
+    }
+    result.first = sumTimes(data[first], crate, phases);
+    result.last = sumTimes(data[len-1], crate, phases);
+    var min = result.first;
+    var max = result.first;
     var q1 = Math.floor(len / 4);
     var q4 = Math.floor(3 * len / 4);
     var total = 0;
     var q1Total = 0;
     var q4Total = 0;
-    var sums = data.map(function(d) { return sumTimes(d, crate, phases) });
+    var sums = data.map(function(d, i) {
+        if (skip_list[i]) {
+            return 0;
+        }
+
+        return sumTimes(d, crate, phases);
+    });
     for (var i in data) {
+        if (skip_list[i]) {
+            continue;
+        }
         var cur = sums[i];
         total += cur;
         if (cur < min) {
@@ -375,19 +411,21 @@ function mk_stats(data, crate, phases) {
     }
 
     // Calculate the variance
-    result.mean = total / len;
+    result.mean = total / count;
     var varTotal = 0;
     for (var i in data) {
+        if (skip_list[i]) {
+            continue;
+        }
         var diff = sums[i] - result.mean;
         varTotal += diff * diff;
     }
-    result.variance = varTotal / (len - 1);
+    result.variance = varTotal / (count - 1);
 
+    result.n = count;
     result.min = min;
     result.max = max;
-    result.first = sumTimes(data[0], crate, phases);
-    result.last = sumTimes(data[len-1], crate, phases);
-    if (len >= 10) {
+    if (count >= 10 && count == len) {
         var q1Mean = q1Total / q1;
         var q4Mean = q4Total / (len - q4);
         result.trend = 100 * (q4Mean - q1Mean) / result.mean;
@@ -428,6 +466,7 @@ function get_data(body, response) {
         if (kind != 'rustc' && kind != 'benchmarks') {
             response.writeHead(200, {"Content-Type": "text/plain", "Access-Control-Allow-Origin": "*"});
             response.end("Error: bad value kind: " + kind);
+            console.log("Error: bad value kind: " + kind);
             return;
         }
         var crates = body.crates;
@@ -436,12 +475,7 @@ function get_data(body, response) {
         if (group_by != 'crate' && group_by != 'phase') {
             response.writeHead(200, {"Content-Type": "text/plain", "Access-Control-Allow-Origin": "*"});
             response.end("Error: bad value group_by: " + group_by);
-            return;
-        }
-
-        if (kind != 'rustc' && (crates.indexOf('total') >= 0 || group_by == 'crate')) {
-            response.writeHead(200, {"Content-Type": "text/plain", "Access-Control-Allow-Origin": "*"});
-            response.end("Error: bad value crate for benchmarks");
+            console.log("Error: bad value group_by: " + group_by);
             return;
         }
 

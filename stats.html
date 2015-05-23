@@ -1,0 +1,109 @@
+<html>
+<head>
+<meta charset="utf-8">
+<title>rustc performance data</title>
+<link rel="stylesheet" type="text/css" href="perf.css">
+</head>
+<body class="container">
+    <div>See also <a href="index.html">graphs</a>.</div>
+    <div>
+        <br><input type="radio" name="kind" checked="true" value="benchmarks">benchmarks<br>
+        <input type="radio" name="kind" value="rustc">bootstrap        
+    </div>
+    <div id="loading" style="display: none">loading...</div>
+    <div id="content" style="display: none"></div>
+    <div id="settings">
+        <span id="crates-outer" class="settings">
+            <h3 id="crates_label">Benchmarks</h3>
+            <div id="benchmarks">loading...</div>
+            <div id="crates" style="display: none">loading...</div>
+        </span>
+        <span id="phases-outer" class="settings">
+            <h3>Phases</h3>
+            <div id="phases">loading...</div>
+        </span>
+        <span id="dates" class="settings">
+            <h3>Dates</h3>
+            start date: <input placeholder="yyyy-mm-dd" id="start-date"></input><br>
+            end date: <input placeholder="yyyy-mm-dd" id="end-date"></input>
+            <div class="submit">
+            <a href="#" onClick="remake_stats(); return false;">Submit</a>
+            </div>
+        </span>
+    </div>
+</body>
+    <script src="libs/fetch.js"></script>
+    <script src="shared.js"></script>
+    <script>
+    function populate_stats(data) {
+        var startDate = new Date(data.startDate);
+        var endDate = new Date(data.endDate);
+        var html = "<h2>" + startDate.toLocaleString() + " to " + endDate.toLocaleString() + "</h2>";
+        for (var c in data.crates) {
+            var crate = data.crates[c];
+            html += "<h3>" + c + "</h3>";
+            html += "<p>"
+            html += "mean: " + crate.mean.toFixed(2) + "s&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
+            html += "min: " + crate.min.toFixed(2) + "s&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
+            html += "max: " + crate.max.toFixed(2) + "s&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
+            html += "variance: " + crate.variance.toFixed(4) + "s^2&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
+            html += "n: " + crate.n + "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
+            html += "first: " + crate.first.toFixed(2) + "s&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
+            html += "last: " + crate.last.toFixed(2) + "s&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
+            html += "trend: " + crate.trend.toFixed(0) + "%/" + crate.trend_b.toFixed(0) + "%";
+            html += "</p>"
+            console.log(crate);
+        }
+        document.getElementById("content").innerHTML = html;
+        document.getElementById("content").style.display = "block";
+    }
+
+    function make_stats(crates, benchmarks, phases, start_date, end_date) {
+        document.getElementById("loading").innerHTML = "loading...";
+        document.getElementById("loading").style.display = "block";
+
+        var kind = get_kind();
+        var body = {
+            start: start_date,
+            end: end_date,
+            kind: kind,
+            crates: kind == "rustc" ? crates : benchmarks,
+            phases: phases,
+        };
+        var init = {
+            method: "POST",
+            body: JSON.stringify(body),
+            mode: "cors"
+        };
+        fetch("http://www.ncameron.org/perf/stats", init).then(function(response) {
+            response.json().then(function(data) {
+                populate_stats(data);
+                document.getElementById("loading").style.display = "none";
+            });
+        }, function(err) {
+            document.getElementById("loading").innerHTML = "Error loading data";
+            console.log("Error fetching data:");
+            console.log(err);
+        });
+    }
+
+    // Read the various settings, then call make_graph.
+    function remake_stats() {
+        document.getElementById("content").style.display = "none";
+
+        // crates and phases
+        var crates = gatherChecks("check-crate");
+        var benchmarks = gatherChecks("check-bench");
+        var phases = gatherChecks("check-phase");
+
+        // dates
+        var start_date = getDate("start-date");
+        var end_date = getDate("end-date");
+
+        make_stats(crates, benchmarks, phases, start_date, end_date);
+    }
+
+    radio_handler();
+    make_settings();
+    </script>
+</html>
