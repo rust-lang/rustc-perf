@@ -178,7 +178,7 @@ function init_graph(data, series) {
         var datum = data[d];
 
         var date = new Date(datum.date);
-        labels.push(date.toDateString());
+        labels.push(date.toLocaleString());
 
         for (var i in series) {
             if (series[i] in datum.data) {
