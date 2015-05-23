@@ -47,24 +47,33 @@ function getDate(id) {
 }
 
 function gatherChecks(name) {
+    if (document.getElementById(name + "-total") && document.getElementById(name + "-total").checked) {
+        return ["total"];
+    }
     var result = [];
     var elements = document.getElementsByName(name);
-    for (var i = 0, l = elements.length; i < l; i++)
-    {
+    for (var i in elements) {
         if (elements[i].checked)
         {
             result.push(elements[i].id);
         }
     }
-    if (name != "check-bench" && document.getElementById(name + "-total").checked) {
-        if (result.length == 0) {
-            result = ["total"];
-        } else {
-            document.getElementById(name + "-total").checked = false;
-        }
-    }
 
     return result;
+}
+
+function addTotalHandler(name) {
+    var elements = document.getElementsByName(name);
+    for (var i in elements) {
+        elements[i].onclick = function() {
+            document.getElementById(name + "-total").checked = false;
+        };
+    }
+    document.getElementById(name + "-total").onclick = function() {
+        for (var i in elements) {
+            elements[i].checked = false;
+        }
+    };
 }
 
 // Get lists of the available crates and phases from the server and make
@@ -111,6 +120,9 @@ function make_settings(callback) {
             if (document.getElementById("group-by-crate")) {
                 groupByCrate.checked = true;
             }
+
+            addTotalHandler("check-crate");
+            addTotalHandler("check-phase");
 
             if (callback) {
                 callback();
