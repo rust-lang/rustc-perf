@@ -5,16 +5,13 @@
 <link rel="stylesheet" type="text/css" href="perf.css">
 </head>
 <body class="container">
-    <div>See also <a href="stats.html">stats</a>, <a href="compare.html">comparisons</a>.</div>
+    <div>See also <a href="index.html">graphs</a>, <a href="stats.html">stats</a>.</div>
     <div>
         <br><input type="radio" name="kind" checked="true" value="benchmarks">benchmarks<br>
         <input type="radio" name="kind" value="rustc">bootstrap        
     </div>
-    <div id="loading">loading...</div>
-    <canvas id="graph" width="1000" height="600" style="display: none">
-        Your web browser is old and weak and does not support Canvas. You should get a <a href="https://www.mozilla.org/en-US/firefox/new/">new one</a>.
-    </canvas>
-    <div id="legend"></div>
+    <div id="loading" style="display: none">loading...</div>
+    <div id="content" style="display: none"></div>
     <div id="settings">
         <span id="crates-outer" class="settings">
             <h3 id="crates_label">Benchmarks</h3>
@@ -32,25 +29,76 @@
         </span>
         <span id="dates" class="settings">
             <h3>Dates</h3>
-            start date: <input placeholder="yyyy-mm-dd" id="start-date"></input><br>
-            end date: <input placeholder="yyyy-mm-dd" id="end-date"></input>
+            <input id="date-a"></input><br>
+            <input id="date-b"></input>
             <div class="submit">
-            <a href="#" onClick="remake_graph(); return false;">Submit</a>
+            <a href="#" onClick="remake_data(); return false;">Submit</a>
             </div>
         </span>
     </div>
 </body>
-    <script src="libs/Chart.min.js"></script>
     <script src="libs/fetch.js"></script>
-    <script src="graph.js"></script>
     <script src="shared.js"></script>
     <script>
-    // Make a graph!
-    function make_graph(crates, benchmarks, phases, group_by, start_date, end_date) {
+    function populate_data(data) {
+        console.log(data);
+        if (data.length < 2) {
+            var html = "<p>Bad dates? Found " + data.length + " results</p>";
+            document.getElementById("content").innerHTML = html;
+            document.getElementById("content").style.display = "block";
+
+            for (var i in data) {
+                console.log(data[i]);
+            }
+
+            return;
+        }
+
+        var html = "";
+        var keys = Object.keys(data[0].data);
+        console.log(keys);
+        var div_keys = "<span class=\"compare\"><h2>&nbsp;</h2>";
+        for (var k in keys) {
+            div_keys += keys[k] + "<br>";
+        }
+        div_keys += "</span>";
+        html += div_keys
+
+        for (var i in data) {
+            var datum = data[i];
+            var div = "<span class=\"compare\">";
+            var date = new Date(datum.date);
+            div += "<h2>" + date.toLocaleString() + "</h2>";
+            for (var k in keys) {
+                div += datum.data[keys[k]].toFixed(2);
+                div += "s<br>";
+            }
+            div += "</span>";
+            html += div;
+        }
+
+        var div_percents = "<span class=\"compare\"><h2>&nbsp;</h2>";
+        for (var k in keys) {
+            var percent = 100*(data[1].data[keys[k]] - data[0].data[keys[k]])/data[0].data[keys[k]];
+            if (percent >= 0) {
+                div_percents += "+";
+            }
+            div_percents += percent.toFixed(1) + "%<br>";
+        }
+        div_percents += "</span>";
+        html += div_percents;
+
+        document.getElementById("content").innerHTML = html;
+        document.getElementById("content").style.display = "block";
+    }
+
+    function make_data(crates, benchmarks, phases, dates, group_by) {
+        document.getElementById("loading").innerHTML = "loading...";
+        document.getElementById("loading").style.display = "block";
+
         var kind = get_kind();
         var body = {
-            start: start_date,
-            end: end_date,
+            dates: dates,
             kind: kind,
             crates: kind == "rustc" ? crates : benchmarks,
             phases: phases,
@@ -61,15 +109,10 @@
             body: JSON.stringify(body),
             mode: "cors"
         };
-        fetch("http://www.ncameron.org/perf/data", init).then(function(response) {
+        fetch("http://www.ncameron.org/perf/get", init).then(function(response) {
             response.json().then(function(data) {
-                var series = kind == "rustc" ? crates : benchmarks;
-                if (group_by == "phase") {
-                    series = phases;
-                }
-                init_graph(data, series);
+                populate_data(data);
                 document.getElementById("loading").style.display = "none";
-                document.getElementById("graph").style.display = "block";
             });
         }, function(err) {
             document.getElementById("loading").innerHTML = "Error loading data";
@@ -79,10 +122,8 @@
     }
 
     // Read the various settings, then call make_graph.
-    function remake_graph() {
-        document.getElementById("loading").style.display = "block";
-        document.getElementById("graph").style.display = "none";
-        document.getElementById("legend").innerHTML = "";
+    function remake_data() {
+        document.getElementById("content").style.display = "none";
 
         // crates and phases
         var crates = gatherChecks("check-crate");
@@ -90,8 +131,8 @@
         var phases = gatherChecks("check-phase");
 
         // dates
-        var start_date = getDate("start-date");
-        var end_date = getDate("end-date");
+        var datea = getDate("date-a");
+        var dateb = getDate("date-b");
 
         // group by
         var group_by;
@@ -109,7 +150,7 @@
             document.getElementById("group-by-crate").checked = true;
         }
 
-        make_graph(crates, benchmarks, phases, group_by, start_date, end_date);
+        make_data(crates, benchmarks, phases, [datea, dateb], group_by);
     }
 
     radio_handler();
@@ -117,6 +158,5 @@
         document.getElementById("helloworld").checked = true;
         document.getElementById("regex.0.1.30").checked = true;
     });
-    make_graph(["total"], ["helloworld", "regex.0.1.30"], ["total"], "crate", "", "");
     </script>
 </html>

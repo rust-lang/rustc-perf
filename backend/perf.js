@@ -81,33 +81,42 @@ function read_files(repo_loc) {
         if (err) {
            throw err;
         }
+        var no_times = 0;
+        var c_bootstraps = 0;
+        var c_benchmarks = 0;
+        var c_benchmarks_add = 0;
         files.map(function (filename) {
             var full_name = path.resolve(__dirname, repo_loc, 'processed', filename);
             var contents = JSON.parse(fs.readFileSync(full_name, 'utf8'));
             var header = contents.header;
             var times = contents.times;
             if (times.length == 0) {
+                no_times += 1;
                 return;
             }
             var test_name = filename.substring(0, filename.indexOf('--'));
 
-            var date_components = [0, 0, 0, 0, 0, 0];
-            var actual_components = header.date.split('-');
-            for (i in actual_components) {
-                date_components[i] = parseInt(actual_components[i], 10);
-            }
-            if (date_components[1] > 0) {
-                date_components[1] -= 1;
-            }
+            var date = new Date(header.date);
+            if (isNaN(date)) {
+                var date_components = [0, 0, 0, 0, 0, 0];
+                var actual_components = header.date.split('-');
+                for (i in actual_components) {
+                    date_components[i] = parseInt(actual_components[i], 10);
+                }
+                if (date_components[1] > 0) {
+                    date_components[1] -= 1;
+                }
 
-            var date = new Date(date_components[0],
+                date = new Date(date_components[0],
                                 date_components[1],
                                 date_components[2],
                                 date_components[3],
                                 date_components[4],
                                 date_components[5]);
+            }
 
             if (test_name == 'rustc') {
+                c_bootstraps += 1;
                 data['rustc'].insertOne(make_data(date, header, times, true));
             } else {
                 if (benchmarks.indexOf(test_name) < 0) {
@@ -115,8 +124,10 @@ function read_files(repo_loc) {
                 }
                 var key = data['benchmarks'].key({date: date});
                 if (key == null) {
+                    c_benchmarks += 1;
                     data['benchmarks'].insertOne(make_data(date, header, times, false));
                 } else {
+                    c_benchmarks_add += 1;
                     data['benchmarks'][key].by_crate[test_name] = make_times(times, false)[times[0].crate];
                 }
             }
@@ -124,6 +135,11 @@ function read_files(repo_loc) {
                 last_date = date;
             }
         });
+        console.log("read", files.length, "files");
+        console.log("found", no_times, "files without times");
+        console.log(c_bootstraps, "bootstrap times");
+        console.log(c_benchmarks, "benchmarks times");
+        console.log(c_benchmarks_add, "benchmarks times (appended)");
     });
 }
 
@@ -175,12 +191,21 @@ function start_server() {
     http.createServer(function (req, res) {
         var parsed_url = url.parse(req.url, true);
         var pathname = parsed_url.pathname;
-        // TODO support getting breakdowns for single days
         if (pathname == '/data') {
             combine_chunks(req, function(body) {
                 try {
                     var json = JSON.parse(body);
                     get_data(json, res);
+                } catch(e) {
+                    res.writeHead(200, {"Content-Type": "text/plain", "Access-Control-Allow-Origin": "*"});
+                    res.end("Error: " + e);
+                }
+            });
+        } else if (pathname == '/get') {
+            combine_chunks(req, function(body) {
+                try {
+                    var json = JSON.parse(body);
+                    get_days(json, res);
                 } catch(e) {
                     res.writeHead(200, {"Content-Type": "text/plain", "Access-Control-Allow-Origin": "*"});
                     res.end("Error: " + e);
@@ -428,11 +453,11 @@ function mk_stats(data, crate, phases) {
     if (count >= 10 && count == len) {
         var q1Mean = q1Total / q1;
         var q4Mean = q4Total / (len - q4);
-        result.trend = 100 * (q4Mean - q1Mean) / result.mean;
+        result.trend = 100 * (q4Mean - q1Mean) / result.first;
     } else {
         result.trend = 0;
     }
-    result.trend_b = 100 * (result.last - result.first) / result.mean;
+    result.trend_b = 100 * (result.last - result.first) / result.first;
 
     return result;
 }
@@ -445,6 +470,51 @@ function sumTimes(data, crate, phases) {
     }
 
     return sum;
+}
+
+// Expected fields on body: {
+//     kind: 'rustc' | 'benchmarks',
+//     dates: [Date],
+//     crates: [str],   // crate == benchmarks for benchmark mode
+//     phases: [str],
+//     group_by: 'crate' | 'phase'
+// }
+// crate or phase can be 'total'
+function get_days(body, response) {
+    var kind = body.kind;
+    if (kind != 'rustc' && kind != 'benchmarks') {
+        response.writeHead(200, {"Content-Type": "text/plain", "Access-Control-Allow-Origin": "*"});
+        response.end("Error: bad value kind: " + kind);
+        console.log("Error: bad value kind: " + kind);
+        return;
+    }
+    var crates = body.crates;
+    var phases = body.phases;
+    var group_by = body.group_by;
+    if (group_by != 'crate' && group_by != 'phase') {
+        response.writeHead(200, {"Content-Type": "text/plain", "Access-Control-Allow-Origin": "*"});
+        response.end("Error: bad value group_by: " + group_by);
+        console.log("Error: bad value group_by: " + group_by);
+        return;
+    }
+
+    var result = [];
+    for (var i in body.dates) {
+        var date = new Date(body.dates[i]);
+        if (isNaN(date)) {
+            console.log("bad date:", body.dates[i]);
+            continue;
+        }
+        var idx = data[kind].bsearch({date: date});
+        if (idx < 0 || idx >= data[kind].length) {
+            idx = data[kind].length - 1;
+        }
+        var day = get_data_for_date(kind, idx, crates, phases, group_by);
+        result.push(day);
+    }
+
+    response.writeHead(200, {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"});
+    response.end(JSON.stringify(result));
 }
 
 // Expected fields on body: {
@@ -480,7 +550,7 @@ function get_data(body, response) {
         }
 
         var result = [];
-        var first_idx = 0;
+        var first_idx = -1;
         var last_idx = 0;
         // Iterate over date range.
         var start_idx = mk_start_idx(start, kind);
@@ -491,9 +561,9 @@ function get_data(body, response) {
 
             var empty = Object.keys(today_data.data).length == 0;
             if (!empty) {
-                last_idx = i;
-                if (first_idx == 0) {
-                    first_idx = i;
+                last_idx = i - start_idx;
+                if (first_idx == -1) {
+                    first_idx = i - start_idx;
                 }
             }
         }
@@ -539,8 +609,8 @@ function start_and_end_dates(body) {
     if (start) {
         start = new Date(start);
     } else {
-        start = new Date();
-        start.setDate(end.getDate() - 60);
+        start = new Date(end);
+        start.setDate(end.getDate() - 30);
     }
 
     return [start, end];

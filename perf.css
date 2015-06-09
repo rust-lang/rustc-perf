@@ -43,6 +43,11 @@ span.settings {
     vertical-align: top;
     padding: 10px;
 }
+span.compare {
+    display: inline-block;
+    vertical-align: top;
+    padding: 10px;
+}
 div.submit {
     padding: 20px;
     text-align: right;
