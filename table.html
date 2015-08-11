@@ -1,0 +1,94 @@
+<html>
+<head>
+<meta charset="utf-8">
+<title>rustc performance data</title>
+<link rel="stylesheet" type="text/css" href="perf.css">
+</head>
+<body class="container">
+    <div>See also <a href="index.html">graphs</a>, <a href="stats.html">stats</a>, <a href="compare.html">comparisons</a>, <a href="mem.html">memory graph</a>.</div>
+    <div>
+        <br><input type="radio" name="kind" checked="true" value="benchmarks">benchmarks<br>
+        <input type="radio" name="kind" value="rustc">bootstrap        
+    </div>
+    <div id="settings">
+        <span id="dates" class="settings">
+            <h3>Dates</h3>
+            date: <input placeholder="yyyy-mm-dd" id="date"></input><br>
+            <div class="submit">
+            <a href="#" onClick="remake_table(); return false;">Submit</a>
+            </div>
+        </span>
+    </div>
+    <div id="table"></div>
+</body>
+    <script src="shared.js"></script>
+    <script src="libs/fetch.js"></script>
+    <script>
+    // Read the various settings, then call make_table.
+    function remake_table() {
+        var kind = get_kind();
+        var date = getDate("date");
+
+        make_table(kind, date);
+    }
+
+    function make_table(kind, date) {
+        console.log(kind, date);
+        var body = {
+            date: date,
+            kind: kind
+        };
+        var init = {
+            method: "POST",
+            body: JSON.stringify(body),
+            mode: "cors"
+        };
+        fetch("http://www.ncameron.org/perf/get_tabular", init).then(function(response) {
+            response.json().then(function(data) {
+                populate_table(data);
+            });
+        }, function(err) {
+            console.log("Error fetching data:");
+            console.log(err);
+        });
+    }
+
+    function populate_table(data) {
+        console.log(data);
+
+        var html = "<p>date: " + data.date + "</p>";
+        html += "<p>commit: " + data.commit + "</p>";
+
+        if (data.data) {
+            // TODO total should be last (and should be labelled "total/max")
+            var rows = Object.keys(data.data).sort();
+            var cols = Object.keys(data.data[rows[0]]).sort();
+
+            html += "<table>";
+            html += "<tr><th></th>";
+            for (var c in cols) {
+                html += "<th>" + cols[c] + "</th>";
+            }
+            html += "</tr>";
+            for (var r in rows) {
+                html += "<tr><th>" + rows[r] + "</th>"
+                for (var c in cols) {
+                    var datum = data.data[rows[r]][cols[c]];
+                    var mem = datum.rss;
+                    var rss = "";
+                    if (mem) {
+                        rss = mem + "mb";
+                    }
+                    console.log(datum);
+                    html += "<td>" + datum.time.toFixed(2) + "s; " + rss + "</td>";
+                }
+                html += "</tr>"
+            }
+            html += "</table>";
+        }
+
+        document.getElementById("table").innerHTML = html;
+    }
+
+    </script>
+</html>

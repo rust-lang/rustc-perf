@@ -159,26 +159,43 @@ function make_data(date, header, times, rustc_crate) {
 function make_times(times, rustc_crate) {
     var by_crate = {};
     var totals = {}
-    times.map(function(t) {
-        by_crate[t.crate] = t.times;
+
+    for (i in times) {
+        var t = times[i];
+
+        var t_times = t.times;
+        var mem_values = [0];
+        if (t.rss) {
+            for (p in t_times) {
+                t_times[p].rss = t.rss[p];
+            }
+            mem_values = Object.keys(t.rss).map(function(v) { return t.rss[v]; });
+        }
+        by_crate[t.crate] = t_times;
+
+
         by_crate[t.crate]['total'] = {
             "percent": 100,
-            "time": t.total
+            "time": t.total,
+            "rss": Math.max.apply(null, mem_values)
         };
         for (var phase in by_crate[t.crate]) {
             if (!totals[phase]) {
                 totals[phase] = {
                     "percent": 0, 
-                    "time": 0                    
+                    "time": 0,
+                    "rss": 0
                 };
             }
             totals[phase].time += by_crate[t.crate][phase].time;
+            totals[phase].rss = Math.max(by_crate[t.crate][phase].rss, totals[phase].rss);
             record_phase(phase);
         }
         if (rustc_crate) {
             record_crate(t.crate);
         }
-    });
+    }
+
     // TODO percentages
     if (rustc_crate) {
         by_crate['total'] = totals;
@@ -206,6 +223,16 @@ function start_server() {
                 try {
                     var json = JSON.parse(body);
                     get_days(json, res);
+                } catch(e) {
+                    res.writeHead(200, {"Content-Type": "text/plain", "Access-Control-Allow-Origin": "*"});
+                    res.end("Error: " + e);
+                }
+            });
+        } else if (pathname == '/get_tabular') {
+            combine_chunks(req, function(body) {
+                try {
+                    var json = JSON.parse(body);
+                    get_tabular(json, res);
                 } catch(e) {
                     res.writeHead(200, {"Content-Type": "text/plain", "Access-Control-Allow-Origin": "*"});
                     res.end("Error: " + e);
@@ -519,11 +546,47 @@ function get_days(body, response) {
 
 // Expected fields on body: {
 //     kind: 'rustc' | 'benchmarks',
+//     date: Date
+// }
+function get_tabular(body, response) {
+    var kind = body.kind;
+    if (kind != 'rustc' && kind != 'benchmarks') {
+        response.writeHead(200, {"Content-Type": "text/plain", "Access-Control-Allow-Origin": "*"});
+        response.end("Error: bad value kind: " + kind);
+        console.log("Error: bad value kind: " + kind);
+        return;
+    }
+    var date = new Date(body.date);
+    if (isNaN(date)) {
+        response.writeHead(200, {"Content-Type": "text/plain", "Access-Control-Allow-Origin": "*"});
+        response.end("Error: bad date: " + body.date);
+        console.log("bad date:", body.date);
+        return;
+    }
+    var idx = data[kind].bsearch({date: date});
+    if (idx < 0 || idx >= data[kind].length) {
+        idx = data[kind].length - 1;
+    }
+
+    var day = data[kind][idx];
+
+    var result = {
+        'date': day.date.toString(),
+        'commit': day.commit,
+        'data': day.by_crate
+    };
+
+    response.writeHead(200, {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"});
+    response.end(JSON.stringify(result));
+}
+
+// Expected fields on body: {
+//     kind: 'rustc' | 'benchmarks',
 //     start: Date,     // optional
 //     end: Date,       // optional
 //     crates: [str],   // crate == benchmarks for benchmark mode
 //     phases: [str],
-//     group_by: 'crate' | 'phase'
+//     group_by: 'crate' | 'phase',
 // }
 // crate (rustc only) or phase can be 'total'
 function get_data(body, response) {
@@ -631,19 +694,25 @@ function get_data_for_date(kind, index, crates, phases, group_by) {
             if (crate in day.by_crate) {
                 var cur_crate = day.by_crate[crate];
                 var total = 0;
+                var mem = 0;
                 for (var p in phases) {
                     var phase = phases[p];
                     if (phase in cur_crate) {
                         total += cur_crate[phase]['time'];
+                        mem = Math.max(mem, cur_crate[phase]['rss']);
                     }
                 }
-                result.data[crates[c]] = total;
+                result.data[crates[c]] = {
+                    time: total,
+                    rss: mem
+                };
             }
         }
     } else {
         // group_by == 'phase'
         for (var p in phases) {
             var total = 0;
+            var mem = 0;
             var phase = phases[p];
             for (var c in crates) {
                 var crate = crates[c];
@@ -651,10 +720,14 @@ function get_data_for_date(kind, index, crates, phases, group_by) {
                     var cur_crate = day.by_crate[crate];
                     if (phase in cur_crate) {
                         total += cur_crate[phase]['time'];
+                        mem = Math.max(mem, cur_crate[phase]['rss']);
                     }
                 }
             }
-            result.data[phases[p]] = total;
+            result.data[phases[p]] = {
+                time: total,
+                rss: mem
+            };
         }
     }
 

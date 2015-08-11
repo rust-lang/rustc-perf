@@ -167,7 +167,11 @@ Chart.types.Line.extend({
     }
 });
 
-function init_graph(data, series) {
+function init_graph(data, series, field, total_label) {
+    if (!total_label) {
+        total_label = "total";
+    }
+
     var ctx = document.getElementById("graph").getContext("2d");
 
     var labels = [];
@@ -182,7 +186,11 @@ function init_graph(data, series) {
 
         for (var i in series) {
             if (series[i] in datum.data) {
-                values[i].push(datum.data[series[i]]);
+                if (field in datum.data[series[i]]) {
+                    values[i].push(datum.data[series[i]][field]);
+                } else {
+                    values[i].push(0);
+                }
             } else {
                 values[i].push(0);
             }
@@ -195,8 +203,12 @@ function init_graph(data, series) {
         var g = Math.floor(Math.random() * 100 + 155);
         var b = Math.floor(Math.random() * 100 + 155);
         var rgb = "" + r + "," + g + "," + b;
+        var label = series[i];
+        if (label == "total") {
+            label = total_label;
+        }
         datasets.push({
-            label: series[i],
+            label: label,
             fillColor: "rgba(" + rgb + ",0.2)",
             strokeColor: "rgba(" + rgb + ",1)",
             pointColor: "rgba(" + rgb + ",1)",

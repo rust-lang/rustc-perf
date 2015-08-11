@@ -5,7 +5,7 @@
 <link rel="stylesheet" type="text/css" href="perf.css">
 </head>
 <body class="container">
-    <div>See also <a href="index.html">graphs</a>, <a href="stats.html">stats</a>.</div>
+    <div>See also <a href="index.html">graphs</a>, <a href="stats.html">stats</a>, <a href="mem.html">memory graph</a>, <a href="table.html">table view</a>.</div>
     <div>
         <br><input type="radio" name="kind" checked="true" value="benchmarks">benchmarks<br>
         <input type="radio" name="kind" value="rustc">bootstrap        
@@ -41,7 +41,6 @@
     <script src="shared.js"></script>
     <script>
     function populate_data(data) {
-        console.log(data);
         if (data.length < 2) {
             var html = "<p>Bad dates? Found " + data.length + " results</p>";
             document.getElementById("content").innerHTML = html;
@@ -70,8 +69,11 @@
             var date = new Date(datum.date);
             div += "<h2>" + date.toLocaleString() + "</h2>";
             for (var k in keys) {
-                div += datum.data[keys[k]].toFixed(2);
-                div += "s<br>";
+                var value = datum.data[keys[k]];
+                if (value) {
+                    div += value.time.toFixed(2) + "s";
+                }
+                div += "<br>";
             }
             div += "</span>";
             html += div;
@@ -79,11 +81,17 @@
 
         var div_percents = "<span class=\"compare\"><h2>&nbsp;</h2>";
         for (var k in keys) {
-            var percent = 100*(data[1].data[keys[k]] - data[0].data[keys[k]])/data[0].data[keys[k]];
-            if (percent >= 0) {
-                div_percents += "+";
+            var value0 = data[0].data[keys[k]];
+            var value1 = data[1].data[keys[k]];
+            if (value0 && value1 && value0.time > 0) {
+                var percent = 100*(value1.time - value0.time)/value0.time;
+                if (percent >= 0) {
+                    div_percents += "+";
+                }
+                div_percents += percent.toFixed(1) + "%<br>";
+            } else {
+                div_percents += "<br>";
             }
-            div_percents += percent.toFixed(1) + "%<br>";
         }
         div_percents += "</span>";
         html += div_percents;

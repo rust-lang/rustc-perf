@@ -79,11 +79,14 @@ function addTotalHandler(name) {
 // Get lists of the available crates and phases from the server and make
 // the lists of checkboxes and other settings.
 // Assumes the initial graph is total/total/by crate
-function make_settings(callback) {
+function make_settings(callback, total_label) {
+    if (!total_label) {
+        total_label = "total";
+    }
     return fetch("http://www.ncameron.org/perf/info", {}).then(function(response) {
         response.json().then(function(data) {
             var crates_html = "";
-            crates_html += "<input checked=\"true\" type=\"checkbox\" id=\"check-crate-total\">total</input></br>";
+            crates_html += "<input checked=\"true\" type=\"checkbox\" id=\"check-crate-total\">" + total_label + "</input></br>";
             data.crates.sort();
             for (c in data.crates) {
                 var crate = data.crates[c];
@@ -104,7 +107,7 @@ function make_settings(callback) {
             bench_div.innerHTML = bench_html;
 
             var phases_html = "";
-            phases_html += "<input checked=\"true\" type=\"checkbox\" id=\"check-phase-total\">total</input></br>";
+            phases_html += "<input checked=\"true\" type=\"checkbox\" id=\"check-phase-total\">" + total_label + "</input></br>";
             data.phases.sort();
             for (p in data.phases) {
                 var phase = data.phases[p];
