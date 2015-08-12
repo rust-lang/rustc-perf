@@ -62,7 +62,6 @@
                 if (push_state) {
                     push_state_to_history(keys, [data[0].date, data[data.length - 1].date, kind, crates, phases, group_by]);
                 }
-
             });
         }, function(err) {
             document.getElementById("loading").innerHTML = "Error loading data";

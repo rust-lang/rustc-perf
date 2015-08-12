@@ -227,7 +227,6 @@ function dispatch_on_params(f, keys) {
     if (keys.map(k => params.has(k)).reduce((a, b) => a && b, true)) {
         var args = keys.map(k => get_param(k, params));
         args.push(false);
-        console.log(args);
         f.apply(null, args);
         return true;
     }
