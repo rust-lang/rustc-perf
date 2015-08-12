@@ -4,7 +4,7 @@
 <title>rustc performance data</title>
 <link rel="stylesheet" type="text/css" href="perf.css">
 </head>
-<body class="container">
+<body>
     <div>See also <a href="index.html">graphs</a>, <a href="stats.html">stats</a>, <a href="compare.html">comparisons</a>, <a href="mem.html">memory graph</a>.</div>
     <div>
         <br><input type="radio" name="kind" checked="true" value="benchmarks">benchmarks<br>
@@ -29,11 +29,10 @@
         var kind = get_kind();
         var date = getDate("date");
 
-        make_table(kind, date);
+        make_table(kind, date, true);
     }
 
-    function make_table(kind, date) {
-        console.log(kind, date);
+    function make_table(kind, date, push_state) {
         var body = {
             date: date,
             kind: kind
@@ -46,6 +45,10 @@
         fetch("http://www.ncameron.org/perf/get_tabular", init).then(function(response) {
             response.json().then(function(data) {
                 populate_table(data);
+
+                if (push_state) {
+                    history.pushState({kind: kind, date: data.date}, "", "?kind=" + kind + "&date=" + encodeURIComponent(data.date));
+                }
             });
         }, function(err) {
             console.log("Error fetching data:");
@@ -54,24 +57,29 @@
     }
 
     function populate_table(data) {
-        console.log(data);
-
         var html = "<p>date: " + data.date + "</p>";
         html += "<p>commit: " + data.commit + "</p>";
 
         if (data.data) {
-            // TODO total should be last (and should be labelled "total/max")
-            var rows = Object.keys(data.data).sort();
-            var cols = Object.keys(data.data[rows[0]]).sort();
+            var rows = Object.keys(data.data).sort(sort_with_total);
+            var cols = Object.keys(data.data[rows[0]]).sort(sort_with_total);
 
             html += "<table>";
             html += "<tr><th></th>";
             for (var c in cols) {
-                html += "<th>" + cols[c] + "</th>";
+                var label = cols[c];
+                if (label == "total") {
+                    label = "total / max"
+                }
+                html += "<th>" + label + "</th>";
             }
             html += "</tr>";
             for (var r in rows) {
-                html += "<tr><th>" + rows[r] + "</th>"
+                var label = rows[r];
+                if (label == "total") {
+                    label = "total / max"
+                }
+                html += "<tr><th>" + label + "</th>"
                 for (var c in cols) {
                     var datum = data.data[rows[r]][cols[c]];
                     var mem = datum.rss;
@@ -79,7 +87,6 @@
                     if (mem) {
                         rss = mem + "mb";
                     }
-                    console.log(datum);
                     html += "<td>" + datum.time.toFixed(2) + "s; " + rss + "</td>";
                 }
                 html += "</tr>"
@@ -90,5 +97,34 @@
         document.getElementById("table").innerHTML = html;
     }
 
+    function sort_with_total(a, b) {
+        if (a == "total") {
+            return 1;
+        }
+        if (b == "total") {
+            return -1;
+        }
+        if (a == b) { return 0; }
+        if (a < b) { return -1; }
+        return 1;
+    }
+
+    // Respond to back/forwards properly.
+    window.onpopstate = function(ev) {
+        var state = ev.state;
+        if (state) {
+            make_table(state.kind, state.date, false);
+        } else {
+            document.getElementById("table").innerHTML = "";
+        }
+    };
+
+    // Load the page from a URL.
+    if (window.location.search) {
+        var params = new URLSearchParams(window.location.search.substring(1));
+        if (params.has("kind") && params.has("date")) {
+            make_table(params.get("kind"), params.get("date"), false);
+        }
+    }
     </script>
 </html>

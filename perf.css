@@ -52,6 +52,9 @@ div.submit {
     padding: 20px;
     text-align: right;
 }
+table {
+    font-size: small;
+}
 li {
     max-width: 580px;
 }
