@@ -137,3 +137,63 @@ function make_settings(callback, total_label) {
         console.log(err);
     });        
 }
+
+// A bunch of helper functions for helping with keeping URLs up to date and
+// interacting with the browser history.
+
+function dispatch_on_state(f, state, keys) {
+    if (state) {
+        var args = keys.map(k => state[k]);
+        args.push(false);
+        f.apply(null, args);
+        return true;
+    }
+    return false;
+}
+
+function dispatch_on_params(f, keys) {
+    if (!window.location.search) {
+        return false;
+    }
+    var params = new URLSearchParams(window.location.search.substring(1));
+    if (keys.map(k => params.has(k)).reduce((a, b) => a && b, true)) {
+        var args = keys.map(k => params.get(k));
+        args.push(false);
+        f.apply(null, args);
+        return true;
+    }
+    return false;
+}
+
+function push_state_to_history(keys, values) {
+    var state = {};
+    for (k in keys) {
+        state[keys[k]] = values[k];
+    }
+    history.pushState(state, "", query_string_for_state(state));
+}
+
+function query_string_for_state(state) {
+    var result = "?";
+    for (k in state) {
+        if (result.length > 1) {
+            result += "&";
+        }
+        result += k + "=" + encodeURIComponent(state[k]);
+    }
+    return result;
+}
+
+// This one is for making the request we send to the backend.
+function make_request(keys, values) {
+    var body = {};
+    for (k in keys) {
+        body[keys[k]] = values[k];
+    }
+
+    return {
+        method: "POST",
+        body: JSON.stringify(body),
+        mode: "cors"
+    };
+}

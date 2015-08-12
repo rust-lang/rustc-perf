@@ -33,21 +33,12 @@
     }
 
     function make_table(kind, date, push_state) {
-        var body = {
-            date: date,
-            kind: kind
-        };
-        var init = {
-            method: "POST",
-            body: JSON.stringify(body),
-            mode: "cors"
-        };
-        fetch("http://www.ncameron.org/perf/get_tabular", init).then(function(response) {
+        fetch("http://www.ncameron.org/perf/get_tabular", make_request(keys, [kind, date])).then(function(response) {
             response.json().then(function(data) {
                 populate_table(data);
 
                 if (push_state) {
-                    history.pushState({kind: kind, date: data.date}, "", "?kind=" + kind + "&date=" + encodeURIComponent(data.date));
+                    push_state_to_history(keys, [kind, data.date]);
                 }
             });
         }, function(err) {
@@ -109,22 +100,19 @@
         return 1;
     }
 
+    var keys = ["kind", "date"];
+
     // Respond to back/forwards properly.
     window.onpopstate = function(ev) {
         var state = ev.state;
-        if (state) {
-            make_table(state.kind, state.date, false);
-        } else {
-            document.getElementById("table").innerHTML = "";
+        if (!dispatch_on_state(make_table, state, keys)) {
+            if (!dispatch_on_params(make_table, keys)) {
+                document.getElementById("table").innerHTML = "";
+            }
         }
     };
 
     // Load the page from a URL.
-    if (window.location.search) {
-        var params = new URLSearchParams(window.location.search.substring(1));
-        if (params.has("kind") && params.has("date")) {
-            make_table(params.get("kind"), params.get("date"), false);
-        }
-    }
+    dispatch_on_params(make_table, keys);
     </script>
 </html>
