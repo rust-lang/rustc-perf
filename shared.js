@@ -235,7 +235,7 @@ function dispatch_on_params(f, keys) {
 
 function get_param(key, params) {
     var result = params.get(key);
-    if (key == "crates" || key == "phases") {
+    if (key == "crates" || key == "phases" || key == "dates") {
         result = result.split(',');
     }
     return result;
@@ -246,7 +246,8 @@ function push_state_to_history(keys, values) {
     for (k in keys) {
         state[keys[k]] = values[k];
     }
-    history.pushState(state, "", query_string_for_state(state));
+    var query_string = query_string_for_state(state);
+    history.pushState(state, "", query_string);
 }
 
 function query_string_for_state(state) {

@@ -29,8 +29,8 @@
         </span>
         <span id="dates" class="settings">
             <h3>Dates</h3>
-            <input id="date-a"></input><br>
-            <input id="date-b"></input>
+            <input id="date-a" placeholder="yyyy-mm-dd"></input><br>
+            <input id="date-b" placeholder="yyyy-mm-dd"></input>
             <div class="submit">
             <a href="#" onClick="remake_data(); return false;">Submit</a>
             </div>
@@ -46,16 +46,11 @@
             document.getElementById("content").innerHTML = html;
             document.getElementById("content").style.display = "block";
 
-            for (var i in data) {
-                console.log(data[i]);
-            }
-
             return;
         }
 
         var html = "";
         var keys = Object.keys(data[0].data);
-        console.log(keys);
         var div_keys = "<span class=\"compare\"><h2>&nbsp;</h2>";
         for (var k in keys) {
             div_keys += keys[k] + "<br>";
@@ -100,27 +95,20 @@
         document.getElementById("content").style.display = "block";
     }
 
-    function make_data(crates, benchmarks, phases, dates, group_by) {
+    function make_data(dates, kind, crates, phases, group_by, push_state) {
         document.getElementById("loading").innerHTML = "loading...";
         document.getElementById("loading").style.display = "block";
 
-        var kind = get_kind();
-        var body = {
-            dates: dates,
-            kind: kind,
-            crates: kind == "rustc" ? crates : benchmarks,
-            phases: phases,
-            group_by: group_by
-        };
-        var init = {
-            method: "POST",
-            body: JSON.stringify(body),
-            mode: "cors"
-        };
-        fetch("http://www.ncameron.org/perf/get", init).then(function(response) {
+        var values = [dates, kind, crates, phases, group_by];
+        fetch("http://www.ncameron.org/perf/get", make_request(keys, values)).then(function(response) {
             response.json().then(function(data) {
                 populate_data(data);
                 document.getElementById("loading").style.display = "none";
+                set_check_boxes(kind, crates, phases, group_by);
+
+                if (push_state) {
+                    push_state_to_history(keys, [[data[0].date, data[1].date], kind, crates, phases, group_by]);
+                }
             });
         }, function(err) {
             document.getElementById("loading").innerHTML = "Error loading data";
@@ -158,13 +146,32 @@
             document.getElementById("group-by-crate").checked = true;
         }
 
-        make_data(crates, benchmarks, phases, [datea, dateb], group_by);
+        var kind = get_kind();
+        var crates_or_benchmarks = kind == "rustc" ? crates : benchmarks;
+
+        make_data([datea, dateb], kind, crates_or_benchmarks, phases, group_by, true);
     }
+
+    var keys = ["dates", "kind", "crates", "phases", "group_by"];
 
     radio_handler();
     make_settings(function() {
         document.getElementById("helloworld").checked = true;
         document.getElementById("regex.0.1.30").checked = true;
+
+        // Respond to back/forwards properly.
+        window.onpopstate = function(ev) {
+            var state = ev.state;
+            if (!dispatch_on_state(make_data, state, keys)) {
+                if (!dispatch_on_params(make_data, keys)) {
+                    document.getElementById("loading").style.display = "none";
+                    document.getElementById("content").style.display = "none";
+                }
+            }
+        };
+
+        // Load the page from a URL.
+        dispatch_on_params(make_data, keys);
     });
     </script>
 </html>

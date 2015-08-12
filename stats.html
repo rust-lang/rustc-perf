@@ -107,20 +107,20 @@
     make_settings(function() {
         document.getElementById("helloworld").checked = true;
         document.getElementById("regex.0.1.30").checked = true;
-    });
 
-    // Respond to back/forwards properly.
-    window.onpopstate = function(ev) {
-        var state = ev.state;
-        if (!dispatch_on_state(make_stats, state, keys)) {
-            if (!dispatch_on_params(make_stats, keys)) {
-                document.getElementById("loading").style.display = "none";
-                document.getElementById("content").style.display = "none";
+        // Respond to back/forwards properly.
+        window.onpopstate = function(ev) {
+            var state = ev.state;
+            if (!dispatch_on_state(make_stats, state, keys)) {
+                if (!dispatch_on_params(make_stats, keys)) {
+                    document.getElementById("loading").style.display = "none";
+                    document.getElementById("content").style.display = "none";
+                }
             }
-        }
-    };
+        };
 
-    // Load the page from a URL.
-    dispatch_on_params(make_stats, keys);
+        // Load the page from a URL.
+        dispatch_on_params(make_stats, keys);
+    });
     </script>
 </html>
