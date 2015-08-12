@@ -139,6 +139,7 @@ function make_settings(callback, total_label) {
 }
 
 // TODO sets the checkboxes to match.
+// TODO set the dates
 function set_check_boxes(kind, crates, phases, group_by) {
     // Set the kind radio button and hide/show other groups as appropriate.
     var radios = document.getElementsByName('kind');
@@ -181,7 +182,7 @@ function set_check_boxes(kind, crates, phases, group_by) {
         if (ck) {
             ck.checked = true;
         } else {
-            console.log("Couldn't find", ck, i, crates[i]);
+            console.log("Couldn't find", id, i, crates[i]);
         }
     }
     for (var i in phases) {
@@ -193,7 +194,7 @@ function set_check_boxes(kind, crates, phases, group_by) {
         if (ck) {
             ck.checked = true;
         } else {
-            console.log("Couldn't find", ck, i, phases[i]);
+            console.log("Couldn't find", id, i, phases[i]);
         }
     }
 

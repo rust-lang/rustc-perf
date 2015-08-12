@@ -46,30 +46,23 @@
     <script src="shared.js"></script>
     <script>
     // Make a graph!
-    function make_graph(crates, benchmarks, phases, group_by, start_date, end_date) {
-        var kind = get_kind();
-        var body = {
-            start: start_date,
-            end: end_date,
-            kind: kind,
-            crates: kind == "rustc" ? crates : benchmarks,
-            phases: phases,
-            group_by: group_by
-        };
-        var init = {
-            method: "POST",
-            body: JSON.stringify(body),
-            mode: "cors"
-        };
-        fetch("http://www.ncameron.org/perf/data", init).then(function(response) {
+    function make_graph(start_date, end_date, kind, crates, phases, group_by, push_state) {
+        var values = [start_date, end_date, kind, crates, phases, group_by];
+        fetch("http://www.ncameron.org/perf/data", make_request(keys, values)).then(function(response) {
             response.json().then(function(data) {
-                var series = kind == "rustc" ? crates : benchmarks;
+                var series = crates;
                 if (group_by == "phase") {
                     series = phases;
                 }
                 init_graph(data, series, "time");
                 document.getElementById("loading").style.display = "none";
                 document.getElementById("graph").style.display = "block";
+                set_check_boxes(kind, crates, phases, group_by);
+
+                if (push_state) {
+                    push_state_to_history(keys, [data[0].date, data[data.length - 1].date, kind, crates, phases, group_by]);
+                }
+
             });
         }, function(err) {
             document.getElementById("loading").innerHTML = "Error loading data";
@@ -109,14 +102,30 @@
             document.getElementById("group-by-crate").checked = true;
         }
 
-        make_graph(crates, benchmarks, phases, group_by, start_date, end_date);
+        var kind = get_kind();
+        var crates_or_benchmarks = kind == "rustc" ? crates : benchmarks;
+
+        make_graph(start_date, end_date, kind, crates_or_benchmarks, phases, group_by, true);
     }
+
+    var keys = ["start", "end", "kind", "crates", "phases", "group_by"];
 
     radio_handler();
     make_settings(function() {
-        document.getElementById("helloworld").checked = true;
-        document.getElementById("regex.0.1.30").checked = true;
+        // Respond to back/forwards properly.
+        window.onpopstate = function(ev) {
+            var state = ev.state;
+            if (!dispatch_on_state(make_graph, state, keys)) {
+                if (!dispatch_on_params(make_graph, keys)) {
+                    make_graph("", "", "benchmarks", ["helloworld", "regex.0.1.30"], ["total"], "crate", false);
+                }
+            }
+        };
+
+        // Load the page from a URL.
+        if (!dispatch_on_params(make_graph, keys)) {
+            make_graph("", "", "benchmarks", ["helloworld", "regex.0.1.30"], ["total"], "crate", false);
+        }
     });
-    make_graph(["total"], ["helloworld", "regex.0.1.30"], ["total"], "crate", "", "");
     </script>
 </html>
