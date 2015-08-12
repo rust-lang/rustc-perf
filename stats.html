@@ -60,27 +60,20 @@
         document.getElementById("content").style.display = "block";
     }
 
-    function make_stats(crates, benchmarks, phases, start_date, end_date) {
+    function make_stats(start_date, end_date, kind, crates, phases, push_state) {
         document.getElementById("loading").innerHTML = "loading...";
         document.getElementById("loading").style.display = "block";
 
-        var kind = get_kind();
-        var body = {
-            start: start_date,
-            end: end_date,
-            kind: kind,
-            crates: kind == "rustc" ? crates : benchmarks,
-            phases: phases,
-        };
-        var init = {
-            method: "POST",
-            body: JSON.stringify(body),
-            mode: "cors"
-        };
-        fetch("http://www.ncameron.org/perf/stats", init).then(function(response) {
+        var values = [start_date, end_date, kind, crates, phases];
+        fetch("http://www.ncameron.org/perf/stats", make_request(keys, values)).then(function(response) {
             response.json().then(function(data) {
                 populate_stats(data);
                 document.getElementById("loading").style.display = "none";
+                set_check_boxes(kind, crates, phases, null);
+
+                if (push_state) {
+                    push_state_to_history(keys, [data.startDate, data.endDate, kind, crates, phases]);
+                }
             });
         }, function(err) {
             document.getElementById("loading").innerHTML = "Error loading data";
@@ -102,13 +95,32 @@
         var start_date = getDate("start-date");
         var end_date = getDate("end-date");
 
-        make_stats(crates, benchmarks, phases, start_date, end_date);
+        var kind = get_kind();
+        var crates_or_benchmarks = kind == "rustc" ? crates : benchmarks;
+
+        make_stats(start_date, end_date, kind, crates_or_benchmarks, phases, true);
     }
+
+    var keys = ["start", "end", "kind", "crates", "phases"];
 
     radio_handler();
     make_settings(function() {
         document.getElementById("helloworld").checked = true;
         document.getElementById("regex.0.1.30").checked = true;
     });
+
+    // Respond to back/forwards properly.
+    window.onpopstate = function(ev) {
+        var state = ev.state;
+        if (!dispatch_on_state(make_stats, state, keys)) {
+            if (!dispatch_on_params(make_stats, keys)) {
+                document.getElementById("loading").style.display = "none";
+                document.getElementById("content").style.display = "none";
+            }
+        }
+    };
+
+    // Load the page from a URL.
+    dispatch_on_params(make_stats, keys);
     </script>
 </html>

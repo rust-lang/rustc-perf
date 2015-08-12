@@ -86,7 +86,7 @@ function make_settings(callback, total_label) {
     return fetch("http://www.ncameron.org/perf/info", {}).then(function(response) {
         response.json().then(function(data) {
             var crates_html = "";
-            crates_html += "<input checked=\"true\" type=\"checkbox\" id=\"check-crate-total\">" + total_label + "</input></br>";
+            crates_html += "<input checked=\"true\" type=\"checkbox\" name=\"check-crate\" id=\"check-crate-total\">" + total_label + "</input></br>";
             data.crates.sort();
             for (c in data.crates) {
                 var crate = data.crates[c];
@@ -107,7 +107,7 @@ function make_settings(callback, total_label) {
             bench_div.innerHTML = bench_html;
 
             var phases_html = "";
-            phases_html += "<input checked=\"true\" type=\"checkbox\" id=\"check-phase-total\">" + total_label + "</input></br>";
+            phases_html += "<input checked=\"true\" type=\"checkbox\" name=\"check-phase\" id=\"check-phase-total\">" + total_label + "</input></br>";
             data.phases.sort();
             for (p in data.phases) {
                 var phase = data.phases[p];
@@ -138,6 +138,73 @@ function make_settings(callback, total_label) {
     });        
 }
 
+// TODO sets the checkboxes to match.
+function set_check_boxes(kind, crates, phases, group_by) {
+    // Set the kind radio button and hide/show other groups as appropriate.
+    var radios = document.getElementsByName('kind');
+    for (var r in radios) {
+        radios[r].checked = radios[r].value == kind;
+    }
+    var crates_total_name = null;
+    if (kind == "rustc") {
+        crates_total_name = "check-crate-total";
+        document.getElementById("crates_label").innerHTML = "Crates";
+        document.getElementById("crates").style.display = "block";
+        document.getElementById("benchmarks").style.display = "none";
+    } else {
+        document.getElementById("crates_label").innerHTML = "Benchmarks";
+        document.getElementById("crates").style.display = "none";
+        document.getElementById("benchmarks").style.display = "block";
+    }
+
+    // Clear checkboxes
+    var ck_crates = document.getElementsByName('check-crate');
+    for (var i in ck_crates) {
+        ck_crates[i].checked = false;
+    }
+    var ck_benches = document.getElementsByName('check-bench');
+    for (var i in ck_benches) {
+        ck_benches[i].checked = false;
+    }
+    var ck_phases = document.getElementsByName('check-phase');
+    for (var i in ck_phases) {
+        ck_phases[i].checked = false;
+    }
+
+    // Check crates/benchmarks/phases checkboxes.
+    for (var i in crates) {
+        var id = crates[i];
+        if (id == "total") {
+            id = crates_total_name;
+        }
+        var ck = document.getElementById(id);
+        if (ck) {
+            ck.checked = true;
+        } else {
+            console.log("Couldn't find", ck, i, crates[i]);
+        }
+    }
+    for (var i in phases) {
+        var id = phases[i];
+        if (id == "total") {
+            id = "check-phase-total";
+        }
+        var ck = document.getElementById(id);
+        if (ck) {
+            ck.checked = true;
+        } else {
+            console.log("Couldn't find", ck, i, phases[i]);
+        }
+    }
+
+    if (group_by) {
+        var radios = document.getElementsByName("groupBy");
+        for (var r in radios) {
+            radios[r].checked = radios[r].value == group_by;
+        }
+    }
+}
+
 // A bunch of helper functions for helping with keeping URLs up to date and
 // interacting with the browser history.
 
@@ -157,12 +224,21 @@ function dispatch_on_params(f, keys) {
     }
     var params = new URLSearchParams(window.location.search.substring(1));
     if (keys.map(k => params.has(k)).reduce((a, b) => a && b, true)) {
-        var args = keys.map(k => params.get(k));
+        var args = keys.map(k => get_param(k, params));
         args.push(false);
+        console.log(args);
         f.apply(null, args);
         return true;
     }
     return false;
+}
+
+function get_param(key, params) {
+    var result = params.get(key);
+    if (key == "crates" || key == "phases") {
+        result = result.split(',');
+    }
+    return result;
 }
 
 function push_state_to_history(keys, values) {
