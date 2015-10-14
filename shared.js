@@ -94,7 +94,7 @@ function make_settings(callback, total_label) {
             data.crates.sort();
             for (c in data.crates) {
                 var crate = data.crates[c];
-                crates_html += "<input type=\"checkbox\" name=\"check-crate\" id=\"" + crate + "\">" + crate + "</input></br>";
+                crates_html += "<input type=\"checkbox\" name=\"check-crate\" id=\"" + crate + "\">" + truncate_name(crate) + "</input></br>";
             }
 
             var crate_div = document.getElementById("crates");
@@ -104,7 +104,7 @@ function make_settings(callback, total_label) {
             data.benchmarks.sort();
             for (b in data.benchmarks) {
                 var bench = data.benchmarks[b];
-                bench_html += "<input type=\"checkbox\" name=\"check-bench\" id=\"" + bench + "\">" + bench + "</input></br>";
+                bench_html += "<input type=\"checkbox\" name=\"check-bench\" id=\"" + bench + "\">" + truncate_name(bench) + "</input></br>";
             }
 
             var bench_div = document.getElementById("benchmarks");
@@ -116,7 +116,7 @@ function make_settings(callback, total_label) {
             for (p in data.phases) {
                 var phase = data.phases[p];
                 if (phase != "total") {
-                    phases_html += "<input type=\"checkbox\" name=\"check-phase\" id=\"" + phase + "\">" + phase + "</input></br>";
+                    phases_html += "<input type=\"checkbox\" name=\"check-phase\" id=\"" + phase + "\">" + truncate_name(phase) + "</input></br>";
                 }
             }
 
@@ -140,6 +140,14 @@ function make_settings(callback, total_label) {
         console.log("Error fetching info:");
         console.log(err);
     });        
+}
+
+function truncate_name(name) {
+    if (name.length > 30) {
+        return name.substring(0, 30) + "...";
+    }
+
+    return name;
 }
 
 // TODO sets the checkboxes to match.
