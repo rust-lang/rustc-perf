@@ -65,13 +65,17 @@ function gatherChecks(name) {
 function addTotalHandler(name) {
     var elements = document.getElementsByName(name);
     for (var i in elements) {
-        elements[i].onclick = function() {
-            document.getElementById(name + "-total").checked = false;
-        };
+        if (elements[i].id != name + "-total") {
+            elements[i].onclick = function() {
+                document.getElementById(name + "-total").checked = false;
+            };
+        }
     }
     document.getElementById(name + "-total").onclick = function() {
         for (var i in elements) {
-            elements[i].checked = false;
+            if (elements[i].id != name + "-total") {
+                elements[i].checked = false;
+            }
         }
     };
 }
