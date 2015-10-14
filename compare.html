@@ -105,6 +105,7 @@
                 populate_data(data);
                 document.getElementById("loading").style.display = "none";
                 set_check_boxes(kind, crates, phases, group_by);
+                set_dates(data[0].date, data[1].date);
 
                 if (push_state) {
                     push_state_to_history(keys, [[data[0].date, data[1].date], kind, crates, phases, group_by]);

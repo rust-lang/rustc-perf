@@ -58,6 +58,7 @@
                 document.getElementById("loading").style.display = "none";
                 document.getElementById("graph").style.display = "block";
                 set_check_boxes(kind, crates, phases, group_by);
+                set_dates(start_date, end_date);
 
                 if (push_state) {
                     push_state_to_history(keys, [data[0].date, data[data.length - 1].date, kind, crates, phases, group_by]);

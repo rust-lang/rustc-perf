@@ -150,8 +150,15 @@ function truncate_name(name) {
     return name;
 }
 
-// TODO sets the checkboxes to match.
-// TODO set the dates
+function set_dates(start_date, end_date) {
+    document.getElementById("start-date").value = new Date(start_date).toISOString().split('T')[0];
+    document.getElementById("end-date").value = new Date(end_date).toISOString().split('T')[0];
+}
+
+function set_date(date) {
+    document.getElementById("date").value = new Date(date).toISOString().split('T')[0];
+}
+
 function set_check_boxes(kind, crates, phases, group_by) {
     // Set the kind radio button and hide/show other groups as appropriate.
     var radios = document.getElementsByName('kind');

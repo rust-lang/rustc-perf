@@ -70,6 +70,7 @@
                 populate_stats(data);
                 document.getElementById("loading").style.display = "none";
                 set_check_boxes(kind, crates, phases, null);
+                set_dates(start_date, end_date);
 
                 if (push_state) {
                     push_state_to_history(keys, [data.startDate, data.endDate, kind, crates, phases]);
