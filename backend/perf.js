@@ -87,7 +87,12 @@ function read_files(repo_loc) {
         var c_benchmarks_add = 0;
         files.map(function (filename) {
             var full_name = path.resolve(__dirname, repo_loc, 'processed', filename);
-            var contents = JSON.parse(fs.readFileSync(full_name, 'utf8'));
+            var file_contents = fs.readFileSync(full_name, 'utf8');
+            if (!file_contents) {
+                no_times += 1;
+                return;
+            }
+            var contents = JSON.parse(file_contents);
             var header = contents.header;
             var times = contents.times;
             if (times.length == 0) {
