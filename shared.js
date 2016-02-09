@@ -151,6 +151,10 @@ function truncate_name(name) {
 }
 
 function set_dates(start_date, end_date) {
+    if (!start_date || !end_date) {
+        return;
+    }
+
     document.getElementById("start-date").value = new Date(start_date).toISOString().split('T')[0];
     document.getElementById("end-date").value = new Date(end_date).toISOString().split('T')[0];
 }
