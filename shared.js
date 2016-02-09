@@ -175,21 +175,24 @@ function set_check_boxes(kind, crates, phases, group_by) {
         document.getElementById("crates_label").innerHTML = "Crates";
         document.getElementById("crates").style.display = "block";
         document.getElementById("benchmarks").style.display = "none";
+
+        // Clear checkboxes
+        var ck_crates = document.getElementsByName('check-crate');
+        for (var i in ck_crates) {
+            ck_crates[i].checked = false;
+        }
     } else {
         document.getElementById("crates_label").innerHTML = "Benchmarks";
         document.getElementById("crates").style.display = "none";
         document.getElementById("benchmarks").style.display = "block";
+
+        // Clear checkboxes
+        var ck_benches = document.getElementsByName('check-bench');
+        for (var i in ck_benches) {
+            ck_benches[i].checked = false;
+        }
     }
 
-    // Clear checkboxes
-    var ck_crates = document.getElementsByName('check-crate');
-    for (var i in ck_crates) {
-        ck_crates[i].checked = false;
-    }
-    var ck_benches = document.getElementsByName('check-bench');
-    for (var i in ck_benches) {
-        ck_benches[i].checked = false;
-    }
     var ck_phases = document.getElementsByName('check-phase');
     for (var i in ck_phases) {
         ck_phases[i].checked = false;
@@ -198,6 +201,9 @@ function set_check_boxes(kind, crates, phases, group_by) {
     // Check crates/benchmarks/phases checkboxes.
     for (var i in crates) {
         var id = crates[i];
+        if (!id) {
+            continue;
+        }
         if (id == "total") {
             id = crates_total_name;
         }
@@ -210,6 +216,9 @@ function set_check_boxes(kind, crates, phases, group_by) {
     }
     for (var i in phases) {
         var id = phases[i];
+        if (!id) {
+            continue;
+        }
         if (id == "total") {
             id = "check-phase-total";
         }

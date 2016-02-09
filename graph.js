@@ -89,6 +89,9 @@ Chart.types.Line.extend({
 
         },this);
 
+        if (data.datasets.length == 0) {
+            this.buildScale([]);
+        }
 
         this.render();
     },
