@@ -1,2 +1,2 @@
-sudo npm install nodegit
-git clone https://github.com/nick29581/rustc-timing.git data
+sudo npm install nodegit http url async path fs sortedlist
+git clone https://github.com/nrc/rustc-timing.git data
