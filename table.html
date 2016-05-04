@@ -33,7 +33,7 @@
     }
 
     function make_table(kind, date, push_state) {
-        fetch("http://www.ncameron.org/perf/get_tabular", make_request(keys, [kind, date])).then(function(response) {
+        fetch("http://perf.rust-lang.org/perf/get_tabular", make_request(keys, [kind, date])).then(function(response) {
             response.json().then(function(data) {
                 set_date(date);
                 populate_table(data);

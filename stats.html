@@ -65,7 +65,7 @@
         document.getElementById("loading").style.display = "block";
 
         var values = [start_date, end_date, kind, crates, phases];
-        fetch("http://www.ncameron.org/perf/stats", make_request(keys, values)).then(function(response) {
+        fetch("http://perf.rust-lang.org/perf/stats", make_request(keys, values)).then(function(response) {
             response.json().then(function(data) {
                 populate_stats(data);
                 document.getElementById("loading").style.display = "none";
