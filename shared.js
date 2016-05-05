@@ -87,7 +87,7 @@ function make_settings(callback, total_label) {
     if (!total_label) {
         total_label = "total";
     }
-    return fetch("http://www.ncameron.org/perf/info", {}).then(function(response) {
+    return fetch("http://perf.rust-lang.org/perf/info", {}).then(function(response) {
         response.json().then(function(data) {
             var crates_html = "";
             crates_html += "<input checked=\"true\" type=\"checkbox\" name=\"check-crate\" id=\"check-crate-total\">" + total_label + "</input></br>";
