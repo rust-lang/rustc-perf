@@ -187,7 +187,7 @@ function make_times(times, rustc_crate) {
         for (var phase in by_crate[t.crate]) {
             if (!totals[phase]) {
                 totals[phase] = {
-                    "percent": 0, 
+                    "percent": 0,
                     "time": 0,
                     "rss": 0
                 };
@@ -213,11 +213,13 @@ function start_server() {
     http.createServer(function (req, res) {
         var parsed_url = url.parse(req.url, true);
         var pathname = parsed_url.pathname;
+        console.log("Path parsed: " + pathname):
         if (pathname == '/data') {
             combine_chunks(req, function(body) {
                 try {
                     var json = JSON.parse(body);
                     get_data(json, res);
+                    console.log(json);
                 } catch(e) {
                     res.writeHead(200, {"Content-Type": "text/plain", "Access-Control-Allow-Origin": "*"});
                     res.end("Error: " + e);
@@ -228,9 +230,11 @@ function start_server() {
                 try {
                     var json = JSON.parse(body);
                     get_days(json, res);
+                    console.log(json);
                 } catch(e) {
                     res.writeHead(200, {"Content-Type": "text/plain", "Access-Control-Allow-Origin": "*"});
                     res.end("Error: " + e);
+                    console.log(e);
                 }
             });
         } else if (pathname == '/get_tabular') {
@@ -238,9 +242,11 @@ function start_server() {
                 try {
                     var json = JSON.parse(body);
                     get_tabular(json, res);
+                    console.log(json);
                 } catch(e) {
                     res.writeHead(200, {"Content-Type": "text/plain", "Access-Control-Allow-Origin": "*"});
                     res.end("Error: " + e);
+                    console.log(e);
                 }
             });
         } else if (pathname == '/stats') {
@@ -248,9 +254,11 @@ function start_server() {
                 try {
                     var json = JSON.parse(body);
                     get_stats(json, res);
+                    console.log(json);
                 } catch(e) {
                     res.writeHead(200, {"Content-Type": "text/plain", "Access-Control-Allow-Origin": "*"});
                     res.end("Error: " + e);
+                    console.log(e);
                 }
             });
         } else if (pathname == '/info') {
@@ -259,17 +267,20 @@ function start_server() {
             combine_chunks(req, function(body) {
                 try {
                     var json = JSON.parse(body);
+                    console.log(json);
                     on_push(json);
                     res.writeHead(200, {"Content-Type": "text/plain", "Access-Control-Allow-Origin": "*"});
                     res.end("Success?");
                 } catch (e) {
                     res.writeHead(200, {"Content-Type": "text/plain", "Access-Control-Allow-Origin": "*"});
                     res.end("Error: " + e);
+                    console.log(e);
                 }
             });
         } else {
             res.writeHead(404, {"Content-Type": "text/plain"});
             res.write("404 Not Found\n");
+            console.log("404 Not Found");
             res.end();
           }
     }).listen(2346);
