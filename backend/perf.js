@@ -213,7 +213,7 @@ function start_server() {
     http.createServer(function (req, res) {
         var parsed_url = url.parse(req.url, true);
         var pathname = parsed_url.pathname;
-        console.log("Path parsed: " + pathname):
+        console.log("Path parsed: " + pathname);
         if (pathname == '/data') {
             combine_chunks(req, function(body) {
                 try {
