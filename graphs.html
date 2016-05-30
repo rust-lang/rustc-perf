@@ -5,7 +5,7 @@
 <link rel="stylesheet" type="text/css" href="perf.css">
 </head>
 <body class="container">
-    <div>&gt; <a href="graphs.html">graphs</a>, <a href="stats.html">stats</a>, <a href="compare.html">comparisons</a>, memory graph, <a href="table.html">table view</a>.</div>
+    <div>&gt;  graphs, <a href="stats.html">stats</a>, <a href="compare.html">comparisons</a>, <a href="mem.html">memory graph</a>, <a href="table.html">table view</a>.</div>
     <div>
         <br><input type="radio" name="kind" checked="true" value="benchmarks">benchmarks<br>
         <input type="radio" name="kind" value="rustc">bootstrap        
@@ -54,14 +54,22 @@
                 if (group_by == "phase") {
                     series = phases;
                 }
-                init_graph(data, series, "rss", "maximum");
-                document.getElementById("loading").style.display = "none";
-                document.getElementById("graph").style.display = "block";
+
                 set_check_boxes(kind, crates, phases, group_by);
                 set_dates(start_date, end_date);
 
+                init_graph(data, series, "time");
+                document.getElementById("loading").style.display = "none";
+                document.getElementById("graph").style.display = "block";
+
                 if (push_state) {
-                    push_state_to_history(keys, [data[0].date, data[data.length - 1].date, kind, crates, phases, group_by]);
+                    var start_date = "";
+                    var end_date = "";
+                    if (data.length > 0) {
+                        start_date = data[0].date;
+                        end_date = data[data.length - 1].date;
+                    }
+                    push_state_to_history(keys, [start_date, end_date, kind, crates, phases, group_by]);
                 }
             });
         }, function(err) {
@@ -126,6 +134,6 @@
         if (!dispatch_on_params(make_graph, keys)) {
             make_graph("", "", "benchmarks", ["helloworld", "regex.0.1.30"], ["total"], "crate", false);
         }
-    }, "maximum");
+    });
     </script>
 </html>
