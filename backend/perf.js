@@ -24,12 +24,17 @@ var fs = require('fs');
 var nodegit = require('nodegit');
 var sortedList = require('sortedlist');
 
+var WEEKS_IN_SUMMARY = 12;
+
 // Data stored by test name and date, each date maps to a table storing the times by crate and by phase.
 // See make_data() for the object layout.
 var data = {};
 var opts = { compare: function(x, y) { return x.date - y.date; }}
 data['rustc'] = sortedList.create(opts);
 data['benchmarks'] = sortedList.create(opts);
+var summary = {};
+summary['rustc'] = [];
+summary['benchmarks'] = [];
 var benchmarks = [];
 
 var last_date;
@@ -140,12 +145,84 @@ function read_files(repo_loc) {
                 last_date = date;
             }
         });
+
+        // Post processing to generate the summary data.
+        var prev_summary = [];
+        // We only want data for the previous 12 weeks, which means we need 13
+        // data points.
+        for (var i = 0; i < WEEKS_IN_SUMMARY + 1; ++i) {
+            // The date for this data point.
+            var date = new Date(last_date.getTime());
+            date.setDate(date.getDate() - 7 * i);
+
+            summarise_data(i, date, 'rustc', prev_summary);
+            summarise_data(i, date, 'benchmarks', prev_summary);
+        }
+
         console.log("read", files.length, "files");
         console.log("found", no_times, "files without times");
         console.log(c_bootstraps, "bootstrap times");
         console.log(c_benchmarks, "benchmarks times");
         console.log(c_benchmarks_add, "benchmarks times (appended)");
     });
+}
+
+// Compute summary data for a given date and kind (rustc bootstrap/benchmarks).
+// For each date we calculate some summary, then for each but the first we
+// calculate the difference from the previous week. Save it all in the summary
+// global.
+function summarise_data(i, date, kind, prev_summary) {
+    var cur_summary = [];
+    cur_summary[kind] = { 'date': date, 'by_crate': {} };
+    summary[kind][i] = { 'date': date, 'by_crate': {} };
+
+    // For a given date we'll get the three most recent sets of data and take the
+    // the median for each value.
+    var start_idx = mk_start_idx(date, kind);
+    var week_data = [];
+    for (var j = 0; j < 3; ++j) {
+        var idx = Math.max(start_idx - 1, 0);
+        week_data.push(data[kind][idx]);
+    }
+
+    // Compute the difference as a percent for every value of data.
+    for (var c in week_data[0].by_crate) {
+        if (c in week_data[1].by_crate && c in week_data[2].by_crate) {
+            cur_summary[kind].by_crate[c] = {};
+            summary[kind][i].by_crate[c] = {};
+            // p is phase
+            for (var p in week_data[0].by_crate[c]) {
+                if (p in week_data[1].by_crate[c] && p in week_data[2].by_crate[c]) {
+                    // Find the median value.
+                    var values = [week_data[0].by_crate[c][p].time, week_data[1].by_crate[c][p].time, week_data[2].by_crate[c][p].time];
+                    values.sort(function(a, b) {
+                        return a - b;
+                    });
+                    cur_summary[kind].by_crate[c][p] = values[1];
+
+                    if (prev_summary[kind] && c in prev_summary[kind].by_crate && p in prev_summary[kind].by_crate[c] && prev_summary[kind].by_crate[c][p] > 0) {
+                        var difference = prev_summary[kind].by_crate[c][p] - values[1];
+                        var percent = 100 * difference / values[1];
+                        summary[kind][i].by_crate[c][p] = percent;
+
+                        if (i == WEEKS_IN_SUMMARY && c in summary[kind][0].by_crate && p in summary[kind][0].by_crate[c] && summary[kind][0].by_crate[c][p] > 0) {
+                            // We're computing the last week, so let's also compute the total
+                            // difference.
+                            var difference = summary[kind][0].by_crate[c][p] - values[1];
+                            var percent = 100 * difference / values[1];
+                            summary[kind][0].by_crate[c][p] = percent;
+                        }
+                    } else if (i == 0) {
+                        // Save the first week we look at so we can compute the total difference,
+                        // see above.
+                        summary[kind][i].by_crate[c][p] = values[1]
+                    }
+                }
+            }
+        }
+    }
+
+    prev_summary[kind] = cur_summary[kind];
 }
 
 
@@ -261,6 +338,14 @@ function start_server() {
                     console.log(e);
                 }
             });
+        } else if (pathname == '/summary') {
+            try {
+                get_summary(res);
+            } catch (e) {
+                res.writeHead(200, {"Content-Type": "text/plain", "Access-Control-Allow-Origin": "*"});
+                res.end("Error: " + e);
+                console.log(e);
+            }
         } else if (pathname == '/info') {
             get_info(res);
         } else if (pathname == '/onpush') {
@@ -329,13 +414,69 @@ function get_info(response) {
         result.benchmarks = benchmarks;
         response.writeHead(200, {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"});
         response.end(JSON.stringify(result));
-        return;
     } catch (e) {
         console.log(e);
         response.writeHead(200, {"Content-Type": "text/plain", "Access-Control-Allow-Origin": "*"});
         response.end("Error: " + e);
-        return;
     }
+}
+
+function get_summary(response) {
+    // TODO we're computing and saving a lot of data which we never use
+    var result = {};
+    // dates for each summary/breakdown
+    result.dates = summary['rustc'].map(function(s) { return s.date; });
+    // Remove the last date.
+    result.dates.length = 12;
+    // overall number for each week
+    result.summaries = [];
+    var sums = summary['benchmarks'].map(function(s) {
+        var sum = 0;
+        var count = 0;
+        for (var c in s.by_crate) {
+            if ('total' in s.by_crate[c]) {
+                sum += s.by_crate[c]['total'];
+                count += 1;
+            }
+        }
+
+        return { 'sum': sum, 'count': count };
+    });
+    for (var i in sums) {
+        if ('total' in summary['rustc'][i].by_crate['total']) {
+            sums[i].sum += 2 * summary['rustc'][i].by_crate['total']['total'];
+            sums[i].count += 2;
+        }
+        result.summaries[i] = (sums[i].sum / sums[i].count).toFixed(1);
+    }
+
+    // per benchmark, per week
+    result.breakdown = summary['benchmarks'].map(function(s) {
+        var per_bench = {};
+
+        for (var c in s.by_crate) {
+            if ('total' in s.by_crate[c]) {
+                per_bench[c] = s.by_crate[c]['total'].toFixed(1);
+            } else {
+                per_bench[c] = 0.0;
+            }
+        }
+
+        return per_bench;
+    });
+    for (var i in result.breakdown) {
+        if ('total' in summary['rustc'][i].by_crate['total']) {
+            result.breakdown[i]['bootstrap'] = summary['rustc'][i].by_crate['total']['total'].toFixed(1);
+        } else {
+            result.breakdown[i]['bootstrap'] = 0.0;
+        }
+    }
+
+    result.total_summary = result.summaries.shift();
+    result.total_breakdown = result.breakdown.shift();
+
+    response.writeHead(200, {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"});
+    response.end(JSON.stringify(result));
 }
 
 // Expected fields on body: {

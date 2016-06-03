@@ -7,16 +7,82 @@
 <body class="container">
     <div>&gt;  <a href="graphs.html">graphs</a>, <a href="stats.html">stats</a>, <a href="compare.html">comparisons</a>, <a href="mem.html">memory graph</a>, <a href="table.html">table view</a>.</div>
     <div id="loading">loading...</div>
-    <canvas id="graph" width="1000" height="600" style="display: none">
-        Your web browser is old and weak and does not support Canvas. You should get a <a href="https://www.mozilla.org/en-US/firefox/new/">new one</a>.
-    </canvas>
-    <div id="legend"></div>
+    <div id="summary_number"></div>
+    <div id="summary_table"></div>
 </body>
     <script src="libs/Chart.min.js"></script>
     <script src="libs/fetch.js"></script>
     <script src="graph.js"></script>
     <script src="shared.js"></script>
     <script>
-    // TODO
+    fetch("http://perf.rust-lang.org/perf/summary").then(function(response) {
+        response.json().then(function(data) {
+            document.getElementById("loading").style.display = "none";
+
+            var summary_number = document.getElementById("summary_number");
+            var big_value = data.summaries[0];
+            var big_class = "";
+            if (parseFloat(big_value) <= -1) {
+                big_class = " negative";
+            } else if (parseFloat(big_value) >= 1) {
+                big_class = " positive";
+            }
+            summary_number.innerHTML = "<div>In the past week, compile times have increased by:</div><div class=\"big_summary" + big_class + "\">" + big_value + "%</div><div>(Lower is better).</div>";
+            summary_number.style.display = "block";
+
+            populate_table(data);
+
+        });
+    }, function(err) {
+        document.getElementById("loading").innerHTML = "Error loading data";
+        console.log("Error fetching data:");
+        console.log(err);
+    });
+
+    // Table of the breakdown of data. Each row is a benchmark, each column is a
+    // week.
+    function populate_table(data) {
+        var week_count = data.breakdown.length;
+        var bench_keys = Object.keys(data.breakdown[0]);
+
+        var html = "<table class=\"summary_table\"><tr><th></th>";
+        for (var i = week_count - 1; i >= 0; --i) {
+            var date = new Date(data.dates[i]);
+            html += "<th>" + date.toLocaleDateString() + "</th>"
+        }
+        html += "<th>total</th></tr>";
+        for (var b of bench_keys) {
+            html += "<tr><th>" + b + "</th>"
+            for (var i = week_count - 1; i >= 0; --i) {
+                html += cell_for_data(data.breakdown[i][b]);
+            }
+            html += cell_for_data(data.total_breakdown[b]);
+            html += "</tr>";
+        }
+        html += "<tr><th>average</th>";
+        for (var i = week_count - 1; i >= 0; --i) {
+            html += cell_for_data(data.summaries[i]);
+        }
+        html += cell_for_data(data.total_summary);
+        html += "</tr>";
+        html += "</table>";
+
+        document.getElementById("summary_table").innerHTML = html;
+        document.getElementById("summary_table").style.display = "block";
+    }
+
+    function cell_for_data(datum) {
+        if (!datum) {
+            datum = 0;
+        }
+        var d_class = "";
+        if (parseFloat(datum) <= -1) {
+            d_class = " negative";
+        } else if (parseFloat(datum) >= 1) {
+            d_class = " positive";
+        }
+
+        return "<td class=\"" + d_class + "\">" + datum + "%</td>";
+    }
     </script>
 </html>

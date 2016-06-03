@@ -69,7 +69,6 @@ a:focus {
 }
 a:focus {
   outline: thin dotted;
-  outline: 5px auto -webkit-focus-ring-color;
   outline-offset: -2px;
 }
 li {
@@ -111,3 +110,24 @@ img {
 @media (min-width: 1200px) {.container {
     width: 1170px;
   }}
+
+.big_summary {
+  display: block;
+  margin-top: -40px;
+  font-size: 15em;
+  font-weight: 500;
+}
+.positive {
+  color: red;
+}
+.negative {
+  color: green;
+}
+.summary_table td {
+  padding: 4px;
+  text-align: center;
+}
+.summary_table th {
+  padding: 4px;
+  text-align: left;
+}
