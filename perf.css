@@ -113,9 +113,10 @@ img {
 
 .big_summary {
   display: block;
-  margin-top: -40px;
+  margin-top: -20px;
   font-size: 15em;
   font-weight: 500;
+  z-index: -1;
 }
 .positive {
   color: red;
