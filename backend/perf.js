@@ -523,8 +523,7 @@ function get_stats(body, response) {
             var today_data = data[kind][i];
             counted.push(today_data);
 
-            var empty = today_data.by_crate.length == 0;
-            if (!empty) {
+            if (Object.keys(today_data.by_crate).length > 0) {
                 last_idx = i;
                 result.endDate = today_data.date;
                 if (first_idx < 0) {
