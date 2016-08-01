@@ -30,7 +30,7 @@ const WEEKS_IN_SUMMARY = 12;
 var opts = { compare: function(x, y) { return x.date - y.date; }};
 var data = {
     rustc: sortedList.create(opts),
-    benchmarks: sortedlist.create(opts)
+    benchmarks: sortedList.create(opts)
 };
 var summary = {
     rustc: [],
@@ -56,23 +56,23 @@ function get_repo_arg() {
 
 // Startup - update the repo and create our runtime representation of the data.
 function init(repo_loc, callback) {
-    console.log('pulling', repo_loc);
+    console.log("pulling", repo_loc);
 
     // git pull origin master == fetch; merge
     var repository;
     nodegit.Repository.open(path.resolve(__dirname, repo_loc))
         .then(function(repo) {
             repository = repo;
-            return repository.fetch('origin', {}, {});
+            return repository.fetch("origin", {}, {});
         })
         .then(function() {
-            return repository.mergeBranches('master', 'origin/master');
+            return repository.mergeBranches("master", "origin/master");
         })
         .done(function() {
             var opts = new nodegit.CheckoutOptions();
             opts.checkoutStrategy = nodegit.Checkout.STRATEGY.FORCE;
             nodegit.Checkout.head(repository, opts).then(function() {
-                console.log('success - pulled');
+                console.log("success - pulled");
 
                 read_files(repo_loc);
 
@@ -81,7 +81,7 @@ function init(repo_loc, callback) {
         });
 }
 
-function read_files(repo_loc, callback) {
+function read_files(repo_loc) {
     // Read all files from repo_loc/processed
     let files = fs.readdirSync(path.resolve(__dirname, repo_loc, "processed"));
 
@@ -616,7 +616,7 @@ function sumTimes(data, crate, phases) {
 //     group_by: 'crate' | 'phase'
 // }
 // crate or phase can be 'total'
-function get_days(body, response) {
+function get_days(body) {
     let kind = body.kind;
     if (kind != "rustc" && kind != "benchmarks") {
         return "Error: bad value kind: " + kind;
@@ -648,7 +648,7 @@ function get_days(body, response) {
 //     kind: 'rustc' | 'benchmarks',
 //     date: Date
 // }
-function get_tabular(body, response) {
+function get_tabular(body) {
     let kind = body.kind;
     if (kind != "rustc" && kind != "benchmarks") {
         return "Error: bad value kind: " + kind;
