@@ -203,7 +203,6 @@ function summarise_data(i, date, kind, summary_state) {
         let idx = Math.max(start_idx - j, 0);
         weeks.push(data[kind][idx].by_crate);
     }
-    // let week = data[kind][idx].by_crate;
 
     // Compute the difference as a percent for every value of data.
     for (let crate_name in weeks[0]) {
