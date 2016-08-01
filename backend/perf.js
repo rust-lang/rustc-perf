@@ -148,7 +148,7 @@ function read_files(repo_loc, callback) {
 		}
 
 		for (let timing of times) {
-			for (let phase in timing.times)
+			for (let phase in timing.times) {
 				if (!phase_list.includes(phase)) {
 					phase_list.push(phase);
 				}
@@ -212,11 +212,15 @@ function summarise_data(i, date, kind, summary_state) {
 		by_crate[crate_name] = {};
 		let cur_summary = {};
 		for (let phase of Object.keys(weeks[0][crate_name])) {
+            if (!weeks[1][crate_name][phase] || !weeks[2][crate_name][phase]) {
+                continue;
+            }
+
 		    // Find the median value.
 			let values = [
-				week_data[0][crate_name][phase].time,
-				week_data[1][crate_name][phase].time,
-				week_data[2][crate_name][phase].time
+				weeks[0][crate_name][phase].time,
+				weeks[1][crate_name][phase].time,
+				weeks[2][crate_name][phase].time
 			];
 			values.sort((a, b) => a - b);
 			let median = values[1];
