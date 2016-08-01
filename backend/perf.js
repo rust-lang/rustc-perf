@@ -27,13 +27,15 @@ const WEEKS_IN_SUMMARY = 12;
 
 // Data stored by test name and date, each date maps to a table storing the times by crate and by phase.
 // See make_data() for the object layout.
-var data = {};
 var opts = { compare: function(x, y) { return x.date - y.date; }};
-data.rustc = sortedList.create(opts);
-data.benchmarks = sortedList.create(opts);
-var summary = {};
-summary.rustc = [];
-summary.benchmarks = [];
+var data = {
+    rustc: sortedList.create(opts),
+    benchmarks: sortedlist.create(opts)
+};
+var summary = {
+    rustc: [],
+    benchmarks: []
+};
 var benchmarks = [];
 
 var last_date;
