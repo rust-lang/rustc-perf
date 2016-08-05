@@ -415,12 +415,16 @@ impl Summary {
         // the previous week.
         let mut weeks: Vec<SummarizedWeek> = Vec::new();
         for window in medians.windows(2) {
-            weeks.push(compare_weeks(&window[0], &window[1]));
+            // We want to compare week 1 to week 0; since we want the change from
+            // week 1 to week 0.
+            weeks.push(compare_weeks(&window[1], &window[0]));
         }
 
         assert_eq!(weeks.len(), 12);
 
-        let totals = compare_weeks(&medians[0], medians.last().unwrap());
+        // See window comparison; compare from last week (which is the oldest)
+        // to the first week.
+        let totals = compare_weeks(medians.last().unwrap(), &medians[0]);
 
         for week in &mut weeks {
             for crate_name in totals.by_crate.keys() {
