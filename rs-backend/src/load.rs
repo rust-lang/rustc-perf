@@ -121,7 +121,7 @@ impl InputData {
 
             let times = &contents["times"];
             if test_name == "rustc" {
-                data_rustc.push(TestRun::new(date, header, times));
+                data_rustc.push(TestRun::new(date, header, times, true));
 
                 for timing in times.members() {
                     let crate_name = timing["crate"].as_str().unwrap().to_string();
@@ -134,9 +134,9 @@ impl InputData {
                     c_benchmarks_add += 1;
                     let crate_name = times[0]["crate"].as_str().unwrap();
                     data_benchmarks[index].by_crate.insert(test_name.to_string(),
-                        make_times(times).remove(crate_name).unwrap());
+                        make_times(times, false).remove(crate_name).unwrap());
                 } else {
-                    data_benchmarks.push(TestRun::new(date, header, times));
+                    data_benchmarks.push(TestRun::new(date, header, times, false));
                 }
             }
 
@@ -232,11 +232,11 @@ impl Ord for TestRun {
 }
 
 impl TestRun {
-    fn new(date: NaiveDateTime, header: &JsonValue, times: &JsonValue) -> TestRun {
+    fn new(date: NaiveDateTime, header: &JsonValue, times: &JsonValue, is_rustc: bool) -> TestRun {
         TestRun {
             date: date,
             commit: header["commit"].as_str().unwrap().to_string(),
-            by_crate: make_times(times)
+            by_crate: make_times(times, is_rustc)
         }
     }
 }
@@ -261,7 +261,7 @@ impl Timing {
 }
 
 /// Run through the timings for a date and construct the `by_crate` field of TestRun.
-fn make_times(timings: &JsonValue) -> HashMap<String, HashMap<String, Timing>> {
+fn make_times(timings: &JsonValue, is_rustc: bool) -> HashMap<String, HashMap<String, Timing>> {
     let mut by_crate = HashMap::new();
     let mut totals = HashMap::new();
 
@@ -297,7 +297,9 @@ fn make_times(timings: &JsonValue) -> HashMap<String, HashMap<String, Timing>> {
         by_crate.insert(timing["crate"].as_str().unwrap().to_string(), times);
     }
 
-    by_crate.insert("total".into(), totals);
+    if is_rustc {
+        by_crate.insert("total".into(), totals);
+    }
     // TODO: calculate percentages
     by_crate
 }
@@ -415,12 +417,16 @@ impl Summary {
         // the previous week.
         let mut weeks: Vec<SummarizedWeek> = Vec::new();
         for window in medians.windows(2) {
-            weeks.push(compare_weeks(&window[0], &window[1]));
+            // We want to compare week 1 to week 0; since we want the change from
+            // week 1 to week 0.
+            weeks.push(compare_weeks(&window[1], &window[0]));
         }
 
         assert_eq!(weeks.len(), 12);
 
-        let totals = compare_weeks(&medians[0], medians.last().unwrap());
+        // See window comparison; compare from last week (which is the oldest)
+        // to the first week.
+        let totals = compare_weeks(medians.last().unwrap(), &medians[0]);
 
         for week in &mut weeks {
             for crate_name in totals.by_crate.keys() {
