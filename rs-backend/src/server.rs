@@ -1,5 +1,5 @@
 use std::collections::{HashMap};
-use std::cmp::{max, min};
+use std::cmp::max;
 use std::io::Read;
 
 use iron::prelude::*;
