@@ -13,7 +13,7 @@ use serde;
 
 use SERVER_ADDRESS;
 use errors::*;
-use load::{SummarizedWeek, Kind, TestRun, InputData};
+use load::{SummarizedWeek, Kind, TestRun, InputData, Timing};
 use util::{start_idx, end_idx};
 
 const JS_DATE_FORMAT: &'static str = "%Y-%m-%dT%H:%M:%S.000Z";
@@ -190,6 +190,22 @@ fn get_data_for_date(day: &TestRun, crate_names: &[String], phases: &[String], g
         rss: u64,
     }
 
+    impl Recording {
+        fn new() -> Recording {
+            Recording {
+                time: 0.0,
+                rss: 0,
+            }
+        }
+
+        fn record(&mut self, phase: Option<&Timing>) {
+            if let Some(phase) = phase {
+                self.time += phase.time;
+                self.rss = max(self.rss, phase.rss.unwrap());
+            }
+        }
+    }
+
     let crates = crate_names.into_iter().filter_map(|crate_name| {
         day.by_crate.get(crate_name).map(|krate| {
             (crate_name, krate)
@@ -197,35 +213,14 @@ fn get_data_for_date(day: &TestRun, crate_names: &[String], phases: &[String], g
     }).collect::<Vec<_>>();
 
     let mut data = HashMap::new();
-    if group_by == GroupBy::Crate {
-        for (crate_name, krate) in crates {
-            let mut mem = 0;
-            let mut total = 0.0;
-            for phase in phases {
-                if let Some(phase) = krate.get(phase) {
-                    total += phase.time;
-                    mem = max(mem, phase.rss.unwrap());
-                }
-            }
-            data.insert(crate_name, Recording {
-                time: total,
-                rss: mem
-            });
-        }
-    } else { // group_by == GroupBy::Phase
-        for phase_name in phases {
-            let mut mem = 0;
-            let mut total = 0.0;
-            for &(_, krate) in &crates {
-                if let Some(phase) = krate.get(phase_name) {
-                    total += phase.time;
-                    mem = max(mem, phase.rss.unwrap());
-                }
-            }
-            data.insert(phase_name, Recording {
-                time: total,
-                rss: mem
-            });
+    for phase_name in phases {
+        for &(crate_name, krate) in &crates {
+            let entry = match group_by {
+                GroupBy::Crate => data.entry(crate_name),
+                GroupBy::Phase => data.entry(phase_name),
+            };
+
+            entry.or_insert(Recording::new()).record(krate.get(phase_name));
         }
     }
 
