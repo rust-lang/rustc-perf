@@ -114,7 +114,7 @@ impl serde::Deserialize for OptionalDate {
     }
 }
 
-fn get_summary(_req_body: Option<Value>, data: &InputData) -> Result<Value> {
+fn get_summary(data: &InputData) -> Result<Value> {
     let dates = data.summary_rustc.summary.iter()
         .map(|s| s.date.format(JS_DATE_FORMAT).to_string())
         .collect::<Vec<_>>();
@@ -174,7 +174,7 @@ fn get_summary(_req_body: Option<Value>, data: &InputData) -> Result<Value> {
         .build())
 }
 
-fn get_info(_req_body: Option<Value>, data: &InputData) -> Result<Value> {
+fn get_info(data: &InputData) -> Result<Value> {
     Ok(ObjectBuilder::new()
         .insert("crates", data.crate_list.iter().cloned().collect::<Vec<String>>())
         .insert("phases", data.phase_list.iter().cloned().collect::<Vec<String>>())
@@ -529,7 +529,7 @@ fn mk_stats(data: &[&TestRun], crate_name: &str, phases: &[String]) -> Value {
 /// Post-processing consists of applying access control headers and [potentially]
 /// printing the error message.
 fn get_handler<F>(handler: F, req: &mut Request) -> IronResult<Response>
-    where F: Fn(Option<Value>, &InputData) -> Result<Value> {
+    where F: Fn(&InputData) -> Result<Value> {
     use std::ops::Deref;
     use iron::headers::{ContentType, AccessControlAllowOrigin};
     use iron::mime::{Mime, TopLevel, SubLevel};
@@ -538,11 +538,7 @@ fn get_handler<F>(handler: F, req: &mut Request) -> IronResult<Response>
     let rwlock = req.get::<State<InputData>>().unwrap();
     let data = rwlock.read().unwrap();
 
-    let mut buf = String::new();
-    let res = match req.body.read_to_string(&mut buf).unwrap() {
-        0 => handler(None, data.deref()),
-        _ => handler(Some(serde_json::from_str(&buf).unwrap()), data.deref())
-    };
+    let res = handler(data.deref());
 
     let mut resp = match res {
         Ok(json) => {
