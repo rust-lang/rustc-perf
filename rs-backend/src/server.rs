@@ -24,16 +24,6 @@ enum GroupBy {
     Phase,
 }
 
-impl GroupBy {
-    fn from_str(kind: &str) -> Option<GroupBy> {
-        match kind {
-            "crate" => Some(GroupBy::Crate),
-            "phase" => Some(GroupBy::Phase),
-            _ => None
-        }
-    }
-}
-
 impl serde::Deserialize for GroupBy {
     fn deserialize<D>(deserializer: &mut D) -> ::std::result::Result<GroupBy, D::Error>
         where D: serde::de::Deserializer
@@ -46,9 +36,10 @@ impl serde::Deserialize for GroupBy {
             fn visit_str<E>(&mut self, value: &str) -> ::std::result::Result<GroupBy, E>
                 where E: serde::de::Error
             {
-                match GroupBy::from_str(value) {
-                    Some(group_by) => Ok(group_by),
-                    None => {
+                match value {
+                    "crate" => Ok(GroupBy::Crate),
+                    "phase" => Ok(GroupBy::Phase),
+                    _ => {
                         let msg = format!("unexpected {} value for group by", value);
                         Err(serde::de::Error::custom(msg))
                     }
@@ -66,18 +57,18 @@ enum OptionalDate {
 }
 
 impl OptionalDate {
-    fn as_start_date(&self, data: &InputData) -> NaiveDateTime {
+    fn as_start(&self, data: &InputData) -> NaiveDateTime {
         // Handle missing start by returning 30 days before end.
         if let OptionalDate::Date(date) = *self {
             date
         } else {
-            let end = self.as_end_date(data);
+            let end = self.as_end(data);
             let start = (end - Duration::days(30)).timestamp();
             NaiveDateTime::from_timestamp(start, 0)
         }
     }
 
-    fn as_end_date(&self, data: &InputData) -> NaiveDateTime {
+    fn as_end(&self, data: &InputData) -> NaiveDateTime {
         // Handle missing end by using the last available date.
         if let OptionalDate::Date(date) = *self {
             date
@@ -284,8 +275,8 @@ impl PostHandler for Data {
         let mut first_idx = None;
         let mut last_idx = 0;
         // Iterate over date range.
-        let start_idx = start_idx(data.by_kind(body.kind), body.start_date.as_start_date(data));
-        let end_idx = end_idx(data.by_kind(body.kind), body.end_date.as_end_date(data));
+        let start_idx = start_idx(data.by_kind(body.kind), body.start_date.as_start(data));
+        let end_idx = end_idx(data.by_kind(body.kind), body.end_date.as_end(data));
         for i in start_idx..(end_idx + 1) {
             let today_data = get_data_for_date(
                 &data.by_kind(body.kind)[i],
@@ -319,7 +310,7 @@ struct Tabular { // XXX naming
 impl PostHandler for Tabular {
     fn handle(body: Self, data: &InputData) -> Result<Value> {
         let kind_data = data.by_kind(body.kind);
-        let day = &kind_data[end_idx(kind_data, body.date.as_end_date(data))];
+        let day = &kind_data[end_idx(kind_data, body.date.as_end(data))];
         let mut by_crate = ObjectBuilder::new();
         for (crate_name, krate) in &day.by_crate {
             let mut krate_obj = ObjectBuilder::new();
@@ -389,8 +380,8 @@ impl PostHandler for Stats {
         }
 
         let kinded_data = data.by_kind(body.kind);
-        let mut start_date = body.start_date.as_start_date(data);
-        let mut end_date = body.end_date.as_end_date(data);
+        let mut start_date = body.start_date.as_start(data);
+        let mut end_date = body.end_date.as_end(data);
 
         let mut counted = Vec::new();
 
