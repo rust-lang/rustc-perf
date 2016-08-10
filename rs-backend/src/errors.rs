@@ -4,7 +4,7 @@ error_chain! {
 
     foreign_links {
         ::std::io::Error, Io, "io error";
-        ::json::Error, Json, "json error";
+        ::serde_json::Error, Json, "json error";
         ::chrono::ParseError, Chrono, "chrono parsing error";
     }
 
