@@ -5,7 +5,8 @@ use std::path::Path;
 use std::io::Read;
 
 use chrono::{Duration, NaiveDateTime};
-use json::{self, JsonValue};
+use serde_json::{self, Value};
+use serde;
 
 use util::start_idx;
 use errors::*;
@@ -46,6 +47,11 @@ impl ::iron::typemap::Key for InputData {
     type Value = InputData;
 }
 
+struct InputHeader {
+    date: NaiveDateTime,
+    commit: String,
+}
+
 impl InputData {
     /// Initialize `InputData from the file system.
     pub fn from_fs() -> Result<InputData> {
@@ -81,7 +87,7 @@ impl InputData {
                 continue;
             }
 
-            let contents = match json::parse(&file_contents) {
+            let contents: Value = match serde_json::from_str(&file_contents) {
                 Ok(json) => json,
                 Err(err) => {
                     println!("Failed to parse JSON for {}: {:?}", filename, err);
@@ -89,7 +95,7 @@ impl InputData {
                     continue;
                 }
             };
-            if contents["times"].is_empty() {
+            if contents.find("times").unwrap().as_array().unwrap().is_empty() {
                 skipped += 1;
                 continue;
             }
@@ -113,18 +119,21 @@ impl InputData {
                     .map_err(|err| err.into())
             }
 
-            let header = &contents["header"];
-            let date = header["date"].as_str().unwrap();
-            let date = parse_from_header(date).or_else(|_| parse_from_filename(&filename))?;
+            let header = InputHeader {
+                commit: contents.lookup("header.commit").unwrap().as_str().unwrap().to_string(),
+                date: parse_from_header(contents.lookup("header.date").unwrap().as_str().unwrap())
+                    .or_else(|_| parse_from_filename(&filename))?,
+            };
+            let date = header.date;
 
             let test_name = &filename[0..filename.find("--").unwrap()];
 
-            let times = &contents["times"];
+            let times = contents.find("times").unwrap().as_array().unwrap();
             if test_name == "rustc" {
                 data_rustc.push(TestRun::new(date, header, times, true));
 
-                for timing in times.members() {
-                    let crate_name = timing["crate"].as_str().unwrap().to_string();
+                for timing in times {
+                    let crate_name = timing.find("crate").unwrap().as_str().unwrap().to_string();
                     crate_list.insert(crate_name);
                 }
             } else {
@@ -132,7 +141,7 @@ impl InputData {
                 let index = data_benchmarks.iter().position(|benchmark: &TestRun| benchmark.date == date);
                 if let Some(index) = index {
                     c_benchmarks_add += 1;
-                    let crate_name = times[0]["crate"].as_str().unwrap();
+                    let crate_name = times[0].find("crate").unwrap().as_str().unwrap();
                     data_benchmarks[index].by_crate.insert(test_name.to_string(),
                         make_times(times, false).remove(crate_name).unwrap());
                 } else {
@@ -140,8 +149,8 @@ impl InputData {
                 }
             }
 
-            for timing in times.members() {
-                for (phase, _) in timing["times"].entries() {
+            for timing in times {
+                for (phase, _) in timing.find("times").unwrap().as_object().unwrap() {
                     phase_list.insert(phase.to_string());
                 }
             }
@@ -202,6 +211,32 @@ impl Kind {
     }
 }
 
+impl serde::Deserialize for Kind {
+    fn deserialize<D>(deserializer: &mut D) -> ::std::result::Result<Kind, D::Error>
+        where D: serde::de::Deserializer
+    {
+        struct KindVisitor;
+
+        impl serde::de::Visitor for KindVisitor {
+            type Value = Kind;
+
+            fn visit_str<E>(&mut self, value: &str) -> ::std::result::Result<Kind, E>
+                where E: serde::de::Error
+            {
+                match Kind::from_str(value) {
+                    Some(group_by) => Ok(group_by),
+                    None => {
+                        let msg = format!("unexpected {} value for kind", value);
+                        Err(serde::de::Error::custom(msg))
+                    }
+                }
+            }
+        }
+
+        deserializer.deserialize(KindVisitor)
+    }
+}
+
 /// The data loaded for a single date, and all associated crates.
 pub struct TestRun {
     pub date: NaiveDateTime,
@@ -232,10 +267,10 @@ impl Ord for TestRun {
 }
 
 impl TestRun {
-    fn new(date: NaiveDateTime, header: &JsonValue, times: &JsonValue, is_rustc: bool) -> TestRun {
+    fn new(date: NaiveDateTime, header: InputHeader, times: &[Value], is_rustc: bool) -> TestRun {
         TestRun {
             date: date,
-            commit: header["commit"].as_str().unwrap().to_string(),
+            commit: header.commit.clone(),
             by_crate: make_times(times, is_rustc)
         }
     }
@@ -261,30 +296,32 @@ impl Timing {
 }
 
 /// Run through the timings for a date and construct the `by_crate` field of TestRun.
-fn make_times(timings: &JsonValue, is_rustc: bool) -> HashMap<String, HashMap<String, Timing>> {
+fn make_times(timings: &[Value], is_rustc: bool) -> HashMap<String, HashMap<String, Timing>> {
     let mut by_crate = HashMap::new();
     let mut totals = HashMap::new();
 
-    for timing in timings.members() {
+    for timing in timings {
         let mut times = HashMap::new();
-        for (phase_name, phase) in timing["times"].entries() {
+        for (phase_name, phase) in timing.find("times").unwrap().as_object().unwrap() {
             times.insert(phase_name.to_string(), Timing {
-                percent: phase["percent"].as_f64().unwrap(),
-                time: phase["time"].as_f64().unwrap(),
-                rss: timing["rss"][phase_name].as_u64(),
+                percent: phase.find("percent").unwrap().as_f64().unwrap(),
+                time: phase.find("time").unwrap().as_f64().unwrap(),
+                rss: timing.find("rss")
+                    .and_then(|rss| rss.find(phase_name))
+                    .and_then(|phase| phase.as_u64()),
             });
         }
 
         let mut mem_values = Vec::new();
-        if timing["rss"].is_object() {
-            for (_, value) in timing["rss"].entries() {
+        if let Some(obj) = timing.find("rss").unwrap().as_object() {
+            for (_, value) in obj {
                 mem_values.push(value.as_u64().unwrap());
             }
         }
 
         times.insert("total".into(), Timing {
             percent: 100.0,
-            time: timing["total"].as_f64().unwrap(),
+            time: timing.find("total").unwrap().as_f64().unwrap(),
             rss: Some(mem_values.into_iter().max().unwrap_or(0))
         });
 
@@ -294,7 +331,7 @@ fn make_times(timings: &JsonValue, is_rustc: bool) -> HashMap<String, HashMap<St
             entry.rss = max(times[phase].rss, entry.rss);
         }
 
-        by_crate.insert(timing["crate"].as_str().unwrap().to_string(), times);
+        by_crate.insert(timing.find("crate").unwrap().as_str().unwrap().to_string(), times);
     }
 
     if is_rustc {
@@ -335,7 +372,7 @@ impl Summary {
 
             // For a given date we'll get the three most recent sets of TestRun
             // and take the the median for each value.
-            let start_idx = start_idx(data, &date);
+            let start_idx = start_idx(data, date);
             assert!(start_idx >= 3, "Less than 3 days of data");
             let mut weeks = Vec::new();
             for idx in 0..3 {

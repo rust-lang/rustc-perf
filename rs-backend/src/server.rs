@@ -7,7 +7,9 @@ use iron::status;
 use router::Router;
 use persistent::State;
 use chrono::{Duration, NaiveDate, NaiveDateTime};
-use json::{self, JsonValue};
+use serde_json::builder::ObjectBuilder;
+use serde_json::{self, Value};
+use serde;
 
 use SERVER_ADDRESS;
 use errors::*;
@@ -32,7 +34,87 @@ impl GroupBy {
     }
 }
 
-fn get_summary(_req_body: Option<JsonValue>, data: &InputData) -> Result<JsonValue> {
+impl serde::Deserialize for GroupBy {
+    fn deserialize<D>(deserializer: &mut D) -> ::std::result::Result<GroupBy, D::Error>
+        where D: serde::de::Deserializer
+    {
+        struct GroupByVisitor;
+
+        impl serde::de::Visitor for GroupByVisitor {
+            type Value = GroupBy;
+
+            fn visit_str<E>(&mut self, value: &str) -> ::std::result::Result<GroupBy, E>
+                where E: serde::de::Error
+            {
+                match GroupBy::from_str(value) {
+                    Some(group_by) => Ok(group_by),
+                    None => {
+                        let msg = format!("unexpected {} value for group by", value);
+                        Err(serde::de::Error::custom(msg))
+                    }
+                }
+            }
+        }
+
+        deserializer.deserialize(GroupByVisitor)
+    }
+}
+
+enum OptionalDate {
+    Date(NaiveDateTime),
+    CouldNotParse(String),
+}
+
+impl OptionalDate {
+    fn as_start_date(&self, data: &InputData) -> NaiveDateTime {
+        // Handle missing start by returning 30 days before end.
+        if let OptionalDate::Date(date) = *self {
+            date
+        } else {
+            let end = self.as_end_date(data);
+            let start = (end - Duration::days(30)).timestamp();
+            NaiveDateTime::from_timestamp(start, 0)
+        }
+    }
+
+    fn as_end_date(&self, data: &InputData) -> NaiveDateTime {
+        // Handle missing end by using the last available date.
+        if let OptionalDate::Date(date) = *self {
+            date
+        } else {
+            data.last_date
+        }
+    }
+}
+
+impl serde::Deserialize for OptionalDate {
+    fn deserialize<D>(deserializer: &mut D) -> ::std::result::Result<OptionalDate, D::Error>
+        where D: serde::de::Deserializer
+    {
+        struct DateVisitor;
+
+        impl serde::de::Visitor for DateVisitor {
+            type Value = OptionalDate;
+
+            fn visit_str<E>(&mut self, value: &str) -> ::std::result::Result<OptionalDate, E>
+                where E: serde::de::Error
+            {
+                match NaiveDate::parse_from_str(value, "%a %b %d %Y") {
+                    Ok(date) => Ok(OptionalDate::Date(date.and_hms(0, 0, 0))),
+                    Err(err) => {
+                        let msg = format!("bad date {:?}: {:?}", value, err);
+                        println!("{}", msg);
+                        Ok(OptionalDate::CouldNotParse(value.to_string()))
+                    }
+                }
+            }
+        }
+
+        deserializer.deserialize(DateVisitor)
+    }
+}
+
+fn get_summary(data: &InputData) -> Result<Value> {
     let dates = data.summary_rustc.summary.iter()
         .map(|s| s.date.format(JS_DATE_FORMAT).to_string())
         .collect::<Vec<_>>();
@@ -60,12 +142,12 @@ fn get_summary(_req_body: Option<JsonValue>, data: &InputData) -> Result<JsonVal
         summarize(s, &data.summary_rustc.summary[i])
     }).collect::<Vec<_>>();
 
-    fn breakdown(benchmark: &SummarizedWeek, rustc: &SummarizedWeek) -> JsonValue {
-        let mut per_bench = HashMap::new();
+    fn breakdown(benchmark: &SummarizedWeek, rustc: &SummarizedWeek) -> Value {
+        let mut per_bench = ObjectBuilder::new();
 
         for (crate_name, krate) in &benchmark.by_crate {
             let val = krate.get("total").cloned().unwrap_or(0.0);
-            per_bench.insert(crate_name.to_string(), format!("{:.1}", val).into());
+            per_bench = per_bench.insert(crate_name.as_str(), format!("{:.1}", val));
         }
 
         let bootstrap = if rustc.by_crate["total"].contains_key("total") {
@@ -73,296 +155,274 @@ fn get_summary(_req_body: Option<JsonValue>, data: &InputData) -> Result<JsonVal
         } else {
             0.0
         };
-        per_bench.insert("bootstrap".to_string(), format!("{:.1}", bootstrap).into());
+        per_bench = per_bench.insert("bootstrap", format!("{:.1}", bootstrap));
 
-        per_bench.into()
+        per_bench.build()
     }
 
     // per benchmark, per week
     let breakdown_data = data.summary_benchmarks.summary.iter().enumerate().map(|(i, s)| {
         breakdown(s, &data.summary_rustc.summary[i])
-    }).collect::<Vec<JsonValue>>();
+    }).collect::<Vec<Value>>();
 
-    Ok(object! {
-        "total_summary" => summarize(&data.summary_benchmarks.total, &data.summary_rustc.total),
-        "total_breakdown" => breakdown(&data.summary_benchmarks.total, &data.summary_rustc.total),
-        "breakdown" => breakdown_data,
-        "summaries" => summaries,
-        "dates" => dates
-    })
+    Ok(ObjectBuilder::new()
+        .insert("total_summary", summarize(&data.summary_benchmarks.total, &data.summary_rustc.total))
+        .insert("total_breakdown", breakdown(&data.summary_benchmarks.total, &data.summary_rustc.total))
+        .insert("breakdown", breakdown_data)
+        .insert("summaries", summaries)
+        .insert("dates", dates)
+        .build())
 }
 
-fn get_info(_req_body: Option<JsonValue>, data: &InputData) -> Result<JsonValue> {
-    Ok(object! {
-        "crates" => data.crate_list.iter().cloned().collect::<Vec<String>>(),
-        "phases" => data.phase_list.iter().cloned().collect::<Vec<String>>(),
-        "benchmarks" => data.benchmarks.iter().cloned().collect::<Vec<String>>()
-    })
+fn get_info(data: &InputData) -> Result<Value> {
+    Ok(ObjectBuilder::new()
+        .insert("crates", &data.crate_list)
+        .insert("phases", &data.phase_list)
+        .insert("benchmarks", &data.benchmarks)
+        .build())
 }
 
-fn assert_request_body_present(body: Option<JsonValue>) -> Result<JsonValue> {
-    match body {
-        Some(body) => Ok(body),
-        None => Err("Missing request body".into())
+fn get_data_for_date(day: &TestRun, crate_names: &[String], phases: &[String], group_by: GroupBy) -> Value {
+    #[derive(Serialize)]
+    struct Recording { // TODO better name (can't use Timing since we don't have a percent...)
+        time: f64,
+        rss: u64,
     }
-}
 
-fn get_kind_from_body(body: &JsonValue) -> Result<Kind> {
-    let kind = body["kind"].as_str().unwrap();
-    match Kind::from_str(kind) {
-        Some(kind) => Ok(kind),
-        None => Err(format!("bad value kind: {}", kind).into())
-    }
-}
+    let crates = crate_names.into_iter().filter_map(|crate_name| {
+        day.by_crate.get(crate_name).map(|krate| {
+            (crate_name, krate)
+        })
+    }).collect::<Vec<_>>();
 
-fn get_group_by_from_body(body: &JsonValue) -> Result<GroupBy> {
-    let group_by = body["group_by"].as_str().unwrap();
-    match GroupBy::from_str(group_by) {
-        Some(group_by) => Ok(group_by),
-        None => Err(format!("bad value group_by: {}", group_by).into())
-    }
-}
-
-fn parse_date(s: &str) -> Result<NaiveDateTime> {
-    let date = match NaiveDate::parse_from_str(s, "%a %b %d %Y") {
-        Ok(date) => date,
-        Err(err) => return Err(err).chain_err(|| format!("while parsing {}", s))
-    };
-
-    Ok(date.and_hms(0, 0, 0))
-}
-
-fn end_date(body: &JsonValue, last_date: &NaiveDateTime) -> NaiveDateTime {
-    // Handle missing end by using the last available date.
-    if !body["end"].is_empty() {
-        parse_date(body["end"].as_str().unwrap()).unwrap()
-    } else {
-        *last_date
-    }
-}
-
-fn start_date(body: &JsonValue, last_date: &NaiveDateTime) -> NaiveDateTime {
-    // Handle missing start by returning 30 days before end.
-    if !body["start"].is_empty() {
-        parse_date(body["start"].as_str().unwrap()).unwrap()
-    } else {
-        let end = end_date(body, last_date);
-        let start = (end - Duration::days(30)).timestamp();
-        NaiveDateTime::from_timestamp(start, 0)
-    }
-}
-
-fn get_data_for_date(day: &TestRun, crates: &JsonValue, phases: &JsonValue, group_by: GroupBy) -> JsonValue {
-    let mut data = JsonValue::new_object();
+    let mut data = HashMap::new();
     if group_by == GroupBy::Crate {
-        for crate_name in crates.members() {
-            let crate_name = crate_name.as_str().unwrap();
-            if let Some(krate) = day.by_crate.get(&*crate_name) {
-                let mut mem = 0;
-                let mut total = 0.0;
-                for phase in phases.members() {
-                    let phase = phase.as_str().unwrap();
-                    if let Some(phase) = krate.get(phase) {
-                        total += phase.time;
-                        mem = max(mem, phase.rss.unwrap());
-                    }
+        for (crate_name, krate) in crates {
+            let mut mem = 0;
+            let mut total = 0.0;
+            for phase in phases {
+                if let Some(phase) = krate.get(phase) {
+                    total += phase.time;
+                    mem = max(mem, phase.rss.unwrap());
                 }
-                data[crate_name] = object! {
-                    "time" => total,
-                    "rss" => mem
-                };
             }
+            data.insert(crate_name, Recording {
+                time: total,
+                rss: mem
+            });
         }
     } else { // group_by == GroupBy::Phase
-        for phase in phases.members() {
-            let phase = phase.as_str().unwrap();
-            let mut total = 0.0;
+        for phase_name in phases {
             let mut mem = 0;
-            for crate_name in crates.members() {
-                let crate_name = crate_name.as_str().unwrap();
-                if let Some(krate) = day.by_crate.get(crate_name) {
-                    if let Some(phase) = krate.get(phase) {
-                        total += phase.time;
-                        mem = max(mem, phase.rss.unwrap());
-                    }
+            let mut total = 0.0;
+            for &(_, krate) in &crates {
+                if let Some(phase) = krate.get(phase_name) {
+                    total += phase.time;
+                    mem = max(mem, phase.rss.unwrap());
                 }
             }
-            data[phase] = object! {
-                "time" => total,
-                "rss" => mem
-            };
+            data.insert(phase_name, Recording {
+                time: total,
+                rss: mem
+            });
         }
     }
 
-    object! {
-        "date" => day.date.format(JS_DATE_FORMAT).to_string(),
-        "commit" => day.commit.clone(),
-        "data" => data
-    }
+    ObjectBuilder::new()
+        .insert("date", day.date.format(JS_DATE_FORMAT).to_string())
+        .insert("commit", day.commit.clone())
+        .insert("data", data)
+        .build()
 }
 
-// Expected fields on body: {
-//     kind: 'rustc' | 'benchmarks',
-//     start: Date,     // optional
-//     end: Date,       // optional
-//     crates: [str],   // crate == benchmarks for benchmark mode
-//     phases: [str],
-//     group_by: 'crate' | 'phase',
-// }
-// crate (rustc only) or phase can be 'total'
-fn get_data(req_body: Option<JsonValue>, data: &InputData) -> Result<JsonValue> {
-    let body = assert_request_body_present(req_body)?;
-    let kind = get_kind_from_body(&body)?;
-    let group_by = get_group_by_from_body(&body)?;
+trait PostHandler: Sized + serde::Deserialize {
+    fn handle(body: Self, data: &InputData) -> Result<Value>;
 
-    let mut result = Vec::new();
-    let mut first_idx = None;
-    let mut last_idx = 0;
-    // Iterate over date range.
-    let start_idx = start_idx(data.by_kind(kind), &start_date(&body, &data.last_date));
-    let end_idx = end_idx(data.by_kind(kind), &end_date(&body, &data.last_date));
-    for i in start_idx..(end_idx + 1) {
-        let today_data = get_data_for_date(&data.by_kind(kind)[i], &body["crates"], &body["phases"], group_by);
+    fn handle_request(req: &mut Request) -> IronResult<Response> {
+        use std::ops::Deref;
+        use iron::headers::{ContentType, AccessControlAllowOrigin};
+        use iron::mime::{Mime, TopLevel, SubLevel};
+        use iron::modifiers::Header;
 
-        if !today_data["data"].is_empty() {
-            last_idx = i - start_idx;
-            if first_idx == None {
-                first_idx = Some(i - start_idx);
-            }
-        }
+        let rwlock = req.get::<State<InputData>>().unwrap();
+        let data = rwlock.read().unwrap();
 
-        result.push(today_data);
-    }
+        let mut buf = String::new();
+        let res = match req.body.read_to_string(&mut buf).unwrap() {
+            0 => panic!("POST handler with 0 length body."), // TODO: return a proper error
+            _ => Self::handle(serde_json::from_str::<Self>(&buf).unwrap(), data.deref())
+        };
 
-    // Trim the data
-    let result = result.drain(first_idx.unwrap()..(last_idx+1)).collect::<Vec<_>>();
-    Ok(result.into())
-}
-
-fn handle_date(date_str: &str) -> Result<NaiveDateTime> {
-    match parse_date(date_str) {
-        Ok(date) => Ok(date),
-        Err(err) => Err(err).chain_err(|| format!("bad date: {:?}", date_str))
-    }
-}
-
-fn get_date_from_body(body: &JsonValue) -> Result<NaiveDateTime> {
-    if let Some(date_str) = body["date"].as_str() {
-        handle_date(date_str)
-    } else {
-        Err(format!("non-string date: {:?}", body["date"]).into())
-    }
-}
-
-// Expected fields on body: {
-//     kind: 'rustc' | 'benchmarks',
-//     date: Date
-// }
-fn get_tabular(req_body: Option<JsonValue>, data: &InputData) -> Result<JsonValue> {
-    let body = assert_request_body_present(req_body)?;
-    let kind = get_kind_from_body(&body)?;
-    let date = get_date_from_body(&body)?;
-
-    let data = data.by_kind(kind);
-    let day = &data[end_idx(data, &date)];
-    let mut by_crate = JsonValue::new_object();
-    for (crate_name, krate) in &day.by_crate {
-        let mut krate_obj = JsonValue::new_object();
-        for (phase_name, timing) in krate {
-            krate_obj[phase_name] = object! {
-                "percent" => timing.percent,
-                "time" => timing.time,
-                "rss" => timing.rss
-            };
-        }
-
-        by_crate[crate_name] = krate_obj;
-    }
-
-    Ok(object! {
-        "date" => day.date.format(JS_DATE_FORMAT).to_string(),
-        "commit" => day.commit.clone(),
-        "data" => by_crate
-    })
-}
-
-// Expected fields on body: {
-//     kind: 'rustc' | 'benchmarks',
-//     dates: [Date],
-//     crates: [str],   // crate == benchmarks for benchmark mode
-//     phases: [str],
-//     group_by: 'crate' | 'phase'
-// }
-// crate or phase can be 'total'
-fn get_days(req_body: Option<JsonValue>, data: &InputData) -> Result<JsonValue> {
-    let body = assert_request_body_present(req_body)?;
-    let kind = get_kind_from_body(&body)?;
-    let group_by = get_group_by_from_body(&body)?;
-
-    let data = data.by_kind(kind);
-    let mut result = JsonValue::new_array();
-    for orig_date in body["dates"].members() {
-        let date = match handle_date(orig_date.as_str().unwrap()) {
-            Ok(date) => date,
+        let mut resp = match res {
+            Ok(json) => {
+                let mut resp = Response::with((status::Ok, serde_json::to_string(&json).unwrap()));
+                resp.set_mut(Header(ContentType(Mime(TopLevel::Application, SubLevel::Json, vec![]))));
+                resp
+            },
             Err(err) => {
-                println!("bad date {:?}: {:?}", orig_date, err);
-                continue;
+                // TODO: Print to stderr
+                println!("An error occurred: {:?}", err);
+                Response::with((status::InternalServerError, err.to_string()))
             }
         };
-        let day = get_data_for_date(&data[end_idx(data, &date)], &body["crates"], &body["phases"], group_by);
-        result.push(day)?;
+        resp.set_mut(Header(AccessControlAllowOrigin::Any));
+        Ok(resp)
     }
-    Ok(result)
 }
 
-// Expected fields on body: {
-//     kind: 'rustc' | 'benchmarks',
-//     start: Date,     // optional
-//     end: Date,       // optional
-//     crates: [str],   // crate == benchmarks for benchmark mode
-//     phases: [str]
-// }
-// crate (rustc only) or phase can be 'total'
-fn get_stats(req_body: Option<JsonValue>, data: &InputData) -> Result<JsonValue> {
-    let body = assert_request_body_present(req_body)?;
-    let kind = get_kind_from_body(&body)?;
+#[derive(Deserialize)]
+struct Data { // XXX naming
+    start_date: OptionalDate,
+    end_date: OptionalDate,
+    kind: Kind,
+    group_by: GroupBy,
+    crates: Vec<String>,
+    phases: Vec<String>,
+}
 
-    if kind == Kind::Benchmarks && body["crates"].contains("total") {
-        return Err("unexpected total crate with benchmarks kind".into());
-    }
+impl PostHandler for Data {
+    fn handle(body: Self, data: &InputData) -> Result<Value> {
+        let mut result = Vec::new();
+        let mut first_idx = None;
+        let mut last_idx = 0;
+        // Iterate over date range.
+        let start_idx = start_idx(data.by_kind(body.kind), body.start_date.as_start_date(data));
+        let end_idx = end_idx(data.by_kind(body.kind), body.end_date.as_end_date(data));
+        for i in start_idx..(end_idx + 1) {
+            let today_data = get_data_for_date(
+                &data.by_kind(body.kind)[i],
+                &body.crates,
+                &body.phases,
+                body.group_by
+            );
 
-    let mut start_date = start_date(&body, &data.last_date);
-    let mut end_date = end_date(&body, &data.last_date);
-
-    let mut counted = Vec::new();
-    // Iterate over date range.
-    let start_idx = start_idx(data.by_kind(kind), &start_date);
-    let end_idx = end_idx(data.by_kind(kind), &end_date);
-    for i in start_idx..(end_idx + 1) {
-        let today_data = &data.by_kind(kind)[i];
-        if !today_data.by_crate.is_empty() {
-            if counted.is_empty() {
-                start_date = today_data.date;
+            if !today_data.find("data").unwrap().as_object().unwrap().is_empty() {
+                last_idx = i - start_idx;
+                if first_idx == None {
+                    first_idx = Some(i - start_idx);
+                }
             }
-            end_date = today_data.date;
-            counted.push(today_data);
+
+            result.push(today_data);
         }
-    }
 
-    let mut crates = JsonValue::new_object();
-    for crate_name in body["crates"].members() {
-        let crate_name = crate_name.as_str().unwrap();
-        crates[crate_name] = mk_stats(&counted, crate_name, &body["phases"]);
+        // Trim the data
+        let result = result.drain(first_idx.unwrap()..(last_idx+1)).collect::<Vec<_>>();
+        Ok(Value::Array(result))
     }
-
-    Ok(object! {
-        "startDate" => start_date.format(JS_DATE_FORMAT).to_string(),
-        "endDate" => end_date.format(JS_DATE_FORMAT).to_string(),
-        "crates" => crates
-    })
 }
 
-fn mk_stats(data: &[&TestRun], crate_name: &str, phases: &JsonValue) -> JsonValue {
+#[derive(Deserialize)]
+struct Tabular { // XXX naming
+    kind: Kind,
+    date: OptionalDate,
+}
+
+impl PostHandler for Tabular {
+    fn handle(body: Self, data: &InputData) -> Result<Value> {
+        let kind_data = data.by_kind(body.kind);
+        let day = &kind_data[end_idx(kind_data, body.date.as_end_date(data))];
+        let mut by_crate = ObjectBuilder::new();
+        for (crate_name, krate) in &day.by_crate {
+            let mut krate_obj = ObjectBuilder::new();
+            for (phase_name, timing) in krate {
+                krate_obj = krate_obj.insert(phase_name.as_str(), ObjectBuilder::new()
+                    .insert("percent", timing.percent)
+                    .insert("time", timing.time)
+                    .insert("rss", timing.rss)
+                    .build());
+            }
+
+            by_crate = by_crate.insert(crate_name.as_str(), krate_obj.build());
+        }
+
+        Ok(ObjectBuilder::new()
+            .insert("date", day.date.format(JS_DATE_FORMAT).to_string())
+            .insert("commit", day.commit.clone())
+            .insert("data", by_crate.build())
+            .build())
+    }
+}
+
+#[derive(Deserialize)]
+struct Days { // XXX naming
+    kind: Kind,
+    dates: Vec<OptionalDate>,
+    crates: Vec<String>,
+    phases: Vec<String>,
+    group_by: GroupBy,
+}
+
+impl PostHandler for Days {
+    fn handle(body: Self, data: &InputData) -> Result<Value> {
+        let data = data.by_kind(body.kind);
+        let mut result = Vec::new();
+        for date in body.dates {
+            if let OptionalDate::Date(date) = date {
+                let day = get_data_for_date(
+                    &data[end_idx(data, date)],
+                    &body.crates,
+                    &body.phases,
+                    body.group_by
+                );
+                result.push(day);
+            }
+        }
+        Ok(Value::Array(result))
+    }
+}
+
+#[derive(Deserialize)]
+struct Stats { // XXX naming
+    kind: Kind,
+    start_date: OptionalDate,
+    end_date: OptionalDate,
+    // kind rustc only: crate or phase can be 'total'
+    crates: Vec<String>,
+    phases: Vec<String>,
+}
+
+impl PostHandler for Stats {
+    fn handle(body: Self, data: &InputData) -> Result<Value> {
+        if body.kind == Kind::Benchmarks && body.crates.iter().any(|s| s == "total") {
+            return Err("unexpected total crate with benchmarks kind".into());
+        }
+
+        let kinded_data = data.by_kind(body.kind);
+        let mut start_date = body.start_date.as_start_date(data);
+        let mut end_date = body.end_date.as_end_date(data);
+
+        let mut counted = Vec::new();
+
+        // Iterate over date range.
+        let start_idx = start_idx(kinded_data, start_date);
+        let end_idx = end_idx(kinded_data, end_date);
+        for i in start_idx..(end_idx + 1) {
+            let today_data = &kinded_data[i];
+            if !today_data.by_crate.is_empty() {
+                if counted.is_empty() {
+                    start_date = today_data.date;
+                }
+                end_date = today_data.date;
+                counted.push(today_data);
+            }
+        }
+
+        let mut crates = ObjectBuilder::new();
+        for crate_name in body.crates {
+            let stats = mk_stats(&counted, &crate_name, &body.phases);
+            crates = crates.insert(crate_name, stats);
+        }
+
+        Ok(ObjectBuilder::new()
+            .insert("startDate", start_date.format(JS_DATE_FORMAT).to_string())
+            .insert("endDate", end_date.format(JS_DATE_FORMAT).to_string())
+            .insert("crates", crates.build())
+            .build())
+    }
+}
+
+fn mk_stats(data: &[&TestRun], crate_name: &str, phases: &[String]) -> Value {
     let mut count = 0;
     let mut first = 0;
     let skip_list = data.iter().enumerate().map(|(i, d)| {
@@ -379,17 +439,17 @@ fn mk_stats(data: &[&TestRun], crate_name: &str, phases: &JsonValue) -> JsonValu
     }).collect::<Vec<_>>();
 
     if count == 0 {
-        return object! {
-            "first" => 0,
-            "last" => 0,
-            "min" => 0,
-            "max" => 0,
-            "mean" => 0,
-            "variance" => 0,
-            "trend" => 0,
-            "trend_b" => 0,
-            "n" => 0
-        };
+        return ObjectBuilder::new()
+            .insert("first", 0)
+            .insert("last", 0)
+            .insert("min", 0)
+            .insert("max", 0)
+            .insert("mean", 0)
+            .insert("variance", 0)
+            .insert("trend", 0)
+            .insert("trend_b", 0)
+            .insert("n", 0)
+            .build();
     }
 
     let sums = data.iter().enumerate().map(|(i, d)| {
@@ -399,8 +459,8 @@ fn mk_stats(data: &[&TestRun], crate_name: &str, phases: &JsonValue) -> JsonValu
 
         let krate = &d.by_crate[crate_name];
         let mut sum = 0.0;
-        for phase in phases.members() {
-            sum += krate[phase.as_str().unwrap()].time;
+        for phase in phases {
+            sum += krate[phase].time;
         }
         sum
     }).collect::<Vec<_>>();
@@ -452,17 +512,17 @@ fn mk_stats(data: &[&TestRun], crate_name: &str, phases: &JsonValue) -> JsonValu
     };
     let trend_b = 100.0 * ((last - first) / first);
 
-    object! {
-        "first" => first,
-        "last" => last,
-        "min" => min,
-        "max" => max,
-        "mean" => mean,
-        "variance" => variance,
-        "trend" => trend,
-        "trend_b" => trend_b,
-        "n" => count
-    }
+    ObjectBuilder::new()
+        .insert("first", first)
+        .insert("last", last)
+        .insert("min", min)
+        .insert("max", max)
+        .insert("mean", mean)
+        .insert("variance", variance)
+        .insert("trend", trend)
+        .insert("trend_b", trend_b)
+        .insert("n", count)
+        .build()
 }
 
 /// Pre and post processes the request and response to prepare it for the
@@ -471,7 +531,7 @@ fn mk_stats(data: &[&TestRun], crate_name: &str, phases: &JsonValue) -> JsonValu
 /// Post-processing consists of applying access control headers and [potentially]
 /// printing the error message.
 fn get_handler<F>(handler: F, req: &mut Request) -> IronResult<Response>
-    where F: Fn(Option<JsonValue>, &InputData) -> Result<JsonValue> {
+    where F: Fn(&InputData) -> Result<Value> {
     use std::ops::Deref;
     use iron::headers::{ContentType, AccessControlAllowOrigin};
     use iron::mime::{Mime, TopLevel, SubLevel};
@@ -480,15 +540,11 @@ fn get_handler<F>(handler: F, req: &mut Request) -> IronResult<Response>
     let rwlock = req.get::<State<InputData>>().unwrap();
     let data = rwlock.read().unwrap();
 
-    let mut buf = String::new();
-    let res = match req.body.read_to_string(&mut buf).unwrap() {
-        0 => handler(None, data.deref()),
-        _ => handler(Some(json::parse(&buf).unwrap()), data.deref())
-    };
+    let res = handler(data.deref());
 
     let mut resp = match res {
         Ok(json) => {
-            let mut resp = Response::with((status::Ok, json.dump()));
+            let mut resp = Response::with((status::Ok, serde_json::to_string(&json).unwrap()));
             resp.set_mut(Header(ContentType(Mime(TopLevel::Application, SubLevel::Json, vec![]))));
             resp
         },
@@ -507,10 +563,10 @@ pub fn start(data: InputData) {
 
     router.get("/summary", |r: &mut Request| get_handler(get_summary, r));
     router.get("/info", |r: &mut Request| get_handler(get_info, r));
-    router.post("/data", |r: &mut Request| get_handler(get_data, r));
-    router.post("/get_tabular", |r: &mut Request| get_handler(get_tabular, r));
-    router.post("/get", |r: &mut Request| get_handler(get_days, r));
-    router.post("/stats", |r: &mut Request| get_handler(get_stats, r));
+    router.post("/data", Data::handle_request);
+    router.post("/get_tabular", Tabular::handle_request);
+    router.post("/get", Days::handle_request);
+    router.post("/stats", Stats::handle_request);
 
     let mut chain = Chain::new(router);
     chain.link(State::<InputData>::both(data));
