@@ -311,24 +311,11 @@ impl PostHandler for Tabular {
     fn handle(body: Self, data: &InputData) -> Result<Value> {
         let kind_data = data.by_kind(body.kind);
         let day = &kind_data[end_idx(kind_data, body.date.as_end(data))];
-        let mut by_crate = ObjectBuilder::new();
-        for (crate_name, krate) in &day.by_crate {
-            let mut krate_obj = ObjectBuilder::new();
-            for (phase_name, timing) in krate {
-                krate_obj = krate_obj.insert(phase_name.as_str(), ObjectBuilder::new()
-                    .insert("percent", timing.percent)
-                    .insert("time", timing.time)
-                    .insert("rss", timing.rss)
-                    .build());
-            }
-
-            by_crate = by_crate.insert(crate_name.as_str(), krate_obj.build());
-        }
 
         Ok(ObjectBuilder::new()
             .insert("date", day.date.format(JS_DATE_FORMAT).to_string())
-            .insert("commit", day.commit.clone())
-            .insert("data", by_crate.build())
+            .insert("commit", &day.commit)
+            .insert("data", &day.by_crate)
             .build())
     }
 }

@@ -269,7 +269,7 @@ impl TestRun {
 
 /// Contains a single timing, associated with a phase (though the phase name
 /// is not included in the timing).
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize)]
 pub struct Timing {
     pub percent: f64,
     pub time: f64,
