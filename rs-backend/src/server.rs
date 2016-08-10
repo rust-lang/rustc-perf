@@ -1,14 +1,12 @@
-use std::collections::{HashMap};
+use std::collections::HashMap;
 use std::cmp::max;
-use std::io::Read;
 
-use iron::prelude::*;
-use iron::status;
+use iron::{Iron, Chain};
 use router::Router;
 use persistent::State;
 use chrono::{Duration, NaiveDate, NaiveDateTime};
 use serde_json::builder::ObjectBuilder;
-use serde_json::{self, Value};
+use serde_json::Value;
 use serde;
 
 use SERVER_ADDRESS;
@@ -17,6 +15,74 @@ use load::{SummarizedWeek, Kind, TestRun, InputData, Timing};
 use util::{start_idx, end_idx};
 
 const JS_DATE_FORMAT: &'static str = "%Y-%m-%dT%H:%M:%S.000Z";
+
+// Boilerplate for parsing and responding to both GET and POST requests.
+mod handler {
+    use std::ops::Deref;
+    use std::io::Read;
+
+    use serde;
+    use serde_json::{self, Value};
+    use iron::prelude::*;
+    use iron::status;
+    use persistent::State;
+
+    use load::InputData;
+    use errors::*;
+
+    fn respond(res: Result<Value>) -> IronResult<Response> {
+        use iron::headers::{ContentType, AccessControlAllowOrigin};
+        use iron::mime::{Mime, TopLevel, SubLevel};
+        use iron::modifiers::Header;
+
+        let mut resp = match res {
+            Ok(json) => {
+                let mut resp = Response::with((status::Ok, serde_json::to_string(&json).unwrap()));
+                resp.set_mut(Header(ContentType(Mime(TopLevel::Application, SubLevel::Json, vec![]))));
+                resp
+            },
+            Err(err) => {
+                // TODO: Print to stderr
+                println!("An error occurred: {:?}", err);
+                Response::with((status::InternalServerError, err.to_string()))
+            }
+        };
+        resp.set_mut(Header(AccessControlAllowOrigin::Any));
+        Ok(resp)
+    }
+
+    pub trait PostHandler: Sized {
+        fn handle(_body: Self, _data: &InputData) -> Result<Value>;
+
+        fn handler(req: &mut Request) -> IronResult<Response>
+            where Self: serde::Deserialize {
+
+            let rwlock = req.get::<State<InputData>>().unwrap();
+            let data = rwlock.read().unwrap();
+
+            let mut buf = String::new();
+            let res = match req.body.read_to_string(&mut buf).unwrap() {
+                0 => Err("POST handler with 0 length body.".into()),
+                _ => Self::handle(serde_json::from_str(&buf).unwrap(), data.deref())
+            };
+
+            respond(res)
+        }
+    }
+
+    pub trait GetHandler: Sized {
+        fn handle(_data: &InputData) -> Result<Value>;
+
+        fn handler(req: &mut Request) -> IronResult<Response> {
+            let rwlock = req.get::<State<InputData>>().unwrap();
+            let data = rwlock.read().unwrap();
+
+            respond(Self::handle(data.deref()))
+        }
+    }
+}
+
+use self::handler::{PostHandler, GetHandler};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 enum GroupBy {
@@ -106,72 +172,78 @@ impl serde::Deserialize for OptionalDate {
     }
 }
 
-fn get_summary(data: &InputData) -> Result<Value> {
-    let dates = data.summary_rustc.summary.iter()
-        .map(|s| s.date.format(JS_DATE_FORMAT).to_string())
-        .collect::<Vec<_>>();
+struct Summary;
+impl GetHandler for Summary {
+    fn handle(data: &InputData) -> Result<Value> {
+        let dates = data.summary_rustc.summary.iter()
+            .map(|s| s.date.format(JS_DATE_FORMAT).to_string())
+            .collect::<Vec<_>>();
 
-    fn summarize(benchmark: &SummarizedWeek, rustc: &SummarizedWeek) -> String {
-        let mut sum = 0.0;
-        let mut count = 0;
-        for krate in benchmark.by_crate.values() {
-            if krate.contains_key("total") {
-                sum += krate["total"];
-                count += 1;
+        fn summarize(benchmark: &SummarizedWeek, rustc: &SummarizedWeek) -> String {
+            let mut sum = 0.0;
+            let mut count = 0;
+            for krate in benchmark.by_crate.values() {
+                if krate.contains_key("total") {
+                    sum += krate["total"];
+                    count += 1;
+                }
             }
+
+            if rustc.by_crate["total"].contains_key("total") {
+                sum += 2.0 * rustc.by_crate["total"]["total"];
+                count += 2;
+            }
+
+            format!("{:.1}", sum / (count as f64))
         }
 
-        if rustc.by_crate["total"].contains_key("total") {
-            sum += 2.0 * rustc.by_crate["total"]["total"];
-            count += 2;
+        // overall number for each week
+        let summaries = data.summary_benchmarks.summary.iter().enumerate().map(|(i, s)| {
+            summarize(s, &data.summary_rustc.summary[i])
+        }).collect::<Vec<_>>();
+
+        fn breakdown(benchmark: &SummarizedWeek, rustc: &SummarizedWeek) -> Value {
+            let mut per_bench = ObjectBuilder::new();
+
+            for (crate_name, krate) in &benchmark.by_crate {
+                let val = krate.get("total").cloned().unwrap_or(0.0);
+                per_bench = per_bench.insert(crate_name.as_str(), format!("{:.1}", val));
+            }
+
+            let bootstrap = if rustc.by_crate["total"].contains_key("total") {
+                rustc.by_crate["total"]["total"]
+            } else {
+                0.0
+            };
+            per_bench = per_bench.insert("bootstrap", format!("{:.1}", bootstrap));
+
+            per_bench.build()
         }
 
-        format!("{:.1}", sum / (count as f64))
+        // per benchmark, per week
+        let breakdown_data = data.summary_benchmarks.summary.iter().enumerate().map(|(i, s)| {
+            breakdown(s, &data.summary_rustc.summary[i])
+        }).collect::<Vec<Value>>();
+
+        Ok(ObjectBuilder::new()
+            .insert("total_summary", summarize(&data.summary_benchmarks.total, &data.summary_rustc.total))
+            .insert("total_breakdown", breakdown(&data.summary_benchmarks.total, &data.summary_rustc.total))
+            .insert("breakdown", breakdown_data)
+            .insert("summaries", summaries)
+            .insert("dates", dates)
+            .build())
     }
-
-    // overall number for each week
-    let summaries = data.summary_benchmarks.summary.iter().enumerate().map(|(i, s)| {
-        summarize(s, &data.summary_rustc.summary[i])
-    }).collect::<Vec<_>>();
-
-    fn breakdown(benchmark: &SummarizedWeek, rustc: &SummarizedWeek) -> Value {
-        let mut per_bench = ObjectBuilder::new();
-
-        for (crate_name, krate) in &benchmark.by_crate {
-            let val = krate.get("total").cloned().unwrap_or(0.0);
-            per_bench = per_bench.insert(crate_name.as_str(), format!("{:.1}", val));
-        }
-
-        let bootstrap = if rustc.by_crate["total"].contains_key("total") {
-            rustc.by_crate["total"]["total"]
-        } else {
-            0.0
-        };
-        per_bench = per_bench.insert("bootstrap", format!("{:.1}", bootstrap));
-
-        per_bench.build()
-    }
-
-    // per benchmark, per week
-    let breakdown_data = data.summary_benchmarks.summary.iter().enumerate().map(|(i, s)| {
-        breakdown(s, &data.summary_rustc.summary[i])
-    }).collect::<Vec<Value>>();
-
-    Ok(ObjectBuilder::new()
-        .insert("total_summary", summarize(&data.summary_benchmarks.total, &data.summary_rustc.total))
-        .insert("total_breakdown", breakdown(&data.summary_benchmarks.total, &data.summary_rustc.total))
-        .insert("breakdown", breakdown_data)
-        .insert("summaries", summaries)
-        .insert("dates", dates)
-        .build())
 }
 
-fn get_info(data: &InputData) -> Result<Value> {
-    Ok(ObjectBuilder::new()
-        .insert("crates", &data.crate_list)
-        .insert("phases", &data.phase_list)
-        .insert("benchmarks", &data.benchmarks)
-        .build())
+struct Info;
+impl GetHandler for Info {
+    fn handle(data: &InputData) -> Result<Value> {
+        Ok(ObjectBuilder::new()
+            .insert("crates", &data.crate_list)
+            .insert("phases", &data.phase_list)
+            .insert("benchmarks", &data.benchmarks)
+            .build())
+    }
 }
 
 fn get_data_for_date(day: &TestRun, crate_names: &[String], phases: &[String], group_by: GroupBy) -> Value {
@@ -220,41 +292,6 @@ fn get_data_for_date(day: &TestRun, crate_names: &[String], phases: &[String], g
         .insert("commit", day.commit.clone())
         .insert("data", data)
         .build()
-}
-
-trait PostHandler: Sized + serde::Deserialize {
-    fn handle(body: Self, data: &InputData) -> Result<Value>;
-
-    fn handle_request(req: &mut Request) -> IronResult<Response> {
-        use std::ops::Deref;
-        use iron::headers::{ContentType, AccessControlAllowOrigin};
-        use iron::mime::{Mime, TopLevel, SubLevel};
-        use iron::modifiers::Header;
-
-        let rwlock = req.get::<State<InputData>>().unwrap();
-        let data = rwlock.read().unwrap();
-
-        let mut buf = String::new();
-        let res = match req.body.read_to_string(&mut buf).unwrap() {
-            0 => panic!("POST handler with 0 length body."), // TODO: return a proper error
-            _ => Self::handle(serde_json::from_str::<Self>(&buf).unwrap(), data.deref())
-        };
-
-        let mut resp = match res {
-            Ok(json) => {
-                let mut resp = Response::with((status::Ok, serde_json::to_string(&json).unwrap()));
-                resp.set_mut(Header(ContentType(Mime(TopLevel::Application, SubLevel::Json, vec![]))));
-                resp
-            },
-            Err(err) => {
-                // TODO: Print to stderr
-                println!("An error occurred: {:?}", err);
-                Response::with((status::InternalServerError, err.to_string()))
-            }
-        };
-        resp.set_mut(Header(AccessControlAllowOrigin::Any));
-        Ok(resp)
-    }
 }
 
 #[derive(Deserialize)]
@@ -485,48 +522,15 @@ fn mk_stats(data: &[&TestRun], crate_name: &str, phases: &[String]) -> Value {
         .build()
 }
 
-/// Pre and post processes the request and response to prepare it for the
-/// handler passed in. Specifically, it parses JSON data from the request if
-/// the request had greater than 0 length, and hands that into the handler.
-/// Post-processing consists of applying access control headers and [potentially]
-/// printing the error message.
-fn get_handler<F>(handler: F, req: &mut Request) -> IronResult<Response>
-    where F: Fn(&InputData) -> Result<Value> {
-    use std::ops::Deref;
-    use iron::headers::{ContentType, AccessControlAllowOrigin};
-    use iron::mime::{Mime, TopLevel, SubLevel};
-    use iron::modifiers::Header;
-
-    let rwlock = req.get::<State<InputData>>().unwrap();
-    let data = rwlock.read().unwrap();
-
-    let res = handler(data.deref());
-
-    let mut resp = match res {
-        Ok(json) => {
-            let mut resp = Response::with((status::Ok, serde_json::to_string(&json).unwrap()));
-            resp.set_mut(Header(ContentType(Mime(TopLevel::Application, SubLevel::Json, vec![]))));
-            resp
-        },
-        Err(err) => {
-            // TODO: Print to stderr
-            println!("An error occurred: {:?}", err);
-            Response::with((status::InternalServerError, err.to_string()))
-        }
-    };
-    resp.set_mut(Header(AccessControlAllowOrigin::Any));
-    Ok(resp)
-}
-
 pub fn start(data: InputData) {
     let mut router = Router::new();
 
-    router.get("/summary", |r: &mut Request| get_handler(get_summary, r));
-    router.get("/info", |r: &mut Request| get_handler(get_info, r));
-    router.post("/data", Data::handle_request);
-    router.post("/get_tabular", Tabular::handle_request);
-    router.post("/get", Days::handle_request);
-    router.post("/stats", Stats::handle_request);
+    router.get("/summary", Summary::handler);
+    router.get("/info", Info::handler);
+    router.post("/data", Data::handler);
+    router.post("/get_tabular", Tabular::handler);
+    router.post("/get", Days::handler);
+    router.post("/stats", Stats::handler);
 
     let mut chain = Chain::new(router);
     chain.link(State::<InputData>::both(data));
