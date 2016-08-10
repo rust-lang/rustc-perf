@@ -182,44 +182,46 @@ fn get_info(data: &InputData) -> Result<Value> {
         .build())
 }
 
-fn get_data_for_date(day: &TestRun, crates: &[String], phases: &[String], group_by: GroupBy) -> Value {
+fn get_data_for_date(day: &TestRun, crate_names: &[String], phases: &[String], group_by: GroupBy) -> Value {
     #[derive(Serialize)]
     struct Recording { // TODO better name (can't use Timing since we don't have a percent...)
         time: f64,
         rss: u64,
     }
 
+    let crates = crate_names.into_iter().filter_map(|crate_name| {
+        day.by_crate.get(crate_name).map(|krate| {
+            (crate_name, krate)
+        })
+    }).collect::<Vec<_>>();
+
     let mut data = HashMap::new();
     if group_by == GroupBy::Crate {
-        for crate_name in crates {
-            if let Some(krate) = day.by_crate.get(&*crate_name) {
-                let mut mem = 0;
-                let mut total = 0.0;
-                for phase in phases {
-                    if let Some(phase) = krate.get(phase) {
-                        total += phase.time;
-                        mem = max(mem, phase.rss.unwrap());
-                    }
+        for (crate_name, krate) in crates {
+            let mut mem = 0;
+            let mut total = 0.0;
+            for phase in phases {
+                if let Some(phase) = krate.get(phase) {
+                    total += phase.time;
+                    mem = max(mem, phase.rss.unwrap());
                 }
-                data.insert(crate_name, Recording {
-                    time: total,
-                    rss: mem
-                });
             }
+            data.insert(crate_name, Recording {
+                time: total,
+                rss: mem
+            });
         }
     } else { // group_by == GroupBy::Phase
-        for phase in phases {
-            let mut total = 0.0;
+        for phase_name in phases {
             let mut mem = 0;
-            for crate_name in crates {
-                if let Some(krate) = day.by_crate.get(crate_name) {
-                    if let Some(phase) = krate.get(phase) {
-                        total += phase.time;
-                        mem = max(mem, phase.rss.unwrap());
-                    }
+            let mut total = 0.0;
+            for &(_, krate) in &crates {
+                if let Some(phase) = krate.get(phase_name) {
+                    total += phase.time;
+                    mem = max(mem, phase.rss.unwrap());
                 }
             }
-            data.insert(phase, Recording {
+            data.insert(phase_name, Recording {
                 time: total,
                 rss: mem
             });
