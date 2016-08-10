@@ -176,9 +176,9 @@ fn get_summary(data: &InputData) -> Result<Value> {
 
 fn get_info(data: &InputData) -> Result<Value> {
     Ok(ObjectBuilder::new()
-        .insert("crates", data.crate_list.iter().cloned().collect::<Vec<String>>())
-        .insert("phases", data.phase_list.iter().cloned().collect::<Vec<String>>())
-        .insert("benchmarks", data.benchmarks.iter().cloned().collect::<Vec<String>>())
+        .insert("crates", &data.crate_list)
+        .insert("phases", &data.phase_list)
+        .insert("benchmarks", &data.benchmarks)
         .build())
 }
 
