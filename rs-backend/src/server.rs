@@ -343,7 +343,7 @@ impl PostHandler for Tabular {
 }
 
 #[derive(Deserialize)]
-struct Days {
+struct Days { // XXX naming
     kind: Kind,
     dates: Vec<OptionalDate>,
     crates: Vec<String>,
@@ -371,7 +371,7 @@ impl PostHandler for Days {
 }
 
 #[derive(Deserialize)]
-struct Stats {
+struct Stats { // XXX naming
     kind: Kind,
     start_date: OptionalDate,
     end_date: OptionalDate,
