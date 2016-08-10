@@ -102,8 +102,9 @@ impl serde::Deserialize for OptionalDate {
                 match NaiveDate::parse_from_str(value, "%a %b %d %Y") {
                     Ok(date) => Ok(OptionalDate::Date(date.and_hms(0, 0, 0))),
                     Err(err) => {
-                        let msg = format!("bad date {:?}: {:?}", value, err);
-                        println!("{}", msg);
+                        if !value.is_empty() {
+                            println!("bad date {:?}: {:?}", value, err);
+                        }
                         Ok(OptionalDate::CouldNotParse(value.to_string()))
                     }
                 }
@@ -272,7 +273,9 @@ trait PostHandler: Sized + serde::Deserialize {
 
 #[derive(Deserialize)]
 struct Data { // XXX naming
+    #[serde(rename(deserialize="start"))]
     start_date: OptionalDate,
+    #[serde(rename(deserialize="end"))]
     end_date: OptionalDate,
     kind: Kind,
     group_by: GroupBy,
@@ -375,7 +378,9 @@ impl PostHandler for Days {
 #[derive(Deserialize)]
 struct Stats { // XXX naming
     kind: Kind,
+    #[serde(rename(deserialize="start"))]
     start_date: OptionalDate,
+    #[serde(rename(deserialize="end"))]
     end_date: OptionalDate,
     // kind rustc only: crate or phase can be 'total'
     crates: Vec<String>,

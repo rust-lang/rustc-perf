@@ -313,7 +313,7 @@ fn make_times(timings: &[Value], is_rustc: bool) -> HashMap<String, HashMap<Stri
         }
 
         let mut mem_values = Vec::new();
-        if let Some(obj) = timing.find("rss").unwrap().as_object() {
+        if let Some(obj) = timing.find("rss").and_then(|rss| rss.as_object()) {
             for (_, value) in obj {
                 mem_values.push(value.as_u64().unwrap());
             }
