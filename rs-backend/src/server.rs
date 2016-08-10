@@ -401,22 +401,23 @@ impl PostHandler for Stats {
 }
 
 fn mk_stats(data: &[&TestRun], crate_name: &str, phases: &[String]) -> Value {
-    let mut count = 0;
-    let mut first = 0;
-    let skip_list = data.iter().enumerate().map(|(i, d)| {
-        if d.by_crate.contains_key(crate_name) && !d.by_crate[crate_name].is_empty() {
-            if count == 0 {
-                first = i;
-            }
-
-            count += 1;
-            false
+    let sums = data.iter()
+        .filter(|day| if let Some(krate) = day.by_crate.get(crate_name) {
+            !krate.is_empty()
         } else {
-            true
-        }
-    }).collect::<Vec<_>>();
+            false
+        })
+        .map(|day| {
+            let krate = &day.by_crate[crate_name];
+            let mut sum = 0.0;
+            for phase in phases {
+                sum += krate[phase].time;
+            }
+            sum
+        })
+        .collect::<Vec<_>>();
 
-    if count == 0 {
+    if sums.is_empty() {
         return ObjectBuilder::new()
             .insert("first", 0)
             .insert("last", 0)
@@ -430,20 +431,7 @@ fn mk_stats(data: &[&TestRun], crate_name: &str, phases: &[String]) -> Value {
             .build();
     }
 
-    let sums = data.iter().enumerate().map(|(i, d)| {
-        if skip_list[i] {
-            return 0.0;
-        }
-
-        let krate = &d.by_crate[crate_name];
-        let mut sum = 0.0;
-        for phase in phases {
-            sum += krate[phase].time;
-        }
-        sum
-    }).collect::<Vec<_>>();
-
-    let first = sums[first];
+    let first = sums[0];
     let last = *sums.last().unwrap();
 
     let mut min = first;
@@ -453,14 +441,11 @@ fn mk_stats(data: &[&TestRun], crate_name: &str, phases: &[String]) -> Value {
     let mut total = 0.0;
     let mut q1_total = 0.0;
     let mut q4_total = 0.0;
-    for i in 0..data.len() {
-        if skip_list[i] {
-            continue;
-        }
-        let cur = sums[i];
-        total += cur;
+    for (i, &cur) in sums.iter().enumerate() {
         min = min.min(cur);
         max = max.max(cur);
+
+        total += cur;
         if i < q1_idx { // Within the first quartile
             q1_total += cur;
         }
@@ -470,18 +455,15 @@ fn mk_stats(data: &[&TestRun], crate_name: &str, phases: &[String]) -> Value {
     }
 
     // Calculate the variance
-    let mean = total / (count as f64);
+    let mean = total / (sums.len() as f64);
     let mut var_total = 0.0;
-    for i in 0..data.len() {
-        if skip_list[i] {
-            continue;
-        }
-        let diff = sums[i] - mean;
+    for sum in &sums {
+        let diff = sum - mean;
         var_total += diff * diff;
     }
-    let variance = var_total / ((count - 1) as f64);
+    let variance = var_total / ((sums.len() - 1) as f64);
 
-    let trend = if count >= 10 && count == data.len() {
+    let trend = if sums.len() >= 10 && sums.len() == data.len() {
         let q1_mean = q1_total / (q1_idx as f64);
         let q4_mean = q4_total / ((data.len() - q4_idx) as f64);
         100.0 * ((q4_mean - q1_mean) / first)
@@ -499,7 +481,7 @@ fn mk_stats(data: &[&TestRun], crate_name: &str, phases: &[String]) -> Value {
         .insert("variance", variance)
         .insert("trend", trend)
         .insert("trend_b", trend_b)
-        .insert("n", count)
+        .insert("n", sums.len())
         .build()
 }
 
