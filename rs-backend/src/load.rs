@@ -201,16 +201,6 @@ pub enum Kind {
     Rustc,
 }
 
-impl Kind {
-    pub fn from_str(kind: &str) -> Option<Kind> {
-        match kind {
-            "rustc" => Some(Kind::Rustc),
-            "benchmarks" => Some(Kind::Benchmarks),
-            _ => None
-        }
-    }
-}
-
 impl serde::Deserialize for Kind {
     fn deserialize<D>(deserializer: &mut D) -> ::std::result::Result<Kind, D::Error>
         where D: serde::de::Deserializer
@@ -223,9 +213,10 @@ impl serde::Deserialize for Kind {
             fn visit_str<E>(&mut self, value: &str) -> ::std::result::Result<Kind, E>
                 where E: serde::de::Error
             {
-                match Kind::from_str(value) {
-                    Some(group_by) => Ok(group_by),
-                    None => {
+                match value {
+                    "rustc" => Ok(Kind::Rustc),
+                    "benchmarks" => Ok(Kind::Benchmarks),
+                    _ => {
                         let msg = format!("unexpected {} value for kind", value);
                         Err(serde::de::Error::custom(msg))
                     }
@@ -278,7 +269,7 @@ impl TestRun {
 
 /// Contains a single timing, associated with a phase (though the phase name
 /// is not included in the timing).
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize)]
 pub struct Timing {
     pub percent: f64,
     pub time: f64,
@@ -313,7 +304,7 @@ fn make_times(timings: &[Value], is_rustc: bool) -> HashMap<String, HashMap<Stri
         }
 
         let mut mem_values = Vec::new();
-        if let Some(obj) = timing.find("rss").unwrap().as_object() {
+        if let Some(obj) = timing.find("rss").and_then(|rss| rss.as_object()) {
             for (_, value) in obj {
                 mem_values.push(value.as_u64().unwrap());
             }
