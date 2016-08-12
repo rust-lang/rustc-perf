@@ -16,6 +16,7 @@ mod util;
 mod load;
 mod server;
 mod errors;
+mod git;
 
 fn main() {
     let data = load::InputData::from_fs().unwrap();
