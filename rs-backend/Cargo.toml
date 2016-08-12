@@ -5,7 +5,7 @@ version = "0.1.0"
 
 [dependencies]
 chrono = "0.2.22"
-error-chain = "0.2.2"
+error-chain = "0.5.0"
 iron = "0.4.0"
 router = "0.2.0"
 persistent = "0.2.0"
