@@ -67,15 +67,11 @@ impl InputData {
         // TODO: Read this at runtime, not hardcoded.
         let repo_loc = Path::new("../data");
 
-        let mut last_date = None;
-        let mut crate_list = HashSet::new();
-        let mut phase_list = HashSet::new();
         let mut skipped = 0;
         let mut c_benchmarks_add = 0;
 
         let mut data_rustc = Vec::new();
         let mut data_benchmarks = Vec::new();
-        let mut benchmarks = HashSet::new();
 
         // Read all files from repo_loc/processed
         let mut file_count = 0;
@@ -118,18 +114,12 @@ impl InputData {
             };
             let date = header.date;
 
-            let test_name = &filename[0..filename.find("--").unwrap()];
+            let test_name = filename[0..filename.find("--").unwrap()].to_string();
 
             let times = contents.find("times").unwrap().as_array().unwrap();
-            if test_name == "rustc" {
-                data_rustc.push(TestRun::new(date, header, times, true));
-
-                for timing in times {
-                    let crate_name = timing.find("crate").unwrap().as_str().unwrap().to_string();
-                    crate_list.insert(crate_name);
-                }
+            if &test_name == "rustc" {
+                data_rustc.push(TestRun::new(date, header, times, test_name));
             } else {
-                benchmarks.insert(test_name.to_string());
                 let index = data_benchmarks.iter()
                     .position(|benchmark: &TestRun| benchmark.date == date);
                 if let Some(index) = index {
@@ -140,18 +130,36 @@ impl InputData {
                                                                .remove(crate_name)
                                                                .unwrap());
                 } else {
-                    data_benchmarks.push(TestRun::new(date, header, times, false));
+                    data_benchmarks.push(TestRun::new(date, header, times, test_name));
                 }
             }
+        }
 
-            for timing in times {
-                for (phase, _) in timing.find("times").unwrap().as_object().unwrap() {
-                    phase_list.insert(phase.to_string());
-                }
+        println!("{} total files", file_count);
+        println!("{} skipped files", skipped);
+        println!("{} bootstrap times", data_rustc.len());
+        println!("{} benchmarks times", data_benchmarks.len());
+        println!("{} benchmarks times (appended)", c_benchmarks_add);
+
+        InputData::new(data_rustc, data_benchmarks)
+    }
+
+    pub fn new(mut data_rustc: Vec<TestRun>, mut data_benchmarks: Vec<TestRun>) -> Result<InputData> {
+        let mut last_date = None;
+        let mut phase_list = HashSet::new();
+        let mut crate_list = HashSet::new();
+
+        for run in data_rustc.iter().chain(&data_benchmarks) {
+            if last_date.is_none() || last_date.as_ref().unwrap() < &run.date {
+                last_date = Some(run.date);
             }
 
-            if last_date.is_none() || last_date.as_ref().unwrap() < &date {
-                last_date = Some(date);
+            for (crate_name, krate) in &run.by_crate {
+                crate_list.insert(crate_name.to_string());
+
+                for phase_name in krate.keys() {
+                    phase_list.insert(phase_name.to_string());
+                }
             }
         }
 
@@ -164,11 +172,7 @@ impl InputData {
         let summary_rustc = Summary::new(&data_rustc, last_date);
         let summary_benchmarks = Summary::new(&data_benchmarks, last_date);
 
-        println!("{} total files", file_count);
-        println!("{} skipped files", skipped);
-        println!("{} bootstrap times", data_rustc.len());
-        println!("{} benchmarks times", data_benchmarks.len());
-        println!("{} benchmarks times (appended)", c_benchmarks_add);
+        let benchmarks = data_benchmarks.iter().map(|run| run.name.clone()).collect();
 
         Ok(InputData {
             summary_rustc: summary_rustc,
@@ -245,6 +249,7 @@ impl serde::Deserialize for Kind {
 pub struct TestRun {
     pub date: NaiveDateTime,
     pub commit: String,
+    pub name: String,
 
     /// Map of crate names to a map of phases to timings per phase.
     pub by_crate: HashMap<String, HashMap<String, Timing>>,
@@ -271,9 +276,11 @@ impl Ord for TestRun {
 }
 
 impl TestRun {
-    fn new(date: NaiveDateTime, header: InputHeader, times: &[Value], is_rustc: bool) -> TestRun {
+    fn new(date: NaiveDateTime, header: InputHeader, times: &[Value], test_name: String) -> TestRun {
+        let is_rustc = &test_name == "rustc";
         TestRun {
             date: date,
+            name: test_name,
             commit: header.commit.clone(),
             by_crate: make_times(times, is_rustc),
         }
