@@ -139,7 +139,7 @@ function make_settings(callback, total_label) {
         document.getElementById("settings").innerHTML = "Error fetching info";
         console.log("Error fetching info:");
         console.log(err);
-    });        
+    });
 }
 
 function truncate_name(name) {
