@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::cmp::max;
 
-use iron::{Iron, Chain};
+use iron::prelude::*;
 use router::Router;
 use persistent::State;
 use chrono::{Duration, NaiveDate, NaiveDateTime};
@@ -12,77 +12,11 @@ use serde;
 use SERVER_ADDRESS;
 use errors::*;
 use load::{SummarizedWeek, Kind, TestRun, InputData, Timing};
+use route_handler::{self, PostHandler, GetHandler};
 use util::{start_idx, end_idx};
+use git;
 
 const JS_DATE_FORMAT: &'static str = "%Y-%m-%dT%H:%M:%S.000Z";
-
-// Boilerplate for parsing and responding to both GET and POST requests.
-mod handler {
-    use std::ops::Deref;
-    use std::io::Read;
-
-    use serde;
-    use serde_json::{self, Value};
-    use iron::prelude::*;
-    use iron::status;
-    use persistent::State;
-
-    use load::InputData;
-    use errors::*;
-
-    fn respond(res: Result<Value>) -> IronResult<Response> {
-        use iron::headers::{ContentType, AccessControlAllowOrigin};
-        use iron::mime::{Mime, TopLevel, SubLevel};
-        use iron::modifiers::Header;
-
-        let mut resp = match res {
-            Ok(json) => {
-                let mut resp = Response::with((status::Ok, serde_json::to_string(&json).unwrap()));
-                resp.set_mut(Header(ContentType(Mime(TopLevel::Application, SubLevel::Json, vec![]))));
-                resp
-            },
-            Err(err) => {
-                // TODO: Print to stderr
-                println!("An error occurred: {:?}", err);
-                Response::with((status::InternalServerError, err.to_string()))
-            }
-        };
-        resp.set_mut(Header(AccessControlAllowOrigin::Any));
-        Ok(resp)
-    }
-
-    pub trait PostHandler: Sized {
-        fn handle(_body: Self, _data: &InputData) -> Result<Value>;
-
-        fn handler(req: &mut Request) -> IronResult<Response>
-            where Self: serde::Deserialize {
-
-            let rwlock = req.get::<State<InputData>>().unwrap();
-            let data = rwlock.read().unwrap();
-
-            let mut buf = String::new();
-            let res = match req.body.read_to_string(&mut buf).unwrap() {
-                0 => Err("POST handler with 0 length body.".into()),
-                _ => Self::handle(serde_json::from_str(&buf).unwrap(), data.deref())
-            };
-
-            respond(res)
-        }
-    }
-
-    pub trait GetHandler: Sized {
-        fn handle(_data: &InputData) -> Result<Value>;
-
-        fn handler(req: &mut Request) -> IronResult<Response> {
-            let rwlock = req.get::<State<InputData>>().unwrap();
-            let data = rwlock.read().unwrap();
-
-            respond(Self::handle(data.deref()))
-        }
-    }
-}
-
-use self::handler::{PostHandler, GetHandler};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 enum GroupBy {
@@ -522,6 +456,32 @@ fn mk_stats(data: &[&TestRun], crate_name: &str, phases: &[String]) -> Value {
         .build()
 }
 
+fn on_push(req: &mut Request) -> IronResult<Response> {
+    // FIXME we are throwing everything away and starting again. It would be
+    // better to read just the added files. These should be available in the
+    // body of the request.
+
+    println!("received onpush hook");
+
+    let mut responder = || {
+        git::update_repo(git::get_repo_path()?)?;
+
+        println!("updating from filesystem...");
+        let new_data = InputData::from_fs()?;
+
+        // Retrieve the stored InputData from the request.
+        let rwlock = req.get::<State<InputData>>().unwrap();
+        let mut data = rwlock.write().unwrap();
+
+        // Write the new data back into the request
+        *data = new_data;
+
+        Ok(Value::String("Successfully updated from filesystem".to_owned()))
+    };
+
+    route_handler::respond(responder())
+}
+
 pub fn start(data: InputData) {
     let mut router = Router::new();
 
@@ -531,6 +491,7 @@ pub fn start(data: InputData) {
     router.post("/get_tabular", Tabular::handler);
     router.post("/get", Days::handler);
     router.post("/stats", Stats::handler);
+    router.post("/onpush", on_push);
 
     let mut chain = Chain::new(router);
     chain.link(State::<InputData>::both(data));
