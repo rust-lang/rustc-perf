@@ -12,7 +12,7 @@ extern crate serde_json;
 
 pub const SERVER_ADDRESS: &'static str = "0.0.0.0:2346";
 
-mod handler;
+mod route_handler;
 mod util;
 mod load;
 mod server;

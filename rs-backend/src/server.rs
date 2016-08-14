@@ -12,7 +12,7 @@ use serde;
 use SERVER_ADDRESS;
 use errors::*;
 use load::{SummarizedWeek, Kind, TestRun, InputData, Timing};
-use handler::{self, PostHandler, GetHandler};
+use route_handler::{self, PostHandler, GetHandler};
 use util::{start_idx, end_idx};
 use git;
 
@@ -463,21 +463,23 @@ fn on_push(req: &mut Request) -> IronResult<Response> {
 
     println!("received onpush hook");
 
-    let mut responder = move || {
+    let mut responder = || {
         git::update_repo(git::get_repo_path()?)?;
 
         println!("updating from filesystem...");
         let new_data = InputData::from_fs()?;
 
+        // Retrieve the stored InputData from the request.
         let rwlock = req.get::<State<InputData>>().unwrap();
         let mut data = rwlock.write().unwrap();
 
+        // Write the new data back into the request
         *data = new_data;
 
         Ok(Value::String("Successfully updated from filesystem".to_owned()))
     };
 
-    handler::respond(responder())
+    route_handler::respond(responder())
 }
 
 pub fn start(data: InputData) {

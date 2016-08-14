@@ -12,11 +12,11 @@ use persistent::State;
 use load::InputData;
 use errors::*;
 
-pub fn respond(res: Result<Value>) -> IronResult<Response> {
-    use iron::headers::{ContentType, AccessControlAllowOrigin};
-    use iron::mime::{Mime, TopLevel, SubLevel};
-    use iron::modifiers::Header;
+use iron::headers::{ContentType, AccessControlAllowOrigin};
+use iron::mime::{Mime, TopLevel, SubLevel};
+use iron::modifiers::Header;
 
+pub fn respond(res: Result<Value>) -> IronResult<Response> {
     let mut resp = match res {
         Ok(json) => {
             let mut resp = Response::with((status::Ok, serde_json::to_string(&json).unwrap()));
