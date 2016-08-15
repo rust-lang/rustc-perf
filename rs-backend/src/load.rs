@@ -1,3 +1,12 @@
+// Copyright 2016 The rustc-perf Project Developers. See the COPYRIGHT
+// file at the top-level directory.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
 use std::collections::{HashMap, HashSet};
 use std::cmp::{Ordering, max};
 use std::fs::{self, File};
@@ -100,32 +109,13 @@ impl InputData {
                 continue;
             }
 
-            /// Parse date from JSON header in file contents.
-            fn parse_from_header(date: &str) -> Result<NaiveDateTime> {
-                // TODO: Determine correct format of header date and move into
-                // variable/constant
-                NaiveDateTime::parse_from_str(date, "%c %z").map_err(|err| err.into())
-            }
-
-            /// Parse date from filename.
-            fn parse_from_filename(filename: &str) -> Result<NaiveDateTime> {
-                let date_str = &filename[(filename.find("--").unwrap() + 2)..filename.find(".json")
-                    .unwrap()];
-
-                // Ignore seconds: they aren't key to the data processing, and
-                // parsing them requires logic to replace them with 0 when
-                // they are absent.
-                NaiveDateTime::parse_from_str(date_str, "%Y-%m-%d-%H-%M").map_err(|err| err.into())
-            }
-
-            let header =
-                InputHeader {
-                    commit: contents.lookup("header.commit").unwrap().as_str().unwrap().to_string(),
-                    date: parse_from_header(contents.lookup("header.date")
-                            .unwrap()
-                            .as_str()
-                            .unwrap()).or_else(|_| parse_from_filename(&filename))?,
-                };
+            let header = InputHeader {
+                commit: contents.lookup("header.commit").unwrap().as_str().unwrap().to_string(),
+                date: InputData::parse_from_header(contents.lookup("header.date")
+                        .unwrap()
+                        .as_str()
+                        .unwrap()).or_else(|_| InputData::parse_from_filename(&filename))?,
+            };
             let date = header.date;
 
             let test_name = &filename[0..filename.find("--").unwrap()];
@@ -197,6 +187,24 @@ impl InputData {
             Kind::Benchmarks => &self.data_benchmarks,
             Kind::Rustc => &self.data_rustc,
         }
+    }
+
+    /// Parse date from JSON header in file contents.
+    fn parse_from_header(date: &str) -> Result<NaiveDateTime> {
+        // TODO: Determine correct format of header date and move into
+        // variable/constant
+        NaiveDateTime::parse_from_str(date, "%c %z").map_err(|err| err.into())
+    }
+
+    /// Parse date from filename.
+    fn parse_from_filename(filename: &str) -> Result<NaiveDateTime> {
+        let date_str = &filename[(filename.find("--").unwrap() + 2)..filename.find(".json")
+            .unwrap()];
+
+        // Ignore seconds: they aren't key to the data processing, and
+        // parsing them requires logic to replace them with 0 when
+        // they are absent.
+        NaiveDateTime::parse_from_str(date_str, "%Y-%m-%d-%H-%M").map_err(|err| err.into())
     }
 }
 
@@ -408,59 +416,20 @@ impl Summary {
             }
         }
 
-        /// Compute the percent change for a given number from the week N-1 to
-        /// week N, where week N-1 is the previous and week N is the current
-        /// week.
-        fn get_percent_change(previous: f64, current: f64) -> f64 {
-            ((current - previous) / previous) * 100.0
-        }
-
-        fn compare_weeks(week0: &SummarizedWeek, week1: &SummarizedWeek) -> SummarizedWeek {
-            let mut current_week = HashMap::new();
-            for crate_name in week0.by_crate.keys() {
-                if !week1.by_crate.contains_key(crate_name) {
-                    continue;
-                }
-
-                let mut current_crate = HashMap::new();
-                for phase in week0.by_crate[crate_name].keys() {
-                    if !week1.by_crate[crate_name].contains_key(phase) {
-                        continue;
-                    }
-
-                    // TODO: Some form of warning is a good idea?
-                    // If this is triggered for both the 0th overall week and
-                    // the last week, then that phase won't be recorded in
-                    // totals no matter what happens in between.
-                    if week0.by_crate[crate_name][phase] > 0.0 &&
-                       week1.by_crate[crate_name][phase] > 0.0 {
-                        current_crate.insert(phase.to_string(),
-                                             get_percent_change(week0.by_crate[crate_name][phase],
-                                                                week1.by_crate[crate_name][phase]));
-                    }
-                }
-                current_week.insert(crate_name.to_string(), current_crate);
-            }
-            SummarizedWeek {
-                date: week1.date,
-                by_crate: current_week,
-            }
-        }
-
         // 12 week long mapping of crate names to by-phase percent changes with
         // the previous week.
         let mut weeks: Vec<SummarizedWeek> = Vec::new();
         for window in medians.windows(2) {
             // We want to compare week 1 to week 0; since we want the change from
             // week 1 to week 0.
-            weeks.push(compare_weeks(&window[1], &window[0]));
+            weeks.push(Summary::compare_weeks(&window[1], &window[0]));
         }
 
         assert_eq!(weeks.len(), 12);
 
         // See window comparison; compare from last week (which is the oldest)
         // to the first week.
-        let totals = compare_weeks(medians.last().unwrap(), &medians[0]);
+        let totals = Summary::compare_weeks(medians.last().unwrap(), &medians[0]);
 
         for week in &mut weeks {
             for crate_name in totals.by_crate.keys() {
@@ -473,6 +442,45 @@ impl Summary {
         Summary {
             total: totals,
             summary: weeks,
+        }
+    }
+
+    /// Compute the percent change for a given number from the week N-1 to
+    /// week N, where week N-1 is the previous and week N is the current
+    /// week.
+    fn get_percent_change(previous: f64, current: f64) -> f64 {
+        ((current - previous) / previous) * 100.0
+    }
+
+    fn compare_weeks(week0: &SummarizedWeek, week1: &SummarizedWeek) -> SummarizedWeek {
+        let mut current_week = HashMap::new();
+        for crate_name in week0.by_crate.keys() {
+            if !week1.by_crate.contains_key(crate_name) {
+                continue;
+            }
+
+            let mut current_crate = HashMap::new();
+            for phase in week0.by_crate[crate_name].keys() {
+                if !week1.by_crate[crate_name].contains_key(phase) {
+                    continue;
+                }
+
+                // TODO: Some form of warning is a good idea?
+                // If this is triggered for both the 0th overall week and
+                // the last week, then that phase won't be recorded in
+                // totals no matter what happens in between.
+                if week0.by_crate[crate_name][phase] > 0.0 &&
+                   week1.by_crate[crate_name][phase] > 0.0 {
+                    current_crate.insert(phase.to_string(),
+                                Summary::get_percent_change(week0.by_crate[crate_name][phase],
+                                                            week1.by_crate[crate_name][phase]));
+                }
+            }
+            current_week.insert(crate_name.to_string(), current_crate);
+        }
+        SummarizedWeek {
+            date: week1.date,
+            by_crate: current_week,
         }
     }
 }
