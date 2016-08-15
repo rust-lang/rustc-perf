@@ -1,0 +1,8 @@
+sudo: false
+language: rust
+rust:
+  - nightly
+script: cd rs-backend && cargo build --verbose && cargo test --verbose
+cache:
+  directories:
+   - $HOME/.cargo

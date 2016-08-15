@@ -7,7 +7,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::env;
 use std::path::Path;
 use std::process::Command;
 
@@ -18,12 +17,8 @@ const GIT: &'static str = "git";
 const GIT_CHECKOUT: &'static str = "checkout";
 const GIT_PULL: &'static str = "pull";
 
-pub fn get_repo_path() -> Result<String> {
-    env::args().nth(1).ok_or("No argument supplied, needs location of data repo.".into())
-}
-
-pub fn update_repo(repo_path: String) -> Result<()> {
-    let working_dir = Path::new(&repo_path);
+pub fn update_repo(repo_path: &str) -> Result<()> {
+    let working_dir = Path::new(repo_path);
     checkout_master(working_dir)?;
     pull_updates(working_dir)?;
     Ok(())

@@ -1,0 +1,186 @@
+{
+    "header": {
+        "date": "Thu Jun 18 04:52:28 2015 +0000", 
+        "commit": "a19ed8ad1579fa8c0a2e5477534da76be5afd3c2"
+    }, 
+    "times": [
+        {
+            "total": 2.8735, 
+            "crate": "html5ever-2015-05-15", 
+            "times": {
+                "intrinsic checking": {
+                    "percent": 0.17400382808421788, 
+                    "time": 0.005
+                }, 
+                "stability checking": {
+                    "percent": 0.4437097616147555, 
+                    "time": 0.01275
+                }, 
+                "complete gated feature checking 1": {
+                    "percent": 0.1392030624673743, 
+                    "time": 0.004
+                }, 
+                "looking for plugin registrar": {
+                    "percent": 0.06960153123368715, 
+                    "time": 0.002
+                }, 
+                "looking for entry point": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "type collecting": {
+                    "percent": 0.3132068905515921, 
+                    "time": 0.009
+                }, 
+                "parsing": {
+                    "percent": 0.6960153123368715, 
+                    "time": 0.02
+                }, 
+                "privacy checking": {
+                    "percent": 0.6090133982947625, 
+                    "time": 0.0175
+                }, 
+                "rvalue checking": {
+                    "percent": 1.6356359839916477, 
+                    "time": 0.047
+                }, 
+                "effect checking": {
+                    "percent": 0.10440229685053071, 
+                    "time": 0.003
+                }, 
+                "gated macro checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "type checking": {
+                    "percent": 38.53314772925005, 
+                    "time": 1.10725
+                }, 
+                "liveness checking": {
+                    "percent": 0.4524099530189664, 
+                    "time": 0.013
+                }, 
+                "configuration 2": {
+                    "percent": 1.0788237341221507, 
+                    "time": 0.031
+                }, 
+                "language item collection": {
+                    "percent": 0.1392030624673743, 
+                    "time": 0.004
+                }, 
+                "assigning node ids and indexing ast": {
+                    "percent": 0.6612145467200279, 
+                    "time": 0.019
+                }, 
+                "lifetime resolution": {
+                    "percent": 0.10440229685053071, 
+                    "time": 0.003
+                }, 
+                "variance inference": {
+                    "percent": 0.1392030624673743, 
+                    "time": 0.004
+                }, 
+                "unused lib feature checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "borrow checking": {
+                    "percent": 4.228293022446493, 
+                    "time": 0.1215
+                }, 
+                "prelude injection": {
+                    "percent": 0.49591091004002086, 
+                    "time": 0.01425
+                }, 
+                "recursion limit": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "loop checking": {
+                    "percent": 0.09570210544631981, 
+                    "time": 0.00275
+                }, 
+                "lint checking": {
+                    "percent": 1.9662432573516617, 
+                    "time": 0.0565
+                }, 
+                "complete gated feature checking 2": {
+                    "percent": 0.13050287106316338, 
+                    "time": 0.00375
+                }, 
+                "crate injection": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "match checking": {
+                    "percent": 1.8096398120758657, 
+                    "time": 0.052
+                }, 
+                "expansion": {
+                    "percent": 35.42717939794675, 
+                    "time": 1.0179999999999998
+                }, 
+                "region resolution": {
+                    "percent": 0.809117800591613, 
+                    "time": 0.02325
+                }, 
+                "configuration 1": {
+                    "percent": 0.20880459370106141, 
+                    "time": 0.006
+                }, 
+                "checking that all macro invocations are gone": {
+                    "percent": 0.06960153123368715, 
+                    "time": 0.002
+                }, 
+                "maybe building test harness": {
+                    "percent": 0.5568122498694972, 
+                    "time": 0.016
+                }, 
+                "death checking": {
+                    "percent": 0.41760918740212283, 
+                    "time": 0.012
+                }, 
+                "const checking": {
+                    "percent": 3.4452757960675138, 
+                    "time": 0.099
+                }, 
+                "plugin loading": {
+                    "percent": 0.034800765616843574, 
+                    "time": 0.001
+                }, 
+                "static item recursion checking": {
+                    "percent": 0.10440229685053071, 
+                    "time": 0.003
+                }, 
+                "stability index": {
+                    "percent": 0.034800765616843574, 
+                    "time": 0.001
+                }, 
+                "macro loading": {
+                    "percent": 0.1392030624673743, 
+                    "time": 0.004
+                }, 
+                "plugin registration": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "coherence checking": {
+                    "percent": 3.236471202366452, 
+                    "time": 0.093
+                }, 
+                "resolution": {
+                    "percent": 1.3224290934400558, 
+                    "time": 0.038
+                }, 
+                "reachability checking": {
+                    "percent": 0.10440229685053071, 
+                    "time": 0.003
+                }, 
+                "external crate/lib resolution": {
+                    "percent": 0.06960153123368715, 
+                    "time": 0.002
+                }
+            }
+        }
+    ]
+}

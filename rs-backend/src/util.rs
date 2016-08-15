@@ -9,6 +9,7 @@
 
 use load::TestRun;
 use chrono::NaiveDateTime;
+use errors::*;
 
 /// Returns where the passed date is or should go in the sorted data slice.
 fn get_insert_location(data: &[TestRun],
@@ -38,4 +39,10 @@ pub fn end_idx(data: &[TestRun], date: NaiveDateTime) -> usize {
             }
         }
     }
+}
+
+use std::env;
+/// Reads the repository path from the arguments passed to main()
+pub fn get_repo_path() -> Result<String> {
+    env::args().nth(1).ok_or("No argument supplied, needs location of data repo.".into())
 }

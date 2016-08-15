@@ -1,0 +1,139 @@
+{
+    "header": {
+        "date": "Mon Jan 11 06:40:58 2016 +0000", 
+        "commit": "69e1f57dfbd32a1a342d696a3e79624da97ebe1b"
+    }, 
+    "times": [
+        {
+            "loc": 639, 
+            "post_nc": 76201, 
+            "crate": "regex-macros.0.1.30", 
+            "pre_nc": 2170, 
+            "times": {
+                "complete gated feature checking 1": {
+                    "percent": 0.7751937984496124, 
+                    "time": 0.001
+                }, 
+                "complete gated feature checking 2": {
+                    "percent": 0.7751937984496124, 
+                    "time": 0.001
+                }, 
+                "parsing": {
+                    "percent": 1.550387596899225, 
+                    "time": 0.002
+                }, 
+                "configuration 1": {
+                    "percent": 0.7751937984496124, 
+                    "time": 0.001
+                }, 
+                "gated macro checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "assigning node ids": {
+                    "percent": 3.875968992248062, 
+                    "time": 0.005
+                }, 
+                "language item collection": {
+                    "percent": 0.7751937984496124, 
+                    "time": 0.001
+                }, 
+                "checking for inline asm in case the target doesn't support it": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "prelude injection": {
+                    "percent": 3.875968992248062, 
+                    "time": 0.005
+                }, 
+                "recursion limit": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "gated configuration checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "crate injection": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "early lint checks": {
+                    "percent": 1.937984496124031, 
+                    "time": 0.0025
+                }, 
+                "expansion": {
+                    "percent": 27.519379844961243, 
+                    "time": 0.035500000000000004
+                }, 
+                "configuration 2": {
+                    "percent": 8.527131782945736, 
+                    "time": 0.011
+                }, 
+                "lowering ast -> hir": {
+                    "percent": 3.10077519379845, 
+                    "time": 0.004
+                }, 
+                "checking that all macro invocations are gone": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "maybe building test harness": {
+                    "percent": 3.875968992248062, 
+                    "time": 0.005
+                }, 
+                "plugin loading": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "attribute checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "macro loading": {
+                    "percent": 2.3255813953488373, 
+                    "time": 0.003
+                }, 
+                "plugin registration": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "indexing hir": {
+                    "percent": 0.7751937984496124, 
+                    "time": 0.001
+                }, 
+                "external crate/lib resolution": {
+                    "percent": 39.53488372093023, 
+                    "time": 0.051
+                }
+            }, 
+            "total": 0.129, 
+            "rss": {
+                "complete gated feature checking 1": 41, 
+                "complete gated feature checking 2": 41, 
+                "parsing": 31, 
+                "configuration 1": 31, 
+                "gated macro checking": 31, 
+                "assigning node ids": 41, 
+                "language item collection": 79, 
+                "checking for inline asm in case the target doesn't support it": 41, 
+                "prelude injection": 41, 
+                "recursion limit": 31, 
+                "gated configuration checking": 41, 
+                "crate injection": 31, 
+                "early lint checks": 45, 
+                "expansion": 41, 
+                "configuration 2": 41, 
+                "lowering ast -> hir": 45, 
+                "checking that all macro invocations are gone": 41, 
+                "maybe building test harness": 41, 
+                "plugin loading": 34, 
+                "attribute checking": 45, 
+                "macro loading": 34, 
+                "plugin registration": 34, 
+                "indexing hir": 45, 
+                "external crate/lib resolution": 79
+            }
+        }
+    ]
+}
