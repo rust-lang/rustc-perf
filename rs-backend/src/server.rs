@@ -1,3 +1,12 @@
+// Copyright 2016 The rustc-perf Project Developers. See the COPYRIGHT
+// file at the top-level directory.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
 use std::collections::HashMap;
 use std::cmp::max;
 
@@ -9,12 +18,10 @@ use serde_json::builder::ObjectBuilder;
 use serde_json::Value;
 use serde;
 
-use SERVER_ADDRESS;
-use errors::*;
-use load::{SummarizedWeek, Kind, TestRun, InputData, Timing};
-use route_handler::{self, PostHandler, GetHandler};
-use util::{start_idx, end_idx};
 use git;
+use load::{SummarizedWeek, Kind, TestRun, InputData, Timing};
+use route_handler;
+use util::{start_idx, end_idx};
 
 const JS_DATE_FORMAT: &'static str = "%Y-%m-%dT%H:%M:%S.000Z";
 
@@ -22,6 +29,11 @@ const JS_DATE_FORMAT: &'static str = "%Y-%m-%dT%H:%M:%S.000Z";
 enum GroupBy {
     Crate,
     Phase,
+}
+
+enum OptionalDate {
+    Date(NaiveDateTime),
+    CouldNotParse(String),
 }
 
 impl serde::Deserialize for GroupBy {
@@ -49,11 +61,6 @@ impl serde::Deserialize for GroupBy {
 
         deserializer.deserialize(GroupByVisitor)
     }
-}
-
-enum OptionalDate {
-    Date(NaiveDateTime),
-    CouldNotParse(String),
 }
 
 impl OptionalDate {
@@ -106,83 +113,96 @@ impl serde::Deserialize for OptionalDate {
     }
 }
 
-struct Summary;
-impl GetHandler for Summary {
-    fn handle(data: &InputData) -> Result<Value> {
-        let dates = data.summary_rustc.summary.iter()
+fn handle_summary(r: &mut Request) -> IronResult<Response> {
+    fn summarize(benchmark: &SummarizedWeek, rustc: &SummarizedWeek) -> String {
+        let mut sum = 0.0;
+        let mut count = 0;
+        for krate in benchmark.by_crate.values() {
+            if krate.contains_key("total") {
+                sum += krate["total"];
+                count += 1;
+            }
+        }
+
+        if rustc.by_crate["total"].contains_key("total") {
+            sum += 2.0 * rustc.by_crate["total"]["total"];
+            count += 2;
+        }
+
+        format!("{:.1}", sum / (count as f64))
+    }
+
+    fn breakdown(benchmark: &SummarizedWeek, rustc: &SummarizedWeek) -> Value {
+        let mut per_bench = ObjectBuilder::new();
+
+        for (crate_name, krate) in &benchmark.by_crate {
+            let val = krate.get("total").cloned().unwrap_or(0.0);
+            per_bench = per_bench.insert(crate_name.as_str(), format!("{:.1}", val));
+        }
+
+        let bootstrap = if rustc.by_crate["total"].contains_key("total") {
+            rustc.by_crate["total"]["total"]
+        } else {
+            0.0
+        };
+        per_bench = per_bench.insert("bootstrap", format!("{:.1}", bootstrap));
+
+        per_bench.build()
+    }
+
+    route_handler::handler_get(r, |data| {
+        let dates = data.summary_rustc
+            .summary
+            .iter()
             .map(|s| s.date.format(JS_DATE_FORMAT).to_string())
             .collect::<Vec<_>>();
 
-        fn summarize(benchmark: &SummarizedWeek, rustc: &SummarizedWeek) -> String {
-            let mut sum = 0.0;
-            let mut count = 0;
-            for krate in benchmark.by_crate.values() {
-                if krate.contains_key("total") {
-                    sum += krate["total"];
-                    count += 1;
-                }
-            }
-
-            if rustc.by_crate["total"].contains_key("total") {
-                sum += 2.0 * rustc.by_crate["total"]["total"];
-                count += 2;
-            }
-
-            format!("{:.1}", sum / (count as f64))
-        }
-
         // overall number for each week
-        let summaries = data.summary_benchmarks.summary.iter().enumerate().map(|(i, s)| {
-            summarize(s, &data.summary_rustc.summary[i])
-        }).collect::<Vec<_>>();
-
-        fn breakdown(benchmark: &SummarizedWeek, rustc: &SummarizedWeek) -> Value {
-            let mut per_bench = ObjectBuilder::new();
-
-            for (crate_name, krate) in &benchmark.by_crate {
-                let val = krate.get("total").cloned().unwrap_or(0.0);
-                per_bench = per_bench.insert(crate_name.as_str(), format!("{:.1}", val));
-            }
-
-            let bootstrap = if rustc.by_crate["total"].contains_key("total") {
-                rustc.by_crate["total"]["total"]
-            } else {
-                0.0
-            };
-            per_bench = per_bench.insert("bootstrap", format!("{:.1}", bootstrap));
-
-            per_bench.build()
-        }
+        let summaries = data.summary_benchmarks
+            .summary
+            .iter()
+            .enumerate()
+            .map(|(i, s)| summarize(s, &data.summary_rustc.summary[i]))
+            .collect::<Vec<_>>();
 
         // per benchmark, per week
-        let breakdown_data = data.summary_benchmarks.summary.iter().enumerate().map(|(i, s)| {
-            breakdown(s, &data.summary_rustc.summary[i])
-        }).collect::<Vec<Value>>();
+        let breakdown_data = data.summary_benchmarks
+            .summary
+            .iter()
+            .enumerate()
+            .map(|(i, s)| breakdown(s, &data.summary_rustc.summary[i]))
+            .collect::<Vec<Value>>();
 
-        Ok(ObjectBuilder::new()
-            .insert("total_summary", summarize(&data.summary_benchmarks.total, &data.summary_rustc.total))
-            .insert("total_breakdown", breakdown(&data.summary_benchmarks.total, &data.summary_rustc.total))
+        ObjectBuilder::new()
+            .insert("total_summary",
+                    summarize(&data.summary_benchmarks.total, &data.summary_rustc.total))
+            .insert("total_breakdown",
+                    breakdown(&data.summary_benchmarks.total, &data.summary_rustc.total))
             .insert("breakdown", breakdown_data)
             .insert("summaries", summaries)
             .insert("dates", dates)
-            .build())
-    }
+            .build()
+    })
 }
 
-struct Info;
-impl GetHandler for Info {
-    fn handle(data: &InputData) -> Result<Value> {
-        Ok(ObjectBuilder::new()
+fn handle_info(r: &mut Request) -> IronResult<Response> {
+    route_handler::handler_get(r, |data| {
+        ObjectBuilder::new()
             .insert("crates", &data.crate_list)
             .insert("phases", &data.phase_list)
             .insert("benchmarks", &data.benchmarks)
-            .build())
-    }
+            .build()
+    })
 }
 
-fn get_data_for_date(day: &TestRun, crate_names: &[String], phases: &[String], group_by: GroupBy) -> Value {
+fn get_data_for_date(day: &TestRun,
+                     crate_names: &[String],
+                     phases: &[String],
+                     group_by: GroupBy)
+                     -> Value {
     #[derive(Serialize)]
-    struct Recording { // TODO better name (can't use Timing since we don't have a percent...)
+    struct Recording {
+        // TODO better name (can't use Timing since we don't have a percent...)
         time: f64,
         rss: u64,
     }
@@ -203,11 +223,9 @@ fn get_data_for_date(day: &TestRun, crate_names: &[String], phases: &[String], g
         }
     }
 
-    let crates = crate_names.into_iter().filter_map(|crate_name| {
-        day.by_crate.get(crate_name).map(|krate| {
-            (crate_name, krate)
-        })
-    }).collect::<Vec<_>>();
+    let crates = crate_names.into_iter()
+        .filter_map(|crate_name| day.by_crate.get(crate_name).map(|krate| (crate_name, krate)))
+        .collect::<Vec<_>>();
 
     let mut data = HashMap::new();
     for phase_name in phases {
@@ -229,7 +247,8 @@ fn get_data_for_date(day: &TestRun, crate_names: &[String], phases: &[String], g
 }
 
 #[derive(Deserialize)]
-struct Data { // XXX naming
+struct Data {
+    // XXX naming
     #[serde(rename(deserialize="start"))]
     start_date: OptionalDate,
     #[serde(rename(deserialize="end"))]
@@ -240,8 +259,8 @@ struct Data { // XXX naming
     phases: Vec<String>,
 }
 
-impl PostHandler for Data {
-    fn handle(body: Self, data: &InputData) -> Result<Value> {
+fn handle_data(r: &mut Request) -> IronResult<Response> {
+    route_handler::handler_post::<_, Data>(r, |body, data| {
         let mut result = Vec::new();
         let mut first_idx = None;
         let mut last_idx = 0;
@@ -249,12 +268,10 @@ impl PostHandler for Data {
         let start_idx = start_idx(data.by_kind(body.kind), body.start_date.as_start(data));
         let end_idx = end_idx(data.by_kind(body.kind), body.end_date.as_end(data));
         for i in start_idx..(end_idx + 1) {
-            let today_data = get_data_for_date(
-                &data.by_kind(body.kind)[i],
-                &body.crates,
-                &body.phases,
-                body.group_by
-            );
+            let today_data = get_data_for_date(&data.by_kind(body.kind)[i],
+                                               &body.crates,
+                                               &body.phases,
+                                               body.group_by);
 
             if !today_data.find("data").unwrap().as_object().unwrap().is_empty() {
                 last_idx = i - start_idx;
@@ -267,32 +284,34 @@ impl PostHandler for Data {
         }
 
         // Trim the data
-        let result = result.drain(first_idx.unwrap()..(last_idx+1)).collect::<Vec<_>>();
-        Ok(Value::Array(result))
-    }
+        let result = result.drain(first_idx.unwrap()..(last_idx + 1)).collect::<Vec<_>>();
+        Value::Array(result)
+    })
 }
 
 #[derive(Deserialize)]
-struct Tabular { // XXX naming
+struct Tabular {
+    // XXX naming
     kind: Kind,
     date: OptionalDate,
 }
 
-impl PostHandler for Tabular {
-    fn handle(body: Self, data: &InputData) -> Result<Value> {
+fn handle_tabular(r: &mut Request) -> IronResult<Response> {
+    route_handler::handler_post::<_, Tabular>(r, |body, data| {
         let kind_data = data.by_kind(body.kind);
         let day = &kind_data[end_idx(kind_data, body.date.as_end(data))];
 
-        Ok(ObjectBuilder::new()
+        ObjectBuilder::new()
             .insert("date", day.date.format(JS_DATE_FORMAT).to_string())
             .insert("commit", &day.commit)
             .insert("data", &day.by_crate)
-            .build())
-    }
+            .build()
+    })
 }
 
 #[derive(Deserialize)]
-struct Days { // XXX naming
+struct Days {
+    // XXX naming
     kind: Kind,
     dates: Vec<OptionalDate>,
     crates: Vec<String>,
@@ -300,27 +319,26 @@ struct Days { // XXX naming
     group_by: GroupBy,
 }
 
-impl PostHandler for Days {
-    fn handle(body: Self, data: &InputData) -> Result<Value> {
+fn handle_days(r: &mut Request) -> IronResult<Response> {
+    route_handler::handler_post::<_, Days>(r, |body, data| {
         let data = data.by_kind(body.kind);
         let mut result = Vec::new();
         for date in body.dates {
             if let OptionalDate::Date(date) = date {
-                let day = get_data_for_date(
-                    &data[end_idx(data, date)],
-                    &body.crates,
-                    &body.phases,
-                    body.group_by
-                );
+                let day = get_data_for_date(&data[end_idx(data, date)],
+                                            &body.crates,
+                                            &body.phases,
+                                            body.group_by);
                 result.push(day);
             }
         }
-        Ok(Value::Array(result))
-    }
+        Value::Array(result)
+    })
 }
 
 #[derive(Deserialize)]
-struct Stats { // XXX naming
+struct Stats {
+    // XXX naming
     kind: Kind,
     #[serde(rename(deserialize="start"))]
     start_date: OptionalDate,
@@ -331,11 +349,9 @@ struct Stats { // XXX naming
     phases: Vec<String>,
 }
 
-impl PostHandler for Stats {
-    fn handle(body: Self, data: &InputData) -> Result<Value> {
-        if body.kind == Kind::Benchmarks && body.crates.iter().any(|s| s == "total") {
-            return Err("unexpected total crate with benchmarks kind".into());
-        }
+fn handle_stats(r: &mut Request) -> IronResult<Response> {
+    route_handler::handler_post::<_, Stats>(r, |body, data| {
+        assert!(body.kind != Kind::Benchmarks || body.crates.iter().all(|s| s != "total"));
 
         let kinded_data = data.by_kind(body.kind);
         let mut start_date = body.start_date.as_start(data);
@@ -363,12 +379,12 @@ impl PostHandler for Stats {
             crates = crates.insert(crate_name, stats);
         }
 
-        Ok(ObjectBuilder::new()
+        ObjectBuilder::new()
             .insert("startDate", start_date.format(JS_DATE_FORMAT).to_string())
             .insert("endDate", end_date.format(JS_DATE_FORMAT).to_string())
             .insert("crates", crates.build())
-            .build())
-    }
+            .build()
+    })
 }
 
 fn mk_stats(data: &[&TestRun], crate_name: &str, phases: &[String]) -> Value {
@@ -417,10 +433,12 @@ fn mk_stats(data: &[&TestRun], crate_name: &str, phases: &[String]) -> Value {
         max = max.max(cur);
 
         total += cur;
-        if i < q1_idx { // Within the first quartile
+        if i < q1_idx {
+            // Within the first quartile
             q1_total += cur;
         }
-        if i >= q4_idx { // Within the fourth quartile
+        if i >= q4_idx {
+            // Within the fourth quartile
             q4_total += cur;
         }
     }
@@ -479,22 +497,22 @@ fn on_push(req: &mut Request) -> IronResult<Response> {
         Ok(Value::String("Successfully updated from filesystem".to_owned()))
     };
 
-    route_handler::respond(responder())
+    Ok(route_handler::unwrap_with_or_internal_err(responder(), route_handler::respond))
 }
 
 pub fn start(data: InputData) {
     let mut router = Router::new();
 
-    router.get("/summary", Summary::handler);
-    router.get("/info", Info::handler);
-    router.post("/data", Data::handler);
-    router.post("/get_tabular", Tabular::handler);
-    router.post("/get", Days::handler);
-    router.post("/stats", Stats::handler);
+    router.get("/summary", handle_summary);
+    router.get("/info", handle_info);
+    router.post("/data", handle_data);
+    router.post("/get_tabular", handle_tabular);
+    router.post("/get", handle_days);
+    router.post("/stats", handle_stats);
     router.post("/onpush", on_push);
 
     let mut chain = Chain::new(router);
     chain.link(State::<InputData>::both(data));
 
-    Iron::new(chain).http(SERVER_ADDRESS).unwrap();
+    Iron::new(chain).http(::SERVER_ADDRESS).unwrap();
 }
