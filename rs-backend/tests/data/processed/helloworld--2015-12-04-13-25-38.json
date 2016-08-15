@@ -1,0 +1,311 @@
+{
+    "header": {
+        "date": "Fri Dec 4 17:47:18 2015 +0000", 
+        "commit": "68c15be8b5a28297ae58ea030adf49f265e41127"
+    }, 
+    "times": [
+        {
+            "total": 0.1035, 
+            "rss": {
+                "drop-impl checking": 53, 
+                "wf checking (new)": 53, 
+                "intrinsic checking": 53, 
+                "complete gated feature checking 1": 36, 
+                "looking for plugin registrar": 42, 
+                "complete gated feature checking 2": 36, 
+                "type collecting": 44, 
+                "parsing": 29, 
+                "privacy checking": 53, 
+                "configuration 1": 29, 
+                "item-bodies checking": 53, 
+                "looking for entry point": 42, 
+                "effect checking": 53, 
+                "linking": 72, 
+                "gated macro checking": 32, 
+                "stability checking": 53, 
+                "liveness checking": 53, 
+                "assigning node ids": 36, 
+                "language item collection": 36, 
+                "resolving dependency formats": 53, 
+                "checking for inline asm in case the target doesn't support it": 36, 
+                "lifetime resolution": 42, 
+                "translation": 62, 
+                "stability index": 53, 
+                "variance inference": 44, 
+                "unused lib feature checking": 53, 
+                "borrow checking": 53, 
+                "prelude injection": 36, 
+                "recursion limit": 29, 
+                "loop checking": 42, 
+                "item-types checking": 53, 
+                "gated configuration checking": 36, 
+                "crate injection": 32, 
+                "wf checking (old)": 48, 
+                "match checking": 53, 
+                "early lint checks": 36, 
+                "LLVM passes": 66, 
+                "MIR dump": 53, 
+                "region resolution": 42, 
+                "lint checking": 53, 
+                "expansion": 36, 
+                "configuration 2": 36, 
+                "lowering ast -> hir": 36, 
+                "checking that all macro invocations are gone": 36, 
+                "maybe building test harness": 36, 
+                "rvalue checking": 53, 
+                "death checking": 53, 
+                "const checking": 53, 
+                "plugin loading": 36, 
+                "static item recursion checking": 44, 
+                "erasing regions from MIR": 53, 
+                "attribute checking": 36, 
+                "macro loading": 36, 
+                "plugin registration": 36, 
+                "coherence checking": 48, 
+                "indexing hir": 36, 
+                "resolution": 40, 
+                "reachability checking": 53, 
+                "external crate/lib resolution": 36
+            }, 
+            "crate": "helloworld", 
+            "times": {
+                "drop-impl checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "wf checking (new)": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "intrinsic checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "complete gated feature checking 1": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "looking for plugin registrar": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "complete gated feature checking 2": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "type collecting": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "parsing": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "privacy checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "configuration 1": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "item-bodies checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "looking for entry point": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "effect checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "linking": {
+                    "percent": 84.29951690821255, 
+                    "time": 0.08725
+                }, 
+                "gated macro checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "stability checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "liveness checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "assigning node ids": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "language item collection": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "resolving dependency formats": {
+                    "percent": 0.9661835748792271, 
+                    "time": 0.001
+                }, 
+                "checking for inline asm in case the target doesn't support it": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "lifetime resolution": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "translation": {
+                    "percent": 3.8647342995169085, 
+                    "time": 0.004
+                }, 
+                "stability index": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "variance inference": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "unused lib feature checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "borrow checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "prelude injection": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "recursion limit": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "loop checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "item-types checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "gated configuration checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "crate injection": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "wf checking (old)": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "match checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "early lint checks": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "LLVM passes": {
+                    "percent": 1.9323671497584543, 
+                    "time": 0.002
+                }, 
+                "MIR dump": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "region resolution": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "lint checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "expansion": {
+                    "percent": 0.9661835748792271, 
+                    "time": 0.001
+                }, 
+                "configuration 2": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "lowering ast -> hir": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "checking that all macro invocations are gone": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "maybe building test harness": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "rvalue checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "death checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "const checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "plugin loading": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "static item recursion checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "erasing regions from MIR": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "attribute checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "macro loading": {
+                    "percent": 1.9323671497584543, 
+                    "time": 0.002
+                }, 
+                "plugin registration": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "coherence checking": {
+                    "percent": 4.1062801932367154, 
+                    "time": 0.00425
+                }, 
+                "indexing hir": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "resolution": {
+                    "percent": 0.9661835748792271, 
+                    "time": 0.001
+                }, 
+                "reachability checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "external crate/lib resolution": {
+                    "percent": 0.9661835748792271, 
+                    "time": 0.001
+                }
+            }
+        }
+    ]
+}
