@@ -15,7 +15,6 @@ use std::io::Read;
 
 use chrono::{Duration, NaiveDateTime};
 use serde_json::{self, Value};
-use serde;
 
 use util::start_idx;
 use errors::*;
