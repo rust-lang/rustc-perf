@@ -207,47 +207,12 @@ impl InputData {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Kind {
+    #[serde(rename="benchmarks")]
     Benchmarks,
+    #[serde(rename="rustc")]
     Rustc,
-}
-
-impl serde::Deserialize for Kind {
-    fn deserialize<D>(deserializer: &mut D) -> ::std::result::Result<Kind, D::Error>
-        where D: serde::de::Deserializer
-    {
-        struct KindVisitor;
-
-        impl serde::de::Visitor for KindVisitor {
-            type Value = Kind;
-
-            fn visit_str<E>(&mut self, value: &str) -> ::std::result::Result<Kind, E>
-                where E: serde::de::Error
-            {
-                match value {
-                    "rustc" => Ok(Kind::Rustc),
-                    "benchmarks" => Ok(Kind::Benchmarks),
-                    _ => {
-                        let msg = format!("unexpected {} value for kind", value);
-                        Err(serde::de::Error::custom(msg))
-                    }
-                }
-            }
-        }
-
-        deserializer.deserialize(KindVisitor)
-    }
-}
-
-impl serde::Serialize for Kind {
-    fn serialize<S>(&self, serializer: &mut S) -> ::std::result::Result<(), S::Error>
-        where S: serde::Serializer {
-        match *self {
-            Kind::Rustc => serializer.serialize_str("rustc"),
-            Kind::Benchmarks => serializer.serialize_str("benchmarks"),
-        }
-    }
 }
 
 /// The data loaded for a single date, and all associated crates.

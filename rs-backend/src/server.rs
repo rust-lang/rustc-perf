@@ -25,52 +25,17 @@ use util::{get_repo_path, start_idx, end_idx};
 
 const JS_DATE_FORMAT: &'static str = "%Y-%m-%dT%H:%M:%S.000Z";
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum GroupBy {
+    #[serde(rename="crate")]
     Crate,
+    #[serde(rename="phase")]
     Phase,
 }
 
 pub enum OptionalDate {
     Date(NaiveDateTime),
     CouldNotParse(String),
-}
-
-impl serde::Deserialize for GroupBy {
-    fn deserialize<D>(deserializer: &mut D) -> ::std::result::Result<GroupBy, D::Error>
-        where D: serde::de::Deserializer
-    {
-        struct GroupByVisitor;
-
-        impl serde::de::Visitor for GroupByVisitor {
-            type Value = GroupBy;
-
-            fn visit_str<E>(&mut self, value: &str) -> ::std::result::Result<GroupBy, E>
-                where E: serde::de::Error
-            {
-                match value {
-                    "crate" => Ok(GroupBy::Crate),
-                    "phase" => Ok(GroupBy::Phase),
-                    _ => {
-                        let msg = format!("unexpected {} value for group by", value);
-                        Err(serde::de::Error::custom(msg))
-                    }
-                }
-            }
-        }
-
-        deserializer.deserialize(GroupByVisitor)
-    }
-}
-
-impl serde::Serialize for GroupBy {
-    fn serialize<S>(&self, serializer: &mut S) -> ::std::result::Result<(), S::Error>
-        where S: serde::Serializer {
-        match *self {
-            GroupBy::Crate => serializer.serialize_str("crate"),
-            GroupBy::Phase => serializer.serialize_str("phase"),
-        }
-    }
 }
 
 impl OptionalDate {
