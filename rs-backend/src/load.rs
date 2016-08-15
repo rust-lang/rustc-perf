@@ -104,26 +104,28 @@ impl InputData {
             fn parse_from_header(date: &str) -> Result<NaiveDateTime> {
                 // TODO: Determine correct format of header date and move into
                 // variable/constant
-                NaiveDateTime::parse_from_str(date, "%c %z")
-                    .map_err(|err| err.into())
+                NaiveDateTime::parse_from_str(date, "%c %z").map_err(|err| err.into())
             }
 
             /// Parse date from filename.
             fn parse_from_filename(filename: &str) -> Result<NaiveDateTime> {
-                let date_str = &filename[(filename.find("--").unwrap() + 2)..filename.find(".json").unwrap()];
+                let date_str = &filename[(filename.find("--").unwrap() + 2)..filename.find(".json")
+                    .unwrap()];
 
                 // Ignore seconds: they aren't key to the data processing, and
                 // parsing them requires logic to replace them with 0 when
                 // they are absent.
-                NaiveDateTime::parse_from_str(date_str, "%Y-%m-%d-%H-%M")
-                    .map_err(|err| err.into())
+                NaiveDateTime::parse_from_str(date_str, "%Y-%m-%d-%H-%M").map_err(|err| err.into())
             }
 
-            let header = InputHeader {
-                commit: contents.lookup("header.commit").unwrap().as_str().unwrap().to_string(),
-                date: parse_from_header(contents.lookup("header.date").unwrap().as_str().unwrap())
-                    .or_else(|_| parse_from_filename(&filename))?,
-            };
+            let header =
+                InputHeader {
+                    commit: contents.lookup("header.commit").unwrap().as_str().unwrap().to_string(),
+                    date: parse_from_header(contents.lookup("header.date")
+                            .unwrap()
+                            .as_str()
+                            .unwrap()).or_else(|_| parse_from_filename(&filename))?,
+                };
             let date = header.date;
 
             let test_name = &filename[0..filename.find("--").unwrap()];
@@ -138,12 +140,15 @@ impl InputData {
                 }
             } else {
                 benchmarks.insert(test_name.to_string());
-                let index = data_benchmarks.iter().position(|benchmark: &TestRun| benchmark.date == date);
+                let index = data_benchmarks.iter()
+                    .position(|benchmark: &TestRun| benchmark.date == date);
                 if let Some(index) = index {
                     c_benchmarks_add += 1;
                     let crate_name = times[0].find("crate").unwrap().as_str().unwrap();
                     data_benchmarks[index].by_crate.insert(test_name.to_string(),
-                        make_times(times, false).remove(crate_name).unwrap());
+                                                           make_times(times, false)
+                                                               .remove(crate_name)
+                                                               .unwrap());
                 } else {
                     data_benchmarks.push(TestRun::new(date, header, times, false));
                 }
@@ -190,7 +195,7 @@ impl InputData {
     pub fn by_kind(&self, kind: Kind) -> &[TestRun] {
         match kind {
             Kind::Benchmarks => &self.data_benchmarks,
-            Kind::Rustc => &self.data_rustc
+            Kind::Rustc => &self.data_rustc,
         }
     }
 }
@@ -234,7 +239,7 @@ pub struct TestRun {
     pub commit: String,
 
     /// Map of crate names to a map of phases to timings per phase.
-    pub by_crate: HashMap<String, HashMap<String, Timing>>
+    pub by_crate: HashMap<String, HashMap<String, Timing>>,
 }
 
 impl PartialEq for TestRun {
@@ -262,7 +267,7 @@ impl TestRun {
         TestRun {
             date: date,
             commit: header.commit.clone(),
-            by_crate: make_times(times, is_rustc)
+            by_crate: make_times(times, is_rustc),
         }
     }
 }
@@ -281,7 +286,7 @@ impl Timing {
         Timing {
             percent: 0.0,
             time: 0.0,
-            rss: Some(0)
+            rss: Some(0),
         }
     }
 }
@@ -294,13 +299,14 @@ fn make_times(timings: &[Value], is_rustc: bool) -> HashMap<String, HashMap<Stri
     for timing in timings {
         let mut times = HashMap::new();
         for (phase_name, phase) in timing.find("times").unwrap().as_object().unwrap() {
-            times.insert(phase_name.to_string(), Timing {
-                percent: phase.find("percent").unwrap().as_f64().unwrap(),
-                time: phase.find("time").unwrap().as_f64().unwrap(),
-                rss: timing.find("rss")
-                    .and_then(|rss| rss.find(phase_name))
-                    .and_then(|phase| phase.as_u64()),
-            });
+            times.insert(phase_name.to_string(),
+                         Timing {
+                             percent: phase.find("percent").unwrap().as_f64().unwrap(),
+                             time: phase.find("time").unwrap().as_f64().unwrap(),
+                             rss: timing.find("rss")
+                                 .and_then(|rss| rss.find(phase_name))
+                                 .and_then(|phase| phase.as_u64()),
+                         });
         }
 
         let mut mem_values = Vec::new();
@@ -310,11 +316,12 @@ fn make_times(timings: &[Value], is_rustc: bool) -> HashMap<String, HashMap<Stri
             }
         }
 
-        times.insert("total".into(), Timing {
-            percent: 100.0,
-            time: timing.find("total").unwrap().as_f64().unwrap(),
-            rss: Some(mem_values.into_iter().max().unwrap_or(0))
-        });
+        times.insert("total".into(),
+                     Timing {
+                         percent: 100.0,
+                         time: timing.find("total").unwrap().as_f64().unwrap(),
+                         rss: Some(mem_values.into_iter().max().unwrap_or(0)),
+                     });
 
         for phase in times.keys() {
             let mut entry = totals.entry(phase.to_string()).or_insert_with(Timing::new);
@@ -322,7 +329,8 @@ fn make_times(timings: &[Value], is_rustc: bool) -> HashMap<String, HashMap<Stri
             entry.rss = max(times[phase].rss, entry.rss);
         }
 
-        by_crate.insert(timing.find("crate").unwrap().as_str().unwrap().to_string(), times);
+        by_crate.insert(timing.find("crate").unwrap().as_str().unwrap().to_string(),
+                        times);
     }
 
     if is_rustc {
@@ -338,7 +346,7 @@ pub struct SummarizedWeek {
 
     /// Maps crate names to a map of phases to each phase's percent change
     /// from the previous date.
-    pub by_crate: HashMap<String, HashMap<String, f64>>
+    pub by_crate: HashMap<String, HashMap<String, f64>>,
 }
 
 pub struct Summary {
@@ -382,15 +390,13 @@ impl Summary {
                 let mut crate_medians = HashMap::new();
                 for phase in weeks[0][crate_name].keys() {
                     if !weeks[1][crate_name].contains_key(phase) ||
-                        !weeks[2][crate_name].contains_key(phase) {
+                       !weeks[2][crate_name].contains_key(phase) {
                         continue;
                     }
                     // Find the median value.
-                    let mut values = [
-                        weeks[0][crate_name][phase].time,
-                        weeks[1][crate_name][phase].time,
-                        weeks[2][crate_name][phase].time
-                    ];
+                    let mut values = [weeks[0][crate_name][phase].time,
+                                      weeks[1][crate_name][phase].time,
+                                      weeks[2][crate_name][phase].time];
                     values.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
                     let median = values[1];
@@ -427,10 +433,10 @@ impl Summary {
                     // the last week, then that phase won't be recorded in
                     // totals no matter what happens in between.
                     if week0.by_crate[crate_name][phase] > 0.0 &&
-                        week1.by_crate[crate_name][phase] > 0.0 {
+                       week1.by_crate[crate_name][phase] > 0.0 {
                         current_crate.insert(phase.to_string(),
-                            get_percent_change(week0.by_crate[crate_name][phase],
-                                week1.by_crate[crate_name][phase]));
+                                             get_percent_change(week0.by_crate[crate_name][phase],
+                                                                week1.by_crate[crate_name][phase]));
                     }
                 }
                 current_week.insert(crate_name.to_string(), current_crate);
@@ -466,7 +472,7 @@ impl Summary {
 
         Summary {
             total: totals,
-            summary: weeks
+            summary: weeks,
         }
     }
 }

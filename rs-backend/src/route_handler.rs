@@ -22,7 +22,7 @@ pub fn respond(res: Result<Value>) -> IronResult<Response> {
             let mut resp = Response::with((status::Ok, serde_json::to_string(&json).unwrap()));
             resp.set_mut(Header(ContentType(Mime(TopLevel::Application, SubLevel::Json, vec![]))));
             resp
-        },
+        }
         Err(err) => {
             // TODO: Print to stderr
             println!("An error occurred: {:?}", err);
@@ -37,7 +37,8 @@ pub trait PostHandler: Sized {
     fn handle(_body: Self, _data: &InputData) -> Result<Value>;
 
     fn handler(req: &mut Request) -> IronResult<Response>
-        where Self: serde::Deserialize {
+        where Self: serde::Deserialize
+    {
 
         let rwlock = req.get::<State<InputData>>().unwrap();
         let data = rwlock.read().unwrap();
@@ -45,7 +46,7 @@ pub trait PostHandler: Sized {
         let mut buf = String::new();
         let res = match req.body.read_to_string(&mut buf).unwrap() {
             0 => Err("POST handler with 0 length body.".into()),
-            _ => Self::handle(serde_json::from_str(&buf).unwrap(), data.deref())
+            _ => Self::handle(serde_json::from_str(&buf).unwrap(), data.deref()),
         };
 
         respond(res)

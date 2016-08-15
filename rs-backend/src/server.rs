@@ -109,7 +109,9 @@ impl serde::Deserialize for OptionalDate {
 struct Summary;
 impl GetHandler for Summary {
     fn handle(data: &InputData) -> Result<Value> {
-        let dates = data.summary_rustc.summary.iter()
+        let dates = data.summary_rustc
+            .summary
+            .iter()
             .map(|s| s.date.format(JS_DATE_FORMAT).to_string())
             .collect::<Vec<_>>();
 
@@ -132,9 +134,12 @@ impl GetHandler for Summary {
         }
 
         // overall number for each week
-        let summaries = data.summary_benchmarks.summary.iter().enumerate().map(|(i, s)| {
-            summarize(s, &data.summary_rustc.summary[i])
-        }).collect::<Vec<_>>();
+        let summaries = data.summary_benchmarks
+            .summary
+            .iter()
+            .enumerate()
+            .map(|(i, s)| summarize(s, &data.summary_rustc.summary[i]))
+            .collect::<Vec<_>>();
 
         fn breakdown(benchmark: &SummarizedWeek, rustc: &SummarizedWeek) -> Value {
             let mut per_bench = ObjectBuilder::new();
@@ -155,13 +160,18 @@ impl GetHandler for Summary {
         }
 
         // per benchmark, per week
-        let breakdown_data = data.summary_benchmarks.summary.iter().enumerate().map(|(i, s)| {
-            breakdown(s, &data.summary_rustc.summary[i])
-        }).collect::<Vec<Value>>();
+        let breakdown_data = data.summary_benchmarks
+            .summary
+            .iter()
+            .enumerate()
+            .map(|(i, s)| breakdown(s, &data.summary_rustc.summary[i]))
+            .collect::<Vec<Value>>();
 
         Ok(ObjectBuilder::new()
-            .insert("total_summary", summarize(&data.summary_benchmarks.total, &data.summary_rustc.total))
-            .insert("total_breakdown", breakdown(&data.summary_benchmarks.total, &data.summary_rustc.total))
+            .insert("total_summary",
+                    summarize(&data.summary_benchmarks.total, &data.summary_rustc.total))
+            .insert("total_breakdown",
+                    breakdown(&data.summary_benchmarks.total, &data.summary_rustc.total))
             .insert("breakdown", breakdown_data)
             .insert("summaries", summaries)
             .insert("dates", dates)
@@ -180,9 +190,14 @@ impl GetHandler for Info {
     }
 }
 
-fn get_data_for_date(day: &TestRun, crate_names: &[String], phases: &[String], group_by: GroupBy) -> Value {
+fn get_data_for_date(day: &TestRun,
+                     crate_names: &[String],
+                     phases: &[String],
+                     group_by: GroupBy)
+                     -> Value {
     #[derive(Serialize)]
-    struct Recording { // TODO better name (can't use Timing since we don't have a percent...)
+    struct Recording {
+        // TODO better name (can't use Timing since we don't have a percent...)
         time: f64,
         rss: u64,
     }
@@ -203,11 +218,9 @@ fn get_data_for_date(day: &TestRun, crate_names: &[String], phases: &[String], g
         }
     }
 
-    let crates = crate_names.into_iter().filter_map(|crate_name| {
-        day.by_crate.get(crate_name).map(|krate| {
-            (crate_name, krate)
-        })
-    }).collect::<Vec<_>>();
+    let crates = crate_names.into_iter()
+        .filter_map(|crate_name| day.by_crate.get(crate_name).map(|krate| (crate_name, krate)))
+        .collect::<Vec<_>>();
 
     let mut data = HashMap::new();
     for phase_name in phases {
@@ -229,7 +242,8 @@ fn get_data_for_date(day: &TestRun, crate_names: &[String], phases: &[String], g
 }
 
 #[derive(Deserialize)]
-struct Data { // XXX naming
+struct Data {
+    // XXX naming
     #[serde(rename(deserialize="start"))]
     start_date: OptionalDate,
     #[serde(rename(deserialize="end"))]
@@ -249,12 +263,10 @@ impl PostHandler for Data {
         let start_idx = start_idx(data.by_kind(body.kind), body.start_date.as_start(data));
         let end_idx = end_idx(data.by_kind(body.kind), body.end_date.as_end(data));
         for i in start_idx..(end_idx + 1) {
-            let today_data = get_data_for_date(
-                &data.by_kind(body.kind)[i],
-                &body.crates,
-                &body.phases,
-                body.group_by
-            );
+            let today_data = get_data_for_date(&data.by_kind(body.kind)[i],
+                                               &body.crates,
+                                               &body.phases,
+                                               body.group_by);
 
             if !today_data.find("data").unwrap().as_object().unwrap().is_empty() {
                 last_idx = i - start_idx;
@@ -267,13 +279,14 @@ impl PostHandler for Data {
         }
 
         // Trim the data
-        let result = result.drain(first_idx.unwrap()..(last_idx+1)).collect::<Vec<_>>();
+        let result = result.drain(first_idx.unwrap()..(last_idx + 1)).collect::<Vec<_>>();
         Ok(Value::Array(result))
     }
 }
 
 #[derive(Deserialize)]
-struct Tabular { // XXX naming
+struct Tabular {
+    // XXX naming
     kind: Kind,
     date: OptionalDate,
 }
@@ -292,7 +305,8 @@ impl PostHandler for Tabular {
 }
 
 #[derive(Deserialize)]
-struct Days { // XXX naming
+struct Days {
+    // XXX naming
     kind: Kind,
     dates: Vec<OptionalDate>,
     crates: Vec<String>,
@@ -306,12 +320,10 @@ impl PostHandler for Days {
         let mut result = Vec::new();
         for date in body.dates {
             if let OptionalDate::Date(date) = date {
-                let day = get_data_for_date(
-                    &data[end_idx(data, date)],
-                    &body.crates,
-                    &body.phases,
-                    body.group_by
-                );
+                let day = get_data_for_date(&data[end_idx(data, date)],
+                                            &body.crates,
+                                            &body.phases,
+                                            body.group_by);
                 result.push(day);
             }
         }
@@ -320,7 +332,8 @@ impl PostHandler for Days {
 }
 
 #[derive(Deserialize)]
-struct Stats { // XXX naming
+struct Stats {
+    // XXX naming
     kind: Kind,
     #[serde(rename(deserialize="start"))]
     start_date: OptionalDate,
@@ -417,10 +430,12 @@ fn mk_stats(data: &[&TestRun], crate_name: &str, phases: &[String]) -> Value {
         max = max.max(cur);
 
         total += cur;
-        if i < q1_idx { // Within the first quartile
+        if i < q1_idx {
+            // Within the first quartile
             q1_total += cur;
         }
-        if i >= q4_idx { // Within the fourth quartile
+        if i >= q4_idx {
+            // Within the fourth quartile
             q4_total += cur;
         }
     }

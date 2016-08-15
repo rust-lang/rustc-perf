@@ -21,8 +21,7 @@ pub fn update_repo(repo_path: String) -> Result<()> {
 }
 
 fn checkout_master(working_dir: &Path) -> Result<()> {
-    Command::new(GIT)
-        .current_dir(working_dir)
+    Command::new(GIT).current_dir(working_dir)
         .arg(GIT_CHECKOUT)
         .arg(BRANCH)
         .status()?;
@@ -30,8 +29,7 @@ fn checkout_master(working_dir: &Path) -> Result<()> {
 }
 
 fn pull_updates(working_dir: &Path) -> Result<()> {
-    Command::new(GIT)
-        .current_dir(working_dir)
+    Command::new(GIT).current_dir(working_dir)
         .arg(GIT_PULL)
         .status()?;
     Ok(())
