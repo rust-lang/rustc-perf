@@ -240,7 +240,18 @@ impl serde::Deserialize for Kind {
     }
 }
 
+impl serde::Serialize for Kind {
+    fn serialize<S>(&self, serializer: &mut S) -> ::std::result::Result<(), S::Error>
+        where S: serde::Serializer {
+        match *self {
+            Kind::Rustc => serializer.serialize_str("rustc"),
+            Kind::Benchmarks => serializer.serialize_str("benchmarks"),
+        }
+    }
+}
+
 /// The data loaded for a single date, and all associated crates.
+#[derive(Debug)]
 pub struct TestRun {
     pub date: NaiveDateTime,
     pub commit: String,

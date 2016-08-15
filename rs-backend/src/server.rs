@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::cmp::max;
 
 use iron::prelude::*;
@@ -26,12 +26,12 @@ use util::{get_repo_path, start_idx, end_idx};
 const JS_DATE_FORMAT: &'static str = "%Y-%m-%dT%H:%M:%S.000Z";
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-enum GroupBy {
+pub enum GroupBy {
     Crate,
     Phase,
 }
 
-enum OptionalDate {
+pub enum OptionalDate {
     Date(NaiveDateTime),
     CouldNotParse(String),
 }
@@ -60,6 +60,16 @@ impl serde::Deserialize for GroupBy {
         }
 
         deserializer.deserialize(GroupByVisitor)
+    }
+}
+
+impl serde::Serialize for GroupBy {
+    fn serialize<S>(&self, serializer: &mut S) -> ::std::result::Result<(), S::Error>
+        where S: serde::Serializer {
+        match *self {
+            GroupBy::Crate => serializer.serialize_str("crate"),
+            GroupBy::Phase => serializer.serialize_str("phase"),
+        }
     }
 }
 
@@ -110,6 +120,16 @@ impl serde::Deserialize for OptionalDate {
         }
 
         deserializer.deserialize(DateVisitor)
+    }
+}
+
+impl serde::Serialize for OptionalDate {
+    fn serialize<S>(&self, serializer: &mut S) -> ::std::result::Result<(), S::Error>
+        where S: serde::Serializer {
+        match *self {
+            OptionalDate::Date(date) => serializer.serialize_str(&date.format("%a %b %d %Y").to_string()),
+            OptionalDate::CouldNotParse(_) => serializer.serialize_str(""), // TODO: Warning?
+        }
     }
 }
 
@@ -186,11 +206,17 @@ fn handle_summary(r: &mut Request) -> IronResult<Response> {
 }
 
 fn handle_info(r: &mut Request) -> IronResult<Response> {
+    fn sort(set: &HashSet<String>) -> Vec<&String> {
+        let mut vec = set.into_iter().collect::<Vec<_>>();
+        vec.sort();
+        vec
+    }
+
     route_handler::handler_get(r, |data| {
         ObjectBuilder::new()
-            .insert("crates", &data.crate_list)
-            .insert("phases", &data.phase_list)
-            .insert("benchmarks", &data.benchmarks)
+            .insert("crates", sort(&data.crate_list))
+            .insert("phases", sort(&data.phase_list))
+            .insert("benchmarks", sort(&data.benchmarks))
             .build()
     })
 }
@@ -246,17 +272,17 @@ fn get_data_for_date(day: &TestRun,
         .build()
 }
 
-#[derive(Deserialize)]
-struct Data {
+#[derive(Serialize, Deserialize)]
+pub struct Data {
     // XXX naming
-    #[serde(rename(deserialize="start"))]
-    start_date: OptionalDate,
-    #[serde(rename(deserialize="end"))]
-    end_date: OptionalDate,
-    kind: Kind,
-    group_by: GroupBy,
-    crates: Vec<String>,
-    phases: Vec<String>,
+    #[serde(rename="start")]
+    pub start_date: OptionalDate,
+    #[serde(rename="end")]
+    pub end_date: OptionalDate,
+    pub kind: Kind,
+    pub group_by: GroupBy,
+    pub crates: Vec<String>,
+    pub phases: Vec<String>,
 }
 
 fn handle_data(r: &mut Request) -> IronResult<Response> {
@@ -289,11 +315,11 @@ fn handle_data(r: &mut Request) -> IronResult<Response> {
     })
 }
 
-#[derive(Deserialize)]
-struct Tabular {
+#[derive(Serialize, Deserialize)]
+pub struct Tabular {
     // XXX naming
-    kind: Kind,
-    date: OptionalDate,
+    pub kind: Kind,
+    pub date: OptionalDate,
 }
 
 fn handle_tabular(r: &mut Request) -> IronResult<Response> {
@@ -309,14 +335,14 @@ fn handle_tabular(r: &mut Request) -> IronResult<Response> {
     })
 }
 
-#[derive(Deserialize)]
-struct Days {
+#[derive(Serialize, Deserialize)]
+pub struct Days {
     // XXX naming
-    kind: Kind,
-    dates: Vec<OptionalDate>,
-    crates: Vec<String>,
-    phases: Vec<String>,
-    group_by: GroupBy,
+    pub kind: Kind,
+    pub dates: Vec<OptionalDate>,
+    pub crates: Vec<String>,
+    pub phases: Vec<String>,
+    pub group_by: GroupBy,
 }
 
 fn handle_days(r: &mut Request) -> IronResult<Response> {
@@ -336,17 +362,17 @@ fn handle_days(r: &mut Request) -> IronResult<Response> {
     })
 }
 
-#[derive(Deserialize)]
-struct Stats {
+#[derive(Serialize, Deserialize)]
+pub struct Stats {
     // XXX naming
-    kind: Kind,
-    #[serde(rename(deserialize="start"))]
-    start_date: OptionalDate,
-    #[serde(rename(deserialize="end"))]
-    end_date: OptionalDate,
+    pub kind: Kind,
+    #[serde(rename="start")]
+    pub start_date: OptionalDate,
+    #[serde(rename="end")]
+    pub end_date: OptionalDate,
     // kind rustc only: crate or phase can be 'total'
-    crates: Vec<String>,
-    phases: Vec<String>,
+    pub crates: Vec<String>,
+    pub phases: Vec<String>,
 }
 
 fn handle_stats(r: &mut Request) -> IronResult<Response> {
@@ -502,7 +528,7 @@ fn on_push(req: &mut Request) -> IronResult<Response> {
     Ok(route_handler::unwrap_with_or_internal_err(responder(), route_handler::respond))
 }
 
-pub fn start(data: InputData) {
+pub fn chain(data: InputData) -> Chain {
     let mut router = Router::new();
 
     router.get("/summary", handle_summary);
@@ -516,5 +542,9 @@ pub fn start(data: InputData) {
     let mut chain = Chain::new(router);
     chain.link(State::<InputData>::both(data));
 
-    Iron::new(chain).http(::SERVER_ADDRESS).unwrap();
+    chain
+}
+
+pub fn start(data: InputData) {
+    Iron::new(chain(data)).http(::SERVER_ADDRESS).unwrap();
 }
