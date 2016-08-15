@@ -1,0 +1,209 @@
+{
+    "header": {
+        "date": "Thu May 5 00:37:56 2016 -0700", 
+        "commit": "3f65afa6946ee4a6b1d619aee69e1f638edfb662"
+    }, 
+    "times": [
+        {
+            "loc": 639, 
+            "post_nc": 69741, 
+            "crate": "regex-macros.0.1.30", 
+            "pre_nc": 2170, 
+            "times": {
+                "parsing": {
+                    "percent": 0.3736479842674533, 
+                    "time": 0.004750000000000001
+                }, 
+                "looking for plugin registrar": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "looking for entry point": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "type collecting": {
+                    "percent": 1.2586037364798428, 
+                    "time": 0.016
+                }, 
+                "const fn bodies and arguments": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "configuration 1": {
+                    "percent": 0.07866273352999018, 
+                    "time": 0.001
+                }, 
+                "item-bodies checking": {
+                    "percent": 81.5142576204523, 
+                    "time": 1.03625
+                }, 
+                "assigning node ids": {
+                    "percent": 0.3146509341199607, 
+                    "time": 0.004
+                }, 
+                "language item collection": {
+                    "percent": 0.07866273352999018, 
+                    "time": 0.001
+                }, 
+                "complete gated feature checking": {
+                    "percent": 0.07866273352999018, 
+                    "time": 0.001
+                }, 
+                "checking for inline asm in case the target doesn't support it": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "lifetime resolution": {
+                    "percent": 0.07866273352999018, 
+                    "time": 0.001
+                }, 
+                "collecting defs": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "variance inference": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "prelude injection": {
+                    "percent": 0.39331366764995085, 
+                    "time": 0.005
+                }, 
+                "recursion limit": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "loop checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "item-types checking": {
+                    "percent": 0.07866273352999018, 
+                    "time": 0.001
+                }, 
+                "gated configuration checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "crate injection": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "expansion": {
+                    "percent": 3.048180924287119, 
+                    "time": 0.03875
+                }, 
+                "region resolution": {
+                    "percent": 0.15732546705998035, 
+                    "time": 0.002
+                }, 
+                "early lint checks": {
+                    "percent": 0.2359882005899705, 
+                    "time": 0.003
+                }, 
+                "configuration 2": {
+                    "percent": 0.7866273352999017, 
+                    "time": 0.01
+                }, 
+                "load_dep_graph": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "lowering ast -> hir": {
+                    "percent": 0.39331366764995085, 
+                    "time": 0.005
+                }, 
+                "checking that all macro invocations are gone": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "maybe building test harness": {
+                    "percent": 0.39331366764995085, 
+                    "time": 0.005
+                }, 
+                "name resolution": {
+                    "percent": 0.8652900688298918, 
+                    "time": 0.011
+                }, 
+                "plugin loading": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "wf checking": {
+                    "percent": 0.5506391347099312, 
+                    "time": 0.007
+                }, 
+                "static item recursion checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "attribute checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "macro loading": {
+                    "percent": 0.2359882005899705, 
+                    "time": 0.003
+                }, 
+                "plugin registration": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "coherence checking": {
+                    "percent": 0.8652900688298918, 
+                    "time": 0.011
+                }, 
+                "indexing hir": {
+                    "percent": 0.07866273352999018, 
+                    "time": 0.001
+                }, 
+                "external crate/lib resolution": {
+                    "percent": 8.141592920353983, 
+                    "time": 0.1035
+                }
+            }, 
+            "total": 1.27125, 
+            "rss": {
+                "parsing": 41, 
+                "looking for plugin registrar": 113, 
+                "looking for entry point": 113, 
+                "type collecting": 148, 
+                "const fn bodies and arguments": 53, 
+                "configuration 1": 42, 
+                "item-bodies checking": 194, 
+                "assigning node ids": 53, 
+                "language item collection": 93, 
+                "complete gated feature checking": 53, 
+                "checking for inline asm in case the target doesn't support it": 53, 
+                "lifetime resolution": 113, 
+                "collecting defs": 53, 
+                "variance inference": 148, 
+                "prelude injection": 53, 
+                "recursion limit": 42, 
+                "loop checking": 114, 
+                "item-types checking": 158, 
+                "gated configuration checking": 53, 
+                "crate injection": 42, 
+                "expansion": 53, 
+                "region resolution": 114, 
+                "early lint checks": 97, 
+                "configuration 2": 53, 
+                "load_dep_graph": 114, 
+                "lowering ast -> hir": 96, 
+                "checking that all macro invocations are gone": 53, 
+                "maybe building test harness": 53, 
+                "name resolution": 113, 
+                "plugin loading": 46, 
+                "wf checking": 158, 
+                "static item recursion checking": 114, 
+                "attribute checking": 97, 
+                "macro loading": 46, 
+                "plugin registration": 46, 
+                "coherence checking": 156, 
+                "indexing hir": 97, 
+                "external crate/lib resolution": 90
+            }
+        }
+    ]
+}

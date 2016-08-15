@@ -7,43 +7,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(question_mark, custom_derive, plugin)]
-#![plugin(serde_macros)]
+extern crate rustc_perf;
 
-#[macro_use]
-extern crate error_chain;
-extern crate chrono;
-extern crate iron;
-extern crate router;
-extern crate persistent;
-extern crate serde;
-extern crate serde_json;
-
-mod errors {
-    error_chain! {
-        links {
-        }
-
-        foreign_links {
-            ::std::io::Error, Io;
-            ::serde_json::Error, Json;
-            ::chrono::ParseError, Chrono;
-        }
-
-        errors {
-        }
-    }
-}
-
-mod git;
-mod load;
-mod route_handler;
-mod server;
-mod util;
-
-const SERVER_ADDRESS: &'static str = "0.0.0.0:2346";
+use rustc_perf::{load, server, util};
 
 fn main() {
-    let data = load::InputData::from_fs().unwrap();
+    let data = load::InputData::from_fs(&util::get_repo_path().unwrap()).unwrap();
     server::start(data);
 }

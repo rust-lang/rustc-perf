@@ -10,7 +10,7 @@
 use std::collections::{HashMap, HashSet};
 use std::cmp::{Ordering, max};
 use std::fs::{self, File};
-use std::path::Path;
+use std::path::PathBuf;
 use std::io::Read;
 
 use chrono::{Duration, NaiveDateTime};
@@ -63,9 +63,8 @@ struct InputHeader {
 
 impl InputData {
     /// Initialize `InputData from the file system.
-    pub fn from_fs() -> Result<InputData> {
-        // TODO: Read this at runtime, not hardcoded.
-        let repo_loc = Path::new("../data");
+    pub fn from_fs(repo_loc: &str) -> Result<InputData> {
+        let repo_loc = PathBuf::from(repo_loc);
 
         let mut skipped = 0;
         let mut c_benchmarks_add = 0;
@@ -212,40 +211,16 @@ impl InputData {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Kind {
+    #[serde(rename="benchmarks")]
     Benchmarks,
+    #[serde(rename="rustc")]
     Rustc,
 }
 
-impl serde::Deserialize for Kind {
-    fn deserialize<D>(deserializer: &mut D) -> ::std::result::Result<Kind, D::Error>
-        where D: serde::de::Deserializer
-    {
-        struct KindVisitor;
-
-        impl serde::de::Visitor for KindVisitor {
-            type Value = Kind;
-
-            fn visit_str<E>(&mut self, value: &str) -> ::std::result::Result<Kind, E>
-                where E: serde::de::Error
-            {
-                match value {
-                    "rustc" => Ok(Kind::Rustc),
-                    "benchmarks" => Ok(Kind::Benchmarks),
-                    _ => {
-                        let msg = format!("unexpected {} value for kind", value);
-                        Err(serde::de::Error::custom(msg))
-                    }
-                }
-            }
-        }
-
-        deserializer.deserialize(KindVisitor)
-    }
-}
-
 /// The data loaded for a single date, and all associated crates.
+#[derive(Debug)]
 pub struct TestRun {
     pub date: NaiveDateTime,
     pub commit: String,
