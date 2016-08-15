@@ -10,7 +10,7 @@
 use std::collections::{HashMap, HashSet};
 use std::cmp::{Ordering, max};
 use std::fs::{self, File};
-use std::path::Path;
+use std::path::PathBuf;
 use std::io::Read;
 
 use chrono::{Duration, NaiveDateTime};
@@ -63,9 +63,8 @@ struct InputHeader {
 
 impl InputData {
     /// Initialize `InputData from the file system.
-    pub fn from_fs() -> Result<InputData> {
-        // TODO: Read this at runtime, not hardcoded.
-        let repo_loc = Path::new("../data");
+    pub fn from_fs(repo_loc: &str) -> Result<InputData> {
+        let repo_loc = PathBuf::from(repo_loc);
 
         let mut last_date = None;
         let mut crate_list = HashSet::new();

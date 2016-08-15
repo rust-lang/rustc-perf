@@ -21,7 +21,7 @@ use serde;
 use git;
 use load::{SummarizedWeek, Kind, TestRun, InputData, Timing};
 use route_handler;
-use util::{start_idx, end_idx};
+use util::{get_repo_path, start_idx, end_idx};
 
 const JS_DATE_FORMAT: &'static str = "%Y-%m-%dT%H:%M:%S.000Z";
 
@@ -482,10 +482,12 @@ fn on_push(req: &mut Request) -> IronResult<Response> {
     println!("received onpush hook");
 
     let mut responder = || {
-        git::update_repo(git::get_repo_path()?)?;
+        let repo_path = get_repo_path()?;
+
+        git::update_repo(&repo_path)?;
 
         println!("updating from filesystem...");
-        let new_data = InputData::from_fs()?;
+        let new_data = InputData::from_fs(&repo_path)?;
 
         // Retrieve the stored InputData from the request.
         let rwlock = req.get::<State<InputData>>().unwrap();
