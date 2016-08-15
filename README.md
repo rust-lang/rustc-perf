@@ -38,4 +38,9 @@ It can be run with:
 forever backend/perf.js ../data
 ```
 
+Rust backend
+------------
+
+You can find a new, work-in-progress Rust backend in rs-backend. You can build
+using `cargo build` and test with `cargo test`.
 
