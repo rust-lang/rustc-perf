@@ -55,11 +55,6 @@ impl ::iron::typemap::Key for InputData {
     type Value = InputData;
 }
 
-struct InputHeader {
-    date: NaiveDateTime,
-    commit: String,
-}
-
 impl InputData {
     /// Initialize `InputData from the file system.
     pub fn from_fs(repo_loc: &str) -> Result<InputData> {
@@ -103,20 +98,17 @@ impl InputData {
                 continue;
             }
 
-            let header = InputHeader {
-                commit: contents.lookup("header.commit").unwrap().as_str().unwrap().to_string(),
-                date: InputData::parse_from_header(contents.lookup("header.date")
+            let commit = contents.lookup("header.commit").unwrap().as_str().unwrap().to_string();
+            let date = InputData::parse_from_header(contents.lookup("header.date")
                         .unwrap()
                         .as_str()
-                        .unwrap()).or_else(|_| InputData::parse_from_filename(&filename))?,
-            };
-            let date = header.date;
+                        .unwrap()).or_else(|_| InputData::parse_from_filename(&filename))?;
 
             let test_name = filename[0..filename.find("--").unwrap()].to_string();
 
             let times = contents.find("times").unwrap().as_array().unwrap();
             if &test_name == "rustc" {
-                data_rustc.push(TestRun::new(date, header, times, test_name));
+                data_rustc.push(TestRun::new(date, commit, times, test_name));
             } else {
                 let index = data_benchmarks.iter()
                     .position(|benchmark: &TestRun| benchmark.date == date);
@@ -128,7 +120,7 @@ impl InputData {
                                                                .remove(crate_name)
                                                                .unwrap());
                 } else {
-                    data_benchmarks.push(TestRun::new(date, header, times, test_name));
+                    data_benchmarks.push(TestRun::new(date, commit, times, test_name));
                 }
             }
         }
@@ -250,12 +242,12 @@ impl Ord for TestRun {
 }
 
 impl TestRun {
-    fn new(date: NaiveDateTime, header: InputHeader, times: &[Value], test_name: String) -> TestRun {
+    fn new(date: NaiveDateTime, commit: String, times: &[Value], test_name: String) -> TestRun {
         let is_rustc = &test_name == "rustc";
         TestRun {
             date: date,
             name: test_name,
-            commit: header.commit.clone(),
+            commit: commit,
             by_crate: make_times(times, is_rustc),
         }
     }
