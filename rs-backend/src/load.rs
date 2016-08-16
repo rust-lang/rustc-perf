@@ -81,6 +81,7 @@ impl InputData {
             let mut file_contents = String::new();
             // Skip files whose size is 0.
             if file.read_to_string(&mut file_contents)? == 0 {
+                println!("Skipping empty file: {}", filename);
                 skipped += 1;
                 continue;
             }
@@ -112,13 +113,21 @@ impl InputData {
             } else {
                 let index = data_benchmarks.iter()
                     .position(|benchmark: &TestRun| benchmark.date == date);
+
+                // A run on the same day occurred. This is fine; take the last
+                // of the two data sets for this crate.
                 if let Some(index) = index {
                     c_benchmarks_add += 1;
                     let crate_name = times[0].find("crate").unwrap().as_str().unwrap();
-                    data_benchmarks[index].by_crate.insert(test_name.to_string(),
-                                                           make_times(times, false)
-                                                               .remove(crate_name)
-                                                               .unwrap());
+
+                    let mut timings = make_times(times, false);
+                    let timing = timings.remove(crate_name).unwrap();
+
+                    if data_benchmarks[index].by_crate.contains_key(&test_name) {
+                        println!("Overwriting {} for {:?}", test_name, date);
+                    }
+
+                    data_benchmarks[index].by_crate.insert(test_name, timing);
                 } else {
                     data_benchmarks.push(TestRun::new(date, commit, times, test_name));
                 }
