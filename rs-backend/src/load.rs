@@ -61,7 +61,7 @@ impl InputData {
         let repo_loc = PathBuf::from(repo_loc);
 
         let mut skipped = 0;
-        let mut c_benchmarks_add = 0;
+        let mut merged = 0;
 
         let mut data_rustc = Vec::new();
         let mut data_benchmarks = Vec::new();
@@ -108,37 +108,38 @@ impl InputData {
             let test_name = filename[0..filename.find("--").unwrap()].to_string();
 
             let times = contents.find("times").unwrap().as_array().unwrap();
-            if &test_name == "rustc" {
-                data_rustc.push(TestRun::new(date, commit, times, test_name));
+
+            let push_to = if &test_name == "rustc" {
+                &mut data_rustc
             } else {
-                let index = data_benchmarks.iter()
-                    .position(|benchmark: &TestRun| benchmark.date == date);
+                &mut data_benchmarks
+            };
 
-                // A run on the same day occurred. This is fine; take the last
-                // of the two data sets for this crate.
-                if let Some(index) = index {
-                    c_benchmarks_add += 1;
-                    let crate_name = times[0].find("crate").unwrap().as_str().unwrap();
+            // A run on the same day occurred. Merge the two data sets,
+            // overwriting previous data if the same crate was benchmarked.
+            if let Some(index) = push_to.iter().position(|run: &TestRun| run.date == date) {
+                let run = &mut push_to[index];
 
-                    let mut timings = make_times(times, false);
-                    let timing = timings.remove(crate_name).unwrap();
-
-                    if data_benchmarks[index].by_crate.contains_key(&test_name) {
-                        println!("Overwriting {} for {:?}", test_name, date);
+                let timings = make_times(times, test_name == "rustc");
+                for (crate_name, crate_timings) in timings {
+                    if run.by_crate.contains_key(&crate_name) {
+                        println!("Overwriting {} from {}, dated {}", crate_name, filename, date);
                     }
 
-                    data_benchmarks[index].by_crate.insert(test_name, timing);
-                } else {
-                    data_benchmarks.push(TestRun::new(date, commit, times, test_name));
+                    run.by_crate.insert(crate_name, crate_timings);
                 }
+
+                merged += 1;
+            } else {
+                push_to.push(TestRun::new(date, commit, times, test_name));
             }
         }
 
         println!("{} total files", file_count);
         println!("{} skipped files", skipped);
+        println!("{} merged times", merged);
         println!("{} bootstrap times", data_rustc.len());
         println!("{} benchmarks times", data_benchmarks.len());
-        println!("{} benchmarks times (appended)", c_benchmarks_add);
 
         InputData::new(data_rustc, data_benchmarks)
     }
