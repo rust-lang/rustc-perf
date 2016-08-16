@@ -42,4 +42,3 @@ pub mod server;
 pub mod util;
 
 const SERVER_ADDRESS: &'static str = "0.0.0.0:2346";
-

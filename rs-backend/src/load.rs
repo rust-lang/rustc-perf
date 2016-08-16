@@ -100,9 +100,9 @@ impl InputData {
 
             let commit = contents.lookup("header.commit").unwrap().as_str().unwrap().to_string();
             let date = InputData::parse_from_header(contents.lookup("header.date")
-                        .unwrap()
-                        .as_str()
-                        .unwrap()).or_else(|_| InputData::parse_from_filename(&filename))?;
+                    .unwrap()
+                    .as_str()
+                    .unwrap()).or_else(|_| InputData::parse_from_filename(&filename))?;
 
             let test_name = filename[0..filename.find("--").unwrap()].to_string();
 
@@ -134,7 +134,9 @@ impl InputData {
         InputData::new(data_rustc, data_benchmarks)
     }
 
-    pub fn new(mut data_rustc: Vec<TestRun>, mut data_benchmarks: Vec<TestRun>) -> Result<InputData> {
+    pub fn new(mut data_rustc: Vec<TestRun>,
+               mut data_benchmarks: Vec<TestRun>)
+               -> Result<InputData> {
         let mut last_date = None;
         let mut phase_list = HashSet::new();
         let mut crate_list = HashSet::new();

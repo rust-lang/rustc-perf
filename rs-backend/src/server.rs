@@ -90,9 +90,12 @@ impl serde::Deserialize for OptionalDate {
 
 impl serde::Serialize for OptionalDate {
     fn serialize<S>(&self, serializer: &mut S) -> ::std::result::Result<(), S::Error>
-        where S: serde::Serializer {
+        where S: serde::Serializer
+    {
         match *self {
-            OptionalDate::Date(date) => serializer.serialize_str(&date.format("%a %b %d %Y").to_string()),
+            OptionalDate::Date(date) => {
+                serializer.serialize_str(&date.format("%a %b %d %Y").to_string())
+            }
             OptionalDate::CouldNotParse(_) => serializer.serialize_str(""), // TODO: Warning?
         }
     }
