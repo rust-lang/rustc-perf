@@ -13,7 +13,7 @@ use std::cmp::max;
 use iron::prelude::*;
 use router::Router;
 use persistent::State;
-use chrono::{Duration, NaiveDate, NaiveDateTime};
+use chrono::{Duration, DateTime, UTC, TimeZone};
 use serde_json::builder::ObjectBuilder;
 use serde_json::Value;
 use serde;
@@ -34,23 +34,22 @@ pub enum GroupBy {
 }
 
 pub enum OptionalDate {
-    Date(NaiveDateTime),
+    Date(DateTime<UTC>),
     CouldNotParse(String),
 }
 
 impl OptionalDate {
-    fn as_start(&self, data: &InputData) -> NaiveDateTime {
+    fn as_start(&self, data: &InputData) -> DateTime<UTC> {
         // Handle missing start by returning 30 days before end.
         if let OptionalDate::Date(date) = *self {
             date
         } else {
             let end = self.as_end(data);
-            let start = (end - Duration::days(30)).timestamp();
-            NaiveDateTime::from_timestamp(start, 0)
+            end - Duration::days(30)
         }
     }
 
-    fn as_end(&self, data: &InputData) -> NaiveDateTime {
+    fn as_end(&self, data: &InputData) -> DateTime<UTC> {
         // Handle missing end by using the last available date.
         if let OptionalDate::Date(date) = *self {
             date
@@ -72,8 +71,8 @@ impl serde::Deserialize for OptionalDate {
             fn visit_str<E>(&mut self, value: &str) -> ::std::result::Result<OptionalDate, E>
                 where E: serde::de::Error
             {
-                match NaiveDate::parse_from_str(value, "%a %b %d %Y") {
-                    Ok(date) => Ok(OptionalDate::Date(date.and_hms(0, 0, 0))),
+                match UTC.datetime_from_str(&format!("{} 00:00", value), "%a %b %d %Y %H:%M") {
+                    Ok(date) => Ok(OptionalDate::Date(date)),
                     Err(err) => {
                         if !value.is_empty() {
                             println!("bad date {:?}: {:?}", value, err);

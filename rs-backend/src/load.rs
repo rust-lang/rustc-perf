@@ -13,7 +13,7 @@ use std::fs::{self, File};
 use std::path::PathBuf;
 use std::io::Read;
 
-use chrono::{Duration, NaiveDateTime};
+use chrono::{Duration, UTC, DateTime, TimeZone};
 use serde_json::{self, Value};
 
 use util::start_idx;
@@ -42,7 +42,7 @@ pub struct InputData {
     /// The last date that was seen while loading files. The DateTime variant is
     /// used here since the date may or may not contain a time. Since the
     /// timezone is not important, it isn't stored, hence the Naive variant.
-    pub last_date: NaiveDateTime,
+    pub last_date: DateTime<UTC>,
 
     /// Private due to access being exposed through by_kind method.
     /// Care must be taken to sort these after modifying them.
@@ -196,21 +196,26 @@ impl InputData {
     }
 
     /// Parse date from JSON header in file contents.
-    fn parse_from_header(date: &str) -> Result<NaiveDateTime> {
+    fn parse_from_header(date: &str) -> Result<DateTime<UTC>> {
         // TODO: Determine correct format of header date and move into
         // variable/constant
-        NaiveDateTime::parse_from_str(date, "%c %z").map_err(|err| err.into())
+        UTC.datetime_from_str(date, "%c %z").map_err(|e| e.into())
     }
 
     /// Parse date from filename.
-    fn parse_from_filename(filename: &str) -> Result<NaiveDateTime> {
+    fn parse_from_filename(filename: &str) -> Result<DateTime<UTC>> {
         let date_str = &filename[(filename.find("--").unwrap() + 2)..filename.find(".json")
             .unwrap()];
 
-        // Ignore seconds: they aren't key to the data processing, and
-        // parsing them requires logic to replace them with 0 when
-        // they are absent.
-        NaiveDateTime::parse_from_str(date_str, "%Y-%m-%d-%H-%M").map_err(|err| err.into())
+        match UTC.datetime_from_str(date_str, "%Y-%m-%d-%H-%M") {
+            Ok(dt) => Ok(dt),
+            Err(_) => {
+                match UTC.datetime_from_str(date_str, "%Y-%m-%d-%H-%M-%S") {
+                    Ok(dt) => Ok(dt),
+                    Err(err) => Err(err.into())
+                }
+            }
+        }
     }
 }
 
@@ -225,7 +230,7 @@ pub enum Kind {
 /// The data loaded for a single date, and all associated crates.
 #[derive(Debug)]
 pub struct TestRun {
-    pub date: NaiveDateTime,
+    pub date: DateTime<UTC>,
     pub commit: String,
     pub name: String,
 
@@ -254,7 +259,7 @@ impl Ord for TestRun {
 }
 
 impl TestRun {
-    fn new(date: NaiveDateTime, commit: String, times: &[Value], test_name: String) -> TestRun {
+    fn new(date: DateTime<UTC>, commit: String, times: &[Value], test_name: String) -> TestRun {
         let is_rustc = &test_name == "rustc";
         TestRun {
             date: date,
@@ -335,7 +340,7 @@ fn make_times(timings: &[Value], is_rustc: bool) -> HashMap<String, HashMap<Stri
 
 #[derive(Debug)]
 pub struct SummarizedWeek {
-    pub date: NaiveDateTime,
+    pub date: DateTime<UTC>,
 
     /// Maps crate names to a map of phases to each phase's percent change
     /// from the previous date.
@@ -350,7 +355,7 @@ pub struct Summary {
 impl Summary {
     // Compute summary data. For each week, we find the last 3 weeks, and use
     // the median timing as the basis of the current week's summary.
-    fn new(data: &[TestRun], last_date: NaiveDateTime) -> Summary {
+    fn new(data: &[TestRun], last_date: DateTime<UTC>) -> Summary {
         // 13 week long mapping of crate names to by-phase medians.
         // We steal using summarized week type here even though we're not
         // storing the percent changes yet.
