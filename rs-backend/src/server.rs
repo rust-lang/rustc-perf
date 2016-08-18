@@ -23,6 +23,8 @@ use load::{SummarizedWeek, Kind, TestRun, InputData, Timing};
 use route_handler;
 use util::{get_repo_path, start_idx, end_idx};
 
+use api::{summary, info, data, tabular, days, stats};
+
 const JS_DATE_FORMAT: &'static str = "%Y-%m-%dT%H:%M:%S.000Z";
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -33,6 +35,7 @@ pub enum GroupBy {
     Phase,
 }
 
+#[derive(Debug, Clone)]
 pub enum OptionalDate {
     Date(DateTime<UTC>),
     CouldNotParse(String),
@@ -101,7 +104,7 @@ impl serde::Serialize for OptionalDate {
 }
 
 fn handle_summary(r: &mut Request) -> IronResult<Response> {
-    fn summarize(benchmark: &SummarizedWeek, rustc: &SummarizedWeek) -> String {
+    fn summarize(benchmark: &SummarizedWeek, rustc: &SummarizedWeek) -> summary::Percent {
         let mut sum = 0.0;
         let mut count = 0;
         for krate in benchmark.by_crate.values() {
@@ -116,15 +119,17 @@ fn handle_summary(r: &mut Request) -> IronResult<Response> {
             count += 2;
         }
 
-        format!("{:.1}", sum / (count as f64))
+        summary::Percent(sum / (count as f64))
     }
 
-    fn breakdown(benchmark: &SummarizedWeek, rustc: &SummarizedWeek) -> Value {
-        let mut per_bench = ObjectBuilder::new();
+    fn breakdown(benchmark: &SummarizedWeek,
+                 rustc: &SummarizedWeek)
+                 -> HashMap<String, summary::Percent> {
+        let mut per_bench = HashMap::new();
 
         for (crate_name, krate) in &benchmark.by_crate {
             let val = krate.get("total").cloned().unwrap_or(0.0);
-            per_bench = per_bench.insert(crate_name.as_str(), format!("{:.1}", val));
+            per_bench.insert(crate_name.to_string(), summary::Percent(val));
         }
 
         let bootstrap = if rustc.by_crate["total"].contains_key("total") {
@@ -132,9 +137,9 @@ fn handle_summary(r: &mut Request) -> IronResult<Response> {
         } else {
             0.0
         };
-        per_bench = per_bench.insert("bootstrap", format!("{:.1}", bootstrap));
+        per_bench.insert("bootstrap".to_string(), summary::Percent(bootstrap));
 
-        per_bench.build()
+        per_bench
     }
 
     route_handler::handler_get(r, |data| {
@@ -158,33 +163,31 @@ fn handle_summary(r: &mut Request) -> IronResult<Response> {
             .iter()
             .enumerate()
             .map(|(i, s)| breakdown(s, &data.summary_rustc.summary[i]))
-            .collect::<Vec<Value>>();
+            .collect::<Vec<_>>();
 
-        ObjectBuilder::new()
-            .insert("total_summary",
-                    summarize(&data.summary_benchmarks.total, &data.summary_rustc.total))
-            .insert("total_breakdown",
-                    breakdown(&data.summary_benchmarks.total, &data.summary_rustc.total))
-            .insert("breakdown", breakdown_data)
-            .insert("summaries", summaries)
-            .insert("dates", dates)
-            .build()
+        summary::Response {
+            total_summary: summarize(&data.summary_benchmarks.total, &data.summary_rustc.total),
+            total_breakdown: breakdown(&data.summary_benchmarks.total, &data.summary_rustc.total),
+            breakdown: breakdown_data,
+            summaries: summaries,
+            dates: dates,
+        }
     })
 }
 
 fn handle_info(r: &mut Request) -> IronResult<Response> {
-    fn sort(set: &HashSet<String>) -> Vec<&String> {
-        let mut vec = set.into_iter().collect::<Vec<_>>();
+    fn sort(set: &HashSet<String>) -> Vec<String> {
+        let mut vec = set.into_iter().cloned().collect::<Vec<_>>();
         vec.sort();
         vec
     }
 
     route_handler::handler_get(r, |data| {
-        ObjectBuilder::new()
-            .insert("crates", sort(&data.crate_list))
-            .insert("phases", sort(&data.phase_list))
-            .insert("benchmarks", sort(&data.benchmarks))
-            .build()
+        info::Response {
+            crates: sort(&data.crate_list),
+            phases: sort(&data.phase_list),
+            benchmarks: sort(&data.benchmarks),
+        }
     })
 }
 
@@ -239,21 +242,8 @@ fn get_data_for_date(day: &TestRun,
         .build()
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct Data {
-    // XXX naming
-    #[serde(rename="start")]
-    pub start_date: OptionalDate,
-    #[serde(rename="end")]
-    pub end_date: OptionalDate,
-    pub kind: Kind,
-    pub group_by: GroupBy,
-    pub crates: Vec<String>,
-    pub phases: Vec<String>,
-}
-
 fn handle_data(r: &mut Request) -> IronResult<Response> {
-    route_handler::handler_post::<_, Data>(r, |body, data| {
+    route_handler::handler_post::<data::Request, _, _>(r, |body, data| {
         let mut result = Vec::new();
         let mut first_idx = None;
         let mut last_idx = 0;
@@ -278,42 +268,25 @@ fn handle_data(r: &mut Request) -> IronResult<Response> {
 
         // Trim the data
         let result = result.drain(first_idx.unwrap()..(last_idx + 1)).collect::<Vec<_>>();
-        Value::Array(result)
+        data::Response(result)
     })
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct Tabular {
-    // XXX naming
-    pub kind: Kind,
-    pub date: OptionalDate,
 }
 
 fn handle_tabular(r: &mut Request) -> IronResult<Response> {
-    route_handler::handler_post::<_, Tabular>(r, |body, data| {
+    route_handler::handler_post::<tabular::Request, _, _>(r, |body, data: &InputData| {
         let kind_data = data.by_kind(body.kind);
         let day = &kind_data[end_idx(kind_data, body.date.as_end(data))];
 
-        ObjectBuilder::new()
-            .insert("date", day.date.format(JS_DATE_FORMAT).to_string())
-            .insert("commit", &day.commit)
-            .insert("data", &day.by_crate)
-            .build()
+        tabular::Response {
+            date: day.date.format(JS_DATE_FORMAT).to_string(),
+            commit: day.commit.clone(),
+            data: day.by_crate.clone(),
+        }
     })
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct Days {
-    // XXX naming
-    pub kind: Kind,
-    pub dates: Vec<OptionalDate>,
-    pub crates: Vec<String>,
-    pub phases: Vec<String>,
-    pub group_by: GroupBy,
-}
-
 fn handle_days(r: &mut Request) -> IronResult<Response> {
-    route_handler::handler_post::<_, Days>(r, |body, data| {
+    route_handler::handler_post::<days::Request, _, _>(r, |body, data| {
         let data = data.by_kind(body.kind);
         let mut result = Vec::new();
         for date in body.dates {
@@ -325,25 +298,12 @@ fn handle_days(r: &mut Request) -> IronResult<Response> {
                 result.push(day);
             }
         }
-        Value::Array(result)
+        days::Response(result)
     })
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct Stats {
-    // XXX naming
-    pub kind: Kind,
-    #[serde(rename="start")]
-    pub start_date: OptionalDate,
-    #[serde(rename="end")]
-    pub end_date: OptionalDate,
-    // kind rustc only: crate or phase can be 'total'
-    pub crates: Vec<String>,
-    pub phases: Vec<String>,
-}
-
 fn handle_stats(r: &mut Request) -> IronResult<Response> {
-    route_handler::handler_post::<_, Stats>(r, |body, data| {
+    route_handler::handler_post::<stats::Request, _, _>(r, |body, data| {
         assert!(body.kind != Kind::Benchmarks || body.crates.iter().all(|s| s != "total"));
 
         let kinded_data = data.by_kind(body.kind);
@@ -372,11 +332,11 @@ fn handle_stats(r: &mut Request) -> IronResult<Response> {
             crates = crates.insert(crate_name, stats);
         }
 
-        ObjectBuilder::new()
-            .insert("startDate", start_date.format(JS_DATE_FORMAT).to_string())
-            .insert("endDate", end_date.format(JS_DATE_FORMAT).to_string())
-            .insert("crates", crates.build())
-            .build()
+        stats::Response {
+            start_date: start_date.format(JS_DATE_FORMAT).to_string(),
+            end_date: end_date.format(JS_DATE_FORMAT).to_string(),
+            crates: crates.build(),
+        }
     })
 }
 

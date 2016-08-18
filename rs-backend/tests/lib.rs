@@ -21,6 +21,7 @@ use serde::Serialize;
 
 use rustc_perf::server::{self, GroupBy, OptionalDate};
 use rustc_perf::load::{Kind, InputData};
+use rustc_perf::api::{data, tabular, days, stats};
 
 fn request<H: Handler>(path: &str, handler: &H) -> IronResult<Response> {
     iron_test::request::get(&format!("http://perf.rust-lang.org/{}", path),
@@ -116,7 +117,7 @@ fn info() {
 fn data_crate_benchmarks() {
     let response = post_request("/data",
                                 &*CHAIN,
-                                server::Data {
+                                data::Request {
                                     start_date: OptionalDate::CouldNotParse("".into()),
                                     end_date: OptionalDate::CouldNotParse("".into()),
                                     group_by: GroupBy::Crate,
@@ -132,7 +133,7 @@ fn data_crate_benchmarks() {
 fn data_crate_rustc_total() {
     let response = post_request("/data",
                                 &*CHAIN,
-                                server::Data {
+                                data::Request {
                                     start_date: OptionalDate::CouldNotParse("".into()),
                                     end_date: OptionalDate::CouldNotParse("".into()),
                                     group_by: GroupBy::Crate,
@@ -148,7 +149,7 @@ fn data_crate_rustc_total() {
 fn tabular_rustc() {
     let response = post_request("/get_tabular",
                                 &*CHAIN,
-                                server::Tabular {
+                                tabular::Request {
                                     kind: Kind::Rustc,
                                     date: OptionalDate::CouldNotParse("".into()),
                                 })
@@ -160,7 +161,7 @@ fn tabular_rustc() {
 fn tabular_benchmarks() {
     let response = post_request("/get_tabular",
                                 &*CHAIN,
-                                server::Tabular {
+                                tabular::Request {
                                     kind: Kind::Benchmarks,
                                     date: OptionalDate::CouldNotParse("".into()),
                                 })
@@ -177,7 +178,7 @@ fn ymd_date(year: u64, month: u64, day: u64) -> OptionalDate {
 fn days_benchmarks() {
     let response = post_request("/get",
                                 &*CHAIN,
-                                server::Days {
+                                days::Request {
                                     kind: Kind::Benchmarks,
                                     dates: vec![ymd_date(2016, 02, 21), ymd_date(2016, 03, 22)],
                                     crates: vec!["helloworld".into(), "regex.0.1.30".into()],
@@ -192,7 +193,7 @@ fn days_benchmarks() {
 fn days_rustc() {
     let response = post_request("/get",
                                 &*CHAIN,
-                                server::Days {
+                                days::Request {
                                     kind: Kind::Rustc,
                                     dates: vec![ymd_date(2016, 02, 21), ymd_date(2016, 03, 22)],
                                     crates: vec!["total".into()],
@@ -207,7 +208,7 @@ fn days_rustc() {
 fn stats_benchmarks() {
     let response = post_request("/stats",
                                 &*CHAIN,
-                                server::Stats {
+                                stats::Request {
                                     kind: Kind::Benchmarks,
                                     start_date: OptionalDate::CouldNotParse("".into()),
                                     end_date: OptionalDate::CouldNotParse("".into()),
@@ -222,7 +223,7 @@ fn stats_benchmarks() {
 fn stats_rustc() {
     let response = post_request("/stats",
                                 &*CHAIN,
-                                server::Stats {
+                                stats::Request {
                                     kind: Kind::Rustc,
                                     start_date: OptionalDate::CouldNotParse("".into()),
                                     end_date: OptionalDate::CouldNotParse("".into()),

@@ -123,7 +123,10 @@ impl InputData {
                 let timings = make_times(times, test_name == "rustc");
                 for (crate_name, crate_timings) in timings {
                     if run.by_crate.contains_key(&crate_name) {
-                        println!("Overwriting {} from {}, dated {}", crate_name, filename, date);
+                        println!("Overwriting {} from {}, dated {}",
+                                 crate_name,
+                                 filename,
+                                 date);
                     }
 
                     run.by_crate.insert(crate_name, crate_timings);
@@ -212,7 +215,7 @@ impl InputData {
             Err(_) => {
                 match UTC.datetime_from_str(date_str, "%Y-%m-%d-%H-%M-%S") {
                     Ok(dt) => Ok(dt),
-                    Err(err) => Err(err.into())
+                    Err(err) => Err(err.into()),
                 }
             }
         }
@@ -272,7 +275,7 @@ impl TestRun {
 
 /// Contains a single timing, associated with a phase (though the phase name
 /// is not included in the timing).
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
 pub struct Timing {
     pub percent: f64,
     pub time: f64,

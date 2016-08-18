@@ -36,8 +36,10 @@ mod errors {
 }
 
 mod git;
-pub mod load;
 mod route_handler;
+
+pub mod api;
+pub mod load;
 pub mod server;
 pub mod util;
 

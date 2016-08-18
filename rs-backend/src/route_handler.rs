@@ -10,9 +10,10 @@
 //! Boilerplate for parsing and responding to both GET and POST requests.
 
 use std::io::Read;
+use std::convert::Into;
 
-use serde;
-use serde_json::{self, Value};
+use serde_json;
+use serde::{Serialize, Deserialize};
 use iron::headers::{ContentType, AccessControlAllowOrigin};
 use iron::mime::{Mime, TopLevel, SubLevel};
 use iron::modifiers::Header;
@@ -39,16 +40,17 @@ pub fn unwrap_with_or_internal_err<T, F>(x: Result<T>, f: F) -> Response
     }
 }
 
-pub fn respond(res: Value) -> Response {
+pub fn respond<T: Serialize>(res: T) -> Response {
     let mut response = Response::with((status::Ok, serde_json::to_string(&res).unwrap()));
     response.set_mut(Header(ContentType(Mime(TopLevel::Application, SubLevel::Json, vec![]))));
     response.set_mut(Header(AccessControlAllowOrigin::Any));
     response
 }
 
-pub fn handler_post<F, T>(req: &mut Request, handle_data: F) -> IronResult<Response>
-    where T: serde::Deserialize,
-          F: FnOnce(T, &InputData) -> Value
+pub fn handler_post<T, F, R>(req: &mut Request, handle_data: F) -> IronResult<Response>
+    where T: Deserialize,
+          R: Serialize,
+          F: FnOnce(T, &InputData) -> R
 {
     let rwlock = req.get::<State<InputData>>().unwrap();
     let data = rwlock.read().unwrap();
@@ -62,8 +64,9 @@ pub fn handler_post<F, T>(req: &mut Request, handle_data: F) -> IronResult<Respo
     Ok(unwrap_with_or_internal_err(data, respond))
 }
 
-pub fn handler_get<F>(req: &mut Request, handle_data: F) -> IronResult<Response>
-    where F: FnOnce(&InputData) -> Value
+pub fn handler_get<F, T>(req: &mut Request, handle_data: F) -> IronResult<Response>
+    where F: FnOnce(&InputData) -> T,
+          T: Serialize
 {
     let rwlock = req.get::<State<InputData>>().unwrap();
     let data = rwlock.read().unwrap();
