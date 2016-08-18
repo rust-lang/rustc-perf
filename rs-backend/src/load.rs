@@ -16,7 +16,8 @@ use std::io::Read;
 use chrono::{Duration, UTC, DateTime, TimeZone};
 use serde_json::{self, Value};
 
-use util::start_idx;
+use util::{start_idx, end_idx};
+use server::OptionalDate;
 use errors::*;
 
 const WEEKS_IN_SUMMARY: usize = 12;
@@ -196,6 +197,17 @@ impl InputData {
             Kind::Benchmarks => &self.data_benchmarks,
             Kind::Rustc => &self.data_rustc,
         }
+    }
+
+    /// Helper function to return a range of data given an optional start and end date.
+    pub fn kinded_range(&self, kind: Kind, start: &OptionalDate, end: &OptionalDate) -> &[TestRun] {
+        let kinded = self.by_kind(kind);
+        &kinded[start_idx(kinded, start.as_start(self))..(end_idx(kinded, end.as_end(self)) + 1)]
+    }
+
+    pub fn kinded_end_day(&self, kind: Kind, end: &OptionalDate) -> &TestRun {
+        let kinded = self.by_kind(kind);
+        &kinded[end_idx(kinded, end.as_end(self))]
     }
 
     /// Parse date from JSON header in file contents.
