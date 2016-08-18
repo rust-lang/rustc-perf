@@ -36,6 +36,7 @@ mod errors {
 }
 
 mod git;
+mod date;
 mod route_handler;
 
 pub mod api;

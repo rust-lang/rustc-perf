@@ -17,6 +17,8 @@ pub mod summary {
     use std::collections::HashMap;
     use serde::{self, Serialize, Deserialize};
 
+    use date::Date;
+
     /// One decimal place rounded percent
     #[derive(Debug, Copy, Clone)]
     pub struct Percent(pub f64);
@@ -81,7 +83,7 @@ pub mod summary {
 
         /// 12 week long list of dates from which data was used for that week.
         /// First week in vector is the current week.
-        pub dates: Vec<String>,
+        pub dates: Vec<Date>,
     }
 }
 
@@ -100,10 +102,8 @@ pub mod info {
 }
 
 pub mod data {
-    use serde_json::Value;
-
     use load::Kind;
-    use server::{GroupBy, OptionalDate};
+    use server::{DateData, GroupBy, OptionalDate};
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct Request {
@@ -131,12 +131,13 @@ pub mod data {
     ///       - time: f64 of duration for compiling (TODO: Is this in seconds?)
     // TODO: Use a struct instead of Value.
     #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct Response(pub Vec<Value>);
+    pub struct Response(pub Vec<DateData>);
 }
 
 pub mod tabular {
     use std::collections::HashMap;
 
+    use date::Date;
     use load::{Kind, Timing};
     use server::OptionalDate;
 
@@ -152,15 +153,13 @@ pub mod tabular {
 
         /// Mapping of all crates timed on this date to their timings by phase
         pub data: HashMap<String, HashMap<String, Timing>>,
-        pub date: String,
+        pub date: Date,
     }
 }
 
 pub mod days {
-    use serde_json::Value;
-
     use load::Kind;
-    use server::{OptionalDate, GroupBy};
+    use server::{DateData, OptionalDate, GroupBy};
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct Request {
@@ -176,14 +175,15 @@ pub mod days {
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct Response(pub Vec<Value>);
+    pub struct Response(pub Vec<DateData>);
 }
 
 pub mod stats {
-    use serde_json::Value;
+    use std::collections::HashMap;
 
+    use date::Date;
     use load::Kind;
-    use server::OptionalDate;
+    use server::{OptionalDate, Stats};
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct Request {
@@ -204,9 +204,9 @@ pub mod stats {
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct Response {
         #[serde(rename="startDate")]
-        pub start_date: String,
+        pub start_date: Date,
         #[serde(rename="endDate")]
-        pub end_date: String,
-        pub crates: Value,
+        pub end_date: Date,
+        pub crates: HashMap<String, Stats>,
     }
 }

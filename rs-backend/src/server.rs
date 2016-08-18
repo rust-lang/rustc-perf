@@ -7,25 +7,82 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::collections::{HashMap, HashSet};
 use std::cmp::max;
+use std::collections::{HashMap, HashSet};
 
 use iron::prelude::*;
 use router::Router;
 use persistent::State;
 use chrono::{Duration, DateTime, UTC, TimeZone};
-use serde_json::builder::ObjectBuilder;
 use serde_json::Value;
 use serde;
 
 use git;
-use load::{SummarizedWeek, Kind, TestRun, InputData, Timing};
 use route_handler;
+use date::Date;
 use util::{get_repo_path, start_idx, end_idx};
-
 use api::{summary, info, data, tabular, days, stats};
+use load::{SummarizedWeek, Kind, TestRun, Timing, InputData};
 
-const JS_DATE_FORMAT: &'static str = "%Y-%m-%dT%H:%M:%S.000Z";
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DateData {
+    pub date: Date,
+    pub commit: String,
+    pub data: HashMap<String, Recording>,
+}
+
+impl DateData {
+    pub fn for_day(day: &TestRun,
+                   crate_names: &[String],
+                   phases: &[String],
+                   group_by: GroupBy)
+                   -> DateData {
+        let crates = crate_names.into_iter()
+            .filter_map(|crate_name| day.by_crate.get(crate_name).map(|krate| (crate_name, krate)))
+            .collect::<Vec<_>>();
+
+        let mut data = HashMap::new();
+        for phase_name in phases {
+            for &(crate_name, krate) in &crates {
+                let entry = match group_by {
+                    GroupBy::Crate => data.entry(crate_name.to_string()),
+                    GroupBy::Phase => data.entry(phase_name.to_string()),
+                };
+
+                entry.or_insert(Recording::new()).record(krate.get(phase_name));
+            }
+        }
+
+        DateData {
+            date: Date(day.date),
+            commit: day.commit.clone(),
+            data: data,
+        }
+    }
+}
+
+// TODO better name (can't use Timing since we don't have a percent...)
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+pub struct Recording {
+    time: f64,
+    rss: u64,
+}
+
+impl Recording {
+    fn new() -> Recording {
+        Recording {
+            time: 0.0,
+            rss: 0,
+        }
+    }
+
+    fn record(&mut self, phase: Option<&Timing>) {
+        if let Some(phase) = phase {
+            self.time += phase.time;
+            self.rss = max(self.rss, phase.rss.unwrap());
+        }
+    }
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum GroupBy {
@@ -146,7 +203,7 @@ fn handle_summary(r: &mut Request) -> IronResult<Response> {
         let dates = data.summary_rustc
             .summary
             .iter()
-            .map(|s| s.date.format(JS_DATE_FORMAT).to_string())
+            .map(|s| Date(s.date))
             .collect::<Vec<_>>();
 
         // overall number for each week
@@ -191,57 +248,6 @@ fn handle_info(r: &mut Request) -> IronResult<Response> {
     })
 }
 
-fn get_data_for_date(day: &TestRun,
-                     crate_names: &[String],
-                     phases: &[String],
-                     group_by: GroupBy)
-                     -> Value {
-    #[derive(Serialize)]
-    struct Recording {
-        // TODO better name (can't use Timing since we don't have a percent...)
-        time: f64,
-        rss: u64,
-    }
-
-    impl Recording {
-        fn new() -> Recording {
-            Recording {
-                time: 0.0,
-                rss: 0,
-            }
-        }
-
-        fn record(&mut self, phase: Option<&Timing>) {
-            if let Some(phase) = phase {
-                self.time += phase.time;
-                self.rss = max(self.rss, phase.rss.unwrap());
-            }
-        }
-    }
-
-    let crates = crate_names.into_iter()
-        .filter_map(|crate_name| day.by_crate.get(crate_name).map(|krate| (crate_name, krate)))
-        .collect::<Vec<_>>();
-
-    let mut data = HashMap::new();
-    for phase_name in phases {
-        for &(crate_name, krate) in &crates {
-            let entry = match group_by {
-                GroupBy::Crate => data.entry(crate_name),
-                GroupBy::Phase => data.entry(phase_name),
-            };
-
-            entry.or_insert(Recording::new()).record(krate.get(phase_name));
-        }
-    }
-
-    ObjectBuilder::new()
-        .insert("date", day.date.format(JS_DATE_FORMAT).to_string())
-        .insert("commit", day.commit.clone())
-        .insert("data", data)
-        .build()
-}
-
 fn handle_data(r: &mut Request) -> IronResult<Response> {
     route_handler::handler_post::<data::Request, _, _>(r, |body, data| {
         let mut result = Vec::new();
@@ -251,12 +257,12 @@ fn handle_data(r: &mut Request) -> IronResult<Response> {
         let start_idx = start_idx(data.by_kind(body.kind), body.start_date.as_start(data));
         let end_idx = end_idx(data.by_kind(body.kind), body.end_date.as_end(data));
         for i in start_idx..(end_idx + 1) {
-            let today_data = get_data_for_date(&data.by_kind(body.kind)[i],
+            let today_data = DateData::for_day(&data.by_kind(body.kind)[i],
                                                &body.crates,
                                                &body.phases,
                                                body.group_by);
 
-            if !today_data.find("data").unwrap().as_object().unwrap().is_empty() {
+            if !today_data.data.is_empty() {
                 last_idx = i - start_idx;
                 if first_idx == None {
                     first_idx = Some(i - start_idx);
@@ -278,7 +284,7 @@ fn handle_tabular(r: &mut Request) -> IronResult<Response> {
         let day = &kind_data[end_idx(kind_data, body.date.as_end(data))];
 
         tabular::Response {
-            date: day.date.format(JS_DATE_FORMAT).to_string(),
+            date: Date(day.date),
             commit: day.commit.clone(),
             data: day.by_crate.clone(),
         }
@@ -291,7 +297,7 @@ fn handle_days(r: &mut Request) -> IronResult<Response> {
         let mut result = Vec::new();
         for date in body.dates {
             if let OptionalDate::Date(date) = date {
-                let day = get_data_for_date(&data[end_idx(data, date)],
+                let day = DateData::for_day(&data[end_idx(data, date)],
                                             &body.crates,
                                             &body.phases,
                                             body.group_by);
@@ -326,105 +332,111 @@ fn handle_stats(r: &mut Request) -> IronResult<Response> {
             }
         }
 
-        let mut crates = ObjectBuilder::new();
+        let mut crates = HashMap::new();
         for crate_name in body.crates {
-            let stats = mk_stats(&counted, &crate_name, &body.phases);
-            crates = crates.insert(crate_name, stats);
+            let stats = Stats::from(&counted, &crate_name, &body.phases);
+            crates.insert(crate_name.to_string(), stats);
         }
 
         stats::Response {
-            start_date: start_date.format(JS_DATE_FORMAT).to_string(),
-            end_date: end_date.format(JS_DATE_FORMAT).to_string(),
-            crates: crates.build(),
+            start_date: Date(start_date),
+            end_date: Date(end_date),
+            crates: crates,
         }
     })
 }
 
-fn mk_stats(data: &[&TestRun], crate_name: &str, phases: &[String]) -> Value {
-    let sums = data.iter()
-        .filter(|day| if let Some(krate) = day.by_crate.get(crate_name) {
-            !krate.is_empty()
-        } else {
-            false
-        })
-        .map(|day| {
-            let krate = &day.by_crate[crate_name];
-            let mut sum = 0.0;
-            for phase in phases {
-                sum += krate[phase].time;
+
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, Default)]
+pub struct Stats {
+    first: f64,
+    last: f64,
+    min: f64,
+    max: f64,
+    mean: f64,
+    variance: f64,
+    trend: f64,
+    trend_b: f64,
+    n: usize,
+}
+
+impl Stats {
+    fn from(data: &[&TestRun], crate_name: &str, phases: &[String]) -> Stats {
+        let sums = data.iter()
+            .filter(|day| if let Some(krate) = day.by_crate.get(crate_name) {
+                !krate.is_empty()
+            } else {
+                false
+            })
+            .map(|day| {
+                let krate = &day.by_crate[crate_name];
+                let mut sum = 0.0;
+                for phase in phases {
+                    sum += krate[phase].time;
+                }
+                sum
+            })
+            .collect::<Vec<_>>();
+
+        if sums.is_empty() {
+            return Stats::default();
+        }
+
+        let first = sums[0];
+        let last = *sums.last().unwrap();
+
+        let mut min = first;
+        let mut max = first;
+        let q1_idx = data.len() / 4;
+        let q4_idx = 3 * data.len() / 4;
+        let mut total = 0.0;
+        let mut q1_total = 0.0;
+        let mut q4_total = 0.0;
+        for (i, &cur) in sums.iter().enumerate() {
+            min = min.min(cur);
+            max = max.max(cur);
+
+            total += cur;
+            if i < q1_idx {
+                // Within the first quartile
+                q1_total += cur;
             }
-            sum
-        })
-        .collect::<Vec<_>>();
-
-    if sums.is_empty() {
-        return ObjectBuilder::new()
-            .insert("first", 0)
-            .insert("last", 0)
-            .insert("min", 0)
-            .insert("max", 0)
-            .insert("mean", 0)
-            .insert("variance", 0)
-            .insert("trend", 0)
-            .insert("trend_b", 0)
-            .insert("n", 0)
-            .build();
-    }
-
-    let first = sums[0];
-    let last = *sums.last().unwrap();
-
-    let mut min = first;
-    let mut max = first;
-    let q1_idx = data.len() / 4;
-    let q4_idx = 3 * data.len() / 4;
-    let mut total = 0.0;
-    let mut q1_total = 0.0;
-    let mut q4_total = 0.0;
-    for (i, &cur) in sums.iter().enumerate() {
-        min = min.min(cur);
-        max = max.max(cur);
-
-        total += cur;
-        if i < q1_idx {
-            // Within the first quartile
-            q1_total += cur;
+            if i >= q4_idx {
+                // Within the fourth quartile
+                q4_total += cur;
+            }
         }
-        if i >= q4_idx {
-            // Within the fourth quartile
-            q4_total += cur;
+
+        // Calculate the variance
+        let mean = total / (sums.len() as f64);
+        let mut var_total = 0.0;
+        for sum in &sums {
+            let diff = sum - mean;
+            var_total += diff * diff;
+        }
+        let variance = var_total / ((sums.len() - 1) as f64);
+
+        let trend = if sums.len() >= 10 && sums.len() == data.len() {
+            let q1_mean = q1_total / (q1_idx as f64);
+            let q4_mean = q4_total / ((data.len() - q4_idx) as f64);
+            100.0 * ((q4_mean - q1_mean) / first)
+        } else {
+            0.0
+        };
+        let trend_b = 100.0 * ((last - first) / first);
+
+        Stats {
+            first: first,
+            last: last,
+            min: min,
+            max: max,
+            mean: mean,
+            variance: variance,
+            trend: trend,
+            trend_b: trend_b,
+            n: sums.len(),
         }
     }
-
-    // Calculate the variance
-    let mean = total / (sums.len() as f64);
-    let mut var_total = 0.0;
-    for sum in &sums {
-        let diff = sum - mean;
-        var_total += diff * diff;
-    }
-    let variance = var_total / ((sums.len() - 1) as f64);
-
-    let trend = if sums.len() >= 10 && sums.len() == data.len() {
-        let q1_mean = q1_total / (q1_idx as f64);
-        let q4_mean = q4_total / ((data.len() - q4_idx) as f64);
-        100.0 * ((q4_mean - q1_mean) / first)
-    } else {
-        0.0
-    };
-    let trend_b = 100.0 * ((last - first) / first);
-
-    ObjectBuilder::new()
-        .insert("first", first)
-        .insert("last", last)
-        .insert("min", min)
-        .insert("max", max)
-        .insert("mean", mean)
-        .insert("variance", variance)
-        .insert("trend", trend)
-        .insert("trend_b", trend_b)
-        .insert("n", sums.len())
-        .build()
 }
 
 fn on_push(req: &mut Request) -> IronResult<Response> {
