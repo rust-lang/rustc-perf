@@ -7,23 +7,15 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use std::env;
+
 use load::TestRun;
 use chrono::{UTC, DateTime};
 use errors::*;
 
 /// Returns where the passed date is or should go in the sorted data slice.
-fn get_insert_location(data: &[TestRun],
-                       date: DateTime<UTC>)
-                       -> ::std::result::Result<usize, usize> {
-    data.binary_search_by(|probe| probe.date.cmp(&date))
-}
-
-// TODO: Merge start_idx and end_idx into one.
-
-/// Return the start index for an iterator from the passed date to the index
-/// returned by the companion function, `end_idx`.
-pub fn start_idx(data: &[TestRun], date: DateTime<UTC>) -> usize {
-    match get_insert_location(data, date) {
+pub fn index_in(data: &[TestRun], date: DateTime<UTC>) -> usize {
+    match data.binary_search_by(|probe| probe.date.cmp(&date)) {
         Ok(idx) => idx,
         Err(idx) => {
             if idx < data.len() {
@@ -35,21 +27,6 @@ pub fn start_idx(data: &[TestRun], date: DateTime<UTC>) -> usize {
     }
 }
 
-/// Returns the end index for an iterator from the `start_idx()` to this date.
-pub fn end_idx(data: &[TestRun], date: DateTime<UTC>) -> usize {
-    match get_insert_location(data, date) {
-        Ok(idx) => idx,
-        Err(idx) => {
-            if idx < data.len() {
-                idx
-            } else {
-                data.len() - 1
-            }
-        }
-    }
-}
-
-use std::env;
 /// Reads the repository path from the arguments passed to main()
 pub fn get_repo_path() -> Result<String> {
     env::args().nth(1).ok_or("No argument supplied, needs location of data repo.".into())
