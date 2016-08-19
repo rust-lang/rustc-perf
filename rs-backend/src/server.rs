@@ -13,14 +13,14 @@ use std::collections::{HashMap, HashSet};
 use iron::prelude::*;
 use router::Router;
 use persistent::State;
-use chrono::{Duration, DateTime, UTC, TimeZone};
+use chrono::{Duration, DateTime, UTC};
 use serde_json::Value;
 use serde;
 
 use git;
 use route_handler;
 use date::Date;
-use util::{get_repo_path, start_idx, end_idx};
+use util::get_repo_path;
 use api::{summary, info, data, tabular, days, stats};
 use load::{SummarizedWeek, Kind, TestRun, Timing, InputData};
 
@@ -94,25 +94,25 @@ pub enum GroupBy {
 
 #[derive(Debug, Clone)]
 pub enum OptionalDate {
-    Date(DateTime<UTC>),
+    Date(Date),
     CouldNotParse(String),
 }
 
 impl OptionalDate {
-    fn as_start(&self, data: &InputData) -> DateTime<UTC> {
+    pub fn as_start(&self, data: &InputData) -> DateTime<UTC> {
         // Handle missing start by returning 30 days before end.
         if let OptionalDate::Date(date) = *self {
-            date
+            date.0
         } else {
             let end = self.as_end(data);
             end - Duration::days(30)
         }
     }
 
-    fn as_end(&self, data: &InputData) -> DateTime<UTC> {
+    pub fn as_end(&self, data: &InputData) -> DateTime<UTC> {
         // Handle missing end by using the last available date.
         if let OptionalDate::Date(date) = *self {
-            date
+            date.0
         } else {
             data.last_date
         }
@@ -131,7 +131,7 @@ impl serde::Deserialize for OptionalDate {
             fn visit_str<E>(&mut self, value: &str) -> ::std::result::Result<OptionalDate, E>
                 where E: serde::de::Error
             {
-                match UTC.datetime_from_str(&format!("{} 00:00", value), "%a %b %d %Y %H:%M") {
+                match Date::from_str(value) {
                     Ok(date) => Ok(OptionalDate::Date(date)),
                     Err(err) => {
                         if !value.is_empty() {
@@ -152,9 +152,7 @@ impl serde::Serialize for OptionalDate {
         where S: serde::Serializer
     {
         match *self {
-            OptionalDate::Date(date) => {
-                serializer.serialize_str(&date.format("%a %b %d %Y").to_string())
-            }
+            OptionalDate::Date(date) => date.serialize(serializer),
             OptionalDate::CouldNotParse(_) => serializer.serialize_str(""), // TODO: Warning?
         }
     }
@@ -250,38 +248,23 @@ fn handle_info(r: &mut Request) -> IronResult<Response> {
 
 fn handle_data(r: &mut Request) -> IronResult<Response> {
     route_handler::handler_post::<data::Request, _, _>(r, |body, data| {
-        let mut result = Vec::new();
-        let mut first_idx = None;
-        let mut last_idx = 0;
-        // Iterate over date range.
-        let start_idx = start_idx(data.by_kind(body.kind), body.start_date.as_start(data));
-        let end_idx = end_idx(data.by_kind(body.kind), body.end_date.as_end(data));
-        for i in start_idx..(end_idx + 1) {
-            let today_data = DateData::for_day(&data.by_kind(body.kind)[i],
-                                               &body.crates,
-                                               &body.phases,
-                                               body.group_by);
+        let mut result = data.kinded_range(body.kind, &body.start_date, &body.end_date)
+            .into_iter()
+            .map(|day| DateData::for_day(day, &body.crates, &body.phases, body.group_by))
+            .collect::<Vec<_>>();
 
-            if !today_data.data.is_empty() {
-                last_idx = i - start_idx;
-                if first_idx == None {
-                    first_idx = Some(i - start_idx);
-                }
-            }
-
-            result.push(today_data);
-        }
-
-        // Trim the data
-        let result = result.drain(first_idx.unwrap()..(last_idx + 1)).collect::<Vec<_>>();
+        // Return everything from the first non-empty data to the last non-empty data.
+        // Data may contain "holes" of empty data.
+        let first_idx = result.iter().position(|day| !day.data.is_empty()).unwrap_or(0);
+        let last_idx = result.iter().rposition(|day| !day.data.is_empty()).unwrap_or(0);
+        let result = result.drain(first_idx..(last_idx + 1)).collect();
         data::Response(result)
     })
 }
 
 fn handle_tabular(r: &mut Request) -> IronResult<Response> {
-    route_handler::handler_post::<tabular::Request, _, _>(r, |body, data: &InputData| {
-        let kind_data = data.by_kind(body.kind);
-        let day = &kind_data[end_idx(kind_data, body.date.as_end(data))];
+    route_handler::handler_post::<tabular::Request, _, _>(r, |body, data| {
+        let day = data.kinded_end_day(body.kind, &body.date);
 
         tabular::Response {
             date: Date(day.date),
@@ -293,11 +276,10 @@ fn handle_tabular(r: &mut Request) -> IronResult<Response> {
 
 fn handle_days(r: &mut Request) -> IronResult<Response> {
     route_handler::handler_post::<days::Request, _, _>(r, |body, data| {
-        let data = data.by_kind(body.kind);
         let mut result = Vec::new();
         for date in body.dates {
-            if let OptionalDate::Date(date) = date {
-                let day = DateData::for_day(&data[end_idx(data, date)],
+            if let OptionalDate::Date(_) = date {
+                let day = DateData::for_day(&data.kinded_end_day(body.kind, &date),
                                             &body.crates,
                                             &body.phases,
                                             body.group_by);
@@ -312,17 +294,13 @@ fn handle_stats(r: &mut Request) -> IronResult<Response> {
     route_handler::handler_post::<stats::Request, _, _>(r, |body, data| {
         assert!(body.kind != Kind::Benchmarks || body.crates.iter().all(|s| s != "total"));
 
-        let kinded_data = data.by_kind(body.kind);
         let mut start_date = body.start_date.as_start(data);
         let mut end_date = body.end_date.as_end(data);
 
         let mut counted = Vec::new();
 
         // Iterate over date range.
-        let start_idx = start_idx(kinded_data, start_date);
-        let end_idx = end_idx(kinded_data, end_date);
-        for i in start_idx..(end_idx + 1) {
-            let today_data = &kinded_data[i];
+        for today_data in data.kinded_range(body.kind, &body.start_date, &body.end_date) {
             if !today_data.by_crate.is_empty() {
                 if counted.is_empty() {
                     start_date = today_data.date;

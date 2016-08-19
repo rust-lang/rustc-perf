@@ -16,7 +16,8 @@ use std::io::Read;
 use chrono::{Duration, UTC, DateTime, TimeZone};
 use serde_json::{self, Value};
 
-use util::start_idx;
+use util::index_in;
+use server::OptionalDate;
 use errors::*;
 
 const WEEKS_IN_SUMMARY: usize = 12;
@@ -198,6 +199,17 @@ impl InputData {
         }
     }
 
+    /// Helper function to return a range of data given an optional start and end date.
+    pub fn kinded_range(&self, kind: Kind, start: &OptionalDate, end: &OptionalDate) -> &[TestRun] {
+        let kinded = self.by_kind(kind);
+        &kinded[index_in(kinded, start.as_start(self))..(index_in(kinded, end.as_end(self)) + 1)]
+    }
+
+    pub fn kinded_end_day(&self, kind: Kind, end: &OptionalDate) -> &TestRun {
+        let kinded = self.by_kind(kind);
+        &kinded[index_in(kinded, end.as_end(self))]
+    }
+
     /// Parse date from JSON header in file contents.
     fn parse_from_header(date: &str) -> Result<DateTime<UTC>> {
         // TODO: Determine correct format of header date and move into
@@ -372,7 +384,7 @@ impl Summary {
 
             // For a given date we'll get the three most recent sets of TestRun
             // and take the the median for each value.
-            let start_idx = start_idx(data, date);
+            let start_idx = index_in(data, date);
             assert!(start_idx >= 3, "Less than 3 days of data");
             let mut weeks = Vec::new();
             for idx in 0..3 {
