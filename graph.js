@@ -72,7 +72,7 @@ Chart.types.Line.extend({
             var steppedLabels = [];
             for (var i = 0; i < data.labels.length; ++i) {
                 if (i % step == 0) {
-                    steppedLabels.push(data.labels[i]);
+                    steppedLabels.push(data.axisLabels[i]);
                 } else {
                     steppedLabels.push("");
                 }
@@ -178,6 +178,7 @@ function init_graph(data, series, field, total_label) {
     var ctx = document.getElementById("graph").getContext("2d");
 
     var labels = [];
+    var axisLabels = [];
     var values = [];
 
     for (var i in series) { values.push([]) }
@@ -185,7 +186,8 @@ function init_graph(data, series, field, total_label) {
         var datum = data[d];
 
         var date = new Date(datum.date);
-        labels.push(date.toLocaleString());
+        labels.push(date.toLocaleString() + " - " + datum.commit.substr(0, 10));
+        axisLabels.push(date.toLocaleString());
 
         for (var i in series) {
             if (series[i] in datum.data) {
@@ -224,7 +226,8 @@ function init_graph(data, series, field, total_label) {
 
     var chart_data = {
         labels: labels,
-        datasets: datasets
+        datasets: datasets,
+        axisLabels: axisLabels,
     };
 
     ctx.clearRect(0, 0, 1000, 600);
