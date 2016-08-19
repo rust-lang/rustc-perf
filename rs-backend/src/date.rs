@@ -1,17 +1,32 @@
+// Copyright 2016 The rustc-perf Project Developers. See the COPYRIGHT
+// file at the top-level directory.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
 use chrono::{UTC, DateTime};
 use serde::{self, Serialize, Deserialize};
 
 #[derive(Debug, Copy, Clone)]
 pub struct Date(pub DateTime<UTC>);
 
-// TODO: Deprecate and replace with RFC3339 dates.
-const JS_DATE_FORMAT: &'static str = "%Y-%m-%dT%H:%M:%S.000Z";
+impl Date {
+    pub fn from_str(s: &str) -> Result<Date, ()> {
+        match DateTime::parse_from_rfc3339(s) {
+            Ok(value) => Ok(Date(value.with_timezone(&UTC))),
+            Err(_) => Err(()),
+        }
+    }
+}
 
 impl Serialize for Date {
     fn serialize<S>(&self, serializer: &mut S) -> ::std::result::Result<(), S::Error>
         where S: serde::ser::Serializer
     {
-        serializer.serialize_str(&self.0.format(JS_DATE_FORMAT).to_string())
+        serializer.serialize_str(&self.0.to_rfc3339())
     }
 }
 
@@ -27,10 +42,7 @@ impl Deserialize for Date {
             fn visit_str<E>(&mut self, value: &str) -> ::std::result::Result<Date, E>
                 where E: serde::de::Error
             {
-                match DateTime::parse_from_str(value, JS_DATE_FORMAT) {
-                    Ok(value) => Ok(Date(value.with_timezone(&UTC))),
-                    Err(_) => Err(serde::de::Error::invalid_value(value)),
-                }
+                Date::from_str(value).map_err(|_| serde::de::Error::invalid_value(value))
             }
         }
 

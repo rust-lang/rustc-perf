@@ -18,12 +18,20 @@ fn get_insert_location(data: &[TestRun],
     data.binary_search_by(|probe| probe.date.cmp(&date))
 }
 
+// TODO: Merge start_idx and end_idx into one.
+
 /// Return the start index for an iterator from the passed date to the index
 /// returned by the companion function, `end_idx`.
 pub fn start_idx(data: &[TestRun], date: DateTime<UTC>) -> usize {
     match get_insert_location(data, date) {
         Ok(idx) => idx,
-        Err(idx) => if idx != 0 { idx - 1 } else { 0 },
+        Err(idx) => {
+            if idx < data.len() {
+                idx
+            } else {
+                data.len() - 1
+            }
+        }
     }
 }
 

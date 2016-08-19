@@ -13,7 +13,7 @@ use std::collections::{HashMap, HashSet};
 use iron::prelude::*;
 use router::Router;
 use persistent::State;
-use chrono::{Duration, DateTime, UTC, TimeZone};
+use chrono::{Duration, DateTime, UTC};
 use serde_json::Value;
 use serde;
 
@@ -94,7 +94,7 @@ pub enum GroupBy {
 
 #[derive(Debug, Clone)]
 pub enum OptionalDate {
-    Date(DateTime<UTC>),
+    Date(Date),
     CouldNotParse(String),
 }
 
@@ -102,7 +102,7 @@ impl OptionalDate {
     pub fn as_start(&self, data: &InputData) -> DateTime<UTC> {
         // Handle missing start by returning 30 days before end.
         if let OptionalDate::Date(date) = *self {
-            date
+            date.0
         } else {
             let end = self.as_end(data);
             end - Duration::days(30)
@@ -112,7 +112,7 @@ impl OptionalDate {
     pub fn as_end(&self, data: &InputData) -> DateTime<UTC> {
         // Handle missing end by using the last available date.
         if let OptionalDate::Date(date) = *self {
-            date
+            date.0
         } else {
             data.last_date
         }
@@ -131,7 +131,7 @@ impl serde::Deserialize for OptionalDate {
             fn visit_str<E>(&mut self, value: &str) -> ::std::result::Result<OptionalDate, E>
                 where E: serde::de::Error
             {
-                match UTC.datetime_from_str(&format!("{} 00:00", value), "%a %b %d %Y %H:%M") {
+                match Date::from_str(value) {
                     Ok(date) => Ok(OptionalDate::Date(date)),
                     Err(err) => {
                         if !value.is_empty() {
@@ -152,9 +152,7 @@ impl serde::Serialize for OptionalDate {
         where S: serde::Serializer
     {
         match *self {
-            OptionalDate::Date(date) => {
-                serializer.serialize_str(&date.format("%a %b %d %Y").to_string())
-            }
+            OptionalDate::Date(date) => date.serialize(serializer),
             OptionalDate::CouldNotParse(_) => serializer.serialize_str(""), // TODO: Warning?
         }
     }

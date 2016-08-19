@@ -39,7 +39,7 @@ function getDate(id) {
             result = "";
             document.getElementById(id).value = "Invalid date";
         } else {
-            result = as_date.toDateString();
+            result = as_date.toISOString();
         }
     }
 
