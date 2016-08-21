@@ -31,6 +31,10 @@ mod errors {
         }
 
         errors {
+            CommandFailed(command: String) {
+                description("command failed; exit code non-zero")
+                display("command failed, non-zero exit code: {}", command)
+            }
         }
     }
 }

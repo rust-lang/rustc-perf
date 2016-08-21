@@ -24,17 +24,21 @@ pub fn update_repo(repo_path: &str) -> Result<()> {
     Ok(())
 }
 
-fn checkout_master(working_dir: &Path) -> Result<()> {
-    Command::new(GIT).current_dir(working_dir)
-        .arg(GIT_CHECKOUT)
-        .arg(BRANCH)
+fn execute_command(working_dir: &Path, args: &[&'static str]) -> Result<()> {
+    let status = Command::new(GIT).current_dir(working_dir)
+        .args(args)
         .status()?;
-    Ok(())
+    if status.success() {
+        Ok(())
+    } else {
+        Err(ErrorKind::CommandFailed(format!("{} {:?}", GIT, args)).into())
+    }
+}
+
+fn checkout_master(working_dir: &Path) -> Result<()> {
+    execute_command(working_dir, &[GIT_CHECKOUT, BRANCH])
 }
 
 fn pull_updates(working_dir: &Path) -> Result<()> {
-    Command::new(GIT).current_dir(working_dir)
-        .arg(GIT_PULL)
-        .status()?;
-    Ok(())
+    execute_command(working_dir, &[GIT_PULL])
 }
