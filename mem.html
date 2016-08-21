@@ -11,10 +11,7 @@
         <input type="radio" name="kind" value="rustc">bootstrap
     </div>
     <div id="loading">loading...</div>
-    <canvas id="graph" width="1000" height="600" style="display: none">
-        Your web browser is old and weak and does not support Canvas. You should get a <a href="https://www.mozilla.org/en-US/firefox/new/">new one</a>.
-    </canvas>
-    <div id="legend"></div>
+    <div style="width: 1000px; height: 600px;" id="chart-container"></div>
     <div id="settings">
         <span id="crates-outer" class="settings">
             <h3 id="crates_label">Benchmarks</h3>
@@ -40,7 +37,7 @@
         </span>
     </div>
 </body>
-    <script src="libs/Chart.min.js"></script>
+    <script src="libs/highcharts.js"></script>
     <script src="libs/fetch.js"></script>
     <script src="graph.js"></script>
     <script src="shared.js"></script>
@@ -54,9 +51,8 @@
                 if (group_by == "phase") {
                     series = phases;
                 }
-                init_graph(data, series, "rss", "maximum");
+                init_graph(data, series, "rss", "maximum", "Megabytes");
                 document.getElementById("loading").style.display = "none";
-                document.getElementById("graph").style.display = "block";
                 set_check_boxes(kind, crates, phases, group_by);
                 set_dates(start_date, end_date);
 
@@ -74,8 +70,6 @@
     // Read the various settings, then call make_graph.
     function remake_graph() {
         document.getElementById("loading").style.display = "block";
-        document.getElementById("graph").style.display = "none";
-        document.getElementById("legend").innerHTML = "";
 
         // crates and phases
         var crates = gatherChecks("check-crate");
