@@ -59,7 +59,7 @@ function init_graph(data, series, field, total_label, yAxisLabel) {
     }
     chart = new Highcharts.Chart({
         chart: {
-            zoomType: "x",
+            zoomType: "xy",
             renderTo: "chart-container",
             type: "line",
         },
