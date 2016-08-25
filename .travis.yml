@@ -2,5 +2,6 @@ sudo: false
 language: rust
 rust:
   - nightly
-script: cd rs-backend && cargo build --verbose && cargo test --verbose
+before_script: (cargo install rustfmt || true)
+script: cd rs-backend && cargo fmt -- --write-mode=diff && cargo build --verbose && cargo test --verbose
 cache: cargo
