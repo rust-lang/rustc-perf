@@ -106,7 +106,7 @@ impl InputData {
                     .as_str()
                     .unwrap()).or_else(|_| InputData::parse_from_filename(&filename))?;
 
-            let test_name = filename[0..filename.find("--").unwrap()].to_string();
+            let test_name = InputData::testname_from_filename(&filename).to_string();
 
             let times = contents.find("times").unwrap().as_array().unwrap();
 
@@ -227,6 +227,10 @@ impl InputData {
             Err(_) => Date::from_format(date_str, "%Y-%m-%d-%H-%M")
         }
     }
+
+    fn testname_from_filename(filename: &str) -> &str {
+        &filename[0..filename.find("--").unwrap()]
+    }
 }
 
 #[test]
@@ -241,6 +245,22 @@ fn check_header_date_parsing() {
     // Don't attempt to parse YYYY-MM-DD dates from the header, since more
     // accurate data will be found in the filename.
     assert!(InputData::parse_from_header("2016-05-05").is_err());
+}
+
+#[test]
+fn check_filename_date_parsing() {
+    assert_eq!(InputData::parse_from_filename("rustc--2016-08-06-21-59-30.json").unwrap(),
+        Date::ymd_hms(2016, 8, 6, 21, 59, 30));
+    assert_eq!(InputData::parse_from_filename("rustc--2016-08-06-00-00.json").unwrap(),
+        Date::ymd_hms(2016, 8, 6, 0, 0, 0));
+}
+
+#[test]
+fn check_testname_extraction() {
+    assert_eq!(InputData::testname_from_filename("rustc--2016-08-06-21-59-30.json"),
+        "rustc");
+    assert_eq!(InputData::testname_from_filename("rust-encoding.0.2.32--2016-08-06-21-59-30.json"),
+        "rust-encoding.0.2.32");
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
