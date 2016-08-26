@@ -13,10 +13,11 @@ use std::fs::{self, File};
 use std::path::PathBuf;
 use std::io::Read;
 
-use chrono::{Duration, UTC, DateTime, TimeZone};
+use chrono::Duration;
 use serde_json::{self, Value};
 
 use util::index_in;
+use date::Date;
 use server::OptionalDate;
 use errors::*;
 
@@ -43,7 +44,7 @@ pub struct InputData {
     /// The last date that was seen while loading files. The DateTime variant is
     /// used here since the date may or may not contain a time. Since the
     /// timezone is not important, it isn't stored, hence the Naive variant.
-    pub last_date: DateTime<UTC>,
+    pub last_date: Date,
 
     /// Private due to access being exposed through by_kind method.
     /// Care must be taken to sort these after modifying them.
@@ -124,7 +125,7 @@ impl InputData {
                 let timings = make_times(times, test_name == "rustc");
                 for (crate_name, crate_timings) in timings {
                     if run.by_crate.contains_key(&crate_name) {
-                        println!("Overwriting {} from {}, dated {}",
+                        println!("Overwriting {} from {}, dated {:?}",
                                  crate_name,
                                  filename,
                                  date);
@@ -211,27 +212,34 @@ impl InputData {
     }
 
     /// Parse date from JSON header in file contents.
-    fn parse_from_header(date: &str) -> Result<DateTime<UTC>> {
-        // TODO: Determine correct format of header date and move into
-        // variable/constant
-        UTC.datetime_from_str(date, "%c %z").map_err(|e| e.into())
+    fn parse_from_header(date: &str) -> Result<Date> {
+        Date::from_format(date, "%a %b %e %T %Y %z")
     }
 
     /// Parse date from filename.
-    fn parse_from_filename(filename: &str) -> Result<DateTime<UTC>> {
+    fn parse_from_filename(filename: &str) -> Result<Date> {
         let date_str = &filename[(filename.find("--").unwrap() + 2)..filename.find(".json")
             .unwrap()];
 
-        match UTC.datetime_from_str(date_str, "%Y-%m-%d-%H-%M") {
+        match Date::from_format(date_str, "%Y-%m-%d-%H-%M-%S") {
             Ok(dt) => Ok(dt),
-            Err(_) => {
-                match UTC.datetime_from_str(date_str, "%Y-%m-%d-%H-%M-%S") {
-                    Ok(dt) => Ok(dt),
-                    Err(err) => Err(err.into()),
-                }
-            }
+            Err(_) => Date::from_format(date_str, "%Y-%m-%d-%H-%M")
         }
     }
+}
+
+#[test]
+fn check_header_date_parsing() {
+    assert_eq!(InputData::parse_from_header("Sat Jan 2 13:58:57 2016 +0000").unwrap(),
+        Date::ymd_hms(2016, 1, 2, 13, 58, 57));
+    assert_eq!(InputData::parse_from_header("Mon Mar 14 08:32:45 2016 -0700").unwrap(),
+        Date::ymd_hms(2016, 03, 14, 15, 32, 45));
+    assert_eq!(InputData::parse_from_header("Mon Mar 14 08:32:45 2016 +0300").unwrap(),
+        Date::ymd_hms(2016, 03, 14, 5, 32, 45));
+
+    // Don't attempt to parse YYYY-MM-DD dates from the header, since more
+    // accurate data will be found in the filename.
+    assert!(InputData::parse_from_header("2016-05-05").is_err());
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -245,7 +253,7 @@ pub enum Kind {
 /// The data loaded for a single date, and all associated crates.
 #[derive(Debug)]
 pub struct TestRun {
-    pub date: DateTime<UTC>,
+    pub date: Date,
     pub commit: String,
     pub name: String,
 
@@ -274,7 +282,7 @@ impl Ord for TestRun {
 }
 
 impl TestRun {
-    fn new(date: DateTime<UTC>, commit: String, times: &[Value], test_name: String) -> TestRun {
+    fn new(date: Date, commit: String, times: &[Value], test_name: String) -> TestRun {
         let is_rustc = &test_name == "rustc";
         TestRun {
             date: date,
@@ -355,7 +363,7 @@ fn make_times(timings: &[Value], is_rustc: bool) -> HashMap<String, HashMap<Stri
 
 #[derive(Debug)]
 pub struct SummarizedWeek {
-    pub date: DateTime<UTC>,
+    pub date: Date,
 
     /// Maps crate names to a map of phases to each phase's percent change
     /// from the previous date.
@@ -370,7 +378,7 @@ pub struct Summary {
 impl Summary {
     // Compute summary data. For each week, we find the last 3 weeks, and use
     // the median timing as the basis of the current week's summary.
-    fn new(data: &[TestRun], last_date: DateTime<UTC>) -> Summary {
+    fn new(data: &[TestRun], last_date: Date) -> Summary {
         // 13 week long mapping of crate names to by-phase medians.
         // We steal using summarized week type here even though we're not
         // storing the percent changes yet.

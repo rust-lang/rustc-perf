@@ -13,7 +13,7 @@ use std::collections::{HashMap, HashSet};
 use iron::prelude::*;
 use router::Router;
 use persistent::State;
-use chrono::{Duration, DateTime, UTC};
+use chrono::Duration;
 use serde_json::Value;
 use serde;
 
@@ -62,7 +62,7 @@ impl DateData {
         }
 
         DateData {
-            date: Date(day.date),
+            date: day.date,
             commit: day.commit.clone(),
             data: data,
         }
@@ -107,20 +107,20 @@ pub enum OptionalDate {
 }
 
 impl OptionalDate {
-    pub fn as_start(&self, data: &InputData) -> DateTime<UTC> {
+    pub fn as_start(&self, data: &InputData) -> Date {
         // Handle missing start by returning 30 days before end.
         if let OptionalDate::Date(date) = *self {
-            date.0
+            date
         } else {
             let end = self.as_end(data);
             end - Duration::days(30)
         }
     }
 
-    pub fn as_end(&self, data: &InputData) -> DateTime<UTC> {
+    pub fn as_end(&self, data: &InputData) -> Date {
         // Handle missing end by using the last available date.
         if let OptionalDate::Date(date) = *self {
-            date.0
+            date
         } else {
             data.last_date
         }
@@ -209,7 +209,7 @@ fn handle_summary(r: &mut Request) -> IronResult<Response> {
         let dates = data.summary_rustc
             .summary
             .iter()
-            .map(|s| Date(s.date))
+            .map(|s| s.date)
             .collect::<Vec<_>>();
 
         // overall number for each week
@@ -275,7 +275,7 @@ fn handle_tabular(r: &mut Request) -> IronResult<Response> {
         let day = data.kinded_end_day(body.kind, &body.date);
 
         tabular::Response {
-            date: Date(day.date),
+            date: day.date,
             commit: day.commit.clone(),
             data: day.by_crate.clone(),
         }
@@ -325,8 +325,8 @@ fn handle_stats(r: &mut Request) -> IronResult<Response> {
         }
 
         stats::Response {
-            start_date: Date(start_date),
-            end_date: Date(end_date),
+            start_date: start_date,
+            end_date: end_date,
             crates: crates,
         }
     })

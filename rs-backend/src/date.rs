@@ -7,18 +7,57 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use chrono::{UTC, DateTime};
+use std::ops::Sub;
+
+use chrono::{UTC, DateTime, TimeZone, Duration};
 use serde::{self, Serialize, Deserialize};
 
-#[derive(Debug, Copy, Clone)]
+use errors::*;
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Date(pub DateTime<UTC>);
 
 impl Date {
-    pub fn from_str(s: &str) -> Result<Date, ()> {
+    pub fn from_str(s: &str) -> Result<Date> {
         match DateTime::parse_from_rfc3339(s) {
             Ok(value) => Ok(Date(value.with_timezone(&UTC))),
-            Err(_) => Err(()),
+            Err(err) => Err(err).chain_err(|| format!("parse failure of date {} with RFC 3339 format", s)),
         }
+    }
+
+    pub fn from_format(date: &str, format: &str) -> Result<Date> {
+        match DateTime::parse_from_str(date, format) {
+            Ok(value) => Ok(Date(value.with_timezone(&UTC))),
+            Err(_) => {
+                match UTC.datetime_from_str(date, format) {
+                    Ok(dt) => Ok(Date(dt)),
+                    Err(err) => Err(err).chain_err(|| format!("parse failure of date {} with format string: {}", date, format))
+                }
+            }
+        }
+    }
+
+    pub fn ymd_hms(year: i32, month: u32, day: u32, h: u32, m: u32, s: u32) -> Date {
+        Date(UTC.ymd(year, month, day).and_hms(h, m, s))
+    }
+}
+
+impl From<DateTime<UTC>> for Date {
+    fn from(datetime: DateTime<UTC>) -> Date {
+        Date(datetime)
+    }
+}
+
+impl PartialEq<DateTime<UTC>> for Date {
+    fn eq(&self, other: &DateTime<UTC>) -> bool {
+        self.0 == *other
+    }
+}
+
+impl Sub<Duration> for Date {
+    type Output = Date;
+    fn sub(self, rhs: Duration) -> Date {
+        Date(self.0 - rhs)
     }
 }
 
