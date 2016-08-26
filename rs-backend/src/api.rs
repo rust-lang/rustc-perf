@@ -15,36 +15,13 @@
 
 pub mod summary {
     use std::collections::HashMap;
-    use serde::{self, Serialize, Deserialize};
+    use serde::{self, Serialize};
 
     use date::Date;
 
     /// One decimal place rounded percent
-    #[derive(Debug, Copy, Clone)]
+    #[derive(Debug, Copy, Clone, Deserialize)]
     pub struct Percent(pub f64);
-
-    impl Deserialize for Percent {
-        fn deserialize<D>(deserializer: &mut D) -> ::std::result::Result<Percent, D::Error>
-            where D: serde::de::Deserializer
-        {
-            struct PercentVisitor;
-
-            impl serde::de::Visitor for PercentVisitor {
-                type Value = Percent;
-
-                fn visit_str<E>(&mut self, value: &str) -> ::std::result::Result<Percent, E>
-                    where E: serde::de::Error
-                {
-                    match value.parse() {
-                        Ok(value) => Ok(Percent(value)),
-                        Err(_) => Err(serde::de::Error::invalid_value(value)),
-                    }
-                }
-            }
-
-            deserializer.deserialize(PercentVisitor)
-        }
-    }
 
     impl Serialize for Percent {
         fn serialize<S>(&self, serializer: &mut S) -> ::std::result::Result<(), S::Error>
@@ -122,14 +99,7 @@ pub mod data {
         pub phases: Vec<String>,
     }
 
-    /// The response consists of a list of objects, from oldest to newest,
-    /// with these fields:
-    ///   - commit: Git commit hash of the compiler these results were obtained with.
-    ///   - date: The date of this run; in the JS_DATE_FORMAT (TODO: Link/reference)
-    ///   - data: An object with keys being the requested crates/phases (depending on group_by);
-    ///       - rss: u64 of memory usage (TODO: What unit? MB?)
-    ///       - time: f64 of duration for compiling (TODO: Is this in seconds?)
-    // TODO: Use a struct instead of Value.
+    /// List of DateData's from oldest to newest
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct Response(pub Vec<DateData>);
 }
@@ -194,7 +164,7 @@ pub mod stats {
         pub end_date: OptionalDate,
 
         /// Which crates to return data for
-        /// kind rustc only: crate or phase can be 'total' (TODO: Better wording)
+        /// If the kind is rustc, no crate or phase name can be 'total'
         pub crates: Vec<String>,
 
         /// Which phases to return data for
