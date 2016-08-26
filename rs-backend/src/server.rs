@@ -24,10 +24,18 @@ use util::get_repo_path;
 use api::{summary, info, data, tabular, days, stats};
 use load::{SummarizedWeek, Kind, TestRun, Timing, InputData};
 
+/// Data associated with a specific date
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DateData {
+    /// The date of this run
     pub date: Date,
+
+    /// Git commit hash of the compiler these results were obtained with.
     pub commit: String,
+
+    /// Keyed by crate names / phases depending on request's group by field;
+    ///   - rss: u64 of memory usage in megabytes
+    ///   - time: f64 of duration for compiling in seconds
     pub data: HashMap<String, Recording>,
 }
 
