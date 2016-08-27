@@ -224,7 +224,7 @@ impl InputData {
 
         match Date::from_format(date_str, "%Y-%m-%d-%H-%M-%S") {
             Ok(dt) => Ok(dt),
-            Err(_) => Date::from_format(date_str, "%Y-%m-%d-%H-%M")
+            Err(_) => Date::from_format(date_str, "%Y-%m-%d-%H-%M"),
         }
     }
 
@@ -236,11 +236,11 @@ impl InputData {
 #[test]
 fn check_header_date_parsing() {
     assert_eq!(InputData::parse_from_header("Sat Jan 2 13:58:57 2016 +0000").unwrap(),
-        Date::ymd_hms(2016, 1, 2, 13, 58, 57));
+               Date::ymd_hms(2016, 1, 2, 13, 58, 57));
     assert_eq!(InputData::parse_from_header("Mon Mar 14 08:32:45 2016 -0700").unwrap(),
-        Date::ymd_hms(2016, 03, 14, 15, 32, 45));
+               Date::ymd_hms(2016, 03, 14, 15, 32, 45));
     assert_eq!(InputData::parse_from_header("Mon Mar 14 08:32:45 2016 +0300").unwrap(),
-        Date::ymd_hms(2016, 03, 14, 5, 32, 45));
+               Date::ymd_hms(2016, 03, 14, 5, 32, 45));
 
     // Don't attempt to parse YYYY-MM-DD dates from the header, since more
     // accurate data will be found in the filename.
@@ -250,17 +250,17 @@ fn check_header_date_parsing() {
 #[test]
 fn check_filename_date_parsing() {
     assert_eq!(InputData::parse_from_filename("rustc--2016-08-06-21-59-30.json").unwrap(),
-        Date::ymd_hms(2016, 8, 6, 21, 59, 30));
+               Date::ymd_hms(2016, 8, 6, 21, 59, 30));
     assert_eq!(InputData::parse_from_filename("rustc--2016-08-06-00-00.json").unwrap(),
-        Date::ymd_hms(2016, 8, 6, 0, 0, 0));
+               Date::ymd_hms(2016, 8, 6, 0, 0, 0));
 }
 
 #[test]
 fn check_testname_extraction() {
     assert_eq!(InputData::testname_from_filename("rustc--2016-08-06-21-59-30.json"),
-        "rustc");
+               "rustc");
     assert_eq!(InputData::testname_from_filename("rust-encoding.0.2.32--2016-08-06-21-59-30.json"),
-        "rust-encoding.0.2.32");
+               "rust-encoding.0.2.32");
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

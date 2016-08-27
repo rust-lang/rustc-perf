@@ -21,7 +21,9 @@ impl Date {
     pub fn from_str(s: &str) -> Result<Date> {
         match DateTime::parse_from_rfc3339(s) {
             Ok(value) => Ok(Date(value.with_timezone(&UTC))),
-            Err(err) => Err(err).chain_err(|| format!("parse failure of date {} with RFC 3339 format", s)),
+            Err(err) => {
+                Err(err).chain_err(|| format!("parse failure of date {} with RFC 3339 format", s))
+            }
         }
     }
 
@@ -31,7 +33,13 @@ impl Date {
             Err(_) => {
                 match UTC.datetime_from_str(date, format) {
                     Ok(dt) => Ok(Date(dt)),
-                    Err(err) => Err(err).chain_err(|| format!("parse failure of date {} with format string: {}", date, format))
+                    Err(err) => {
+                        Err(err).chain_err(|| {
+                            format!("parse failure of date {} with format string: {}",
+                                    date,
+                                    format)
+                        })
+                    }
                 }
             }
         }
