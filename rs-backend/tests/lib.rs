@@ -17,10 +17,10 @@ use iron::status::Status;
 use serde_json::Value;
 use serde::Serialize;
 
-use rustc_perf::server::{self, GroupBy, OptionalDate};
+use rustc_perf::server::{self, GroupBy};
 use rustc_perf::load::{Kind, InputData};
+use rustc_perf::date::{OptionalDate, Date};
 use rustc_perf::api::{data, tabular, days, stats};
-use rustc_perf::date::Date;
 
 fn request<H: Handler>(path: &str, handler: &H) -> IronResult<Response> {
     iron_test::request::get(&format!("http://perf.rust-lang.org/{}", path),

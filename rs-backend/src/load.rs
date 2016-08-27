@@ -16,10 +16,9 @@ use std::io::Read;
 use chrono::Duration;
 use serde_json::{self, Value};
 
-use util::index_in;
-use date::Date;
-use server::OptionalDate;
 use errors::*;
+use util::index_in;
+use date::{OptionalDate, Date};
 
 const WEEKS_IN_SUMMARY: usize = 12;
 
@@ -203,12 +202,14 @@ impl InputData {
     /// Helper function to return a range of data given an optional start and end date.
     pub fn kinded_range(&self, kind: Kind, start: &OptionalDate, end: &OptionalDate) -> &[TestRun] {
         let kinded = self.by_kind(kind);
-        &kinded[index_in(kinded, start.as_start(self))..(index_in(kinded, end.as_end(self)) + 1)]
+        let start = index_in(kinded, start.as_start(self.last_date));
+        let end = index_in(kinded, end.as_end(self.last_date)) + 1;
+        &kinded[start..end]
     }
 
     pub fn kinded_end_day(&self, kind: Kind, end: &OptionalDate) -> &TestRun {
         let kinded = self.by_kind(kind);
-        &kinded[index_in(kinded, end.as_end(self))]
+        &kinded[index_in(kinded, end.as_end(self.last_date))]
     }
 
     /// Parse date from JSON header in file contents.
@@ -248,6 +249,17 @@ pub enum Kind {
     Benchmarks,
     #[serde(rename="rustc")]
     Rustc,
+}
+
+#[test]
+fn serialize_kind() {
+    assert_eq!(serde_json::to_string(&Kind::Benchmarks).unwrap(),
+               r#""benchmarks""#);
+    assert_eq!(serde_json::from_str::<Kind>(r#""benchmarks""#).unwrap(),
+               Kind::Benchmarks);
+    assert_eq!(serde_json::to_string(&Kind::Rustc).unwrap(), r#""rustc""#);
+    assert_eq!(serde_json::from_str::<Kind>(r#""rustc""#).unwrap(),
+               Kind::Rustc);
 }
 
 /// The data loaded for a single date, and all associated crates.

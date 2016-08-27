@@ -88,3 +88,76 @@ impl Deserialize for Date {
         deserializer.deserialize(DateVisitor)
     }
 }
+
+#[derive(Debug, Clone)]
+pub enum OptionalDate {
+    Date(Date),
+    CouldNotParse(String),
+}
+
+impl OptionalDate {
+    pub fn is_date(&self) -> bool {
+        match *self {
+            OptionalDate::Date(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn as_start(&self, last_date: Date) -> Date {
+        // Handle missing start by returning 30 days before end.
+        if let OptionalDate::Date(date) = *self {
+            date
+        } else {
+            let end = self.as_end(last_date);
+            end - Duration::days(30)
+        }
+    }
+
+    pub fn as_end(&self, last_date: Date) -> Date {
+        // Handle missing end by using the last available date.
+        if let OptionalDate::Date(date) = *self {
+            date
+        } else {
+            last_date
+        }
+    }
+}
+
+impl serde::Deserialize for OptionalDate {
+    fn deserialize<D>(deserializer: &mut D) -> ::std::result::Result<OptionalDate, D::Error>
+        where D: serde::de::Deserializer
+    {
+        struct DateVisitor;
+
+        impl serde::de::Visitor for DateVisitor {
+            type Value = OptionalDate;
+
+            fn visit_str<E>(&mut self, value: &str) -> ::std::result::Result<OptionalDate, E>
+                where E: serde::de::Error
+            {
+                match Date::from_str(value) {
+                    Ok(date) => Ok(OptionalDate::Date(date)),
+                    Err(err) => {
+                        if !value.is_empty() {
+                            println!("bad date {:?}: {:?}", value, err);
+                        }
+                        Ok(OptionalDate::CouldNotParse(value.to_string()))
+                    }
+                }
+            }
+        }
+
+        deserializer.deserialize(DateVisitor)
+    }
+}
+
+impl serde::Serialize for OptionalDate {
+    fn serialize<S>(&self, serializer: &mut S) -> ::std::result::Result<(), S::Error>
+        where S: serde::Serializer
+    {
+        match *self {
+            OptionalDate::Date(date) => date.serialize(serializer),
+            OptionalDate::CouldNotParse(_) => serializer.serialize_str(""), // TODO: Warning?
+        }
+    }
+}
