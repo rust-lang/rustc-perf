@@ -80,7 +80,8 @@ pub mod info {
 
 pub mod data {
     use load::Kind;
-    use server::{DateData, GroupBy, OptionalDate};
+    use date::OptionalDate;
+    use server::{DateData, GroupBy};
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct Request {
@@ -107,9 +108,8 @@ pub mod data {
 pub mod tabular {
     use std::collections::HashMap;
 
-    use date::Date;
+    use date::{OptionalDate, Date};
     use load::{Kind, Timing};
-    use server::OptionalDate;
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct Request {
@@ -129,7 +129,8 @@ pub mod tabular {
 
 pub mod days {
     use load::Kind;
-    use server::{DateData, OptionalDate, GroupBy};
+    use date::OptionalDate;
+    use server::{DateData, GroupBy};
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct Request {
@@ -151,9 +152,9 @@ pub mod days {
 pub mod stats {
     use std::collections::HashMap;
 
-    use date::Date;
     use load::Kind;
-    use server::{OptionalDate, Stats};
+    use server::Stats;
+    use date::{OptionalDate, Date};
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct Request {

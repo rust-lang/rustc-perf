@@ -13,9 +13,7 @@ use std::collections::{HashMap, HashSet};
 use iron::prelude::*;
 use router::Router;
 use persistent::State;
-use chrono::{Duration, DateTime, UTC};
-use serde_json::Value;
-use serde;
+use serde_json;
 
 use git;
 use route_handler;
@@ -62,7 +60,7 @@ impl DateData {
         }
 
         DateData {
-            date: Date(day.date),
+            date: day.date,
             commit: day.commit.clone(),
             data: data,
         }
@@ -100,70 +98,16 @@ pub enum GroupBy {
     Phase,
 }
 
-#[derive(Debug, Clone)]
-pub enum OptionalDate {
-    Date(Date),
-    CouldNotParse(String),
-}
-
-impl OptionalDate {
-    pub fn as_start(&self, data: &InputData) -> DateTime<UTC> {
-        // Handle missing start by returning 30 days before end.
-        if let OptionalDate::Date(date) = *self {
-            date.0
-        } else {
-            let end = self.as_end(data);
-            end - Duration::days(30)
-        }
-    }
-
-    pub fn as_end(&self, data: &InputData) -> DateTime<UTC> {
-        // Handle missing end by using the last available date.
-        if let OptionalDate::Date(date) = *self {
-            date.0
-        } else {
-            data.last_date
-        }
-    }
-}
-
-impl serde::Deserialize for OptionalDate {
-    fn deserialize<D>(deserializer: &mut D) -> ::std::result::Result<OptionalDate, D::Error>
-        where D: serde::de::Deserializer
-    {
-        struct DateVisitor;
-
-        impl serde::de::Visitor for DateVisitor {
-            type Value = OptionalDate;
-
-            fn visit_str<E>(&mut self, value: &str) -> ::std::result::Result<OptionalDate, E>
-                where E: serde::de::Error
-            {
-                match Date::from_str(value) {
-                    Ok(date) => Ok(OptionalDate::Date(date)),
-                    Err(err) => {
-                        if !value.is_empty() {
-                            println!("bad date {:?}: {:?}", value, err);
-                        }
-                        Ok(OptionalDate::CouldNotParse(value.to_string()))
-                    }
-                }
-            }
-        }
-
-        deserializer.deserialize(DateVisitor)
-    }
-}
-
-impl serde::Serialize for OptionalDate {
-    fn serialize<S>(&self, serializer: &mut S) -> ::std::result::Result<(), S::Error>
-        where S: serde::Serializer
-    {
-        match *self {
-            OptionalDate::Date(date) => date.serialize(serializer),
-            OptionalDate::CouldNotParse(_) => serializer.serialize_str(""), // TODO: Warning?
-        }
-    }
+#[test]
+fn serialize_kind() {
+    assert_eq!(serde_json::to_string(&GroupBy::Crate).unwrap(),
+               r#""crate""#);
+    assert_eq!(serde_json::from_str::<GroupBy>(r#""crate""#).unwrap(),
+               GroupBy::Crate);
+    assert_eq!(serde_json::to_string(&GroupBy::Phase).unwrap(),
+               r#""phase""#);
+    assert_eq!(serde_json::from_str::<GroupBy>(r#""phase""#).unwrap(),
+               GroupBy::Phase);
 }
 
 fn handle_summary(r: &mut Request) -> IronResult<Response> {
@@ -209,7 +153,7 @@ fn handle_summary(r: &mut Request) -> IronResult<Response> {
         let dates = data.summary_rustc
             .summary
             .iter()
-            .map(|s| Date(s.date))
+            .map(|s| s.date)
             .collect::<Vec<_>>();
 
         // overall number for each week
@@ -275,7 +219,7 @@ fn handle_tabular(r: &mut Request) -> IronResult<Response> {
         let day = data.kinded_end_day(body.kind, &body.date);
 
         tabular::Response {
-            date: Date(day.date),
+            date: day.date,
             commit: day.commit.clone(),
             data: day.by_crate.clone(),
         }
@@ -286,7 +230,7 @@ fn handle_days(r: &mut Request) -> IronResult<Response> {
     route_handler::handler_post::<days::Request, _, _>(r, |body, data| {
         let mut result = Vec::new();
         for date in body.dates {
-            if let OptionalDate::Date(_) = date {
+            if date.is_date() {
                 let day = DateData::for_day(&data.kinded_end_day(body.kind, &date),
                                             &body.crates,
                                             &body.phases,
@@ -302,8 +246,8 @@ fn handle_stats(r: &mut Request) -> IronResult<Response> {
     route_handler::handler_post::<stats::Request, _, _>(r, |body, data| {
         assert!(body.kind != Kind::Benchmarks || body.crates.iter().all(|s| s != "total"));
 
-        let mut start_date = body.start_date.as_start(data);
-        let mut end_date = body.end_date.as_end(data);
+        let mut start_date = body.start_date.as_start(data.last_date);
+        let mut end_date = body.end_date.as_end(data.last_date);
 
         let mut counted = Vec::new();
 
@@ -325,8 +269,8 @@ fn handle_stats(r: &mut Request) -> IronResult<Response> {
         }
 
         stats::Response {
-            start_date: Date(start_date),
-            end_date: Date(end_date),
+            start_date: start_date,
+            end_date: end_date,
             crates: crates,
         }
     })
@@ -447,7 +391,7 @@ fn on_push(req: &mut Request) -> IronResult<Response> {
         // Write the new data back into the request
         *data = new_data;
 
-        Ok(Value::String("Successfully updated from filesystem".to_owned()))
+        Ok(serde_json::to_value("Successfully updated from filesystem"))
     };
 
     Ok(route_handler::unwrap_with_or_internal_err(responder(), route_handler::respond))

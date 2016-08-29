@@ -10,11 +10,11 @@
 use std::env;
 
 use load::TestRun;
-use chrono::{UTC, DateTime};
+use date::Date;
 use errors::*;
 
 /// Returns where the passed date is or should go in the sorted data slice.
-pub fn index_in(data: &[TestRun], date: DateTime<UTC>) -> usize {
+pub fn index_in(data: &[TestRun], date: Date) -> usize {
     match data.binary_search_by(|probe| probe.date.cmp(&date)) {
         Ok(idx) => idx,
         Err(idx) => {
