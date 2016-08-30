@@ -194,6 +194,7 @@ fn handle_info(r: &mut Request) -> IronResult<Response> {
             crates: sort(&data.crate_list),
             phases: sort(&data.phase_list),
             benchmarks: sort(&data.benchmarks),
+            as_of: data.last_date,
         }
     })
 }

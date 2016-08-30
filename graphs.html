@@ -36,12 +36,14 @@
             </div>
         </span>
     </div>
+    <div id="as-of"></div>
 </body>
     <script src="libs/highcharts.js"></script>
     <script src="libs/fetch.js"></script>
     <script src="graph.js"></script>
     <script src="shared.js"></script>
     <script>
+    make_as_of();
     // Make a graph!
     function make_graph(start_date, end_date, kind, crates, phases, group_by, push_state) {
         var values = [start_date, end_date, kind, crates, phases, group_by];

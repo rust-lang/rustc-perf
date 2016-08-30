@@ -144,6 +144,18 @@ function make_settings(callback, total_label) {
     });
 }
 
+function make_as_of() {
+    return fetch(BASE_URL + "/info", {}).then(function(response) {
+        response.json().then(function(data) {
+            document.getElementById("as-of").innerHTML = "Updated as of: " + (new Date(data.as_of)).toLocaleString();
+        });
+    }, function(err) {
+        document.getElementById("as-of").innerHTML = "Error fetching info";
+        console.log("Error fetching info:");
+        console.log(err);
+    });
+}
+
 function truncate_name(name) {
     if (name.length > 30) {
         return name.substring(0, 30) + "...";
