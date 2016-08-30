@@ -45,7 +45,7 @@
     // Make a graph!
     function make_graph(start_date, end_date, kind, crates, phases, group_by, push_state) {
         var values = [start_date, end_date, kind, crates, phases, group_by];
-        fetch("http://perf.rust-lang.org/perf/data", make_request(keys, values)).then(function(response) {
+        fetch(BASE_URL + "/data", make_request(keys, values)).then(function(response) {
             response.json().then(function(data) {
                 var series = crates;
                 if (group_by == "phase") {

@@ -13,7 +13,7 @@
     <script src="libs/fetch.js"></script>
     <script src="shared.js"></script>
     <script>
-    fetch("http://perf.rust-lang.org/perf/summary").then(function(response) {
+    fetch(BASE_URL + "/summary").then(function(response) {
         response.json().then(function(data) {
             document.getElementById("loading").style.display = "none";
 
