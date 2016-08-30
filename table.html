@@ -20,10 +20,12 @@
         </span>
     </div>
     <div id="table"></div>
+    <div id="as-of"></div>
 </body>
     <script src="shared.js"></script>
     <script src="libs/fetch.js"></script>
     <script>
+    make_as_of();
     // Read the various settings, then call make_table.
     function remake_table() {
         var kind = get_kind();

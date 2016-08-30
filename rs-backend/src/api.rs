@@ -65,6 +65,8 @@ pub mod summary {
 }
 
 pub mod info {
+    use date::Date;
+
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct Response {
         /// Sorted vector of crate names (benchmarks and all crates in the rust distribution)
@@ -75,6 +77,9 @@ pub mod info {
 
         /// Sorted vector of benchmark names.
         pub benchmarks: Vec<String>,
+
+        /// Chronologically last loaded run date.
+        pub as_of: Date,
     }
 }
 

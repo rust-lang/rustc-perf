@@ -9,10 +9,12 @@
     <div id="loading">loading...</div>
     <div id="summary_number"></div>
     <div id="summary_table"></div>
+    <div id="as-of"></div>
 </body>
     <script src="libs/fetch.js"></script>
     <script src="shared.js"></script>
     <script>
+    make_as_of();
     fetch(BASE_URL + "/summary").then(function(response) {
         response.json().then(function(data) {
             document.getElementById("loading").style.display = "none";

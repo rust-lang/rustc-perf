@@ -31,10 +31,12 @@
             </div>
         </span>
     </div>
+    <div id="as-of"></div>
 </body>
     <script src="libs/fetch.js"></script>
     <script src="shared.js"></script>
     <script>
+    make_as_of();
     function populate_stats(data) {
         var startDate = new Date(data.startDate);
         var endDate = new Date(data.endDate);
