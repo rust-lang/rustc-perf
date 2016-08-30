@@ -100,7 +100,7 @@
         document.getElementById("loading").style.display = "block";
 
         var values = [dates, kind, crates, phases, group_by];
-        fetch("http://perf.rust-lang.org/perf/get", make_request(keys, values)).then(function(response) {
+        fetch(BASE_URL + "/get", make_request(keys, values)).then(function(response) {
             response.json().then(function(data) {
                 populate_data(data);
                 document.getElementById("loading").style.display = "none";
