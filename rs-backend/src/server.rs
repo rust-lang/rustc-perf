@@ -375,14 +375,14 @@ fn on_push(req: &mut Request) -> IronResult<Response> {
     // better to read just the added files. These should be available in the
     // body of the request.
 
-    println!("received onpush hook");
+    debug!("received onpush hook");
 
     let mut responder = || {
         let repo_path = get_repo_path()?;
 
         git::update_repo(&repo_path)?;
 
-        println!("updating from filesystem...");
+        info!("updating from filesystem...");
         let new_data = InputData::from_fs(&repo_path)?;
 
         // Retrieve the stored InputData from the request.

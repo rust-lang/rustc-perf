@@ -82,7 +82,7 @@ impl InputData {
             let mut file_contents = String::new();
             // Skip files whose size is 0.
             if file.read_to_string(&mut file_contents)? == 0 {
-                println!("Skipping empty file: {}", filename);
+                warn!("Skipping empty file: {}", filename);
                 skipped += 1;
                 continue;
             }
@@ -90,7 +90,7 @@ impl InputData {
             let contents: Value = match serde_json::from_str(&file_contents) {
                 Ok(json) => json,
                 Err(err) => {
-                    println!("Failed to parse JSON for {}: {:?}", filename, err);
+                    error!("Failed to parse JSON for {}: {:?}", filename, err);
                     skipped += 1;
                     continue;
                 }
@@ -124,10 +124,10 @@ impl InputData {
                 let timings = make_times(times, test_name == "rustc");
                 for (crate_name, crate_timings) in timings {
                     if run.by_crate.contains_key(&crate_name) {
-                        println!("Overwriting {} from {}, dated {:?}",
-                                 crate_name,
-                                 filename,
-                                 date);
+                        warn!("Overwriting {} from {}, dated {:?}",
+                              crate_name,
+                              filename,
+                              date);
                     }
 
                     run.by_crate.insert(crate_name, crate_timings);
@@ -139,11 +139,11 @@ impl InputData {
             }
         }
 
-        println!("{} total files", file_count);
-        println!("{} skipped files", skipped);
-        println!("{} merged times", merged);
-        println!("{} bootstrap times", data_rustc.len());
-        println!("{} benchmarks times", data_benchmarks.len());
+        info!("{} total files", file_count);
+        info!("{} skipped files", skipped);
+        info!("{} merged times", merged);
+        info!("{} bootstrap times", data_rustc.len());
+        info!("{} benchmarks times", data_benchmarks.len());
 
         InputData::new(data_rustc, data_benchmarks)
     }
