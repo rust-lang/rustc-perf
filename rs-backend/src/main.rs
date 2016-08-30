@@ -7,11 +7,17 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+extern crate env_logger;
 extern crate rustc_perf;
 
 use rustc_perf::{load, server, util};
 
 fn main() {
+    env_logger::init().unwrap();
+
     let data = load::InputData::from_fs(&util::get_repo_path().unwrap()).unwrap();
+
+    println!("Starting server!");
+
     server::start(data);
 }

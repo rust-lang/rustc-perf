@@ -31,8 +31,7 @@ pub fn unwrap_with_or_internal_err<T, F>(x: Result<T>, f: F) -> Response
     match x {
         Ok(x) => f(x),
         Err(err) => {
-            // TODO: Print to stderr
-            println!("An error occurred: {:?}", err);
+            error!("An error occurred: {:?}", err);
             let mut response = Response::with((status::InternalServerError, err.to_string()));
             response.set_mut(Header(AccessControlAllowOrigin::Any));
             response

@@ -147,7 +147,7 @@ impl serde::Deserialize for OptionalDate {
                     Ok(date) => Ok(OptionalDate::Date(date)),
                     Err(err) => {
                         if !value.is_empty() {
-                            println!("bad date {:?}: {:?}", value, err);
+                            error!("bad date {:?}: {:?}", value, err);
                         }
                         Ok(OptionalDate::CouldNotParse(value.to_string()))
                     }

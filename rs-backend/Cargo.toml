@@ -12,6 +12,8 @@ persistent = "0.2.0"
 serde = "0.8.3"
 serde_json = "0.8.1"
 serde_macros = "0.8.3"
+env_logger = "0.3.4"
+log = "0.3.6"
 
 [dev-dependencies]
 iron-test = "0.4.0"
