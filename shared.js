@@ -86,47 +86,41 @@ function addTotalHandler(name) {
 // the lists of checkboxes and other settings.
 // Assumes the initial graph is total/total/by crate
 function make_settings(callback, total_label) {
+    function checkbox(name, id, checked, body) {
+        if (checked) {
+            return "<input type=\"checkbox\" checked=\"true\" name=\"" + name + "\" id=\"" + id + "\">" + body + "</input></br>";
+        } else {
+            return "<input type=\"checkbox\" name=\"" + name + "\" id=\"" + id + "\">" + body + "</input></br>";
+        }
+    }
+
     if (!total_label) {
         total_label = "total";
     }
     return fetch(BASE_URL + "/info", {}).then(function(response) {
         response.json().then(function(data) {
-            var crates_html = "";
-            crates_html += "<input checked=\"true\" type=\"checkbox\" name=\"check-crate\" id=\"check-crate-total\">" + total_label + "</input></br>";
-            data.crates.sort();
-            for (c in data.crates) {
-                var crate = data.crates[c];
-                crates_html += "<input type=\"checkbox\" name=\"check-crate\" id=\"" + crate + "\">" + truncate_name(crate) + "</input></br>";
+            var crates_html = checkbox("check-crate", "check-crate-total", true, total_label);
+            for (let crate of data.crates) {
+                crates_html += checkbox("check-crate", crate, false, truncate_name(crate));
             }
-
-            var crate_div = document.getElementById("crates");
-            crate_div.innerHTML = crates_html;
+            document.getElementById("crates").innerHTML = crates_html;
 
             var bench_html = "";
-            data.benchmarks.sort();
-            for (b in data.benchmarks) {
-                var bench = data.benchmarks[b];
-                bench_html += "<input type=\"checkbox\" name=\"check-bench\" id=\"" + bench + "\">" + truncate_name(bench) + "</input></br>";
+            for (let bench of data.benchmarks) {
+                bench_html += checkbox("check-bench", bench, false, truncate_name(bench));
             }
+            document.getElementById("benchmarks").innerHTML = bench_html;
 
-            var bench_div = document.getElementById("benchmarks");
-            bench_div.innerHTML = bench_html;
-
-            var phases_html = "";
-            phases_html += "<input checked=\"true\" type=\"checkbox\" name=\"check-phase\" id=\"check-phase-total\">" + total_label + "</input></br>";
-            data.phases.sort();
-            for (p in data.phases) {
-                var phase = data.phases[p];
+            var phases_html = checkbox("check-phase", "check-phase-total", true, total_label);
+            for (let phase of data.phases) {
                 if (phase != "total") {
-                    phases_html += "<input type=\"checkbox\" name=\"check-phase\" id=\"" + phase + "\">" + truncate_name(phase) + "</input></br>";
+                    phases_html += checkbox("check-phase", phase, false, truncate_name(phase));
                 }
             }
-
-            var phase_div = document.getElementById("phases");
-            phase_div.innerHTML = phases_html;
+            document.getElementById("phases").innerHTML = phases_html;
 
             var groupByCrate = document.getElementById("group-by-crate");
-            if (document.getElementById("group-by-crate")) {
+            if (groupByCrate) {
                 groupByCrate.checked = true;
             }
 
