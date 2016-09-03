@@ -131,3 +131,19 @@ img {
 #as-of {
   text-align: center;
 }
+
+.compare {
+  table-layout: fixed;
+}
+
+.compare td, .compare th {
+  padding: 0.3em;
+}
+
+.compare tr th:first-child {
+  text-align: right;
+}
+
+.space {
+  width: 1em;
+}

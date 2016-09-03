@@ -42,76 +42,99 @@
     <script src="shared.js"></script>
     <script>
     make_as_of();
-    function populate_data(data) {
-        if (data.length < 2) {
-            var html = "<p>Bad dates? Found " + data.length + " results</p>";
-            document.getElementById("content").innerHTML = html;
-            document.getElementById("content").style.display = "block";
 
-            return;
+    function unique(arr) {
+        return arr.filter((value, idx) => arr.indexOf(value) == idx);
+    }
+
+    function add_datum_fields(datum) {
+        let html = "";
+
+        if (datum) {
+            html += "<td>" + datum.time.toFixed(2) + "s</td>";
+            html += "<td>" + datum.rss.toFixed(0) + "MB</td>";
+        } else {
+            html += "<td>-</td>";
+            html += "<td>-</td>";
         }
 
-        var html = "";
-        var keys = Object.keys(data[0].data);
-        var div_keys = "<span class=\"compare\"><h2>&nbsp;</h2>";
-        for (var k in keys) {
-            div_keys += keys[k] + "<br>";
-        }
-        div_keys += "</span>";
-        html += div_keys
+        html += "<td class=\"space\"></td>";
 
-        for (var i in data) {
-            var datum = data[i];
-            var div = "<span class=\"compare\">";
-            var date = new Date(datum.date);
-            div += "<h2>" + date.toLocaleString() + "</h2>";
-            for (var k in keys) {
-                var value = datum.data[keys[k]];
-                if (value) {
-                    div += value.time.toFixed(2) + "s";
-                }
-                div += "<br>";
-            }
-            div += "</span>";
-            html += div;
-        }
+        return html;
+    }
 
-        var div_percents = "<span class=\"compare\"><h2>&nbsp;</h2>";
-        for (var k in keys) {
-            var value0 = data[0].data[keys[k]];
-            var value1 = data[1].data[keys[k]];
-            if (value0 && value1 && value0.time > 0) {
-                var percent = 100*(value1.time - value0.time)/value0.time;
-                if (percent >= 0) {
-                    div_percents += "+";
-                }
-                div_percents += percent.toFixed(1) + "%<br>";
+    function add_percent(a, b, field) {
+        if (a && b && a[field] > 0) {
+            let percent = 100 * (b[field] - a[field]) / a[field];
+            if (percent > 0) {
+                return "<td class=\"positive\">" + percent.toFixed(1) + "%" + "</td>";
             } else {
-                div_percents += "<br>";
+                return "<td class=\"negative\">" + percent.toFixed(1) + "%" + "</td>";
             }
+        } else {
+            return "<td>-</td>"
         }
-        div_percents += "</span>";
-        html += div_percents;
+    }
+
+    function populate_data(data) {
+        let html = "<table class=\"compare\" style=\"font-size: medium !important;\">";
+
+        // Heading: the two dates, and the time and rss percent changes.
+        html += "<thead>";
+        html += "<tr>";
+        html += "<td class=\"space\"></td>";
+        html += "<td class=\"space\"></td>";
+
+        html += "<th colspan=2>" + new Date(data.a.date).toLocaleString() + "</th>";
+        html += "<td class=\"space\"></td>";
+        html += "<th colspan=2>" + new Date(data.b.date).toLocaleString() + "</th>";
+        html += "<td class=\"space\"></td>";
+
+        html += "<th>" + "% change (time)" + "</th>";
+        html += "<th>" + "% change (rss)" + "</th>";
+        html += "</tr>";
+        html += "</thead>";
+
+        let test_names = unique([...Object.keys(data.a.data), ...Object.keys(data.b.data)]);
+
+        for (let name of test_names) {
+            html += "<tr>";
+
+            html += "<th>" + truncate_name(name) + "</th>";
+            html += "<td class=\"space\"></td>";
+
+            html += add_datum_fields(data.a.data[name]);
+            html += add_datum_fields(data.b.data[name]);
+
+            html += add_percent(data.a.data[name], data.b.data[name], "time");
+            html += add_percent(data.a.data[name], data.b.data[name], "rss");
+
+            html += "</tr>";
+        }
+
+        html += "</table>";
 
         document.getElementById("content").innerHTML = html;
         document.getElementById("content").style.display = "block";
     }
 
-    function make_data(dates, kind, crates, phases, group_by, push_state) {
+    function make_data(datea, dateb, kind, crates, phases, group_by, push_state) {
         document.getElementById("loading").innerHTML = "loading...";
         document.getElementById("loading").style.display = "block";
 
-        var values = [dates, kind, crates, phases, group_by];
+        var values = [datea, dateb, kind, crates, phases, group_by];
         fetch(BASE_URL + "/get", make_request(keys, values)).then(function(response) {
             response.json().then(function(data) {
                 populate_data(data);
                 document.getElementById("loading").style.display = "none";
                 set_check_boxes(kind, crates, phases, group_by);
-                document.getElementById("date-a").value = new Date(data[0].date).toISOString().split('T')[0];
-                document.getElementById("date-b").value = new Date(data[1].date).toISOString().split('T')[0];
+                let date_a = new Date(data.a.date);
+                let date_b = new Date(data.b.date);
+                document.getElementById("date-a").value = date_a.toISOString().split('T')[0];
+                document.getElementById("date-b").value = date_b.toISOString().split('T')[0];
 
                 if (push_state) {
-                    push_state_to_history(keys, [[data[0].date, data[1].date], kind, crates, phases, group_by]);
+                    push_state_to_history(keys, [date_a, date_b, kind, crates, phases, group_by]);
                 }
             });
         }, function(err) {
@@ -153,10 +176,10 @@
         var kind = get_kind();
         var crates_or_benchmarks = kind == "rustc" ? crates : benchmarks;
 
-        make_data([datea, dateb], kind, crates_or_benchmarks, phases, group_by, true);
+        make_data(datea, dateb, kind, crates_or_benchmarks, phases, group_by, true);
     }
 
-    var keys = ["dates", "kind", "crates", "phases", "group_by"];
+    var keys = ["date_a", "date_b", "kind", "crates", "phases", "group_by"];
 
     radio_handler();
     make_settings(function() {
