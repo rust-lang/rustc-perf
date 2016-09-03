@@ -17,9 +17,6 @@
     src: local('Fira Sans Medium'), url("../fonts/FiraSans-Medium.woff") format('woff');
 }
 
-div.clear {
-    clear: both;
-}
 body {
     font-family: 'Fira Sans', "Helvetica Neue", Helvetica, Arial, sans-serif;
     margin-top: 20px;
@@ -34,9 +31,6 @@ body {
 p {
     margin-top: 1.2em;
     margin-bottom: 1.2em;
-}
-p.narrow {
-    max-width: 640px;
 }
 span.settings {
     display: inline-block;
@@ -74,11 +68,6 @@ a:focus {
 li {
     margin-bottom: .5em;
 }
-h1 {
-    font-size: 2em;
-    margin-top: 1.2em;
-    margin-bottom: 0.5em;
-}
 
 ul {
     padding-left: 30px;
@@ -101,15 +90,21 @@ img {
   margin-right: auto;
   margin-left: auto;
 }
-@media (min-width: 768px) {.container {
+@media (min-width: 768px) {
+  .container {
     width: 750px;
-  }}
-@media (min-width: 992px) {.container {
+  }
+}
+@media (min-width: 992px) {
+  .container {
     width: 970px;
-  }}
-@media (min-width: 1200px) {.container {
+  }
+}
+@media (min-width: 1200px) {
+  .container {
     width: 1170px;
-  }}
+  }
+}
 
 .big_summary {
   display: block;
