@@ -67,7 +67,7 @@ fn check_response(response: Response, expected_body: &str) {
     let body = pretty_json(&n);
     let expected = pretty_json(&expected_body);
     if body != expected {
-        let (_, changeset) = difference::diff(&body, &expected, "\n");
+        let (_, changeset) = difference::diff(&expected, &body, "\n");
 
         let mut t = term::stdout().unwrap();
 
