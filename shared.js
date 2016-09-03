@@ -296,7 +296,12 @@ function query_string_for_state(state) {
         if (result.length > 1) {
             result += "&";
         }
-        result += k + "=" + encodeURIComponent(state[k]);
+        // Best known way to check if passed state is a date object.
+        if (state[k].toISOString) {
+            result += k + "=" + encodeURIComponent(state[k].toISOString());
+        } else {
+            result += k + "=" + encodeURIComponent(state[k]);
+        }
     }
     return result;
 }
