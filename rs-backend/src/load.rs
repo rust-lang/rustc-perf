@@ -212,6 +212,11 @@ impl InputData {
         &kinded[index_in(kinded, end.as_end(self.last_date))]
     }
 
+    pub fn kinded_start_day(&self, kind: Kind, start: &OptionalDate) -> &TestRun {
+        let kinded = self.by_kind(kind);
+        &kinded[index_in(kinded, start.as_start(self.last_date))]
+    }
+
     /// Parse date from JSON header in file contents.
     fn parse_from_header(date: &str) -> Result<Date> {
         Date::from_format(date, "%a %b %e %T %Y %z")

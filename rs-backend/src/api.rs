@@ -141,7 +141,8 @@ pub mod days {
     pub struct Request {
         pub kind: Kind,
         pub group_by: GroupBy,
-        pub dates: Vec<OptionalDate>,
+        pub date_a: OptionalDate,
+        pub date_b: OptionalDate,
 
         /// Which crates to return data for
         pub crates: Vec<String>,
@@ -151,7 +152,10 @@ pub mod days {
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct Response(pub Vec<DateData>);
+    pub struct Response {
+        pub a: DateData,
+        pub b: DateData,
+    }
 }
 
 pub mod stats {
