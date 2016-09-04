@@ -41,23 +41,45 @@
         var startDate = new Date(data.startDate);
         var endDate = new Date(data.endDate);
         var html = "<h2>" + startDate.toLocaleString() + " to " + endDate.toLocaleString() + "</h2>";
+
+        html += "<table class=\"stats\" style=\"font-size: medium !important;\">";
+        html += "<thead>";
+        html += "<tr>";
+        html += "<td></td>"; // test name placeholder
+        html += "<td class=\"space\"></td>";
+        html += "<th>Mean</th>";
+        html += "<th>Min</th>";
+        html += "<th>Max</th>";
+        html += "<th>Variance</th>";
+        html += "<th>Samples</th>";
+        html += "<th>First</th>";
+        html += "<th>Last</th>";
+        html += "<th>Trend_b (Trend)</th>";
+        html += "</tr>";
+        html += "</thead>";
         for (var c in data.crates) {
             var crate = data.crates[c];
-            html += "<h3>" + c + "</h3>";
-            html += "<p>"
-            html += "mean: " + crate.mean.toFixed(2) + "s&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
-            html += "min: " + crate.min.toFixed(2) + "s&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
-            html += "max: " + crate.max.toFixed(2) + "s&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
-            html += "variance: " + crate.variance.toFixed(4) + "s^2&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
-            html += "n: " + crate.n + "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
-            html += "first: " + crate.first.toFixed(2) + "s&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
-            html += "last: " + crate.last.toFixed(2) + "s&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
-            html += "trend: " + crate.trend_b.toFixed(0) + "%";
+            html += "<tr>";
+            html += "<th>" + truncate_name(c) + "</th>";
+            html += "<td class=\"space\"></td>";
+            html += "<td>" + crate.mean.toFixed(2) + "s" + "</td>";
+            html += "<td>" + crate.min.toFixed(2) + "s" + "</td>";
+            html += "<td>" + crate.max.toFixed(2) + "s" + "</td>";
+            html += "<td>" + crate.variance.toFixed(4) + "s^2" + "</td>";
+            html += "<td>" + crate.n + "" + "</td>";
+            html += "<td>" + crate.first.toFixed(2) + "s" + "</td>";
+            html += "<td>" + crate.last.toFixed(2) + "s" + "</td>";
+
+            html += "<td>" + crate.trend_b.toFixed(0) + "%";
             if (crate.trend.toFixed(0) != 0) {
                 html += " (" + crate.trend.toFixed(0) + "%)";
             }
-            html += "</p>"
+            html += "</td>";
+
+            html += "</tr>";
         }
+        html += "</table>";
+
         document.getElementById("content").innerHTML = html;
         document.getElementById("content").style.display = "block";
     }

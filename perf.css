@@ -134,15 +134,15 @@ img {
   text-align: center;
 }
 
-.compare {
+.compare, .stats {
   table-layout: fixed;
 }
 
-.compare td, .compare th {
+.stats td, .compare td, .stats th, .compare th {
   padding: 0.3em;
 }
 
-.compare tr th:first-child {
+.stats tr th:first-child, .compare tr th:first-child {
   text-align: right;
 }
 
