@@ -44,6 +44,8 @@ span.compare {
 }
 div.submit {
     padding: 20px;
+    padding-top: 10px;
+    padding-right: 0;
     text-align: right;
 }
 table {
