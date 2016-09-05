@@ -116,18 +116,20 @@ impl InputData {
                 &mut data_benchmarks
             };
 
-            // A run on the same day occurred. Merge the two data sets,
-            // overwriting previous data if the same crate was benchmarked.
-            if let Some(index) = push_to.iter().position(|run: &TestRun| run.date == date) {
+            // If a run on the same commit occurs, replacing the crates in the
+            // old run for this commit with the "current" run's crates.
+            // TODO: Merge the two runs somehow, perhaps averaging each pass?
+            if let Some(index) = push_to.iter().position(|run: &TestRun| run.commit == commit) {
                 let run = &mut push_to[index];
 
                 let timings = make_times(times, test_name == "rustc");
                 for (crate_name, crate_timings) in timings {
                     if run.by_crate.contains_key(&crate_name) {
-                        warn!("Overwriting {} from {}, dated {:?}",
+                        warn!("Overwriting {} from {}, dated {:?}, commit {}",
                               crate_name,
                               filename,
-                              date);
+                              date,
+                              commit);
                     }
 
                     run.by_crate.insert(crate_name, crate_timings);
@@ -210,6 +212,11 @@ impl InputData {
     pub fn kinded_end_day(&self, kind: Kind, end: &OptionalDate) -> &TestRun {
         let kinded = self.by_kind(kind);
         &kinded[index_in(kinded, end.as_end(self.last_date))]
+    }
+
+    pub fn kinded_start_day(&self, kind: Kind, start: &OptionalDate) -> &TestRun {
+        let kinded = self.by_kind(kind);
+        &kinded[index_in(kinded, start.as_start(self.last_date))]
     }
 
     /// Parse date from JSON header in file contents.

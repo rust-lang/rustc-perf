@@ -85,7 +85,7 @@ impl Recording {
     fn record(&mut self, phase: Option<&Timing>) {
         if let Some(phase) = phase {
             self.time += phase.time;
-            self.rss = max(self.rss, phase.rss.unwrap());
+            self.rss = max(self.rss, phase.rss.unwrap_or(0));
         }
     }
 }
@@ -229,17 +229,16 @@ fn handle_tabular(r: &mut Request) -> IronResult<Response> {
 
 fn handle_days(r: &mut Request) -> IronResult<Response> {
     route_handler::handler_post::<days::Request, _, _>(r, |body, data| {
-        let mut result = Vec::new();
-        for date in body.dates {
-            if date.is_date() {
-                let day = DateData::for_day(&data.kinded_end_day(body.kind, &date),
-                                            &body.crates,
-                                            &body.phases,
-                                            body.group_by);
-                result.push(day);
-            }
+        days::Response {
+            a: DateData::for_day(&data.kinded_start_day(body.kind, &body.date_a),
+                                 &body.crates,
+                                 &body.phases,
+                                 body.group_by),
+            b: DateData::for_day(&data.kinded_end_day(body.kind, &body.date_b),
+                                 &body.crates,
+                                 &body.phases,
+                                 body.group_by),
         }
-        days::Response(result)
     })
 }
 
