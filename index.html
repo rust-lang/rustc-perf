@@ -73,7 +73,7 @@
 
     function cell_for_data(datum) {
         if (!datum) {
-            datum = 0;
+            return "<td>-</td>";
         }
         var d_class = "";
         if (parseFloat(datum) <= -1) {
