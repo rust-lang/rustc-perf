@@ -15,21 +15,39 @@
     <div id="settings">
         <span id="crates-outer" class="settings">
             <h3 id="crates_label">Benchmarks</h3>
+            <label class="group-by">
+                <input type="radio" name="groupBy" id="group-by-crate" value="crate" checked="true">group by crate
+            </label>
             <div id="benchmarks">loading...</div>
             <div id="crates" style="display: none">loading...</div>
         </span>
         <span id="phases-outer" class="settings">
             <h3>Phases</h3>
+            <label class="group-by">
+                <input type="radio" name="groupBy" id="group-by-phase" value="phase">group by phase
+            </label>
             <div id="phases">loading...</div>
+        </span>
+        <span class="settings">
+            <h3>Kind</h3>
+            <div class="kind-selectors">
+                <label>
+                    <input type="radio" name="kind" value="benchmarks" checked="true">benchmarks
+                </label>
+                <br>
+                <label>
+                    <input type="radio" name="kind" value="rustc">bootstrap
+                </label>
+            </div>
         </span>
         <span id="dates" class="settings">
             <h3>Dates</h3>
             start date: <input placeholder="yyyy-mm-dd" id="start-date"></input><br>
             end date: <input placeholder="yyyy-mm-dd" id="end-date"></input>
             <div class="submit">
-            <a href="#" onClick="remake_stats(); return false;">Submit</a>
+                <a href="#" onClick="remake_stats(); return false;">Submit</a>
             </div>
-        </span>
+        </div>
     </div>
     <div id="as-of"></div>
 </body>
