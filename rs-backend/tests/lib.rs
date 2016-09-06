@@ -67,7 +67,7 @@ fn check_response(response: Response, expected_body: &str) {
     let body = pretty_json(&n);
     let expected = pretty_json(&expected_body);
     if body != expected {
-        let (_, changeset) = difference::diff(&body, &expected, "\n");
+        let (_, changeset) = difference::diff(&expected, &body, "\n");
 
         let mut t = term::stdout().unwrap();
 
@@ -176,13 +176,14 @@ fn days_benchmarks() {
                                 &*CHAIN,
                                 days::Request {
                                     kind: Kind::Benchmarks,
-                                    dates: vec![ymd_date(2016, 02, 21), ymd_date(2016, 03, 22)],
+                                    date_a: ymd_date(2016, 02, 21),
+                                    date_b: ymd_date(2016, 03, 22),
                                     crates: vec!["helloworld".into(), "regex.0.1.30".into()],
                                     phases: vec!["total".into()],
                                     group_by: GroupBy::Crate,
                                 })
         .unwrap();
-    check_response(response, r#"[{"date":"2016-02-21T09:16:30+00:00","commit":"0c72f697eb0630f3d7218a298ea1a7b77289ea8a","data":{}},{"date":"2016-03-22T15:02:13+00:00","commit":"c7bdfd4442f0bde3412f08336f75b9eabff4a938","data":{}}]"#);
+    check_response(response, r#"{"a":{"date":"2016-02-21T09:16:30+00:00","commit":"0c72f697eb0630f3d7218a298ea1a7b77289ea8a","data":{}},"b":{"date":"2016-03-22T15:02:13+00:00","commit":"c7bdfd4442f0bde3412f08336f75b9eabff4a938","data":{}}}"#);
 }
 
 #[test]
@@ -191,13 +192,14 @@ fn days_rustc() {
                                 &*CHAIN,
                                 days::Request {
                                     kind: Kind::Rustc,
-                                    dates: vec![ymd_date(2016, 02, 21), ymd_date(2016, 03, 22)],
+                                    date_a: ymd_date(2016, 02, 21),
+                                    date_b: ymd_date(2016, 03, 22),
                                     crates: vec!["total".into()],
                                     phases: vec!["total".into()],
                                     group_by: GroupBy::Crate,
                                 })
         .unwrap();
-    check_response(response, r#"[{"date":"2016-02-24T07:21:44+00:00","commit":"df91cb9af69497e67e432c66ccba5182681b8917","data":{"total":{"time":715.0070000000001,"rss":1108}}},{"date":"2016-03-22T17:00:12+00:00","commit":"e3f2dfdececa8053e652eb0fb286db9aef0f82e6","data":{"total":{"time":676.312,"rss":1215}}}]"#);
+    check_response(response, r#"{"a":{"date":"2016-02-24T07:21:44+00:00","commit":"df91cb9af69497e67e432c66ccba5182681b8917","data":{"total":{"time":715.0070000000001,"rss":1108}}},"b":{"date":"2016-03-22T17:00:12+00:00","commit":"e3f2dfdececa8053e652eb0fb286db9aef0f82e6","data":{"total":{"time":676.312,"rss":1215}}}}"#);
 }
 
 #[test]

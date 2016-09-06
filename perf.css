@@ -17,9 +17,6 @@
     src: local('Fira Sans Medium'), url("../fonts/FiraSans-Medium.woff") format('woff');
 }
 
-div.clear {
-    clear: both;
-}
 body {
     font-family: 'Fira Sans', "Helvetica Neue", Helvetica, Arial, sans-serif;
     margin-top: 20px;
@@ -35,9 +32,6 @@ p {
     margin-top: 1.2em;
     margin-bottom: 1.2em;
 }
-p.narrow {
-    max-width: 640px;
-}
 span.settings {
     display: inline-block;
     vertical-align: top;
@@ -50,6 +44,8 @@ span.compare {
 }
 div.submit {
     padding: 20px;
+    padding-top: 10px;
+    padding-right: 0;
     text-align: right;
 }
 table {
@@ -74,11 +70,6 @@ a:focus {
 li {
     margin-bottom: .5em;
 }
-h1 {
-    font-size: 2em;
-    margin-top: 1.2em;
-    margin-bottom: 0.5em;
-}
 
 ul {
     padding-left: 30px;
@@ -101,15 +92,21 @@ img {
   margin-right: auto;
   margin-left: auto;
 }
-@media (min-width: 768px) {.container {
+@media (min-width: 768px) {
+  .container {
     width: 750px;
-  }}
-@media (min-width: 992px) {.container {
+  }
+}
+@media (min-width: 992px) {
+  .container {
     width: 970px;
-  }}
-@media (min-width: 1200px) {.container {
+  }
+}
+@media (min-width: 1200px) {
+  .container {
     width: 1170px;
-  }}
+  }
+}
 
 .big_summary {
   display: block;
@@ -135,4 +132,20 @@ img {
 
 #as-of {
   text-align: center;
+}
+
+.compare, .stats {
+  table-layout: fixed;
+}
+
+.stats td, .compare td, .stats th, .compare th {
+  padding: 0.3em;
+}
+
+.stats tr th:first-child, .compare tr th:first-child {
+  text-align: right;
+}
+
+.space {
+  width: 1em;
 }

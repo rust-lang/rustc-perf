@@ -71,21 +71,25 @@ impl DateData {
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct Recording {
     time: f64,
-    rss: u64,
+    rss: Option<u64>,
 }
 
 impl Recording {
     fn new() -> Recording {
         Recording {
             time: 0.0,
-            rss: 0,
+            rss: None,
         }
     }
 
     fn record(&mut self, phase: Option<&Timing>) {
         if let Some(phase) = phase {
             self.time += phase.time;
-            self.rss = max(self.rss, phase.rss.unwrap());
+            self.rss = if let Some(rss) = phase.rss {
+                Some(max(self.rss.unwrap_or(0), rss))
+            } else {
+                None
+            };
         }
     }
 }
@@ -229,17 +233,16 @@ fn handle_tabular(r: &mut Request) -> IronResult<Response> {
 
 fn handle_days(r: &mut Request) -> IronResult<Response> {
     route_handler::handler_post::<days::Request, _, _>(r, |body, data| {
-        let mut result = Vec::new();
-        for date in body.dates {
-            if date.is_date() {
-                let day = DateData::for_day(&data.kinded_end_day(body.kind, &date),
-                                            &body.crates,
-                                            &body.phases,
-                                            body.group_by);
-                result.push(day);
-            }
+        days::Response {
+            a: DateData::for_day(&data.kinded_start_day(body.kind, &body.date_a),
+                                 &body.crates,
+                                 &body.phases,
+                                 body.group_by),
+            b: DateData::for_day(&data.kinded_end_day(body.kind, &body.date_b),
+                                 &body.crates,
+                                 &body.phases,
+                                 body.group_by),
         }
-        days::Response(result)
     })
 }
 
