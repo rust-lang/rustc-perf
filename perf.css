@@ -37,6 +37,15 @@ span.settings {
     vertical-align: top;
     padding: 10px;
 }
+
+#dates {
+  text-align: right;
+}
+
+#dates h3 {
+  text-align: left;
+}
+
 span.compare {
     display: inline-block;
     vertical-align: top;
@@ -148,4 +157,9 @@ img {
 
 .space {
   width: 1em;
+}
+
+.group-by {
+  padding-bottom: 1em;
+  display: block;
 }
