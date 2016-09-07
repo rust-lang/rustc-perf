@@ -44,6 +44,7 @@
     function populate_table(data) {
         var week_count = data.breakdown.length;
         var bench_keys = Object.keys(data.breakdown[0]);
+        bench_keys.sort();
 
         var html = "<table class=\"summary_table\"><tr><th></th>";
         for (var i = week_count - 1; i >= 0; --i) {
