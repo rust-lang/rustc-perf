@@ -25,11 +25,14 @@
                 var big_value = data.summaries[0];
                 var big_class = "";
                 if (parseFloat(big_value) <= -1) {
-                    big_class = " negative";
+                    big_class = "negative";
                 } else if (parseFloat(big_value) >= 1) {
-                    big_class = " positive";
+                    big_class = "positive";
                 }
-                summary_number.innerHTML = "<div>In the past week, compile times have increased by:</div><div class=\"big_summary" + big_class + "\">" + big_value + "%</div><div>(Lower is better).</div>";
+                let html = "<div>In the past week, compile times have increased by:</div>";
+                html += `<div class="big_summary ${big_class}">${big_value}%</div>`;
+                html += "<div>(Lower is better).</div>";
+                summary_number.innerHTML = html;
                 summary_number.style.display = "block";
 
                 populate_table(data);
@@ -50,7 +53,7 @@
         var bench_keys = Object.keys(data.breakdown[0]);
         bench_keys.sort();
 
-        var html = "<table class=\"summary_table\"><tr><th></th>";
+        var html = `<table class="summary_table"><tr><th></th>`;
         for (var i = week_count - 1; i >= 0; --i) {
             var date = new Date(data.dates[i]);
             html += "<th>" + date.toLocaleDateString() + "</th>"
@@ -82,9 +85,9 @@
         }
         var d_class = "neutral";
         if (parseFloat(datum) <= -1) {
-            d_class = " negative";
+            d_class = "negative";
         } else if (parseFloat(datum) >= 1) {
-            d_class = " positive";
+            d_class = "positive";
         }
 
         if (dates) {
@@ -100,17 +103,17 @@
                 kind = "benchmarks";
             }
 
-            let href = "<a class=\"" + d_class + "\" href=\"" + "/graphs.html" + query_string_for_state({
+            let query_str = query_string_for_state({
                 start: start,
                 end: end,
                 kind: kind,
                 group_by: "phase",
                 crates: [crate],
                 phases: info_data.phases,
-            }) + "\">" + datum + "%</a>";
-            return "<td>" + href + "</td>";
+            });
+            return `<td><a class="${d_class}" href="/graphs.html${query_str}">${datum}%</a></td>`;
         } else {
-            return "<td class=\"" + d_class + "\">" + datum + "%</td>";
+            return `<td class="${d_class}">${datum}%</td>`;
         }
     }
     </script>

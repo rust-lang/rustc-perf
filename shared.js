@@ -88,9 +88,9 @@ function addTotalHandler(name) {
 function make_settings(callback, total_label) {
     function checkbox(name, id, checked, body) {
         if (checked) {
-            return "<input type=\"checkbox\" checked=\"true\" name=\"" + name + "\" id=\"" + id + "\">" + body + "</input></br>";
+            return `<input type="checkbox" checked="true" name="${name}" id="${id}">${body}</input></br>`;
         } else {
-            return "<input type=\"checkbox\" name=\"" + name + "\" id=\"" + id + "\">" + body + "</input></br>";
+            return `<input type="checkbox" name="${name}" id="${id}">${body}</input></br>`;
         }
     }
 

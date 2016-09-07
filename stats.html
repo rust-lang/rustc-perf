@@ -56,11 +56,11 @@
         var endDate = new Date(data.endDate);
         var html = "<h2>" + startDate.toLocaleString() + " to " + endDate.toLocaleString() + "</h2>";
 
-        html += "<table class=\"stats\" style=\"font-size: medium !important;\">";
+        html += `<table class="stats" style="font-size: medium !important;">`;
         html += "<thead>";
         html += "<tr>";
         html += "<td></td>"; // test name placeholder
-        html += "<td class=\"space\"></td>";
+        html += `<td class="space"></td>`;
         html += "<th>Mean</th>";
         html += "<th>Min</th>";
         html += "<th>Max</th>";
@@ -75,7 +75,7 @@
             var crate = data.crates[c];
             html += "<tr>";
             html += "<th>" + truncate_name(c) + "</th>";
-            html += "<td class=\"space\"></td>";
+            html += `<td class="space"></td>`;
             html += "<td>" + crate.mean.toFixed(2) + "s" + "</td>";
             html += "<td>" + crate.min.toFixed(2) + "s" + "</td>";
             html += "<td>" + crate.max.toFixed(2) + "s" + "</td>";
