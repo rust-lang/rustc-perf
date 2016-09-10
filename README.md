@@ -19,21 +19,23 @@ Setup
 sudo apt-get install apache2 git
 git clone https://github.com/rust-lang-nursery/rustc-perf.git /var/www/html/
 cd /var/www/html/rustc-perf
-git clone https://github.com/nrc/rustc-timing.git data
+git clone https://github.com/rust-lang-nursery/rustc-timing.git data
 ```
 
 The following lines in `/etc/apache2/sites-enabled/000-default.conf` allow the
 frontend in its current configuration to get data from the API (served by
-either the JS or the Rust backend)
+either the JS or the Rust backend).
+
+The proxy_http module also needs to be enabled, which can be done via `a2enmod proxy_http`.
 
 ```
     ProxyPass /perf http://localhost:2346
     ProxyPassReverse /perf http://localhost:2346
 ```
 
-The backend currently depends on a POST request being sent to the /perf/onpush
-(with above configuration) when new data is made available in the timings
-repo.
+The backend currently depends on a POST request being sent to the `/perf/onpush` URL
+(with above configuration) when new data is made available in the timings repo. This
+will intiate a git pull in the timings repo directory passed on startup.
 
 Launching
 ---------
