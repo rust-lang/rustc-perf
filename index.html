@@ -15,23 +15,27 @@
     <script src="shared.js"></script>
     <script>
     make_as_of();
+    var info_data;
     fetch(BASE_URL + "/summary").then(function(response) {
         response.json().then(function(data) {
-            document.getElementById("loading").style.display = "none";
+            fetch(BASE_URL + "/info").then(response => response.json()).then(info => {
+                info_data = info;
 
-            var summary_number = document.getElementById("summary_number");
-            var big_value = data.summaries[0];
-            var big_class = "";
-            if (parseFloat(big_value) <= -1) {
-                big_class = " negative";
-            } else if (parseFloat(big_value) >= 1) {
-                big_class = " positive";
-            }
-            summary_number.innerHTML = "<div>In the past week, compile times have increased by:</div><div class=\"big_summary" + big_class + "\">" + big_value + "%</div><div>(Lower is better).</div>";
-            summary_number.style.display = "block";
+                var summary_number = document.getElementById("summary_number");
+                var big_value = data.summaries[0];
+                var big_class = "";
+                if (parseFloat(big_value) <= -1) {
+                    big_class = " negative";
+                } else if (parseFloat(big_value) >= 1) {
+                    big_class = " positive";
+                }
+                summary_number.innerHTML = "<div>In the past week, compile times have increased by:</div><div class=\"big_summary" + big_class + "\">" + big_value + "%</div><div>(Lower is better).</div>";
+                summary_number.style.display = "block";
 
-            populate_table(data);
+                populate_table(data);
 
+                document.getElementById("loading").style.display = "none";
+            });
         });
     }, function(err) {
         document.getElementById("loading").innerHTML = "Error loading data";
@@ -55,7 +59,7 @@
         for (var b of bench_keys) {
             html += "<tr><th>" + b + "</th>"
             for (var i = week_count - 1; i >= 0; --i) {
-                html += cell_for_data(data.breakdown[i][b]);
+                html += cell_for_data(data.breakdown[i][b], b, data.dates, i);
             }
             html += cell_for_data(data.total_breakdown[b]);
             html += "</tr>";
@@ -72,18 +76,42 @@
         document.getElementById("summary_table").style.display = "block";
     }
 
-    function cell_for_data(datum) {
+    function cell_for_data(datum, crate, dates, index) {
         if (!datum) {
             return "<td>-</td>";
         }
-        var d_class = "";
+        var d_class = "neutral";
         if (parseFloat(datum) <= -1) {
             d_class = " negative";
         } else if (parseFloat(datum) >= 1) {
             d_class = " positive";
         }
 
-        return "<td class=\"" + d_class + "\">" + datum + "%</td>";
+        if (dates) {
+            let start = new Date(dates[index]);
+            start.setDate(start.getDate() - 7);
+            let end = new Date(dates[index]);
+
+            let kind;
+            if (crate == "bootstrap") {
+                kind = "rustc";
+                crate = "total";
+            } else {
+                kind = "benchmarks";
+            }
+
+            let href = "<a class=\"" + d_class + "\" href=\"" + "/graphs.html" + query_string_for_state({
+                start: start,
+                end: end,
+                kind: kind,
+                group_by: "phase",
+                crates: [crate],
+                phases: info_data.phases,
+            }) + "\">" + datum + "%</a>";
+            return "<td>" + href + "</td>";
+        } else {
+            return "<td class=\"" + d_class + "\">" + datum + "%</td>";
+        }
     }
     </script>
 </html>

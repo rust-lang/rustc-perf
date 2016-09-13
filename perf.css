@@ -130,6 +130,9 @@ img {
 .negative {
   color: green;
 }
+.neutral {
+  color: black;
+}
 .summary_table td {
   padding: 4px;
   text-align: center;
