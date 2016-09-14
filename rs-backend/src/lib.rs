@@ -7,9 +7,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(question_mark, custom_derive, plugin)]
-#![plugin(serde_macros)]
+#![feature(question_mark, rustc_macro, rustc_attrs, structural_match)]
 
+#[macro_use]
+extern crate serde_derive;
 #[macro_use]
 extern crate error_chain;
 #[macro_use]
