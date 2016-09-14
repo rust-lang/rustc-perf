@@ -62,9 +62,10 @@
         for (var b of bench_keys) {
             html += "<tr><th>" + b + "</th>"
             for (var i = week_count - 1; i >= 0; --i) {
-                html += cell_for_data(data.breakdown[i][b], b, data.dates, i);
+                html += cell_for_data(data.breakdown[i][b], b, data.dates, i, 1);
             }
-            html += cell_for_data(data.total_breakdown[b]);
+            // total column, subtract the week count from 0th date, which is actually the most recent date
+            html += cell_for_data(data.total_breakdown[b], b, data.dates, 0, week_count);
             html += "</tr>";
         }
         html += "<tr><th>average</th>";
@@ -79,7 +80,7 @@
         document.getElementById("summary_table").style.display = "block";
     }
 
-    function cell_for_data(datum, crate, dates, index) {
+    function cell_for_data(datum, crate, dates, index, weeks) {
         if (!datum) {
             return "<td>-</td>";
         }
@@ -92,7 +93,7 @@
 
         if (dates) {
             let start = new Date(dates[index]);
-            start.setDate(start.getDate() - 7);
+            start.setDate(start.getDate() - (weeks * 7));
             let end = new Date(dates[index]);
 
             let kind;
