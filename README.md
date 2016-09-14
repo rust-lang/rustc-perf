@@ -23,8 +23,7 @@ git clone https://github.com/rust-lang-nursery/rustc-timing.git data
 ```
 
 The following lines in `/etc/apache2/sites-enabled/000-default.conf` allow the
-frontend in its current configuration to get data from the API (served by
-either the JS or the Rust backend).
+frontend in its current configuration to get data from the API.
 
 The proxy_http module also needs to be enabled, which can be done via `a2enmod proxy_http`.
 
@@ -40,7 +39,7 @@ will intiate a git pull in the timings repo directory passed on startup.
 Launching
 ---------
 
-It can be run with the following command from the rs-backend directory:
+It can be run with the following command from the backend directory:
 
 ```
 cargo run --release ../data
