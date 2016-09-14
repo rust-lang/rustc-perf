@@ -29,15 +29,15 @@ pub struct InputData {
     pub summary_rustc: Summary,
     pub summary_benchmarks: Summary,
 
-    /// A set containing all crate names.
+    /// A set containing all crate names of the bootstrap kind.
     pub crate_list: HashSet<String>,
 
     /// A set containing all phase names, across all crates.
     pub phase_list: HashSet<String>,
 
-    /// TODO: Better docs. It's unknown how this is used on the client.  A set
-    /// of test names. Test names are found from the file path, everything
-    /// before the `--` is included.
+    /// A set of test names; only non-bootstrap benchmarks are included. Test
+    /// names are found from the file path, everything before the `--` is
+    /// included.
     pub benchmarks: HashSet<String>,
 
     /// The last date that was seen while loading files. The DateTime variant is
@@ -163,7 +163,9 @@ impl InputData {
             }
 
             for (crate_name, krate) in &run.by_crate {
-                crate_list.insert(crate_name.to_string());
+                if run.kind == Kind::Rustc {
+                    crate_list.insert(crate_name.to_string());
+                }
 
                 for phase_name in krate.keys() {
                     phase_list.insert(phase_name.to_string());
@@ -295,6 +297,7 @@ pub struct TestRun {
     pub date: Date,
     pub commit: String,
     pub name: String,
+    pub kind: Kind,
 
     /// Map of crate names to a map of phases to timings per phase.
     pub by_crate: HashMap<String, HashMap<String, Timing>>,
@@ -327,6 +330,11 @@ impl TestRun {
             date: date,
             name: test_name,
             commit: commit,
+            kind: if is_rustc {
+                Kind::Rustc
+            } else {
+                Kind::Benchmarks
+            },
             by_crate: make_times(times, is_rustc),
         }
     }

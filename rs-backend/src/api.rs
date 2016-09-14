@@ -69,13 +69,13 @@ pub mod info {
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct Response {
-        /// Sorted vector of crate names (benchmarks and all crates in the rust distribution)
+        /// Sorted vector of crate names (all compiler crates)
         pub crates: Vec<String>,
 
         /// Sorted vector of phase names.
         pub phases: Vec<String>,
 
-        /// Sorted vector of benchmark names.
+        /// Sorted vector of benchmark (non-compiler crates) crate names.
         pub benchmarks: Vec<String>,
 
         /// Chronologically last loaded run date.
