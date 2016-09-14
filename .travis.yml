@@ -4,7 +4,7 @@ rust:
   - nightly
 before_script: (cargo install --verbose --root $HOME rustfmt || true)
 script:
-  - cd rs-backend
+  - cd backend
   - cargo fmt -- --write-mode=diff
   - cargo build --verbose
   - cargo test --verbose
