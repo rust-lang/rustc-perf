@@ -135,11 +135,9 @@ img {
 }
 .summary_table td {
   padding: 4px;
-  text-align: center;
 }
 .summary_table th {
   padding: 4px;
-  text-align: left;
 }
 
 #as-of {
@@ -154,7 +152,7 @@ img {
   padding: 0.3em;
 }
 
-.stats tr th:first-child, .compare tr th:first-child {
+table td, table th {
   text-align: right;
 }
 
