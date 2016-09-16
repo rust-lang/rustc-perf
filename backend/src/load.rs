@@ -440,40 +440,47 @@ impl Summary {
             // For a given date we'll get the three most recent sets of TestRun
             // and take the the median for each value.
             let start_idx = index_in(data, date);
-            assert!(start_idx >= 3, "Less than 3 days of data");
             let mut weeks = Vec::new();
             for idx in 0..3 {
-                weeks.push(&data[start_idx - idx].by_crate);
+                if let Some(ref day) = data.get(start_idx - idx) {
+                    weeks.push(&day.by_crate);
+                }
             }
 
-            medians.push(SummarizedWeek {
+            let mut by_crate_phase: HashMap<String, HashMap<String, Vec<f64>>> = HashMap::new();
+
+            for week in weeks {
+                for (krate_name, krate) in week {
+                    let mut by_phase = by_crate_phase.entry(krate_name.to_string())
+                        .or_insert(HashMap::new());
+                    for (phase_name, phase) in krate {
+                        by_phase.entry(phase_name.to_string())
+                            .or_insert(Vec::new())
+                            .push(phase.time);
+                    }
+                }
+            }
+
+            let mut median = SummarizedWeek {
                 date: date,
                 by_crate: HashMap::new(),
-            });
-            for crate_name in weeks[0].keys() {
-                if !weeks[1].contains_key(crate_name) || !weeks[2].contains_key(crate_name) {
-                    continue;
-                }
+            };
 
+            for (crate_name, krate) in by_crate_phase {
                 let mut crate_medians = HashMap::new();
-                for phase in weeks[0][crate_name].keys() {
-                    if !weeks[1][crate_name].contains_key(phase) ||
-                       !weeks[2][crate_name].contains_key(phase) {
-                        continue;
-                    }
+                for (phase_name, phase) in krate {
                     // Find the median value.
-                    let mut values = [weeks[0][crate_name][phase].time,
-                                      weeks[1][crate_name][phase].time,
-                                      weeks[2][crate_name][phase].time];
+                    let mut values = phase.clone();
+                    assert!(!values.is_empty(), "At least one value");
                     values.sort_by(|a, b| a.partial_cmp(b).unwrap());
-
-                    let median = values[1];
-
-                    crate_medians.insert(phase.to_string(), median);
+                    let median = values[values.len() / 2];
+                    crate_medians.insert(phase_name, median);
                 }
 
-                medians.last_mut().unwrap().by_crate.insert(crate_name.to_string(), crate_medians);
+                median.by_crate.insert(crate_name, crate_medians);
             }
+
+            medians.push(median);
         }
 
         // 12 week long mapping of crate names to by-phase percent changes with

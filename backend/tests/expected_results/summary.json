@@ -1,0 +1,108 @@
+{
+    "total_summary": "-21.9",
+    "total_breakdown": {
+        "rust-encoding.0.2.32": "9.2",
+        "bootstrap": "-1.4",
+        "jld-day15-parser": "-93.9"
+    },
+    "breakdown": [
+        {
+            "rust-encoding.0.2.32": "0.0",
+            "bootstrap": "-91.4",
+            "jld-day15-parser": "0.0",
+            "helloworld": "-0.2"
+        },
+        {
+            "rust-encoding.0.2.32": "0.0",
+            "bootstrap": "0.0",
+            "jld-day15-parser": "0.0",
+            "helloworld": "0.0"
+        },
+        {
+            "rust-encoding.0.2.32": "0.0",
+            "bootstrap": "0.0",
+            "jld-day15-parser": "0.0"
+        },
+        {
+            "rust-encoding.0.2.32": "0.0",
+            "bootstrap": "0.0",
+            "jld-day15-parser": "0.0"
+        },
+        {
+            "rust-encoding.0.2.32": "0.3",
+            "bootstrap": "0.0",
+            "jld-day15-parser": "0.0",
+            "helloworld": "8.8"
+        },
+        {
+            "rust-encoding.0.2.32": "0.0",
+            "bootstrap": "993.7",
+            "jld-day15-parser": "0.0"
+        },
+        {
+            "rust-encoding.0.2.32": "0.0",
+            "bootstrap": "0.0",
+            "jld-day15-parser": "0.0",
+            "issue-32278-big-array-of-strings": "0.4",
+            "hyper.0.5.0": "366.0"
+        },
+        {
+            "rust-encoding.0.2.32": "0.0",
+            "bootstrap": "0.0",
+            "jld-day15-parser": "0.0",
+            "issue-32062-equality-relations-complexity": "-0.7"
+        },
+        {
+            "rust-encoding.0.2.32": "0.0",
+            "bootstrap": "-5.2",
+            "jld-day15-parser": "0.0",
+            "regex.0.1.30": "-0.1"
+        },
+        {
+            "rust-encoding.0.2.32": "0.0",
+            "bootstrap": "0.0",
+            "jld-day15-parser": "0.0",
+            "regex.0.1.30": "-8.4"
+        },
+        {
+            "regex-macros.0.1.30": "-4.9",
+            "rust-encoding.0.2.32": "0.0",
+            "bootstrap": "10.0",
+            "jld-day15-parser": "0.3",
+            "issue-32278-big-array-of-strings": "0.7"
+        },
+        {
+            "rust-encoding.0.2.32": "0.0",
+            "bootstrap": "0.0",
+            "jld-day15-parser": "9.1"
+        }
+    ],
+    "summaries": [
+        "-45.7",
+        "0.0",
+        "0.0",
+        "0.0",
+        "2.3",
+        "993.7",
+        "91.6",
+        "-0.2",
+        "-3.5",
+        "-2.8",
+        "3.3",
+        "3.0"
+    ],
+    "dates": [
+        "2016-08-12T08:26:12+00:00",
+        "2016-08-05T08:26:12+00:00",
+        "2016-07-29T08:26:12+00:00",
+        "2016-07-22T08:26:12+00:00",
+        "2016-07-15T08:26:12+00:00",
+        "2016-07-08T08:26:12+00:00",
+        "2016-07-01T08:26:12+00:00",
+        "2016-06-24T08:26:12+00:00",
+        "2016-06-17T08:26:12+00:00",
+        "2016-06-10T08:26:12+00:00",
+        "2016-06-03T08:26:12+00:00",
+        "2016-05-27T08:26:12+00:00"
+    ]
+}
