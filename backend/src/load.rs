@@ -442,8 +442,10 @@ impl Summary {
             let start_idx = index_in(data, date);
             let mut weeks = Vec::new();
             for idx in 0..3 {
-                if let Some(ref day) = data.get(start_idx - idx) {
-                    weeks.push(&day.by_crate);
+                if let Some(idx) = start_idx.checked_sub(idx) {
+                    if let Some(ref day) = data.get(idx) {
+                        weeks.push(&day.by_crate);
+                    }
                 }
             }
 
