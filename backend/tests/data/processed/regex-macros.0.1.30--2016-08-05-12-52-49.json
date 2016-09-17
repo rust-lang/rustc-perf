@@ -1,0 +1,184 @@
+{
+    "header": {
+        "date": "Fri Aug 5 04:38:41 2016 -0700", 
+        "commit": "4c02363852e6ce41cf2da1b43a32cb7780a9b067"
+    }, 
+    "times": [
+        {
+            "loc": 639, 
+            "post_nc": 69587, 
+            "crate": "regex-macros.0.1.30", 
+            "pre_nc": 2088, 
+            "times": {
+                "looking for plugin registrar": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "looking for entry point": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "type collecting": {
+                    "percent": 1.2944983818770226, 
+                    "time": 0.012
+                }, 
+                "parsing": {
+                    "percent": 0.2157497303128371, 
+                    "time": 0.002
+                }, 
+                "item-bodies checking": {
+                    "percent": 80.63646170442287, 
+                    "time": 0.7475
+                }, 
+                "configuration": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "assigning node ids": {
+                    "percent": 0.32362459546925565, 
+                    "time": 0.003
+                }, 
+                "language item collection": {
+                    "percent": 0.026968716289104636, 
+                    "time": 0.00025
+                }, 
+                "complete gated feature checking": {
+                    "percent": 0.026968716289104636, 
+                    "time": 0.00025
+                }, 
+                "checking for inline asm in case the target doesn't support it": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "lifetime resolution": {
+                    "percent": 0.10787486515641855, 
+                    "time": 0.001
+                }, 
+                "collecting defs": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "variance inference": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "recursion limit": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "loop checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "item-types checking": {
+                    "percent": 0.10787486515641855, 
+                    "time": 0.001
+                }, 
+                "crate injection": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "expansion": {
+                    "percent": 3.344120819848975, 
+                    "time": 0.031
+                }, 
+                "region resolution": {
+                    "percent": 0.32362459546925565, 
+                    "time": 0.003
+                }, 
+                "early lint checks": {
+                    "percent": 0.2157497303128371, 
+                    "time": 0.002
+                }, 
+                "load_dep_graph": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "lowering ast -> hir": {
+                    "percent": 0.4314994606256742, 
+                    "time": 0.004
+                }, 
+                "maybe building test harness": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "AST validation": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "name resolution": {
+                    "percent": 2.2653721682847894, 
+                    "time": 0.020999999999999998
+                }, 
+                "plugin loading": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "wf checking": {
+                    "percent": 0.7551240560949299, 
+                    "time": 0.007
+                }, 
+                "static item recursion checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "attribute checking": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "plugin registration": {
+                    "percent": 0.0, 
+                    "time": 0.0
+                }, 
+                "coherence checking": {
+                    "percent": 1.0787486515641855, 
+                    "time": 0.01
+                }, 
+                "indexing hir": {
+                    "percent": 0.10787486515641855, 
+                    "time": 0.001
+                }, 
+                "external crate/lib resolution": {
+                    "percent": 8.737864077669903, 
+                    "time": 0.081
+                }
+            }, 
+            "total": 0.927, 
+            "rss": {
+                "looking for plugin registrar": 181, 
+                "looking for entry point": 181, 
+                "type collecting": 185, 
+                "parsing": 52, 
+                "item-bodies checking": 206, 
+                "configuration": 52, 
+                "assigning node ids": 92, 
+                "language item collection": 181, 
+                "complete gated feature checking": 92, 
+                "checking for inline asm in case the target doesn't support it": 92, 
+                "lifetime resolution": 181, 
+                "collecting defs": 92, 
+                "variance inference": 185, 
+                "recursion limit": 52, 
+                "loop checking": 183, 
+                "item-types checking": 187, 
+                "crate injection": 52, 
+                "expansion": 92, 
+                "region resolution": 183, 
+                "early lint checks": 179, 
+                "load_dep_graph": 183, 
+                "lowering ast -> hir": 188, 
+                "maybe building test harness": 92, 
+                "AST validation": 179, 
+                "name resolution": 185, 
+                "plugin loading": 52, 
+                "wf checking": 187, 
+                "static item recursion checking": 183, 
+                "attribute checking": 187, 
+                "plugin registration": 52, 
+                "coherence checking": 186, 
+                "indexing hir": 187, 
+                "external crate/lib resolution": 179
+            }
+        }
+    ]
+}
