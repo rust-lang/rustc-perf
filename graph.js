@@ -71,16 +71,12 @@ function init_graph(data, series, field, total_label, yAxisLabel) {
         },
         series: datasets,
         tooltip: {
-            shared: true,
             crosshairs: [true],
             formatter: function () {
                 var date = new Date(this.x);
-                var commit = this.points[0].point.commit.substr(0, 10);
-                var s = "<b>" + date.toLocaleString() + " - " + commit + "</b>";
-                for (let point of this.points) {
-                    s += "<br/>" + point.series.name + ": " + point.y;
-                }
-                return s;
+                var commit = this.point.commit.substr(0, 10);
+                return "<b>" + date.toLocaleString() + " - " + commit + "</b>" +
+                    "<br>" + this.series.name + ": " + this.y;
             }
         },
         xAxis: {
