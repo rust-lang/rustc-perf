@@ -114,10 +114,7 @@ fn summary() {
     check_response(response, "tests/expected_results/summary.json");
 }
 
-// This test breaks on Travis for unknown reasons for the time being, so 
-// set it to ignored.
 #[test]
-#[ignore]
 fn info() {
     let response = request("/info");
     check_response(response, "tests/expected_results/info.json");
