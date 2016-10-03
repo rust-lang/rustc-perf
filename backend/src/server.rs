@@ -8,7 +8,7 @@
 // except according to those terms.
 
 use std::cmp::max;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use iron::prelude::*;
 use router::Router;
@@ -187,17 +187,11 @@ fn handle_summary(r: &mut Request) -> IronResult<Response> {
 }
 
 fn handle_info(r: &mut Request) -> IronResult<Response> {
-    fn sort(set: &HashSet<String>) -> Vec<String> {
-        let mut vec = set.into_iter().cloned().collect::<Vec<_>>();
-        vec.sort();
-        vec
-    }
-
     route_handler::handler_get(r, |data| {
         info::Response {
-            crates: sort(&data.crate_list),
-            phases: sort(&data.phase_list),
-            benchmarks: sort(&data.benchmarks),
+            crates: data.crate_list.clone(),
+            phases: data.phase_list.clone(),
+            benchmarks: data.benchmarks.clone(),
             as_of: data.last_date,
         }
     })

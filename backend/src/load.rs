@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, BTreeSet};
 use std::cmp::{Ordering, max};
 use std::fs::{self, File};
 use std::path::PathBuf;
@@ -30,15 +30,15 @@ pub struct InputData {
     pub summary_benchmarks: Summary,
 
     /// A set containing all crate names of the bootstrap kind.
-    pub crate_list: HashSet<String>,
+    pub crate_list: BTreeSet<String>,
 
     /// A set containing all phase names, across all crates.
-    pub phase_list: HashSet<String>,
+    pub phase_list: BTreeSet<String>,
 
     /// A set of test names; only non-bootstrap benchmarks are included. Test
     /// names are found from the file path, everything before the `--` is
     /// included.
-    pub benchmarks: HashSet<String>,
+    pub benchmarks: BTreeSet<String>,
 
     /// The last date that was seen while loading files. The DateTime variant is
     /// used here since the date may or may not contain a time. Since the
@@ -154,8 +154,8 @@ impl InputData {
                mut data_benchmarks: Vec<TestRun>)
                -> Result<InputData> {
         let mut last_date = None;
-        let mut phase_list = HashSet::new();
-        let mut crate_list = HashSet::new();
+        let mut phase_list = BTreeSet::new();
+        let mut crate_list = BTreeSet::new();
 
         for run in data_rustc.iter().chain(&data_benchmarks) {
             if last_date.is_none() || last_date.as_ref().unwrap() < &run.date {
