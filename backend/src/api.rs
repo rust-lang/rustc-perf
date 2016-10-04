@@ -66,17 +66,18 @@ pub mod summary {
 
 pub mod info {
     use date::Date;
+    use std::collections::BTreeSet;
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct Response {
         /// Sorted vector of crate names (all compiler crates)
-        pub crates: Vec<String>,
+        pub crates: BTreeSet<String>,
 
         /// Sorted vector of phase names.
-        pub phases: Vec<String>,
+        pub phases: BTreeSet<String>,
 
         /// Sorted vector of benchmark (non-compiler crates) crate names.
-        pub benchmarks: Vec<String>,
+        pub benchmarks: BTreeSet<String>,
 
         /// Chronologically last loaded run date.
         pub as_of: Date,
