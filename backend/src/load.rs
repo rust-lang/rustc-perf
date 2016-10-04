@@ -137,7 +137,7 @@ impl InputData {
 
                 merged += 1;
             } else {
-                push_to.push(TestRun::new(date, commit, times, test_name));
+                push_to.push(TestRun::new(date, commit, times, &test_name));
             }
         }
 
@@ -182,7 +182,7 @@ impl InputData {
         let summary_rustc = Summary::new(&data_rustc, last_date);
         let summary_benchmarks = Summary::new(&data_benchmarks, last_date);
 
-        let benchmarks = data_benchmarks.iter().map(|run| run.name.clone()).collect();
+        let benchmarks = data_benchmarks.iter().flat_map(|a| a.by_crate.keys()).cloned().collect();
 
         Ok(InputData {
             summary_rustc: summary_rustc,
@@ -296,7 +296,6 @@ fn serialize_kind() {
 pub struct TestRun {
     pub date: Date,
     pub commit: String,
-    pub name: String,
     pub kind: Kind,
 
     /// Map of crate names to a map of phases to timings per phase.
@@ -324,11 +323,10 @@ impl Ord for TestRun {
 }
 
 impl TestRun {
-    fn new(date: Date, commit: String, times: &[Value], test_name: String) -> TestRun {
-        let is_rustc = &test_name == "rustc";
+    fn new(date: Date, commit: String, times: &[Value], test_name: &str) -> TestRun {
+        let is_rustc = test_name == "rustc";
         TestRun {
             date: date,
-            name: test_name,
             commit: commit,
             kind: if is_rustc {
                 Kind::Rustc
