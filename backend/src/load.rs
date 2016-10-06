@@ -178,11 +178,11 @@ impl InputData {
         data_rustc.sort();
         data_benchmarks.sort();
 
-        // Post processing to generate the summary data.
-        let summary_rustc = Summary::new(&data_rustc, last_date);
-        let summary_benchmarks = Summary::new(&data_benchmarks, last_date);
-
         let benchmarks = data_benchmarks.iter().flat_map(|a| a.by_crate.keys()).cloned().collect();
+
+        // Post processing to generate the summary data.
+        let summary_rustc = Summary::new(&data_rustc, last_date, &benchmarks);
+        let summary_benchmarks = Summary::new(&data_benchmarks, last_date, &benchmarks);
 
         Ok(InputData {
             summary_rustc: summary_rustc,
@@ -423,7 +423,7 @@ pub struct Summary {
 impl Summary {
     // Compute summary data. For each week, we find the last 3 weeks, and use
     // the median timing as the basis of the current week's summary.
-    fn new(data: &[TestRun], last_date: Date) -> Summary {
+    fn new(data: &[TestRun], last_date: Date, benchmarks: &BTreeSet<String>) -> Summary {
         // 13 week long mapping of crate names to by-phase medians.
         // We steal using summarized week type here even though we're not
         // storing the percent changes yet.
@@ -438,19 +438,19 @@ impl Summary {
             // For a given date we'll get the three most recent sets of TestRun
             // and take the the median for each value.
             let start_idx = index_in(data, date);
-            let mut weeks = Vec::new();
+            let mut runs = Vec::new();
             for idx in 0..3 {
                 if let Some(idx) = start_idx.checked_sub(idx) {
-                    if let Some(ref day) = data.get(idx) {
-                        weeks.push(&day.by_crate);
+                    if let Some(ref run) = data.get(idx) {
+                        runs.push(&run.by_crate);
                     }
                 }
             }
 
             let mut by_crate_phase: HashMap<String, HashMap<String, Vec<f64>>> = HashMap::new();
 
-            for week in weeks {
-                for (krate_name, krate) in week {
+            for run in runs {
+                for (krate_name, krate) in run {
                     let mut by_phase = by_crate_phase.entry(krate_name.to_string())
                         .or_insert(HashMap::new());
                     for (phase_name, phase) in krate {
@@ -499,7 +499,7 @@ impl Summary {
         let totals = Summary::compare_weeks(medians.last().unwrap(), &medians[0]);
 
         for week in &mut weeks {
-            for crate_name in totals.by_crate.keys() {
+            for crate_name in benchmarks {
                 if !week.by_crate.contains_key(crate_name) {
                     week.by_crate.insert(crate_name.to_string(), HashMap::new());
                 }

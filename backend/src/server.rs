@@ -135,12 +135,12 @@ fn handle_summary(r: &mut Request) -> IronResult<Response> {
 
     fn breakdown(benchmark: &SummarizedWeek,
                  rustc: &SummarizedWeek)
-                 -> HashMap<String, summary::Percent> {
+                 -> HashMap<String, Option<summary::Percent>> {
         let mut per_bench = HashMap::new();
 
         for (crate_name, krate) in &benchmark.by_crate {
-            let val = krate.get("total").cloned().unwrap_or(0.0);
-            per_bench.insert(crate_name.to_string(), summary::Percent(val));
+            per_bench.insert(crate_name.to_string(),
+                krate.get("total").cloned().map(|val| summary::Percent(val)));
         }
 
         let bootstrap = if rustc.by_crate["total"].contains_key("total") {
@@ -148,7 +148,7 @@ fn handle_summary(r: &mut Request) -> IronResult<Response> {
         } else {
             0.0
         };
-        per_bench.insert("bootstrap".to_string(), summary::Percent(bootstrap));
+        per_bench.insert("bootstrap".to_string(), Some(summary::Percent(bootstrap)));
 
         per_bench
     }
