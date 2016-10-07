@@ -7,9 +7,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::ops::Sub;
+use std::ops::{Add, Sub};
 
-use chrono::{UTC, DateTime, TimeZone, Duration};
+use chrono::{UTC, DateTime, TimeZone, Duration, Datelike};
 use serde::{self, Serialize, Deserialize};
 
 use errors::*;
@@ -48,6 +48,12 @@ impl Date {
     pub fn ymd_hms(year: i32, month: u32, day: u32, h: u32, m: u32, s: u32) -> Date {
         Date(UTC.ymd(year, month, day).and_hms(h, m, s))
     }
+
+    pub fn start_of_week(&self) -> Date {
+        let weekday = self.0.weekday();
+        // num_days_from_sunday is 0 for Sunday
+        Date(self.0 - Duration::days(weekday.num_days_from_sunday() as i64))
+    }
 }
 
 impl From<DateTime<UTC>> for Date {
@@ -66,6 +72,13 @@ impl Sub<Duration> for Date {
     type Output = Date;
     fn sub(self, rhs: Duration) -> Date {
         Date(self.0 - rhs)
+    }
+}
+
+impl Add<Duration> for Date {
+    type Output = Date;
+    fn add(self, rhs: Duration) -> Date {
+        Date(self.0 + rhs)
     }
 }
 

@@ -46,12 +46,12 @@ pub mod summary {
         /// weeks ago) and current week.
         ///
         /// Represented as a hashmap of crate names to percents.
-        pub total_breakdown: HashMap<String, Percent>,
+        pub total_breakdown: HashMap<String, Option<Percent>>,
 
         /// 12 week long mapping of crate names to percent differences from
         /// last week's times to the current week's times.
         /// First week in vector is the current week.
-        pub breakdown: Vec<HashMap<String, Percent>>,
+        pub breakdown: Vec<HashMap<String, Option<Percent>>>,
 
         /// 12 week long averages across both benchmarks and bootstrap.
         /// Bootstrap counts for twice as much that all other benchmarks do.
