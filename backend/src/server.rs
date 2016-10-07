@@ -20,7 +20,7 @@ use route_handler;
 use date::Date;
 use util::get_repo_path;
 use api::{summary, info, data, tabular, days, stats};
-use load::{SummarizedWeek, Kind, TestRun, Timing, InputData};
+use load::{MedianRun, Kind, TestRun, Timing, InputData};
 
 /// Data associated with a specific date
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -115,7 +115,7 @@ fn serialize_kind() {
 }
 
 fn handle_summary(r: &mut Request) -> IronResult<Response> {
-    fn summarize(benchmark: &SummarizedWeek, rustc: &SummarizedWeek) -> summary::Percent {
+    fn summarize(benchmark: &MedianRun, rustc: &MedianRun) -> summary::Percent {
         let mut sum = 0.0;
         let mut count = 0;
         for krate in benchmark.by_crate.values() {
@@ -133,14 +133,14 @@ fn handle_summary(r: &mut Request) -> IronResult<Response> {
         summary::Percent(sum / (count as f64))
     }
 
-    fn breakdown(benchmark: &SummarizedWeek,
-                 rustc: &SummarizedWeek)
+    fn breakdown(benchmark: &MedianRun,
+                 rustc: &MedianRun)
                  -> HashMap<String, Option<summary::Percent>> {
         let mut per_bench = HashMap::new();
 
         for (crate_name, krate) in &benchmark.by_crate {
             per_bench.insert(crate_name.to_string(),
-                krate.get("total").cloned().map(|val| summary::Percent(val)));
+                             krate.get("total").cloned().map(|val| summary::Percent(val)));
         }
 
         let bootstrap = if rustc.by_crate["total"].contains_key("total") {

@@ -407,7 +407,7 @@ fn make_times(timings: &[Value], is_rustc: bool) -> HashMap<String, HashMap<Stri
 }
 
 #[derive(Debug)]
-pub struct SummarizedWeek {
+pub struct MedianRun {
     pub date: Date,
 
     /// Maps crate names to a map of phases to each phase's percent change
@@ -415,88 +415,98 @@ pub struct SummarizedWeek {
     pub by_crate: HashMap<String, HashMap<String, f64>>,
 }
 
+impl MedianRun {
+    /// To summarize given an index, take the last 3 available runs and
+    /// iterate over the phases, returning the median time for each phase
+    fn new(data: &[TestRun], start_idx: usize, date: Date) -> MedianRun {
+        let mut runs = Vec::new();
+
+        for idx in 0..3 {
+            if let Some(idx) = start_idx.checked_sub(idx) {
+                if let Some(ref run) = data.get(idx) {
+                    runs.push(&run.by_crate);
+                }
+            }
+        }
+
+        let mut by_crate_phase: HashMap<String, HashMap<String, Vec<f64>>> = HashMap::new();
+
+        for run in runs {
+            for (krate_name, krate) in run {
+                let mut by_phase = by_crate_phase.entry(krate_name.to_string())
+                    .or_insert(HashMap::new());
+                for (phase_name, phase) in krate {
+                    by_phase.entry(phase_name.to_string())
+                        .or_insert(Vec::new())
+                        .push(phase.time);
+                }
+            }
+        }
+
+        let mut median = MedianRun {
+            date: date,
+            by_crate: HashMap::new(),
+        };
+
+        for (crate_name, krate) in by_crate_phase {
+            let mut crate_medians = HashMap::new();
+            for (phase_name, phase) in krate {
+                // Find the median value.
+                let mut values = phase.clone();
+                assert!(!values.is_empty(), "At least one value");
+                values.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                let median = values[values.len() / 2];
+                crate_medians.insert(phase_name, median);
+            }
+
+            median.by_crate.insert(crate_name, crate_medians);
+        }
+
+        median
+    }
+}
+
 pub struct Summary {
-    pub total: SummarizedWeek,
-    pub summary: Vec<SummarizedWeek>,
+    pub total: MedianRun,
+    pub summary: Vec<MedianRun>,
 }
 
 impl Summary {
     // Compute summary data. For each week, we find the last 3 weeks, and use
     // the median timing as the basis of the current week's summary.
     fn new(data: &[TestRun], last_date: Date, benchmarks: &BTreeSet<String>) -> Summary {
-        // 13 week long mapping of crate names to by-phase medians.
-        // We steal using summarized week type here even though we're not
-        // storing the percent changes yet.
-        let mut medians: Vec<SummarizedWeek> = Vec::new();
-
-        // In order to compute summaries for the previous 12 weeks, we need 13
-        // weeks, using the 0th week to compute difference with first week and
-        // totals.
-        for i in 0..(WEEKS_IN_SUMMARY + 1) {
-            let date = last_date - Duration::weeks(i as i64);
-
-            // For a given date we'll get the three most recent sets of TestRun
-            // and take the the median for each value.
-            let start_idx = index_in(data, date);
-            let mut runs = Vec::new();
-            for idx in 0..3 {
-                if let Some(idx) = start_idx.checked_sub(idx) {
-                    if let Some(ref run) = data.get(idx) {
-                        runs.push(&run.by_crate);
-                    }
-                }
-            }
-
-            let mut by_crate_phase: HashMap<String, HashMap<String, Vec<f64>>> = HashMap::new();
-
-            for run in runs {
-                for (krate_name, krate) in run {
-                    let mut by_phase = by_crate_phase.entry(krate_name.to_string())
-                        .or_insert(HashMap::new());
-                    for (phase_name, phase) in krate {
-                        by_phase.entry(phase_name.to_string())
-                            .or_insert(Vec::new())
-                            .push(phase.time);
-                    }
-                }
-            }
-
-            let mut median = SummarizedWeek {
-                date: date,
-                by_crate: HashMap::new(),
-            };
-
-            for (crate_name, krate) in by_crate_phase {
-                let mut crate_medians = HashMap::new();
-                for (phase_name, phase) in krate {
-                    // Find the median value.
-                    let mut values = phase.clone();
-                    assert!(!values.is_empty(), "At least one value");
-                    values.sort_by(|a, b| a.partial_cmp(b).unwrap());
-                    let median = values[values.len() / 2];
-                    crate_medians.insert(phase_name, median);
-                }
-
-                median.by_crate.insert(crate_name, crate_medians);
-            }
-
-            medians.push(median);
-        }
-
         // 12 week long mapping of crate names to by-phase percent changes with
         // the previous week.
-        let mut weeks: Vec<SummarizedWeek> = Vec::new();
-        for window in medians.windows(2) {
-            // We want to compare week 1 to week 0; since we want the change from
-            // week 1 to week 0.
-            weeks.push(Summary::compare_weeks(&window[1], &window[0]));
+        let mut weeks: Vec<MedianRun> = Vec::new();
+
+        for i in 0..WEEKS_IN_SUMMARY {
+            let start = last_date.start_of_week() - Duration::weeks(i as i64);
+            let end = start + Duration::weeks(1);
+
+            let mut start_idx = index_in(data, start);
+            let end_idx = index_in(data, end);
+
+            if start_idx == end_idx {
+                assert!(start_idx > 0, "Handling dawn of data not yet implemented");
+                start_idx -= 1;
+            }
+
+            weeks.push(Summary::compare_weeks(&MedianRun::new(data, start_idx, start),
+                                              &MedianRun::new(data, end_idx, end)));
         }
 
         assert_eq!(weeks.len(), 12);
 
-        // See window comparison; compare from last week (which is the oldest)
-        // to the first week.
-        let totals = Summary::compare_weeks(medians.last().unwrap(), &medians[0]);
+        let totals = {
+            let start = last_date.start_of_week() - Duration::weeks(13);
+            let end = last_date + Duration::weeks(1);
+
+            let start_idx = index_in(data, start);
+            let end_idx = index_in(data, end);
+
+            Summary::compare_weeks(&MedianRun::new(data, start_idx, start),
+                                   &MedianRun::new(data, end_idx, end))
+        };
 
         for week in &mut weeks {
             for crate_name in benchmarks {
@@ -519,7 +529,7 @@ impl Summary {
         ((current - previous) / previous) * 100.0
     }
 
-    fn compare_weeks(week0: &SummarizedWeek, week1: &SummarizedWeek) -> SummarizedWeek {
+    fn compare_weeks(week0: &MedianRun, week1: &MedianRun) -> MedianRun {
         let mut current_week = HashMap::new();
         for crate_name in week0.by_crate.keys() {
             if !week1.by_crate.contains_key(crate_name) {
@@ -545,7 +555,7 @@ impl Summary {
             }
             current_week.insert(crate_name.to_string(), current_crate);
         }
-        SummarizedWeek {
+        MedianRun {
             date: week1.date,
             by_crate: current_week,
         }
