@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(question_mark, rustc_macro, rustc_attrs, structural_match)]
+#![feature(question_mark, proc_macro, rustc_attrs, structural_match)]
 
 #[macro_use]
 extern crate serde_derive;
