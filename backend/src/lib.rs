@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(question_mark, proc_macro, rustc_attrs, structural_match)]
+#![feature(proc_macro)]
 
 #[macro_use]
 extern crate serde_derive;
@@ -24,13 +24,10 @@ extern crate serde_json;
 
 mod errors {
     error_chain! {
-        links {
-        }
-
         foreign_links {
-            ::std::io::Error, Io;
-            ::serde_json::Error, Json;
-            ::chrono::ParseError, Chrono;
+            Io(::std::io::Error);
+            Json(::serde_json::Error);
+            Chrono(::chrono::ParseError);
         }
 
         errors {
