@@ -398,13 +398,13 @@ fn on_push(req: &mut Request) -> IronResult<Response> {
 pub fn chain(data: InputData) -> Chain {
     let mut router = Router::new();
 
-    router.get("/summary", handle_summary);
-    router.get("/info", handle_info);
-    router.post("/data", handle_data);
-    router.post("/get_tabular", handle_tabular);
-    router.post("/get", handle_days);
-    router.post("/stats", handle_stats);
-    router.post("/onpush", on_push);
+    router.get("/summary", handle_summary, "summary");
+    router.get("/info", handle_info, "info");
+    router.post("/data", handle_data, "data");
+    router.post("/get_tabular", handle_tabular, "get_tabular");
+    router.post("/get", handle_days, "get");
+    router.post("/stats", handle_stats, "stats");
+    router.post("/onpush", on_push, "on_push");
 
     let mut chain = Chain::new(router);
     chain.link(State::<InputData>::both(data));
