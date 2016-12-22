@@ -29,16 +29,16 @@ lazy_static! {
 fn request(path: &str) -> Response {
     iron_test::request::get(&format!("http://perf.rust-lang.org/{}", path),
                             Headers::new(),
-                            &*CHAIN).unwrap()
+                            &*CHAIN)
+        .unwrap()
 }
 
-fn post_request<T: Serialize>(path: &str,
-                                          body: T)
-                                          -> Response {
+fn post_request<T: Serialize>(path: &str, body: T) -> Response {
     iron_test::request::post(&format!("http://perf.rust-lang.org/{}", path),
                              Headers::new(),
                              &serde_json::to_string(&body).unwrap(),
-                             &*CHAIN).unwrap()
+                             &*CHAIN)
+        .unwrap()
 }
 
 fn response_body(response: Response) -> Value {
@@ -104,7 +104,8 @@ fn check_response(response: Response, expected_file: &str) {
         // Note: This value's float fields should not be used for direct
         // comparison with the expected results, due to the loss of precision in Serde
         println!("{}", serde_json::to_string(&raw_received_value).unwrap());
-        panic!("Compared {} body with server result, results not equal.", expected_file);
+        panic!("Compared {} body with server result, results not equal.",
+               expected_file);
     }
 }
 
@@ -131,7 +132,8 @@ fn data_crate_benchmarks() {
                                     phases: vec!["total".into()],
                                     crates: vec!["helloworld".into(), "regex.0.1.30".into()],
                                 });
-    check_response(response, "tests/expected_results/data_crate_benchmarks.json");
+    check_response(response,
+                   "tests/expected_results/data_crate_benchmarks.json");
 }
 
 #[test]
@@ -145,7 +147,8 @@ fn data_crate_rustc_total() {
                                     phases: vec!["total".into()],
                                     crates: vec!["total".into()],
                                 });
-    check_response(response, "tests/expected_results/data_crate_rustc_total.json");
+    check_response(response,
+                   "tests/expected_results/data_crate_rustc_total.json");
 }
 
 #[test]
