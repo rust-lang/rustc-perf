@@ -1,6 +1,17 @@
 [package]
-name = "rustc-perf-collect"
-version = "0.1.0"
 authors = ["Mark Simulacrum <mark.simulacrum@gmail.com>"]
+name = "rustc-perf"
+version = "0.1.0"
 
 [dependencies]
+error-chain = "0.9"
+flate2 = "0.2"
+reqwest = "0.4.0"
+serde = "0.9"
+serde_derive = "0.9"
+serde_json = "0.9"
+tar = "0.4"
+
+[dependencies.chrono]
+features = ["serde"]
+version = "0.3"
