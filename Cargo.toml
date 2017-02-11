@@ -1,6 +1,6 @@
 [package]
 authors = ["Mark Simulacrum <mark.simulacrum@gmail.com>"]
-name = "rustc-perf"
+name = "rustc-perf-collector"
 version = "0.1.0"
 
 [dependencies]

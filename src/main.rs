@@ -7,7 +7,7 @@ extern crate reqwest;
 extern crate flate2;
 extern crate tar;
 extern crate chrono;
-extern crate rustc_perf;
+extern crate rustc_perf_collector;
 
 mod errors {
     // Create the Error, ErrorKind, ResultExt, and Result types
@@ -31,7 +31,7 @@ use std::path::{Path, PathBuf};
 use std::io::BufReader;
 use std::process::Command;
 
-use rustc_perf::{Pass, Run, Patch};
+use rustc_perf_collector::{Pass, Run, Patch};
 
 use tar::Archive;
 use flate2::read::GzDecoder;
