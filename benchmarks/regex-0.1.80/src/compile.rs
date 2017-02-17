@@ -54,7 +54,6 @@ impl Compiler {
     ///
     /// Various options can be set before calling `compile` on an expression.
     pub fn new() -> Self {
-        {}
         Compiler {
             insts: vec![],
             compiled: Program::new(),
@@ -138,8 +137,6 @@ impl Compiler {
     }
 
     fn compile_one(mut self, expr: &Expr) -> result::Result<Program, Error> {
-        {} // @030
-
         // If we're compiling a forward DFA and we aren't anchored, then
         // add a `.*?` before the first capture group.
         // Other matching engines handle this by baking the logic into the

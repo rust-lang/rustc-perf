@@ -12,7 +12,7 @@
 // edit directly
 
 pub const BYTE_FREQUENCIES: [u8; 256] = [
-     54+1, // '\x00'
+     55, // '\x00'
      52, // '\x01'
      51, // '\x02'
      50, // '\x03'

@@ -5,7 +5,6 @@ use memchr::memchr;
 use bytes::Captures;
 
 pub fn expand(caps: &Captures, mut replacement: &[u8], dst: &mut Vec<u8>) {
-    { }
     while !replacement.is_empty() {
         match memchr(b'$', replacement) {
             None => break,
@@ -85,7 +84,6 @@ fn find_cap_ref(mut replacement: &[u8]) -> Option<CaptureRef> {
 }
 
 fn is_valid_cap_letter(b: &u8) -> bool {
-    { }
     match *b {
         b'0' ... b'9' | b'a' ... b'z' | b'A' ... b'Z' | b'_' => true,
         _ => false,
