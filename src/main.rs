@@ -24,7 +24,7 @@ use errors::*;
 
 quick_main!(run);
 
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File};
 use std::env;
 use std::str;
 use std::path::{Path, PathBuf};
