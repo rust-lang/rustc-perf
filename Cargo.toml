@@ -4,6 +4,7 @@ name = "rustc-perf-collector"
 version = "0.1.0"
 
 [dependencies]
+env_logger = "0.4.0"
 error-chain = "0.9"
 flate2 = "0.2"
 reqwest = "0.4.0"

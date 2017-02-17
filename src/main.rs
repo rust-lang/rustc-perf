@@ -2,12 +2,12 @@
 
 extern crate serde;
 extern crate serde_json;
-extern crate reqwest;
 #[macro_use] extern crate error_chain;
 extern crate flate2;
 extern crate tar;
-extern crate chrono;
 extern crate rustc_perf_collector;
+extern crate env_logger;
+extern crate reqwest;
 
 mod errors {
     // Create the Error, ErrorKind, ResultExt, and Result types
@@ -24,20 +24,22 @@ use errors::*;
 
 quick_main!(run);
 
-use std::fs;
+use std::fs::{self, File, OpenOptions};
 use std::env;
 use std::str;
 use std::path::{Path, PathBuf};
-use std::io::BufReader;
+use std::io::{Read, Write, BufReader};
 use std::process::Command;
 
 use rustc_perf_collector::{Pass, Run, Patch};
 
 use tar::Archive;
-use flate2::read::GzDecoder;
-use chrono::UTC;
+use flate2::bufread::GzDecoder;
+use serde_json::Value;
+use reqwest::header::Authorization;
 
 const BASE_PATH: &'static str = "https://s3.amazonaws.com/rust-lang-ci/rustc-builds";
+const GH_API_TOKEN: &'static str = env!("GH_API_TOKEN");
 
 fn get_and_extract(url: &str, into: &str, is_std: bool) -> Result<()> {
     println!("requesting: {}", url);
@@ -160,21 +162,20 @@ impl PassAverager {
 }
 
 fn run_commit(commit: &str, benchmarks: &[PathBuf]) -> Result<()> {
-    let now = UTC::now();
-
     let unpack_into = format!("rust-{}", commit);
+    let triple = "x86_64-unknown-linux-gnu";
     get_and_extract(
-        &format!("{}/{}/rustc-nightly-x86_64-unknown-linux-gnu.tar.gz", BASE_PATH, commit),
+        &format!("{}/{}/rustc-nightly-{}.tar.gz", BASE_PATH, commit, triple),
         &unpack_into,
         false,
     )?;
     get_and_extract(
-        &format!("{}/{}/rust-std-nightly-x86_64-unknown-linux-gnu.tar.gz", BASE_PATH, commit),
+        &format!("{}/{}/rust-std-nightly-{}.tar.gz", BASE_PATH, commit, triple),
         &unpack_into,
         true,
     )?;
     get_and_extract(
-        &format!("{}/{}/cargo-nightly-x86_64-unknown-linux-gnu.tar.gz", BASE_PATH, commit),
+        &format!("{}/{}/cargo-nightly-{}.tar.gz", BASE_PATH, commit, triple),
         &unpack_into,
         false,
     )?;
@@ -249,9 +250,10 @@ fn run_commit(commit: &str, benchmarks: &[PathBuf]) -> Result<()> {
             });
         }
 
-        let filepath = format!("times/{}-{}-{}.json", &commit, now.format("%Y-%m-%d-%H-%M"), name);
+        let filepath = format!("times/{}-{}-{}.json",
+            &commit, triple, name);
         println!("creating file {}", filepath);
-        let mut file = fs::File::create(&filepath)?;
+        let mut file = File::create(&filepath)?;
         serde_json::to_writer_pretty(&mut file, &single_runs)?;
         if !command("make", &cargo, &rustc).arg("clean").current_dir(&path).status()?.success() {
             bail!("{}: make touch failed.", path.display());
@@ -265,7 +267,85 @@ fn run_commit(commit: &str, benchmarks: &[PathBuf]) -> Result<()> {
     Ok(())
 }
 
+const COMMIT_FILE: &'static str = "last-commit-sha";
+
+fn get_new_commit_shas(client: &reqwest::Client) -> Result<Vec<String>> {
+    let mut commit_file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(COMMIT_FILE)?;
+
+    let mut last_commit = String::new();
+    commit_file.read_to_string(&mut last_commit)?;
+
+    if last_commit.is_empty() {
+        bail!("{} was empty", COMMIT_FILE);
+    }
+
+    let last_commit = last_commit.trim();
+
+    fn request(client: &reqwest::Client, url: &str, last_commit: &str) -> Result<Vec<String>> {
+        fn convert_to_str_array(url: &str, value: Value) -> Result<Vec<String>> {
+            let value = if let Value::Array(arr) = value {
+                arr.into_iter().map(|value| {
+                    if let Value::Object(mut map) = value {
+                        if let Some(commit) = map.remove("sha") {
+                            if let Value::String(commit) = commit {
+                                return Ok(commit);
+                            }
+                        }
+                    }
+                    bail!("{} returned element without string sha key in array element", url)
+                }).collect::<Result<Vec<String>>>()?
+            } else {
+                bail!("{} returned non-array response: {}", url, value);
+            };
+
+            Ok(value)
+        }
+
+        println!("Requesting: {}", url);
+
+        let mut response = client.get(url)
+            .header(Authorization(format!("token {}", GH_API_TOKEN)))
+            .send().chain_err(|| format!("API request to {}", url))?;
+        let value: Value = serde_json::from_reader(&mut response)
+            .chain_err(|| format!("API request to {} deserialization", url))?;
+        let mut commits = convert_to_str_array(url, value)?;
+
+        if let Some(pos) = commits.iter().position(|commit| commit == last_commit) {
+            commits.truncate(pos);
+            return Ok(commits);
+        }
+
+        if let Some(headers) = response.headers().get_raw("Link") {
+            if let Some(next) = headers.iter().map(|s| str::from_utf8(s).unwrap()).flat_map(|s| s.split(", ")).find(|s| s.contains(r#"rel="next"#)) {
+                let url = &next[1..next.find(">").unwrap()];
+                let next_value = request(client, url, last_commit)?;
+                commits.extend(next_value);
+                if let Some(_) = commits.iter().find(|commit| *commit == last_commit) {
+                    return Ok(commits);
+                }
+
+            }
+        }
+
+        Ok(commits)
+    }
+
+    let commits = request(
+        client,
+        "https://api.github.com/repos/rust-lang/rust/commits?author=bors&per_page=100",
+        &last_commit,
+    )?;
+
+    Ok(commits)
+}
+
 fn run() -> Result<()> {
+    env_logger::init().expect("logger initialization successful");
+
     let mut benchmarks = Vec::new();
     for entry in fs::read_dir("benchmarks")? {
         let entry = entry?;
@@ -277,8 +357,23 @@ fn run() -> Result<()> {
         benchmarks.push(path);
     }
 
-    let commit = env::args().nth(1).expect("Usage: self <commit sha>");
-    run_commit(&commit, &benchmarks)?;
+    let client = reqwest::Client::new()?;
+    let commits = get_new_commit_shas(&client)?;
+    if !commits.is_empty() {
+        println!("new commits: {:?}", commits);
+        // We need to reverse the commits in order to have the first commit be the one directly
+        // after the commit in the commit file
+        for commit in commits.iter().rev() {
+            run_commit(&commit, &benchmarks)?;
+
+            // Since we successfully ran for this commit, we update the file to mark the latest
+            // commit as this one
+            let mut commit_file = File::create(COMMIT_FILE)?;
+            commit_file.write_all(commit.as_bytes())?;
+        }
+    } else {
+        println!("Nothing to do; no new commits.");
+    }
 
     Ok(())
 }
