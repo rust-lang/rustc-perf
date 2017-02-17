@@ -16,3 +16,8 @@ tar = "0.4"
 [dependencies.chrono]
 features = ["serde"]
 version = "0.3"
+
+[[bin]]
+name = "benchmark"
+path = "src/bin/benchmark.rs"
+
