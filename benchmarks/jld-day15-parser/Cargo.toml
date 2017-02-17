@@ -1,0 +1,6 @@
+[package]
+name = "day15"
+version = "0.1.0"
+authors = ["Jed Davis <jld@panix.com>"]
+[dependencies]
+combine = "1.2.0"

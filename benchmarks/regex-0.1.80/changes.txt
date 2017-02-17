@@ -1,0 +1,24 @@
+
+
+// private method in large CGU
+compile::compile_one()
+
+
+// private function in small CGU
+expand::is_valid_cap_letter
+
+
+// public static used in one other module
+freqs::BYTE_FREQUENCIES
+
+
+// struct used in two other modules
+sparse::SparseSet
+
+
+// local enum used in one module
+backtrack::Job
+
+
+// public inherent method called in one other module
+compile::Compiler::new

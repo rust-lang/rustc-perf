@@ -1,0 +1,42 @@
+language: rust
+sudo: false
+notifications:
+    irc: "irc.mozilla.org#piston-internals"
+os:
+    - linux
+    - osx
+rust:
+    - stable
+    - beta
+    - nightly
+env:
+    global:
+        - secure: M2MCRtyP5P/Xf2TSqrbz8cs41TQY04mK/5Fi6qgr77OKLNZlDclKiFY8BmQ6f1JhVccoE5gMIFpfPoVUu8wZ0Pe7/X4IyO4vxWawVQfE6f0NYErD9yqiE1KEi/RGKPOQfL5HFUK7ifnXvLwsAMh1ix9XMgaBZfZLQ8KhkxNRXwI=
+    matrix:
+      - FEATURES=''
+      - FEATURES='gif_codec'
+      - FEATURES='jpeg'
+      - FEATURES='png_codec'
+      - FEATURES='ppm'
+      - FEATURES='tga'
+      - FEATURES='tiff'
+      - FEATURES='webp'
+      - FEATURES='hdr'
+script:
+    - if [ -z "$FEATURES" ]; then
+        cargo build -v;
+        if [ "$TRAVIS_RUST_VERSION" = "nightly" ]; then cargo test -v; fi;
+        cargo doc -v;
+      else
+        cargo build -v --no-default-features --features "$FEATURES";
+        if [ "$TRAVIS_RUST_VERSION" = "nightly" ]; then cargo test -v --no-default-features --features "$FEATURES"; fi;
+        cargo doc -v;
+      fi
+after_success: |
+    [ $TRAVIS_BRANCH = master ] &&
+    [ $TRAVIS_PULL_REQUEST = false ] &&
+    cargo doc &&
+    echo '<meta http-equiv=refresh content=0;url=image/index.html>' > target/doc/index.html &&
+    pip install --user ghp-import &&
+    ghp-import -n target/doc &&
+    git push -fq https://${GH_TOKEN}:x-oauth-basic@github.com/${TRAVIS_REPO_SLUG}.git gh-pages

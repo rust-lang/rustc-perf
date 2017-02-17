@@ -1,0 +1,4 @@
+[root]
+name = "issue-32062-equality-relations-complexity"
+version = "0.1.0"
+
