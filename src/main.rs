@@ -270,11 +270,8 @@ fn run_commit(commit: &str, benchmarks: &[PathBuf]) -> Result<()> {
 const COMMIT_FILE: &'static str = "last-commit-sha";
 
 fn get_new_commit_shas(client: &reqwest::Client) -> Result<Vec<String>> {
-    let mut commit_file = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .open(COMMIT_FILE)?;
+    let mut commit_file = File::open(COMMIT_FILE)
+        .chain_err(|| format!("expected {} to exist, and contain the last tested commit sha", COMMIT_FILE))?;
 
     let mut last_commit = String::new();
     commit_file.read_to_string(&mut last_commit)?;
