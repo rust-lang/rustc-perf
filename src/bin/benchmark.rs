@@ -30,8 +30,9 @@ use std::str;
 use std::path::{Path, PathBuf};
 use std::io::{Read, Write, BufReader};
 use std::process::Command;
+use std::collections::HashMap;
 
-use rustc_perf_collector::{Pass, Run, Patch, Commit};
+use rustc_perf_collector::{Pass, Run, Patch, Commit, CommitData};
 
 use tar::Archive;
 use flate2::bufread::GzDecoder;
@@ -189,6 +190,11 @@ fn run_commit(commit: &Commit, benchmarks: &[PathBuf]) -> Result<()> {
 
     println!("version: {}", version);
 
+    let mut file_data = CommitData {
+        commit: commit.clone(),
+        benchmarks: HashMap::new(),
+    };
+
     for path in benchmarks {
         let name = path.display().to_string().replace("benchmarks/", "");
         println!("processing {}", name);
@@ -221,15 +227,15 @@ fn run_commit(commit: &Commit, benchmarks: &[PathBuf]) -> Result<()> {
                     patch_runs.push(Patch {
                         patch: patch.to_string(),
                         name: name.clone(),
-                        commit: commit.clone(),
                         runs: Vec::new(),
                     });
                     patch_runs.len() - 1
                 };
 
+                let combined_name = format!("{}{}", name, patch);
                 patch_runs[patch_index].runs.push(Run {
-                    name: format!("{}{}", name, patch),
-                    passes: process_output(&format!("{}{}", name, patch), output.stdout)?,
+                    passes: process_output(&combined_name, output.stdout)?,
+                    name: combined_name,
                 });
             }
             if !command("make", &cargo, &rustc).arg("touch").current_dir(&path).status()?.success() {
@@ -237,29 +243,36 @@ fn run_commit(commit: &Commit, benchmarks: &[PathBuf]) -> Result<()> {
             }
         }
 
-        let mut single_runs = Vec::new();
+        let mut patches = Vec::new();
         for patch_run in patch_runs {
-            let name = patch_run.name + &patch_run.patch;
             let mut runs = patch_run.runs.into_iter();
             let mut pa = PassAverager::new(runs.next().unwrap().passes);
             for run in runs {
                 pa.average_with(run.passes)?;
             }
-            single_runs.push(Run {
-                name: name,
-                passes: pa.state,
+            patches.push(Patch {
+                name: patch_run.name.clone(),
+                patch: patch_run.patch.clone(),
+                runs: vec![
+                    Run {
+                        name: patch_run.name + &patch_run.patch,
+                        passes: pa.state,
+                    }
+                ],
             });
         }
 
-        let filepath = format!("times/{}-{}-{}.json",
-            &commit.sha, triple, name);
-        println!("creating file {}", filepath);
-        let mut file = File::create(&filepath)?;
-        serde_json::to_writer(&mut file, &single_runs)?;
+        assert!(file_data.benchmarks.insert(name, patches).is_none(), "First instance of this benchmark");
+
         if !command("make", &cargo, &rustc).arg("clean").current_dir(&path).status()?.success() {
             bail!("{}: make touch failed.", path.display());
         }
     }
+
+    let filepath = format!("times/{}-{}.json", &commit.sha, triple);
+    println!("creating file {}", filepath);
+    let mut file = File::create(&filepath)?;
+    serde_json::to_writer(&mut file, &file_data)?;
 
     fs::remove_dir_all(&unpack_into).unwrap_or_else(|err| {
         println!("failed to remove {}, please do so manually: {:?}", unpack_into, err);

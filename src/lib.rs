@@ -1,5 +1,7 @@
 #[macro_use] extern crate serde_derive;
 
+use std::collections::HashMap;
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Pass {
     pub name: String,
@@ -17,7 +19,6 @@ pub struct Run {
 pub struct Patch {
     pub patch: String,
     pub name: String,
-    pub commit: Commit,
     pub runs: Vec<Run>,
 }
 
@@ -25,4 +26,10 @@ pub struct Patch {
 pub struct Commit {
     pub sha: String,
     pub date: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CommitData {
+    pub commit: Commit,
+    pub benchmarks: HashMap<String, Vec<Patch>>,
 }
