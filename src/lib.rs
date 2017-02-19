@@ -17,5 +17,12 @@ pub struct Run {
 pub struct Patch {
     pub patch: String,
     pub name: String,
+    pub commit: Commit,
     pub runs: Vec<Run>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Commit {
+    pub sha: String,
+    pub date: String,
 }

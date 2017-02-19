@@ -24,14 +24,14 @@ use errors::*;
 
 quick_main!(run);
 
-use std::fs::{self, File};
+use std::fs::{self, OpenOptions, File};
 use std::env;
 use std::str;
 use std::path::{Path, PathBuf};
 use std::io::{Read, Write, BufReader};
 use std::process::Command;
 
-use rustc_perf_collector::{Pass, Run, Patch};
+use rustc_perf_collector::{Pass, Run, Patch, Commit};
 
 use tar::Archive;
 use flate2::bufread::GzDecoder;
@@ -161,27 +161,27 @@ impl PassAverager {
     }
 }
 
-fn run_commit(commit: &str, benchmarks: &[PathBuf]) -> Result<()> {
-    let unpack_into = format!("rust-{}", commit);
+fn run_commit(commit: &Commit, benchmarks: &[PathBuf]) -> Result<()> {
+    let unpack_into = format!("rust-{}", commit.sha);
     let triple = "x86_64-unknown-linux-gnu";
     get_and_extract(
-        &format!("{}/{}/rustc-nightly-{}.tar.gz", BASE_PATH, commit, triple),
+        &format!("{}/{}/rustc-nightly-{}.tar.gz", BASE_PATH, commit.sha, triple),
         &unpack_into,
         false,
     )?;
     get_and_extract(
-        &format!("{}/{}/rust-std-nightly-{}.tar.gz", BASE_PATH, commit, triple),
+        &format!("{}/{}/rust-std-nightly-{}.tar.gz", BASE_PATH, commit.sha, triple),
         &unpack_into,
         true,
     )?;
     get_and_extract(
-        &format!("{}/{}/cargo-nightly-{}.tar.gz", BASE_PATH, commit, triple),
+        &format!("{}/{}/cargo-nightly-{}.tar.gz", BASE_PATH, commit.sha, triple),
         &unpack_into,
         false,
     )?;
-    let rustc = PathBuf::from(format!("rust-{}/rustc/bin/rustc", commit)).canonicalize()
+    let rustc = PathBuf::from(format!("rust-{}/rustc/bin/rustc", commit.sha)).canonicalize()
         .chain_err(|| "failed to canonicalize rustc path")?;
-    let cargo = PathBuf::from(format!("rust-{}/cargo/bin/cargo", commit)).canonicalize()
+    let cargo = PathBuf::from(format!("rust-{}/cargo/bin/cargo", commit.sha)).canonicalize()
         .chain_err(|| "failed to canonicalize cargo path")?;
 
     let version = String::from_utf8(command(&rustc, &cargo, &rustc).arg("--version").output()
@@ -221,6 +221,7 @@ fn run_commit(commit: &str, benchmarks: &[PathBuf]) -> Result<()> {
                     patch_runs.push(Patch {
                         patch: patch.to_string(),
                         name: name.clone(),
+                        commit: commit.clone(),
                         runs: Vec::new(),
                     });
                     patch_runs.len() - 1
@@ -251,10 +252,10 @@ fn run_commit(commit: &str, benchmarks: &[PathBuf]) -> Result<()> {
         }
 
         let filepath = format!("times/{}-{}-{}.json",
-            &commit, triple, name);
+            &commit.sha, triple, name);
         println!("creating file {}", filepath);
         let mut file = File::create(&filepath)?;
-        serde_json::to_writer_pretty(&mut file, &single_runs)?;
+        serde_json::to_writer(&mut file, &single_runs)?;
         if !command("make", &cargo, &rustc).arg("clean").current_dir(&path).status()?.success() {
             bail!("{}: make touch failed.", path.display());
         }
@@ -269,7 +270,7 @@ fn run_commit(commit: &str, benchmarks: &[PathBuf]) -> Result<()> {
 
 const COMMIT_FILE: &'static str = "last-commit-sha";
 
-fn get_new_commit_shas(client: &reqwest::Client) -> Result<Vec<String>> {
+fn get_new_commits(client: &reqwest::Client) -> Result<Vec<Commit>> {
     let mut commit_file = File::open(COMMIT_FILE)
         .chain_err(|| format!("expected {} to exist, and contain the last tested commit sha", COMMIT_FILE))?;
 
@@ -282,19 +283,23 @@ fn get_new_commit_shas(client: &reqwest::Client) -> Result<Vec<String>> {
 
     let last_commit = last_commit.trim();
 
-    fn request(client: &reqwest::Client, url: &str, last_commit: &str) -> Result<Vec<String>> {
-        fn convert_to_str_array(url: &str, value: Value) -> Result<Vec<String>> {
+    fn request(client: &reqwest::Client, url: &str, last_commit: &str) -> Result<Vec<Commit>> {
+        fn convert_to_str_array(url: &str, value: Value) -> Result<Vec<Commit>> {
             let value = if let Value::Array(arr) = value {
                 arr.into_iter().map(|value| {
                     if let Value::Object(mut map) = value {
-                        if let Some(commit) = map.remove("sha") {
-                            if let Value::String(commit) = commit {
-                                return Ok(commit);
-                            }
-                        }
+                        return Ok(Commit {
+                            sha: map.remove("sha").expect("sha to be present").as_str().unwrap().to_string(),
+                            date: map.remove("commit")
+                                .and_then(|mut commit| commit.as_object_mut()
+                                    .and_then(|commit| commit.remove("committer")))
+                                .and_then(|mut committer| committer.as_object_mut()
+                                    .and_then(|committer| committer.remove("date")))
+                                .expect("commit.comitter.date to be present").as_str().unwrap().to_string(),
+                        });
                     }
                     bail!("{} returned element without string sha key in array element", url)
-                }).collect::<Result<Vec<String>>>()?
+                }).collect::<Result<Vec<Commit>>>()?
             } else {
                 bail!("{} returned non-array response: {}", url, value);
             };
@@ -311,7 +316,7 @@ fn get_new_commit_shas(client: &reqwest::Client) -> Result<Vec<String>> {
             .chain_err(|| format!("API request to {} deserialization", url))?;
         let mut commits = convert_to_str_array(url, value)?;
 
-        if let Some(pos) = commits.iter().position(|commit| commit == last_commit) {
+        if let Some(pos) = commits.iter().position(|commit| commit.sha == last_commit) {
             commits.truncate(pos);
             return Ok(commits);
         }
@@ -321,7 +326,7 @@ fn get_new_commit_shas(client: &reqwest::Client) -> Result<Vec<String>> {
                 let url = &next[1..next.find(">").unwrap()];
                 let next_value = request(client, url, last_commit)?;
                 commits.extend(next_value);
-                if let Some(_) = commits.iter().find(|commit| *commit == last_commit) {
+                if let Some(_) = commits.iter().find(|commit| commit.sha == last_commit) {
                     return Ok(commits);
                 }
 
@@ -355,18 +360,22 @@ fn run() -> Result<()> {
     }
 
     let client = reqwest::Client::new()?;
-    let commits = get_new_commit_shas(&client)?;
+    let commits = get_new_commits(&client)?;
     if !commits.is_empty() {
         println!("new commits: {:?}", commits);
         // We need to reverse the commits in order to have the first commit be the one directly
         // after the commit in the commit file
         for commit in commits.iter().rev() {
-            run_commit(&commit, &benchmarks)?;
+            if let Err(e) = run_commit(&commit, &benchmarks) {
+                let mut file = OpenOptions::new().append(true).create(true).open("broken-commits")?;
+                writeln!(file, "{}: {:?}", commit.sha, e)?;
+                println!("running {} failed: {:?}", commit.sha, e);
+            }
 
-            // Since we successfully ran for this commit, we update the file to mark the latest
-            // commit as this one
+            // Even if we failed with this commit, we should still update the SHA in the file so
+            // future runs can continue and don't have to re-run.
             let mut commit_file = File::create(COMMIT_FILE)?;
-            commit_file.write_all(commit.as_bytes())?;
+            commit_file.write_all(commit.sha.as_bytes())?;
         }
     } else {
         println!("Nothing to do; no new commits.");
