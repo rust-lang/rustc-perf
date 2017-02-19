@@ -1,6 +1,9 @@
 #[macro_use] extern crate serde_derive;
+extern crate chrono;
 
 use std::collections::HashMap;
+
+use chrono::{DateTime, UTC};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Pass {
@@ -25,7 +28,7 @@ pub struct Patch {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Commit {
     pub sha: String,
-    pub date: String,
+    pub date: DateTime<UTC>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

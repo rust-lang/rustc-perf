@@ -8,6 +8,7 @@ extern crate tar;
 extern crate rustc_perf_collector;
 extern crate env_logger;
 extern crate reqwest;
+extern crate chrono;
 
 mod errors {
     // Create the Error, ErrorKind, ResultExt, and Result types
@@ -38,6 +39,8 @@ use tar::Archive;
 use flate2::bufread::GzDecoder;
 use serde_json::Value;
 use reqwest::header::Authorization;
+
+use chrono::{TimeZone, UTC};
 
 const BASE_PATH: &'static str = "https://s3.amazonaws.com/rust-lang-ci/rustc-builds";
 const GH_API_TOKEN: &'static str = env!("GH_API_TOKEN");
@@ -303,12 +306,13 @@ fn get_new_commits(client: &reqwest::Client) -> Result<Vec<Commit>> {
                     if let Value::Object(mut map) = value {
                         return Ok(Commit {
                             sha: map.remove("sha").expect("sha to be present").as_str().unwrap().to_string(),
-                            date: map.remove("commit")
+                            date: UTC.datetime_from_str(map.remove("commit")
                                 .and_then(|mut commit| commit.as_object_mut()
                                     .and_then(|commit| commit.remove("committer")))
                                 .and_then(|mut committer| committer.as_object_mut()
                                     .and_then(|committer| committer.remove("date")))
-                                .expect("commit.comitter.date to be present").as_str().unwrap().to_string(),
+                                .expect("commit.comitter.date to be present").as_str().unwrap(),
+                                "%+").expect("failed to parse date"),
                         });
                     }
                     bail!("{} returned element without string sha key in array element", url)
