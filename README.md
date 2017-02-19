@@ -10,7 +10,7 @@ please install openssl (libssl-dev).
 A file, `last-commit-sha`, should be in the current directory when running the script and it should
 contain a single line, containing the SHA1 of the bors merge commit in the rust-lang/rust repository
 from which to start running. The script will automatically update it as it completes each commit
-since it. If starting from scratch, 7dfcac55bbaf83a247f133286006c5efa9df784a may be a good option
+since it. If starting from scratch, 83c2d95238e3545e7ae9af4873c48b1e3651c164 may be a good option
 (see below, this is the first commit we support).
 
 ## How to run
@@ -32,9 +32,8 @@ at that point.
 
 ## Limitations
 
-Will only work for commits merged after #39050 merged (bors sha:
-7dfcac55bbaf83a247f133286006c5efa9df784a) because the naming changed in that PR to the -nightly-
-syntax instead of a version specific syntax (which we prefer not to support).
+Will only work for commits merged after #39245 merged (bors sha:
+83c2d95238e3545e7ae9af4873c48b1e3651c164) because it began producing cargo artifacts as well.
 
 Subpasses are currently ignored completely, since their naming differs between different runs. No
 serious investigation as to why this is has been conducted, so it is possible that they could be
