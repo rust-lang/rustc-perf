@@ -4,6 +4,8 @@ use std::str;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use tempdir::TempDir;
+
 use rustc_perf_collector::{Patch, Run};
 
 use errors::{Result, ResultExt};
@@ -25,20 +27,37 @@ impl Benchmark {
     /// Run a specific benchmark on a specific commit
     pub fn run(&self, sysroot: &Sysroot) -> Result<Vec<Patch>> {
         info!("processing {}", self.name);
-        let output = self.command(sysroot, "make").arg("patches").output()?;
-        let mut patches = str::from_utf8(&output.stdout)
-            .chain_err(|| format!("make patches in {} returned non UTF-8 output", self.path.display()))?
-            .split_whitespace()
-            .collect::<Vec<_>>();
-        if patches.is_empty() {
-            patches.push("");
-        }
 
         let mut patch_runs: Vec<Patch> = Vec::new();
         for _ in 0..3 {
+            let tmp_dir = TempDir::new(&format!("rustc-benchmark-{}", self.name))?;
+            info!("temporary directory is {}", tmp_dir.path().display());
+
+            info!("copying files to temporary directory");
+            let output = self.command(sysroot, "cp").arg("-r").arg("-T").arg("--")
+                .arg(&self.path).arg(tmp_dir.path()).output()?;
+
+            if !output.status.success() {
+                bail!("copy failed: {}", String::from_utf8_lossy(&output.stderr));
+            }
+            let make = || {
+                let mut command = sysroot.command("make");
+                command.current_dir(tmp_dir.path());
+                command
+            };
+
+            let output = make().arg("patches").output()?;
+            let mut patches = str::from_utf8(&output.stdout)
+                .chain_err(|| format!("make patches in {} returned non UTF-8 output", self.path.display()))?
+                .split_whitespace()
+                .collect::<Vec<_>>();
+            if patches.is_empty() {
+                patches.push("");
+            }
+
             for patch in &patches {
                 info!("running `make all{}`", patch);
-                let output = self.command(sysroot, "make").arg(&format!("all{}", patch))
+                let output = make().arg(&format!("all{}", patch))
                     .env("CARGO_OPTS", "")
                     .env("CARGO_RUSTC_OPTS", "-Z time-passes")
                     .output()?;
@@ -63,9 +82,6 @@ impl Benchmark {
                     passes: process_output(&combined_name, output.stdout)?,
                     name: combined_name,
                 });
-            }
-            if !self.command(sysroot, "make").arg("touch").status()?.success() {
-                bail!("{}: make touch failed.", self.path.display());
             }
         }
 

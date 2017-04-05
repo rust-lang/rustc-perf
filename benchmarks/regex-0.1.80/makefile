@@ -15,7 +15,7 @@ all@020-incr-from-scratch:
 
 # `compile_one()` is a private method in a large CGU.
 all@030-compile_one:
-	git apply 030-compile_one.diff
+	patch -Np2 -i 030-compile_one.diff
 	find . -name "*.rs" | xargs touch
 	git diff
 	RUSTFLAGS="${INCREMENTAL_FLAGS}" $(CARGO) rustc $(CARGO_OPTS) -- \
@@ -23,7 +23,7 @@ all@030-compile_one:
 
 # `is_valid_cap_letter()` is a private function in a small CGU.
 all@040-is_valid_cap_letter:
-	git apply 040-is_valid_cap_letter.diff
+	patch -Np2 -i 040-is_valid_cap_letter.diff
 	find . -name "*.rs" | xargs touch
 	git diff
 	RUSTFLAGS="${INCREMENTAL_FLAGS}" $(CARGO) rustc $(CARGO_OPTS) -- \
@@ -31,7 +31,7 @@ all@040-is_valid_cap_letter:
 
 # `expand()` is a public function in a small CGU.
 all@050-expand:
-	git apply 050-expand.diff
+	patch -Np2 -i 050-expand.diff
 	find . -name "*.rs" | xargs touch
 	git diff
 	RUSTFLAGS="${INCREMENTAL_FLAGS}" $(CARGO) rustc $(CARGO_OPTS) -- \
@@ -39,7 +39,7 @@ all@050-expand:
 
 # `new()` is a public method in a large CGU called in one other module
 all@060-Compiler-new:
-	git apply 060-Compiler-new.diff
+	patch -Np2 -i 060-Compiler-new.diff
 	find . -name "*.rs" | xargs touch
 	git diff
 	RUSTFLAGS="${INCREMENTAL_FLAGS}" $(CARGO) rustc $(CARGO_OPTS) -- \
@@ -47,7 +47,7 @@ all@060-Compiler-new:
 
 # `BYTE_FREQUENCIES` is a public static used in one other module
 all@070-BYTE_FREQUENCIES:
-	git apply 070-BYTE_FREQUENCIES.diff
+	patch -Np2 -i 070-BYTE_FREQUENCIES.diff
 	find . -name "*.rs" | xargs touch
 	git diff
 	RUSTFLAGS="${INCREMENTAL_FLAGS}" $(CARGO) rustc $(CARGO_OPTS) -- \
@@ -55,7 +55,7 @@ all@070-BYTE_FREQUENCIES:
 
 # `sparse::SparseSet` is a struct used in two other modules
 all@080-SparseSet:
-	git apply 080-SparseSet.diff
+	patch -Np2 -i 080-SparseSet.diff
 	find . -name "*.rs" | xargs touch
 	git diff
 	RUSTFLAGS="${INCREMENTAL_FLAGS}" $(CARGO) rustc $(CARGO_OPTS) -- \
@@ -63,7 +63,7 @@ all@080-SparseSet:
 
 # `backtrack::Job` is a local enum used in one module
 all@090-Job:
-	git apply 090-Job.diff
+	patch -Np2 -i 090-Job.diff
 	find . -name "*.rs" | xargs touch
 	git diff
 	RUSTFLAGS="${INCREMENTAL_FLAGS}" $(CARGO) rustc $(CARGO_OPTS) -- \

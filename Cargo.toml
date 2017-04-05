@@ -18,6 +18,7 @@ serde_json = "0.9"
 tar = "0.4"
 clap = "~2.22.0"
 log = "~0.3"
+tempdir = "~0.3"
 
 [dependencies.chrono]
 features = ["serde"]

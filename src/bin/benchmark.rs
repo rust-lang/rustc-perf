@@ -8,6 +8,7 @@ extern crate flate2;
 extern crate tar;
 extern crate rustc_perf_collector;
 extern crate env_logger;
+extern crate tempdir;
 #[macro_use] extern crate log;
 extern crate reqwest;
 extern crate chrono;
