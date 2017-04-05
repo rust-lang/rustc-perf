@@ -35,14 +35,7 @@ impl Sysroot {
     }
 
     pub fn install(sha: &str, triple: &str) -> Result<Self> {
-        let result = Sysroot {
-            rustc: PathBuf::from(format!("rust-{}/rustc/bin/rustc", sha)).canonicalize()
-                .chain_err(|| "failed to canonicalize rustc path")?,
-            cargo: PathBuf::from(format!("rust-{}/cargo/bin/cargo", sha)).canonicalize()
-                .chain_err(|| "failed to canonicalize cargo path")?,
-            sha: sha.to_owned()
-        };
-        let unpack_into = result.path();
+        let unpack_into = format!("rust-{}", sha);
         get_and_extract(
             &format!("{}/{}/rustc-nightly-{}.tar.gz", BASE_PATH, sha, triple),
             &unpack_into,
@@ -57,7 +50,15 @@ impl Sysroot {
             &format!("{}/{}/cargo-nightly-{}.tar.gz", BASE_PATH, sha, triple),
             &unpack_into,
             false,
-            )?;
+        )?;
+
+        let result = Sysroot {
+            rustc: PathBuf::from(format!("rust-{}/rustc/bin/rustc", sha)).canonicalize()
+                .chain_err(|| "failed to canonicalize rustc path")?,
+            cargo: PathBuf::from(format!("rust-{}/cargo/bin/cargo", sha)).canonicalize()
+                .chain_err(|| "failed to canonicalize cargo path")?,
+            sha: sha.to_owned()
+        };
 
         let version = result.command(&result.rustc).arg("--version").output()
             .chain_err(|| format!("{} --version", result.rustc.display()))?;

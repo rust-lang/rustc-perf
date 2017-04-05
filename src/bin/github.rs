@@ -43,9 +43,11 @@ pub fn get_new_commits(last_commit: &str) -> Result<Vec<Commit>> {
 
         info!("Requesting: {}", url);
 
-        let mut response = client.get(url)
-            .header(Authorization(format!("token {}", GH_API_TOKEN)))
-            .send().chain_err(|| format!("API request to {}", url))?;
+        let mut request_ = client.get(url);
+        if !GH_API_TOKEN.is_empty() {
+            request_ = request_.header(Authorization(format!("token {}", GH_API_TOKEN)));
+        }
+        let mut response = request_.send().chain_err(|| format!("API request to {}", url))?;
         let value: Value = serde_json::from_reader(&mut response)
             .chain_err(|| format!("API request to {} deserialization", url))?;
         let mut commits = convert_to_str_array(url, value)?;
