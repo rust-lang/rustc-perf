@@ -1,5 +1,6 @@
 #![recursion_limit = "1024"]
 
+#[macro_use] extern crate clap;
 extern crate serde;
 extern crate serde_json;
 #[macro_use] extern crate error_chain;
@@ -7,6 +8,7 @@ extern crate flate2;
 extern crate tar;
 extern crate rustc_perf_collector;
 extern crate env_logger;
+#[macro_use] extern crate log;
 extern crate reqwest;
 extern crate chrono;
 
@@ -29,7 +31,7 @@ use std::fs::{self, OpenOptions, File};
 use std::env;
 use std::str;
 use std::path::{Path, PathBuf};
-use std::io::{Read, Write, BufReader};
+use std::io::{stdout, stderr, Read, Write, BufReader};
 use std::process::Command;
 use std::collections::HashMap;
 
@@ -45,10 +47,91 @@ use chrono::{TimeZone, UTC};
 const BASE_PATH: &'static str = "https://s3.amazonaws.com/rust-lang-ci/rustc-builds";
 const GH_API_TOKEN: &'static str = env!("GH_API_TOKEN");
 
+struct Benchmark {
+    name: String,
+    path: PathBuf
+}
+
+impl Benchmark {
+    /// Run a specific benchmark on a specific commit
+    fn run(&self, rustc: &Path, cargo: &Path) -> Result<Vec<Patch>> {
+        info!("processing {}", self.name);
+        let output = command("make", &cargo, &rustc).arg("patches").current_dir(&self.path).output()?;
+        let mut patches = str::from_utf8(&output.stdout)
+            .chain_err(|| format!("make patches in {} returned non UTF-8 output", self.path.display()))?
+            .split_whitespace()
+            .collect::<Vec<_>>();
+        if patches.is_empty() {
+            patches.push("");
+        }
+
+        let mut patch_runs: Vec<Patch> = Vec::new();
+        for _ in 0..3 {
+            for patch in &patches {
+                info!("running `make all{}`", patch);
+                let output = command("make", &cargo, &rustc).arg(&format!("all{}", patch))
+                    .current_dir(&self.path)
+                    .env("CARGO_OPTS", "")
+                    .env("CARGO_RUSTC_OPTS", "-Z time-passes")
+                    .output()?;
+
+                if !output.status.success() {
+                    bail!("stderr non empty: {}", String::from_utf8_lossy(&output.stderr));
+                }
+
+                let patch_index = if let Some(p) = patch_runs.iter().position(|p_run| p_run.patch == *patch) {
+                    p
+                } else {
+                    patch_runs.push(Patch {
+                        patch: patch.to_string(),
+                        name: self.name.clone(),
+                        runs: Vec::new(),
+                    });
+                    patch_runs.len() - 1
+                };
+
+                let combined_name = format!("{}{}", self.name, patch);
+                patch_runs[patch_index].runs.push(Run {
+                    passes: process_output(&combined_name, output.stdout)?,
+                    name: combined_name,
+                });
+            }
+            if !command("make", &cargo, &rustc).arg("touch").current_dir(&self.path).status()?.success() {
+                bail!("{}: make touch failed.", self.path.display());
+            }
+        }
+
+        let mut patches = Vec::new();
+        for patch_run in patch_runs {
+            let mut runs = patch_run.runs.into_iter();
+            let mut pa = PassAverager::new(runs.next().unwrap().passes);
+            for run in runs {
+                pa.average_with(run.passes)?;
+            }
+            patches.push(Patch {
+                name: patch_run.name.clone(),
+                patch: patch_run.patch.clone(),
+                runs: vec![
+                    Run {
+                        name: patch_run.name + &patch_run.patch,
+                        passes: pa.state,
+                    }
+                ],
+            });
+        }
+
+        if !command("make", &cargo, &rustc).arg("clean").current_dir(&self.path).status()?.success() {
+            bail!("{}: make touch failed.", self.path.display());
+        }
+
+        Ok(patches)
+    }
+}
+
 fn get_and_extract(url: &str, into: &str, is_std: bool) -> Result<()> {
-    println!("requesting: {}", url);
+    info!("requesting: {}", url);
     let resp = reqwest::get(url)?;
-    println!("{}", resp.status());
+    info!("{}", resp.status());
     let mut resp = BufReader::new(resp);
 
     let decoder = GzDecoder::new(&mut resp)?;
@@ -113,7 +196,7 @@ fn process_output(name: &str, output: Vec<u8>) -> Result<Vec<Pass>> {
             //    sub_passes: HashMap::new(),
             //});
         } else {
-            //println!("unhandled line: {}", line);
+            //info!("unhandled line: {}", line);
         }
     }
 
@@ -165,123 +248,44 @@ impl PassAverager {
     }
 }
 
-fn run_commit(commit: &Commit, benchmarks: &[PathBuf]) -> Result<()> {
-    let unpack_into = format!("rust-{}", commit.sha);
-    let triple = "x86_64-unknown-linux-gnu";
+/// Download a commit from AWS and run benchmarks on it.
+fn bench_commit(sha: &str, triple: &str, benchmarks: &[Benchmark])
+                -> Result<HashMap<String, Vec<Patch>>>
+{
+    let unpack_into = format!("rust-{}", sha);
     get_and_extract(
-        &format!("{}/{}/rustc-nightly-{}.tar.gz", BASE_PATH, commit.sha, triple),
+        &format!("{}/{}/rustc-nightly-{}.tar.gz", BASE_PATH, sha, triple),
         &unpack_into,
         false,
     )?;
     get_and_extract(
-        &format!("{}/{}/rust-std-nightly-{}.tar.gz", BASE_PATH, commit.sha, triple),
+        &format!("{}/{}/rust-std-nightly-{}.tar.gz", BASE_PATH, sha, triple),
         &unpack_into,
         true,
     )?;
     get_and_extract(
-        &format!("{}/{}/cargo-nightly-{}.tar.gz", BASE_PATH, commit.sha, triple),
+        &format!("{}/{}/cargo-nightly-{}.tar.gz", BASE_PATH, sha, triple),
         &unpack_into,
         false,
     )?;
-    let rustc = PathBuf::from(format!("rust-{}/rustc/bin/rustc", commit.sha)).canonicalize()
+    let rustc = PathBuf::from(format!("rust-{}/rustc/bin/rustc", sha)).canonicalize()
         .chain_err(|| "failed to canonicalize rustc path")?;
-    let cargo = PathBuf::from(format!("rust-{}/cargo/bin/cargo", commit.sha)).canonicalize()
+    let cargo = PathBuf::from(format!("rust-{}/cargo/bin/cargo", sha)).canonicalize()
         .chain_err(|| "failed to canonicalize cargo path")?;
 
     let version = String::from_utf8(command(&rustc, &cargo, &rustc).arg("--version").output()
         .chain_err(|| format!("{} --version", rustc.display()))?.stdout).unwrap();
+    info!("version: {}", version);
 
-    println!("version: {}", version);
-
-    let mut file_data = CommitData {
-        commit: commit.clone(),
-        benchmarks: HashMap::new(),
-    };
-
-    for path in benchmarks {
-        let name = path.display().to_string().replace("benchmarks/", "");
-        println!("processing {}", name);
-        let output = command("make", &cargo, &rustc).arg("patches").current_dir(&path).output()?;
-        let mut patches = str::from_utf8(&output.stdout)
-            .chain_err(|| format!("make patches in {} returned non UTF-8 output", path.display()))?
-            .split_whitespace()
-            .collect::<Vec<_>>();
-        if patches.is_empty() {
-            patches.push("");
-        }
-
-        let mut patch_runs: Vec<Patch> = Vec::new();
-        for _ in 0..3 {
-            for patch in &patches {
-                println!("running `make all{}`", patch);
-                let output = command("make", &cargo, &rustc).arg(&format!("all{}", patch))
-                    .current_dir(&path)
-                    .env("CARGO_OPTS", "")
-                    .env("CARGO_RUSTC_OPTS", "-Z time-passes")
-                    .output()?;
-
-                if !output.status.success() {
-                    bail!("stderr non empty: {}", String::from_utf8_lossy(&output.stderr));
-                }
-
-                let patch_index = if let Some(p) = patch_runs.iter().position(|p_run| p_run.patch == *patch) {
-                    p
-                } else {
-                    patch_runs.push(Patch {
-                        patch: patch.to_string(),
-                        name: name.clone(),
-                        runs: Vec::new(),
-                    });
-                    patch_runs.len() - 1
-                };
-
-                let combined_name = format!("{}{}", name, patch);
-                patch_runs[patch_index].runs.push(Run {
-                    passes: process_output(&combined_name, output.stdout)?,
-                    name: combined_name,
-                });
-            }
-            if !command("make", &cargo, &rustc).arg("touch").current_dir(&path).status()?.success() {
-                bail!("{}: make touch failed.", path.display());
-            }
-        }
-
-        let mut patches = Vec::new();
-        for patch_run in patch_runs {
-            let mut runs = patch_run.runs.into_iter();
-            let mut pa = PassAverager::new(runs.next().unwrap().passes);
-            for run in runs {
-                pa.average_with(run.passes)?;
-            }
-            patches.push(Patch {
-                name: patch_run.name.clone(),
-                patch: patch_run.patch.clone(),
-                runs: vec![
-                    Run {
-                        name: patch_run.name + &patch_run.patch,
-                        passes: pa.state,
-                    }
-                ],
-            });
-        }
-
-        assert!(file_data.benchmarks.insert(name, patches).is_none(), "First instance of this benchmark");
-
-        if !command("make", &cargo, &rustc).arg("clean").current_dir(&path).status()?.success() {
-            bail!("{}: make touch failed.", path.display());
-        }
-    }
-
-    let filepath = format!("times/{}-{}.json", &commit.sha, triple);
-    println!("creating file {}", filepath);
-    let mut file = File::create(&filepath)?;
-    serde_json::to_writer(&mut file, &file_data)?;
+    let results : Result<Vec<_>> = benchmarks.iter().map(|benchmark| {
+        Ok((benchmark.name.clone(), benchmark.run(&rustc, &cargo)?))
+    }).collect();
 
     fs::remove_dir_all(&unpack_into).unwrap_or_else(|err| {
-        println!("failed to remove {}, please do so manually: {:?}", unpack_into, err);
+        info!("failed to remove {}, please do so manually: {:?}", unpack_into, err);
     });
 
-    Ok(())
+    Ok(results?.into_iter().collect())
 }
 
 const COMMIT_FILE: &'static str = "last-commit-sha";
@@ -324,7 +328,7 @@ fn get_new_commits(client: &reqwest::Client) -> Result<Vec<Commit>> {
             Ok(value)
         }
 
-        println!("Requesting: {}", url);
+        info!("Requesting: {}", url);
 
         let mut response = client.get(url)
             .header(Authorization(format!("token {}", GH_API_TOKEN)))
@@ -362,41 +366,119 @@ fn get_new_commits(client: &reqwest::Client) -> Result<Vec<Commit>> {
     Ok(commits)
 }
 
-fn run() -> Result<()> {
-    env_logger::init().expect("logger initialization successful");
-
+fn get_benchmarks(benchmark_dir: &Path, filter: Option<&str>) -> Result<Vec<Benchmark>> {
     let mut benchmarks = Vec::new();
-    for entry in fs::read_dir("benchmarks")? {
+    for entry in fs::read_dir(benchmark_dir).chain_err(|| "failed to list benchmarks")? {
         let entry = entry?;
         let path = entry.path();
+        let name = match entry.file_name().into_string() {
+            Ok(s) => s,
+            Err(e) => bail!("non-utf8 benchmark name: {:?}", e)
+        };
+
         if path.ends_with(".git") || path.ends_with("scripts") || !entry.file_type()?.is_dir() {
+            info!("benchmark {} - ignored", name);
             continue;
         }
 
-        benchmarks.push(path);
+        if let Some(filter) = filter {
+            if !name.contains(filter) {
+                info!("benchmark {} - filtered", name);
+                continue;
+            }
+        }
+
+        info!("benchmark {} - REGISTERED", name);
+        benchmarks.push(Benchmark {
+            path: path,
+            name: name
+        });
+    }
+    Ok(benchmarks)
+}
+
+fn process_commit2(commit: &Commit, benchmarks: &[Benchmark]) -> Result<()> {
+    let triple = "x86_64-unknown-linux-gnu";
+    let results = bench_commit(&commit.sha, triple, benchmarks)?;
+
+    let file_data = CommitData {
+        commit: commit.clone(),
+        benchmarks: results
+    };
+
+    let filepath = format!("times/{}-{}-{}.json", commit.date, commit.sha, triple);
+    info!("creating file {}", filepath);
+    let mut file = File::create(&filepath)?;
+    serde_json::to_writer(&mut file, &file_data)?;
+
+    Ok(())
+}
+
+fn process_commit(commit: &Commit, benchmarks: &[Benchmark]) -> Result<()> {
+    if let Err(e) = process_commit2(commit, &benchmarks) {
+        let mut file = OpenOptions::new().append(true).create(true).open("broken-commits")?;
+        writeln!(file, "{}: {:?}", commit.sha, e)?;
+        info!("running {} failed: {:?}", commit.sha, e);
     }
 
+    // Even if we failed with this commit, we should still update the SHA in the file so
+    // future runs can continue and don't have to re-run.
+    let mut commit_file = File::create(COMMIT_FILE)?;
+    commit_file.write_all(commit.sha.as_bytes())?;
+    Ok(())
+}
+
+fn process(benchmarks: &[Benchmark]) -> Result<()> {
     let client = reqwest::Client::new()?;
     let commits = get_new_commits(&client)?;
     if !commits.is_empty() {
-        println!("new commits: {:?}", commits);
+        info!("new commits: {:?}", commits);
         // We need to reverse the commits in order to have the first commit be the one directly
         // after the commit in the commit file
         for commit in commits.iter().rev() {
-            if let Err(e) = run_commit(&commit, &benchmarks) {
-                let mut file = OpenOptions::new().append(true).create(true).open("broken-commits")?;
-                writeln!(file, "{}: {:?}", commit.sha, e)?;
-                println!("running {} failed: {:?}", commit.sha, e);
-            }
-
-            // Even if we failed with this commit, we should still update the SHA in the file so
-            // future runs can continue and don't have to re-run.
-            let mut commit_file = File::create(COMMIT_FILE)?;
-            commit_file.write_all(commit.sha.as_bytes())?;
+            process_commit(commit, &benchmarks)?;
         }
     } else {
-        println!("Nothing to do; no new commits.");
+        info!("Nothing to do; no new commits.");
     }
-
     Ok(())
+}
+
+fn run() -> Result<i32> {
+    env_logger::init().expect("logger initialization successful");
+
+    let matches = clap_app!(rustc_perf_collector =>
+       (version: "0.1")
+       (author: "The Rust Compiler Team")
+       (about: "Collects Rust performance data")
+       (@arg benchmarks_dir: --benchmarks-dir +required +takes_value "Sets the directory benchmarks are found in")
+       (@arg filter: --filter +takes_value "Run only benchmarks that contain this")
+       (@subcommand process =>
+           (about: "syncs to git and collects performance data for all versions")
+       )
+       (@subcommand bench_commit =>
+           (about: "benchmark a bors merge from AWS and output data to stdout")
+           (@arg COMMIT: +required +takes_value "Commit hash to bench")
+        )
+    ).get_matches();
+    let benchmark_dir = PathBuf::from(matches.value_of_os("benchmarks_dir").unwrap());
+    let filter = matches.value_of("filter");
+    let benchmarks = get_benchmarks(&benchmark_dir, filter)?;
+
+    match matches.subcommand() {
+        ("process", Some(_)) => {
+            process(&benchmarks)?;
+            Ok(0)
+        }
+        ("bench_commit", Some(sub_m)) => {
+            let commit = sub_m.value_of("COMMIT").unwrap();
+            let result = bench_commit(commit, "x86_64-unknown-linux-gnu", &benchmarks)?;
+            serde_json::to_writer(&mut stdout(), &result)?;
+            Ok(0)
+        }
+        _ => {
+            let _ = writeln!(stderr(), "{}", matches.usage());
+            Ok(2)
+        }
+    }
 }

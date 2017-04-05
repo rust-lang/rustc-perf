@@ -16,12 +16,9 @@ serde = "0.9"
 serde_derive = "0.9"
 serde_json = "0.9"
 tar = "0.4"
+clap = "~2.22.0"
+log = "~0.3"
 
 [dependencies.chrono]
 features = ["serde"]
 version = "0.3.0"
-
-[[bin]]
-name = "benchmark"
-path = "src/bin/benchmark.rs"
-
