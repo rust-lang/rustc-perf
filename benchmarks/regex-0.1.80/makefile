@@ -17,7 +17,6 @@ all@020-incr-from-scratch:
 all@030-compile_one:
 	patch -Np2 -i 030-compile_one.diff
 	find . -name "*.rs" | xargs touch
-	git diff
 	RUSTFLAGS="${INCREMENTAL_FLAGS}" $(CARGO) rustc $(CARGO_OPTS) -- \
 	  $(CARGO_RUSTC_OPTS) -Z incremental-info
 
@@ -25,7 +24,6 @@ all@030-compile_one:
 all@040-is_valid_cap_letter:
 	patch -Np2 -i 040-is_valid_cap_letter.diff
 	find . -name "*.rs" | xargs touch
-	git diff
 	RUSTFLAGS="${INCREMENTAL_FLAGS}" $(CARGO) rustc $(CARGO_OPTS) -- \
 	  $(CARGO_RUSTC_OPTS) -Z incremental-info
 
@@ -33,7 +31,6 @@ all@040-is_valid_cap_letter:
 all@050-expand:
 	patch -Np2 -i 050-expand.diff
 	find . -name "*.rs" | xargs touch
-	git diff
 	RUSTFLAGS="${INCREMENTAL_FLAGS}" $(CARGO) rustc $(CARGO_OPTS) -- \
 	  $(CARGO_RUSTC_OPTS) -Z incremental-info
 
@@ -41,7 +38,6 @@ all@050-expand:
 all@060-Compiler-new:
 	patch -Np2 -i 060-Compiler-new.diff
 	find . -name "*.rs" | xargs touch
-	git diff
 	RUSTFLAGS="${INCREMENTAL_FLAGS}" $(CARGO) rustc $(CARGO_OPTS) -- \
 	  $(CARGO_RUSTC_OPTS) -Z incremental-info
 
@@ -49,7 +45,6 @@ all@060-Compiler-new:
 all@070-BYTE_FREQUENCIES:
 	patch -Np2 -i 070-BYTE_FREQUENCIES.diff
 	find . -name "*.rs" | xargs touch
-	git diff
 	RUSTFLAGS="${INCREMENTAL_FLAGS}" $(CARGO) rustc $(CARGO_OPTS) -- \
 	  $(CARGO_RUSTC_OPTS) -Z incremental-info
 
@@ -57,7 +52,6 @@ all@070-BYTE_FREQUENCIES:
 all@080-SparseSet:
 	patch -Np2 -i 080-SparseSet.diff
 	find . -name "*.rs" | xargs touch
-	git diff
 	RUSTFLAGS="${INCREMENTAL_FLAGS}" $(CARGO) rustc $(CARGO_OPTS) -- \
 	  $(CARGO_RUSTC_OPTS) -Z incremental-info
 
@@ -65,7 +59,6 @@ all@080-SparseSet:
 all@090-Job:
 	patch -Np2 -i 090-Job.diff
 	find . -name "*.rs" | xargs touch
-	git diff
 	RUSTFLAGS="${INCREMENTAL_FLAGS}" $(CARGO) rustc $(CARGO_OPTS) -- \
 	  $(CARGO_RUSTC_OPTS) -Z incremental-info
 

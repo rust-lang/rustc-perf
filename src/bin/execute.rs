@@ -63,7 +63,10 @@ impl Benchmark {
                     .output()?;
 
                 if !output.status.success() {
-                    bail!("stderr non empty: {}", String::from_utf8_lossy(&output.stderr));
+                    bail!("stderr non empty: {},\n\n stdout={}",
+                          String::from_utf8_lossy(&output.stderr),
+                          String::from_utf8_lossy(&output.stdout)
+                          );
                 }
 
                 let patch_index = if let Some(p) = patch_runs.iter().position(|p_run| p_run.patch == *patch) {
