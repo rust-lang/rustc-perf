@@ -45,32 +45,17 @@ impl Repo {
 
     }
 
-    fn git_location(&self) -> Result<()> {
-        let current = self
-            .git().arg("log").arg("--oneline").arg("-1").arg("HEAD")
-            .output().chain_err(|| "could not spawn `git`")?;
-        if !current.status.success() {
-            bail!("`{}` is not a valid repository:\n{}",
-                  self.path.display(),
-                  String::from_utf8_lossy(&current.stderr));
-        }
-
-        info!("at commit {}", String::from_utf8_lossy(&current.stdout).trim());
-        Ok(())
-    }
-
     pub fn open(path: PathBuf) -> Result<Self> {
         let result = Repo { path: path };
 
-        result.git_location()?;
         if !result.commit_file().exists() {
             // try not to nuke random repositories.
             bail!("`{:?}` file not present", result.commit_file().display());
         }
 
+        result.git_nooutput(&["reset", "--hard", "HEAD"])?;
         result.git_nooutput(&["pull", "-f"])?;
         result.git_nooutput(&["reset", "--hard", "HEAD"])?;
-        result.git_location()?;
 
         fs::create_dir_all(result.times()).chain_err(|| "can't create `times/`")?;
         OpenOptions::new().append(true).create(true).open(result.broken_commits_file())

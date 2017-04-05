@@ -35,7 +35,7 @@ impl Benchmark {
 
             info!("copying files to temporary directory");
             let output = self.command(sysroot, "cp").arg("-r").arg("-T").arg("--")
-                .arg(&self.path).arg(tmp_dir.path()).output()?;
+                .arg(".").arg(tmp_dir.path()).output()?;
 
             if !output.status.success() {
                 bail!("copy failed: {}", String::from_utf8_lossy(&output.stderr));
