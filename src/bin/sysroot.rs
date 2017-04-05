@@ -48,17 +48,11 @@ impl Sysroot {
             &unpack_into,
             true,
         )?;
-        get_and_extract(
-            &format!("{}/{}/cargo-nightly-{}.tar.gz", BASE_PATH, sha, triple),
-            &unpack_into,
-            false,
-        )?;
 
-        let result = Sysroot {
+        let mut result = Sysroot {
             rustc: PathBuf::from(format!("rust-{}/rustc/bin/rustc", sha)).canonicalize()
                 .chain_err(|| "failed to canonicalize rustc path")?,
-            cargo: PathBuf::from(format!("rust-{}/cargo/bin/cargo", sha)).canonicalize()
-                .chain_err(|| "failed to canonicalize cargo path")?,
+            cargo: PathBuf::new(),
             sha: sha.to_owned(),
             preserve: preserve,
         };
@@ -67,6 +61,35 @@ impl Sysroot {
             .chain_err(|| format!("{} --version", result.rustc.display()))?;
         let version = String::from_utf8(version.stdout).unwrap();
         info!("version: {}", version);
+
+        let mut cargo_sha = sha;
+        let index = version.find('(');
+        if let Some(index) = index {
+            let version = &version[index..];
+            if let Some(index) = version.find(' ') {
+                let version = &version[index..];
+                if let Some(rindex) = version.rfind(')') {
+                    let date = version[..rindex].trim();
+                    info!("date: {}", date);
+                    if date < "2017-03-20" {
+                        // Versions of rustc older than Mar 20 have bugs in
+                        // their cargo. Use a known-good cargo for older rustcs
+                        // instead.
+                        info!("using fallback cargo");
+                        cargo_sha = "53eb08bedc8719844bb553dbe1a39d9010783ff5";
+                    }
+                }
+            }
+        }
+
+        get_and_extract(
+            &format!("{}/{}/cargo-nightly-{}.tar.gz", BASE_PATH, cargo_sha, triple),
+            &unpack_into,
+            false,
+        )?;
+
+        result.cargo = PathBuf::from(format!("rust-{}/cargo/bin/cargo", sha)).canonicalize()
+            .chain_err(|| "failed to canonicalize cargo path")?;
 
         Ok(result)
     }
