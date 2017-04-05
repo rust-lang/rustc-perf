@@ -17,7 +17,8 @@ const BASE_PATH: &'static str = "https://s3.amazonaws.com/rust-lang-ci/rustc-bui
 pub struct Sysroot {
     pub sha: String,
     pub rustc: PathBuf,
-    pub cargo: PathBuf
+    pub cargo: PathBuf,
+    pub preserve: bool,
 }
 
 impl Sysroot {
@@ -29,12 +30,13 @@ impl Sysroot {
         command
             .env_clear()
             .env("PATH", env::var("PATH").unwrap_or_default())
+            .env("CARGO_HOME", env::var("CARGO_HOME").unwrap_or_default())
             .env("CARGO", &self.cargo)
             .env("RUSTC", &self.rustc);
         command
     }
 
-    pub fn install(sha: &str, triple: &str) -> Result<Self> {
+    pub fn install(sha: &str, triple: &str, preserve: bool) -> Result<Self> {
         let unpack_into = format!("rust-{}", sha);
         get_and_extract(
             &format!("{}/{}/rustc-nightly-{}.tar.gz", BASE_PATH, sha, triple),
@@ -57,7 +59,8 @@ impl Sysroot {
                 .chain_err(|| "failed to canonicalize rustc path")?,
             cargo: PathBuf::from(format!("rust-{}/cargo/bin/cargo", sha)).canonicalize()
                 .chain_err(|| "failed to canonicalize cargo path")?,
-            sha: sha.to_owned()
+            sha: sha.to_owned(),
+            preserve: preserve,
         };
 
         let version = result.command(&result.rustc).arg("--version").output()
@@ -75,6 +78,10 @@ impl Sysroot {
 
 impl Drop for Sysroot {
     fn drop(&mut self) {
+        if self.preserve {
+            return
+        }
+
         fs::remove_dir_all(&self.path()).unwrap_or_else(|err| {
             info!("failed to remove {}, please do so manually: {:?}", self.path(), err);
         });

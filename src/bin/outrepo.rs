@@ -2,7 +2,7 @@
 
 use errors::{Error, Result, ResultExt};
 
-use std::fs::{File, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{PathBuf};
 use std::process::Command;
@@ -37,6 +37,10 @@ impl Repo {
                   self.path.display(),
                   String::from_utf8_lossy(&output.stderr));
         }
+        info!("git {:?} returned ({:?}, {:?})",
+              args,
+              String::from_utf8_lossy(&output.stdout),
+              String::from_utf8_lossy(&output.stderr));
         Ok(())
 
     }
@@ -59,13 +63,18 @@ impl Repo {
         let result = Repo { path: path };
 
         result.git_location()?;
-        if !result.times().is_dir() {
-            bail!("`{}` directory not present", result.times().display());
+        if !result.commit_file().exists() {
+            // try not to nuke random repositories.
+            bail!("`{:?}` file not present", result.commit_file().display());
         }
 
         result.git_nooutput(&["pull", "-f"])?;
         result.git_nooutput(&["reset", "--hard", "HEAD"])?;
         result.git_location()?;
+
+        fs::create_dir_all(result.times()).chain_err(|| "can't create `times/`")?;
+        OpenOptions::new().append(true).create(true).open(result.broken_commits_file())
+            .chain_err(|| "can't create `broken_commits`")?;
 
         Ok(result)
     }
@@ -123,7 +132,7 @@ impl Repo {
     fn add_commit_data(&self, triple: &str, data: &CommitData) -> Result<()> {
         let commit = &data.commit;
         let filepath = self.times()
-            .join(format!("{}-{}-{}.json", commit.date, commit.sha, triple));
+            .join(format!("{}-{}-{}.json", commit.date.to_rfc3339(), commit.sha, triple));
         info!("creating file {}", filepath.display());
         let mut file = File::create(&filepath)?;
         serde_json::to_writer(&mut file, &data)?;

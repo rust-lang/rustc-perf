@@ -44,11 +44,11 @@ mod time_passes;
 use execute::Benchmark;
 
 /// Download a commit from AWS and run benchmarks on it.
-fn bench_commit(sha: &str, triple: &str, benchmarks: &[Benchmark])
+fn bench_commit(sha: &str, triple: &str, benchmarks: &[Benchmark], preserve_sysroot: bool)
                 -> Result<HashMap<String, Vec<Patch>>>
 {
     info!("benchmarking commit {} for triple {}", sha, triple);
-    let sysroot = sysroot::Sysroot::install(sha, triple)?;
+    let sysroot = sysroot::Sysroot::install(sha, triple, preserve_sysroot)?;
 
     let results : Result<Vec<_>> = benchmarks.iter().map(|benchmark| {
         Ok((benchmark.name.clone(), benchmark.run(&sysroot)?))
@@ -88,9 +88,10 @@ fn get_benchmarks(benchmark_dir: &Path, filter: Option<&str>) -> Result<Vec<Benc
     Ok(benchmarks)
 }
 
-fn process_commit(repo: &outrepo::Repo, commit: &Commit, benchmarks: &[Benchmark]) -> Result<()> {
+fn process_commit(repo: &outrepo::Repo, commit: &Commit, benchmarks: &[Benchmark],
+                  preserve_sysroot: bool) -> Result<()> {
     let triple = "x86_64-unknown-linux-gnu";
-    match bench_commit(&commit.sha, triple, benchmarks) {
+    match bench_commit(&commit.sha, triple, benchmarks, preserve_sysroot) {
         Ok(results) => {
             let file_data = CommitData {
                 commit: commit.clone(),
@@ -105,7 +106,9 @@ fn process_commit(repo: &outrepo::Repo, commit: &Commit, benchmarks: &[Benchmark
     }
 }
 
-fn process_commits(repo: &outrepo::Repo, benchmarks: &[Benchmark]) -> Result<()> {
+fn process_commits(repo: &outrepo::Repo, benchmarks: &[Benchmark], preserve_sysroot: bool)
+                   -> Result<()>
+{
     let last_commit = repo.get_last_commit()?;
     let commits = github::get_new_commits(&last_commit)?;
     if !commits.is_empty() {
@@ -113,7 +116,7 @@ fn process_commits(repo: &outrepo::Repo, benchmarks: &[Benchmark]) -> Result<()>
         // We need to reverse the commits in order to have the first commit be the one directly
         // after the commit in the commit file
         for commit in commits.iter().rev() {
-            process_commit(repo, commit, &benchmarks)?;
+            process_commit(repo, commit, &benchmarks, preserve_sysroot)?;
         }
     } else {
         info!("Nothing to do; no new commits.");
@@ -130,6 +133,7 @@ fn run() -> Result<i32> {
        (about: "Collects Rust performance data")
        (@arg benchmarks_dir: --benchmarks-dir +required +takes_value "Sets the directory benchmarks are found in")
        (@arg filter: --filter +takes_value "Run only benchmarks that contain this")
+       (@arg preserve_sysroots: -p --preserve "Don't delete sysroots after running.")
        (@subcommand process =>
            (about: "syncs to git and collects performance data for all versions")
            (@arg OUTPUT_REPOSITORY: +required +takes_value "Repository to output to")
@@ -142,17 +146,19 @@ fn run() -> Result<i32> {
     let benchmark_dir = PathBuf::from(matches.value_of_os("benchmarks_dir").unwrap());
     let filter = matches.value_of("filter");
     let benchmarks = get_benchmarks(&benchmark_dir, filter)?;
+    let preserve_sysroots = matches.is_present("preserve_sysroots");
 
     match matches.subcommand() {
         ("process", Some(sub_m)) => {
             let out_repo = PathBuf::from(sub_m.value_of_os("OUTPUT_REPOSITORY").unwrap());
             let out_repo = outrepo::Repo::open(out_repo)?;
-            process_commits(&out_repo, &benchmarks)?;
+            process_commits(&out_repo, &benchmarks, preserve_sysroots)?;
             Ok(0)
         }
         ("bench_commit", Some(sub_m)) => {
             let commit = sub_m.value_of("COMMIT").unwrap();
-            let result = bench_commit(commit, "x86_64-unknown-linux-gnu", &benchmarks)?;
+            let result = bench_commit(commit, "x86_64-unknown-linux-gnu", &benchmarks,
+                                      preserve_sysroots)?;
             serde_json::to_writer(&mut stdout(), &result)?;
             Ok(0)
         }
