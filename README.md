@@ -16,11 +16,13 @@ since it. If starting from scratch, 83c2d95238e3545e7ae9af4873c48b1e3651c164 may
 ## How to run
 
 ```
-GH_API_TOKEN=<token> cargo run
+RUST_LOG=info GH_API_TOKEN=<token> cargo run -- --benchmarks ./benchmarks process $RUSTC_TIMING
 ```
 
 GH_API_TOKEN should be a GitHub token, which is only used to reduce API rate limits, so should need
 extremely minimal rights (if any).
+
+$RUSTC_TIMING should point to a clone of the `https://github.com/rust-lang-nursery/rustc-timing` repository, with push access.
 
 ## How it works
 
@@ -40,4 +42,3 @@ serious investigation as to why this is has been conducted, so it is possible th
 re-enabled after additional investigation and improvements. The differences in names between runs
 make the code which attempts to average passes across runs to (at least theoretically) produce more
 accurate data break, since it cannot find the same pass in all runs.
-
