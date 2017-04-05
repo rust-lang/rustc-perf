@@ -27,16 +27,17 @@ use errors::*;
 
 quick_main!(run);
 
-use std::fs::{self, OpenOptions, File};
+use std::fs;
 use std::str;
 use std::path::{Path, PathBuf};
-use std::io::{stdout, stderr, Read, Write};
+use std::io::{stdout, stderr, Write};
 use std::collections::HashMap;
 
 use rustc_perf_collector::{Patch, Commit, CommitData};
 
 mod execute;
 mod github;
+mod outrepo;
 mod sysroot;
 mod time_passes;
 
@@ -46,6 +47,7 @@ use execute::Benchmark;
 fn bench_commit(sha: &str, triple: &str, benchmarks: &[Benchmark])
                 -> Result<HashMap<String, Vec<Patch>>>
 {
+    info!("benchmarking commit {} for triple {}", sha, triple);
     let sysroot = sysroot::Sysroot::install(sha, triple)?;
 
     let results : Result<Vec<_>> = benchmarks.iter().map(|benchmark| {
@@ -54,8 +56,6 @@ fn bench_commit(sha: &str, triple: &str, benchmarks: &[Benchmark])
 
     Ok(results?.into_iter().collect())
 }
-
-const COMMIT_FILE: &'static str = "last-commit-sha";
 
 fn get_benchmarks(benchmark_dir: &Path, filter: Option<&str>) -> Result<Vec<Benchmark>> {
     let mut benchmarks = Vec::new();
@@ -88,59 +88,32 @@ fn get_benchmarks(benchmark_dir: &Path, filter: Option<&str>) -> Result<Vec<Benc
     Ok(benchmarks)
 }
 
-fn process_commit2(commit: &Commit, benchmarks: &[Benchmark]) -> Result<()> {
+fn process_commit(repo: &outrepo::Repo, commit: &Commit, benchmarks: &[Benchmark]) -> Result<()> {
     let triple = "x86_64-unknown-linux-gnu";
-    let results = bench_commit(&commit.sha, triple, benchmarks)?;
-
-    let file_data = CommitData {
-        commit: commit.clone(),
-        benchmarks: results
-    };
-
-    let filepath = format!("times/{}-{}-{}.json", commit.date, commit.sha, triple);
-    info!("creating file {}", filepath);
-    let mut file = File::create(&filepath)?;
-    serde_json::to_writer(&mut file, &file_data)?;
-
-    Ok(())
-}
-
-fn process_commit(commit: &Commit, benchmarks: &[Benchmark]) -> Result<()> {
-    if let Err(e) = process_commit2(commit, &benchmarks) {
-        let mut file = OpenOptions::new().append(true).create(true).open("broken-commits")?;
-        writeln!(file, "{}: {:?}", commit.sha, e)?;
-        info!("running {} failed: {:?}", commit.sha, e);
+    match bench_commit(&commit.sha, triple, benchmarks) {
+        Ok(results) => {
+            let file_data = CommitData {
+                commit: commit.clone(),
+                benchmarks: results
+            };
+            repo.success(triple, &file_data)
+        }
+        Err(error) => {
+            info!("running {} failed: {:?}", commit.sha, error);
+            repo.failure(commit, &error)
+        }
     }
-
-    // Even if we failed with this commit, we should still update the SHA in the file so
-    // future runs can continue and don't have to re-run.
-    let mut commit_file = File::create(COMMIT_FILE)?;
-    commit_file.write_all(commit.sha.as_bytes())?;
-    Ok(())
 }
 
-fn get_last_commit() -> Result<String> {
-    let mut commit_file = File::open(COMMIT_FILE)
-        .chain_err(|| format!("expected {} to exist, and contain the last tested commit sha", COMMIT_FILE))?;
-
-    let mut last_commit = String::new();
-    commit_file.read_to_string(&mut last_commit)?;
-
-    if last_commit.is_empty() {
-        bail!("{} was empty", COMMIT_FILE);
-    }
-
-    Ok(last_commit.trim().to_owned())
-}
-
-fn process(benchmarks: &[Benchmark]) -> Result<()> {
-    let commits = github::get_new_commits(&get_last_commit()?)?;
+fn process_commits(repo: &outrepo::Repo, benchmarks: &[Benchmark]) -> Result<()> {
+    let last_commit = repo.get_last_commit()?;
+    let commits = github::get_new_commits(&last_commit)?;
     if !commits.is_empty() {
         info!("new commits: {:?}", commits);
         // We need to reverse the commits in order to have the first commit be the one directly
         // after the commit in the commit file
         for commit in commits.iter().rev() {
-            process_commit(commit, &benchmarks)?;
+            process_commit(repo, commit, &benchmarks)?;
         }
     } else {
         info!("Nothing to do; no new commits.");
@@ -159,6 +132,7 @@ fn run() -> Result<i32> {
        (@arg filter: --filter +takes_value "Run only benchmarks that contain this")
        (@subcommand process =>
            (about: "syncs to git and collects performance data for all versions")
+           (@arg OUTPUT_REPOSITORY: +required +takes_value "Repository to output to")
        )
        (@subcommand bench_commit =>
            (about: "benchmark a bors merge from AWS and output data to stdout")
@@ -170,8 +144,10 @@ fn run() -> Result<i32> {
     let benchmarks = get_benchmarks(&benchmark_dir, filter)?;
 
     match matches.subcommand() {
-        ("process", Some(_)) => {
-            process(&benchmarks)?;
+        ("process", Some(sub_m)) => {
+            let out_repo = PathBuf::from(sub_m.value_of_os("OUTPUT_REPOSITORY").unwrap());
+            let out_repo = outrepo::Repo::open(out_repo)?;
+            process_commits(&out_repo, &benchmarks)?;
             Ok(0)
         }
         ("bench_commit", Some(sub_m)) => {
