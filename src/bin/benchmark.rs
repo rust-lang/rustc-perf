@@ -42,6 +42,8 @@ mod outrepo;
 mod sysroot;
 mod time_passes;
 
+use outrepo::CommitKind;
+
 use execute::Benchmark;
 
 /// Download a commit from AWS and run benchmarks on it.
@@ -90,7 +92,7 @@ fn get_benchmarks(benchmark_dir: &Path, filter: Option<&str>) -> Result<Vec<Benc
 }
 
 fn process_commit(repo: &outrepo::Repo, commit: &Commit, benchmarks: &[Benchmark],
-                  preserve_sysroot: bool) -> Result<()> {
+                  preserve_sysroot: bool, kind: CommitKind) -> Result<()> {
     let triple = "x86_64-unknown-linux-gnu";
     match bench_commit(commit, triple, benchmarks, preserve_sysroot) {
         Ok(results) => {
@@ -98,13 +100,28 @@ fn process_commit(repo: &outrepo::Repo, commit: &Commit, benchmarks: &[Benchmark
                 commit: commit.clone(),
                 benchmarks: results
             };
-            repo.success(triple, &file_data)
+            repo.success(triple, &file_data, kind)
         }
         Err(error) => {
             info!("running {} failed: {:?}", commit.sha, error);
-            repo.failure(commit, &error)
+            repo.failure(commit, &error, kind)
         }
     }
+}
+
+
+fn process_retries(repo: &mut outrepo::Repo, benchmarks: &[Benchmark], preserve_sysroot: bool)
+                   -> Result<()>
+{
+    while let Some(retry) = repo.next_retry() {
+        info!("retrying {}", retry);
+        // we don't want to reuse the `client` between commits, because it will time out
+        // in the time it takes to benchmark a commit.
+        let client = reqwest::Client::new()?;
+        let commit = github::commit_from_sha(&client, &retry)?;
+        process_commit(repo, &commit, benchmarks, preserve_sysroot, CommitKind::Retry)?;
+    }
+    Ok(())
 }
 
 fn process_commits(repo: &outrepo::Repo, benchmarks: &[Benchmark], preserve_sysroot: bool)
@@ -117,7 +134,7 @@ fn process_commits(repo: &outrepo::Repo, benchmarks: &[Benchmark], preserve_sysr
         // We need to reverse the commits in order to have the first commit be the one directly
         // after the commit in the commit file
         for commit in commits.iter().rev() {
-            process_commit(repo, commit, &benchmarks, preserve_sysroot)?;
+            process_commit(repo, commit, &benchmarks, preserve_sysroot, CommitKind::Progress)?;
         }
     } else {
         info!("Nothing to do; no new commits.");
@@ -152,7 +169,8 @@ fn run() -> Result<i32> {
     match matches.subcommand() {
         ("process", Some(sub_m)) => {
             let out_repo = PathBuf::from(sub_m.value_of_os("OUTPUT_REPOSITORY").unwrap());
-            let out_repo = outrepo::Repo::open(out_repo)?;
+            let mut out_repo = outrepo::Repo::open(out_repo)?;
+            process_retries(&mut out_repo, &benchmarks, preserve_sysroots)?;
             process_commits(&out_repo, &benchmarks, preserve_sysroots)?;
             Ok(0)
         }

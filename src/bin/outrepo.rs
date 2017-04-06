@@ -14,7 +14,13 @@ use serde_json;
 use rustc_perf_collector::{Commit, CommitData};
 
 pub struct Repo {
-    path: PathBuf
+    path: PathBuf,
+    retries: Vec<String>
+}
+
+pub enum CommitKind {
+    Progress,
+    Retry
 }
 
 impl Repo {
@@ -46,34 +52,34 @@ impl Repo {
     }
 
     pub fn open(path: PathBuf) -> Result<Self> {
-        let result = Repo { path: path };
+        let mut result = Repo { path: path, retries: vec![] };
 
         if !result.commit_file().exists() {
             // try not to nuke random repositories.
             bail!("`{:?}` file not present", result.commit_file().display());
         }
 
-        result.git_nooutput(&["reset", "--hard", "HEAD"])?;
-        result.git_nooutput(&["pull", "-f"])?;
-        result.git_nooutput(&["reset", "--hard", "HEAD"])?;
+        result.git_nooutput(&["fetch"])?;
+        result.git_nooutput(&["reset", "--hard", "@{upstream}"])?;
 
         fs::create_dir_all(result.times()).chain_err(|| "can't create `times/`")?;
         OpenOptions::new().append(true).create(true).open(result.broken_commits_file())
             .chain_err(|| "can't create `broken_commits`")?;
+        result.load_retries()?;
 
         Ok(result)
     }
 
-    pub fn success(&self, triple: &str, data: &CommitData) -> Result<()> {
+    pub fn success(&self, triple: &str, data: &CommitData, kind: CommitKind) -> Result<()> {
         self.add_commit_data(triple, data)?;
-        self.set_last_commit(&data.commit)?;
+        self.set_last_commit(&data.commit, kind)?;
         self.commit_and_push(&format!("{} - success", data.commit.sha))?;
         Ok(())
     }
 
-    pub fn failure(&self, commit: &Commit, err: &Error) -> Result<()> {
+    pub fn failure(&self, commit: &Commit, err: &Error, kind: CommitKind) -> Result<()> {
         self.add_broken_commit(commit, err)?;
-        self.set_last_commit(commit)?;
+        self.set_last_commit(commit, kind)?;
         self.commit_and_push(&format!("{} - FAILURE", commit.sha))?;
 
         // sleep for a minute to avoid triggering rate-limits.
@@ -99,10 +105,12 @@ impl Repo {
     }
 
     fn commit_and_push(&self, message: &str) -> Result<()> {
+        self.write_retries()?;
         self.git_nooutput(&[
             "add",
             "last-commit-sha",
             "broken-commits-log",
+            "retries",
             "times"])?;
         self.git_nooutput(&[
             "commit",
@@ -124,9 +132,11 @@ impl Repo {
         Ok(())
     }
 
-    fn set_last_commit(&self, last_commit: &Commit) -> Result<()> {
-        let mut commit_file = File::create(self.commit_file())?;
-        commit_file.write_all(last_commit.sha.as_bytes())?;
+    fn set_last_commit(&self, last_commit: &Commit, kind: CommitKind) -> Result<()> {
+        if let CommitKind::Progress = kind {
+            let mut commit_file = File::create(self.commit_file())?;
+            commit_file.write_all(last_commit.sha.as_bytes())?;
+        }
         Ok(())
     }
 
@@ -138,12 +148,54 @@ impl Repo {
         Ok(())
     }
 
+    fn load_retries(&mut self) -> Result<()> {
+        let mut retries = OpenOptions::new().read(true).write(true).create(true).open(self.retries_file())
+            .chain_err(|| "can't create `retries`")?;
+        let mut retries_s = String::new();
+        retries.read_to_string(&mut retries_s)?;
+        self.retries = retries_s.split('\n')
+            .map(|line| line.trim())
+            .filter(|line| !line.is_empty())
+            .map(|line| {
+                if line.len() == 40 {
+                    Ok(line.to_owned())
+                } else {
+                    bail!("bad retry hash `{}`", line)
+                }
+            }).collect::<Result<_>>()?;
+        info!("loaded retries: {:?}", self.retries);
+        Ok(())
+    }
+
+    fn write_retries(&self) -> Result<()> {
+        info!("writing retries");
+        let mut retries = OpenOptions::new().write(true).truncate(true)
+            .open(self.retries_file())
+            .chain_err(|| "can't create `retries`")?;
+        for retry in self.retries.iter() {
+            writeln!(retries, "{}", retry)?;
+        }
+        Ok(())
+    }
+
+    pub fn next_retry(&mut self) -> Option<String> {
+        if self.retries.len() == 0 {
+            None
+        } else {
+            Some(self.retries.remove(0))
+        }
+    }
+
     fn commit_file(&self) -> PathBuf {
         self.path.join("last-commit-sha")
     }
 
     fn broken_commits_file(&self) -> PathBuf {
         self.path.join("broken-commits-log")
+    }
+
+    fn retries_file(&self) -> PathBuf {
+        self.path.join("retries")
     }
 
     fn times(&self) -> PathBuf {
