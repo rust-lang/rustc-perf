@@ -6,9 +6,12 @@ use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use chrono::{TimeZone, UTC};
 use flate2::bufread::GzDecoder;
 use reqwest;
 use tar::Archive;
+
+use rustc_perf_collector::Commit;
 
 use errors::{Result, ResultExt};
 
@@ -34,15 +37,29 @@ impl Sysroot {
         command
     }
 
-    pub fn install(sha: &str, triple: &str, preserve: bool) -> Result<Self> {
+    pub fn install(commit: &Commit, triple: &str, preserve: bool) -> Result<Self> {
+        let sha : &str = &commit.sha;
         let unpack_into = format!("rust-{}", sha);
+
+        let cargo_sha = if commit.date < UTC.ymd(2017, 3, 20).and_hms(0, 0, 0) {
+            // Versions of rustc older than Mar 20 have bugs in
+            // their cargo. Use a known-good cargo for older rustcs
+            // instead.
+            info!("using fallback cargo");
+            "53eb08bedc8719844bb553dbe1a39d9010783ff5"
+        } else {
+            sha
+        };
+
         get_and_extract("rustc", sha, triple, &unpack_into, false)?;
         get_and_extract("rust-std", sha, triple, &unpack_into, true)?;
+        get_and_extract("cargo", cargo_sha, triple, &unpack_into, false)?;
 
-        let mut result = Sysroot {
+        let result = Sysroot {
             rustc: PathBuf::from(format!("rust-{}/rustc/bin/rustc", sha)).canonicalize()
                 .chain_err(|| "failed to canonicalize rustc path")?,
-            cargo: PathBuf::new(),
+            cargo: PathBuf::from(format!("rust-{}/cargo/bin/cargo", sha)).canonicalize()
+                .chain_err(|| "failed to canonicalize cargo path")?,
             sha: sha.to_owned(),
             preserve: preserve,
         };
@@ -51,31 +68,6 @@ impl Sysroot {
             .chain_err(|| format!("{} --version", result.rustc.display()))?;
         let version = String::from_utf8(version.stdout).unwrap();
         info!("version: {}", version.trim());
-
-        let mut cargo_sha = sha;
-        let index = version.find('(');
-        if let Some(index) = index {
-            let version = &version[index..];
-            if let Some(index) = version.find(' ') {
-                let version = &version[index..];
-                if let Some(rindex) = version.rfind(')') {
-                    let date = version[..rindex].trim();
-                    info!("date: {}", date);
-                    if date < "2017-03-20" {
-                        // Versions of rustc older than Mar 20 have bugs in
-                        // their cargo. Use a known-good cargo for older rustcs
-                        // instead.
-                        info!("using fallback cargo");
-                        cargo_sha = "53eb08bedc8719844bb553dbe1a39d9010783ff5";
-                    }
-                }
-            }
-        }
-
-        get_and_extract("cargo", cargo_sha, triple, &unpack_into, false)?;
-
-        result.cargo = PathBuf::from(format!("rust-{}/cargo/bin/cargo", sha)).canonicalize()
-            .chain_err(|| "failed to canonicalize cargo path")?;
 
         Ok(result)
     }
