@@ -12,8 +12,6 @@ use tar::Archive;
 
 use errors::{Result, ResultExt};
 
-const BASE_PATH: &'static str = "https://s3.amazonaws.com/rust-lang-ci/rustc-builds";
-
 pub struct Sysroot {
     pub sha: String,
     pub rustc: PathBuf,
@@ -38,16 +36,8 @@ impl Sysroot {
 
     pub fn install(sha: &str, triple: &str, preserve: bool) -> Result<Self> {
         let unpack_into = format!("rust-{}", sha);
-        get_and_extract(
-            &format!("{}/{}/rustc-nightly-{}.tar.gz", BASE_PATH, sha, triple),
-            &unpack_into,
-            false,
-         )?;
-        get_and_extract(
-            &format!("{}/{}/rust-std-nightly-{}.tar.gz", BASE_PATH, sha, triple),
-            &unpack_into,
-            true,
-        )?;
+        get_and_extract("rustc", sha, triple, &unpack_into, false)?;
+        get_and_extract("rust-std", sha, triple, &unpack_into, true)?;
 
         let mut result = Sysroot {
             rustc: PathBuf::from(format!("rust-{}/rustc/bin/rustc", sha)).canonicalize()
@@ -60,7 +50,7 @@ impl Sysroot {
         let version = result.command(&result.rustc).arg("--version").output()
             .chain_err(|| format!("{} --version", result.rustc.display()))?;
         let version = String::from_utf8(version.stdout).unwrap();
-        info!("version: {}", version);
+        info!("version: {}", version.trim());
 
         let mut cargo_sha = sha;
         let index = version.find('(');
@@ -82,11 +72,7 @@ impl Sysroot {
             }
         }
 
-        get_and_extract(
-            &format!("{}/{}/cargo-nightly-{}.tar.gz", BASE_PATH, cargo_sha, triple),
-            &unpack_into,
-            false,
-        )?;
+        get_and_extract("cargo", cargo_sha, triple, &unpack_into, false)?;
 
         result.cargo = PathBuf::from(format!("rust-{}/cargo/bin/cargo", sha)).canonicalize()
             .chain_err(|| "failed to canonicalize cargo path")?;
@@ -111,10 +97,26 @@ impl Drop for Sysroot {
     }
 }
 
-fn get_and_extract(url: &str, into: &str, is_std: bool) -> Result<()> {
-    info!("requesting: {}", url);
-    let resp = reqwest::get(url)?;
-    info!("{}", resp.status());
+const MODULE_URLS: &'static [&'static str] = &[
+    "https://s3.amazonaws.com/rust-lang-ci/rustc-builds/@SHA@/@MODULE@-nightly-@TRIPLE@.tar.gz",
+    "https://s3.amazonaws.com/rust-lang-ci/rustc-builds/@SHA@/dist/@MODULE@-nightly-@TRIPLE@.tar.gz"
+];
+
+fn get_module(module: &str, sha: &str, triple: &str) -> Result<reqwest::Response> {
+    for url in MODULE_URLS {
+        let url = url.replace("@MODULE@", module).replace("@SHA@", sha).replace("@TRIPLE@", triple);
+        info!("requesting: {}", url);
+        let resp = reqwest::get(&url)?;
+        info!("{}", resp.status());
+        if resp.status().is_success() {
+            return Ok(resp);
+        }
+    }
+    bail!("unable to download sha {} triple {} module {}", sha, triple, module);
+}
+
+fn get_and_extract(module: &str, sha: &str, triple: &str, into: &str, is_std: bool) -> Result<()> {
+    let resp = get_module(module, sha, triple)?;
     let mut resp = BufReader::new(resp);
 
     let decoder = GzDecoder::new(&mut resp)?;
