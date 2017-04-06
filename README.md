@@ -34,8 +34,7 @@ at that point.
 
 ## Limitations
 
-Will only work for commits merged after #39245 merged (bors sha:
-83c2d95238e3545e7ae9af4873c48b1e3651c164) because it began producing cargo artifacts as well.
+Will only work for commits that have builds on s3://rust-lang-ci/rustc-builds: these merged after #38748 (bors sha: 927c55d86b0be44337f37cf5b0a76fb8ba86e06c).
 
 Subpasses are currently ignored completely, since their naming differs between different runs. No
 serious investigation as to why this is has been conducted, so it is possible that they could be
