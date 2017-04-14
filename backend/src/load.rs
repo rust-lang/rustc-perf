@@ -95,20 +95,18 @@ impl InputData {
                     continue;
                 }
             };
-            if contents.find("times").unwrap().as_array().unwrap().is_empty() {
+            if contents["times"].as_array().unwrap().is_empty() {
                 skipped += 1;
                 continue;
             }
 
-            let commit = contents.lookup("header.commit").unwrap().as_str().unwrap().to_string();
-            let date = InputData::parse_from_header(contents.lookup("header.date")
-                    .unwrap()
-                    .as_str()
-                    .unwrap()).or_else(|_| InputData::parse_from_filename(&filename))?;
+            let commit = contents["header"]["commit"].as_str().unwrap().to_string();
+            let date = InputData::parse_from_header(contents["header"]["date"].as_str().unwrap())
+                .or_else(|_| InputData::parse_from_filename(&filename))?;
 
             let test_name = InputData::testname_from_filename(&filename).to_string();
 
-            let times = contents.find("times").unwrap().as_array().unwrap();
+            let times = contents["times"].as_array().unwrap();
 
             let push_to = if &test_name == "rustc" {
                 &mut data_rustc
@@ -364,19 +362,19 @@ fn make_times(timings: &[Value], is_rustc: bool) -> HashMap<String, HashMap<Stri
 
     for timing in timings {
         let mut times = HashMap::new();
-        for (phase_name, phase) in timing.find("times").unwrap().as_object().unwrap() {
+        for (phase_name, phase) in timing["times"].as_object().unwrap() {
             times.insert(phase_name.to_string(),
                          Timing {
-                             percent: phase.find("percent").unwrap().as_f64().unwrap(),
-                             time: phase.find("time").unwrap().as_f64().unwrap(),
-                             rss: timing.find("rss")
-                                 .and_then(|rss| rss.find(phase_name))
+                             percent: phase["percent"].as_f64().unwrap(),
+                             time: phase["time"].as_f64().unwrap(),
+                             rss: timing.get("rss")
+                                 .and_then(|rss| rss.get(phase_name))
                                  .and_then(|phase| phase.as_u64()),
                          });
         }
 
         let mut mem_values = Vec::new();
-        if let Some(obj) = timing.find("rss").and_then(|rss| rss.as_object()) {
+        if let Some(obj) = timing.get("rss").and_then(|rss| rss.as_object()) {
             for (_, value) in obj {
                 mem_values.push(value.as_u64().unwrap());
             }
@@ -385,7 +383,7 @@ fn make_times(timings: &[Value], is_rustc: bool) -> HashMap<String, HashMap<Stri
         times.insert("total".into(),
                      Timing {
                          percent: 100.0,
-                         time: timing.find("total").unwrap().as_f64().unwrap(),
+                         time: timing["total"].as_f64().unwrap(),
                          rss: Some(mem_values.into_iter().max().unwrap_or(0)),
                      });
 
@@ -395,7 +393,7 @@ fn make_times(timings: &[Value], is_rustc: bool) -> HashMap<String, HashMap<Stri
             entry.rss = max(times[phase].rss, entry.rss);
         }
 
-        by_crate.insert(timing.find("crate").unwrap().as_str().unwrap().to_string(),
+        by_crate.insert(timing["crate"].as_str().unwrap().to_string(),
                         times);
     }
 

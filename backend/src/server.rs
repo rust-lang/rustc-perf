@@ -389,7 +389,7 @@ fn on_push(req: &mut Request) -> IronResult<Response> {
         // Write the new data back into the request
         *data = new_data;
 
-        Ok(serde_json::to_value("Successfully updated from filesystem"))
+        Ok(serde_json::to_value("Successfully updated from filesystem")?)
     };
 
     Ok(route_handler::unwrap_with_or_internal_err(responder(), route_handler::respond))

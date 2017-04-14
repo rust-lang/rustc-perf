@@ -24,7 +24,7 @@ pub mod summary {
     pub struct Percent(pub f64);
 
     impl Serialize for Percent {
-        fn serialize<S>(&self, serializer: &mut S) -> ::std::result::Result<(), S::Error>
+        fn serialize<S>(&self, serializer: S) -> ::std::result::Result<S::Ok, S::Error>
             where S: serde::ser::Serializer
         {
             serializer.serialize_str(&format!("{:.1}", self.0))

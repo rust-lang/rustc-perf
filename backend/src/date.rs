@@ -8,6 +8,7 @@
 // except according to those terms.
 
 use std::ops::{Add, Sub};
+use std::fmt;
 
 use chrono::{UTC, DateTime, TimeZone, Duration, Datelike};
 use serde::{self, Serialize, Deserialize};
@@ -83,7 +84,7 @@ impl Add<Duration> for Date {
 }
 
 impl Serialize for Date {
-    fn serialize<S>(&self, serializer: &mut S) -> ::std::result::Result<(), S::Error>
+    fn serialize<S>(&self, serializer: S) -> ::std::result::Result<S::Ok, S::Error>
         where S: serde::ser::Serializer
     {
         serializer.serialize_str(&self.0.to_rfc3339())
@@ -91,7 +92,7 @@ impl Serialize for Date {
 }
 
 impl Deserialize for Date {
-    fn deserialize<D>(deserializer: &mut D) -> ::std::result::Result<Date, D::Error>
+    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Date, D::Error>
         where D: serde::de::Deserializer
     {
         struct DateVisitor;
@@ -99,10 +100,17 @@ impl Deserialize for Date {
         impl serde::de::Visitor for DateVisitor {
             type Value = Date;
 
-            fn visit_str<E>(&mut self, value: &str) -> ::std::result::Result<Date, E>
+            fn visit_str<E>(self, value: &str) -> ::std::result::Result<Date, E>
                 where E: serde::de::Error
             {
-                Date::from_str(value).map_err(|_| serde::de::Error::invalid_value(value))
+                Date::from_str(value)
+                    .map_err(|_| {
+                        serde::de::Error::invalid_value(serde::de::Unexpected::Str(value), &self)
+                    })
+            }
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("an RFC 3339 date")
             }
         }
 
@@ -145,7 +153,7 @@ impl OptionalDate {
 }
 
 impl serde::Deserialize for OptionalDate {
-    fn deserialize<D>(deserializer: &mut D) -> ::std::result::Result<OptionalDate, D::Error>
+    fn deserialize<D>(deserializer: D) -> ::std::result::Result<OptionalDate, D::Error>
         where D: serde::de::Deserializer
     {
         struct DateVisitor;
@@ -153,7 +161,7 @@ impl serde::Deserialize for OptionalDate {
         impl serde::de::Visitor for DateVisitor {
             type Value = OptionalDate;
 
-            fn visit_str<E>(&mut self, value: &str) -> ::std::result::Result<OptionalDate, E>
+            fn visit_str<E>(self, value: &str) -> ::std::result::Result<OptionalDate, E>
                 where E: serde::de::Error
             {
                 match Date::from_str(value) {
@@ -166,6 +174,10 @@ impl serde::Deserialize for OptionalDate {
                     }
                 }
             }
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("OptionalDate")
+            }
         }
 
         deserializer.deserialize(DateVisitor)
@@ -173,7 +185,7 @@ impl serde::Deserialize for OptionalDate {
 }
 
 impl serde::Serialize for OptionalDate {
-    fn serialize<S>(&self, serializer: &mut S) -> ::std::result::Result<(), S::Error>
+    fn serialize<S>(&self, serializer: S) -> ::std::result::Result<S::Ok, S::Error>
         where S: serde::Serializer
     {
         match *self {

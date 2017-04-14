@@ -13,7 +13,7 @@ use std::path::Path;
 use iron::prelude::*;
 use iron::status::Status;
 use iron::{Headers, headers};
-use iron::response::ResponseBody;
+use iron::response::Response;
 use serde_json::Value;
 use serde::Serialize;
 
@@ -44,7 +44,7 @@ fn post_request<T: Serialize>(path: &str, body: T) -> Response {
 fn response_body(response: Response) -> Value {
     if let Some(mut body) = response.body {
         let mut buf = Vec::new();
-        body.write_body(&mut ResponseBody::new(&mut buf)).unwrap();
+        body.write_body(&mut buf).unwrap();
         let s = String::from_utf8(buf).unwrap();
         serde_json::from_str(&s).unwrap()
     } else {
