@@ -100,7 +100,10 @@ impl InputData {
                 continue;
             }
 
-            let commit = contents["header"]["commit"].as_str().unwrap().to_string();
+            let commit = contents["header"]["commit"]
+                .as_str()
+                .unwrap()
+                .to_string();
             let date = InputData::parse_from_header(contents["header"]["date"].as_str().unwrap())
                 .or_else(|_| InputData::parse_from_filename(&filename))?;
 
@@ -117,7 +120,9 @@ impl InputData {
             // If a run on the same commit occurs, replacing the crates in the
             // old run for this commit with the "current" run's crates.
             // TODO: Merge the two runs somehow, perhaps averaging each pass?
-            if let Some(index) = push_to.iter().position(|run: &TestRun| run.commit == commit) {
+            if let Some(index) = push_to
+                   .iter()
+                   .position(|run: &TestRun| run.commit == commit) {
                 let run = &mut push_to[index];
 
                 let timings = make_times(times, test_name == "rustc");
@@ -176,22 +181,26 @@ impl InputData {
         data_rustc.sort();
         data_benchmarks.sort();
 
-        let benchmarks = data_benchmarks.iter().flat_map(|a| a.by_crate.keys()).cloned().collect();
+        let benchmarks = data_benchmarks
+            .iter()
+            .flat_map(|a| a.by_crate.keys())
+            .cloned()
+            .collect();
 
         // Post processing to generate the summary data.
         let summary_rustc = Summary::new(&data_rustc, last_date, &benchmarks);
         let summary_benchmarks = Summary::new(&data_benchmarks, last_date, &benchmarks);
 
         Ok(InputData {
-            summary_rustc: summary_rustc,
-            summary_benchmarks: summary_benchmarks,
-            crate_list: crate_list,
-            phase_list: phase_list,
-            benchmarks: benchmarks,
-            last_date: last_date,
-            data_rustc: data_rustc,
-            data_benchmarks: data_benchmarks,
-        })
+               summary_rustc: summary_rustc,
+               summary_benchmarks: summary_benchmarks,
+               crate_list: crate_list,
+               phase_list: phase_list,
+               benchmarks: benchmarks,
+               last_date: last_date,
+               data_rustc: data_rustc,
+               data_benchmarks: data_benchmarks,
+           })
     }
 
     pub fn by_kind(&self, kind: Kind) -> &[TestRun] {
@@ -226,8 +235,8 @@ impl InputData {
 
     /// Parse date from filename.
     fn parse_from_filename(filename: &str) -> Result<Date> {
-        let date_str = &filename[(filename.find("--").unwrap() + 2)..filename.find(".json")
-            .unwrap()];
+        let date_str = &filename[(filename.find("--").unwrap() + 2)..
+                        filename.find(".json").unwrap()];
 
         match Date::from_format(date_str, "%Y-%m-%d-%H-%M-%S") {
             Ok(dt) => Ok(dt),
@@ -367,7 +376,8 @@ fn make_times(timings: &[Value], is_rustc: bool) -> HashMap<String, HashMap<Stri
                          Timing {
                              percent: phase["percent"].as_f64().unwrap(),
                              time: phase["time"].as_f64().unwrap(),
-                             rss: timing.get("rss")
+                             rss: timing
+                                 .get("rss")
                                  .and_then(|rss| rss.get(phase_name))
                                  .and_then(|phase| phase.as_u64()),
                          });
@@ -388,13 +398,14 @@ fn make_times(timings: &[Value], is_rustc: bool) -> HashMap<String, HashMap<Stri
                      });
 
         for phase in times.keys() {
-            let mut entry = totals.entry(phase.to_string()).or_insert_with(Timing::new);
+            let mut entry = totals
+                .entry(phase.to_string())
+                .or_insert_with(Timing::new);
             entry.time += times[phase].time;
             entry.rss = max(times[phase].rss, entry.rss);
         }
 
-        by_crate.insert(timing["crate"].as_str().unwrap().to_string(),
-                        times);
+        by_crate.insert(timing["crate"].as_str().unwrap().to_string(), times);
     }
 
     if is_rustc {
@@ -431,10 +442,12 @@ impl MedianRun {
 
         for run in runs {
             for (krate_name, krate) in run {
-                let mut by_phase = by_crate_phase.entry(krate_name.to_string())
+                let mut by_phase = by_crate_phase
+                    .entry(krate_name.to_string())
                     .or_insert(HashMap::new());
                 for (phase_name, phase) in krate {
-                    by_phase.entry(phase_name.to_string())
+                    by_phase
+                        .entry(phase_name.to_string())
                         .or_insert(Vec::new())
                         .push(phase.time);
                 }
@@ -509,7 +522,8 @@ impl Summary {
         for week in &mut weeks {
             for crate_name in benchmarks {
                 if !week.by_crate.contains_key(crate_name) {
-                    week.by_crate.insert(crate_name.to_string(), HashMap::new());
+                    week.by_crate
+                        .insert(crate_name.to_string(), HashMap::new());
                 }
             }
         }
@@ -547,8 +561,10 @@ impl Summary {
                 if week0.by_crate[crate_name][phase] > 0.0 &&
                    week1.by_crate[crate_name][phase] > 0.0 {
                     current_crate.insert(phase.to_string(),
-                                Summary::get_percent_change(week0.by_crate[crate_name][phase],
-                                                            week1.by_crate[crate_name][phase]));
+                                         Summary::get_percent_change(week0.by_crate[crate_name]
+                                                                         [phase],
+                                                                     week1.by_crate[crate_name]
+                                                                         [phase]));
                 }
             }
             current_week.insert(crate_name.to_string(), current_crate);

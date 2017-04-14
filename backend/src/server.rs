@@ -43,8 +43,13 @@ impl DateData {
                    phases: &[String],
                    group_by: GroupBy)
                    -> DateData {
-        let crates = crate_names.into_iter()
-            .filter_map(|crate_name| day.by_crate.get(crate_name).map(|krate| (crate_name, krate)))
+        let crates = crate_names
+            .into_iter()
+            .filter_map(|crate_name| {
+                            day.by_crate
+                                .get(crate_name)
+                                .map(|krate| (crate_name, krate))
+                        })
             .collect::<Vec<_>>();
 
         let mut data = HashMap::new();
@@ -55,7 +60,9 @@ impl DateData {
                     GroupBy::Phase => data.entry(phase_name.to_string()),
                 };
 
-                entry.or_insert(Recording::new()).record(krate.get(phase_name));
+                entry
+                    .or_insert(Recording::new())
+                    .record(krate.get(phase_name));
             }
         }
 
@@ -140,7 +147,10 @@ fn handle_summary(r: &mut Request) -> IronResult<Response> {
 
         for (crate_name, krate) in &benchmark.by_crate {
             per_bench.insert(crate_name.to_string(),
-                             krate.get("total").cloned().map(|val| summary::Percent(val)));
+                             krate
+                                 .get("total")
+                                 .cloned()
+                                 .map(|val| summary::Percent(val)));
         }
 
         let bootstrap = if rustc.by_crate["total"].contains_key("total") {
@@ -206,8 +216,14 @@ fn handle_data(r: &mut Request) -> IronResult<Response> {
 
         // Return everything from the first non-empty data to the last non-empty data.
         // Data may contain "holes" of empty data.
-        let first_idx = result.iter().position(|day| !day.data.is_empty()).unwrap_or(0);
-        let last_idx = result.iter().rposition(|day| !day.data.is_empty()).unwrap_or(0);
+        let first_idx = result
+            .iter()
+            .position(|day| !day.data.is_empty())
+            .unwrap_or(0);
+        let last_idx = result
+            .iter()
+            .rposition(|day| !day.data.is_empty())
+            .unwrap_or(0);
         let result = result.drain(first_idx..(last_idx + 1)).collect();
         data::Response(result)
     })
@@ -292,18 +308,18 @@ impl Stats {
     fn from(data: &[&TestRun], crate_name: &str, phases: &[String]) -> Stats {
         let sums = data.iter()
             .filter(|day| if let Some(krate) = day.by_crate.get(crate_name) {
-                !krate.is_empty()
-            } else {
-                false
-            })
+                        !krate.is_empty()
+                    } else {
+                        false
+                    })
             .map(|day| {
-                let krate = &day.by_crate[crate_name];
-                let mut sum = 0.0;
-                for phase in phases {
-                    sum += krate[phase].time;
-                }
-                sum
-            })
+                     let krate = &day.by_crate[crate_name];
+                     let mut sum = 0.0;
+                     for phase in phases {
+                         sum += krate[phase].time;
+                     }
+                     sum
+                 })
             .collect::<Vec<_>>();
 
         if sums.is_empty() {

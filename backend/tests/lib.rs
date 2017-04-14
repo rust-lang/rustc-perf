@@ -30,7 +30,7 @@ fn request(path: &str) -> Response {
     iron_test::request::get(&format!("http://perf.rust-lang.org/{}", path),
                             Headers::new(),
                             &*CHAIN)
-        .unwrap()
+            .unwrap()
 }
 
 fn post_request<T: Serialize>(path: &str, body: T) -> Response {
@@ -38,7 +38,7 @@ fn post_request<T: Serialize>(path: &str, body: T) -> Response {
                              Headers::new(),
                              &serde_json::to_string(&body).unwrap(),
                              &*CHAIN)
-        .unwrap()
+            .unwrap()
 }
 
 fn response_body(response: Response) -> Value {

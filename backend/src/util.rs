@@ -29,5 +29,7 @@ pub fn index_in(data: &[TestRun], date: Date) -> usize {
 
 /// Reads the repository path from the arguments passed to main()
 pub fn get_repo_path() -> Result<String> {
-    env::args().nth(1).ok_or("No argument supplied, needs location of data repo.".into())
+    env::args()
+        .nth(1)
+        .ok_or("No argument supplied, needs location of data repo.".into())
 }
