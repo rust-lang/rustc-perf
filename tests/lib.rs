@@ -42,7 +42,8 @@ fn pretty_json<S: Serialize>(value: &S) -> String {
 }
 
 fn check_response<S>(received_value: S, expected_file: &str)
-    where S: Serialize + Deserialize + PartialEq + ::std::fmt::Debug
+where
+    S: Serialize + Deserialize + PartialEq + ::std::fmt::Debug,
 {
     // Some types aren't equivalent after a round trip to their actual values.
     // This means we need to round trip through Serde to get saved representation on disk.
@@ -55,61 +56,92 @@ fn check_response<S>(received_value: S, expected_file: &str)
     let expected_value = from_file(expected_file);
 
     if received_value != expected_value {
-        panic!("Compared {} body with server result, results not equal.", expected_file);
+        panic!(
+            "Compared {} body with server result, results not equal.",
+            expected_file
+        );
     }
 }
 
 #[test]
 fn summary() {
-    check_response(server::handle_summary(&INPUT_DATA), "tests/expected_results/summary.json");
+    check_response(
+        server::handle_summary(&INPUT_DATA),
+        "tests/expected_results/summary.json",
+    );
 }
 
 
 #[test]
 fn info() {
-    check_response(server::handle_info(&INPUT_DATA), "tests/expected_results/info.json");
+    check_response(
+        server::handle_info(&INPUT_DATA),
+        "tests/expected_results/info.json",
+    );
 }
 
 #[test]
 fn data_crate_benchmarks() {
-    check_response(server::handle_data(data::Request {
-                                    start_date: OptionalDate::CouldNotParse("".into()),
-                                    end_date: OptionalDate::CouldNotParse("".into()),
-                                    group_by: GroupBy::Crate,
-                                    kind: Kind::Benchmarks,
-                                    phases: vec!["total".into()],
-                                    crates: vec!["helloworld".into(), "regex.0.1.30".into()],
-                                }, &INPUT_DATA),
-                                "tests/expected_results/data_crate_benchmarks.json");
+    check_response(
+        server::handle_data(
+            data::Request {
+                start_date: OptionalDate::CouldNotParse("".into()),
+                end_date: OptionalDate::CouldNotParse("".into()),
+                group_by: GroupBy::Crate,
+                kind: Kind::Benchmarks,
+                phases: vec!["total".into()],
+                crates: vec!["helloworld".into(), "regex.0.1.30".into()],
+            },
+            &INPUT_DATA,
+        ),
+        "tests/expected_results/data_crate_benchmarks.json",
+    );
 }
 
 #[test]
 fn data_crate_rustc_total() {
-    check_response(server::handle_data(data::Request {
-                                    start_date: OptionalDate::CouldNotParse("".into()),
-                                    end_date: OptionalDate::CouldNotParse("".into()),
-                                    group_by: GroupBy::Crate,
-                                    kind: Kind::Rustc,
-                                    phases: vec!["total".into()],
-                                    crates: vec!["total".into()],
-                                }, &INPUT_DATA),
-                                "tests/expected_results/data_crate_rustc_total.json");
+    check_response(
+        server::handle_data(
+            data::Request {
+                start_date: OptionalDate::CouldNotParse("".into()),
+                end_date: OptionalDate::CouldNotParse("".into()),
+                group_by: GroupBy::Crate,
+                kind: Kind::Rustc,
+                phases: vec!["total".into()],
+                crates: vec!["total".into()],
+            },
+            &INPUT_DATA,
+        ),
+        "tests/expected_results/data_crate_rustc_total.json",
+    );
 }
 
 #[test]
 fn tabular_rustc() {
-    check_response(server::handle_tabular(tabular::Request {
-                                    kind: Kind::Rustc,
-                                    date: OptionalDate::CouldNotParse("".into()),
-                                }, &INPUT_DATA), "tests/expected_results/tabular_rustc.json");
+    check_response(
+        server::handle_tabular(
+            tabular::Request {
+                kind: Kind::Rustc,
+                date: OptionalDate::CouldNotParse("".into()),
+            },
+            &INPUT_DATA,
+        ),
+        "tests/expected_results/tabular_rustc.json",
+    );
 }
 
 #[test]
 fn tabular_benchmarks() {
-    check_response(server::handle_tabular(tabular::Request {
-                                    kind: Kind::Benchmarks,
-                                    date: OptionalDate::CouldNotParse("".into()),
-                                }, &INPUT_DATA), "tests/expected_results/tabular_benchmarks.json");
+    check_response(
+        server::handle_tabular(
+            tabular::Request {
+                kind: Kind::Benchmarks,
+                date: OptionalDate::CouldNotParse("".into()),
+            },
+            &INPUT_DATA,
+        ),
+        "tests/expected_results/tabular_benchmarks.json",
+    );
 }
 
 fn ymd_date(year: i32, month: u32, day: u32) -> OptionalDate {
@@ -118,46 +150,70 @@ fn ymd_date(year: i32, month: u32, day: u32) -> OptionalDate {
 
 #[test]
 fn days_benchmarks() {
-    check_response(server::handle_days(days::Request {
-                                    kind: Kind::Benchmarks,
-                                    date_a: ymd_date(2016, 02, 21),
-                                    date_b: ymd_date(2016, 03, 22),
-                                    crates: vec!["helloworld".into(), "regex.0.1.30".into()],
-                                    phases: vec!["total".into()],
-                                    group_by: GroupBy::Crate,
-                                }, &INPUT_DATA), "tests/expected_results/days_benchmarks.json");
+    check_response(
+        server::handle_days(
+            days::Request {
+                kind: Kind::Benchmarks,
+                date_a: ymd_date(2016, 02, 21),
+                date_b: ymd_date(2016, 03, 22),
+                crates: vec!["helloworld".into(), "regex.0.1.30".into()],
+                phases: vec!["total".into()],
+                group_by: GroupBy::Crate,
+            },
+            &INPUT_DATA,
+        ),
+        "tests/expected_results/days_benchmarks.json",
+    );
 }
 
 #[test]
 fn days_rustc() {
-    check_response(server::handle_days(days::Request {
-                                    kind: Kind::Rustc,
-                                    date_a: ymd_date(2016, 02, 21),
-                                    date_b: ymd_date(2016, 03, 22),
-                                    crates: vec!["total".into()],
-                                    phases: vec!["total".into()],
-                                    group_by: GroupBy::Crate,
-                                }, &INPUT_DATA), "tests/expected_results/days_rustc.json");
+    check_response(
+        server::handle_days(
+            days::Request {
+                kind: Kind::Rustc,
+                date_a: ymd_date(2016, 02, 21),
+                date_b: ymd_date(2016, 03, 22),
+                crates: vec!["total".into()],
+                phases: vec!["total".into()],
+                group_by: GroupBy::Crate,
+            },
+            &INPUT_DATA,
+        ),
+        "tests/expected_results/days_rustc.json",
+    );
 }
 
 #[test]
 fn stats_benchmarks() {
-    check_response(server::handle_stats(stats::Request {
-                                    kind: Kind::Benchmarks,
-                                    start_date: OptionalDate::CouldNotParse("".into()),
-                                    end_date: OptionalDate::CouldNotParse("".into()),
-                                    crates: vec!["helloworld".into(), "regex.0.1.30".into()],
-                                    phases: vec!["total".into()],
-                                }, &INPUT_DATA), "tests/expected_results/stats_benchmarks.json");
+    check_response(
+        server::handle_stats(
+            stats::Request {
+                kind: Kind::Benchmarks,
+                start_date: OptionalDate::CouldNotParse("".into()),
+                end_date: OptionalDate::CouldNotParse("".into()),
+                crates: vec!["helloworld".into(), "regex.0.1.30".into()],
+                phases: vec!["total".into()],
+            },
+            &INPUT_DATA,
+        ),
+        "tests/expected_results/stats_benchmarks.json",
+    );
 }
 
 #[test]
 fn stats_rustc() {
-    check_response(server::handle_stats(stats::Request {
-                                    kind: Kind::Rustc,
-                                    start_date: OptionalDate::CouldNotParse("".into()),
-                                    end_date: OptionalDate::CouldNotParse("".into()),
-                                    crates: vec!["total".into()],
-                                    phases: vec!["total".into()],
-                                }, &INPUT_DATA), "tests/expected_results/stats_rustc.json");
+    check_response(
+        server::handle_stats(
+            stats::Request {
+                kind: Kind::Rustc,
+                start_date: OptionalDate::CouldNotParse("".into()),
+                end_date: OptionalDate::CouldNotParse("".into()),
+                crates: vec!["total".into()],
+                phases: vec!["total".into()],
+            },
+            &INPUT_DATA,
+        ),
+        "tests/expected_results/stats_rustc.json",
+    );
 }
