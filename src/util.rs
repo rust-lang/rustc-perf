@@ -33,3 +33,21 @@ pub fn get_repo_path() -> Result<String> {
         .nth(1)
         .ok_or("No argument supplied, needs location of data repo.".into())
 }
+
+/// Rounds serialized and deserialized floats to 2 decimal places.
+pub mod round_float {
+    use serde::{Deserialize, Serializer, Deserializer};
+
+    pub fn serialize<S>(n: &f64, serializer: S) -> Result<S::Ok, S::Error>
+        where S: Serializer
+    {
+        serializer.serialize_f64((*n * 100.0).round() / 100.0)
+    }
+
+    pub fn deserialize<D>(deserializer: D) -> Result<f64, D::Error>
+        where D: Deserializer
+    {
+        let n = f64::deserialize(deserializer)?;
+        Ok((n * 100.0).round() / 100.0)
+    }
+}

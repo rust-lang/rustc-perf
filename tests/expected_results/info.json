@@ -1,22 +1,4 @@
 {
-  "as_of": "2016-09-13T17:54:55+00:00",
-  "benchmarks": [
-    "futures-rs-test-all",
-    "helloworld",
-    "html5ever-2016-08-25",
-    "hyper.0.5.0",
-    "inflate-0.1.0",
-    "issue-32062-equality-relations-complexity",
-    "issue-32278-big-array-of-strings",
-    "jld-day15-parser",
-    "piston-image-0.10.3",
-    "regex-macros.0.1.30",
-    "regex.0.1.30",
-    "rust-encoding-0.3.0",
-    "rust-encoding.0.2.32",
-    "syntex-0.42.2",
-    "syntex-0.42.2-incr-clean"
-  ],
   "crates": [
     "liballoc",
     "liballoc_jemalloc",
@@ -132,5 +114,23 @@
     "unused lib feature checking",
     "variance inference",
     "wf checking"
-  ]
+  ],
+  "benchmarks": [
+    "futures-rs-test-all",
+    "helloworld",
+    "html5ever-2016-08-25",
+    "hyper.0.5.0",
+    "inflate-0.1.0",
+    "issue-32062-equality-relations-complexity",
+    "issue-32278-big-array-of-strings",
+    "jld-day15-parser",
+    "piston-image-0.10.3",
+    "regex-macros.0.1.30",
+    "regex.0.1.30",
+    "rust-encoding-0.3.0",
+    "rust-encoding.0.2.32",
+    "syntex-0.42.2",
+    "syntex-0.42.2-incr-clean"
+  ],
+  "as_of": "2016-09-13T17:54:55+00:00"
 }

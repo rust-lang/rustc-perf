@@ -16,11 +16,11 @@ extern crate error_chain;
 #[macro_use]
 extern crate log;
 extern crate chrono;
-extern crate iron;
-extern crate router;
-extern crate persistent;
 extern crate serde;
 extern crate serde_json;
+extern crate hyper;
+extern crate futures;
+extern crate futures_cpupool;
 
 mod errors {
     error_chain! {
@@ -40,7 +40,6 @@ mod errors {
 }
 
 mod git;
-mod route_handler;
 
 pub mod api;
 pub mod load;

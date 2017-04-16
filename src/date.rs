@@ -118,7 +118,7 @@ impl Deserialize for Date {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum OptionalDate {
     Date(Date),
     CouldNotParse(String),

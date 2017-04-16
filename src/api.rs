@@ -15,28 +15,17 @@
 
 pub mod summary {
     use std::collections::HashMap;
-    use serde::{self, Serialize};
 
+    // FIXME: Move percent elsewhere (utils?), and update imports.
+    pub use load::Percent;
     use date::Date;
-
-    /// One decimal place rounded percent
-    #[derive(Debug, Copy, Clone, Deserialize)]
-    pub struct Percent(pub f64);
-
-    impl Serialize for Percent {
-        fn serialize<S>(&self, serializer: S) -> ::std::result::Result<S::Ok, S::Error>
-            where S: serde::ser::Serializer
-        {
-            serializer.serialize_str(&format!("{:.1}", self.0))
-        }
-    }
 
     // TODO: Deduplicate bootstrap counting for twice as much text; rephrase.
     // TODO: Deduplicate 'First week in vector is the current week'.
     // TODO: Come up with, document, and use terminology for referring to 13
     //       weeks ago and 0 weeks ago.
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct Response {
         /// The average summary across all benchmarks and bootstrap.
         /// Bootstrap counts for twice as much that all other benchmarks do.
@@ -68,7 +57,7 @@ pub mod info {
     use date::Date;
     use std::collections::BTreeSet;
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct Response {
         /// Sorted vector of crate names (all compiler crates)
         pub crates: BTreeSet<String>,
@@ -89,7 +78,7 @@ pub mod data {
     use date::OptionalDate;
     use server::{DateData, GroupBy};
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct Request {
         #[serde(rename="start")]
         pub start_date: OptionalDate,
@@ -107,7 +96,7 @@ pub mod data {
     }
 
     /// List of DateData's from oldest to newest
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct Response(pub Vec<DateData>);
 }
 
@@ -117,13 +106,13 @@ pub mod tabular {
     use date::{OptionalDate, Date};
     use load::{Kind, Timing};
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct Request {
         pub kind: Kind,
         pub date: OptionalDate,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct Response {
         pub commit: String,
 
@@ -138,7 +127,7 @@ pub mod days {
     use date::OptionalDate;
     use server::{DateData, GroupBy};
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct Request {
         pub kind: Kind,
         pub group_by: GroupBy,
@@ -152,7 +141,7 @@ pub mod days {
         pub phases: Vec<String>,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct Response {
         pub a: DateData,
         pub b: DateData,
@@ -166,7 +155,7 @@ pub mod stats {
     use server::Stats;
     use date::{OptionalDate, Date};
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct Request {
         pub kind: Kind,
         #[serde(rename="start")]
@@ -182,7 +171,7 @@ pub mod stats {
         pub phases: Vec<String>,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct Response {
         #[serde(rename="startDate")]
         pub start_date: Date,

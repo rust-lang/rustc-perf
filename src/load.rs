@@ -17,7 +17,7 @@ use chrono::Duration;
 use serde_json::{self, Value};
 
 use errors::*;
-use util::index_in;
+use util::{self, index_in};
 use date::{OptionalDate, Date};
 
 const WEEKS_IN_SUMMARY: usize = 12;
@@ -25,6 +25,7 @@ const WEEKS_IN_SUMMARY: usize = 12;
 /// Contains the TestRun loaded from the file system.
 /// Useful to avoid passing around each individual field, instead passing the
 /// entire struct.
+#[derive(Debug)]
 pub struct InputData {
     pub summary_rustc: Summary,
     pub summary_benchmarks: Summary,
@@ -49,11 +50,6 @@ pub struct InputData {
     /// Care must be taken to sort these after modifying them.
     data_rustc: Vec<TestRun>,
     data_benchmarks: Vec<TestRun>,
-}
-
-/// Allows storing `InputData` in Iron's persistent data structure.
-impl ::iron::typemap::Key for InputData {
-    type Value = InputData;
 }
 
 impl InputData {
@@ -349,7 +345,8 @@ impl TestRun {
 /// is not included in the timing).
 #[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
 pub struct Timing {
-    pub percent: f64,
+    pub percent: Percent,
+    #[serde(with = "util::round_float")]
     pub time: f64,
     pub rss: Option<u64>,
 }
@@ -357,7 +354,7 @@ pub struct Timing {
 impl Timing {
     fn new() -> Timing {
         Timing {
-            percent: 0.0,
+            percent: Percent(0.0),
             time: 0.0,
             rss: Some(0),
         }
@@ -374,7 +371,7 @@ fn make_times(timings: &[Value], is_rustc: bool) -> HashMap<String, HashMap<Stri
         for (phase_name, phase) in timing["times"].as_object().unwrap() {
             times.insert(phase_name.to_string(),
                          Timing {
-                             percent: phase["percent"].as_f64().unwrap(),
+                             percent: Percent(phase["percent"].as_f64().unwrap()),
                              time: phase["time"].as_f64().unwrap(),
                              rss: timing
                                  .get("rss")
@@ -392,7 +389,7 @@ fn make_times(timings: &[Value], is_rustc: bool) -> HashMap<String, HashMap<Stri
 
         times.insert("total".into(),
                      Timing {
-                         percent: 100.0,
+                         percent: Percent(100.0),
                          time: timing["total"].as_f64().unwrap(),
                          rss: Some(mem_values.into_iter().max().unwrap_or(0)),
                      });
@@ -477,6 +474,7 @@ impl MedianRun {
     }
 }
 
+#[derive(Debug)]
 pub struct Summary {
     pub total: MedianRun,
     pub summary: Vec<MedianRun>,
@@ -575,3 +573,7 @@ impl Summary {
         }
     }
 }
+
+/// One decimal place rounded percent
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Percent(#[serde(with = "util::round_float")] pub f64);
