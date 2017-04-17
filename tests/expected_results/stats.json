@@ -1,0 +1,28 @@
+{
+  "startDate": "2017-03-19T17:44:02+00:00",
+  "endDate": "2017-04-14T02:02:13+00:00",
+  "crates": {
+    "helloworld": {
+      "first": 0.0,
+      "last": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "mean": 0.0,
+      "variance": 0.0,
+      "trend": 0.0,
+      "trend_b": 0.0,
+      "n": 98
+    },
+    "regex.0.1.30": {
+      "first": 0.0,
+      "last": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "mean": 0.0,
+      "variance": 0.0,
+      "trend": 0.0,
+      "trend_b": 0.0,
+      "n": 98
+    }
+  }
+}
