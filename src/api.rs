@@ -18,37 +18,27 @@ pub mod summary {
 
     // FIXME: Move percent elsewhere (utils?), and update imports.
     pub use load::Percent;
-    use date::Date;
+    use date::{Date, DeltaTime};
 
-    // TODO: Deduplicate bootstrap counting for twice as much text; rephrase.
-    // TODO: Deduplicate 'First week in vector is the current week'.
-    // TODO: Come up with, document, and use terminology for referring to 13
-    //       weeks ago and 0 weeks ago.
-
+    // First week in vectors is the current week.
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct Response {
-        /// The average summary across all benchmarks and bootstrap.
-        /// Bootstrap counts for twice as much that all other benchmarks do.
-        pub total_summary: Percent,
+        /// The average delta time across all benchmarks.
+        pub total_summary: DeltaTime,
 
-        /// By-crate (benchmark and bootstrap) comparisons of 0th week (13
-        /// weeks ago) and current week.
+        /// By-crate comparisons of 0th week (13 weeks ago) and current week.
         ///
         /// Represented as a hashmap of crate names to percents.
-        pub total_breakdown: HashMap<String, Option<Percent>>,
+        pub total_breakdown: HashMap<String, DeltaTime>,
 
-        /// 12 week long mapping of crate names to percent differences from
+        /// 12 week long mapping of crate names to delta times from
         /// last week's times to the current week's times.
-        /// First week in vector is the current week.
-        pub breakdown: Vec<HashMap<String, Option<Percent>>>,
+        pub breakdown: Vec<HashMap<String, DeltaTime>>,
 
-        /// 12 week long averages across both benchmarks and bootstrap.
-        /// Bootstrap counts for twice as much that all other benchmarks do.
-        /// First week in vector is the current week.
-        pub summaries: Vec<Percent>,
+        /// 12 week long averages
+        pub summaries: Vec<DeltaTime>,
 
         /// 12 week long list of dates from which data was used for that week.
-        /// First week in vector is the current week.
         pub dates: Vec<Date>,
     }
 }
@@ -59,14 +49,11 @@ pub mod info {
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct Response {
-        /// Sorted vector of crate names (all compiler crates)
+        /// Sorted vector of crate names
         pub crates: BTreeSet<String>,
 
-        /// Sorted vector of phase names.
+        /// Sorted vector of phase names
         pub phases: BTreeSet<String>,
-
-        /// Sorted vector of benchmark (non-compiler crates) crate names.
-        pub benchmarks: BTreeSet<String>,
 
         /// Chronologically last loaded run date.
         pub as_of: Date,
@@ -74,7 +61,6 @@ pub mod info {
 }
 
 pub mod data {
-    use load::Kind;
     use date::OptionalDate;
     use server::{DateData, GroupBy};
 
@@ -85,7 +71,6 @@ pub mod data {
 
         #[serde(rename="end")]
         pub end_date: OptionalDate,
-        pub kind: Kind,
         pub group_by: GroupBy,
 
         /// Which crates to return data for
@@ -104,11 +89,10 @@ pub mod tabular {
     use std::collections::HashMap;
 
     use date::{OptionalDate, Date};
-    use load::{Kind, Timing};
+    use server::Recording;
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct Request {
-        pub kind: Kind,
         pub date: OptionalDate,
     }
 
@@ -117,19 +101,17 @@ pub mod tabular {
         pub commit: String,
 
         /// Mapping of all crates timed on this date to their timings by phase
-        pub data: HashMap<String, HashMap<String, Timing>>,
+        pub data: HashMap<String, HashMap<String, Recording>>,
         pub date: Date,
     }
 }
 
 pub mod days {
-    use load::Kind;
     use date::OptionalDate;
     use server::{DateData, GroupBy};
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct Request {
-        pub kind: Kind,
         pub group_by: GroupBy,
         pub date_a: OptionalDate,
         pub date_b: OptionalDate,
@@ -151,20 +133,17 @@ pub mod days {
 pub mod stats {
     use std::collections::HashMap;
 
-    use load::Kind;
     use server::Stats;
     use date::{OptionalDate, Date};
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct Request {
-        pub kind: Kind,
         #[serde(rename="start")]
         pub start_date: OptionalDate,
         #[serde(rename="end")]
         pub end_date: OptionalDate,
 
         /// Which crates to return data for
-        /// If the kind is rustc, no crate or phase name can be 'total'
         pub crates: Vec<String>,
 
         /// Which phases to return data for

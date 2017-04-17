@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(proc_macro)]
+#![feature(proc_macro, conservative_impl_trait)]
 
 #[macro_use]
 extern crate serde_derive;

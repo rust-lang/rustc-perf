@@ -23,3 +23,6 @@ optional = false
 
 [dev-dependencies]
 lazy_static = "0.2.1"
+
+[profile.release]
+debug = true

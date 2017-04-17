@@ -1,38 +1,5 @@
 var BASE_URL = "http://perf.rust-lang.org/perf";
 
-// Radio button event listener.
-var radios = document.getElementsByName("kind");
-var prev_kind = null;
-for (var r in radios) {
-    radios[r].onclick = radio_handler;
-}
-
-function radio_handler() {
-    if (prev_kind !== this) {
-        prev_kind = this;
-
-        if (this.value == "rustc") {
-            document.getElementById("crates_label").innerHTML = "Crates";
-            document.getElementById("crates").style.display = "block";
-            document.getElementById("benchmarks").style.display = "none";
-        } else {
-            document.getElementById("crates_label").innerHTML = "Benchmarks";
-            document.getElementById("crates").style.display = "none";
-            document.getElementById("benchmarks").style.display = "block";
-        }
-    }
-}
-
-function get_kind() {
-    var radios = document.getElementsByName('kind');
-
-    for (var r in radios) {
-        if (radios[r].checked) {
-            return radios[r].value;
-        }
-    }
-}
-
 function getDate(id) {
     var result = document.getElementById(id).value;
     if (result) {
@@ -49,14 +16,15 @@ function getDate(id) {
 }
 
 function gatherChecks(name) {
+    let total_checked = false;
     if (document.getElementById(name + "-total") && document.getElementById(name + "-total").checked) {
-        return ["total"];
+        total_checked = true;
     }
     var result = [];
     var elements = document.getElementsByName(name);
     for (var i in elements) {
-        if (elements[i].checked)
-        {
+        if ((elements[i].checked || total_checked) &&
+            elements[i].id && elements[i].id != name + "-total") {
             result.push(elements[i].id);
         }
     }
@@ -104,28 +72,19 @@ function make_settings(callback, total_label) {
                 crates_html += checkbox("check-crate", crate, false, truncate_name(crate));
             }
             document.getElementById("crates").innerHTML = crates_html;
-
-            var bench_html = "";
-            for (let bench of data.benchmarks) {
-                bench_html += checkbox("check-bench", bench, false, truncate_name(bench));
-            }
-            document.getElementById("benchmarks").innerHTML = bench_html;
+            addTotalHandler("check-crate");
 
             var phases_html = checkbox("check-phase", "check-phase-total", true, total_label);
             for (let phase of data.phases) {
-                if (phase != "total") {
-                    phases_html += checkbox("check-phase", phase, false, truncate_name(phase));
-                }
+                phases_html += checkbox("check-phase", phase, false, truncate_name(phase));
             }
             document.getElementById("phases").innerHTML = phases_html;
+            addTotalHandler("check-phase");
 
             var groupByCrate = document.getElementById("group-by-crate");
             if (groupByCrate) {
                 groupByCrate.checked = true;
             }
-
-            addTotalHandler("check-crate");
-            addTotalHandler("check-phase");
 
             if (callback) {
                 callback();
@@ -158,83 +117,60 @@ function truncate_name(name) {
     return name;
 }
 
-function set_dates(start_date, end_date) {
-    if (!start_date || !end_date) {
-        return;
+function set_date(id, date) {
+    let d = new Date(date);
+    if (!Number.isNaN(d.getTime())) {
+        document.getElementById(id).value = new Date(date).toISOString().split('T')[0];
     }
-
-    document.getElementById("start-date").value = new Date(start_date).toISOString().split('T')[0];
-    document.getElementById("end-date").value = new Date(end_date).toISOString().split('T')[0];
 }
 
-function set_date(date) {
-    document.getElementById("date").value = new Date(date).toISOString().split('T')[0];
-}
+function set_check_boxes(crates, phases, group_by) {
+    let is_total_crate_checked = document.getElementById("check-crate-total").checked;
+    let is_total_phase_checked = document.getElementById("check-phase-total").checked;
 
-function set_check_boxes(kind, crates, phases, group_by) {
-    // Set the kind radio button and hide/show other groups as appropriate.
-    var radios = document.getElementsByName('kind');
-    for (var r in radios) {
-        radios[r].checked = radios[r].value == kind;
-    }
-    var crates_total_name = null;
-    if (kind == "rustc") {
-        crates_total_name = "check-crate-total";
-        document.getElementById("crates_label").innerHTML = "Crates";
-        document.getElementById("crates").style.display = "block";
-        document.getElementById("benchmarks").style.display = "none";
-
-        // Clear checkboxes
-        var ck_crates = document.getElementsByName('check-crate');
-        for (var i in ck_crates) {
+    // Clear checkboxes
+    var ck_crates = document.getElementsByName('check-crate');
+    for (var i in ck_crates) {
+        if (ck_crates[i].id !== "check-crate-total") {
             ck_crates[i].checked = false;
-        }
-    } else {
-        document.getElementById("crates_label").innerHTML = "Benchmarks";
-        document.getElementById("crates").style.display = "none";
-        document.getElementById("benchmarks").style.display = "block";
-
-        // Clear checkboxes
-        var ck_benches = document.getElementsByName('check-bench');
-        for (var i in ck_benches) {
-            ck_benches[i].checked = false;
         }
     }
 
     var ck_phases = document.getElementsByName('check-phase');
     for (var i in ck_phases) {
-        ck_phases[i].checked = false;
+        if (ck_phases[i].id !== "check-phase-total") {
+            ck_phases[i].checked = false;
+        }
     }
 
     // Check crates/benchmarks/phases checkboxes.
-    for (var i in crates) {
-        var id = crates[i];
-        if (!id) {
-            continue;
-        }
-        if (id == "total") {
-            id = crates_total_name;
-        }
-        var ck = document.getElementById(id);
-        if (ck) {
-            ck.checked = true;
-        } else {
-            console.log("Couldn't find", id, i, crates[i]);
+    if (!is_total_crate_checked) {
+        for (let id of crates) {
+            if (!id) {
+                continue;
+            }
+            if (id == "total") {
+                id = "check-crate-total";
+            }
+            let ck = document.getElementById(id);
+            if (ck) {
+                ck.checked = true;
+            } else {
+                console.log("Couldn't find", id, i, crates[i]);
+            }
         }
     }
-    for (var i in phases) {
-        var id = phases[i];
-        if (!id) {
-            continue;
-        }
-        if (id == "total") {
-            id = "check-phase-total";
-        }
-        var ck = document.getElementById(id);
-        if (ck) {
-            ck.checked = true;
-        } else {
-            console.log("Couldn't find", id, i, phases[i]);
+    if (!is_total_phase_checked) {
+        for (let id of phases) {
+            if (!id) {
+                continue;
+            }
+            var ck = document.getElementById(id);
+            if (ck) {
+                ck.checked = true;
+            } else {
+                console.log("Couldn't find", id, i, phases[i]);
+            }
         }
     }
 
@@ -281,13 +217,11 @@ function get_param(key, params) {
     return result;
 }
 
-function push_state_to_history(keys, values) {
-    var state = {};
-    for (k in keys) {
-        state[keys[k]] = values[k];
-    }
+function push_state_to_history(state) {
     var query_string = query_string_for_state(state);
-    history.pushState(state, "", query_string);
+    if (query_string !== "") {
+        history.pushState(state, "", query_string);
+    }
 }
 
 function query_string_for_state(state) {
@@ -307,12 +241,7 @@ function query_string_for_state(state) {
 }
 
 // This one is for making the request we send to the backend.
-function make_request(keys, values) {
-    var body = {};
-    for (k in keys) {
-        body[keys[k]] = values[k];
-    }
-
+function make_request(body) {
     return {
         method: "POST",
         body: JSON.stringify(body),

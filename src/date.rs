@@ -12,8 +12,12 @@ use std::fmt;
 
 use chrono::{UTC, DateTime, TimeZone, Duration, Datelike};
 use serde::{self, Serialize, Deserialize};
+use util;
 
 use errors::*;
+
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Serialize, Deserialize)]
+pub struct DeltaTime(#[serde(with = "util::round_float")] pub f64);
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Date(pub DateTime<UTC>);
@@ -54,6 +58,12 @@ impl Date {
         let weekday = self.0.weekday();
         // num_days_from_sunday is 0 for Sunday
         Date(self.0 - Duration::days(weekday.num_days_from_sunday() as i64))
+    }
+}
+
+impl fmt::Display for Date {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(&self.0.to_rfc3339())
     }
 }
 

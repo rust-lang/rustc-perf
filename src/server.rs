@@ -25,10 +25,10 @@ use hyper::mime::{Mime, TopLevel, SubLevel};
 use hyper::server::{Http, Service, Request, Response};
 
 use git;
-use date::Date;
+use date::{DeltaTime, Date};
 use util::{self, get_repo_path};
 pub use api::{summary, info, data, tabular, days, stats};
-use load::{MedianRun, Kind, TestRun, Timing, InputData};
+use load::{Pass, CommitData, InputData, Comparison};
 
 use errors::*;
 
@@ -48,66 +48,57 @@ pub struct DateData {
 }
 
 impl DateData {
-    pub fn for_day(day: &TestRun,
-                   crate_names: &[String],
-                   phases: &[String],
-                   group_by: GroupBy)
-                   -> DateData {
-        let crates = crate_names
-            .into_iter()
-            .filter_map(|crate_name| {
-                            day.by_crate
-                                .get(crate_name)
-                                .map(|krate| (crate_name, krate))
-                        })
+    pub fn for_day(
+        day: &CommitData,
+        crate_names: &[String],
+        phases: &[String],
+        group_by: GroupBy
+    ) -> DateData {
+        let crates = day.patches()
+            .filter(|patch| crate_names.contains(&patch.name))
             .collect::<Vec<_>>();
 
         let mut data = HashMap::new();
         for phase_name in phases {
-            for &(crate_name, krate) in &crates {
+            for patch in &crates {
                 let entry = match group_by {
-                    GroupBy::Crate => data.entry(crate_name.to_string()),
+                    GroupBy::Crate => data.entry(patch.name.to_string()),
                     GroupBy::Phase => data.entry(phase_name.to_string()),
                 };
 
                 entry
                     .or_insert(Recording::new())
-                    .record(krate.get(phase_name));
+                    .record(patch.run().get_pass(phase_name));
             }
         }
 
         DateData {
-            date: day.date,
-            commit: day.commit.clone(),
+            date: day.commit.date,
+            commit: day.commit.sha.clone(),
             data: data,
         }
     }
 }
 
-// TODO better name (can't use Timing since we don't have a percent...)
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Recording {
     #[serde(with = "util::round_float")]
     time: f64,
-    rss: Option<u64>,
+    rss: u64,
 }
 
 impl Recording {
     fn new() -> Recording {
         Recording {
             time: 0.0,
-            rss: None,
+            rss: 0,
         }
     }
 
-    fn record(&mut self, phase: Option<&Timing>) {
+    fn record(&mut self, phase: Option<&Pass>) {
         if let Some(phase) = phase {
             self.time += phase.time;
-            self.rss = if let Some(rss) = phase.rss {
-                Some(max(self.rss.unwrap_or(0), rss))
-            } else {
-                None
-            };
+            self.rss = max(self.rss, phase.mem);
         }
     }
 }
@@ -133,72 +124,48 @@ fn serialize_kind() {
 }
 
 pub fn handle_summary(data: &InputData) -> summary::Response {
-    fn summarize(benchmark: &MedianRun, rustc: &MedianRun) -> summary::Percent {
+    fn summarize(comparison: &Comparison) -> DeltaTime {
         let mut sum = 0.0;
-        let mut count = 0;
-        for krate in benchmark.by_crate.values() {
-            if krate.contains_key("total") {
-                sum += krate["total"];
-                count += 1;
+        let mut count = 0; // crate count
+        for krate in comparison.by_crate.values() {
+            count += 1;
+            for (_, &phase_dt) in krate.iter() {
+                sum += phase_dt;
             }
         }
 
-        if rustc.by_crate["total"].contains_key("total") {
-            sum += 2.0 * rustc.by_crate["total"]["total"];
-            count += 2;
-        }
-
-        summary::Percent(sum / (count as f64))
+        DeltaTime(sum / (count as f64))
     }
 
-    fn breakdown(benchmark: &MedianRun,
-                 rustc: &MedianRun)
-                 -> HashMap<String, Option<summary::Percent>> {
+    fn breakdown(comparison: &Comparison) -> HashMap<String, DeltaTime> {
         let mut per_bench = HashMap::new();
 
-        for (crate_name, krate) in &benchmark.by_crate {
-            per_bench.insert(crate_name.to_string(),
-                             krate
-                                 .get("total")
-                                 .cloned()
-                                 .map(|val| summary::Percent(val)));
+        for (crate_name, krate) in &comparison.by_crate {
+            let mut sum = 0.0;
+            let mut count: usize = 0; // phase count
+            for phase_dt in krate.values() {
+                count += 1;
+                sum += *phase_dt;
+            }
+            // average delta time
+            let avg = sum / (count as f64);
+            per_bench.insert(crate_name.to_string(), DeltaTime(avg));
         }
-
-        let bootstrap = if rustc.by_crate["total"].contains_key("total") {
-            rustc.by_crate["total"]["total"]
-        } else {
-            0.0
-        };
-        per_bench.insert("bootstrap".to_string(), Some(summary::Percent(bootstrap)));
 
         per_bench
     }
 
-    let dates = data.summary_rustc
-        .summary
-        .iter()
-        .map(|s| s.date)
-        .collect::<Vec<_>>();
+    let dates = data.summary.comparisons.iter().map(|c| c.b.date).collect::<Vec<_>>();
 
     // overall number for each week
-    let summaries = data.summary_benchmarks
-        .summary
-        .iter()
-        .enumerate()
-        .map(|(i, s)| summarize(s, &data.summary_rustc.summary[i]))
-        .collect::<Vec<_>>();
+    let summaries = data.summary.comparisons.iter().map(summarize).collect::<Vec<_>>();
 
     // per benchmark, per week
-    let breakdown_data = data.summary_benchmarks
-        .summary
-        .iter()
-        .enumerate()
-        .map(|(i, s)| breakdown(s, &data.summary_rustc.summary[i]))
-        .collect::<Vec<_>>();
+    let breakdown_data = data.summary.comparisons.iter().map(breakdown).collect::<Vec<_>>();
 
     summary::Response {
-        total_summary: summarize(&data.summary_benchmarks.total, &data.summary_rustc.total),
-        total_breakdown: breakdown(&data.summary_benchmarks.total, &data.summary_rustc.total),
+        total_summary: summarize(&data.summary.total),
+        total_breakdown: breakdown(&data.summary.total),
         breakdown: breakdown_data,
         summaries: summaries,
         dates: dates,
@@ -209,14 +176,13 @@ pub fn handle_info(data: &InputData) -> info::Response {
     info::Response {
         crates: data.crate_list.clone(),
         phases: data.phase_list.clone(),
-        benchmarks: data.benchmarks.clone(),
         as_of: data.last_date,
     }
 }
 
 pub fn handle_data(body: data::Request, data: &InputData) -> data::Response {
-    let mut result = data.kinded_range(body.kind, &body.start_date, &body.end_date)
-        .into_iter()
+    let mut result = util::optional_data_range(data, body.start_date.clone(), body.end_date.clone())
+        .map(|(_, day)| day)
         .map(|day| DateData::for_day(day, &body.crates, &body.phases, body.group_by))
         .collect::<Vec<_>>();
 
@@ -235,45 +201,52 @@ pub fn handle_data(body: data::Request, data: &InputData) -> data::Response {
 }
 
 pub fn handle_tabular(body: tabular::Request, data: &InputData) -> tabular::Response {
-    let day = data.kinded_end_day(body.kind, &body.date);
+    let day = util::get_commit_data_from_end(data, body.date.as_end(data.last_date));
+
+    let mut by_crate = HashMap::new();
+    for patch in day.patches() {
+        let mut by_phase = by_crate.entry(patch.full_name()).or_insert_with(HashMap::new);
+        for phase in &patch.run().passes {
+            by_phase.insert(phase.name.clone(), Recording { time: phase.time, rss: phase.mem });
+        }
+    }
 
     tabular::Response {
-        date: day.date,
-        commit: day.commit.clone(),
-        data: day.by_crate.clone(),
+        date: day.commit.date,
+        commit: day.commit.sha.clone(),
+        data: by_crate,
     }
 }
 
 pub fn handle_days(body: days::Request, data: &InputData) -> days::Response {
     days::Response {
-        a: DateData::for_day(&data.kinded_start_day(body.kind, &body.date_a),
-                                &body.crates,
-                                &body.phases,
-                                body.group_by),
-        b: DateData::for_day(&data.kinded_end_day(body.kind, &body.date_b),
-                                &body.crates,
-                                &body.phases,
-                                body.group_by),
+        a: DateData::for_day(
+            util::get_commit_data_from_start(data, body.date_a.as_start(data.last_date)),
+            &body.crates,
+            &body.phases,
+            body.group_by
+        ),
+        b: DateData::for_day(
+            util::get_commit_data_from_end(data, body.date_b.as_end(data.last_date)),
+            &body.crates,
+            &body.phases,
+            body.group_by
+        ),
     }
 }
 
 pub fn handle_stats(body: stats::Request, data: &InputData) -> stats::Response {
-    assert!(body.kind != Kind::Benchmarks || body.crates.iter().all(|s| s != "total"));
-
+    let mut counted = Vec::new();
     let mut start_date = body.start_date.as_start(data.last_date);
     let mut end_date = body.end_date.as_end(data.last_date);
 
-    let mut counted = Vec::new();
-
     // Iterate over date range.
-    for today_data in data.kinded_range(body.kind, &body.start_date, &body.end_date) {
-        if !today_data.by_crate.is_empty() {
-            if counted.is_empty() {
-                start_date = today_data.date;
-            }
-            end_date = today_data.date;
-            counted.push(today_data);
+    for (_, commit_data) in util::data_range(&data.data, start_date, end_date) {
+        if counted.is_empty() {
+            start_date = commit_data.commit.date;
         }
+        end_date = commit_data.commit.date;
+        counted.push(commit_data);
     }
 
     let mut crates = HashMap::new();
@@ -297,27 +270,26 @@ pub struct Stats {
     max: f64,
     mean: f64,
     variance: f64,
+    #[serde(deserialize_with = "util::null_means_nan")]
     trend: f64,
+    #[serde(deserialize_with = "util::null_means_nan")]
     trend_b: f64,
     n: usize,
 }
 
 impl Stats {
-    fn from(data: &[&TestRun], crate_name: &str, phases: &[String]) -> Stats {
+    fn from(data: &[&CommitData], crate_name: &str, phases: &[String]) -> Stats {
         let sums = data.iter()
-            .filter(|day| if let Some(krate) = day.by_crate.get(crate_name) {
-                        !krate.is_empty()
-                    } else {
-                        false
-                    })
-            .map(|day| {
-                     let krate = &day.by_crate[crate_name];
-                     let mut sum = 0.0;
-                     for phase in phases {
-                         sum += krate[phase].time;
-                     }
-                     sum
-                 })
+            .flat_map(|cd| cd.patches())
+            .filter(|patch| {
+                patch.full_name() == crate_name
+            })
+            .map(|patch| {
+                patch.run().passes.iter()
+                    .filter(|p| phases.contains(&p.name))
+                    .map(|p| p.time)
+                    .sum::<f64>()
+            })
             .collect::<Vec<_>>();
 
         if sums.is_empty() {
@@ -374,8 +346,8 @@ impl Stats {
             max: max,
             mean: mean,
             variance: variance,
-            trend: trend,
-            trend_b: trend_b,
+            trend: if trend.is_nan() { trend } else { 0.0 },
+            trend_b: if trend_b.is_nan() { trend_b } else { 0.0 },
             n: sums.len(),
         }
     }
@@ -476,7 +448,7 @@ impl Service for Server {
             req.path()
         });
 
-        println!("handling: req.path()={:?}, fs_path={:?}", req.path(), fs_path);
+        info!("handling: req.path()={:?}, fs_path={:?}", req.path(), fs_path);
 
         if fs_path.contains("./") | fs_path.contains("../") {
             return futures::future::ok(Response::new()

@@ -14,8 +14,7 @@
             <label class="group-by">
                 <input type="radio" name="groupBy" id="group-by-crate" value="crate" checked="true">group by crate
             </label>
-            <div id="benchmarks">loading...</div>
-            <div id="crates" style="display: none">loading...</div>
+            <div id="crates">loading...</div>
         </span>
         <span id="phases-outer" class="settings">
             <h3>Phases</h3>
@@ -23,18 +22,6 @@
                 <input type="radio" name="groupBy" id="group-by-phase" value="phase">group by phase
             </label>
             <div id="phases">loading...</div>
-        </span>
-        <span class="settings">
-            <h3>Kind</h3>
-            <div class="kind-selectors">
-                <label>
-                    <input type="radio" name="kind" value="benchmarks" checked="true">benchmarks
-                </label>
-                <br>
-                <label>
-                    <input type="radio" name="kind" value="rustc">bootstrap
-                </label>
-            </div>
         </span>
         <span id="dates" class="settings">
             <h3>Dates</h3>
@@ -52,19 +39,27 @@
     <script src="graph.js"></script>
     <script src="shared.js"></script>
     <script>
+    let keys = ["start", "end", "crates", "phases", "group_by"];
     make_as_of();
     // Make a graph!
-    function make_graph(start_date, end_date, kind, crates, phases, group_by, push_state) {
-        var values = [start_date, end_date, kind, crates, phases, group_by];
-        fetch(BASE_URL + "/data", make_request(keys, values)).then(function(response) {
+    function make_graph(start_date, end_date, crates, phases, group_by, push_state) {
+        var values = {
+            start: start_date,
+            end: end_date,
+            crates: crates,
+            phases: phases,
+            group_by: group_by
+        };
+        fetch(BASE_URL + "/data", make_request(values)).then(function(response) {
             response.json().then(function(data) {
                 var series = crates;
                 if (group_by == "phase") {
                     series = phases;
                 }
 
-                set_check_boxes(kind, crates, phases, group_by);
-                set_dates(start_date, end_date);
+                set_check_boxes(crates, phases, group_by);
+                set_date("start-date", start_date)
+                set_date("end-date", end_date);
 
                 init_graph(data, series, "time", undefined, "Seconds");
                 document.getElementById("loading").style.display = "none";
@@ -76,7 +71,13 @@
                         start_date = data[0].date;
                         end_date = data[data.length - 1].date;
                     }
-                    push_state_to_history(keys, [start_date, end_date, kind, crates, phases, group_by]);
+                    push_state_to_history({
+                        start: start_date,
+                        end: end_date,
+                        crates: crates,
+                        phases: phases,
+                        group_by: group_by
+                    });
                 }
             });
         }, function(err) {
@@ -92,7 +93,6 @@
 
         // crates and phases
         var crates = gatherChecks("check-crate");
-        var benchmarks = gatherChecks("check-bench");
         var phases = gatherChecks("check-phase");
 
         // dates
@@ -102,10 +102,8 @@
         // group by
         var group_by;
         var elements = document.getElementsByName("groupBy");
-        for (var i = 0, l = elements.length; i < l; i++)
-        {
-            if (elements[i].checked)
-            {
+        for (var i = 0, l = elements.length; i < l; i++) {
+            if (elements[i].checked) {
                 group_by = elements[i].value;
                 break;
             }
@@ -115,30 +113,25 @@
             document.getElementById("group-by-crate").checked = true;
         }
 
-        var kind = get_kind();
-        var crates_or_benchmarks = kind == "rustc" ? crates : benchmarks;
-
-        make_graph(start_date, end_date, kind, crates_or_benchmarks, phases, group_by, true);
+        make_graph(start_date, end_date, crates, phases, group_by, true);
     }
 
-    var keys = ["start", "end", "kind", "crates", "phases", "group_by"];
-
-    radio_handler();
     make_settings(function() {
-        // Respond to back/forwards properly.
-        window.onpopstate = function(ev) {
-            var state = ev.state;
-            if (!dispatch_on_state(make_graph, state, keys)) {
-                if (!dispatch_on_params(make_graph, keys)) {
-                    make_graph("", "", "benchmarks", ["helloworld", "regex.0.1.30"], ["total"], "crate", false);
-                }
-            }
-        };
+       // Respond to back/forwards properly.
+       window.onpopstate = function(ev) {
+           var state = ev.state;
+           if (!dispatch_on_state(make_graph, state, keys)) {
+               if (!dispatch_on_params(make_graph, keys)) {
+                   make_graph("", "", ["total"], ["total"], "crate", false);
+               }
+           }
+       };
 
-        // Load the page from a URL.
-        if (!dispatch_on_params(make_graph, keys)) {
-            make_graph("", "", "benchmarks", ["helloworld", "regex.0.1.30"], ["total"], "crate", false);
-        }
+       // Load the page from a URL.
+       if (!dispatch_on_params(make_graph, keys)) {
+           make_graph("", "", ["total"], ["total"], "crate", false);
+           remake_graph();
+       }
     });
     </script>
 </html>

@@ -14,8 +14,7 @@
             <label class="group-by">
                 <input type="radio" name="groupBy" id="group-by-crate" value="crate" checked="true">group by crate
             </label>
-            <div id="benchmarks">loading...</div>
-            <div id="crates" style="display: none">loading...</div>
+            <div id="crates">loading...</div>
         </span>
         <span id="phases-outer" class="settings">
             <h3>Phases</h3>
@@ -23,18 +22,6 @@
                 <input type="radio" name="groupBy" id="group-by-phase" value="phase">group by phase
             </label>
             <div id="phases">loading...</div>
-        </span>
-        <span class="settings">
-            <h3>Kind</h3>
-            <div class="kind-selectors">
-                <label>
-                    <input type="radio" name="kind" value="benchmarks" checked="true">benchmarks
-                </label>
-                <br>
-                <label>
-                    <input type="radio" name="kind" value="rustc">bootstrap
-                </label>
-            </div>
         </span>
         <span id="dates" class="settings">
             <h3>Dates</h3>
@@ -60,7 +47,11 @@
         let html = "";
 
         if (datum) {
-            html += "<td>" + datum.time.toFixed(2) + "s</td>";
+            if (datum.time) {
+                html += "<td>" + datum.time.toFixed(2) + "s</td>";
+            } else {
+                html += "<td>-</td>";
+            }
             if (datum.rss) {
                 html += "<td>" + datum.rss.toFixed(0) + "MB</td>";
             } else {
@@ -131,24 +122,29 @@
         document.getElementById("content").style.display = "block";
     }
 
-    function make_data(datea, dateb, kind, crates, phases, group_by, push_state) {
+    function make_data(datea, dateb, crates, phases, group_by, push_state) {
         document.getElementById("loading").innerHTML = "loading...";
         document.getElementById("loading").style.display = "block";
 
-        var values = [datea, dateb, kind, crates, phases, group_by];
-        fetch(BASE_URL + "/get", make_request(keys, values)).then(function(response) {
+        var values = {
+            date_a: datea,
+            date_b: dateb,
+            crates: crates,
+            phases: phases,
+            group_by: group_by
+        };
+        fetch(BASE_URL + "/get", make_request(values)).then(function(response) {
             response.json().then(function(data) {
                 populate_data(data);
-                document.getElementById("loading").style.display = "none";
-                set_check_boxes(kind, crates, phases, group_by);
-                let date_a = new Date(data.a.date);
-                let date_b = new Date(data.b.date);
-                document.getElementById("date-a").value = date_a.toISOString().split('T')[0];
-                document.getElementById("date-b").value = date_b.toISOString().split('T')[0];
+                set_check_boxes(crates, phases, group_by);
+                set_date("date-a", data.a.date);
+                set_date("date-b", data.b.date);
 
                 if (push_state) {
-                    push_state_to_history(keys, [date_a, date_b, kind, crates, phases, group_by]);
+                    push_state_to_history(values);
                 }
+
+                document.getElementById("loading").style.display = "none";
             });
         }, function(err) {
             document.getElementById("loading").innerHTML = "Error loading data";
@@ -163,7 +159,6 @@
 
         // crates and phases
         var crates = gatherChecks("check-crate");
-        var benchmarks = gatherChecks("check-bench");
         var phases = gatherChecks("check-phase");
 
         // dates
@@ -186,32 +181,24 @@
             document.getElementById("group-by-crate").checked = true;
         }
 
-        var kind = get_kind();
-        var crates_or_benchmarks = kind == "rustc" ? crates : benchmarks;
-
-        make_data(datea, dateb, kind, crates_or_benchmarks, phases, group_by, true);
+        make_data(datea, dateb, crates, phases, group_by, true);
     }
 
-    var keys = ["date_a", "date_b", "kind", "crates", "phases", "group_by"];
-
-    radio_handler();
     make_settings(function() {
-        document.getElementById("helloworld").checked = true;
-        document.getElementById("regex.0.1.30").checked = true;
+        // FIXME: implement serializing to URL
+        // // Respond to back/forwards properly.
+        // window.onpopstate = function(ev) {
+        //     var state = ev.state;
+        //     if (!dispatch_on_state(make_data, state, keys)) {
+        //         if (!dispatch_on_params(make_data, keys)) {
+        //             document.getElementById("loading").style.display = "none";
+        //             document.getElementById("content").style.display = "none";
+        //         }
+        //     }
+        // };
 
-        // Respond to back/forwards properly.
-        window.onpopstate = function(ev) {
-            var state = ev.state;
-            if (!dispatch_on_state(make_data, state, keys)) {
-                if (!dispatch_on_params(make_data, keys)) {
-                    document.getElementById("loading").style.display = "none";
-                    document.getElementById("content").style.display = "none";
-                }
-            }
-        };
-
-        // Load the page from a URL.
-        dispatch_on_params(make_data, keys);
+        // // Load the page from a URL.
+        // dispatch_on_params(make_data);
     });
     </script>
 </html>
