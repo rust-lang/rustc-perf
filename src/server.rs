@@ -142,14 +142,10 @@ pub fn handle_summary(data: &InputData) -> summary::Response {
 
         for (crate_name, krate) in &comparison.by_crate {
             let mut sum = 0.0;
-            let mut count: usize = 0; // phase count
-            for phase_dt in krate.values() {
-                count += 1;
-                sum += *phase_dt;
+            for &phase_dt in krate.values() {
+                sum += phase_dt;
             }
-            // average delta time
-            let avg = sum / (count as f64);
-            per_bench.insert(crate_name.to_string(), DeltaTime(avg));
+            per_bench.insert(crate_name.to_string(), DeltaTime(sum));
         }
 
         per_bench

@@ -230,6 +230,7 @@ impl Summary {
             let last = week.next_back();
 
             if let (Some((_, first)), Some((_, last))) = (first, last) {
+                debug!("actual: start: {:?}, end: {:?}", first.commit.date, last.commit.date);
                 weeks.push(Summary::compare_points(first, last));
             } else {
                 warn!("week {} - {} has too few commits", start, end);
