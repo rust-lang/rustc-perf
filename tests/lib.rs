@@ -9,7 +9,8 @@ use std::io::{Write, Read};
 use std::path::Path;
 use std::cmp::PartialEq;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 use rustc_perf::server::{self, GroupBy};
 use rustc_perf::load::InputData;
@@ -20,15 +21,12 @@ lazy_static! {
     static ref INPUT_DATA: InputData = InputData::from_fs("tests/data").unwrap();
 }
 
-fn round_trip<T: Serialize + Deserialize + ::std::fmt::Debug>(value: &T) -> T {
-    println!("{:?}", value);
+fn round_trip<T: Serialize + DeserializeOwned + ::std::fmt::Debug>(value: &T) -> T {
     let serialized = serde_json::to_string_pretty(value).unwrap();
-    println!("{}", serialized);
-    println!("{:?}", serde_json::to_string(value).unwrap());
     serde_json::from_str(&serialized).unwrap()
 }
 
-fn from_file<P: AsRef<Path>, D: Deserialize>(path: P) -> D {
+fn from_file<P: AsRef<Path>, D: DeserializeOwned>(path: P) -> D {
     let mut file = File::open(path).unwrap();
     let mut s = String::new();
     file.read_to_string(&mut s).unwrap();
@@ -47,7 +45,7 @@ fn pretty_json<S: Serialize>(value: &S) -> String {
 
 fn check_response<S>(received_value: S, expected_file: &str)
 where
-    S: Serialize + Deserialize + PartialEq + ::std::fmt::Debug,
+    S: Serialize + DeserializeOwned + PartialEq + ::std::fmt::Debug,
 {
     // Some types aren't equivalent after a round trip to their actual values.
     // This means we need to round trip through Serde to get saved representation on disk.

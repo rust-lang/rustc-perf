@@ -15,7 +15,8 @@ use std::sync::{RwLock, Arc};
 use std::collections::HashMap;
 use std::path::Path;
 
-use serde::{Serialize, Deserialize};
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 use serde_json;
 use futures::{self, Future, Stream};
 use futures_cpupool::CpuPool;
@@ -369,9 +370,9 @@ impl Server {
         futures::future::ok(response).boxed()
     }
 
-    fn handle_post<F, D, S>(&self, req: Request, handler: F) -> <Server as Service>::Future
+    fn handle_post<'de, F, D, S>(&self, req: Request, handler: F) -> <Server as Service>::Future
         where F: FnOnce(D, &InputData) -> S + Send + 'static,
-              D: Deserialize,
+              D: DeserializeOwned,
               S: Serialize,
     {
         assert_eq!(*req.method(), Post);

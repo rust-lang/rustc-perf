@@ -71,8 +71,8 @@ pub fn get_repo_path() -> Result<String> {
         .ok_or("No argument supplied, needs location of data repo.".into())
 }
 
-pub fn null_means_nan<D>(deserializer: D) -> ::std::result::Result<f64, D::Error>
-    where D: Deserializer
+pub fn null_means_nan<'de, D>(deserializer: D) -> ::std::result::Result<f64, D::Error>
+    where D: Deserializer<'de>
 {
     Ok(Option::deserialize(deserializer)?.unwrap_or(0.0))
 }
@@ -87,8 +87,8 @@ pub mod round_float {
         serializer.serialize_f64((*n * 100.0).round() / 100.0)
     }
 
-    pub fn deserialize<D>(deserializer: D) -> Result<f64, D::Error>
-        where D: Deserializer
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<f64, D::Error>
+        where D: Deserializer<'de>
     {
         let n = f64::deserialize(deserializer)?;
         Ok((n * 100.0).round() / 100.0)
