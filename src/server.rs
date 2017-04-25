@@ -12,7 +12,7 @@ use std::cmp::max;
 use std::fs::File;
 use std::io::Read;
 use std::sync::{RwLock, Arc};
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 use std::path::Path;
 
 use serde::Serialize;
@@ -138,8 +138,8 @@ pub fn handle_summary(data: &InputData) -> summary::Response {
         DeltaTime(sum / (count as f64))
     }
 
-    fn breakdown(comparison: &Comparison) -> HashMap<String, DeltaTime> {
-        let mut per_bench = HashMap::new();
+    fn breakdown(comparison: &Comparison) -> BTreeMap<String, DeltaTime> {
+        let mut per_bench = BTreeMap::new();
 
         for (crate_name, krate) in &comparison.by_crate {
             let mut sum = 0.0;

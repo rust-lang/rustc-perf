@@ -1,5 +1,7 @@
 #[macro_use]
 extern crate lazy_static;
+#[macro_use]
+extern crate pretty_assertions;
 extern crate rustc_perf;
 extern crate serde_json;
 extern crate serde;
@@ -52,15 +54,13 @@ where
     let received_value = round_trip(&received_value);
 
     // Uncomment this line to refresh the expected results.
-    to_file(expected_file, &received_value);
+    // to_file(expected_file, &received_value);
 
     // The deserialized value from the file.
     let expected_value = from_file(expected_file);
 
     if received_value != expected_value {
-        println!("r: {:?}", received_value);
-        println!("e: {:?}", expected_value);
-        panic!(
+        assert_eq!(expected_value, received_value,
             "Compared {} body with server result, results not equal.",
             expected_file
         );

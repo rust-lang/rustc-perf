@@ -23,6 +23,9 @@ optional = false
 
 [dev-dependencies]
 lazy_static = "0.2.1"
+pretty_assertions = "0.1.2"
+
+[profile]
 
 [profile.release]
 debug = true
