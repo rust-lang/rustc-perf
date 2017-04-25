@@ -1,0 +1,5335 @@
+{
+  "commit": "4f32e0dfb287c2b3d0c48cb3b8090b3902960084",
+  "data": {
+    "futures-rs-test-all": {
+      "plugin registration": {
+        "time": 0.0,
+        "rss": 53
+      },
+      "indexing hir": {
+        "time": 0.0,
+        "rss": 91
+      },
+      "MIR cleanup and validation": {
+        "time": 0.01,
+        "rss": 116
+      },
+      "expansion": {
+        "time": 0.03,
+        "rss": 86
+      },
+      "MIR optimisations": {
+        "time": 0.01,
+        "rss": 118
+      },
+      "checking for inline asm in case the target doesn't support it": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "attribute checking": {
+        "time": 0.0,
+        "rss": 91
+      },
+      "serialize dep graph": {
+        "time": 0.0,
+        "rss": 196
+      },
+      "parsing": {
+        "time": 0.0,
+        "rss": 53
+      },
+      "looking for plugin registrar": {
+        "time": 0.0,
+        "rss": 91
+      },
+      "serialize work products": {
+        "time": 0.0,
+        "rss": 183
+      },
+      "liveness checking": {
+        "time": 0.0,
+        "rss": 116
+      },
+      "loop checking": {
+        "time": 0.0,
+        "rss": 91
+      },
+      "resolving dependency formats": {
+        "time": 0.0,
+        "rss": 116
+      },
+      "const checking": {
+        "time": 0.0,
+        "rss": 116
+      },
+      "AST validation": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "lint checking": {
+        "time": 0.0,
+        "rss": 116
+      },
+      "translation": {
+        "time": 1.56,
+        "rss": 196
+      },
+      "item-bodies checking": {
+        "time": 0.12,
+        "rss": 116
+      },
+      "early lint checks": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "plugin loading": {
+        "time": 0.0,
+        "rss": 53
+      },
+      "maybe building test harness": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "wf checking": {
+        "time": 0.01,
+        "rss": 110
+      },
+      "MIR dump": {
+        "time": 0.01,
+        "rss": 116
+      },
+      "unused lib feature checking": {
+        "time": 0.0,
+        "rss": 116
+      },
+      "variance inference": {
+        "time": 0.0,
+        "rss": 104
+      },
+      "static item recursion checking": {
+        "time": 0.0,
+        "rss": 91
+      },
+      "load_dep_graph": {
+        "time": 0.0,
+        "rss": 91
+      },
+      "borrow checking": {
+        "time": 0.01,
+        "rss": 116
+      },
+      "complete gated feature checking": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "effect checking": {
+        "time": 0.0,
+        "rss": 116
+      },
+      "assert dep graph": {
+        "time": 0.0,
+        "rss": 196
+      },
+      "intrinsic checking": {
+        "time": 0.0,
+        "rss": 116
+      },
+      "name resolution": {
+        "time": 0.01,
+        "rss": 86
+      },
+      "impl wf inference": {
+        "time": 0.0,
+        "rss": 104
+      },
+      "recursion limit": {
+        "time": 0.0,
+        "rss": 53
+      },
+      "lifetime resolution": {
+        "time": 0.0,
+        "rss": 91
+      },
+      "maybe creating a macro crate": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "linking": {
+        "time": 0.19,
+        "rss": 134
+      },
+      "type collecting": {
+        "time": 0.0,
+        "rss": 104
+      },
+      "reachability checking": {
+        "time": 0.0,
+        "rss": 116
+      },
+      "compute_incremental_hashes_map": {
+        "time": 0.0,
+        "rss": 91
+      },
+      "privacy checking": {
+        "time": 0.0,
+        "rss": 116
+      },
+      "looking for entry point": {
+        "time": 0.0,
+        "rss": 91
+      },
+      "item-types checking": {
+        "time": 0.0,
+        "rss": 110
+      },
+      "region resolution": {
+        "time": 0.0,
+        "rss": 91
+      },
+      "death checking": {
+        "time": 0.0,
+        "rss": 116
+      },
+      "language item collection": {
+        "time": 0.0,
+        "rss": 91
+      },
+      "lowering ast -> hir": {
+        "time": 0.0,
+        "rss": 91
+      },
+      "stability checking": {
+        "time": 0.0,
+        "rss": 91
+      },
+      "coherence checking": {
+        "time": 0.0,
+        "rss": 104
+      },
+      "LLVM passes": {
+        "time": 2.41,
+        "rss": 183
+      },
+      "crate injection": {
+        "time": 0.0,
+        "rss": 53
+      },
+      "stability index": {
+        "time": 0.0,
+        "rss": 91
+      },
+      "match checking": {
+        "time": 0.0,
+        "rss": 116
+      }
+    },
+    "regex-0.1.80@060-Compiler-new": {
+      "maybe building test harness": {
+        "time": 0.0,
+        "rss": 107
+      },
+      "looking for entry point": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "looking for plugin registrar": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "intrinsic checking": {
+        "time": 0.0,
+        "rss": 165
+      },
+      "plugin registration": {
+        "time": 0.0,
+        "rss": 64
+      },
+      "static item recursion checking": {
+        "time": 0.0,
+        "rss": 124
+      },
+      "expansion": {
+        "time": 0.07,
+        "rss": 107
+      },
+      "loop checking": {
+        "time": 0.0,
+        "rss": 124
+      },
+      "type collecting": {
+        "time": 0.01,
+        "rss": 135
+      },
+      "complete gated feature checking": {
+        "time": 0.01,
+        "rss": 109
+      },
+      "linking": {
+        "time": 0.2,
+        "rss": 249
+      },
+      "attribute checking": {
+        "time": 0.0,
+        "rss": 121
+      },
+      "match checking": {
+        "time": 0.01,
+        "rss": 165
+      },
+      "coherence checking": {
+        "time": 0.02,
+        "rss": 145
+      },
+      "name resolution": {
+        "time": 0.01,
+        "rss": 109
+      },
+      "assert dep graph": {
+        "time": 0.0,
+        "rss": 307
+      },
+      "parsing": {
+        "time": 0.03,
+        "rss": 64
+      },
+      "crate injection": {
+        "time": 0.0,
+        "rss": 64
+      },
+      "checking for inline asm in case the target doesn't support it": {
+        "time": 0.0,
+        "rss": 107
+      },
+      "privacy checking": {
+        "time": 0.01,
+        "rss": 165
+      },
+      "MIR optimisations": {
+        "time": 0.05,
+        "rss": 193
+      },
+      "impl wf inference": {
+        "time": 0.0,
+        "rss": 135
+      },
+      "wf checking": {
+        "time": 0.02,
+        "rss": 146
+      },
+      "borrow checking": {
+        "time": 0.04,
+        "rss": 193
+      },
+      "maybe creating a macro crate": {
+        "time": 0.0,
+        "rss": 107
+      },
+      "recursion limit": {
+        "time": 0.0,
+        "rss": 64
+      },
+      "resolving dependency formats": {
+        "time": 0.0,
+        "rss": 193
+      },
+      "liveness checking": {
+        "time": 0.0,
+        "rss": 165
+      },
+      "serialize work products": {
+        "time": 0.0,
+        "rss": 419
+      },
+      "LLVM passes": {
+        "time": 1.43,
+        "rss": 419
+      },
+      "item-types checking": {
+        "time": 0.24,
+        "rss": 155
+      },
+      "region resolution": {
+        "time": 0.01,
+        "rss": 124
+      },
+      "load_dep_graph": {
+        "time": 0.06,
+        "rss": 127
+      },
+      "MIR dump": {
+        "time": 0.04,
+        "rss": 188
+      },
+      "AST validation": {
+        "time": 0.0,
+        "rss": 107
+      },
+      "lint checking": {
+        "time": 0.04,
+        "rss": 193
+      },
+      "translation": {
+        "time": 1.81,
+        "rss": 307
+      },
+      "indexing hir": {
+        "time": 0.0,
+        "rss": 121
+      },
+      "plugin loading": {
+        "time": 0.0,
+        "rss": 64
+      },
+      "MIR cleanup and validation": {
+        "time": 0.04,
+        "rss": 192
+      },
+      "variance inference": {
+        "time": 0.0,
+        "rss": 135
+      },
+      "item-bodies checking": {
+        "time": 0.33,
+        "rss": 165
+      },
+      "serialize dep graph": {
+        "time": 0.15,
+        "rss": 307
+      },
+      "death checking": {
+        "time": 0.0,
+        "rss": 193
+      },
+      "unused lib feature checking": {
+        "time": 0.0,
+        "rss": 193
+      },
+      "early lint checks": {
+        "time": 0.0,
+        "rss": 107
+      },
+      "const checking": {
+        "time": 0.02,
+        "rss": 165
+      },
+      "lowering ast -> hir": {
+        "time": 0.01,
+        "rss": 115
+      },
+      "compute_incremental_hashes_map": {
+        "time": 0.03,
+        "rss": 125
+      },
+      "reachability checking": {
+        "time": 0.0,
+        "rss": 193
+      },
+      "stability index": {
+        "time": 0.0,
+        "rss": 127
+      },
+      "lifetime resolution": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "effect checking": {
+        "time": 0.0,
+        "rss": 165
+      },
+      "stability checking": {
+        "time": 0.0,
+        "rss": 130
+      },
+      "language item collection": {
+        "time": 0.0,
+        "rss": 120
+      }
+    },
+    "regex-0.1.80@070-BYTE_FREQUENCIES": {
+      "serialize dep graph": {
+        "time": 0.14,
+        "rss": 212
+      },
+      "unused lib feature checking": {
+        "time": 0.0,
+        "rss": 192
+      },
+      "MIR optimisations": {
+        "time": 0.05,
+        "rss": 194
+      },
+      "plugin registration": {
+        "time": 0.0,
+        "rss": 63
+      },
+      "recursion limit": {
+        "time": 0.0,
+        "rss": 63
+      },
+      "borrow checking": {
+        "time": 0.04,
+        "rss": 192
+      },
+      "stability checking": {
+        "time": 0.0,
+        "rss": 125
+      },
+      "privacy checking": {
+        "time": 0.01,
+        "rss": 169
+      },
+      "crate injection": {
+        "time": 0.0,
+        "rss": 63
+      },
+      "liveness checking": {
+        "time": 0.0,
+        "rss": 169
+      },
+      "serialize work products": {
+        "time": 0.0,
+        "rss": 208
+      },
+      "death checking": {
+        "time": 0.0,
+        "rss": 192
+      },
+      "maybe building test harness": {
+        "time": 0.0,
+        "rss": 107
+      },
+      "lint checking": {
+        "time": 0.04,
+        "rss": 192
+      },
+      "checking for inline asm in case the target doesn't support it": {
+        "time": 0.0,
+        "rss": 107
+      },
+      "AST validation": {
+        "time": 0.0,
+        "rss": 107
+      },
+      "lowering ast -> hir": {
+        "time": 0.01,
+        "rss": 116
+      },
+      "LLVM passes": {
+        "time": 0.11,
+        "rss": 208
+      },
+      "load_dep_graph": {
+        "time": 0.07,
+        "rss": 129
+      },
+      "linking": {
+        "time": 0.19,
+        "rss": 210
+      },
+      "parsing": {
+        "time": 0.03,
+        "rss": 63
+      },
+      "looking for plugin registrar": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "language item collection": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "intrinsic checking": {
+        "time": 0.0,
+        "rss": 169
+      },
+      "indexing hir": {
+        "time": 0.0,
+        "rss": 118
+      },
+      "impl wf inference": {
+        "time": 0.0,
+        "rss": 138
+      },
+      "maybe creating a macro crate": {
+        "time": 0.0,
+        "rss": 107
+      },
+      "MIR dump": {
+        "time": 0.04,
+        "rss": 192
+      },
+      "name resolution": {
+        "time": 0.01,
+        "rss": 109
+      },
+      "effect checking": {
+        "time": 0.0,
+        "rss": 169
+      },
+      "MIR cleanup and validation": {
+        "time": 0.03,
+        "rss": 192
+      },
+      "complete gated feature checking": {
+        "time": 0.01,
+        "rss": 109
+      },
+      "match checking": {
+        "time": 0.01,
+        "rss": 169
+      },
+      "early lint checks": {
+        "time": 0.0,
+        "rss": 107
+      },
+      "variance inference": {
+        "time": 0.0,
+        "rss": 138
+      },
+      "plugin loading": {
+        "time": 0.0,
+        "rss": 63
+      },
+      "lifetime resolution": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "const checking": {
+        "time": 0.02,
+        "rss": 169
+      },
+      "translation": {
+        "time": 0.51,
+        "rss": 215
+      },
+      "assert dep graph": {
+        "time": 0.0,
+        "rss": 215
+      },
+      "compute_incremental_hashes_map": {
+        "time": 0.03,
+        "rss": 125
+      },
+      "loop checking": {
+        "time": 0.0,
+        "rss": 124
+      },
+      "region resolution": {
+        "time": 0.01,
+        "rss": 124
+      },
+      "item-types checking": {
+        "time": 0.24,
+        "rss": 158
+      },
+      "item-bodies checking": {
+        "time": 0.33,
+        "rss": 169
+      },
+      "attribute checking": {
+        "time": 0.0,
+        "rss": 118
+      },
+      "expansion": {
+        "time": 0.07,
+        "rss": 107
+      },
+      "looking for entry point": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "resolving dependency formats": {
+        "time": 0.0,
+        "rss": 192
+      },
+      "type collecting": {
+        "time": 0.01,
+        "rss": 137
+      },
+      "stability index": {
+        "time": 0.0,
+        "rss": 129
+      },
+      "reachability checking": {
+        "time": 0.0,
+        "rss": 192
+      },
+      "wf checking": {
+        "time": 0.02,
+        "rss": 149
+      },
+      "static item recursion checking": {
+        "time": 0.0,
+        "rss": 124
+      },
+      "coherence checking": {
+        "time": 0.02,
+        "rss": 148
+      }
+    },
+    "html5ever-2016-08-25": {
+      "privacy checking": {
+        "time": 0.01,
+        "rss": 175
+      },
+      "indexing hir": {
+        "time": 0.01,
+        "rss": 141
+      },
+      "language item collection": {
+        "time": 0.0,
+        "rss": 124
+      },
+      "lifetime resolution": {
+        "time": 0.0,
+        "rss": 124
+      },
+      "MIR cleanup and validation": {
+        "time": 0.06,
+        "rss": 233
+      },
+      "coherence checking": {
+        "time": 0.01,
+        "rss": 150
+      },
+      "borrow checking": {
+        "time": 0.13,
+        "rss": 221
+      },
+      "name resolution": {
+        "time": 0.02,
+        "rss": 126
+      },
+      "MIR dump": {
+        "time": 0.1,
+        "rss": 233
+      },
+      "resolving dependency formats": {
+        "time": 0.0,
+        "rss": 222
+      },
+      "lint checking": {
+        "time": 0.05,
+        "rss": 222
+      },
+      "effect checking": {
+        "time": 0.0,
+        "rss": 175
+      },
+      "translation": {
+        "time": 0.44,
+        "rss": 255
+      },
+      "liveness checking": {
+        "time": 0.01,
+        "rss": 168
+      },
+      "stability checking": {
+        "time": 0.0,
+        "rss": 134
+      },
+      "static item recursion checking": {
+        "time": 0.0,
+        "rss": 132
+      },
+      "variance inference": {
+        "time": 0.0,
+        "rss": 143
+      },
+      "assert dep graph": {
+        "time": 0.0,
+        "rss": 255
+      },
+      "maybe building test harness": {
+        "time": 0.0,
+        "rss": 122
+      },
+      "crate injection": {
+        "time": 0.0,
+        "rss": 57
+      },
+      "item-types checking": {
+        "time": 0.28,
+        "rss": 155
+      },
+      "serialize work products": {
+        "time": 0.0,
+        "rss": 162
+      },
+      "AST validation": {
+        "time": 0.0,
+        "rss": 122
+      },
+      "lowering ast -> hir": {
+        "time": 0.02,
+        "rss": 137
+      },
+      "recursion limit": {
+        "time": 0.0,
+        "rss": 57
+      },
+      "looking for plugin registrar": {
+        "time": 0.0,
+        "rss": 124
+      },
+      "MIR optimisations": {
+        "time": 0.39,
+        "rss": 233
+      },
+      "complete gated feature checking": {
+        "time": 0.0,
+        "rss": 126
+      },
+      "impl wf inference": {
+        "time": 0.0,
+        "rss": 143
+      },
+      "reachability checking": {
+        "time": 0.0,
+        "rss": 221
+      },
+      "const checking": {
+        "time": 0.04,
+        "rss": 175
+      },
+      "death checking": {
+        "time": 0.0,
+        "rss": 221
+      },
+      "parsing": {
+        "time": 0.02,
+        "rss": 57
+      },
+      "item-bodies checking": {
+        "time": 0.55,
+        "rss": 173
+      },
+      "unused lib feature checking": {
+        "time": 0.0,
+        "rss": 221
+      },
+      "checking for inline asm in case the target doesn't support it": {
+        "time": 0.0,
+        "rss": 122
+      },
+      "region resolution": {
+        "time": 0.01,
+        "rss": 132
+      },
+      "expansion": {
+        "time": 0.42,
+        "rss": 122
+      },
+      "serialize dep graph": {
+        "time": 0.0,
+        "rss": 255
+      },
+      "linking": {
+        "time": 0.03,
+        "rss": 145
+      },
+      "load_dep_graph": {
+        "time": 0.0,
+        "rss": 132
+      },
+      "attribute checking": {
+        "time": 0.0,
+        "rss": 141
+      },
+      "match checking": {
+        "time": 0.02,
+        "rss": 175
+      },
+      "loop checking": {
+        "time": 0.0,
+        "rss": 132
+      },
+      "intrinsic checking": {
+        "time": 0.0,
+        "rss": 175
+      },
+      "LLVM passes": {
+        "time": 0.68,
+        "rss": 162
+      },
+      "maybe creating a macro crate": {
+        "time": 0.0,
+        "rss": 122
+      },
+      "type collecting": {
+        "time": 0.01,
+        "rss": 143
+      },
+      "early lint checks": {
+        "time": 0.01,
+        "rss": 122
+      },
+      "plugin loading": {
+        "time": 0.0,
+        "rss": 57
+      },
+      "plugin registration": {
+        "time": 0.0,
+        "rss": 57
+      },
+      "compute_incremental_hashes_map": {
+        "time": 0.02,
+        "rss": 132
+      },
+      "looking for entry point": {
+        "time": 0.0,
+        "rss": 124
+      },
+      "wf checking": {
+        "time": 0.02,
+        "rss": 150
+      },
+      "stability index": {
+        "time": 0.0,
+        "rss": 132
+      }
+    },
+    "regex-0.1.80@040-is_valid_cap_letter": {
+      "expansion": {
+        "time": 0.07,
+        "rss": 109
+      },
+      "plugin registration": {
+        "time": 0.0,
+        "rss": 63
+      },
+      "effect checking": {
+        "time": 0.0,
+        "rss": 167
+      },
+      "lowering ast -> hir": {
+        "time": 0.01,
+        "rss": 115
+      },
+      "plugin loading": {
+        "time": 0.0,
+        "rss": 63
+      },
+      "unused lib feature checking": {
+        "time": 0.0,
+        "rss": 192
+      },
+      "static item recursion checking": {
+        "time": 0.0,
+        "rss": 124
+      },
+      "complete gated feature checking": {
+        "time": 0.01,
+        "rss": 109
+      },
+      "reachability checking": {
+        "time": 0.0,
+        "rss": 192
+      },
+      "maybe creating a macro crate": {
+        "time": 0.0,
+        "rss": 109
+      },
+      "looking for plugin registrar": {
+        "time": 0.0,
+        "rss": 119
+      },
+      "indexing hir": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "coherence checking": {
+        "time": 0.02,
+        "rss": 145
+      },
+      "intrinsic checking": {
+        "time": 0.0,
+        "rss": 167
+      },
+      "looking for entry point": {
+        "time": 0.0,
+        "rss": 119
+      },
+      "parsing": {
+        "time": 0.03,
+        "rss": 63
+      },
+      "MIR cleanup and validation": {
+        "time": 0.04,
+        "rss": 192
+      },
+      "borrow checking": {
+        "time": 0.04,
+        "rss": 192
+      },
+      "wf checking": {
+        "time": 0.02,
+        "rss": 146
+      },
+      "serialize dep graph": {
+        "time": 0.17,
+        "rss": 320
+      },
+      "type collecting": {
+        "time": 0.01,
+        "rss": 139
+      },
+      "MIR optimisations": {
+        "time": 0.05,
+        "rss": 194
+      },
+      "liveness checking": {
+        "time": 0.0,
+        "rss": 167
+      },
+      "privacy checking": {
+        "time": 0.01,
+        "rss": 167
+      },
+      "variance inference": {
+        "time": 0.0,
+        "rss": 139
+      },
+      "stability index": {
+        "time": 0.0,
+        "rss": 129
+      },
+      "LLVM passes": {
+        "time": 1.49,
+        "rss": 419
+      },
+      "loop checking": {
+        "time": 0.0,
+        "rss": 124
+      },
+      "item-types checking": {
+        "time": 0.24,
+        "rss": 155
+      },
+      "crate injection": {
+        "time": 0.0,
+        "rss": 63
+      },
+      "name resolution": {
+        "time": 0.01,
+        "rss": 109
+      },
+      "translation": {
+        "time": 1.77,
+        "rss": 304
+      },
+      "compute_incremental_hashes_map": {
+        "time": 0.03,
+        "rss": 125
+      },
+      "maybe building test harness": {
+        "time": 0.0,
+        "rss": 109
+      },
+      "item-bodies checking": {
+        "time": 0.33,
+        "rss": 167
+      },
+      "match checking": {
+        "time": 0.01,
+        "rss": 167
+      },
+      "lint checking": {
+        "time": 0.04,
+        "rss": 192
+      },
+      "impl wf inference": {
+        "time": 0.0,
+        "rss": 139
+      },
+      "checking for inline asm in case the target doesn't support it": {
+        "time": 0.0,
+        "rss": 109
+      },
+      "early lint checks": {
+        "time": 0.0,
+        "rss": 109
+      },
+      "const checking": {
+        "time": 0.02,
+        "rss": 167
+      },
+      "stability checking": {
+        "time": 0.0,
+        "rss": 129
+      },
+      "resolving dependency formats": {
+        "time": 0.0,
+        "rss": 192
+      },
+      "serialize work products": {
+        "time": 0.0,
+        "rss": 419
+      },
+      "MIR dump": {
+        "time": 0.04,
+        "rss": 192
+      },
+      "recursion limit": {
+        "time": 0.0,
+        "rss": 63
+      },
+      "assert dep graph": {
+        "time": 0.0,
+        "rss": 304
+      },
+      "death checking": {
+        "time": 0.0,
+        "rss": 192
+      },
+      "language item collection": {
+        "time": 0.0,
+        "rss": 119
+      },
+      "attribute checking": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "lifetime resolution": {
+        "time": 0.0,
+        "rss": 119
+      },
+      "load_dep_graph": {
+        "time": 0.05,
+        "rss": 129
+      },
+      "region resolution": {
+        "time": 0.01,
+        "rss": 124
+      },
+      "AST validation": {
+        "time": 0.0,
+        "rss": 109
+      },
+      "linking": {
+        "time": 0.2,
+        "rss": 251
+      }
+    },
+    "rust-encoding-0.3.0": {
+      "MIR dump": {
+        "time": 0.02,
+        "rss": 136
+      },
+      "assert dep graph": {
+        "time": 0.0,
+        "rss": 193
+      },
+      "variance inference": {
+        "time": 0.0,
+        "rss": 110
+      },
+      "stability checking": {
+        "time": 0.0,
+        "rss": 100
+      },
+      "lowering ast -> hir": {
+        "time": 0.0,
+        "rss": 98
+      },
+      "loop checking": {
+        "time": 0.0,
+        "rss": 100
+      },
+      "expansion": {
+        "time": 0.04,
+        "rss": 90
+      },
+      "plugin loading": {
+        "time": 0.0,
+        "rss": 55
+      },
+      "name resolution": {
+        "time": 0.01,
+        "rss": 92
+      },
+      "item-bodies checking": {
+        "time": 0.13,
+        "rss": 122
+      },
+      "plugin registration": {
+        "time": 0.0,
+        "rss": 55
+      },
+      "liveness checking": {
+        "time": 0.0,
+        "rss": 122
+      },
+      "crate injection": {
+        "time": 0.0,
+        "rss": 55
+      },
+      "lifetime resolution": {
+        "time": 0.0,
+        "rss": 100
+      },
+      "linking": {
+        "time": 0.04,
+        "rss": 134
+      },
+      "maybe building test harness": {
+        "time": 0.0,
+        "rss": 90
+      },
+      "resolving dependency formats": {
+        "time": 0.0,
+        "rss": 136
+      },
+      "impl wf inference": {
+        "time": 0.0,
+        "rss": 110
+      },
+      "MIR optimisations": {
+        "time": 0.04,
+        "rss": 136
+      },
+      "LLVM passes": {
+        "time": 0.91,
+        "rss": 167
+      },
+      "early lint checks": {
+        "time": 0.0,
+        "rss": 90
+      },
+      "privacy checking": {
+        "time": 0.0,
+        "rss": 122
+      },
+      "complete gated feature checking": {
+        "time": 0.0,
+        "rss": 92
+      },
+      "indexing hir": {
+        "time": 0.0,
+        "rss": 100
+      },
+      "MIR cleanup and validation": {
+        "time": 0.01,
+        "rss": 136
+      },
+      "looking for plugin registrar": {
+        "time": 0.0,
+        "rss": 100
+      },
+      "reachability checking": {
+        "time": 0.0,
+        "rss": 136
+      },
+      "recursion limit": {
+        "time": 0.0,
+        "rss": 55
+      },
+      "borrow checking": {
+        "time": 0.02,
+        "rss": 136
+      },
+      "attribute checking": {
+        "time": 0.0,
+        "rss": 100
+      },
+      "static item recursion checking": {
+        "time": 0.0,
+        "rss": 100
+      },
+      "match checking": {
+        "time": 0.0,
+        "rss": 122
+      },
+      "translation": {
+        "time": 0.42,
+        "rss": 193
+      },
+      "language item collection": {
+        "time": 0.0,
+        "rss": 100
+      },
+      "parsing": {
+        "time": 0.02,
+        "rss": 55
+      },
+      "serialize work products": {
+        "time": 0.0,
+        "rss": 167
+      },
+      "wf checking": {
+        "time": 0.01,
+        "rss": 114
+      },
+      "looking for entry point": {
+        "time": 0.0,
+        "rss": 100
+      },
+      "maybe creating a macro crate": {
+        "time": 0.0,
+        "rss": 90
+      },
+      "compute_incremental_hashes_map": {
+        "time": 0.01,
+        "rss": 100
+      },
+      "item-types checking": {
+        "time": 0.01,
+        "rss": 116
+      },
+      "load_dep_graph": {
+        "time": 0.0,
+        "rss": 100
+      },
+      "serialize dep graph": {
+        "time": 0.0,
+        "rss": 193
+      },
+      "effect checking": {
+        "time": 0.0,
+        "rss": 122
+      },
+      "stability index": {
+        "time": 0.0,
+        "rss": 100
+      },
+      "death checking": {
+        "time": 0.0,
+        "rss": 136
+      },
+      "AST validation": {
+        "time": 0.0,
+        "rss": 90
+      },
+      "intrinsic checking": {
+        "time": 0.0,
+        "rss": 122
+      },
+      "unused lib feature checking": {
+        "time": 0.0,
+        "rss": 136
+      },
+      "const checking": {
+        "time": 0.01,
+        "rss": 122
+      },
+      "type collecting": {
+        "time": 0.01,
+        "rss": 110
+      },
+      "region resolution": {
+        "time": 0.0,
+        "rss": 100
+      },
+      "checking for inline asm in case the target doesn't support it": {
+        "time": 0.0,
+        "rss": 90
+      },
+      "coherence checking": {
+        "time": 0.01,
+        "rss": 114
+      },
+      "lint checking": {
+        "time": 0.02,
+        "rss": 136
+      }
+    },
+    "piston-image-0.10.3": {
+      "wf checking": {
+        "time": 0.07,
+        "rss": 155
+      },
+      "MIR cleanup and validation": {
+        "time": 0.06,
+        "rss": 222
+      },
+      "type collecting": {
+        "time": 0.02,
+        "rss": 147
+      },
+      "match checking": {
+        "time": 0.02,
+        "rss": 179
+      },
+      "stability index": {
+        "time": 0.0,
+        "rss": 138
+      },
+      "stability checking": {
+        "time": 0.01,
+        "rss": 138
+      },
+      "maybe creating a macro crate": {
+        "time": 0.0,
+        "rss": 114
+      },
+      "serialize dep graph": {
+        "time": 0.0,
+        "rss": 370
+      },
+      "borrow checking": {
+        "time": 0.1,
+        "rss": 222
+      },
+      "variance inference": {
+        "time": 0.0,
+        "rss": 147
+      },
+      "looking for entry point": {
+        "time": 0.0,
+        "rss": 131
+      },
+      "item-bodies checking": {
+        "time": 0.74,
+        "rss": 175
+      },
+      "AST validation": {
+        "time": 0.0,
+        "rss": 114
+      },
+      "resolving dependency formats": {
+        "time": 0.0,
+        "rss": 222
+      },
+      "crate injection": {
+        "time": 0.0,
+        "rss": 62
+      },
+      "assert dep graph": {
+        "time": 0.0,
+        "rss": 370
+      },
+      "const checking": {
+        "time": 0.04,
+        "rss": 179
+      },
+      "MIR dump": {
+        "time": 0.08,
+        "rss": 222
+      },
+      "name resolution": {
+        "time": 0.02,
+        "rss": 120
+      },
+      "attribute checking": {
+        "time": 0.0,
+        "rss": 133
+      },
+      "lowering ast -> hir": {
+        "time": 0.02,
+        "rss": 130
+      },
+      "indexing hir": {
+        "time": 0.01,
+        "rss": 133
+      },
+      "language item collection": {
+        "time": 0.0,
+        "rss": 131
+      },
+      "unused lib feature checking": {
+        "time": 0.0,
+        "rss": 222
+      },
+      "death checking": {
+        "time": 0.01,
+        "rss": 222
+      },
+      "liveness checking": {
+        "time": 0.01,
+        "rss": 179
+      },
+      "effect checking": {
+        "time": 0.0,
+        "rss": 179
+      },
+      "privacy checking": {
+        "time": 0.01,
+        "rss": 179
+      },
+      "early lint checks": {
+        "time": 0.01,
+        "rss": 114
+      },
+      "item-types checking": {
+        "time": 0.25,
+        "rss": 164
+      },
+      "recursion limit": {
+        "time": 0.0,
+        "rss": 62
+      },
+      "MIR optimisations": {
+        "time": 0.1,
+        "rss": 226
+      },
+      "LLVM passes": {
+        "time": 5.63,
+        "rss": 294
+      },
+      "parsing": {
+        "time": 0.04,
+        "rss": 62
+      },
+      "linking": {
+        "time": 0.13,
+        "rss": 163
+      },
+      "intrinsic checking": {
+        "time": 0.01,
+        "rss": 179
+      },
+      "looking for plugin registrar": {
+        "time": 0.0,
+        "rss": 131
+      },
+      "compute_incremental_hashes_map": {
+        "time": 0.04,
+        "rss": 138
+      },
+      "plugin loading": {
+        "time": 0.0,
+        "rss": 62
+      },
+      "checking for inline asm in case the target doesn't support it": {
+        "time": 0.0,
+        "rss": 114
+      },
+      "loop checking": {
+        "time": 0.0,
+        "rss": 137
+      },
+      "region resolution": {
+        "time": 0.01,
+        "rss": 137
+      },
+      "expansion": {
+        "time": 0.09,
+        "rss": 114
+      },
+      "lint checking": {
+        "time": 0.06,
+        "rss": 222
+      },
+      "impl wf inference": {
+        "time": 0.0,
+        "rss": 147
+      },
+      "reachability checking": {
+        "time": 0.0,
+        "rss": 222
+      },
+      "static item recursion checking": {
+        "time": 0.0,
+        "rss": 137
+      },
+      "maybe building test harness": {
+        "time": 0.0,
+        "rss": 114
+      },
+      "plugin registration": {
+        "time": 0.0,
+        "rss": 62
+      },
+      "complete gated feature checking": {
+        "time": 0.01,
+        "rss": 120
+      },
+      "serialize work products": {
+        "time": 0.0,
+        "rss": 294
+      },
+      "coherence checking": {
+        "time": 0.02,
+        "rss": 155
+      },
+      "lifetime resolution": {
+        "time": 0.0,
+        "rss": 131
+      },
+      "load_dep_graph": {
+        "time": 0.0,
+        "rss": 138
+      },
+      "translation": {
+        "time": 2.84,
+        "rss": 370
+      }
+    },
+    "regex.0.1.30": {
+      "linking": {
+        "time": 0.04,
+        "rss": 138
+      },
+      "load_dep_graph": {
+        "time": 0.0,
+        "rss": 108
+      },
+      "lint checking": {
+        "time": 0.02,
+        "rss": 159
+      },
+      "reachability checking": {
+        "time": 0.0,
+        "rss": 159
+      },
+      "item-bodies checking": {
+        "time": 0.12,
+        "rss": 136
+      },
+      "stability checking": {
+        "time": 0.0,
+        "rss": 110
+      },
+      "attribute checking": {
+        "time": 0.0,
+        "rss": 110
+      },
+      "const checking": {
+        "time": 0.02,
+        "rss": 138
+      },
+      "assert dep graph": {
+        "time": 0.0,
+        "rss": 207
+      },
+      "compute_incremental_hashes_map": {
+        "time": 0.02,
+        "rss": 108
+      },
+      "item-types checking": {
+        "time": 0.28,
+        "rss": 134
+      },
+      "MIR dump": {
+        "time": 0.04,
+        "rss": 157
+      },
+      "plugin loading": {
+        "time": 0.0,
+        "rss": 65
+      },
+      "lifetime resolution": {
+        "time": 0.0,
+        "rss": 104
+      },
+      "crate injection": {
+        "time": 0.0,
+        "rss": 65
+      },
+      "looking for plugin registrar": {
+        "time": 0.0,
+        "rss": 104
+      },
+      "plugin registration": {
+        "time": 0.0,
+        "rss": 65
+      },
+      "LLVM passes": {
+        "time": 1.05,
+        "rss": 165
+      },
+      "impl wf inference": {
+        "time": 0.0,
+        "rss": 118
+      },
+      "looking for entry point": {
+        "time": 0.0,
+        "rss": 104
+      },
+      "MIR cleanup and validation": {
+        "time": 0.02,
+        "rss": 157
+      },
+      "variance inference": {
+        "time": 0.0,
+        "rss": 118
+      },
+      "name resolution": {
+        "time": 0.01,
+        "rss": 101
+      },
+      "AST validation": {
+        "time": 0.0,
+        "rss": 99
+      },
+      "maybe creating a macro crate": {
+        "time": 0.0,
+        "rss": 99
+      },
+      "serialize work products": {
+        "time": 0.0,
+        "rss": 165
+      },
+      "type collecting": {
+        "time": 0.01,
+        "rss": 118
+      },
+      "intrinsic checking": {
+        "time": 0.0,
+        "rss": 138
+      },
+      "translation": {
+        "time": 0.6,
+        "rss": 207
+      },
+      "indexing hir": {
+        "time": 0.0,
+        "rss": 110
+      },
+      "resolving dependency formats": {
+        "time": 0.0,
+        "rss": 159
+      },
+      "recursion limit": {
+        "time": 0.0,
+        "rss": 65
+      },
+      "death checking": {
+        "time": 0.0,
+        "rss": 159
+      },
+      "wf checking": {
+        "time": 0.01,
+        "rss": 123
+      },
+      "effect checking": {
+        "time": 0.0,
+        "rss": 138
+      },
+      "checking for inline asm in case the target doesn't support it": {
+        "time": 0.0,
+        "rss": 99
+      },
+      "liveness checking": {
+        "time": 0.0,
+        "rss": 138
+      },
+      "early lint checks": {
+        "time": 0.0,
+        "rss": 99
+      },
+      "loop checking": {
+        "time": 0.0,
+        "rss": 108
+      },
+      "borrow checking": {
+        "time": 0.04,
+        "rss": 159
+      },
+      "MIR optimisations": {
+        "time": 0.02,
+        "rss": 159
+      },
+      "lowering ast -> hir": {
+        "time": 0.01,
+        "rss": 108
+      },
+      "coherence checking": {
+        "time": 0.01,
+        "rss": 123
+      },
+      "region resolution": {
+        "time": 0.0,
+        "rss": 108
+      },
+      "maybe building test harness": {
+        "time": 0.0,
+        "rss": 99
+      },
+      "static item recursion checking": {
+        "time": 0.0,
+        "rss": 108
+      },
+      "unused lib feature checking": {
+        "time": 0.0,
+        "rss": 159
+      },
+      "privacy checking": {
+        "time": 0.0,
+        "rss": 138
+      },
+      "serialize dep graph": {
+        "time": 0.0,
+        "rss": 207
+      },
+      "stability index": {
+        "time": 0.0,
+        "rss": 108
+      },
+      "match checking": {
+        "time": 0.0,
+        "rss": 138
+      },
+      "expansion": {
+        "time": 0.04,
+        "rss": 99
+      },
+      "parsing": {
+        "time": 0.05,
+        "rss": 65
+      },
+      "language item collection": {
+        "time": 0.0,
+        "rss": 104
+      },
+      "complete gated feature checking": {
+        "time": 0.0,
+        "rss": 101
+      }
+    },
+    "syntex-0.42.2@010-incr": {
+      "maybe building test harness": {
+        "time": 0.0,
+        "rss": 167
+      },
+      "maybe creating a macro crate": {
+        "time": 0.01,
+        "rss": 167
+      },
+      "type collecting": {
+        "time": 0.05,
+        "rss": 238
+      },
+      "intrinsic checking": {
+        "time": 0.03,
+        "rss": 354
+      },
+      "complete gated feature checking": {
+        "time": 0.02,
+        "rss": 185
+      },
+      "variance inference": {
+        "time": 0.0,
+        "rss": 238
+      },
+      "effect checking": {
+        "time": 0.01,
+        "rss": 354
+      },
+      "privacy checking": {
+        "time": 0.07,
+        "rss": 354
+      },
+      "coherence checking": {
+        "time": 0.03,
+        "rss": 251
+      },
+      "language item collection": {
+        "time": 0.0,
+        "rss": 198
+      },
+      "linking": {
+        "time": 0.83,
+        "rss": 352
+      },
+      "wf checking": {
+        "time": 0.08,
+        "rss": 252
+      },
+      "borrow checking": {
+        "time": 0.46,
+        "rss": 549
+      },
+      "crate injection": {
+        "time": 0.0,
+        "rss": 78
+      },
+      "stability checking": {
+        "time": 0.02,
+        "rss": 227
+      },
+      "looking for plugin registrar": {
+        "time": 0.0,
+        "rss": 201
+      },
+      "MIR dump": {
+        "time": 0.34,
+        "rss": 547
+      },
+      "attribute checking": {
+        "time": 0.01,
+        "rss": 213
+      },
+      "lint checking": {
+        "time": 0.17,
+        "rss": 549
+      },
+      "unused lib feature checking": {
+        "time": 0.0,
+        "rss": 549
+      },
+      "death checking": {
+        "time": 0.03,
+        "rss": 549
+      },
+      "lowering ast -> hir": {
+        "time": 0.08,
+        "rss": 222
+      },
+      "item-bodies checking": {
+        "time": 4.36,
+        "rss": 350
+      },
+      "plugin loading": {
+        "time": 0.0,
+        "rss": 78
+      },
+      "item-types checking": {
+        "time": 0.32,
+        "rss": 265
+      },
+      "MIR optimisations": {
+        "time": 0.6,
+        "rss": 575
+      },
+      "compute_incremental_hashes_map": {
+        "time": 0.29,
+        "rss": 223
+      },
+      "early lint checks": {
+        "time": 0.02,
+        "rss": 167
+      },
+      "plugin registration": {
+        "time": 0.0,
+        "rss": 78
+      },
+      "reachability checking": {
+        "time": 0.01,
+        "rss": 549
+      },
+      "MIR cleanup and validation": {
+        "time": 0.3,
+        "rss": 547
+      },
+      "name resolution": {
+        "time": 0.08,
+        "rss": 185
+      },
+      "stability index": {
+        "time": 0.01,
+        "rss": 223
+      },
+      "match checking": {
+        "time": 0.06,
+        "rss": 367
+      },
+      "liveness checking": {
+        "time": 0.05,
+        "rss": 353
+      },
+      "expansion": {
+        "time": 0.34,
+        "rss": 167
+      },
+      "LLVM passes": {
+        "time": 7.5,
+        "rss": 1047
+      },
+      "loop checking": {
+        "time": 0.01,
+        "rss": 221
+      },
+      "checking for inline asm in case the target doesn't support it": {
+        "time": 0.0,
+        "rss": 167
+      },
+      "resolving dependency formats": {
+        "time": 0.0,
+        "rss": 549
+      },
+      "indexing hir": {
+        "time": 0.03,
+        "rss": 213
+      },
+      "assert dep graph": {
+        "time": 0.0,
+        "rss": 1174
+      },
+      "load_dep_graph": {
+        "time": 0.0,
+        "rss": 223
+      },
+      "parsing": {
+        "time": 0.09,
+        "rss": 78
+      },
+      "impl wf inference": {
+        "time": 0.01,
+        "rss": 241
+      },
+      "region resolution": {
+        "time": 0.05,
+        "rss": 221
+      },
+      "lifetime resolution": {
+        "time": 0.02,
+        "rss": 201
+      },
+      "AST validation": {
+        "time": 0.01,
+        "rss": 167
+      },
+      "recursion limit": {
+        "time": 0.0,
+        "rss": 78
+      },
+      "looking for entry point": {
+        "time": 0.0,
+        "rss": 201
+      },
+      "const checking": {
+        "time": 0.2,
+        "rss": 354
+      },
+      "static item recursion checking": {
+        "time": 0.0,
+        "rss": 221
+      },
+      "serialize dep graph": {
+        "time": 1.06,
+        "rss": 1224
+      },
+      "serialize work products": {
+        "time": 0.0,
+        "rss": 1047
+      },
+      "translation": {
+        "time": 9.68,
+        "rss": 1174
+      }
+    },
+    "regex-0.1.80@020-incr-from-scratch": {
+      "translation": {
+        "time": 1.82,
+        "rss": 308
+      },
+      "region resolution": {
+        "time": 0.01,
+        "rss": 124
+      },
+      "assert dep graph": {
+        "time": 0.0,
+        "rss": 308
+      },
+      "name resolution": {
+        "time": 0.01,
+        "rss": 109
+      },
+      "death checking": {
+        "time": 0.0,
+        "rss": 187
+      },
+      "stability checking": {
+        "time": 0.0,
+        "rss": 125
+      },
+      "item-types checking": {
+        "time": 0.24,
+        "rss": 156
+      },
+      "item-bodies checking": {
+        "time": 0.32,
+        "rss": 166
+      },
+      "lowering ast -> hir": {
+        "time": 0.01,
+        "rss": 116
+      },
+      "plugin registration": {
+        "time": 0.0,
+        "rss": 64
+      },
+      "language item collection": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "effect checking": {
+        "time": 0.0,
+        "rss": 166
+      },
+      "looking for entry point": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "serialize dep graph": {
+        "time": 0.16,
+        "rss": 318
+      },
+      "lint checking": {
+        "time": 0.04,
+        "rss": 189
+      },
+      "plugin loading": {
+        "time": 0.0,
+        "rss": 64
+      },
+      "expansion": {
+        "time": 0.07,
+        "rss": 109
+      },
+      "LLVM passes": {
+        "time": 1.48,
+        "rss": 415
+      },
+      "intrinsic checking": {
+        "time": 0.0,
+        "rss": 166
+      },
+      "attribute checking": {
+        "time": 0.0,
+        "rss": 121
+      },
+      "loop checking": {
+        "time": 0.0,
+        "rss": 124
+      },
+      "liveness checking": {
+        "time": 0.0,
+        "rss": 166
+      },
+      "reachability checking": {
+        "time": 0.0,
+        "rss": 187
+      },
+      "impl wf inference": {
+        "time": 0.0,
+        "rss": 135
+      },
+      "looking for plugin registrar": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "AST validation": {
+        "time": 0.0,
+        "rss": 109
+      },
+      "unused lib feature checking": {
+        "time": 0.0,
+        "rss": 187
+      },
+      "privacy checking": {
+        "time": 0.01,
+        "rss": 166
+      },
+      "complete gated feature checking": {
+        "time": 0.01,
+        "rss": 109
+      },
+      "crate injection": {
+        "time": 0.0,
+        "rss": 64
+      },
+      "stability index": {
+        "time": 0.0,
+        "rss": 125
+      },
+      "compute_incremental_hashes_map": {
+        "time": 0.03,
+        "rss": 125
+      },
+      "MIR optimisations": {
+        "time": 0.05,
+        "rss": 194
+      },
+      "linking": {
+        "time": 0.2,
+        "rss": 243
+      },
+      "maybe building test harness": {
+        "time": 0.0,
+        "rss": 109
+      },
+      "checking for inline asm in case the target doesn't support it": {
+        "time": 0.0,
+        "rss": 109
+      },
+      "load_dep_graph": {
+        "time": 0.0,
+        "rss": 125
+      },
+      "recursion limit": {
+        "time": 0.0,
+        "rss": 64
+      },
+      "variance inference": {
+        "time": 0.0,
+        "rss": 135
+      },
+      "coherence checking": {
+        "time": 0.02,
+        "rss": 146
+      },
+      "lifetime resolution": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "serialize work products": {
+        "time": 0.0,
+        "rss": 415
+      },
+      "parsing": {
+        "time": 0.03,
+        "rss": 64
+      },
+      "static item recursion checking": {
+        "time": 0.0,
+        "rss": 124
+      },
+      "maybe creating a macro crate": {
+        "time": 0.0,
+        "rss": 109
+      },
+      "early lint checks": {
+        "time": 0.0,
+        "rss": 109
+      },
+      "indexing hir": {
+        "time": 0.0,
+        "rss": 121
+      },
+      "borrow checking": {
+        "time": 0.04,
+        "rss": 187
+      },
+      "type collecting": {
+        "time": 0.01,
+        "rss": 135
+      },
+      "MIR cleanup and validation": {
+        "time": 0.04,
+        "rss": 187
+      },
+      "match checking": {
+        "time": 0.01,
+        "rss": 166
+      },
+      "const checking": {
+        "time": 0.02,
+        "rss": 166
+      },
+      "wf checking": {
+        "time": 0.02,
+        "rss": 146
+      },
+      "resolving dependency formats": {
+        "time": 0.0,
+        "rss": 189
+      },
+      "MIR dump": {
+        "time": 0.04,
+        "rss": 187
+      }
+    },
+    "regex-0.1.80@050-expand": {
+      "parsing": {
+        "time": 0.03,
+        "rss": 64
+      },
+      "lowering ast -> hir": {
+        "time": 0.01,
+        "rss": 119
+      },
+      "expansion": {
+        "time": 0.07,
+        "rss": 108
+      },
+      "region resolution": {
+        "time": 0.01,
+        "rss": 125
+      },
+      "item-types checking": {
+        "time": 0.24,
+        "rss": 156
+      },
+      "type collecting": {
+        "time": 0.01,
+        "rss": 135
+      },
+      "privacy checking": {
+        "time": 0.01,
+        "rss": 167
+      },
+      "match checking": {
+        "time": 0.01,
+        "rss": 167
+      },
+      "early lint checks": {
+        "time": 0.0,
+        "rss": 108
+      },
+      "attribute checking": {
+        "time": 0.0,
+        "rss": 121
+      },
+      "LLVM passes": {
+        "time": 1.47,
+        "rss": 410
+      },
+      "maybe building test harness": {
+        "time": 0.0,
+        "rss": 108
+      },
+      "language item collection": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "assert dep graph": {
+        "time": 0.0,
+        "rss": 305
+      },
+      "looking for plugin registrar": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "name resolution": {
+        "time": 0.01,
+        "rss": 110
+      },
+      "lifetime resolution": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "wf checking": {
+        "time": 0.02,
+        "rss": 147
+      },
+      "looking for entry point": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "item-bodies checking": {
+        "time": 0.33,
+        "rss": 167
+      },
+      "complete gated feature checking": {
+        "time": 0.01,
+        "rss": 110
+      },
+      "linking": {
+        "time": 0.2,
+        "rss": 241
+      },
+      "MIR cleanup and validation": {
+        "time": 0.04,
+        "rss": 193
+      },
+      "load_dep_graph": {
+        "time": 0.06,
+        "rss": 130
+      },
+      "liveness checking": {
+        "time": 0.0,
+        "rss": 167
+      },
+      "resolving dependency formats": {
+        "time": 0.0,
+        "rss": 193
+      },
+      "loop checking": {
+        "time": 0.0,
+        "rss": 125
+      },
+      "death checking": {
+        "time": 0.0,
+        "rss": 193
+      },
+      "static item recursion checking": {
+        "time": 0.0,
+        "rss": 125
+      },
+      "checking for inline asm in case the target doesn't support it": {
+        "time": 0.0,
+        "rss": 108
+      },
+      "indexing hir": {
+        "time": 0.0,
+        "rss": 121
+      },
+      "serialize dep graph": {
+        "time": 0.16,
+        "rss": 322
+      },
+      "unused lib feature checking": {
+        "time": 0.0,
+        "rss": 193
+      },
+      "maybe creating a macro crate": {
+        "time": 0.0,
+        "rss": 108
+      },
+      "plugin registration": {
+        "time": 0.0,
+        "rss": 64
+      },
+      "coherence checking": {
+        "time": 0.02,
+        "rss": 146
+      },
+      "intrinsic checking": {
+        "time": 0.0,
+        "rss": 167
+      },
+      "recursion limit": {
+        "time": 0.0,
+        "rss": 64
+      },
+      "translation": {
+        "time": 1.76,
+        "rss": 305
+      },
+      "variance inference": {
+        "time": 0.0,
+        "rss": 135
+      },
+      "plugin loading": {
+        "time": 0.0,
+        "rss": 64
+      },
+      "stability checking": {
+        "time": 0.0,
+        "rss": 126
+      },
+      "stability index": {
+        "time": 0.0,
+        "rss": 130
+      },
+      "borrow checking": {
+        "time": 0.04,
+        "rss": 193
+      },
+      "impl wf inference": {
+        "time": 0.0,
+        "rss": 135
+      },
+      "serialize work products": {
+        "time": 0.0,
+        "rss": 410
+      },
+      "const checking": {
+        "time": 0.02,
+        "rss": 167
+      },
+      "reachability checking": {
+        "time": 0.0,
+        "rss": 193
+      },
+      "MIR optimisations": {
+        "time": 0.05,
+        "rss": 193
+      },
+      "AST validation": {
+        "time": 0.0,
+        "rss": 108
+      },
+      "MIR dump": {
+        "time": 0.04,
+        "rss": 193
+      },
+      "compute_incremental_hashes_map": {
+        "time": 0.03,
+        "rss": 126
+      },
+      "effect checking": {
+        "time": 0.0,
+        "rss": 167
+      },
+      "lint checking": {
+        "time": 0.04,
+        "rss": 193
+      },
+      "crate injection": {
+        "time": 0.0,
+        "rss": 64
+      }
+    },
+    "regex-0.1.80@080-SparseSet": {
+      "lowering ast -> hir": {
+        "time": 0.01,
+        "rss": 115
+      },
+      "stability checking": {
+        "time": 0.0,
+        "rss": 129
+      },
+      "coherence checking": {
+        "time": 0.02,
+        "rss": 148
+      },
+      "stability index": {
+        "time": 0.0,
+        "rss": 128
+      },
+      "unused lib feature checking": {
+        "time": 0.0,
+        "rss": 193
+      },
+      "MIR cleanup and validation": {
+        "time": 0.03,
+        "rss": 188
+      },
+      "translation": {
+        "time": 1.78,
+        "rss": 307
+      },
+      "attribute checking": {
+        "time": 0.0,
+        "rss": 117
+      },
+      "expansion": {
+        "time": 0.07,
+        "rss": 107
+      },
+      "MIR optimisations": {
+        "time": 0.05,
+        "rss": 193
+      },
+      "LLVM passes": {
+        "time": 1.56,
+        "rss": 415
+      },
+      "assert dep graph": {
+        "time": 0.0,
+        "rss": 307
+      },
+      "match checking": {
+        "time": 0.01,
+        "rss": 165
+      },
+      "liveness checking": {
+        "time": 0.0,
+        "rss": 165
+      },
+      "effect checking": {
+        "time": 0.0,
+        "rss": 165
+      },
+      "intrinsic checking": {
+        "time": 0.0,
+        "rss": 165
+      },
+      "loop checking": {
+        "time": 0.0,
+        "rss": 124
+      },
+      "crate injection": {
+        "time": 0.0,
+        "rss": 64
+      },
+      "checking for inline asm in case the target doesn't support it": {
+        "time": 0.0,
+        "rss": 107
+      },
+      "wf checking": {
+        "time": 0.02,
+        "rss": 149
+      },
+      "plugin registration": {
+        "time": 0.0,
+        "rss": 64
+      },
+      "item-types checking": {
+        "time": 0.24,
+        "rss": 156
+      },
+      "type collecting": {
+        "time": 0.01,
+        "rss": 138
+      },
+      "load_dep_graph": {
+        "time": 0.03,
+        "rss": 128
+      },
+      "looking for plugin registrar": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "complete gated feature checking": {
+        "time": 0.01,
+        "rss": 109
+      },
+      "indexing hir": {
+        "time": 0.0,
+        "rss": 117
+      },
+      "privacy checking": {
+        "time": 0.01,
+        "rss": 165
+      },
+      "item-bodies checking": {
+        "time": 0.32,
+        "rss": 165
+      },
+      "death checking": {
+        "time": 0.0,
+        "rss": 193
+      },
+      "serialize dep graph": {
+        "time": 0.17,
+        "rss": 308
+      },
+      "recursion limit": {
+        "time": 0.0,
+        "rss": 64
+      },
+      "maybe creating a macro crate": {
+        "time": 0.0,
+        "rss": 107
+      },
+      "reachability checking": {
+        "time": 0.0,
+        "rss": 193
+      },
+      "name resolution": {
+        "time": 0.01,
+        "rss": 109
+      },
+      "looking for entry point": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "maybe building test harness": {
+        "time": 0.0,
+        "rss": 107
+      },
+      "lifetime resolution": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "MIR dump": {
+        "time": 0.04,
+        "rss": 188
+      },
+      "serialize work products": {
+        "time": 0.0,
+        "rss": 415
+      },
+      "compute_incremental_hashes_map": {
+        "time": 0.03,
+        "rss": 125
+      },
+      "early lint checks": {
+        "time": 0.0,
+        "rss": 107
+      },
+      "parsing": {
+        "time": 0.03,
+        "rss": 64
+      },
+      "static item recursion checking": {
+        "time": 0.0,
+        "rss": 124
+      },
+      "resolving dependency formats": {
+        "time": 0.0,
+        "rss": 193
+      },
+      "lint checking": {
+        "time": 0.04,
+        "rss": 193
+      },
+      "region resolution": {
+        "time": 0.01,
+        "rss": 124
+      },
+      "plugin loading": {
+        "time": 0.0,
+        "rss": 64
+      },
+      "variance inference": {
+        "time": 0.0,
+        "rss": 138
+      },
+      "impl wf inference": {
+        "time": 0.0,
+        "rss": 138
+      },
+      "AST validation": {
+        "time": 0.0,
+        "rss": 107
+      },
+      "borrow checking": {
+        "time": 0.05,
+        "rss": 193
+      },
+      "const checking": {
+        "time": 0.02,
+        "rss": 165
+      },
+      "linking": {
+        "time": 0.19,
+        "rss": 246
+      },
+      "language item collection": {
+        "time": 0.0,
+        "rss": 120
+      }
+    },
+    "hyper.0.5.0": {
+      "death checking": {
+        "time": 0.0,
+        "rss": 177
+      },
+      "name resolution": {
+        "time": 0.02,
+        "rss": 115
+      },
+      "coherence checking": {
+        "time": 0.02,
+        "rss": 141
+      },
+      "MIR optimisations": {
+        "time": 0.05,
+        "rss": 179
+      },
+      "serialize dep graph": {
+        "time": 0.0,
+        "rss": 264
+      },
+      "stability index": {
+        "time": 0.0,
+        "rss": 128
+      },
+      "translation": {
+        "time": 1.44,
+        "rss": 264
+      },
+      "stability checking": {
+        "time": 0.0,
+        "rss": 128
+      },
+      "impl wf inference": {
+        "time": 0.0,
+        "rss": 135
+      },
+      "item-types checking": {
+        "time": 0.03,
+        "rss": 141
+      },
+      "checking for inline asm in case the target doesn't support it": {
+        "time": 0.0,
+        "rss": 111
+      },
+      "effect checking": {
+        "time": 0.0,
+        "rss": 152
+      },
+      "lifetime resolution": {
+        "time": 0.0,
+        "rss": 122
+      },
+      "early lint checks": {
+        "time": 0.0,
+        "rss": 111
+      },
+      "match checking": {
+        "time": 0.01,
+        "rss": 152
+      },
+      "variance inference": {
+        "time": 0.0,
+        "rss": 135
+      },
+      "serialize work products": {
+        "time": 0.0,
+        "rss": 208
+      },
+      "MIR dump": {
+        "time": 0.04,
+        "rss": 175
+      },
+      "assert dep graph": {
+        "time": 0.0,
+        "rss": 264
+      },
+      "static item recursion checking": {
+        "time": 0.0,
+        "rss": 126
+      },
+      "MIR cleanup and validation": {
+        "time": 0.04,
+        "rss": 177
+      },
+      "plugin registration": {
+        "time": 0.0,
+        "rss": 57
+      },
+      "compute_incremental_hashes_map": {
+        "time": 0.03,
+        "rss": 128
+      },
+      "wf checking": {
+        "time": 0.04,
+        "rss": 141
+      },
+      "lint checking": {
+        "time": 0.04,
+        "rss": 177
+      },
+      "AST validation": {
+        "time": 0.0,
+        "rss": 111
+      },
+      "recursion limit": {
+        "time": 0.0,
+        "rss": 57
+      },
+      "loop checking": {
+        "time": 0.0,
+        "rss": 126
+      },
+      "indexing hir": {
+        "time": 0.0,
+        "rss": 123
+      },
+      "crate injection": {
+        "time": 0.0,
+        "rss": 57
+      },
+      "expansion": {
+        "time": 0.11,
+        "rss": 111
+      },
+      "unused lib feature checking": {
+        "time": 0.0,
+        "rss": 177
+      },
+      "const checking": {
+        "time": 0.03,
+        "rss": 152
+      },
+      "privacy checking": {
+        "time": 0.01,
+        "rss": 152
+      },
+      "attribute checking": {
+        "time": 0.0,
+        "rss": 123
+      },
+      "complete gated feature checking": {
+        "time": 0.01,
+        "rss": 115
+      },
+      "item-bodies checking": {
+        "time": 0.32,
+        "rss": 152
+      },
+      "maybe building test harness": {
+        "time": 0.0,
+        "rss": 111
+      },
+      "load_dep_graph": {
+        "time": 0.0,
+        "rss": 128
+      },
+      "lowering ast -> hir": {
+        "time": 0.01,
+        "rss": 122
+      },
+      "borrow checking": {
+        "time": 0.05,
+        "rss": 177
+      },
+      "liveness checking": {
+        "time": 0.0,
+        "rss": 152
+      },
+      "LLVM passes": {
+        "time": 2.68,
+        "rss": 208
+      },
+      "region resolution": {
+        "time": 0.01,
+        "rss": 126
+      },
+      "parsing": {
+        "time": 0.03,
+        "rss": 57
+      },
+      "maybe creating a macro crate": {
+        "time": 0.0,
+        "rss": 111
+      },
+      "language item collection": {
+        "time": 0.0,
+        "rss": 122
+      },
+      "looking for plugin registrar": {
+        "time": 0.0,
+        "rss": 122
+      },
+      "type collecting": {
+        "time": 0.01,
+        "rss": 135
+      },
+      "looking for entry point": {
+        "time": 0.0,
+        "rss": 122
+      },
+      "linking": {
+        "time": 0.08,
+        "rss": 154
+      },
+      "reachability checking": {
+        "time": 0.0,
+        "rss": 177
+      },
+      "intrinsic checking": {
+        "time": 0.0,
+        "rss": 152
+      },
+      "resolving dependency formats": {
+        "time": 0.0,
+        "rss": 177
+      },
+      "plugin loading": {
+        "time": 0.0,
+        "rss": 57
+      }
+    },
+    "issue-32062-equality-relations-complexity": {
+      "compute_incremental_hashes_map": {
+        "time": 0.0,
+        "rss": 84
+      },
+      "impl wf inference": {
+        "time": 0.0,
+        "rss": 84
+      },
+      "loop checking": {
+        "time": 0.0,
+        "rss": 84
+      },
+      "privacy checking": {
+        "time": 0.0,
+        "rss": 97
+      },
+      "lint checking": {
+        "time": 0.0,
+        "rss": 101
+      },
+      "name resolution": {
+        "time": 0.0,
+        "rss": 84
+      },
+      "unused lib feature checking": {
+        "time": 0.0,
+        "rss": 101
+      },
+      "effect checking": {
+        "time": 0.0,
+        "rss": 97
+      },
+      "type collecting": {
+        "time": 0.0,
+        "rss": 84
+      },
+      "stability index": {
+        "time": 0.0,
+        "rss": 84
+      },
+      "resolving dependency formats": {
+        "time": 0.0,
+        "rss": 101
+      },
+      "lowering ast -> hir": {
+        "time": 0.0,
+        "rss": 84
+      },
+      "item-types checking": {
+        "time": 0.0,
+        "rss": 92
+      },
+      "liveness checking": {
+        "time": 0.0,
+        "rss": 97
+      },
+      "reachability checking": {
+        "time": 0.0,
+        "rss": 101
+      },
+      "language item collection": {
+        "time": 0.0,
+        "rss": 84
+      },
+      "item-bodies checking": {
+        "time": 0.04,
+        "rss": 97
+      },
+      "intrinsic checking": {
+        "time": 0.0,
+        "rss": 97
+      },
+      "MIR optimisations": {
+        "time": 0.0,
+        "rss": 101
+      },
+      "match checking": {
+        "time": 0.0,
+        "rss": 97
+      },
+      "plugin registration": {
+        "time": 0.0,
+        "rss": 51
+      },
+      "serialize dep graph": {
+        "time": 0.0,
+        "rss": 111
+      },
+      "looking for plugin registrar": {
+        "time": 0.0,
+        "rss": 84
+      },
+      "translation": {
+        "time": 0.08,
+        "rss": 109
+      },
+      "region resolution": {
+        "time": 0.0,
+        "rss": 84
+      },
+      "coherence checking": {
+        "time": 0.0,
+        "rss": 84
+      },
+      "stability checking": {
+        "time": 0.0,
+        "rss": 84
+      },
+      "AST validation": {
+        "time": 0.0,
+        "rss": 81
+      },
+      "crate injection": {
+        "time": 0.0,
+        "rss": 51
+      },
+      "serialize work products": {
+        "time": 0.0,
+        "rss": 116
+      },
+      "death checking": {
+        "time": 0.0,
+        "rss": 101
+      },
+      "maybe creating a macro crate": {
+        "time": 0.0,
+        "rss": 81
+      },
+      "MIR dump": {
+        "time": 0.0,
+        "rss": 100
+      },
+      "static item recursion checking": {
+        "time": 0.0,
+        "rss": 84
+      },
+      "indexing hir": {
+        "time": 0.0,
+        "rss": 84
+      },
+      "variance inference": {
+        "time": 0.0,
+        "rss": 84
+      },
+      "checking for inline asm in case the target doesn't support it": {
+        "time": 0.0,
+        "rss": 81
+      },
+      "lifetime resolution": {
+        "time": 0.0,
+        "rss": 84
+      },
+      "attribute checking": {
+        "time": 0.0,
+        "rss": 84
+      },
+      "LLVM passes": {
+        "time": 0.02,
+        "rss": 116
+      },
+      "wf checking": {
+        "time": 0.0,
+        "rss": 90
+      },
+      "linking": {
+        "time": 0.11,
+        "rss": 116
+      },
+      "MIR cleanup and validation": {
+        "time": 0.0,
+        "rss": 100
+      },
+      "borrow checking": {
+        "time": 0.0,
+        "rss": 101
+      },
+      "complete gated feature checking": {
+        "time": 0.0,
+        "rss": 84
+      },
+      "load_dep_graph": {
+        "time": 0.0,
+        "rss": 84
+      },
+      "parsing": {
+        "time": 0.0,
+        "rss": 51
+      },
+      "maybe building test harness": {
+        "time": 0.0,
+        "rss": 81
+      },
+      "looking for entry point": {
+        "time": 0.0,
+        "rss": 84
+      },
+      "recursion limit": {
+        "time": 0.0,
+        "rss": 51
+      },
+      "expansion": {
+        "time": 0.02,
+        "rss": 81
+      },
+      "early lint checks": {
+        "time": 0.0,
+        "rss": 81
+      },
+      "plugin loading": {
+        "time": 0.0,
+        "rss": 51
+      },
+      "const checking": {
+        "time": 0.0,
+        "rss": 97
+      },
+      "assert dep graph": {
+        "time": 0.0,
+        "rss": 109
+      }
+    },
+    "inflate-0.1.0": {
+      "attribute checking": {
+        "time": 0.0,
+        "rss": 97
+      },
+      "looking for plugin registrar": {
+        "time": 0.0,
+        "rss": 97
+      },
+      "match checking": {
+        "time": 0.0,
+        "rss": 125
+      },
+      "stability index": {
+        "time": 0.0,
+        "rss": 98
+      },
+      "privacy checking": {
+        "time": 0.0,
+        "rss": 125
+      },
+      "LLVM passes": {
+        "time": 0.8,
+        "rss": 140
+      },
+      "lowering ast -> hir": {
+        "time": 0.01,
+        "rss": 95
+      },
+      "checking for inline asm in case the target doesn't support it": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "recursion limit": {
+        "time": 0.0,
+        "rss": 53
+      },
+      "death checking": {
+        "time": 0.0,
+        "rss": 142
+      },
+      "reachability checking": {
+        "time": 0.0,
+        "rss": 142
+      },
+      "lifetime resolution": {
+        "time": 0.0,
+        "rss": 97
+      },
+      "serialize dep graph": {
+        "time": 0.0,
+        "rss": 168
+      },
+      "MIR optimisations": {
+        "time": 0.32,
+        "rss": 145
+      },
+      "const checking": {
+        "time": 0.01,
+        "rss": 125
+      },
+      "assert dep graph": {
+        "time": 0.0,
+        "rss": 168
+      },
+      "effect checking": {
+        "time": 0.0,
+        "rss": 125
+      },
+      "resolving dependency formats": {
+        "time": 0.0,
+        "rss": 145
+      },
+      "parsing": {
+        "time": 0.0,
+        "rss": 53
+      },
+      "intrinsic checking": {
+        "time": 0.0,
+        "rss": 125
+      },
+      "lint checking": {
+        "time": 0.02,
+        "rss": 145
+      },
+      "name resolution": {
+        "time": 0.01,
+        "rss": 93
+      },
+      "borrow checking": {
+        "time": 0.2,
+        "rss": 142
+      },
+      "plugin registration": {
+        "time": 0.0,
+        "rss": 53
+      },
+      "plugin loading": {
+        "time": 0.0,
+        "rss": 53
+      },
+      "AST validation": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "type collecting": {
+        "time": 0.0,
+        "rss": 102
+      },
+      "indexing hir": {
+        "time": 0.0,
+        "rss": 97
+      },
+      "wf checking": {
+        "time": 0.0,
+        "rss": 111
+      },
+      "item-types checking": {
+        "time": 0.0,
+        "rss": 111
+      },
+      "language item collection": {
+        "time": 0.0,
+        "rss": 97
+      },
+      "translation": {
+        "time": 0.24,
+        "rss": 168
+      },
+      "unused lib feature checking": {
+        "time": 0.0,
+        "rss": 142
+      },
+      "looking for entry point": {
+        "time": 0.0,
+        "rss": 97
+      },
+      "stability checking": {
+        "time": 0.0,
+        "rss": 98
+      },
+      "liveness checking": {
+        "time": 0.06,
+        "rss": 124
+      },
+      "complete gated feature checking": {
+        "time": 0.0,
+        "rss": 93
+      },
+      "serialize work products": {
+        "time": 0.0,
+        "rss": 140
+      },
+      "static item recursion checking": {
+        "time": 0.0,
+        "rss": 98
+      },
+      "early lint checks": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "variance inference": {
+        "time": 0.0,
+        "rss": 102
+      },
+      "region resolution": {
+        "time": 0.0,
+        "rss": 98
+      },
+      "loop checking": {
+        "time": 0.0,
+        "rss": 98
+      },
+      "linking": {
+        "time": 0.02,
+        "rss": 126
+      },
+      "coherence checking": {
+        "time": 0.01,
+        "rss": 111
+      },
+      "item-bodies checking": {
+        "time": 1.76,
+        "rss": 125
+      },
+      "compute_incremental_hashes_map": {
+        "time": 0.02,
+        "rss": 98
+      },
+      "maybe creating a macro crate": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "MIR dump": {
+        "time": 0.03,
+        "rss": 142
+      },
+      "impl wf inference": {
+        "time": 0.0,
+        "rss": 102
+      },
+      "MIR cleanup and validation": {
+        "time": 0.02,
+        "rss": 141
+      },
+      "crate injection": {
+        "time": 0.0,
+        "rss": 53
+      },
+      "expansion": {
+        "time": 0.08,
+        "rss": 86
+      },
+      "maybe building test harness": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "load_dep_graph": {
+        "time": 0.0,
+        "rss": 98
+      }
+    },
+    "helloworld": {
+      "maybe creating a macro crate": {
+        "time": 0.0,
+        "rss": 84
+      },
+      "crate injection": {
+        "time": 0.0,
+        "rss": 51
+      },
+      "liveness checking": {
+        "time": 0.0,
+        "rss": 97
+      },
+      "lint checking": {
+        "time": 0.0,
+        "rss": 97
+      },
+      "const checking": {
+        "time": 0.0,
+        "rss": 97
+      },
+      "plugin registration": {
+        "time": 0.0,
+        "rss": 51
+      },
+      "variance inference": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "load_dep_graph": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "linking": {
+        "time": 0.12,
+        "rss": 114
+      },
+      "serialize dep graph": {
+        "time": 0.0,
+        "rss": 107
+      },
+      "assert dep graph": {
+        "time": 0.0,
+        "rss": 107
+      },
+      "lifetime resolution": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "indexing hir": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "expansion": {
+        "time": 0.02,
+        "rss": 81
+      },
+      "borrow checking": {
+        "time": 0.0,
+        "rss": 97
+      },
+      "match checking": {
+        "time": 0.0,
+        "rss": 97
+      },
+      "MIR cleanup and validation": {
+        "time": 0.0,
+        "rss": 97
+      },
+      "MIR optimisations": {
+        "time": 0.0,
+        "rss": 97
+      },
+      "attribute checking": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "MIR dump": {
+        "time": 0.0,
+        "rss": 97
+      },
+      "recursion limit": {
+        "time": 0.0,
+        "rss": 51
+      },
+      "AST validation": {
+        "time": 0.0,
+        "rss": 84
+      },
+      "stability index": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "LLVM passes": {
+        "time": 0.0,
+        "rss": 111
+      },
+      "item-types checking": {
+        "time": 0.0,
+        "rss": 89
+      },
+      "maybe building test harness": {
+        "time": 0.0,
+        "rss": 81
+      },
+      "item-bodies checking": {
+        "time": 0.0,
+        "rss": 93
+      },
+      "impl wf inference": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "static item recursion checking": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "stability checking": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "effect checking": {
+        "time": 0.0,
+        "rss": 97
+      },
+      "plugin loading": {
+        "time": 0.0,
+        "rss": 51
+      },
+      "unused lib feature checking": {
+        "time": 0.0,
+        "rss": 97
+      },
+      "serialize work products": {
+        "time": 0.0,
+        "rss": 111
+      },
+      "early lint checks": {
+        "time": 0.0,
+        "rss": 84
+      },
+      "lowering ast -> hir": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "wf checking": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "coherence checking": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "intrinsic checking": {
+        "time": 0.0,
+        "rss": 97
+      },
+      "name resolution": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "looking for plugin registrar": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "reachability checking": {
+        "time": 0.0,
+        "rss": 97
+      },
+      "parsing": {
+        "time": 0.0,
+        "rss": 51
+      },
+      "checking for inline asm in case the target doesn't support it": {
+        "time": 0.0,
+        "rss": 84
+      },
+      "translation": {
+        "time": 0.05,
+        "rss": 107
+      },
+      "looking for entry point": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "type collecting": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "resolving dependency formats": {
+        "time": 0.0,
+        "rss": 97
+      },
+      "compute_incremental_hashes_map": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "language item collection": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "loop checking": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "complete gated feature checking": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "death checking": {
+        "time": 0.0,
+        "rss": 97
+      },
+      "region resolution": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "privacy checking": {
+        "time": 0.0,
+        "rss": 97
+      }
+    },
+    "tuple-stress": {
+      "type collecting": {
+        "time": 0.0,
+        "rss": 187
+      },
+      "linking": {
+        "time": 0.13,
+        "rss": 128
+      },
+      "loop checking": {
+        "time": 0.0,
+        "rss": 184
+      },
+      "lifetime resolution": {
+        "time": 0.0,
+        "rss": 162
+      },
+      "AST validation": {
+        "time": 0.01,
+        "rss": 160
+      },
+      "stability checking": {
+        "time": 0.0,
+        "rss": 184
+      },
+      "lint checking": {
+        "time": 0.17,
+        "rss": 370
+      },
+      "liveness checking": {
+        "time": 0.0,
+        "rss": 247
+      },
+      "item-types checking": {
+        "time": 0.84,
+        "rss": 222
+      },
+      "expansion": {
+        "time": 0.09,
+        "rss": 160
+      },
+      "lowering ast -> hir": {
+        "time": 0.04,
+        "rss": 211
+      },
+      "parsing": {
+        "time": 0.44,
+        "rss": 139
+      },
+      "attribute checking": {
+        "time": 0.01,
+        "rss": 236
+      },
+      "translation": {
+        "time": 0.37,
+        "rss": 394
+      },
+      "crate injection": {
+        "time": 0.0,
+        "rss": 139
+      },
+      "plugin loading": {
+        "time": 0.0,
+        "rss": 139
+      },
+      "early lint checks": {
+        "time": 0.03,
+        "rss": 160
+      },
+      "load_dep_graph": {
+        "time": 0.0,
+        "rss": 184
+      },
+      "wf checking": {
+        "time": 0.0,
+        "rss": 187
+      },
+      "indexing hir": {
+        "time": 0.03,
+        "rss": 236
+      },
+      "serialize dep graph": {
+        "time": 0.0,
+        "rss": 394
+      },
+      "looking for entry point": {
+        "time": 0.0,
+        "rss": 162
+      },
+      "unused lib feature checking": {
+        "time": 0.0,
+        "rss": 370
+      },
+      "compute_incremental_hashes_map": {
+        "time": 0.14,
+        "rss": 184
+      },
+      "intrinsic checking": {
+        "time": 0.0,
+        "rss": 247
+      },
+      "borrow checking": {
+        "time": 0.44,
+        "rss": 370
+      },
+      "assert dep graph": {
+        "time": 0.0,
+        "rss": 394
+      },
+      "const checking": {
+        "time": 0.26,
+        "rss": 247
+      },
+      "looking for plugin registrar": {
+        "time": 0.0,
+        "rss": 162
+      },
+      "MIR optimisations": {
+        "time": 0.05,
+        "rss": 371
+      },
+      "LLVM passes": {
+        "time": 0.43,
+        "rss": 164
+      },
+      "privacy checking": {
+        "time": 0.01,
+        "rss": 247
+      },
+      "region resolution": {
+        "time": 0.05,
+        "rss": 184
+      },
+      "maybe creating a macro crate": {
+        "time": 0.01,
+        "rss": 160
+      },
+      "complete gated feature checking": {
+        "time": 0.0,
+        "rss": 161
+      },
+      "serialize work products": {
+        "time": 0.0,
+        "rss": 164
+      },
+      "impl wf inference": {
+        "time": 0.0,
+        "rss": 187
+      },
+      "stability index": {
+        "time": 0.0,
+        "rss": 184
+      },
+      "coherence checking": {
+        "time": 0.0,
+        "rss": 187
+      },
+      "static item recursion checking": {
+        "time": 0.0,
+        "rss": 184
+      },
+      "reachability checking": {
+        "time": 0.0,
+        "rss": 370
+      },
+      "MIR cleanup and validation": {
+        "time": 0.07,
+        "rss": 353
+      },
+      "effect checking": {
+        "time": 0.0,
+        "rss": 247
+      },
+      "name resolution": {
+        "time": 0.01,
+        "rss": 161
+      },
+      "MIR dump": {
+        "time": 0.35,
+        "rss": 352
+      },
+      "item-bodies checking": {
+        "time": 0.01,
+        "rss": 234
+      },
+      "language item collection": {
+        "time": 0.0,
+        "rss": 162
+      },
+      "maybe building test harness": {
+        "time": 0.0,
+        "rss": 160
+      },
+      "resolving dependency formats": {
+        "time": 0.0,
+        "rss": 370
+      },
+      "death checking": {
+        "time": 0.0,
+        "rss": 370
+      },
+      "recursion limit": {
+        "time": 0.0,
+        "rss": 139
+      },
+      "variance inference": {
+        "time": 0.0,
+        "rss": 187
+      },
+      "match checking": {
+        "time": 0.0,
+        "rss": 247
+      },
+      "plugin registration": {
+        "time": 0.0,
+        "rss": 139
+      },
+      "checking for inline asm in case the target doesn't support it": {
+        "time": 0.0,
+        "rss": 160
+      }
+    },
+    "regex-0.1.80@030-compile_one": {
+      "match checking": {
+        "time": 0.01,
+        "rss": 165
+      },
+      "MIR dump": {
+        "time": 0.04,
+        "rss": 186
+      },
+      "effect checking": {
+        "time": 0.0,
+        "rss": 165
+      },
+      "linking": {
+        "time": 0.2,
+        "rss": 250
+      },
+      "type collecting": {
+        "time": 0.01,
+        "rss": 135
+      },
+      "maybe creating a macro crate": {
+        "time": 0.0,
+        "rss": 109
+      },
+      "checking for inline asm in case the target doesn't support it": {
+        "time": 0.0,
+        "rss": 109
+      },
+      "lowering ast -> hir": {
+        "time": 0.01,
+        "rss": 119
+      },
+      "looking for plugin registrar": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "language item collection": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "translation": {
+        "time": 1.79,
+        "rss": 307
+      },
+      "serialize work products": {
+        "time": 0.0,
+        "rss": 418
+      },
+      "coherence checking": {
+        "time": 0.02,
+        "rss": 145
+      },
+      "MIR optimisations": {
+        "time": 0.05,
+        "rss": 193
+      },
+      "unused lib feature checking": {
+        "time": 0.0,
+        "rss": 193
+      },
+      "complete gated feature checking": {
+        "time": 0.01,
+        "rss": 109
+      },
+      "region resolution": {
+        "time": 0.01,
+        "rss": 124
+      },
+      "reachability checking": {
+        "time": 0.0,
+        "rss": 193
+      },
+      "liveness checking": {
+        "time": 0.0,
+        "rss": 165
+      },
+      "stability checking": {
+        "time": 0.0,
+        "rss": 126
+      },
+      "wf checking": {
+        "time": 0.02,
+        "rss": 146
+      },
+      "assert dep graph": {
+        "time": 0.0,
+        "rss": 307
+      },
+      "stability index": {
+        "time": 0.0,
+        "rss": 128
+      },
+      "expansion": {
+        "time": 0.07,
+        "rss": 109
+      },
+      "plugin loading": {
+        "time": 0.0,
+        "rss": 64
+      },
+      "looking for entry point": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "serialize dep graph": {
+        "time": 0.15,
+        "rss": 307
+      },
+      "indexing hir": {
+        "time": 0.0,
+        "rss": 121
+      },
+      "LLVM passes": {
+        "time": 1.57,
+        "rss": 418
+      },
+      "variance inference": {
+        "time": 0.0,
+        "rss": 135
+      },
+      "crate injection": {
+        "time": 0.0,
+        "rss": 64
+      },
+      "intrinsic checking": {
+        "time": 0.0,
+        "rss": 165
+      },
+      "MIR cleanup and validation": {
+        "time": 0.04,
+        "rss": 193
+      },
+      "recursion limit": {
+        "time": 0.0,
+        "rss": 64
+      },
+      "static item recursion checking": {
+        "time": 0.0,
+        "rss": 124
+      },
+      "plugin registration": {
+        "time": 0.0,
+        "rss": 64
+      },
+      "borrow checking": {
+        "time": 0.05,
+        "rss": 193
+      },
+      "item-types checking": {
+        "time": 0.24,
+        "rss": 155
+      },
+      "item-bodies checking": {
+        "time": 0.33,
+        "rss": 165
+      },
+      "loop checking": {
+        "time": 0.0,
+        "rss": 124
+      },
+      "const checking": {
+        "time": 0.02,
+        "rss": 165
+      },
+      "death checking": {
+        "time": 0.0,
+        "rss": 193
+      },
+      "name resolution": {
+        "time": 0.01,
+        "rss": 109
+      },
+      "impl wf inference": {
+        "time": 0.0,
+        "rss": 135
+      },
+      "privacy checking": {
+        "time": 0.01,
+        "rss": 165
+      },
+      "resolving dependency formats": {
+        "time": 0.0,
+        "rss": 193
+      },
+      "lifetime resolution": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "maybe building test harness": {
+        "time": 0.0,
+        "rss": 109
+      },
+      "parsing": {
+        "time": 0.03,
+        "rss": 64
+      },
+      "attribute checking": {
+        "time": 0.0,
+        "rss": 121
+      },
+      "lint checking": {
+        "time": 0.04,
+        "rss": 193
+      },
+      "load_dep_graph": {
+        "time": 0.05,
+        "rss": 128
+      },
+      "early lint checks": {
+        "time": 0.0,
+        "rss": 109
+      },
+      "compute_incremental_hashes_map": {
+        "time": 0.03,
+        "rss": 125
+      },
+      "AST validation": {
+        "time": 0.0,
+        "rss": 109
+      }
+    },
+    "jld-day15-parser": {
+      "item-types checking": {
+        "time": 0.0,
+        "rss": 94
+      },
+      "crate injection": {
+        "time": 0.0,
+        "rss": 51
+      },
+      "loop checking": {
+        "time": 0.0,
+        "rss": 90
+      },
+      "attribute checking": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "parsing": {
+        "time": 0.0,
+        "rss": 51
+      },
+      "plugin loading": {
+        "time": 0.0,
+        "rss": 51
+      },
+      "compute_incremental_hashes_map": {
+        "time": 0.0,
+        "rss": 90
+      },
+      "early lint checks": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "item-bodies checking": {
+        "time": 0.03,
+        "rss": 109
+      },
+      "MIR dump": {
+        "time": 0.0,
+        "rss": 109
+      },
+      "language item collection": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "expansion": {
+        "time": 0.02,
+        "rss": 86
+      },
+      "privacy checking": {
+        "time": 0.0,
+        "rss": 109
+      },
+      "coherence checking": {
+        "time": 0.0,
+        "rss": 90
+      },
+      "maybe creating a macro crate": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "reachability checking": {
+        "time": 0.0,
+        "rss": 109
+      },
+      "LLVM passes": {
+        "time": 0.48,
+        "rss": 139
+      },
+      "variance inference": {
+        "time": 0.0,
+        "rss": 90
+      },
+      "serialize work products": {
+        "time": 0.0,
+        "rss": 139
+      },
+      "assert dep graph": {
+        "time": 0.0,
+        "rss": 138
+      },
+      "AST validation": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "impl wf inference": {
+        "time": 0.0,
+        "rss": 90
+      },
+      "borrow checking": {
+        "time": 0.0,
+        "rss": 109
+      },
+      "stability index": {
+        "time": 0.0,
+        "rss": 90
+      },
+      "death checking": {
+        "time": 0.0,
+        "rss": 109
+      },
+      "indexing hir": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "lowering ast -> hir": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "recursion limit": {
+        "time": 0.0,
+        "rss": 51
+      },
+      "load_dep_graph": {
+        "time": 0.0,
+        "rss": 90
+      },
+      "static item recursion checking": {
+        "time": 0.0,
+        "rss": 90
+      },
+      "intrinsic checking": {
+        "time": 0.0,
+        "rss": 109
+      },
+      "wf checking": {
+        "time": 0.0,
+        "rss": 94
+      },
+      "translation": {
+        "time": 0.58,
+        "rss": 138
+      },
+      "name resolution": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "checking for inline asm in case the target doesn't support it": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "effect checking": {
+        "time": 0.0,
+        "rss": 109
+      },
+      "lint checking": {
+        "time": 0.0,
+        "rss": 109
+      },
+      "plugin registration": {
+        "time": 0.0,
+        "rss": 51
+      },
+      "looking for entry point": {
+        "time": 0.0,
+        "rss": 90
+      },
+      "region resolution": {
+        "time": 0.0,
+        "rss": 90
+      },
+      "resolving dependency formats": {
+        "time": 0.0,
+        "rss": 109
+      },
+      "complete gated feature checking": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "type collecting": {
+        "time": 0.0,
+        "rss": 90
+      },
+      "linking": {
+        "time": 0.12,
+        "rss": 128
+      },
+      "serialize dep graph": {
+        "time": 0.0,
+        "rss": 138
+      },
+      "match checking": {
+        "time": 0.0,
+        "rss": 109
+      },
+      "stability checking": {
+        "time": 0.0,
+        "rss": 90
+      },
+      "MIR optimisations": {
+        "time": 0.0,
+        "rss": 110
+      },
+      "lifetime resolution": {
+        "time": 0.0,
+        "rss": 90
+      },
+      "maybe building test harness": {
+        "time": 0.0,
+        "rss": 86
+      },
+      "unused lib feature checking": {
+        "time": 0.0,
+        "rss": 109
+      },
+      "MIR cleanup and validation": {
+        "time": 0.0,
+        "rss": 109
+      },
+      "looking for plugin registrar": {
+        "time": 0.0,
+        "rss": 90
+      },
+      "const checking": {
+        "time": 0.0,
+        "rss": 109
+      },
+      "liveness checking": {
+        "time": 0.0,
+        "rss": 109
+      }
+    },
+    "syntex-0.42.2@000-base": {
+      "region resolution": {
+        "time": 0.05,
+        "rss": 209
+      },
+      "type collecting": {
+        "time": 0.04,
+        "rss": 220
+      },
+      "lowering ast -> hir": {
+        "time": 0.07,
+        "rss": 213
+      },
+      "expansion": {
+        "time": 0.33,
+        "rss": 157
+      },
+      "lint checking": {
+        "time": 0.18,
+        "rss": 481
+      },
+      "complete gated feature checking": {
+        "time": 0.02,
+        "rss": 175
+      },
+      "unused lib feature checking": {
+        "time": 0.0,
+        "rss": 481
+      },
+      "checking for inline asm in case the target doesn't support it": {
+        "time": 0.0,
+        "rss": 157
+      },
+      "indexing hir": {
+        "time": 0.02,
+        "rss": 204
+      },
+      "early lint checks": {
+        "time": 0.02,
+        "rss": 157
+      },
+      "loop checking": {
+        "time": 0.01,
+        "rss": 209
+      },
+      "maybe creating a macro crate": {
+        "time": 0.01,
+        "rss": 157
+      },
+      "attribute checking": {
+        "time": 0.01,
+        "rss": 204
+      },
+      "plugin loading": {
+        "time": 0.0,
+        "rss": 74
+      },
+      "stability checking": {
+        "time": 0.02,
+        "rss": 211
+      },
+      "borrow checking": {
+        "time": 0.45,
+        "rss": 481
+      },
+      "item-types checking": {
+        "time": 0.3,
+        "rss": 235
+      },
+      "AST validation": {
+        "time": 0.01,
+        "rss": 157
+      },
+      "crate injection": {
+        "time": 0.0,
+        "rss": 74
+      },
+      "recursion limit": {
+        "time": 0.0,
+        "rss": 74
+      },
+      "impl wf inference": {
+        "time": 0.0,
+        "rss": 220
+      },
+      "resolving dependency formats": {
+        "time": 0.0,
+        "rss": 481
+      },
+      "MIR cleanup and validation": {
+        "time": 0.29,
+        "rss": 481
+      },
+      "effect checking": {
+        "time": 0.01,
+        "rss": 295
+      },
+      "serialize work products": {
+        "time": 0.0,
+        "rss": 475
+      },
+      "looking for plugin registrar": {
+        "time": 0.0,
+        "rss": 189
+      },
+      "load_dep_graph": {
+        "time": 0.0,
+        "rss": 211
+      },
+      "LLVM passes": {
+        "time": 14.39,
+        "rss": 475
+      },
+      "linking": {
+        "time": 0.34,
+        "rss": 177
+      },
+      "death checking": {
+        "time": 0.03,
+        "rss": 481
+      },
+      "privacy checking": {
+        "time": 0.06,
+        "rss": 295
+      },
+      "parsing": {
+        "time": 0.09,
+        "rss": 74
+      },
+      "plugin registration": {
+        "time": 0.0,
+        "rss": 74
+      },
+      "MIR optimisations": {
+        "time": 0.58,
+        "rss": 507
+      },
+      "translation": {
+        "time": 6.03,
+        "rss": 791
+      },
+      "wf checking": {
+        "time": 0.08,
+        "rss": 226
+      },
+      "MIR dump": {
+        "time": 0.33,
+        "rss": 481
+      },
+      "variance inference": {
+        "time": 0.0,
+        "rss": 220
+      },
+      "stability index": {
+        "time": 0.01,
+        "rss": 211
+      },
+      "assert dep graph": {
+        "time": 0.0,
+        "rss": 791
+      },
+      "item-bodies checking": {
+        "time": 4.07,
+        "rss": 291
+      },
+      "match checking": {
+        "time": 0.06,
+        "rss": 295
+      },
+      "liveness checking": {
+        "time": 0.04,
+        "rss": 305
+      },
+      "serialize dep graph": {
+        "time": 0.0,
+        "rss": 791
+      },
+      "looking for entry point": {
+        "time": 0.0,
+        "rss": 189
+      },
+      "const checking": {
+        "time": 0.19,
+        "rss": 295
+      },
+      "static item recursion checking": {
+        "time": 0.0,
+        "rss": 209
+      },
+      "reachability checking": {
+        "time": 0.01,
+        "rss": 481
+      },
+      "lifetime resolution": {
+        "time": 0.02,
+        "rss": 189
+      },
+      "name resolution": {
+        "time": 0.08,
+        "rss": 175
+      },
+      "intrinsic checking": {
+        "time": 0.02,
+        "rss": 295
+      },
+      "maybe building test harness": {
+        "time": 0.0,
+        "rss": 157
+      },
+      "coherence checking": {
+        "time": 0.02,
+        "rss": 226
+      },
+      "compute_incremental_hashes_map": {
+        "time": 0.25,
+        "rss": 211
+      },
+      "language item collection": {
+        "time": 0.0,
+        "rss": 188
+      }
+    },
+    "syntex-0.42.2@020-clean": {},
+    "regex-0.1.80@090-Job": {
+      "variance inference": {
+        "time": 0.0,
+        "rss": 135
+      },
+      "maybe creating a macro crate": {
+        "time": 0.0,
+        "rss": 107
+      },
+      "checking for inline asm in case the target doesn't support it": {
+        "time": 0.0,
+        "rss": 107
+      },
+      "translation": {
+        "time": 1.84,
+        "rss": 309
+      },
+      "serialize dep graph": {
+        "time": 0.16,
+        "rss": 318
+      },
+      "lowering ast -> hir": {
+        "time": 0.01,
+        "rss": 115
+      },
+      "compute_incremental_hashes_map": {
+        "time": 0.03,
+        "rss": 125
+      },
+      "lint checking": {
+        "time": 0.04,
+        "rss": 193
+      },
+      "const checking": {
+        "time": 0.02,
+        "rss": 165
+      },
+      "language item collection": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "privacy checking": {
+        "time": 0.01,
+        "rss": 165
+      },
+      "effect checking": {
+        "time": 0.0,
+        "rss": 165
+      },
+      "item-types checking": {
+        "time": 0.24,
+        "rss": 156
+      },
+      "name resolution": {
+        "time": 0.01,
+        "rss": 109
+      },
+      "plugin registration": {
+        "time": 0.0,
+        "rss": 63
+      },
+      "looking for entry point": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "complete gated feature checking": {
+        "time": 0.01,
+        "rss": 109
+      },
+      "recursion limit": {
+        "time": 0.0,
+        "rss": 63
+      },
+      "MIR optimisations": {
+        "time": 0.05,
+        "rss": 195
+      },
+      "assert dep graph": {
+        "time": 0.0,
+        "rss": 309
+      },
+      "parsing": {
+        "time": 0.03,
+        "rss": 63
+      },
+      "LLVM passes": {
+        "time": 1.47,
+        "rss": 419
+      },
+      "indexing hir": {
+        "time": 0.0,
+        "rss": 118
+      },
+      "lifetime resolution": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "crate injection": {
+        "time": 0.0,
+        "rss": 63
+      },
+      "plugin loading": {
+        "time": 0.0,
+        "rss": 63
+      },
+      "attribute checking": {
+        "time": 0.0,
+        "rss": 118
+      },
+      "static item recursion checking": {
+        "time": 0.0,
+        "rss": 124
+      },
+      "MIR cleanup and validation": {
+        "time": 0.04,
+        "rss": 189
+      },
+      "stability index": {
+        "time": 0.0,
+        "rss": 128
+      },
+      "item-bodies checking": {
+        "time": 0.33,
+        "rss": 165
+      },
+      "resolving dependency formats": {
+        "time": 0.0,
+        "rss": 193
+      },
+      "stability checking": {
+        "time": 0.0,
+        "rss": 124
+      },
+      "borrow checking": {
+        "time": 0.05,
+        "rss": 193
+      },
+      "linking": {
+        "time": 0.2,
+        "rss": 252
+      },
+      "wf checking": {
+        "time": 0.02,
+        "rss": 147
+      },
+      "unused lib feature checking": {
+        "time": 0.0,
+        "rss": 193
+      },
+      "maybe building test harness": {
+        "time": 0.0,
+        "rss": 107
+      },
+      "type collecting": {
+        "time": 0.01,
+        "rss": 135
+      },
+      "loop checking": {
+        "time": 0.0,
+        "rss": 124
+      },
+      "death checking": {
+        "time": 0.0,
+        "rss": 193
+      },
+      "match checking": {
+        "time": 0.01,
+        "rss": 165
+      },
+      "MIR dump": {
+        "time": 0.04,
+        "rss": 187
+      },
+      "load_dep_graph": {
+        "time": 0.05,
+        "rss": 128
+      },
+      "expansion": {
+        "time": 0.07,
+        "rss": 107
+      },
+      "serialize work products": {
+        "time": 0.0,
+        "rss": 419
+      },
+      "liveness checking": {
+        "time": 0.0,
+        "rss": 165
+      },
+      "intrinsic checking": {
+        "time": 0.0,
+        "rss": 165
+      },
+      "looking for plugin registrar": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "AST validation": {
+        "time": 0.0,
+        "rss": 107
+      },
+      "early lint checks": {
+        "time": 0.0,
+        "rss": 107
+      },
+      "reachability checking": {
+        "time": 0.0,
+        "rss": 193
+      },
+      "region resolution": {
+        "time": 0.01,
+        "rss": 124
+      },
+      "coherence checking": {
+        "time": 0.02,
+        "rss": 144
+      },
+      "impl wf inference": {
+        "time": 0.0,
+        "rss": 135
+      }
+    },
+    "regex-0.1.80@010-baseline": {
+      "item-bodies checking": {
+        "time": 0.31,
+        "rss": 150
+      },
+      "language item collection": {
+        "time": 0.0,
+        "rss": 115
+      },
+      "const checking": {
+        "time": 0.02,
+        "rss": 150
+      },
+      "translation": {
+        "time": 1.21,
+        "rss": 247
+      },
+      "liveness checking": {
+        "time": 0.0,
+        "rss": 150
+      },
+      "serialize dep graph": {
+        "time": 0.0,
+        "rss": 247
+      },
+      "crate injection": {
+        "time": 0.0,
+        "rss": 60
+      },
+      "plugin loading": {
+        "time": 0.0,
+        "rss": 60
+      },
+      "checking for inline asm in case the target doesn't support it": {
+        "time": 0.0,
+        "rss": 102
+      },
+      "MIR optimisations": {
+        "time": 0.05,
+        "rss": 173
+      },
+      "variance inference": {
+        "time": 0.0,
+        "rss": 128
+      },
+      "impl wf inference": {
+        "time": 0.0,
+        "rss": 128
+      },
+      "reachability checking": {
+        "time": 0.0,
+        "rss": 171
+      },
+      "attribute checking": {
+        "time": 0.0,
+        "rss": 115
+      },
+      "complete gated feature checking": {
+        "time": 0.01,
+        "rss": 104
+      },
+      "stability index": {
+        "time": 0.0,
+        "rss": 118
+      },
+      "expansion": {
+        "time": 0.07,
+        "rss": 102
+      },
+      "coherence checking": {
+        "time": 0.02,
+        "rss": 134
+      },
+      "lowering ast -> hir": {
+        "time": 0.01,
+        "rss": 110
+      },
+      "match checking": {
+        "time": 0.01,
+        "rss": 150
+      },
+      "parsing": {
+        "time": 0.03,
+        "rss": 60
+      },
+      "death checking": {
+        "time": 0.0,
+        "rss": 171
+      },
+      "resolving dependency formats": {
+        "time": 0.0,
+        "rss": 171
+      },
+      "type collecting": {
+        "time": 0.01,
+        "rss": 128
+      },
+      "name resolution": {
+        "time": 0.01,
+        "rss": 104
+      },
+      "plugin registration": {
+        "time": 0.0,
+        "rss": 60
+      },
+      "unused lib feature checking": {
+        "time": 0.0,
+        "rss": 171
+      },
+      "looking for entry point": {
+        "time": 0.0,
+        "rss": 115
+      },
+      "maybe creating a macro crate": {
+        "time": 0.0,
+        "rss": 102
+      },
+      "borrow checking": {
+        "time": 0.04,
+        "rss": 171
+      },
+      "linking": {
+        "time": 0.12,
+        "rss": 144
+      },
+      "assert dep graph": {
+        "time": 0.0,
+        "rss": 247
+      },
+      "wf checking": {
+        "time": 0.02,
+        "rss": 134
+      },
+      "maybe building test harness": {
+        "time": 0.0,
+        "rss": 102
+      },
+      "compute_incremental_hashes_map": {
+        "time": 0.02,
+        "rss": 118
+      },
+      "AST validation": {
+        "time": 0.0,
+        "rss": 102
+      },
+      "LLVM passes": {
+        "time": 3.87,
+        "rss": 235
+      },
+      "effect checking": {
+        "time": 0.0,
+        "rss": 150
+      },
+      "lifetime resolution": {
+        "time": 0.0,
+        "rss": 115
+      },
+      "serialize work products": {
+        "time": 0.0,
+        "rss": 235
+      },
+      "MIR dump": {
+        "time": 0.04,
+        "rss": 171
+      },
+      "looking for plugin registrar": {
+        "time": 0.0,
+        "rss": 115
+      },
+      "intrinsic checking": {
+        "time": 0.0,
+        "rss": 150
+      },
+      "early lint checks": {
+        "time": 0.0,
+        "rss": 102
+      },
+      "stability checking": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "recursion limit": {
+        "time": 0.0,
+        "rss": 60
+      },
+      "MIR cleanup and validation": {
+        "time": 0.03,
+        "rss": 171
+      },
+      "load_dep_graph": {
+        "time": 0.0,
+        "rss": 118
+      },
+      "privacy checking": {
+        "time": 0.01,
+        "rss": 150
+      },
+      "indexing hir": {
+        "time": 0.0,
+        "rss": 115
+      },
+      "item-types checking": {
+        "time": 0.23,
+        "rss": 142
+      },
+      "lint checking": {
+        "time": 0.03,
+        "rss": 171
+      },
+      "region resolution": {
+        "time": 0.01,
+        "rss": 118
+      },
+      "loop checking": {
+        "time": 0.0,
+        "rss": 118
+      },
+      "static item recursion checking": {
+        "time": 0.0,
+        "rss": 118
+      }
+    },
+    "issue-32278-big-array-of-strings": {
+      "linking": {
+        "time": 0.17,
+        "rss": 117
+      },
+      "wf checking": {
+        "time": 0.0,
+        "rss": 115
+      },
+      "indexing hir": {
+        "time": 0.0,
+        "rss": 116
+      },
+      "name resolution": {
+        "time": 0.0,
+        "rss": 99
+      },
+      "MIR optimisations": {
+        "time": 0.0,
+        "rss": 137
+      },
+      "plugin loading": {
+        "time": 0.0,
+        "rss": 68
+      },
+      "parsing": {
+        "time": 0.11,
+        "rss": 68
+      },
+      "checking for inline asm in case the target doesn't support it": {
+        "time": 0.0,
+        "rss": 99
+      },
+      "translation": {
+        "time": 0.12,
+        "rss": 158
+      },
+      "recursion limit": {
+        "time": 0.0,
+        "rss": 68
+      },
+      "resolving dependency formats": {
+        "time": 0.0,
+        "rss": 137
+      },
+      "lint checking": {
+        "time": 0.02,
+        "rss": 137
+      },
+      "serialize dep graph": {
+        "time": 0.0,
+        "rss": 158
+      },
+      "maybe creating a macro crate": {
+        "time": 0.0,
+        "rss": 99
+      },
+      "reachability checking": {
+        "time": 0.0,
+        "rss": 137
+      },
+      "variance inference": {
+        "time": 0.0,
+        "rss": 115
+      },
+      "loop checking": {
+        "time": 0.0,
+        "rss": 113
+      },
+      "stability index": {
+        "time": 0.0,
+        "rss": 113
+      },
+      "static item recursion checking": {
+        "time": 0.0,
+        "rss": 113
+      },
+      "const checking": {
+        "time": 0.03,
+        "rss": 131
+      },
+      "match checking": {
+        "time": 0.0,
+        "rss": 131
+      },
+      "MIR cleanup and validation": {
+        "time": 0.0,
+        "rss": 139
+      },
+      "AST validation": {
+        "time": 0.0,
+        "rss": 99
+      },
+      "lifetime resolution": {
+        "time": 0.0,
+        "rss": 105
+      },
+      "attribute checking": {
+        "time": 0.0,
+        "rss": 116
+      },
+      "stability checking": {
+        "time": 0.0,
+        "rss": 113
+      },
+      "crate injection": {
+        "time": 0.0,
+        "rss": 68
+      },
+      "privacy checking": {
+        "time": 0.0,
+        "rss": 131
+      },
+      "load_dep_graph": {
+        "time": 0.0,
+        "rss": 113
+      },
+      "plugin registration": {
+        "time": 0.0,
+        "rss": 68
+      },
+      "type collecting": {
+        "time": 0.0,
+        "rss": 115
+      },
+      "death checking": {
+        "time": 0.0,
+        "rss": 137
+      },
+      "effect checking": {
+        "time": 0.0,
+        "rss": 131
+      },
+      "intrinsic checking": {
+        "time": 0.0,
+        "rss": 131
+      },
+      "looking for entry point": {
+        "time": 0.0,
+        "rss": 105
+      },
+      "looking for plugin registrar": {
+        "time": 0.0,
+        "rss": 105
+      },
+      "maybe building test harness": {
+        "time": 0.0,
+        "rss": 99
+      },
+      "item-types checking": {
+        "time": 0.71,
+        "rss": 124
+      },
+      "compute_incremental_hashes_map": {
+        "time": 0.03,
+        "rss": 113
+      },
+      "early lint checks": {
+        "time": 0.0,
+        "rss": 99
+      },
+      "MIR dump": {
+        "time": 0.04,
+        "rss": 138
+      },
+      "liveness checking": {
+        "time": 0.0,
+        "rss": 131
+      },
+      "item-bodies checking": {
+        "time": 0.0,
+        "rss": 124
+      },
+      "language item collection": {
+        "time": 0.0,
+        "rss": 105
+      },
+      "coherence checking": {
+        "time": 0.0,
+        "rss": 115
+      },
+      "complete gated feature checking": {
+        "time": 0.0,
+        "rss": 99
+      },
+      "LLVM passes": {
+        "time": 0.24,
+        "rss": 129
+      },
+      "region resolution": {
+        "time": 0.01,
+        "rss": 112
+      },
+      "impl wf inference": {
+        "time": 0.0,
+        "rss": 115
+      },
+      "borrow checking": {
+        "time": 0.06,
+        "rss": 137
+      },
+      "lowering ast -> hir": {
+        "time": 0.0,
+        "rss": 109
+      },
+      "serialize work products": {
+        "time": 0.0,
+        "rss": 129
+      },
+      "unused lib feature checking": {
+        "time": 0.0,
+        "rss": 137
+      },
+      "assert dep graph": {
+        "time": 0.0,
+        "rss": 158
+      },
+      "expansion": {
+        "time": 0.03,
+        "rss": 99
+      }
+    },
+    "regex-0.1.80@100-incr-no-change": {
+      "MIR cleanup and validation": {
+        "time": 0.04,
+        "rss": 191
+      },
+      "resolving dependency formats": {
+        "time": 0.0,
+        "rss": 191
+      },
+      "effect checking": {
+        "time": 0.0,
+        "rss": 168
+      },
+      "maybe creating a macro crate": {
+        "time": 0.0,
+        "rss": 107
+      },
+      "privacy checking": {
+        "time": 0.01,
+        "rss": 168
+      },
+      "indexing hir": {
+        "time": 0.0,
+        "rss": 117
+      },
+      "early lint checks": {
+        "time": 0.0,
+        "rss": 107
+      },
+      "serialize work products": {
+        "time": 0.0,
+        "rss": 181
+      },
+      "item-types checking": {
+        "time": 0.25,
+        "rss": 156
+      },
+      "serialize dep graph": {
+        "time": 0.14,
+        "rss": 218
+      },
+      "attribute checking": {
+        "time": 0.0,
+        "rss": 117
+      },
+      "plugin registration": {
+        "time": 0.0,
+        "rss": 64
+      },
+      "language item collection": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "maybe building test harness": {
+        "time": 0.0,
+        "rss": 107
+      },
+      "loop checking": {
+        "time": 0.0,
+        "rss": 124
+      },
+      "variance inference": {
+        "time": 0.0,
+        "rss": 140
+      },
+      "AST validation": {
+        "time": 0.0,
+        "rss": 107
+      },
+      "MIR optimisations": {
+        "time": 0.05,
+        "rss": 193
+      },
+      "type collecting": {
+        "time": 0.01,
+        "rss": 140
+      },
+      "stability index": {
+        "time": 0.0,
+        "rss": 130
+      },
+      "linking": {
+        "time": 0.2,
+        "rss": 183
+      },
+      "looking for entry point": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "unused lib feature checking": {
+        "time": 0.0,
+        "rss": 191
+      },
+      "assert dep graph": {
+        "time": 0.0,
+        "rss": 212
+      },
+      "plugin loading": {
+        "time": 0.0,
+        "rss": 64
+      },
+      "complete gated feature checking": {
+        "time": 0.01,
+        "rss": 109
+      },
+      "wf checking": {
+        "time": 0.02,
+        "rss": 147
+      },
+      "stability checking": {
+        "time": 0.0,
+        "rss": 131
+      },
+      "static item recursion checking": {
+        "time": 0.0,
+        "rss": 124
+      },
+      "impl wf inference": {
+        "time": 0.0,
+        "rss": 140
+      },
+      "match checking": {
+        "time": 0.01,
+        "rss": 168
+      },
+      "death checking": {
+        "time": 0.0,
+        "rss": 191
+      },
+      "region resolution": {
+        "time": 0.01,
+        "rss": 124
+      },
+      "load_dep_graph": {
+        "time": 0.07,
+        "rss": 130
+      },
+      "liveness checking": {
+        "time": 0.0,
+        "rss": 168
+      },
+      "borrow checking": {
+        "time": 0.04,
+        "rss": 191
+      },
+      "LLVM passes": {
+        "time": 0.03,
+        "rss": 181
+      },
+      "reachability checking": {
+        "time": 0.0,
+        "rss": 191
+      },
+      "expansion": {
+        "time": 0.07,
+        "rss": 107
+      },
+      "recursion limit": {
+        "time": 0.0,
+        "rss": 64
+      },
+      "coherence checking": {
+        "time": 0.02,
+        "rss": 146
+      },
+      "const checking": {
+        "time": 0.02,
+        "rss": 168
+      },
+      "looking for plugin registrar": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "crate injection": {
+        "time": 0.0,
+        "rss": 64
+      },
+      "item-bodies checking": {
+        "time": 0.33,
+        "rss": 168
+      },
+      "checking for inline asm in case the target doesn't support it": {
+        "time": 0.0,
+        "rss": 107
+      },
+      "name resolution": {
+        "time": 0.01,
+        "rss": 109
+      },
+      "parsing": {
+        "time": 0.03,
+        "rss": 64
+      },
+      "lifetime resolution": {
+        "time": 0.0,
+        "rss": 120
+      },
+      "translation": {
+        "time": 0.48,
+        "rss": 212
+      },
+      "lowering ast -> hir": {
+        "time": 0.01,
+        "rss": 115
+      },
+      "MIR dump": {
+        "time": 0.04,
+        "rss": 191
+      },
+      "compute_incremental_hashes_map": {
+        "time": 0.03,
+        "rss": 125
+      },
+      "lint checking": {
+        "time": 0.04,
+        "rss": 191
+      },
+      "intrinsic checking": {
+        "time": 0.0,
+        "rss": 168
+      }
+    }
+  },
+  "date": "2017-04-14T02:02:13+00:00"
+}

@@ -1,0 +1,114 @@
+<html>
+<head>
+<meta charset="utf-8">
+<title>rustc performance data</title>
+<link rel="stylesheet" type="text/css" href="perf.css">
+</head>
+<body class="container">
+    <div>&gt;  <a href="graphs.html">graphs</a>, <a href="stats.html">stats</a>, <a href="compare.html">comparisons</a>, <a href="mem.html">memory graph</a>, <a href="table.html">table view</a>.</div>
+    <div id="loading">loading...</div>
+    <div id="summary_number"></div>
+    <div id="summary_table"></div>
+    <div id="as-of"></div>
+</body>
+    <script src="libs/fetch.js"></script>
+    <script src="shared.js"></script>
+    <script>
+    make_as_of();
+    var info_data;
+    fetch(BASE_URL + "/summary").then(function(response) {
+        response.json().then(function(data) {
+            fetch(BASE_URL + "/info").then(response => response.json()).then(info => {
+                info_data = info;
+
+                var summary_number = document.getElementById("summary_number");
+                var big_value = data.summaries[0];
+                var big_class = "";
+                if (parseFloat(big_value) <= -1) {
+                    big_class = "negative";
+                } else if (parseFloat(big_value) >= 1) {
+                    big_class = "positive";
+                }
+                let html = "<div>In the past week, compile times have changed by:</div>";
+                html += `<div class="big_summary ${big_class}">${big_value}s</div>`;
+                summary_number.innerHTML = html;
+                summary_number.style.display = "block";
+
+                populate_table(data);
+
+                document.getElementById("loading").style.display = "none";
+            });
+        });
+    }, function(err) {
+        document.getElementById("loading").innerHTML = "Error loading data";
+        console.log("Error fetching data:");
+        console.log(err);
+    });
+
+    // Table of the breakdown of data. Each row is a benchmark, each column is a
+    // week.
+    function populate_table(data) {
+        var week_count = data.breakdown.length;
+        var bench_keys = Object.keys(data.breakdown[0]);
+        bench_keys.sort();
+
+        var html = `<table class="summary_table"><tr><th></th>`;
+        for (var i = week_count - 1; i >= 0; --i) {
+            var date = new Date(data.dates[i]);
+            html += "<th>" + date.toLocaleDateString() + "</th>"
+        }
+        html += "<th>total</th></tr>";
+        for (var b of bench_keys) {
+            html += "<tr><th>" + b + "</th>"
+            for (var i = week_count - 1; i >= 0; --i) {
+                html += cell_for_data(data.breakdown[i][b], b, data.dates, i, 1);
+            }
+            // total column, subtract the week count from 0th date, which is actually the most recent date
+            html += cell_for_data(data.total_breakdown[b], b, data.dates, 0, week_count);
+            html += "</tr>";
+        }
+        html += "<tr><th>average</th>";
+        for (var i = week_count - 1; i >= 0; --i) {
+            html += cell_for_data(data.summaries[i]);
+        }
+        html += cell_for_data(data.total_summary);
+        html += "</tr>";
+        html += "</table>";
+
+        document.getElementById("summary_table").innerHTML = html;
+        document.getElementById("summary_table").style.display = "block";
+    }
+
+    function cell_for_data(datum, crate, dates, index, weeks) {
+        var d_class = "neutral";
+        if (datum <= -1) {
+            d_class = "negative";
+        } else if (datum >= 1) {
+            d_class = "positive";
+        }
+
+        if (datum == 0) {
+            datum = "-";
+        } else {
+            datum += "s";
+        }
+
+        if (dates) {
+            let start = new Date(dates[index]);
+            start.setDate(start.getDate() - (weeks * 7));
+            let end = new Date(dates[index]);
+
+            let query_str = query_string_for_state({
+                start: start,
+                end: end,
+                group_by: "phase",
+                crates: [crate],
+                phases: info_data.phases,
+            });
+            return `<td><a class="${d_class}" href="graphs.html${query_str}">${datum}</a></td>`;
+        } else {
+            return `<td class="${d_class}">${datum}</td>`;
+        }
+    }
+    </script>
+</html>

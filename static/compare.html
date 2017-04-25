@@ -1,0 +1,204 @@
+<html>
+<head>
+<meta charset="utf-8">
+<title>rustc performance data</title>
+<link rel="stylesheet" type="text/css" href="perf.css">
+</head>
+<body class="container">
+    <div>&gt;  <a href="graphs.html">graphs</a>, <a href="stats.html">stats</a>, comparisons, <a href="mem.html">memory graph</a>, <a href="table.html">table view</a>.</div>
+    <div id="loading" style="display: none">loading...</div>
+    <div id="content" style="display: none"></div>
+    <div id="settings">
+        <span id="crates-outer" class="settings">
+            <h3 id="crates_label">Benchmarks</h3>
+            <label class="group-by">
+                <input type="radio" name="groupBy" id="group-by-crate" value="crate" checked="true">group by crate
+            </label>
+            <div id="crates">loading...</div>
+        </span>
+        <span id="phases-outer" class="settings">
+            <h3>Phases</h3>
+            <label class="group-by">
+                <input type="radio" name="groupBy" id="group-by-phase" value="phase">group by phase
+            </label>
+            <div id="phases">loading...</div>
+        </span>
+        <span id="dates" class="settings">
+            <h3>Dates</h3>
+            start date: <input placeholder="yyyy-mm-dd" id="date-a"></input><br>
+            end date: <input placeholder="yyyy-mm-dd" id="date-b"></input>
+            <div class="submit">
+                <a href="#" onClick="remake_data(); return false;">Submit</a>
+            </div>
+        </div>
+    </div>
+    <div id="as-of"></div>
+</body>
+    <script src="libs/fetch.js"></script>
+    <script src="shared.js"></script>
+    <script>
+    make_as_of();
+
+    function unique(arr) {
+        return arr.filter((value, idx) => arr.indexOf(value) == idx);
+    }
+
+    function add_datum_fields(datum) {
+        let html = "";
+
+        if (datum) {
+            if (datum.time) {
+                html += "<td>" + datum.time.toFixed(2) + "s</td>";
+            } else {
+                html += "<td>-</td>";
+            }
+            if (datum.rss) {
+                html += "<td>" + datum.rss.toFixed(0) + "MB</td>";
+            } else {
+                html += "<td>-</td>";
+            }
+        } else {
+            html += "<td>-</td>";
+            html += "<td>-</td>";
+        }
+
+        html += `<td class="space"></td>`;
+
+        return html;
+    }
+
+    function add_percent(a, b, field) {
+        if (a && b && a[field] > 0) {
+            let percent = 100 * (b[field] - a[field]) / a[field];
+            if (percent > 0) {
+                return `<td class="positive">${percent.toFixed(1)}%</td>`;
+            } else {
+                return `<td class="negative">${percent.toFixed(1)}%</td>`;
+            }
+        } else {
+            return "<td>-</td>"
+        }
+    }
+
+    function populate_data(data) {
+        let html = `<table class="compare" style="font-size: medium !important;">`;
+
+        // Heading: the two dates, and the time and rss percent changes.
+        html += "<thead>";
+        html += "<tr>";
+        html += `<td class="space"></td>`;
+        html += `<td class="space"></td>`;
+
+        html += "<th colspan=2>" + new Date(data.a.date).toLocaleString() + "</th>";
+        html += `<td class="space"></td>`;
+        html += "<th colspan=2>" + new Date(data.b.date).toLocaleString() + "</th>";
+        html += `<td class="space"></td>`;
+
+        html += "<th>" + "% change (time)" + "</th>";
+        html += "<th>" + "% change (rss)" + "</th>";
+        html += "</tr>";
+        html += "</thead>";
+
+        let test_names = unique([...Object.keys(data.a.data), ...Object.keys(data.b.data)]);
+
+        for (let name of test_names) {
+            html += "<tr>";
+
+            html += "<th>" + truncate_name(name) + "</th>";
+            html += `<td class="space"></td>`;
+
+            html += add_datum_fields(data.a.data[name]);
+            html += add_datum_fields(data.b.data[name]);
+
+            html += add_percent(data.a.data[name], data.b.data[name], "time");
+            html += add_percent(data.a.data[name], data.b.data[name], "rss");
+
+            html += "</tr>";
+        }
+
+        html += "</table>";
+
+        document.getElementById("content").innerHTML = html;
+        document.getElementById("content").style.display = "block";
+    }
+
+    function make_data(datea, dateb, crates, phases, group_by, push_state) {
+        document.getElementById("loading").innerHTML = "loading...";
+        document.getElementById("loading").style.display = "block";
+
+        var values = {
+            date_a: datea,
+            date_b: dateb,
+            crates: crates,
+            phases: phases,
+            group_by: group_by
+        };
+        fetch(BASE_URL + "/get", make_request(values)).then(function(response) {
+            response.json().then(function(data) {
+                populate_data(data);
+                set_check_boxes(crates, phases, group_by);
+                set_date("date-a", data.a.date);
+                set_date("date-b", data.b.date);
+
+                if (push_state) {
+                    push_state_to_history(values);
+                }
+
+                document.getElementById("loading").style.display = "none";
+            });
+        }, function(err) {
+            document.getElementById("loading").innerHTML = "Error loading data";
+            console.log("Error fetching data:");
+            console.log(err);
+        });
+    }
+
+    // Read the various settings, then call make_graph.
+    function remake_data() {
+        document.getElementById("content").style.display = "none";
+
+        // crates and phases
+        var crates = gatherChecks("check-crate");
+        var phases = gatherChecks("check-phase");
+
+        // dates
+        var datea = getDate("date-a");
+        var dateb = getDate("date-b");
+
+        // group by
+        var group_by;
+        var elements = document.getElementsByName("groupBy");
+        for (var i = 0, l = elements.length; i < l; i++)
+        {
+            if (elements[i].checked)
+            {
+                group_by = elements[i].value;
+                break;
+            }
+        }
+        if (!group_by) {
+            group_by = "crate";
+            document.getElementById("group-by-crate").checked = true;
+        }
+
+        make_data(datea, dateb, crates, phases, group_by, true);
+    }
+
+    make_settings(function() {
+        // FIXME: implement serializing to URL
+        // // Respond to back/forwards properly.
+        // window.onpopstate = function(ev) {
+        //     var state = ev.state;
+        //     if (!dispatch_on_state(make_data, state, keys)) {
+        //         if (!dispatch_on_params(make_data, keys)) {
+        //             document.getElementById("loading").style.display = "none";
+        //             document.getElementById("content").style.display = "none";
+        //         }
+        //     }
+        // };
+
+        // // Load the page from a URL.
+        // dispatch_on_params(make_data);
+    });
+    </script>
+</html>
