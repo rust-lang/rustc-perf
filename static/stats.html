@@ -6,7 +6,6 @@
 </head>
 <body class="container">
     <div>&gt;  <a href="graphs.html">graphs</a>, stats, <a href="compare.html">comparisons</a>, <a href="mem.html">memory graph</a>, <a href="table.html">table view</a>.</div>
-    <div id="loading" style="display: none">loading...</div>
     <div id="content" style="display: none"></div>
     <div id="settings">
         <span id="crates-outer" class="settings">
@@ -28,7 +27,7 @@
             start date: <input placeholder="yyyy-mm-dd" id="start-date"></input><br>
             end date: <input placeholder="yyyy-mm-dd" id="end-date"></input>
             <div class="submit">
-                <a href="#" onClick="remake_stats(); return false;">Submit</a>
+                <a href="#" onClick="make_stats({}, true); return false;">Submit</a>
             </div>
         </div>
     </div>
@@ -38,7 +37,6 @@
     <script src="shared.js"></script>
     <script>
     let keys = ["start", "end", "crates", "phases"];
-    make_as_of();
     function populate_stats(data) {
         var startDate = new Date(data.startDate);
         var endDate = new Date(data.endDate);
@@ -92,11 +90,13 @@
         document.getElementById("content").style.display = "block";
     }
 
-    function make_stats(start_date, end_date, crates, phases, push_state) {
-        document.getElementById("loading").innerHTML = "loading...";
-        document.getElementById("loading").style.display = "block";
+    function make_stats(state, push_state) {
+        let start_date = state.start || getDate("start-date");
+        let end_date = state.end || getDate("end-date");
+        let crates = state.crates || gatherChecks("check-crate");
+        let phases = state.phases || gatherChecks("check-phase");
 
-        var values = {
+        let values = {
             start: start_date,
             end: end_date,
             crates: crates,
@@ -105,13 +105,17 @@
         fetch(BASE_URL + "/stats", make_request(values)).then(function(response) {
             response.json().then(function(data) {
                 populate_stats(data);
-                document.getElementById("loading").style.display = "none";
                 set_check_boxes(crates, phases, null);
-                set_date("start-date", start_date);
-                set_date("end-date", end_date);
+                set_date("start-date", data.startDate);
+                set_date("end-date", data.endDate);
 
                 if (push_state) {
-                    push_state_to_history(values);
+                    push_state_to_history({
+                        start: data.startDate,
+                        end: data.endDate,
+                        crates,
+                        phases,
+                    });
                 }
             });
         }, function(err) {
@@ -121,35 +125,6 @@
         });
     }
 
-    // Read the various settings, then call make_graph.
-    function remake_stats() {
-        document.getElementById("content").style.display = "none";
-
-        // crates and phases
-        var crates = gatherChecks("check-crate");
-        var phases = gatherChecks("check-phase");
-
-        // dates
-        var start_date = getDate("start-date");
-        var end_date = getDate("end-date");
-
-        make_stats(start_date, end_date, crates, phases, true);
-    }
-
-    make_settings(function() {
-        // Respond to back/forwards properly.
-        window.onpopstate = function(ev) {
-            var state = ev.state;
-            if (!dispatch_on_state(make_stats, state, keys)) {
-                if (!dispatch_on_params(make_stats, keys)) {
-                    document.getElementById("loading").style.display = "none";
-                    document.getElementById("content").style.display = "none";
-                }
-            }
-        };
-
-        // Load the page from a URL.
-        dispatch_on_params(make_stats, keys);
-    });
+    make_settings(make_stats);
     </script>
 </html>

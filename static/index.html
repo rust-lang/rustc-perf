@@ -14,7 +14,6 @@
     <script src="libs/fetch.js"></script>
     <script src="shared.js"></script>
     <script>
-    make_as_of();
     var info_data;
     fetch(BASE_URL + "/summary").then(function(response) {
         response.json().then(function(data) {
