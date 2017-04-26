@@ -199,7 +199,7 @@ pub struct Comparison {
     pub b: Commit,
 
     /// Maps crate names to a map of phases to each phase's delta time over the range.
-    pub by_crate: HashMap<String, HashMap<String, f64>>,
+    pub by_crate: BTreeMap<String, BTreeMap<String, f64>>,
 }
 
 #[derive(Debug)]
@@ -253,7 +253,7 @@ impl Summary {
     }
 
     fn compare_points(a: &CommitData, b: &CommitData) -> Comparison {
-        let mut by_crate = HashMap::new();
+        let mut by_crate = BTreeMap::new();
         for (crate_name, patches) in &a.benchmarks {
             if !b.benchmarks.contains_key(crate_name) {
                 warn!("Comparing {} with {}: a contained {}, but b did not.",
@@ -274,7 +274,7 @@ impl Summary {
                     let a_t = a_pass.time;
                     let b_t = b_run.get_pass(&a_pass.name).map(|p| p.time).unwrap_or(0.0);
                     by_crate.entry(a_run.name.clone())
-                        .or_insert_with(HashMap::new)
+                        .or_insert_with(BTreeMap::new)
                         .insert(a_pass.name.clone(), b_t - a_t);
                 }
             }

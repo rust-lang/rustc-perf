@@ -1,4 +1,4 @@
-var BASE_URL = "http://perf.rust-lang.org/perf";
+var BASE_URL = window.location.origin + "/perf";
 
 function getDate(id) {
     var result = document.getElementById(id).value;

@@ -8,12 +8,14 @@
 // except according to those terms.
 
 use std::str;
+use std::env;
 use std::cmp::max;
 use std::fs::File;
 use std::io::Read;
 use std::sync::{RwLock, Arc};
 use std::collections::{HashMap, BTreeMap};
 use std::path::Path;
+use std::net::SocketAddr;
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -484,6 +486,8 @@ pub fn start(data: InputData) {
         data: Arc::new(RwLock::new(data)),
         pool: CpuPool::new_num_cpus(),
     });
-    let server = Http::new().bind(&::SERVER_ADDRESS.parse().unwrap(), move || Ok(server.clone()));
+    let mut server_address: SocketAddr = "0.0.0.0:2346".parse().unwrap();
+    server_address.set_port(env::var("PORT").ok().and_then(|x| x.parse().ok()).unwrap_or(2346));
+    let server = Http::new().bind(&server_address, move || Ok(server.clone()));
     server.unwrap().run().unwrap();
 }
