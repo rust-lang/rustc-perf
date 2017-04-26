@@ -15,6 +15,9 @@ to the timings repo.
 Setup
 -----
 
+Apache can also be omitted from the setup, in which case the backend will function normally on
+either port 2346, or the port given by the environment variable `PORT`.
+
 ```
 sudo apt-get install apache2 git
 git clone https://github.com/rust-lang-nursery/rustc-perf.git /var/www/html/
@@ -28,8 +31,8 @@ frontend in its current configuration to get data from the API.
 The proxy_http module also needs to be enabled, which can be done via `a2enmod proxy_http`.
 
 ```
-    ProxyPass /perf http://localhost:2346
-    ProxyPassReverse /perf http://localhost:2346
+    ProxyPass / http://localhost:2346
+    ProxyPassReverse / http://localhost:2346
 ```
 
 The backend currently depends on a POST request being sent to the `/perf/onpush` URL
@@ -39,14 +42,8 @@ will intiate a git pull in the timings repo directory passed on startup.
 Launching
 ---------
 
-It can be run with the following command from the backend directory:
+It can be run with the following command:
 
 ```
-cargo run --release ../data
+cargo run --release data
 ```
-
-Rust backend
-------------
-
-The new Rust backend can be built with `cargo build` and tested with
-`cargo test`.
