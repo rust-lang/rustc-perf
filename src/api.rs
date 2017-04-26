@@ -14,7 +14,7 @@
 //! The responses are calculated in the server.rs file.
 
 pub mod summary {
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
 
     // FIXME: Move percent elsewhere (utils?), and update imports.
     pub use load::Percent;
@@ -29,11 +29,11 @@ pub mod summary {
         /// By-crate comparisons of 0th week (13 weeks ago) and current week.
         ///
         /// Represented as a hashmap of crate names to percents.
-        pub total_breakdown: HashMap<String, DeltaTime>,
+        pub total_breakdown: BTreeMap<String, DeltaTime>,
 
         /// 12 week long mapping of crate names to delta times from
         /// last week's times to the current week's times.
-        pub breakdown: Vec<HashMap<String, DeltaTime>>,
+        pub breakdown: Vec<BTreeMap<String, DeltaTime>>,
 
         /// 12 week long averages
         pub summaries: Vec<DeltaTime>,

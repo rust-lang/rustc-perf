@@ -101,13 +101,13 @@ impl Serialize for Date {
     }
 }
 
-impl Deserialize for Date {
+impl<'de> Deserialize<'de> for Date {
     fn deserialize<D>(deserializer: D) -> ::std::result::Result<Date, D::Error>
-        where D: serde::de::Deserializer
+        where D: serde::de::Deserializer<'de>
     {
         struct DateVisitor;
 
-        impl serde::de::Visitor for DateVisitor {
+        impl<'de> serde::de::Visitor<'de> for DateVisitor {
             type Value = Date;
 
             fn visit_str<E>(self, value: &str) -> ::std::result::Result<Date, E>
@@ -124,7 +124,7 @@ impl Deserialize for Date {
             }
         }
 
-        deserializer.deserialize(DateVisitor)
+        deserializer.deserialize_str(DateVisitor)
     }
 }
 
@@ -162,13 +162,13 @@ impl OptionalDate {
     }
 }
 
-impl serde::Deserialize for OptionalDate {
+impl<'de> serde::Deserialize<'de> for OptionalDate {
     fn deserialize<D>(deserializer: D) -> ::std::result::Result<OptionalDate, D::Error>
-        where D: serde::de::Deserializer
+        where D: serde::de::Deserializer<'de>
     {
         struct DateVisitor;
 
-        impl serde::de::Visitor for DateVisitor {
+        impl<'de> serde::de::Visitor<'de> for DateVisitor {
             type Value = OptionalDate;
 
             fn visit_str<E>(self, value: &str) -> ::std::result::Result<OptionalDate, E>
@@ -190,7 +190,7 @@ impl serde::Deserialize for OptionalDate {
             }
         }
 
-        deserializer.deserialize(DateVisitor)
+        deserializer.deserialize_str(DateVisitor)
     }
 }
 

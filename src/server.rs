@@ -12,10 +12,11 @@ use std::cmp::max;
 use std::fs::File;
 use std::io::Read;
 use std::sync::{RwLock, Arc};
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 use std::path::Path;
 
-use serde::{Serialize, Deserialize};
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 use serde_json;
 use futures::{self, Future, Stream};
 use futures_cpupool::CpuPool;
@@ -137,8 +138,8 @@ pub fn handle_summary(data: &InputData) -> summary::Response {
         DeltaTime(sum / (count as f64))
     }
 
-    fn breakdown(comparison: &Comparison) -> HashMap<String, DeltaTime> {
-        let mut per_bench = HashMap::new();
+    fn breakdown(comparison: &Comparison) -> BTreeMap<String, DeltaTime> {
+        let mut per_bench = BTreeMap::new();
 
         for (crate_name, krate) in &comparison.by_crate {
             let mut sum = 0.0;
@@ -369,9 +370,9 @@ impl Server {
         futures::future::ok(response).boxed()
     }
 
-    fn handle_post<F, D, S>(&self, req: Request, handler: F) -> <Server as Service>::Future
+    fn handle_post<'de, F, D, S>(&self, req: Request, handler: F) -> <Server as Service>::Future
         where F: FnOnce(D, &InputData) -> S + Send + 'static,
-              D: Deserialize,
+              D: DeserializeOwned,
               S: Serialize,
     {
         assert_eq!(*req.method(), Post);
