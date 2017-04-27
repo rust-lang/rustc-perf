@@ -12,12 +12,14 @@ use std::cmp::{PartialOrd, Ord, Ordering};
 use std::fs::{self, File};
 use std::path::PathBuf;
 use std::io::Read;
+use std::env;
 
 use chrono::Duration;
 use serde_json;
 
 use errors::*;
 use util;
+use git;
 use date::Date;
 
 const WEEKS_IN_SUMMARY: usize = 12;
@@ -115,6 +117,15 @@ impl InputData {
         let repo_loc = PathBuf::from(repo_loc);
         let mut skipped = 0;
         let mut data = BTreeMap::new();
+
+        if !repo_loc.exists() {
+            // If the repository doesn't yet exist, simplify clone it to the given location.
+            info!("cloning repository into {}, since it doesn't exist before", repo_loc.display());
+            git::execute_command(&env::current_dir()?, &[
+                "clone", "https://github.com/rust-lang-nursery/rustc-timing.git",
+                repo_loc.to_str().unwrap()
+            ])?;
+        }
 
         // Read all files from repo_loc/processed
         let mut file_count = 0;

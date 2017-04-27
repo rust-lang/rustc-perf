@@ -24,7 +24,7 @@ pub fn update_repo(repo_path: &str) -> Result<()> {
     Ok(())
 }
 
-fn execute_command(working_dir: &Path, args: &[&'static str]) -> Result<()> {
+pub fn execute_command(working_dir: &Path, args: &[&str]) -> Result<()> {
     let status = Command::new(GIT)
         .current_dir(working_dir)
         .args(args)
