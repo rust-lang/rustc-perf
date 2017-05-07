@@ -1,4 +1,4 @@
-.PHONY: all touch clean \
+.PHONY: all \
 	    all@010-baseline \
 	    all@020-incr-from-scratch \
 	    all@030-incr-change-private-fn
@@ -81,12 +81,3 @@ patches:
 	    @090-Job \
 	    @100-incr-no-change \
 	"
-
-touch:
-	git checkout src
-	find . -name "*.rs" | xargs touch
-	rm -rf incr
-
-clean:
-	$(CARGO) clean
-	rm -rf incr

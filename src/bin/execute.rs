@@ -107,10 +107,6 @@ impl Benchmark {
             });
         }
 
-        if !self.command(sysroot, "make").arg("clean").status()?.success() {
-            bail!("{}: make touch failed.", self.path.display());
-        }
-
         Ok(patches)
     }
 }

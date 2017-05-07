@@ -1,8 +1,4 @@
-.PHONY: all touch clean
+.PHONY: all
 
 all:
 	$(CARGO) rustc $(CARGO_OPTS) -- $(CARGO_RUSTC_OPTS)
-touch:
-	touch src/main.rs
-clean:
-	$(CARGO) clean
