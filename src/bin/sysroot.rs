@@ -19,6 +19,7 @@ pub struct Sysroot {
     pub sha: String,
     pub rustc: PathBuf,
     pub cargo: PathBuf,
+    pub triple: String,
     pub preserve: bool,
 }
 
@@ -35,6 +36,31 @@ impl Sysroot {
             .env("CARGO", &self.cargo)
             .env("RUSTC", &self.rustc);
         command
+    }
+
+    pub fn from_local(commit: &Commit, rustc: &str, triple: &str, preserve: bool) -> Result<Self> {
+        let sha: &str = &commit.sha;
+        let unpack_into = format!("rust-{}", sha);
+
+        // Use known good cargo
+        get_and_extract("cargo", "53eb08bedc8719844bb553dbe1a39d9010783ff5", triple, &unpack_into, false)?;
+
+        let result = Sysroot {
+            rustc: PathBuf::from(rustc).canonicalize()
+                .chain_err(|| "failed to canonicalize rustc path")?,
+            cargo: PathBuf::from(format!("rust-{}/cargo/bin/cargo", sha)).canonicalize()
+                .chain_err(|| "failed to canonicalize cargo path")?,
+            sha: sha.to_owned(),
+            preserve: preserve,
+            triple: triple.to_string(),
+        };
+
+        let version = result.command(&result.rustc).arg("--version").output()
+            .chain_err(|| format!("{} --version", result.rustc.display()))?;
+        let version = String::from_utf8(version.stdout).unwrap();
+        info!("version: {}", version.trim());
+
+        Ok(result)
     }
 
     pub fn install(commit: &Commit, triple: &str, preserve: bool) -> Result<Self> {
@@ -62,6 +88,7 @@ impl Sysroot {
                 .chain_err(|| "failed to canonicalize cargo path")?,
             sha: sha.to_owned(),
             preserve: preserve,
+            triple: triple.to_string(),
         };
 
         let version = result.command(&result.rustc).arg("--version").output()

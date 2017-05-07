@@ -19,6 +19,7 @@ mod errors {
         foreign_links {
             Reqwest(::reqwest::Error);
             Serde(::serde_json::Error);
+            Chrono(::chrono::ParseError);
             Io(::std::io::Error);
         }
     }
@@ -34,7 +35,9 @@ use std::path::{Path, PathBuf};
 use std::io::{stdout, stderr, Write};
 use std::collections::HashMap;
 
-use rustc_perf_collector::{Patch, Commit, CommitData};
+use chrono::{DateTime, UTC};
+
+use rustc_perf_collector::{Commit, CommitData};
 
 mod execute;
 mod github;
@@ -45,19 +48,23 @@ mod time_passes;
 use outrepo::CommitKind;
 
 use execute::Benchmark;
+use sysroot::Sysroot;
 
-/// Download a commit from AWS and run benchmarks on it.
-fn bench_commit(commit: &Commit, triple: &str, benchmarks: &[Benchmark], preserve_sysroot: bool)
-                -> Result<HashMap<String, Vec<Patch>>>
-{
-    info!("benchmarking commit {} ({}) for triple {}", commit.sha, commit.date, triple);
-    let sysroot = sysroot::Sysroot::install(commit, triple, preserve_sysroot)?;
+fn bench_commit(
+    commit: &Commit,
+    sysroot: Sysroot,
+    benchmarks: &[Benchmark]
+) -> Result<CommitData> {
+    info!("benchmarking commit {} ({}) for triple {}", commit.sha, commit.date, sysroot.triple);
 
-    let results : Result<Vec<_>> = benchmarks.iter().map(|benchmark| {
+    let results : Result<HashMap<_, _>> = benchmarks.iter().map(|benchmark| {
         Ok((benchmark.name.clone(), benchmark.run(&sysroot)?))
     }).collect();
 
-    Ok(results?.into_iter().collect())
+    Ok(CommitData {
+        commit: commit.clone(),
+        benchmarks: results?
+    })
 }
 
 fn get_benchmarks(benchmark_dir: &Path, filter: Option<&str>) -> Result<Vec<Benchmark>> {
@@ -94,13 +101,10 @@ fn get_benchmarks(benchmark_dir: &Path, filter: Option<&str>) -> Result<Vec<Benc
 fn process_commit(repo: &outrepo::Repo, commit: &Commit, benchmarks: &[Benchmark],
                   preserve_sysroot: bool, kind: CommitKind) -> Result<()> {
     let triple = "x86_64-unknown-linux-gnu";
-    match bench_commit(commit, triple, benchmarks, preserve_sysroot) {
-        Ok(results) => {
-            let file_data = CommitData {
-                commit: commit.clone(),
-                benchmarks: results
-            };
-            repo.success(triple, &file_data, kind)
+    let sysroot = Sysroot::install(commit, "x86_64-unknown-linux-gnu", preserve_sysroot)?;
+    match bench_commit(commit, sysroot, benchmarks) {
+        Ok(result) => {
+            repo.success(triple, &result, kind)
         }
         Err(error) => {
             info!("running {} failed: {:?}", commit.sha, error);
@@ -160,6 +164,12 @@ fn run() -> Result<i32> {
            (about: "benchmark a bors merge from AWS and output data to stdout")
            (@arg COMMIT: +required +takes_value "Commit hash to bench")
        )
+       (@subcommand bench_local =>
+           (about: "benchmark a bors merge from AWS and output data to stdout")
+           (@arg COMMIT: --commit +required +takes_value "Commit hash to associate benchmark results with")
+           (@arg DATE: --date +required +takes_value "Date to associate benchmark result with, YYYY-MM-DDTHH:MM:SS format.")
+           (@arg RUSTC: +required +takes_value "the path to the local rustc to benchmark")
+       )
     ).get_matches();
     let benchmark_dir = PathBuf::from(matches.value_of_os("benchmarks_dir").unwrap());
     let filter = matches.value_of("filter");
@@ -178,8 +188,18 @@ fn run() -> Result<i32> {
             let commit = sub_m.value_of("COMMIT").unwrap();
             let client = reqwest::Client::new()?;
             let commit = github::commit_from_sha(&client, commit)?;
-            let result = bench_commit(&commit, "x86_64-unknown-linux-gnu", &benchmarks,
-                                      preserve_sysroots)?;
+            let sysroot = Sysroot::install(&commit, "x86_64-unknown-linux-gnu", preserve_sysroots)?;
+            let result = bench_commit(&commit, sysroot, &benchmarks)?;
+            serde_json::to_writer(&mut stdout(), &result)?;
+            Ok(0)
+        }
+        ("bench_local", Some(sub_m)) => {
+            let commit = sub_m.value_of("COMMIT").unwrap();
+            let date = sub_m.value_of("DATE").unwrap();
+            let rustc = sub_m.value_of("RUSTC").unwrap();
+            let commit = Commit { sha: commit.to_string(), date: DateTime::parse_from_rfc3339(date)?.with_timezone(&UTC) };
+            let sysroot = Sysroot::from_local(&commit, rustc, "x86_64-unknown-linux-gnu", preserve_sysroots)?;
+            let result = bench_commit(&commit, sysroot, &benchmarks)?;
             serde_json::to_writer(&mut stdout(), &result)?;
             Ok(0)
         }
