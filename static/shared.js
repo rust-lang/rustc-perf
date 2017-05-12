@@ -87,7 +87,13 @@ function make_settings(callback, total_label) {
             }
 
             if (callback) {
-                callback();
+                // Respond to back/forwards properly.
+                window.onpopstate = function() {
+                    dispatch_on_params(callback);
+                };
+
+                // Load the page from a URL.
+                dispatch_on_params(callback);
             }
         });
     }, function(err) {
@@ -121,6 +127,8 @@ function set_date(id, date) {
     let d = new Date(date);
     if (!Number.isNaN(d.getTime())) {
         document.getElementById(id).value = new Date(date).toISOString().split('T')[0];
+    } else {
+        console.warn("could not set", id, "to:", date, "; invalid date");
     }
 }
 
@@ -182,41 +190,58 @@ function set_check_boxes(crates, phases, group_by) {
     }
 }
 
+function get_group_by() {
+    // group by
+    let group_by;
+    let elements = document.getElementsByName("groupBy");
+    for (let element of elements) {
+        if (element.checked) {
+            group_by = element.value;
+            break;
+        }
+    }
+    if (!group_by) {
+        group_by = "crate";
+        document.getElementById("group-by-crate").checked = true;
+    }
+
+    return group_by;
+}
+
 // A bunch of helper functions for helping with keeping URLs up to date and
 // interacting with the browser history.
 
-function dispatch_on_state(f, state, keys) {
-    if (state) {
-        var args = keys.map(k => state[k]);
-        args.push(false);
-        f.apply(null, args);
-        return true;
-    }
-    return false;
-}
-
-function dispatch_on_params(f, keys) {
+// Dispatches on query string state. This examines the ?... part of the URL.
+//
+// The query string may not contain all of the parameters. If it doesn't, we simply pass what
+// exists.
+function dispatch_on_params(f) {
     if (!window.location.search) {
-        return false;
+        f({}, false);
+        return;
     }
-    var params = new URLSearchParams(window.location.search.substring(1));
-    if (keys.map(k => params.has(k)).reduce((a, b) => a && b, true)) {
-        var args = keys.map(k => get_param(k, params));
-        args.push(false);
-        f.apply(null, args);
-        return true;
+
+    let params = new URLSearchParams(window.location.search.substring(1));
+    let state = {};
+    for (let param of params) {
+        let key = param[0];
+        let value = param[1];
+
+        if (key == "crates" || key == "phases" || key == "dates") {
+            value = value.split(",");
+        }
+
+        state[key] = value;
     }
-    return false;
+    f(state, false);
 }
 
-function get_param(key, params) {
-    var result = params.get(key);
-    if (key == "crates" || key == "phases" || key == "dates") {
-        result = result.split(',');
-    }
-    return result;
-}
-
+// Add an entry into the browser's history to allow the back button to work correctly.
+//
+// This does not refresh the page in any way.
+//
+// For more information, see:
+// https://developer.mozilla.org/en-US/docs/Web/API/History_API#The_pushState()_method
 function push_state_to_history(state) {
     var query_string = query_string_for_state(state);
     if (query_string !== "") {
@@ -248,3 +273,5 @@ function make_request(body) {
         mode: "cors"
     };
 }
+
+make_as_of();

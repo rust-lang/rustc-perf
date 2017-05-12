@@ -6,7 +6,6 @@
 </head>
 <body class="container">
     <div>&gt; <a href="graphs.html">graphs</a>, <a href="stats.html">stats</a>, <a href="compare.html">comparisons</a>, memory graph, <a href="table.html">table view</a>.</div>
-    <div id="loading">loading...</div>
     <div style="width: 1000px; height: 600px;" id="chart-container"></div>
     <div id="settings">
         <span id="crates-outer" class="settings">
@@ -28,7 +27,7 @@
             start date: <input placeholder="yyyy-mm-dd" id="start-date"></input><br>
             end date: <input placeholder="yyyy-mm-dd" id="end-date"></input>
             <div class="submit">
-                <a href="#" onClick="remake_graph(); return false;">Submit</a>
+                <a href="#" onClick="make_graph({}, true); return false;">Submit</a>
             </div>
         </div>
     </div>
@@ -39,10 +38,13 @@
     <script src="graph.js"></script>
     <script src="shared.js"></script>
     <script>
-    let keys = ["start", "end", "crates", "phases", "group_by"];
-    make_as_of();
-    // Make a graph!
-    function make_graph(start_date, end_date, crates, phases, group_by, push_state) {
+    function make_graph(state, push_state) {
+        let start_date = state.start || getDate("start-date");
+        let end_date = state.end || getDate("end-date");
+        let crates = state.crates || gatherChecks("check-crate");
+        let phases = state.phases || gatherChecks("check-phase");
+        let group_by = state.group_by || "crate";
+
         let values = {
             start: start_date,
             end: end_date,
@@ -52,20 +54,25 @@
         };
         fetch(BASE_URL + "/data", make_request(values)).then(function(response) {
             response.json().then(function(data) {
+                if (data.length > 0) {
+                    start_date = data[0].date;
+                    end_date = data[data.length - 1].date;
+                }
                 var series = crates;
                 if (group_by == "phase") {
                     series = phases;
                 }
-                init_graph(data, series, "rss", "maximum", "Megabytes");
-                document.getElementById("loading").style.display = "none";
+
                 set_check_boxes(crates, phases, group_by);
                 set_date("start-date", start_date);
                 set_date("end-date", end_date);
 
+                init_graph(data, series, "rss", "maximum", "Megabytes");
+
                 if (push_state) {
                     push_state_to_history({
-                        start: data[0].date,
-                        end: data[data.length - 1].date,
+                        start: start_date,
+                        end: end_date,
                         crates: crates,
                         phases: phases,
                         group_by: group_by
@@ -73,60 +80,11 @@
                 }
             });
         }, function(err) {
-            document.getElementById("loading").innerHTML = "Error loading data";
             console.log("Error fetching data:");
             console.log(err);
         });
     }
 
-    // Read the various settings, then call make_graph.
-    function remake_graph() {
-        document.getElementById("loading").style.display = "block";
-
-        // crates and phases
-        var crates = gatherChecks("check-crate");
-        var benchmarks = gatherChecks("check-bench");
-        var phases = gatherChecks("check-phase");
-
-        // dates
-        var start_date = getDate("start-date");
-        var end_date = getDate("end-date");
-
-        // group by
-        var group_by;
-        var elements = document.getElementsByName("groupBy");
-        for (var i = 0, l = elements.length; i < l; i++)
-        {
-            if (elements[i].checked)
-            {
-                group_by = elements[i].value;
-                break;
-            }
-        }
-        if (!group_by) {
-            group_by = "crate";
-            document.getElementById("group-by-crate").checked = true;
-        }
-
-        make_graph(start_date, end_date, crates, phases, group_by, true);
-    }
-
-    make_settings(function() {
-        // Respond to back/forwards properly.
-        window.onpopstate = function(ev) {
-            var state = ev.state;
-            if (!dispatch_on_state(make_graph, state, keys)) {
-                if (!dispatch_on_params(make_graph, keys)) {
-                    make_graph("", "", ["total"], ["total"], "crate", false);
-                }
-            }
-        };
-
-        // // Load the page from a URL.
-        if (!dispatch_on_params(make_graph, keys)) {
-            make_graph("", "", ["total"], ["total"], "crate", false);
-            remake_graph();
-        }
-    }, "maximum");
+    make_settings(make_graph, "maximum");
     </script>
 </html>
