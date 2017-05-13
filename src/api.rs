@@ -61,16 +61,16 @@ pub mod info {
 }
 
 pub mod data {
-    use date::OptionalDate;
+    use date::{OptionalDate, Start, End};
     use server::{DateData, GroupBy};
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct Request {
         #[serde(rename="start")]
-        pub start_date: OptionalDate,
+        pub start_date: OptionalDate<Start>,
 
         #[serde(rename="end")]
-        pub end_date: OptionalDate,
+        pub end_date: OptionalDate<End>,
         pub group_by: GroupBy,
 
         /// Which crates to return data for
@@ -88,12 +88,12 @@ pub mod data {
 pub mod tabular {
     use std::collections::HashMap;
 
-    use date::{OptionalDate, Date};
+    use date::{OptionalDate, Date, End};
     use server::Recording;
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct Request {
-        pub date: OptionalDate,
+        pub date: OptionalDate<End>,
     }
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
@@ -107,14 +107,14 @@ pub mod tabular {
 }
 
 pub mod days {
-    use date::OptionalDate;
+    use date::{OptionalDate, Start, End};
     use server::{DateData, GroupBy};
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct Request {
         pub group_by: GroupBy,
-        pub date_a: OptionalDate,
-        pub date_b: OptionalDate,
+        pub date_a: OptionalDate<Start>,
+        pub date_b: OptionalDate<End>,
 
         /// Which crates to return data for
         pub crates: Vec<String>,
@@ -134,14 +134,14 @@ pub mod stats {
     use std::collections::HashMap;
 
     use server::Stats;
-    use date::{OptionalDate, Date};
+    use date::{OptionalDate, Date, Start, End};
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct Request {
         #[serde(rename="start")]
-        pub start_date: OptionalDate,
+        pub start_date: OptionalDate<Start>,
         #[serde(rename="end")]
-        pub end_date: OptionalDate,
+        pub end_date: OptionalDate<End>,
 
         /// Which crates to return data for
         pub crates: Vec<String>,

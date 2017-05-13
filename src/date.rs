@@ -8,6 +8,8 @@
 // except according to those terms.
 
 use std::ops::{Add, Sub};
+use std::str::FromStr;
+use std::marker::PhantomData;
 use std::fmt;
 
 use chrono::{UTC, DateTime, TimeZone, Duration, Datelike};
@@ -22,8 +24,9 @@ pub struct DeltaTime(#[serde(with = "util::round_float")] pub f64);
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Date(pub DateTime<UTC>);
 
-impl Date {
-    pub fn from_str(s: &str) -> Result<Date> {
+impl FromStr for Date {
+    type Err = Error;
+    fn from_str(s: &str) -> Result<Date> {
         match DateTime::parse_from_rfc3339(s) {
             Ok(value) => Ok(Date(value.with_timezone(&UTC))),
             Err(err) => {
@@ -31,7 +34,9 @@ impl Date {
             }
         }
     }
+}
 
+impl Date {
     pub fn from_format(date: &str, format: &str) -> Result<Date> {
         match DateTime::parse_from_str(date, format) {
             Ok(value) => Ok(Date(value.with_timezone(&UTC))),
@@ -128,33 +133,50 @@ impl<'de> Deserialize<'de> for Date {
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Start {}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum End {}
+
+pub trait Bound {}
+impl Bound for Start {}
+impl Bound for End {}
+
 #[derive(Debug, Clone, PartialEq)]
-pub enum OptionalDate {
-    Date(Date),
+pub enum OptionalDate<B: Bound> {
+    Date(Date, PhantomData<B>),
     CouldNotParse(String),
 }
 
-impl OptionalDate {
+impl<B: Bound> OptionalDate<B> {
+    pub fn new(date: Date) -> Self {
+        OptionalDate::Date(date, PhantomData)
+    }
+
     pub fn is_date(&self) -> bool {
         match *self {
-            OptionalDate::Date(_) => true,
+            OptionalDate::Date(..) => true,
             _ => false,
         }
     }
+}
 
-    pub fn as_start(&self, last_date: Date) -> Date {
+impl OptionalDate<Start> {
+    pub fn as_date(&self, last_date: Date) -> Date {
         // Handle missing start by returning 30 days before end.
-        if let OptionalDate::Date(date) = *self {
+        if let OptionalDate::Date(date, _) = *self {
             date
         } else {
-            let end = self.as_end(last_date);
-            end - Duration::days(30)
+            last_date - Duration::days(30)
         }
     }
+}
 
-    pub fn as_end(&self, last_date: Date) -> Date {
+impl OptionalDate<End> {
+    pub fn as_date(&self, last_date: Date) -> Date {
         // Handle missing end by using the last available date.
-        if let OptionalDate::Date(date) = *self {
+        if let OptionalDate::Date(date, _) = *self {
             date
         } else {
             last_date
@@ -162,20 +184,20 @@ impl OptionalDate {
     }
 }
 
-impl<'de> serde::Deserialize<'de> for OptionalDate {
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<OptionalDate, D::Error>
+impl<'de, B: Bound> serde::Deserialize<'de> for OptionalDate<B> {
+    fn deserialize<D>(deserializer: D) -> ::std::result::Result<OptionalDate<B>, D::Error>
         where D: serde::de::Deserializer<'de>
     {
-        struct DateVisitor;
+        struct DateVisitor<B>(PhantomData<B>);
 
-        impl<'de> serde::de::Visitor<'de> for DateVisitor {
-            type Value = OptionalDate;
+        impl<'de, B: Bound> serde::de::Visitor<'de> for DateVisitor<B> {
+            type Value = OptionalDate<B>;
 
-            fn visit_str<E>(self, value: &str) -> ::std::result::Result<OptionalDate, E>
+            fn visit_str<E>(self, value: &str) -> ::std::result::Result<OptionalDate<B>, E>
                 where E: serde::de::Error
             {
                 match Date::from_str(value) {
-                    Ok(date) => Ok(OptionalDate::Date(date)),
+                    Ok(date) => Ok(OptionalDate::new(date)),
                     Err(err) => {
                         if !value.is_empty() {
                             error!("bad date {:?}: {:?}", value, err);
@@ -190,16 +212,16 @@ impl<'de> serde::Deserialize<'de> for OptionalDate {
             }
         }
 
-        deserializer.deserialize_str(DateVisitor)
+        deserializer.deserialize_str(DateVisitor::<B>(PhantomData))
     }
 }
 
-impl serde::Serialize for OptionalDate {
+impl<B: Bound> serde::Serialize for OptionalDate<B> {
     fn serialize<S>(&self, serializer: S) -> ::std::result::Result<S::Ok, S::Error>
         where S: serde::Serializer
     {
         match *self {
-            OptionalDate::Date(date) => date.serialize(serializer),
+            OptionalDate::Date(date, _) => date.serialize(serializer),
             OptionalDate::CouldNotParse(_) => serializer.serialize_str(""), // TODO: Warning?
         }
     }

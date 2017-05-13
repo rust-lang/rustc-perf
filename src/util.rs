@@ -14,7 +14,7 @@ use std::collections::btree_map::Range;
 use std::collections::Bound::Included;
 
 use load::{InputData, Commit, CommitData};
-use date::{OptionalDate, Date};
+use date::{OptionalDate, Date, Start, End};
 use errors::*;
 
 use serde::{Deserialize, Deserializer};
@@ -47,10 +47,10 @@ pub fn get_commit_data_from_start(data: &InputData, idx: Date) -> &CommitData {
 
 pub fn optional_data_range(
     data: &InputData,
-    a: OptionalDate,
-    b: OptionalDate,
+    a: OptionalDate<Start>,
+    b: OptionalDate<End>,
 ) -> Range<Commit, CommitData> {
-    data_range(&data.data, a.as_start(data.last_date), b.as_end(data.last_date))
+    data_range(&data.data, a.as_date(data.last_date), b.as_date(data.last_date))
 }
 
 pub fn data_range(

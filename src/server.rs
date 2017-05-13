@@ -200,7 +200,7 @@ pub fn handle_data(body: data::Request, data: &InputData) -> data::Response {
 }
 
 pub fn handle_tabular(body: tabular::Request, data: &InputData) -> tabular::Response {
-    let day = util::get_commit_data_from_end(data, body.date.as_end(data.last_date));
+    let day = util::get_commit_data_from_end(data, body.date.as_date(data.last_date));
 
     let mut by_crate = HashMap::new();
     for patch in day.patches() {
@@ -220,13 +220,13 @@ pub fn handle_tabular(body: tabular::Request, data: &InputData) -> tabular::Resp
 pub fn handle_days(body: days::Request, data: &InputData) -> days::Response {
     days::Response {
         a: DateData::for_day(
-            util::get_commit_data_from_start(data, body.date_a.as_start(data.last_date)),
+            util::get_commit_data_from_start(data, body.date_a.as_date(data.last_date)),
             &body.crates,
             &body.phases,
             body.group_by
         ),
         b: DateData::for_day(
-            util::get_commit_data_from_end(data, body.date_b.as_end(data.last_date)),
+            util::get_commit_data_from_end(data, body.date_b.as_date(data.last_date)),
             &body.crates,
             &body.phases,
             body.group_by
@@ -236,8 +236,8 @@ pub fn handle_days(body: days::Request, data: &InputData) -> days::Response {
 
 pub fn handle_stats(body: stats::Request, data: &InputData) -> stats::Response {
     let mut counted = Vec::new();
-    let mut start_date = body.start_date.as_start(data.last_date);
-    let mut end_date = body.end_date.as_end(data.last_date);
+    let mut start_date = body.start_date.as_date(data.last_date);
+    let mut end_date = body.end_date.as_date(data.last_date);
 
     // Iterate over date range.
     for (_, commit_data) in util::data_range(&data.data, start_date, end_date) {
