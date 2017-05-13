@@ -16,7 +16,7 @@ use serde::de::DeserializeOwned;
 
 use rustc_perf::server::{self, GroupBy};
 use rustc_perf::load::InputData;
-use rustc_perf::date::{OptionalDate, Date};
+use rustc_perf::date::{OptionalDate, Date, Bound};
 use rustc_perf::api::{data, tabular, days, stats};
 
 lazy_static! {
@@ -92,8 +92,8 @@ fn data_phase() {
                 start_date: OptionalDate::CouldNotParse("".into()),
                 end_date: OptionalDate::CouldNotParse("".into()),
                 group_by: GroupBy::Phase,
-                phases: vec!["total".into()],
-                crates: vec!["helloworld".into(), "regex.0.1.30".into()],
+                phases: vec!["total".into()].into(),
+                crates: vec!["helloworld".into(), "regex.0.1.30".into()].into(),
             },
             &INPUT_DATA,
         ),
@@ -109,8 +109,8 @@ fn data_crate() {
                 start_date: OptionalDate::CouldNotParse("".into()),
                 end_date: OptionalDate::CouldNotParse("".into()),
                 group_by: GroupBy::Crate,
-                phases: vec!["total".into()],
-                crates: vec!["helloworld".into(), "regex.0.1.30".into()],
+                phases: vec!["total".into()].into(),
+                crates: vec!["helloworld".into(), "regex.0.1.30".into()].into(),
             },
             &INPUT_DATA,
         ),
@@ -131,8 +131,8 @@ fn tabular() {
     );
 }
 
-fn ymd_date(year: i32, month: u32, day: u32) -> OptionalDate {
-    OptionalDate::Date(Date::ymd_hms(year, month, day, 0, 0, 0))
+fn ymd_date<B: Bound>(year: i32, month: u32, day: u32) -> OptionalDate<B> {
+    OptionalDate::Date(Date::ymd_hms(year, month, day, 0, 0, 0), std::marker::PhantomData)
 }
 
 #[test]
@@ -142,8 +142,8 @@ fn days() {
             days::Request {
                 date_a: ymd_date(2016, 02, 21),
                 date_b: ymd_date(2016, 03, 22),
-                crates: vec!["helloworld".into(), "regex.0.1.30".into()],
-                phases: vec!["total".into()],
+                crates: vec!["helloworld".into(), "regex.0.1.30".into()].into(),
+                phases: vec!["total".into()].into(),
                 group_by: GroupBy::Crate,
             },
             &INPUT_DATA,

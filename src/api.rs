@@ -22,6 +22,12 @@ pub enum List {
     List(BTreeSet<String>),
 }
 
+impl From<Vec<String>> for List {
+    fn from(s: Vec<String>) -> List {
+        List::List(s.into_iter().collect())
+    }
+}
+
 impl List {
     pub fn contains(&self, item: &str) -> bool {
         match *self {
