@@ -5,14 +5,11 @@ function getDate(id) {
     if (result) {
         var as_date = new Date(result);
         if (isNaN(as_date.getTime())) {
-            result = "";
-            document.getElementById(id).value = "Invalid date";
+            return null;
         } else {
-            result = as_date.toISOString();
+            return as_date.toISOString();
         }
     }
-
-    return result;
 }
 
 function gatherChecks(name) {
