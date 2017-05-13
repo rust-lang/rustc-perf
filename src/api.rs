@@ -13,6 +13,31 @@
 //!
 //! The responses are calculated in the server.rs file.
 
+use std::collections::BTreeSet;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "list", content = "content")]
+pub enum List {
+    All,
+    List(BTreeSet<String>),
+}
+
+impl List {
+    pub fn contains(&self, item: &str) -> bool {
+        match *self {
+            List::All => true,
+            List::List(ref x) => x.contains(item),
+        }
+    }
+
+    pub fn into_set(&self, all: &BTreeSet<String>) -> BTreeSet<String> {
+        match *self {
+            List::All => all.clone(),
+            List::List(ref x) => x.clone(),
+        }
+    }
+}
+
 pub mod summary {
     use std::collections::BTreeMap;
 
@@ -61,8 +86,10 @@ pub mod info {
 }
 
 pub mod data {
-    use date::{OptionalDate, Start, End};
+    use super::List;
+    use date::{Date, OptionalDate, Start, End};
     use server::{DateData, GroupBy};
+    use std::collections::BTreeSet;
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct Request {
@@ -74,15 +101,21 @@ pub mod data {
         pub group_by: GroupBy,
 
         /// Which crates to return data for
-        pub crates: Vec<String>,
+        pub crates: List,
 
         /// Which phases to return data for
-        pub phases: Vec<String>,
+        pub phases: List,
     }
 
     /// List of DateData's from oldest to newest
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-    pub struct Response(pub Vec<DateData>);
+    pub struct Response {
+        pub data: Vec<DateData>,
+        pub start: Date,
+        pub end: Date,
+        pub crates: BTreeSet<String>,
+        pub phases: BTreeSet<String>,
+    }
 }
 
 pub mod tabular {
@@ -107,6 +140,7 @@ pub mod tabular {
 }
 
 pub mod days {
+    use super::List;
     use date::{OptionalDate, Start, End};
     use server::{DateData, GroupBy};
 
@@ -117,10 +151,10 @@ pub mod days {
         pub date_b: OptionalDate<End>,
 
         /// Which crates to return data for
-        pub crates: Vec<String>,
+        pub crates: List,
 
         /// Which phases to return data for
-        pub phases: Vec<String>,
+        pub phases: List,
     }
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]

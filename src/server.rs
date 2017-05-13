@@ -13,7 +13,7 @@ use std::cmp::max;
 use std::fs::File;
 use std::io::Read;
 use std::sync::{RwLock, Arc};
-use std::collections::{HashMap, BTreeMap};
+use std::collections::{HashMap, BTreeMap, BTreeSet};
 use std::path::Path;
 use std::net::SocketAddr;
 
@@ -30,7 +30,7 @@ use hyper::server::{Http, Service, Request, Response};
 use git;
 use date::{DeltaTime, Date};
 use util::{self, get_repo_path};
-pub use api::{summary, info, data, tabular, days, stats};
+pub use api::{self, summary, info, data, tabular, days, stats};
 use load::{Pass, CommitData, InputData, Comparison};
 
 use errors::*;
@@ -53,12 +53,12 @@ pub struct DateData {
 impl DateData {
     pub fn for_day(
         day: &CommitData,
-        crate_names: &[String],
-        phases: &[String],
+        crates: &BTreeSet<String>,
+        phases: &BTreeSet<String>,
         group_by: GroupBy
     ) -> DateData {
         let crates = day.patches()
-            .filter(|patch| crate_names.contains(&patch.name))
+            .filter(|patch| crates.contains(&patch.name))
             .collect::<Vec<_>>();
 
         let mut data = HashMap::new();
@@ -182,7 +182,12 @@ pub fn handle_info(data: &InputData) -> info::Response {
 pub fn handle_data(body: data::Request, data: &InputData) -> data::Response {
     let mut result = util::optional_data_range(data, body.start_date.clone(), body.end_date.clone())
         .map(|(_, day)| day)
-        .map(|day| DateData::for_day(day, &body.crates, &body.phases, body.group_by))
+        .map(|day| DateData::for_day(
+            day,
+            &body.crates.into_set(&data.crate_list),
+            &body.phases.into_set(&data.phase_list),
+            body.group_by
+        ))
         .collect::<Vec<_>>();
 
     // Return everything from the first non-empty data to the last non-empty data.
@@ -196,7 +201,13 @@ pub fn handle_data(body: data::Request, data: &InputData) -> data::Response {
         .rposition(|day| !day.data.is_empty())
         .unwrap_or(0);
     let result = result.drain(first_idx..(last_idx + 1)).collect();
-    data::Response(result)
+    data::Response {
+        data: result,
+        start: body.start_date.as_date(data.last_date),
+        end: body.end_date.as_date(data.last_date),
+        crates: body.crates.into_set(&data.crate_list),
+        phases: body.phases.into_set(&data.phase_list),
+    }
 }
 
 pub fn handle_tabular(body: tabular::Request, data: &InputData) -> tabular::Response {
@@ -221,14 +232,14 @@ pub fn handle_days(body: days::Request, data: &InputData) -> days::Response {
     days::Response {
         a: DateData::for_day(
             util::get_commit_data_from_start(data, body.date_a.as_date(data.last_date)),
-            &body.crates,
-            &body.phases,
+            &body.crates.into_set(&data.crate_list),
+            &body.phases.into_set(&data.phase_list),
             body.group_by
         ),
         b: DateData::for_day(
             util::get_commit_data_from_end(data, body.date_b.as_date(data.last_date)),
-            &body.crates,
-            &body.phases,
+            &body.crates.into_set(&data.crate_list),
+            &body.phases.into_set(&data.phase_list),
             body.group_by
         ),
     }

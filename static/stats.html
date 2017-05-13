@@ -96,6 +96,8 @@
         let crates = state.crates || gatherChecks("check-crate");
         let phases = state.phases || gatherChecks("check-phase");
 
+        set_check_boxes(crates, phases, null);
+
         let values = {
             start: start_date,
             end: end_date,
@@ -105,7 +107,6 @@
         fetch(BASE_URL + "/stats", make_request(values)).then(function(response) {
             response.json().then(function(data) {
                 populate_stats(data);
-                set_check_boxes(crates, phases, null);
                 set_date("start-date", data.startDate);
                 set_date("end-date", data.endDate);
 

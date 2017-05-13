@@ -129,6 +129,8 @@
         let phases = state.phases || gatherChecks("check-phase");
         let group_by = state.group_by || "crate";
 
+        set_check_boxes(crates, phases, group_by);
+
         var values = {
             date_a: datea,
             date_b: dateb,
@@ -139,7 +141,6 @@
         fetch(BASE_URL + "/get", make_request(values)).then(function(response) {
             response.json().then(function(data) {
                 populate_data(data);
-                set_check_boxes(crates, phases, group_by);
                 set_date("date-a", data.a.date);
                 set_date("date-b", data.b.date);
 

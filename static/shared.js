@@ -2,31 +2,28 @@ var BASE_URL = window.location.origin + "/perf";
 
 function getDate(id) {
     var result = document.getElementById(id).value;
-    if (result) {
-        var as_date = new Date(result);
-        if (isNaN(as_date.getTime())) {
-            return null;
-        } else {
-            return as_date.toISOString();
-        }
+    var as_date = new Date(result);
+    if (isNaN(as_date.getTime())) {
+        return "";
+    } else {
+        return as_date.toISOString();
     }
 }
 
 function gatherChecks(name) {
-    let total_checked = false;
-    if (document.getElementById(name + "-total") && document.getElementById(name + "-total").checked) {
-        total_checked = true;
+    if (document.getElementById(name + "-total") &&
+        document.getElementById(name + "-total").checked) {
+        return { list: "All", content: null }; // Decoded as all variants
     }
-    var result = [];
-    var elements = document.getElementsByName(name);
-    for (var i in elements) {
-        if ((elements[i].checked || total_checked) &&
-            elements[i].id && elements[i].id != name + "-total") {
-            result.push(elements[i].id);
+    let result = [];
+    let elements = document.getElementsByName(name);
+    for (let element of elements) {
+        if (element.checked && element.id && element.id != name + "-total") {
+            result.push(element.id);
         }
     }
 
-    return result;
+    return { list: "List", content: result };
 }
 
 function addTotalHandler(name) {
@@ -53,9 +50,9 @@ function addTotalHandler(name) {
 function make_settings(callback, total_label) {
     function checkbox(name, id, checked, body) {
         if (checked) {
-            return `<input type="checkbox" checked="true" name="${name}" id="${id}">${body}</input></br>`;
+            return `<label><input type="checkbox" checked="true" name="${name}" id="${id}">${body}</label></br>`;
         } else {
-            return `<input type="checkbox" name="${name}" id="${id}">${body}</input></br>`;
+            return `<label><input type="checkbox" name="${name}" id="${id}">${body}</label></br>`;
         }
     }
 
@@ -225,7 +222,7 @@ function dispatch_on_params(f) {
         let value = param[1];
 
         if (key == "crates" || key == "phases" || key == "dates") {
-            value = value.split(",");
+            value = JSON.parse(value);
         }
 
         state[key] = value;
@@ -256,7 +253,7 @@ function query_string_for_state(state) {
         if (state[k].toISOString) {
             result += k + "=" + encodeURIComponent(state[k].toISOString());
         } else {
-            result += k + "=" + encodeURIComponent(state[k]);
+            result += k + "=" + encodeURIComponent(JSON.stringify(state[k]));
         }
     }
     return result;

@@ -45,7 +45,9 @@
         let phases = state.phases || gatherChecks("check-phase");
         let group_by = state.group_by || "crate";
 
-        var values = {
+        set_check_boxes(crates, phases, group_by);
+
+        let values = {
             start: start_date,
             end: end_date,
             crates: crates,
@@ -54,20 +56,18 @@
         };
         fetch(BASE_URL + "/data", make_request(values)).then(function(response) {
             response.json().then(function(data) {
-                if (data.length > 0) {
-                    start_date = data[0].date;
-                    end_date = data[data.length - 1].date;
-                }
-                var series = crates;
+                let start_date = data.start;
+                let end_date = data.end;
+
+                var series = data.crates;
                 if (group_by == "phase") {
-                    series = phases;
+                    series = data.phases;
                 }
 
-                set_check_boxes(crates, phases, group_by);
                 set_date("start-date", start_date);
                 set_date("end-date", end_date);
 
-                init_graph(data, series, "time", undefined, "Seconds");
+                init_graph(data.data, series, "time", undefined, "Seconds");
 
                 if (push_state) {
                     push_state_to_history({
