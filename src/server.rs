@@ -401,7 +401,17 @@ impl Server {
                 futures::future::ok::<_, <Self as Service>::Error>(acc)
             }).map(move |body| {
                 let data = data.read().unwrap();
-                let result = handler(serde_json::from_slice(&body).unwrap(), &data);
+                let body: D = match serde_json::from_slice(&body) {
+                    Ok(d) => d,
+                    Err(err) => {
+                        error!("failed to deserialize request {:?}: {:?}",
+                            String::from_utf8_lossy(&body), err);
+                        return Response::new()
+                            .with_header(ContentType::plaintext())
+                            .with_body(format!("Failed to deserialize request; {:?}", err))
+                    }
+                };
+                let result = handler(body, &data);
                 Response::new()
                     .with_header(ContentType::json())
                     .with_body(serde_json::to_string(&result).unwrap())
