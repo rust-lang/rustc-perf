@@ -86,8 +86,8 @@ impl DateData {
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Recording {
     #[serde(with = "util::round_float")]
-    time: f64,
-    rss: u64,
+    pub time: f64,
+    pub rss: u64,
 }
 
 impl Recording {
