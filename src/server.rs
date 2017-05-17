@@ -97,6 +97,14 @@ impl Recording {
             rss: 0,
         }
     }
+    
+    pub fn get_time(&self) -> f64 {
+        self.time
+    }
+    
+    pub fn get_rss(&self) -> u64 {
+        self.rss
+    }
 
     fn record(&mut self, phase: Option<&Pass>) {
         if let Some(phase) = phase {
