@@ -54,7 +54,7 @@
             phases: phases,
             group_by: group_by,
         };
-        fetch(BASE_URL + "/data", make_request(values)).then(function(response) {
+        make_request("/data", values).then(function(response) {
             response.json().then(function(data) {
                 let start_date = data.start;
                 let end_date = data.end;

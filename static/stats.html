@@ -104,7 +104,7 @@
             crates: crates,
             phases: phases
         };
-        fetch(BASE_URL + "/stats", make_request(values)).then(function(response) {
+        make_request("/stats", values).then(function(response) {
             response.json().then(function(data) {
                 populate_stats(data);
                 set_date("start-date", data.startDate);

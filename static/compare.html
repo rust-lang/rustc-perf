@@ -138,7 +138,7 @@
             phases: phases,
             group_by: group_by
         };
-        fetch(BASE_URL + "/get", make_request(values)).then(function(response) {
+        make_request("/get", values).then(function(response) {
             response.json().then(function(data) {
                 populate_data(data);
                 set_date("date-a", data.a.date);

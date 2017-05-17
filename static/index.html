@@ -101,8 +101,8 @@
                 start: start,
                 end: end,
                 group_by: "phase",
-                crates: [crate],
-                phases: info_data.phases,
+                crates: { "list": "List", content: [crate] },
+                phases: { "list": "All", content: null },
             });
             return `<td><a class="${d_class}" href="graphs.html${query_str}">${datum}</a></td>`;
         } else {

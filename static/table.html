@@ -18,12 +18,12 @@
     <div id="table"></div>
     <div id="as-of"></div>
 </body>
-    <script src="shared.js"></script>
     <script src="libs/fetch.js"></script>
+    <script src="shared.js"></script>
     <script>
     function make_table(state, push_state) {
         let date = state.date || getDate("date");
-        fetch(BASE_URL + "/get_tabular", make_request({ date: date })).then(function(response) {
+        make_request("/get_tabular", { date: date }).then(function(response) {
             response.json().then(function(data) {
                 set_date("date", date);
                 populate_table(data);

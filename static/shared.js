@@ -252,6 +252,8 @@ function query_string_for_state(state) {
         // Best known way to check if passed state is a date object.
         if (state[k].toISOString) {
             result += k + "=" + encodeURIComponent(state[k].toISOString());
+        } else if (typeof state[k] == "string") {
+            result += k + "=" + encodeURIComponent(state[k]);
         } else {
             result += k + "=" + encodeURIComponent(JSON.stringify(state[k]));
         }
@@ -260,12 +262,12 @@ function query_string_for_state(state) {
 }
 
 // This one is for making the request we send to the backend.
-function make_request(body) {
-    return {
+function make_request(path, body) {
+    return fetch(BASE_URL + path, {
         method: "POST",
         body: JSON.stringify(body),
         mode: "cors"
-    };
+    });
 }
 
 make_as_of();

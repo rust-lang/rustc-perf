@@ -404,7 +404,7 @@ impl Server {
                 let body: D = match serde_json::from_slice(&body) {
                     Ok(d) => d,
                     Err(err) => {
-                        error!("failed to deserialize request {:?}: {:?}",
+                        error!("failed to deserialize request {}: {:?}",
                             String::from_utf8_lossy(&body), err);
                         return Response::new()
                             .with_header(ContentType::plaintext())
