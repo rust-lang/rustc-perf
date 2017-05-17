@@ -86,8 +86,8 @@ impl DateData {
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Recording {
     #[serde(with = "util::round_float")]
-    time: f64,
-    rss: u64,
+    pub time: f64,
+    pub rss: u64,
 }
 
 impl Recording {
@@ -96,14 +96,6 @@ impl Recording {
             time: 0.0,
             rss: 0,
         }
-    }
-    
-    pub fn get_time(&self) -> f64 {
-        self.time
-    }
-    
-    pub fn get_rss(&self) -> u64 {
-        self.rss
     }
 
     fn record(&mut self, phase: Option<&Pass>) {
