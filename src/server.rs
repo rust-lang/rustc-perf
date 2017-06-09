@@ -58,14 +58,14 @@ impl DateData {
         group_by: GroupBy
     ) -> DateData {
         let crates = day.patches()
-            .filter(|patch| crates.contains(&patch.name))
+            .filter(|patch| crates.contains(&patch.full_name()))
             .collect::<Vec<_>>();
 
         let mut data = HashMap::new();
         for phase_name in phases {
             for patch in &crates {
                 let entry = match group_by {
-                    GroupBy::Crate => data.entry(patch.name.to_string()),
+                    GroupBy::Crate => data.entry(patch.full_name()),
                     GroupBy::Phase => data.entry(phase_name.to_string()),
                 };
 
