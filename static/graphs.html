@@ -5,7 +5,7 @@
 <link rel="stylesheet" type="text/css" href="perf.css">
 </head>
 <body class="container">
-    <div>&gt;  graphs, <a href="stats.html">stats</a>, <a href="compare.html">comparisons</a>, <a href="mem.html">memory graph</a>, <a href="table.html">table view</a>.</div>
+    <div>&gt;  graphs, <a href="stats.html">stats</a>, <a href="compare.html">comparisons</a>, <a href="table.html">table view</a>.</div>
     <div style="width: 1000px; height: 600px;" id="chart-container"></div>
     <div id="settings">
         <span id="crates-outer" class="settings">
@@ -22,30 +22,149 @@
             </label>
             <div id="phases">loading...</div>
         </span>
-        <span id="dates" class="settings">
+        <span id="dates" class="settings" style="text-align:left;">
             <h3>Dates</h3>
             start date: <input placeholder="yyyy-mm-dd" id="start-date"></input><br>
-            end date: <input placeholder="yyyy-mm-dd" id="end-date"></input>
-            <div class="submit">
-                <a href="#" onClick="make_graph({}, true); return false;">Submit</a>
-            </div>
+            end date: <input placeholder="yyyy-mm-dd" id="end-date"></input><br>
+            <input type="radio" name="graphType" id="type-rss"> rss
+            <input type="radio" name="graphType" id="type-time" checked> time
+        <div class="submit">
+            <a href="#" onClick="make_graph({}, true); return false;">Submit</a>
+        </div>
+        </span>
         </div>
     </div>
     <div id="as-of"></div>
 </body>
     <script src="libs/highcharts.js"></script>
     <script src="libs/fetch.js"></script>
-    <script src="graph.js"></script>
     <script src="shared.js"></script>
     <script>
+    var chart;
+
+    function init_graph(data, series, field, total_label, yAxisLabel) {
+        if (!total_label) {
+            total_label = "total";
+        }
+
+        var values = [];
+
+        for (var i = 0; i < series.length; i++) {
+            values.push([]);
+        }
+
+        for (var x = 0; x < data.length; x++) {
+            let datum = data[x];
+            var date = new Date(datum.date);
+
+            var url = null;
+            if (x > 0) {
+                url = "https://github.com/rust-lang/rust/compare/" + data[x - 1].commit + "..." + data[x].commit;
+            }
+
+            for (var i = 0; i < series.length; i++) {
+                let value = {
+                    commit: datum.commit,
+                    url: url,
+                    y: 0,
+                    x: date.valueOf() // number of milliseconds since 1970
+                };
+                if (series[i] in datum.data) {
+                    if (field in datum.data[series[i]]) {
+                        value.y = datum.data[series[i]][field];
+                    }
+                }
+                value.name = date.toLocaleString();
+                values[i].push(value);
+            }
+        }
+
+        var datasets = [];
+        for (var i = 0; i < series.length; i++) {
+            var label = series[i];
+            if (label == "total") {
+                label = total_label;
+            }
+            datasets.push({
+                name: label,
+                animation: false,
+                allowPointSelect: true,
+                data: values[i],
+                marker: {
+                    enabled: true
+                },
+            });
+        }
+
+        if (chart) {
+            chart.destroy();
+        }
+        chart = new Highcharts.Chart({
+            chart: {
+                zoomType: "xy",
+                renderTo: "chart-container",
+                type: "line",
+            },
+            title: {
+                text: "",
+            },
+            rangeSelector: {
+                selected: 1,
+            },
+            series: datasets,
+            tooltip: {
+                crosshairs: [true],
+                formatter: function () {
+                    var date = new Date(this.x);
+                    var commit = this.point.commit.substr(0, 10);
+                    return "<b>" + date.toLocaleString() + " - " + commit + "</b>" +
+                        "<br>" + this.series.name + ": " + this.y;
+                }
+            },
+            xAxis: {
+                type: "datetime",
+            },
+            yAxis: {
+                min: 0,
+                title: {
+                    text: yAxisLabel,
+                }
+            },
+            plotOptions: {
+                line: {
+                    point: {
+                        events: {
+                            click: function (event) {
+                                if (this.options.url) {
+                                    window.open(this.options.url, "_blank");
+                                }
+                                return false;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
     function make_graph(state, push_state) {
         let start_date = state.start || getDate("start-date");
         let end_date = state.end || getDate("end-date");
         let crates = state.crates || gatherChecks("check-crate");
         let phases = state.phases || gatherChecks("check-phase");
-        let group_by = state.group_by || "crate";
+        let group_by = state.group_by || (document.getElementById("group-by-crate").checked ?
+            "crate" : "phase");
+        let type = state.type || (document.getElementById("type-rss").checked ? "rss" : "time");
 
-        set_check_boxes(crates, phases, group_by);
+        document.getElementById("type-rss").checked = false;
+        document.getElementById("type-time").checked = false;
+        if (type == "rss") {
+            document.getElementById("type-rss").checked = true;
+        } else {
+            document.getElementById("type-time").checked = true;
+        }
+
+        set_check_boxes(toList(crates), toList(phases), group_by);
 
         let values = {
             start: start_date,
@@ -67,7 +186,9 @@
                 set_date("start-date", start_date);
                 set_date("end-date", end_date);
 
-                init_graph(data.data, series, "time", undefined, "Seconds");
+                init_graph(data.data, series,
+                    ...(type == "rss" ?
+                    ["rss", "maximum", "Megabytes"] : ["time", "total", "Seconds"]));
 
                 if (push_state) {
                     push_state_to_history({
@@ -75,7 +196,8 @@
                         end: end_date,
                         crates: crates,
                         phases: phases,
-                        group_by: group_by
+                        group_by: group_by,
+                        type: type,
                     });
                 }
             });

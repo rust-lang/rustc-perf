@@ -26,6 +26,22 @@ function gatherChecks(name) {
     return { list: "List", content: result };
 }
 
+function toList(list_object, type) {
+    if (list_object.list == "All") {
+        let result = [];
+        let elements = document.getElementsByName(name);
+        for (let element of elements) {
+            if (element.checked && element.id && element.id != `check-${type}-total`) {
+                result.push(element.id);
+            }
+        }
+
+        return result;
+    }
+
+    return list_object.content;
+}
+
 function addTotalHandler(name) {
     var elements = document.getElementsByName(name);
     for (var i in elements) {
