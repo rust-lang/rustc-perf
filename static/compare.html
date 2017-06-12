@@ -127,7 +127,7 @@
         let dateb = state.date_b || getDate("date-b");
         let crates = state.crates || gatherChecks("check-crate");
         let phases = state.phases || gatherChecks("check-phase");
-        let group_by = state.group_by || "crate";
+        let group_by = state.group_by || get_group_by();
 
         set_check_boxes(crates, phases, group_by);
 

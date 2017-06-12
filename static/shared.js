@@ -143,52 +143,44 @@ function set_date(id, date) {
 }
 
 function set_check_boxes(crates, phases, group_by) {
-    let is_total_crate_checked = document.getElementById("check-crate-total").checked;
-    let is_total_phase_checked = document.getElementById("check-phase-total").checked;
-
     // Clear checkboxes
     var ck_crates = document.getElementsByName('check-crate');
     for (var i in ck_crates) {
-        if (ck_crates[i].id !== "check-crate-total") {
-            ck_crates[i].checked = false;
-        }
+        ck_crates[i].checked = false;
     }
 
     var ck_phases = document.getElementsByName('check-phase');
     for (var i in ck_phases) {
-        if (ck_phases[i].id !== "check-phase-total") {
-            ck_phases[i].checked = false;
-        }
+        ck_phases[i].checked = false;
+    }
+
+    var totalCratesSet = crates.list == "All";
+    var totalPhasesSet = phases.list == "All";
+    var crates = toList(crates);
+    var phases = toList(phases);
+
+    if (totalCratesSet) {
+        document.getElementById("check-crate-total").checked = true;
+    }
+    if (totalPhasesSet) {
+        document.getElementById("check-phase-total").checked = true;
     }
 
     // Check crates/benchmarks/phases checkboxes.
-    if (!is_total_crate_checked) {
-        for (let id of crates) {
-            if (!id) {
-                continue;
-            }
-            if (id == "total") {
-                id = "check-crate-total";
-            }
-            let ck = document.getElementById(id);
-            if (ck) {
-                ck.checked = true;
-            } else {
-                console.log("Couldn't find", id, i, crates[i]);
-            }
+    for (let id of crates) {
+        let ck = document.getElementById(id);
+        if (ck) {
+            ck.checked = true;
+        } else {
+            console.log("Couldn't find", id);
         }
     }
-    if (!is_total_phase_checked) {
-        for (let id of phases) {
-            if (!id) {
-                continue;
-            }
-            var ck = document.getElementById(id);
-            if (ck) {
-                ck.checked = true;
-            } else {
-                console.log("Couldn't find", id, i, phases[i]);
-            }
+    for (let id of phases) {
+        let ck = document.getElementById(id);
+        if (ck) {
+            ck.checked = true;
+        } else {
+            console.log("Couldn't find", id);
         }
     }
 

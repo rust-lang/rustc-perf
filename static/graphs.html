@@ -152,8 +152,7 @@
         let end_date = state.end || getDate("end-date");
         let crates = state.crates || gatherChecks("check-crate");
         let phases = state.phases || gatherChecks("check-phase");
-        let group_by = state.group_by || (document.getElementById("group-by-crate").checked ?
-            "crate" : "phase");
+        let group_by = state.group_by || get_group_by();
         let type = state.type || (document.getElementById("type-rss").checked ? "rss" : "time");
 
         document.getElementById("type-rss").checked = false;
@@ -164,7 +163,7 @@
             document.getElementById("type-time").checked = true;
         }
 
-        set_check_boxes(toList(crates), toList(phases), group_by);
+        set_check_boxes(crates, phases, group_by);
 
         let values = {
             start: start_date,
