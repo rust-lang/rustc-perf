@@ -3,11 +3,11 @@
     "date": "2017-01-25T02:17:33+00:00",
     "commit": "c0d0e68be4f8bb9d8522bd72a7a1b8ef95b84c6c",
     "data": {
-      "helloworld": {
+      "regex.0.1.30": {
         "time": 0.0,
         "rss": 0
       },
-      "regex.0.1.30": {
+      "helloworld": {
         "time": 0.0,
         "rss": 0
       }

@@ -159,8 +159,9 @@ fn stats() {
             stats::Request {
                 start_date: OptionalDate::CouldNotParse("".into()),
                 end_date: OptionalDate::CouldNotParse("".into()),
-                crates: vec!["helloworld".into(), "regex.0.1.30".into()],
-                phases: vec!["total".into()],
+                crates: vec!["helloworld".into(), "regex.0.1.30".into()].into(),
+                phases: vec!["total".into()].into(),
+                group_by: GroupBy::Crate,
             },
             &INPUT_DATA,
         ),
