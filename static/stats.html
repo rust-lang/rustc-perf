@@ -57,10 +57,10 @@
         html += "<th>Trend_b (Trend)</th>";
         html += "</tr>";
         html += "</thead>";
-        let keys = Object.keys(data.crates);
+        let keys = Object.keys(data.data);
         keys.sort();
         for (let key of keys) {
-            let crate = data.crates[key];
+            let crate = data.data[key];
             html += "<tr>";
             html += `<th style="text-align: left;">` + truncate_name(key) + "</th>";
             html += `<td class="space"></td>`;
@@ -95,6 +95,7 @@
         let end_date = state.end || getDate("end-date");
         let crates = state.crates || gatherChecks("check-crate");
         let phases = state.phases || gatherChecks("check-phase");
+        let group_by = state.group_by || get_group_by();
 
         set_check_boxes(crates, phases, null);
 
@@ -102,7 +103,8 @@
             start: start_date,
             end: end_date,
             crates: crates,
-            phases: phases
+            phases: phases,
+            group_by: group_by,
         };
         make_request("/stats", values).then(function(response) {
             response.json().then(function(data) {
@@ -116,6 +118,7 @@
                         end: data.endDate,
                         crates,
                         phases,
+                        group_by,
                     });
                 }
             });

@@ -246,29 +246,33 @@ pub fn handle_days(body: days::Request, data: &InputData) -> days::Response {
 }
 
 pub fn handle_stats(body: stats::Request, data: &InputData) -> stats::Response {
-    let mut counted = Vec::new();
+    let mut counted: HashMap<String, Vec<f64>> = HashMap::new();
     let mut start_date = body.start_date.as_date(data.last_date);
     let mut end_date = body.end_date.as_date(data.last_date);
-
-    // Iterate over date range.
     for (_, commit_data) in util::data_range(&data.data, start_date, end_date) {
         if counted.is_empty() {
             start_date = commit_data.commit.date;
         }
         end_date = commit_data.commit.date;
-        counted.push(commit_data);
+        let data = DateData::for_day(
+            commit_data,
+            &body.crates.into_set(&data.crate_list),
+            &body.phases.into_set(&data.phase_list),
+            body.group_by
+        );
+        for (name, rec) in data.data {
+            counted.entry(name).or_insert_with(Vec::new).push(rec.time);
+        }
     }
 
-    let mut crates = HashMap::new();
-    for crate_name in body.crates {
-        let stats = Stats::from(&counted, &crate_name, &body.phases);
-        crates.insert(crate_name.to_string(), stats);
-    }
+    let out = counted.into_iter().map(|(key, values)| {
+        (key, Stats::from(&values))
+    }).collect();
 
     stats::Response {
         start_date: start_date,
         end_date: end_date,
-        crates: crates,
+        data: out,
     }
 }
 
@@ -288,20 +292,7 @@ pub struct Stats {
 }
 
 impl Stats {
-    fn from(data: &[&CommitData], crate_name: &str, phases: &[String]) -> Stats {
-        let sums = data.iter()
-            .flat_map(|cd| cd.patches())
-            .filter(|patch| {
-                patch.full_name() == crate_name
-            })
-            .map(|patch| {
-                patch.run().passes.iter()
-                    .filter(|p| phases.contains(&p.name))
-                    .map(|p| p.time)
-                    .sum::<f64>()
-            })
-            .collect::<Vec<_>>();
-
+    fn from(sums: &[f64]) -> Stats {
         if sums.is_empty() {
             return Stats::default();
         }
@@ -311,8 +302,8 @@ impl Stats {
 
         let mut min = first;
         let mut max = first;
-        let q1_idx = data.len() / 4;
-        let q4_idx = 3 * data.len() / 4;
+        let q1_idx = sums.len() / 4;
+        let q4_idx = 3 * sums.len() / 4;
         let mut total = 0.0;
         let mut q1_total = 0.0;
         let mut q4_total = 0.0;
@@ -334,15 +325,15 @@ impl Stats {
         // Calculate the variance
         let mean = total / (sums.len() as f64);
         let mut var_total = 0.0;
-        for sum in &sums {
+        for sum in sums {
             let diff = sum - mean;
             var_total += diff * diff;
         }
         let variance = var_total / ((sums.len() - 1) as f64);
 
-        let trend = if sums.len() >= 10 && sums.len() == data.len() {
+        let trend = if sums.len() >= 10 {
             let q1_mean = q1_total / (q1_idx as f64);
-            let q4_mean = q4_total / ((data.len() - q4_idx) as f64);
+            let q4_mean = q4_total / ((sums.len() - q4_idx) as f64);
             100.0 * ((q4_mean - q1_mean) / first)
         } else {
             0.0

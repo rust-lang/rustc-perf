@@ -173,8 +173,9 @@ pub mod days {
 pub mod stats {
     use std::collections::HashMap;
 
-    use server::Stats;
+    use server::{Stats, GroupBy};
     use date::{OptionalDate, Date, Start, End};
+    use super::List;
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct Request {
@@ -182,12 +183,9 @@ pub mod stats {
         pub start_date: OptionalDate<Start>,
         #[serde(rename="end")]
         pub end_date: OptionalDate<End>,
-
-        /// Which crates to return data for
-        pub crates: Vec<String>,
-
-        /// Which phases to return data for
-        pub phases: Vec<String>,
+        pub crates: List,
+        pub phases: List,
+        pub group_by: GroupBy,
     }
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -196,6 +194,7 @@ pub mod stats {
         pub start_date: Date,
         #[serde(rename="endDate")]
         pub end_date: Date,
-        pub crates: HashMap<String, Stats>,
+        // Grouped either by crate or phase, depending on group_by
+        pub data: HashMap<String, Stats>,
     }
 }
