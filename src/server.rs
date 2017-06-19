@@ -16,6 +16,7 @@ use std::sync::{RwLock, Arc};
 use std::collections::{HashMap, BTreeMap, BTreeSet};
 use std::path::Path;
 use std::net::SocketAddr;
+use std::sync::atomic::{Ordering, AtomicBool};
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -24,7 +25,7 @@ use futures::{self, Future, Stream};
 use futures_cpupool::CpuPool;
 use hyper::{self, Get, Post, StatusCode};
 use hyper::header::{ContentLength, ContentType};
-use hyper::mime::{Mime, TopLevel, SubLevel};
+use hyper::mime;
 use hyper::server::{Http, Service, Request, Response};
 
 use git;
@@ -357,6 +358,7 @@ impl Stats {
 struct Server {
     data: Arc<RwLock<InputData>>,
     pool: CpuPool,
+    updating: Arc<AtomicBool>,
 }
 
 impl Server {
@@ -411,6 +413,17 @@ impl Server {
     }
 
     fn handle_push(&self, _req: Request) -> <Self as Service>::Future {
+        // set to updating
+        let was_updating = self.updating.compare_and_swap(false, true, Ordering::AcqRel);
+
+        if was_updating {
+            return futures::future::ok(Response::new()
+                .with_body(format!("Already updating!"))
+                .with_status(StatusCode::Ok)
+                .with_header(ContentType(mime::TEXT_PLAIN_UTF_8)))
+                .boxed();
+        }
+
         // FIXME we are throwing everything away and starting again. It would be
         // better to read just the added files. These should be available in the
         // body of the request.
@@ -418,6 +431,7 @@ impl Server {
         debug!("received onpush hook");
 
         let rwlock = self.data.clone();
+        let updating = self.updating.clone();
         let response = self.pool.spawn_fn(move || -> Result<serde_json::Value> {
             let repo_path = get_repo_path()?;
 
@@ -432,6 +446,8 @@ impl Server {
             // Write the new data back into the request
             *data = new_data;
 
+            updating.store(false, Ordering::Release);
+
             Ok(serde_json::to_value("Successfully updated from filesystem")?)
         });
 
@@ -441,7 +457,7 @@ impl Server {
             futures::future::ok(Response::new()
                 .with_body(format!("Internal Server Error: {:?}", err))
                 .with_status(StatusCode::InternalServerError)
-                .with_header(ContentType(Mime(TopLevel::Text, SubLevel::Plain, vec![]))))
+                .with_header(ContentType(mime::TEXT_PLAIN_UTF_8)))
         }).boxed()
     }
 }
@@ -497,6 +513,7 @@ pub fn start(data: InputData) {
     let server = Arc::new(Server {
         data: Arc::new(RwLock::new(data)),
         pool: CpuPool::new_num_cpus(),
+        updating: Arc::new(AtomicBool::new(false)),
     });
     let mut server_address: SocketAddr = "0.0.0.0:2346".parse().unwrap();
     server_address.set_port(env::var("PORT").ok().and_then(|x| x.parse().ok()).unwrap_or(2346));
