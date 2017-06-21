@@ -6,7 +6,7 @@ use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use chrono::{TimeZone, UTC};
+use chrono::{TimeZone, Utc};
 use flate2::bufread::GzDecoder;
 use reqwest;
 use tar::Archive;
@@ -67,7 +67,7 @@ impl Sysroot {
         let sha : &str = &commit.sha;
         let unpack_into = format!("rust-{}", sha);
 
-        let cargo_sha = if commit.date < UTC.ymd(2017, 3, 20).and_hms(0, 0, 0) {
+        let cargo_sha = if commit.date < Utc.ymd(2017, 3, 20).and_hms(0, 0, 0) {
             // Versions of rustc older than Mar 20 have bugs in
             // their cargo. Use a known-good cargo for older rustcs
             // instead.

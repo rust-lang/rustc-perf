@@ -35,7 +35,7 @@ use std::path::{Path, PathBuf};
 use std::io::{stdout, stderr, Write};
 use std::collections::HashMap;
 
-use chrono::{DateTime, UTC};
+use chrono::{DateTime, Utc};
 
 use rustc_perf_collector::{Commit, CommitData};
 
@@ -197,7 +197,7 @@ fn run() -> Result<i32> {
             let commit = sub_m.value_of("COMMIT").unwrap();
             let date = sub_m.value_of("DATE").unwrap();
             let rustc = sub_m.value_of("RUSTC").unwrap();
-            let commit = Commit { sha: commit.to_string(), date: DateTime::parse_from_rfc3339(date)?.with_timezone(&UTC) };
+            let commit = Commit { sha: commit.to_string(), date: DateTime::parse_from_rfc3339(date)?.with_timezone(&Utc) };
             let sysroot = Sysroot::from_local(&commit, rustc, "x86_64-unknown-linux-gnu", preserve_sysroots)?;
             let result = bench_commit(&commit, sysroot, &benchmarks)?;
             serde_json::to_writer(&mut stdout(), &result)?;

@@ -4,7 +4,7 @@ use std::str;
 
 use rustc_perf_collector::Commit;
 
-use chrono::{TimeZone, UTC};
+use chrono::{TimeZone, Utc};
 use reqwest;
 use reqwest::header::Authorization;
 use serde_json::{self, Value};
@@ -17,7 +17,7 @@ fn parse_commit(commit: Value) -> Commit {
     if let Value::Object(mut map) = commit {
         return Commit {
             sha: map.remove("sha").expect("sha to be present").as_str().unwrap().to_string(),
-            date: UTC.datetime_from_str(map.remove("commit")
+            date: Utc.datetime_from_str(map.remove("commit")
                 .and_then(|mut commit| commit.as_object_mut()
                 .and_then(|commit| commit.remove("committer")))
                 .and_then(|mut committer| committer.as_object_mut()
