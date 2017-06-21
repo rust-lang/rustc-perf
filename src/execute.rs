@@ -9,7 +9,7 @@ use tempdir::TempDir;
 use rustc_perf_collector::{Patch, Run};
 
 use errors::{Result, ResultExt};
-use sysroot::Sysroot;
+use rust_sysroot::sysroot::Sysroot;
 use time_passes::{PassAverager, process_output};
 
 pub struct Benchmark {

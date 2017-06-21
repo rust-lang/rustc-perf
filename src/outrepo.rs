@@ -2,25 +2,22 @@
 
 use errors::{Error, Result, ResultExt};
 
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File, OpenOptions, read_dir};
 use std::io::{Read, Write};
 use std::path::{PathBuf};
 use std::process::Command;
 use std::str;
 use std::time;
 use std::thread;
+use std::collections::HashSet;
 
 use serde_json;
-use rustc_perf_collector::{Commit, CommitData};
+use rustc_perf_collector::CommitData;
+use rust_sysroot::git::Commit as GitCommit;
 
 pub struct Repo {
     path: PathBuf,
     retries: Vec<String>
-}
-
-pub enum CommitKind {
-    Progress,
-    Retry
 }
 
 impl Repo {
@@ -39,9 +36,9 @@ impl Repo {
     pub fn open(path: PathBuf) -> Result<Self> {
         let mut result = Repo { path: path, retries: vec![] };
 
-        if !result.commit_file().exists() {
+        if !result.broken_commits_file().exists() {
             // try not to nuke random repositories.
-            bail!("`{:?}` file not present", result.commit_file().display());
+            bail!("`{:?}` file not present", result.broken_commits_file().display());
         }
 
         result.git(&["fetch"])?;
@@ -55,16 +52,14 @@ impl Repo {
         Ok(result)
     }
 
-    pub fn success(&self, data: &CommitData, kind: CommitKind) -> Result<()> {
+    pub fn success(&self, data: &CommitData) -> Result<()> {
         self.add_commit_data(data)?;
-        self.set_last_commit(&data.commit, kind)?;
         self.commit_and_push(&format!("{} - success", data.commit.sha))?;
         Ok(())
     }
 
-    pub fn failure(&self, commit: &Commit, err: &Error, kind: CommitKind) -> Result<()> {
+    pub fn failure(&self, commit: &GitCommit, err: &Error) -> Result<()> {
         self.add_broken_commit(commit, err)?;
-        self.set_last_commit(commit, kind)?;
         self.commit_and_push(&format!("{} - FAILURE", commit.sha))?;
 
         // sleep for a minute to avoid triggering rate-limits.
@@ -73,30 +68,28 @@ impl Repo {
         Ok(())
     }
 
-    pub fn get_last_commit(&self) -> Result<String> {
-        let mut commit_file = File::open(self.commit_file())
-            .chain_err(|| format!("expected {} to exist, and contain the last tested commit sha",
-                                  self.commit_file().display()))?;
-
-        let mut last_commit = String::new();
-        commit_file.read_to_string(&mut last_commit)?;
-        let last_commit = last_commit.trim();
-
-        if last_commit.is_empty() {
-            bail!("{} was empty", self.commit_file().display());
+    pub fn find_missing_commits<'a>(&self, commits: &'a [GitCommit]) -> Result<Vec<&'a GitCommit>> {
+        let mut have = HashSet::new();
+        let path = self.path.join("times");
+        for entry in read_dir(path)? {
+            let entry = entry?;
+            let filename = entry.file_name().to_string_lossy().to_string();
+            let sha = &filename[0..filename.find("-").unwrap()];
+            have.insert(sha.to_string());
         }
 
-        Ok(last_commit.to_owned())
+        Ok(commits.iter().filter(|c| {
+            !have.contains(&c.sha)
+        }).collect::<Vec<_>>())
     }
 
     fn commit_and_push(&self, message: &str) -> Result<()> {
         self.write_retries()?;
-        self.git(&["add", "last-commit-sha", "broken-commits-log", "retries", "times"])?;
+        self.git(&["add", "broken-commits-log", "retries", "times"])?;
         self.git(&["commit", "-m", message])?;
         self.git(&["push"])?;
         Ok(())
     }
-
 
     fn add_commit_data(&self, data: &CommitData) -> Result<()> {
         let commit = &data.commit;
@@ -108,15 +101,7 @@ impl Repo {
         Ok(())
     }
 
-    fn set_last_commit(&self, last_commit: &Commit, kind: CommitKind) -> Result<()> {
-        if let CommitKind::Progress = kind {
-            let mut commit_file = File::create(self.commit_file())?;
-            commit_file.write_all(last_commit.sha.as_bytes())?;
-        }
-        Ok(())
-    }
-
-    fn add_broken_commit(&self, commit: &Commit, err: &Error) -> Result<()> {
+    fn add_broken_commit(&self, commit: &GitCommit, err: &Error) -> Result<()> {
         // FIXME: make file machine-readable?
         let mut file = OpenOptions::new().append(true).create(true).open(
             self.broken_commits_file())?;
@@ -160,10 +145,6 @@ impl Repo {
         } else {
             Some(self.retries.remove(0))
         }
-    }
-
-    fn commit_file(&self) -> PathBuf {
-        self.path.join("last-commit-sha")
     }
 
     fn broken_commits_file(&self) -> PathBuf {
