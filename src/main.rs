@@ -63,6 +63,7 @@ fn bench_commit(
 
     Ok(CommitData {
         commit: commit.clone(),
+        triple: sysroot.triple.clone(),
         benchmarks: results?
     })
 }
@@ -100,11 +101,10 @@ fn get_benchmarks(benchmark_dir: &Path, filter: Option<&str>) -> Result<Vec<Benc
 
 fn process_commit(repo: &outrepo::Repo, commit: &Commit, benchmarks: &[Benchmark],
                   preserve_sysroot: bool, kind: CommitKind) -> Result<()> {
-    let triple = "x86_64-unknown-linux-gnu";
     let sysroot = Sysroot::install(commit, "x86_64-unknown-linux-gnu", preserve_sysroot)?;
     match bench_commit(commit, sysroot, benchmarks) {
         Ok(result) => {
-            repo.success(triple, &result, kind)
+            repo.success(&result, kind)
         }
         Err(error) => {
             info!("running {} failed: {:?}", commit.sha, error);

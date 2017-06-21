@@ -35,4 +35,5 @@ pub struct Commit {
 pub struct CommitData {
     pub commit: Commit,
     pub benchmarks: HashMap<String, Vec<Patch>>,
+    pub triple: String,
 }

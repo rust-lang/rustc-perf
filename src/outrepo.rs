@@ -24,31 +24,16 @@ pub enum CommitKind {
 }
 
 impl Repo {
-    fn git(&self) -> Command {
+    fn git(&self, args: &[&str]) -> Result<()> {
         let mut command = Command::new("git");
         command.current_dir(&self.path);
-        command
-    }
-
-    fn git_nooutput(&self, args: &[&str]) -> Result<()> {
-        let mut command = self.git();
         info!("git {:?}", args);
-        for arg in args {
-            command.arg(arg);
+        command.args(args);
+        let status = command.status().chain_err(|| format!("could not spawn git {:?}", args))?;
+        if !status.success() {
+            bail!("command `git {:?}` failed in `{}`", args, self.path.display());
         }
-        let output = command.output().chain_err(|| "could not spawn `git`")?;
-        if !output.status.success() {
-            bail!("command `git {:?}` failed at `{}`:\n{}",
-                  args,
-                  self.path.display(),
-                  String::from_utf8_lossy(&output.stderr));
-        }
-        info!("git {:?} returned ({:?}, {:?})",
-              args,
-              String::from_utf8_lossy(&output.stdout),
-              String::from_utf8_lossy(&output.stderr));
         Ok(())
-
     }
 
     pub fn open(path: PathBuf) -> Result<Self> {
@@ -59,8 +44,8 @@ impl Repo {
             bail!("`{:?}` file not present", result.commit_file().display());
         }
 
-        result.git_nooutput(&["fetch"])?;
-        result.git_nooutput(&["reset", "--hard", "@{upstream}"])?;
+        result.git(&["fetch"])?;
+        result.git(&["reset", "--hard", "@{upstream}"])?;
 
         fs::create_dir_all(result.times()).chain_err(|| "can't create `times/`")?;
         OpenOptions::new().append(true).create(true).open(result.broken_commits_file())
@@ -70,8 +55,8 @@ impl Repo {
         Ok(result)
     }
 
-    pub fn success(&self, triple: &str, data: &CommitData, kind: CommitKind) -> Result<()> {
-        self.add_commit_data(triple, data)?;
+    pub fn success(&self, data: &CommitData, kind: CommitKind) -> Result<()> {
+        self.add_commit_data(data)?;
         self.set_last_commit(&data.commit, kind)?;
         self.commit_and_push(&format!("{} - success", data.commit.sha))?;
         Ok(())
@@ -106,26 +91,17 @@ impl Repo {
 
     fn commit_and_push(&self, message: &str) -> Result<()> {
         self.write_retries()?;
-        self.git_nooutput(&[
-            "add",
-            "last-commit-sha",
-            "broken-commits-log",
-            "retries",
-            "times"])?;
-        self.git_nooutput(&[
-            "commit",
-            "-m",
-            message
-        ])?;
-        self.git_nooutput(&["push"])?;
+        self.git(&["add", "last-commit-sha", "broken-commits-log", "retries", "times"])?;
+        self.git(&["commit", "-m", message])?;
+        self.git(&["push"])?;
         Ok(())
     }
 
 
-    fn add_commit_data(&self, triple: &str, data: &CommitData) -> Result<()> {
+    fn add_commit_data(&self, data: &CommitData) -> Result<()> {
         let commit = &data.commit;
         let filepath = self.times()
-            .join(format!("{}-{}-{}.json", commit.date.to_rfc3339(), commit.sha, triple));
+            .join(format!("{}-{}-{}.json", commit.date.to_rfc3339(), commit.sha, data.triple));
         info!("creating file {}", filepath.display());
         let mut file = File::create(&filepath)?;
         serde_json::to_writer(&mut file, &data)?;
@@ -150,7 +126,7 @@ impl Repo {
 
     fn load_retries(&mut self) -> Result<()> {
         let mut retries = OpenOptions::new().read(true).write(true).create(true).open(self.retries_file())
-            .chain_err(|| "can't create `retries`")?;
+            .chain_err(|| format!("can't create `{}`", self.retries_file().display()))?;
         let mut retries_s = String::new();
         retries.read_to_string(&mut retries_s)?;
         self.retries = retries_s.split('\n')
