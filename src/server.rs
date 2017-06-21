@@ -451,9 +451,11 @@ impl Server {
             Ok(serde_json::to_value("Successfully updated from filesystem")?)
         });
 
+        let updating = self.updating.clone();
         response.map(|value| {
             Response::new().with_body(serde_json::to_string(&value).unwrap())
-        }).or_else(|err| {
+        }).or_else(move |err| {
+            updating.store(false, Ordering::Release);
             futures::future::ok(Response::new()
                 .with_body(format!("Internal Server Error: {:?}", err))
                 .with_status(StatusCode::InternalServerError)
