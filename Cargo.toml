@@ -3,10 +3,6 @@ authors = ["Mark Simulacrum <mark.simulacrum@gmail.com>"]
 name = "rustc-perf-collector"
 version = "0.1.0"
 
-[[bin]]
-name = "benchmark"
-path = "src/bin/benchmark.rs"
-
 [dependencies]
 env_logger = "0.4.0"
 error-chain = "0.10"
