@@ -1,4 +1,3 @@
-#![feature(iterator_step_by)]
 #![recursion_limit = "1024"]
 
 #[macro_use] extern crate clap;
@@ -136,9 +135,10 @@ fn process_commits(commits: &[GitCommit], repo: &outrepo::Repo, benchmarks: &[Be
 {
     if !commits.is_empty() {
         let to_process = repo.find_missing_commits(commits)?;
-        info!("processing sparse commits: {}", to_process.len());
-        let step = if to_process.len() > 5 { 30 } else { 1 };
-        for commit in to_process.iter().step_by(step) {
+        // take 3 from the end -- this means that for each bors commit (which takes ~3 hours) we
+        // test 3, which should allow us to eventually test all commits, but also keep up with the
+        // latest rustc
+        for commit in to_process.iter().rev().take(3) {
             process_commit(repo, &commit, &benchmarks, preserve_sysroot)?;
         }
     } else {

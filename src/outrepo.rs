@@ -74,7 +74,7 @@ impl Repo {
         for entry in read_dir(path)? {
             let entry = entry?;
             let filename = entry.file_name().to_string_lossy().to_string();
-            let sha = &filename[0..filename.find("-").unwrap()];
+            let sha = &filename[filename.find("00:00").unwrap() + 7..filename.find("-x86").unwrap()];
             have.insert(sha.to_string());
         }
 
