@@ -1,1 +1,1 @@
-web: ./target/release/rustc-perf data
+web: RUST_LOG=rustc_perf=debug ./target/release/rustc-perf data
