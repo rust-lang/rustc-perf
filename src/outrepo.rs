@@ -82,8 +82,7 @@ impl Repo {
         let missing = commits.iter().filter(|c| {
             !have.contains(&c.sha) || {
                 self.load_commit_data(c, triple).ok().map(|data| {
-                    benchmarks.iter()
-                        .all(|b| data.benchmarks.keys().find(|k| **k == b.name).is_some())
+                    benchmarks.iter().any(|b| data.benchmarks.keys().find(|k| **k == b.name).is_none())
                 }).unwrap_or(true)
             }
         }).collect::<Vec<_>>();
