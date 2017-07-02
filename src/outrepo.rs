@@ -1,14 +1,12 @@
 //! Write benchmark information to the output repository
 
-use errors::{Error, Result, ResultExt};
+use errors::{Result, ResultExt};
 
 use std::fs::{self, File, OpenOptions, read_dir};
 use std::io::{Read, Write, BufRead, BufReader};
 use std::path::{PathBuf};
 use std::process::Command;
 use std::str;
-use std::time;
-use std::thread;
 use std::collections::HashSet;
 
 use serde_json;
@@ -36,17 +34,15 @@ impl Repo {
     pub fn open(path: PathBuf) -> Result<Self> {
         let mut result = Repo { path: path, retries: vec![] };
 
-        if !result.broken_commits_file().exists() {
+        if !result.retries_file().exists() {
             // try not to nuke random repositories.
-            bail!("`{:?}` file not present", result.broken_commits_file().display());
+            bail!("`{}` file not present", result.retries_file().display());
         }
 
         result.git(&["fetch"])?;
         result.git(&["reset", "--hard", "@{upstream}"])?;
 
         fs::create_dir_all(result.times()).chain_err(|| "can't create `times/`")?;
-        OpenOptions::new().append(true).create(true).open(result.broken_commits_file())
-            .chain_err(|| "can't create `broken_commits`")?;
         result.load_retries()?;
 
         Ok(result)
@@ -58,19 +54,9 @@ impl Repo {
         Ok(())
     }
 
-    pub fn failure(&self, commit: &GitCommit, err: &Error) -> Result<()> {
-        self.add_broken_commit(commit, err)?;
-        self.commit_and_push(&format!("{} - FAILURE", commit.sha))?;
-
-        // sleep for a minute to avoid triggering rate-limits.
-        info!("timing commit failed - sleeping");
-        thread::sleep(time::Duration::from_secs(60));
-        Ok(())
-    }
-
     pub fn find_missing_commits<'a>(&self, commits: &'a [GitCommit]) -> Result<Vec<&'a GitCommit>> {
         let mut have = HashSet::new();
-        let path = self.path.join("times");
+        let path = self.times();
         for entry in read_dir(path)? {
             let entry = entry?;
             let filename = entry.file_name().to_string_lossy().to_string();
@@ -78,7 +64,8 @@ impl Repo {
             have.insert(sha.to_string());
         }
 
-        let file = OpenOptions::new().read(true).create(true).open(self.broken_commits_file())?;
+        let file = OpenOptions::new()
+            .write(true).read(true).create(true).open(self.broken_commits_file())?;
         let file = BufReader::new(file);
         for line in file.lines() {
             let line = line?;
@@ -95,7 +82,7 @@ impl Repo {
 
     fn commit_and_push(&self, message: &str) -> Result<()> {
         self.write_retries()?;
-        self.git(&["add", "broken-commits-log", "retries", "times"])?;
+        self.git(&["add", "retries", "times"])?;
         self.git(&["commit", "-m", message])?;
         self.git(&["push"])?;
         Ok(())
@@ -108,14 +95,6 @@ impl Repo {
         info!("creating file {}", filepath.display());
         let mut file = File::create(&filepath)?;
         serde_json::to_writer(&mut file, &data)?;
-        Ok(())
-    }
-
-    fn add_broken_commit(&self, commit: &GitCommit, err: &Error) -> Result<()> {
-        // FIXME: make file machine-readable?
-        let mut file = OpenOptions::new().append(true).create(true).open(
-            self.broken_commits_file())?;
-        writeln!(file, "{}: {:?}", commit.sha, err)?;
         Ok(())
     }
 
@@ -165,7 +144,7 @@ impl Repo {
         self.path.join("retries")
     }
 
-    fn times(&self) -> PathBuf {
+    pub fn times(&self) -> PathBuf {
         self.path.join("times")
     }
 }

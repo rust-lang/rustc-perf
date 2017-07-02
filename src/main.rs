@@ -57,21 +57,27 @@ fn bench_commit(
     commit: &GitCommit,
     sysroot: Sysroot,
     benchmarks: &[Benchmark]
-) -> Result<CommitData> {
+) -> CommitData {
     info!("benchmarking commit {} ({}) for triple {}", commit.sha, commit.date, sysroot.triple);
 
-    let results : Result<HashMap<_, _>> = benchmarks.iter().map(|benchmark| {
-        Ok((benchmark.name.clone(), benchmark.run(&sysroot)?))
+    let results: HashMap<_, _> = benchmarks.iter().map(|benchmark| {
+        let result = benchmark.run(&sysroot);
+
+        if result.is_err() {
+            info!("failure to benchmark {}, recorded: {:?}", benchmark.name, result);
+        }
+
+        (benchmark.name.clone(), result.map_err(|e| format!("{:?}", e)))
     }).collect();
 
-    Ok(CommitData {
+    CommitData {
         commit: Commit {
             sha: commit.sha.clone(),
             date: commit.date,
         },
         triple: sysroot.triple.clone(),
-        benchmarks: results?
-    })
+        benchmarks: results
+    }
 }
 
 fn get_benchmarks(benchmark_dir: &Path, filter: Option<&str>) -> Result<Vec<Benchmark>> {
@@ -107,15 +113,7 @@ fn get_benchmarks(benchmark_dir: &Path, filter: Option<&str>) -> Result<Vec<Benc
 
 fn process_commit(repo: &outrepo::Repo, commit: &GitCommit, benchmarks: &[Benchmark], preserve_sysroot: bool) -> Result<()> {
     let sysroot = Sysroot::install(commit, "x86_64-unknown-linux-gnu", preserve_sysroot, false)?;
-    match bench_commit(commit, sysroot, benchmarks) {
-        Ok(result) => {
-            repo.success(&result)
-        }
-        Err(error) => {
-            info!("running {} failed: {:?}", commit.sha, error);
-            repo.failure(commit, &error)
-        }
-    }
+    repo.success(&bench_commit(commit, sysroot, benchmarks))
 }
 
 
@@ -133,6 +131,7 @@ fn process_retries(commits: &[GitCommit], repo: &mut outrepo::Repo, benchmarks: 
 fn process_commits(commits: &[GitCommit], repo: &outrepo::Repo, benchmarks: &[Benchmark], preserve_sysroot: bool)
                    -> Result<()>
 {
+    println!("processing commits");
     if !commits.is_empty() {
         let to_process = repo.find_missing_commits(commits)?;
         // take 3 from the end -- this means that for each bors commit (which takes ~3 hours) we
@@ -192,7 +191,7 @@ fn run() -> Result<i32> {
             let commit = sub_m.value_of("COMMIT").unwrap();
             let commit = commits.iter().find(|c| c.sha == commit).unwrap();
             let sysroot = Sysroot::install(&commit, "x86_64-unknown-linux-gnu", preserve_sysroots, false)?;
-            let result = bench_commit(&commit, sysroot, &benchmarks)?;
+            let result = bench_commit(&commit, sysroot, &benchmarks);
             serde_json::to_writer(&mut stdout(), &result)?;
             Ok(0)
         }
@@ -202,7 +201,7 @@ fn run() -> Result<i32> {
             let rustc = sub_m.value_of("RUSTC").unwrap();
             let commit = GitCommit { sha: commit.to_string(), date: DateTime::parse_from_rfc3339(date)?.with_timezone(&Utc), summary: String::new() };
             let sysroot = Sysroot::with_local_rustc(&commit, rustc, "x86_64-unknown-linux-gnu", preserve_sysroots, false)?;
-            let result = bench_commit(&commit, sysroot, &benchmarks)?;
+            let result = bench_commit(&commit, sysroot, &benchmarks);
             serde_json::to_writer(&mut stdout(), &result)?;
             Ok(0)
         }

@@ -34,6 +34,7 @@ pub struct Commit {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CommitData {
     pub commit: Commit,
-    pub benchmarks: HashMap<String, Vec<Patch>>,
+    // String in Result is the output of the command that failed
+    pub benchmarks: HashMap<String, Result<Vec<Patch>, String>>,
     pub triple: String,
 }
