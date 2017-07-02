@@ -3,7 +3,7 @@
 use errors::{Error, Result, ResultExt};
 
 use std::fs::{self, File, OpenOptions, read_dir};
-use std::io::{Read, Write};
+use std::io::{Read, Write, BufRead, BufReader};
 use std::path::{PathBuf};
 use std::process::Command;
 use std::str;
@@ -74,13 +74,23 @@ impl Repo {
         for entry in read_dir(path)? {
             let entry = entry?;
             let filename = entry.file_name().to_string_lossy().to_string();
-            let sha = &filename[filename.find("00:00").unwrap() + 7..filename.find("-x86").unwrap()];
+            let sha = &filename[filename.find("00:00").unwrap() + 6..filename.find("-x86").unwrap()];
             have.insert(sha.to_string());
         }
 
-        Ok(commits.iter().filter(|c| {
+        let file = OpenOptions::new().read(true).create(true).open(self.broken_commits_file())?;
+        let file = BufReader::new(file);
+        for line in file.lines() {
+            let line = line?;
+            let sha = &line[..line.find(":").unwrap()];
+            have.insert(sha.to_string());
+        }
+
+        let missing = commits.iter().filter(|c| {
             !have.contains(&c.sha)
-        }).collect::<Vec<_>>())
+        }).collect::<Vec<_>>();
+
+        Ok(missing)
     }
 
     fn commit_and_push(&self, message: &str) -> Result<()> {
