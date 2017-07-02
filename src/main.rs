@@ -142,7 +142,7 @@ fn process_commits(commits: &[GitCommit], repo: &outrepo::Repo, benchmarks: &[Be
 {
     println!("processing commits");
     if !commits.is_empty() {
-        let to_process = repo.find_missing_commits(commits)?;
+        let to_process = repo.find_missing_commits(commits, benchmarks, "x86_64-unknown-linux-gnu")?;
         // take 3 from the end -- this means that for each bors commit (which takes ~3 hours) we
         // test 3, which should allow us to eventually test all commits, but also keep up with the
         // latest rustc

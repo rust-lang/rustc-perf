@@ -59,6 +59,7 @@ impl Repo {
         &self,
         commits: &'a [GitCommit],
         benchmarks: &[Benchmark],
+        triple: &str,
     ) -> Result<Vec<&'a GitCommit>> {
         let mut have = HashSet::new();
         let path = self.times();
@@ -80,9 +81,9 @@ impl Repo {
 
         let missing = commits.iter().filter(|c| {
             !have.contains(&c.sha) || {
-                self.load_commit_data(c).ok().map(|data| {
+                self.load_commit_data(c, triple).ok().map(|data| {
                     benchmarks.iter()
-                        .all(|b| data.benchmarks.keys().find(|k| k == b.name).is_some())
+                        .all(|b| data.benchmarks.keys().find(|k| **k == b.name).is_some())
                 }).unwrap_or(true)
             }
         }).collect::<Vec<_>>();
