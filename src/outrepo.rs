@@ -12,6 +12,7 @@ use std::collections::HashSet;
 use serde_json;
 use rustc_perf_collector::CommitData;
 use rust_sysroot::git::Commit as GitCommit;
+use execute::Benchmark;
 
 pub struct Repo {
     path: PathBuf,
@@ -54,7 +55,11 @@ impl Repo {
         Ok(())
     }
 
-    pub fn find_missing_commits<'a>(&self, commits: &'a [GitCommit]) -> Result<Vec<&'a GitCommit>> {
+    pub fn find_missing_commits<'a>(
+        &self,
+        commits: &'a [GitCommit],
+        benchmarks: &[Benchmark],
+    ) -> Result<Vec<&'a GitCommit>> {
         let mut have = HashSet::new();
         let path = self.times();
         for entry in read_dir(path)? {
@@ -74,7 +79,12 @@ impl Repo {
         }
 
         let missing = commits.iter().filter(|c| {
-            !have.contains(&c.sha)
+            !have.contains(&c.sha) || {
+                self.load_commit_data(c).ok().map(|data| {
+                    benchmarks.iter()
+                        .all(|b| data.benchmarks.keys().find(|k| k == b.name).is_some())
+                }).unwrap_or(true)
+            }
         }).collect::<Vec<_>>();
 
         Ok(missing)
@@ -86,6 +96,17 @@ impl Repo {
         self.git(&["commit", "-m", message])?;
         self.git(&["push"])?;
         Ok(())
+    }
+
+    pub fn load_commit_data(&self, commit: &GitCommit, triple: &str) -> Result<CommitData> {
+        let filepath = self.times()
+            .join(format!("{}-{}-{}.json", commit.date.to_rfc3339(), commit.sha, triple));
+        info!("loading file {}", filepath.display());
+        let mut file = File::open(&filepath)?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+        let data = serde_json::from_str(&contents)?;
+        Ok(data)
     }
 
     fn add_commit_data(&self, data: &CommitData) -> Result<()> {

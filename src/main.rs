@@ -55,12 +55,21 @@ use execute::Benchmark;
 
 fn bench_commit(
     commit: &GitCommit,
+    repo: Option<&outrepo::Repo>,
     sysroot: Sysroot,
     benchmarks: &[Benchmark]
 ) -> CommitData {
     info!("benchmarking commit {} ({}) for triple {}", commit.sha, commit.date, sysroot.triple);
 
+    let existing_data = repo.and_then(|r| r.load_commit_data(&commit, &sysroot.triple).ok());
+
     let results: HashMap<_, _> = benchmarks.iter().map(|benchmark| {
+        if let Some(ref data) = existing_data {
+            if let Some(result) = data.benchmarks.get(&benchmark.name) {
+                return (benchmark.name.clone(), result.clone());
+            }
+        }
+
         let result = benchmark.run(&sysroot);
 
         if result.is_err() {
@@ -113,7 +122,7 @@ fn get_benchmarks(benchmark_dir: &Path, filter: Option<&str>) -> Result<Vec<Benc
 
 fn process_commit(repo: &outrepo::Repo, commit: &GitCommit, benchmarks: &[Benchmark], preserve_sysroot: bool) -> Result<()> {
     let sysroot = Sysroot::install(commit, "x86_64-unknown-linux-gnu", preserve_sysroot, false)?;
-    repo.success(&bench_commit(commit, sysroot, benchmarks))
+    repo.success(&bench_commit(commit, Some(repo), sysroot, benchmarks))
 }
 
 
@@ -191,7 +200,7 @@ fn run() -> Result<i32> {
             let commit = sub_m.value_of("COMMIT").unwrap();
             let commit = commits.iter().find(|c| c.sha == commit).unwrap();
             let sysroot = Sysroot::install(&commit, "x86_64-unknown-linux-gnu", preserve_sysroots, false)?;
-            let result = bench_commit(&commit, sysroot, &benchmarks);
+            let result = bench_commit(&commit, None, sysroot, &benchmarks);
             serde_json::to_writer(&mut stdout(), &result)?;
             Ok(0)
         }
@@ -201,7 +210,7 @@ fn run() -> Result<i32> {
             let rustc = sub_m.value_of("RUSTC").unwrap();
             let commit = GitCommit { sha: commit.to_string(), date: DateTime::parse_from_rfc3339(date)?.with_timezone(&Utc), summary: String::new() };
             let sysroot = Sysroot::with_local_rustc(&commit, rustc, "x86_64-unknown-linux-gnu", preserve_sysroots, false)?;
-            let result = bench_commit(&commit, sysroot, &benchmarks);
+            let result = bench_commit(&commit, None, sysroot, &benchmarks);
             serde_json::to_writer(&mut stdout(), &result)?;
             Ok(0)
         }
