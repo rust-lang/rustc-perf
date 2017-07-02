@@ -55,7 +55,7 @@ pub struct Commit {
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct CommitData {
     pub commit: Commit,
-    pub benchmarks: HashMap<String, Vec<Patch>>,
+    pub benchmarks: HashMap<String, ::std::result::Result<Vec<Patch>, String>>,
 }
 
 impl PartialOrd for Commit {
@@ -72,7 +72,17 @@ impl Ord for Commit {
 
 impl CommitData {
     pub fn patches<'a>(&'a self) -> impl Iterator<Item=&'a Patch> + 'a {
-        self.benchmarks.values().flat_map(|patches| patches)
+        self.benchmarks.values().filter(|v| v.is_ok()).flat_map(|patches| patches.as_ref().unwrap())
+    }
+
+    pub fn patches_for<'a>(&'a self, bench: &str) -> &'a [Patch] {
+        self.benchmarks[bench].as_ref().map(|v| &v[..]).unwrap_or(&[])
+    }
+
+    pub fn benchmarks<'a>(&'a self) -> impl Iterator<Item=(&'a str, &'a [Patch])> + 'a {
+        self.benchmarks.iter().filter(|&(_, v)| v.is_ok()).map(|(k, v)| {
+            (k.as_str(), v.as_ref().map(|v| &v[..]).unwrap())
+        })
     }
 }
 
@@ -181,7 +191,7 @@ impl InputData {
                 last_date = Some(run.commit.date);
             }
 
-            for patch in run.benchmarks.values().flat_map(|x| x) {
+            for patch in run.patches() {
                 crate_list.insert(patch.full_name());
                 for pass in &patch.run().passes {
                     phase_list.insert(pass.name.clone());
@@ -265,7 +275,7 @@ impl Summary {
 
     fn compare_points(a: &CommitData, b: &CommitData) -> Comparison {
         let mut by_crate = BTreeMap::new();
-        for (crate_name, patches) in &a.benchmarks {
+        for (crate_name, patches) in a.benchmarks() {
             if !b.benchmarks.contains_key(crate_name) {
                 warn!("Comparing {} with {}: a contained {}, but b did not.",
                     a.commit.sha, b.commit.sha, crate_name);
@@ -273,7 +283,7 @@ impl Summary {
             }
 
             let a_patches = patches;
-            let b_patches = &b.benchmarks[crate_name];
+            let b_patches = b.patches_for(crate_name);
             assert_eq!(a_patches.len(), b_patches.len());
 
             for (a_patch, b_patch) in a_patches.iter().zip(b_patches) {
