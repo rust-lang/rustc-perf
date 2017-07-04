@@ -71,17 +71,9 @@ impl Ord for Commit {
 }
 
 impl CommitData {
-    pub fn patches<'a>(&'a self) -> impl Iterator<Item=&'a Patch> + 'a {
-        self.benchmarks.values().filter(|v| v.is_ok()).flat_map(|patches| patches.as_ref().unwrap())
-    }
-
-    pub fn patches_for<'a>(&'a self, bench: &str) -> &'a [Patch] {
-        self.benchmarks[bench].as_ref().map(|v| &v[..]).unwrap_or(&[])
-    }
-
-    pub fn benchmarks<'a>(&'a self) -> impl Iterator<Item=(&'a str, &'a [Patch])> + 'a {
-        self.benchmarks.iter().filter(|&(_, v)| v.is_ok()).map(|(k, v)| {
-            (k.as_str(), v.as_ref().map(|v| &v[..]).unwrap())
+    pub fn benchmarks<'a>(&'a self) -> impl Iterator<Item=Option<(&'a str, &'a [Patch])>> + 'a {
+        self.benchmarks.iter().map(|(k, v)| {
+            v.as_ref().map(|v| (k.as_str(), &v[..])).ok()
         })
     }
 }
@@ -191,7 +183,8 @@ impl InputData {
                 last_date = Some(run.commit.date);
             }
 
-            for patch in run.patches() {
+            for patch in run.benchmarks.values()
+                .filter(|v| v.is_ok()).flat_map(|v| v.as_ref().unwrap()) {
                 crate_list.insert(patch.full_name());
                 for pass in &patch.run().passes {
                     phase_list.insert(pass.name.clone());
@@ -275,7 +268,9 @@ impl Summary {
 
     fn compare_points(a: &CommitData, b: &CommitData) -> Comparison {
         let mut by_crate = BTreeMap::new();
-        for (crate_name, patches) in a.benchmarks() {
+        for a_benchmark in a.benchmarks() {
+            if a_benchmark.is_none() { continue; }
+            let (crate_name, patches) = a_benchmark.unwrap();
             if !b.benchmarks.contains_key(crate_name) {
                 warn!("Comparing {} with {}: a contained {}, but b did not.",
                     a.commit.sha, b.commit.sha, crate_name);
@@ -283,17 +278,20 @@ impl Summary {
             }
 
             let a_patches = patches;
-            let b_patches = b.patches_for(crate_name);
-            assert_eq!(a_patches.len(), b_patches.len());
+            let b_patches = b.benchmarks[crate_name].as_ref().map(|v| &v[..]).ok();
+            if b_patches.is_none() { continue; }
+            let b_patches = b_patches.unwrap();
 
-            for (a_patch, b_patch) in a_patches.iter().zip(b_patches) {
+            for a_patch in a_patches {
                 let a_run = a_patch.run();
-                let b_run = b_patch.run();
-                assert_eq!(a_run.name, b_run.name);
+                let b_patch = b_patches.iter().find(|p| p.run().name == a_run.name);
+                if b_patch.is_none() { continue; }
+                let b_run = b_patch.unwrap().run();
 
                 for a_pass in &a_run.passes {
                     let a_t = a_pass.time;
                     let b_t = b_run.get_pass(&a_pass.name).map(|p| p.time).unwrap_or(0.0);
+                    println!("{}: {}: {} - {}: {}", a_run.name, a_pass.name, b_t, a_t, b_t - a_t);
                     by_crate.entry(a_run.name.clone())
                         .or_insert_with(BTreeMap::new)
                         .insert(a_pass.name.clone(), b_t - a_t);

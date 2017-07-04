@@ -58,7 +58,8 @@ impl DateData {
         phases: &BTreeSet<String>,
         group_by: GroupBy
     ) -> DateData {
-        let crates = day.patches()
+        let crates = day.benchmarks.values().filter(|v| v.is_ok())
+            .flat_map(|patches| patches.as_ref().unwrap())
             .filter(|patch| crates.contains(&patch.full_name()))
             .collect::<Vec<_>>();
 
@@ -215,7 +216,9 @@ pub fn handle_tabular(body: tabular::Request, data: &InputData) -> tabular::Resp
     let day = util::get_commit_data_from_end(data, body.date.as_date(data.last_date));
 
     let mut by_crate = HashMap::new();
-    for patch in day.patches() {
+    let patches = day.benchmarks.values().filter(|v| v.is_ok())
+        .flat_map(|patches| patches.as_ref().unwrap());
+    for patch in patches {
         let mut by_phase = by_crate.entry(patch.full_name()).or_insert_with(HashMap::new);
         for phase in &patch.run().passes {
             by_phase.insert(phase.name.clone(), Recording { time: phase.time, rss: phase.mem });
