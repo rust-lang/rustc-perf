@@ -11,7 +11,7 @@ all@010-incr:
 	    $(CARGO) rustc -p syntex_syntax $(CARGO_OPTS) -- \
 	    $(CARGO_RUSTC_OPTS) -Z incremental-info
 all@020-clean:
-	find . -name '*.rs' | xargs touch
+	rm -rf target/debug/deps/libsyntex*
 	RUSTFLAGS="-Z incremental=incr" \
 	    $(CARGO) rustc -p syntex_syntax $(CARGO_OPTS) -- \
 	    $(CARGO_RUSTC_OPTS) -Z incremental-info
