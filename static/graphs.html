@@ -28,6 +28,9 @@
             end date: <input placeholder="yyyy-mm-dd" id="end-date"></input><br>
             <input type="radio" name="graphType" id="type-rss"> rss
             <input type="radio" name="graphType" id="type-time" checked> time
+            <br/>
+            <input type="radio" name="yaxis" id="y-pct"> %-change
+            <input type="radio" name="yaxis" id="y-abs" checked> absolute
         <div class="submit">
             <a href="#" onClick="make_graph({}, true); return false;">Submit</a>
         </div>
@@ -42,15 +45,30 @@
     <script>
     var chart;
 
-    function init_graph(data, series, field, total_label, yAxisLabel) {
+    function init_graph(data, series, field, total_label, yAxisLabel, yAxisKind) {
         if (!total_label) {
             total_label = "total";
         }
+        var pct = yAxisKind == "pct";
 
         var values = [];
 
         for (var i = 0; i < series.length; i++) {
             values.push([]);
+        }
+
+        var firsts = [];
+        for (var i = 0; i < series.length; i++) {
+            var first = null;
+            for (var x = data.length - 1; x >= 0; x--) {
+                let datum = data[x];
+                if (series[i] in datum.data) {
+                    if (field in datum.data[series[i]]) {
+                        first = datum.data[series[i]][field];
+                    }
+                }
+            }
+            firsts.push(first);
         }
 
         for (var x = 0; x < data.length; x++) {
@@ -72,6 +90,9 @@
                 if (series[i] in datum.data) {
                     if (field in datum.data[series[i]]) {
                         value.y = datum.data[series[i]][field];
+                        if (pct) {
+                          value.y /= firsts[i];
+                        }
                     }
                 }
                 value.name = date.toLocaleString();
@@ -154,6 +175,7 @@
         let phases = state.phases || gatherChecks("check-phase");
         let group_by = state.group_by || get_group_by();
         let type = state.type || (document.getElementById("type-rss").checked ? "rss" : "time");
+        let yaxis = state.yaxis || (document.getElementById("y-pct").checked ?  "pct" : "abs");
 
         document.getElementById("type-rss").checked = false;
         document.getElementById("type-time").checked = false;
@@ -161,6 +183,13 @@
             document.getElementById("type-rss").checked = true;
         } else {
             document.getElementById("type-time").checked = true;
+        }
+        document.getElementById("y-pct").checked = false;
+        document.getElementById("y-abs").checked = false;
+        if (yaxis == "pct") {
+            document.getElementById("y-pct").checked = true;
+        } else {
+            document.getElementById("y-abs").checked = true;
         }
 
         set_check_boxes(crates, phases, group_by);
@@ -185,9 +214,22 @@
                 set_date("start-date", start_date);
                 set_date("end-date", end_date);
 
-                init_graph(data.data, series,
-                    ...(type == "rss" ?
-                    ["rss", "maximum", "Megabytes"] : ["time", "total", "Seconds"]));
+                let args = [];
+                if (yaxis == "pct") {
+                    if (type == "rss") {
+                        args = ["rss", "maximum", "% difference", "pct"];
+                    } else {
+                        args = ["time", "total", "% difference", "pct"];
+                    }
+                } else {
+                    if (type == "rss") {
+                        args = ["rss", "maximum", "Megabytes", "abs"];
+                    } else {
+                        args = ["time", "total", "Seconds", "abs"];
+                    }
+                }
+
+                init_graph(data.data, series, ...args);
 
                 if (push_state) {
                     push_state_to_history({
@@ -197,6 +239,7 @@
                         phases: phases,
                         group_by: group_by,
                         type: type,
+                        yaxis: yaxis,
                     });
                 }
             });
