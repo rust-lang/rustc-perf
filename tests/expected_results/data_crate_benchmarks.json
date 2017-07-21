@@ -1,64 +1,22 @@
 {
   "data": [
     {
-      "date": "2017-03-19T17:44:02+00:00",
-      "commit": "38c53f3c2d31e73404545114f0ef42d5711c6403",
+      "date": "2017-04-15T14:42:22+00:00",
+      "commit": "ae23e65eb8f207d0c9be82e7f2043d98a32d4f57",
       "data": {
-        "regex.0.1.30": {
-          "time": 0.0,
-          "rss": 0
-        },
-        "helloworld": {
-          "time": 0.0,
-          "rss": 0
-        }
-      }
-    },
-    {
-      "date": "2017-03-19T21:02:53+00:00",
-      "commit": "6eb9960d3603aadab62b8f0877e87c63f67001d6",
-      "data": {
-        "regex.0.1.30": {
-          "time": 0.0,
-          "rss": 0
-        },
         "helloworld": {
-          "time": 0.0,
-          "rss": 0
-        }
-      }
-    },
-    {
-      "date": "2017-03-20T05:36:36+00:00",
-      "commit": "6738cd4d473668f7af381826d634e573d15e1f11",
-      "data": {
-        "regex.0.1.30": {
           "time": 0.0,
           "rss": 0
         },
-        "helloworld": {
-          "time": 0.0,
-          "rss": 0
-        }
-      }
-    },
-    {
-      "date": "2017-03-20T08:31:16+00:00",
-      "commit": "244f893ed704a60841d4615445d540a21a8d7722",
-      "data": {
         "regex.0.1.30": {
-          "time": 0.0,
-          "rss": 0
-        },
-        "helloworld": {
           "time": 0.0,
           "rss": 0
         }
       }
     },
     {
-      "date": "2017-03-20T15:58:10+00:00",
-      "commit": "134c4a0f08a3d1f55ea8968fbe728fa935c71698",
+      "date": "2017-04-15T17:17:17+00:00",
+      "commit": "516ca2598c8c3e709777b90f48fa28a4a56580ad",
       "data": {
         "helloworld": {
           "time": 0.0,
@@ -71,8 +29,8 @@
       }
     },
     {
-      "date": "2017-03-21T14:35:18+00:00",
-      "commit": "53eb08bedc8719844bb553dbe1a39d9010783ff5",
+      "date": "2017-04-15T19:44:17+00:00",
+      "commit": "d5cf1cb64cd1948a8c289e29838716f03d49d5aa",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
@@ -85,8 +43,8 @@
       }
     },
     {
-      "date": "2017-03-21T17:02:38+00:00",
-      "commit": "58c701f5c7dc26d9b55c631006ece52abe1ddce2",
+      "date": "2017-04-15T22:15:53+00:00",
+      "commit": "13fd5e93deb41045c4de88c257d2b02ada2b1730",
       "data": {
         "helloworld": {
           "time": 0.0,
@@ -99,134 +57,50 @@
       }
     },
     {
-      "date": "2017-03-21T19:50:17+00:00",
-      "commit": "cab4bff3de1a61472f3c2e7752ef54b87344d1c9",
+      "date": "2017-04-16T13:44:22+00:00",
+      "commit": "fef1026bae4a0cc59c4bd204021eea4e1a976b4f",
       "data": {
-        "helloworld": {
-          "time": 0.0,
-          "rss": 0
-        },
         "regex.0.1.30": {
-          "time": 0.0,
-          "rss": 0
-        }
-      }
-    },
-    {
-      "date": "2017-03-21T23:11:56+00:00",
-      "commit": "50c4e3e8d01020c83255c48d2fdbc58ea5ab34c9",
-      "data": {
-        "helloworld": {
           "time": 0.0,
           "rss": 0
         },
-        "regex.0.1.30": {
-          "time": 0.0,
-          "rss": 0
-        }
-      }
-    },
-    {
-      "date": "2017-03-22T02:00:16+00:00",
-      "commit": "8c4f2c64c6759a82f143e23964a46a65c67509c9",
-      "data": {
         "helloworld": {
-          "time": 0.0,
-          "rss": 0
-        },
-        "regex.0.1.30": {
           "time": 0.0,
           "rss": 0
         }
       }
     },
     {
-      "date": "2017-03-22T23:31:08+00:00",
-      "commit": "c62e532f3de4c0254b772c36fe629b2042efd107",
+      "date": "2017-04-16T16:47:18+00:00",
+      "commit": "9af79f52d0ab43e318bdf3aa73d939c4482cc946",
       "data": {
-        "helloworld": {
-          "time": 0.0,
-          "rss": 0
-        },
         "regex.0.1.30": {
-          "time": 0.0,
-          "rss": 0
-        }
-      }
-    },
-    {
-      "date": "2017-03-23T03:53:06+00:00",
-      "commit": "7c7753d370ee186219bf369cb0910a20198ea79e",
-      "data": {
-        "helloworld": {
           "time": 0.0,
           "rss": 0
         },
-        "regex.0.1.30": {
-          "time": 0.0,
-          "rss": 0
-        }
-      }
-    },
-    {
-      "date": "2017-03-23T06:48:23+00:00",
-      "commit": "c6df67afca788453a3c494899fbf5295992bcfba",
-      "data": {
         "helloworld": {
-          "time": 0.0,
-          "rss": 0
-        },
-        "regex.0.1.30": {
           "time": 0.0,
           "rss": 0
         }
       }
     },
     {
-      "date": "2017-03-23T09:18:11+00:00",
-      "commit": "90346eae18e83887517e096c17678a74838ff995",
+      "date": "2017-04-16T19:13:52+00:00",
+      "commit": "7627e3d31dd641ae9042675e9032857f58d0c5d1",
       "data": {
         "regex.0.1.30": {
-          "time": 0.0,
-          "rss": 0
-        },
-        "helloworld": {
           "time": 0.0,
           "rss": 0
-        }
-      }
-    },
-    {
-      "date": "2017-03-23T12:03:39+00:00",
-      "commit": "8dfc25e05e995c92a6093718198cca4bc2c85b63",
-      "data": {
-        "helloworld": {
-          "time": 0.0,
-          "rss": 0
         },
-        "regex.0.1.30": {
-          "time": 0.0,
-          "rss": 0
-        }
-      }
-    },
-    {
-      "date": "2017-03-23T14:26:13+00:00",
-      "commit": "d5580374d7eb8795a8188be4650bd5079a25c6b3",
-      "data": {
         "helloworld": {
           "time": 0.0,
           "rss": 0
-        },
-        "regex.0.1.30": {
-          "time": 0.0,
-          "rss": 0
         }
       }
     },
     {
-      "date": "2017-03-23T18:43:40+00:00",
-      "commit": "e703b33e3e03d1078c8825e1f64ecfb45884f5cb",
+      "date": "2017-04-16T22:24:36+00:00",
+      "commit": "5997806a6a4f1e57491bd9f24c7ac07619bf38d2",
       "data": {
         "helloworld": {
           "time": 0.0,
@@ -239,8 +113,8 @@
       }
     },
     {
-      "date": "2017-03-24T10:11:05+00:00",
-      "commit": "366386c46dbe660947de21dfd04eace5486e2f00",
+      "date": "2017-04-17T15:10:23+00:00",
+      "commit": "011f240b898899644039bae4933ee8bd03efd609",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
@@ -253,8 +127,8 @@
       }
     },
     {
-      "date": "2017-03-24T15:42:15+00:00",
-      "commit": "f2036c7be4e783f459d1f9a712c5a7b3ef6679bd",
+      "date": "2017-04-17T17:56:29+00:00",
+      "commit": "5516bcc4588ea6192298b4e3682eb1d09581912a",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
@@ -267,8 +141,8 @@
       }
     },
     {
-      "date": "2017-03-24T18:40:57+00:00",
-      "commit": "8cf8fc9d8973a4d523c01dcba2ef991e0f2393d7",
+      "date": "2017-04-17T22:22:56+00:00",
+      "commit": "235fe8313fd0ffec665f1400da781ab2cb1e13f9",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
@@ -281,8 +155,8 @@
       }
     },
     {
-      "date": "2017-03-24T21:09:34+00:00",
-      "commit": "3da40237e542e7859adab48049ec15cf18154817",
+      "date": "2017-04-18T01:18:14+00:00",
+      "commit": "6b2aaaf6687c7435e4f7ec44a4ff198d788cc200",
       "data": {
         "helloworld": {
           "time": 0.0,
@@ -295,36 +169,22 @@
       }
     },
     {
-      "date": "2017-03-24T23:46:45+00:00",
-      "commit": "49c67bd632e961a57863805e5d0a400f97da9b93",
+      "date": "2017-04-18T04:15:13+00:00",
+      "commit": "e621e1c73f1487b4450446eafe6ccad3a99e3cd8",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
           "rss": 0
         },
-        "helloworld": {
-          "time": 0.0,
-          "rss": 0
-        }
-      }
-    },
-    {
-      "date": "2017-03-25T22:33:29+00:00",
-      "commit": "0e4b4eb6ab632a1d0ad32f5260235b39f88b6866",
-      "data": {
         "helloworld": {
-          "time": 0.0,
-          "rss": 0
-        },
-        "regex.0.1.30": {
           "time": 0.0,
           "rss": 0
         }
       }
     },
     {
-      "date": "2017-03-26T01:33:39+00:00",
-      "commit": "0f5ddb953aafa8c63098dc1a32d3fdebaad82a5b",
+      "date": "2017-04-18T11:23:44+00:00",
+      "commit": "c398efc53f09f6e1a8cba4ec2259ffb9d89f0542",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
@@ -337,50 +197,22 @@
       }
     },
     {
-      "date": "2017-03-26T04:26:22+00:00",
-      "commit": "7dd4e2db785c8ec360a989f69891b1e97dd4d369",
+      "date": "2017-04-18T18:20:04+00:00",
+      "commit": "9f2abadca2d065bf81772cb84981d0a22d8e98b3",
       "data": {
-        "helloworld": {
-          "time": 0.0,
-          "rss": 0
-        },
         "regex.0.1.30": {
-          "time": 0.0,
-          "rss": 0
-        }
-      }
-    },
-    {
-      "date": "2017-03-26T11:45:13+00:00",
-      "commit": "bcfd5c48b7ec96cc28bef2cc5e29b4ae0ce6c3ac",
-      "data": {
-        "helloworld": {
           "time": 0.0,
           "rss": 0
         },
-        "regex.0.1.30": {
-          "time": 0.0,
-          "rss": 0
-        }
-      }
-    },
-    {
-      "date": "2017-03-26T14:04:25+00:00",
-      "commit": "7846dbe0c8de17f59cdfc3d2b914d58faad7eade",
-      "data": {
         "helloworld": {
-          "time": 0.0,
-          "rss": 0
-        },
-        "regex.0.1.30": {
           "time": 0.0,
           "rss": 0
         }
       }
     },
     {
-      "date": "2017-03-27T05:28:32+00:00",
-      "commit": "ccce2c6eb914a66571f60fa0afe8a46faa9fb3bd",
+      "date": "2017-04-19T01:27:08+00:00",
+      "commit": "84be2df0e9dac63a4e730c4f5652deb872060ad8",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
@@ -393,22 +225,22 @@
       }
     },
     {
-      "date": "2017-03-28T21:10:07+00:00",
-      "commit": "07a34293faeb10757944ce2fa9d552cc2b189583",
+      "date": "2017-04-19T05:54:23+00:00",
+      "commit": "5f22d46e4bea4b5a335c671c61c96f00a5b3f554",
       "data": {
-        "helloworld": {
+        "regex.0.1.30": {
           "time": 0.0,
           "rss": 0
         },
-        "regex.0.1.30": {
+        "helloworld": {
           "time": 0.0,
           "rss": 0
         }
       }
     },
     {
-      "date": "2017-03-29T01:18:13+00:00",
-      "commit": "10b1739588f8b7ecde7761fdcb08bd79ac77b119",
+      "date": "2017-04-19T08:40:27+00:00",
+      "commit": "467aaab50ef0c7284121d59d8f7af3184836e586",
       "data": {
         "helloworld": {
           "time": 0.0,
@@ -421,8 +253,8 @@
       }
     },
     {
-      "date": "2017-03-29T03:54:09+00:00",
-      "commit": "4465f22ef6498db65059a41595d354a7af56cbea",
+      "date": "2017-04-19T11:07:08+00:00",
+      "commit": "452bf0852e1d47f7478d8b81328c15b183c6d971",
       "data": {
         "helloworld": {
           "time": 0.0,
@@ -435,50 +267,22 @@
       }
     },
     {
-      "date": "2017-03-29T07:06:13+00:00",
-      "commit": "abf5592510156e08b4de3830afaabbc0b65ce054",
+      "date": "2017-04-20T01:56:59+00:00",
+      "commit": "1bb1530239c801bb46b705eb2874ac4e5b213e54",
       "data": {
-        "regex.0.1.30": {
-          "time": 0.0,
-          "rss": 0
-        },
         "helloworld": {
-          "time": 0.0,
-          "rss": 0
-        }
-      }
-    },
-    {
-      "date": "2017-03-29T11:55:41+00:00",
-      "commit": "cf69238b82661f5fcb6488e31ef27977f5d2cb81",
-      "data": {
-        "regex.0.1.30": {
           "time": 0.0,
           "rss": 0
         },
-        "helloworld": {
-          "time": 0.0,
-          "rss": 0
-        }
-      }
-    },
-    {
-      "date": "2017-03-29T15:38:11+00:00",
-      "commit": "e1cec5d4bf626f151a779323e16d62fe60117086",
-      "data": {
         "regex.0.1.30": {
-          "time": 0.0,
-          "rss": 0
-        },
-        "helloworld": {
           "time": 0.0,
           "rss": 0
         }
       }
     },
     {
-      "date": "2017-03-29T21:08:17+00:00",
-      "commit": "c82f1325cfb5f3fd5028225f692cb134517016f1",
+      "date": "2017-04-20T06:28:16+00:00",
+      "commit": "fa6b50fc6282a2c64814b35b16464a22f4ae9265",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
@@ -491,8 +295,8 @@
       }
     },
     {
-      "date": "2017-03-30T02:11:55+00:00",
-      "commit": "6afa0d42ff55591fdcbd2dc7da54970538ab3f3e",
+      "date": "2017-04-20T13:08:07+00:00",
+      "commit": "968ae7babecfc6c62ef9699ff052d9ab00411848",
       "data": {
         "helloworld": {
           "time": 0.0,
@@ -505,36 +309,22 @@
       }
     },
     {
-      "date": "2017-03-30T06:48:52+00:00",
-      "commit": "fe151194e9a919ab23c2bb356767a5cbfa3811e7",
+      "date": "2017-04-20T17:33:58+00:00",
+      "commit": "ddc5d7bd4b9ea3e8a8ccf82cb443e950be311d61",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
           "rss": 0
         },
-        "helloworld": {
-          "time": 0.0,
-          "rss": 0
-        }
-      }
-    },
-    {
-      "date": "2017-03-30T14:20:20+00:00",
-      "commit": "7ae95e548929f4924905b2e8f87f2dd57d8bc887",
-      "data": {
         "helloworld": {
-          "time": 0.0,
-          "rss": 0
-        },
-        "regex.0.1.30": {
           "time": 0.0,
           "rss": 0
         }
       }
     },
     {
-      "date": "2017-03-30T17:10:11+00:00",
-      "commit": "5c94997b6b1cca3e65ecfc5ba40c033d6838019b",
+      "date": "2017-04-20T23:40:06+00:00",
+      "commit": "535ee6c7f05e29a6e94edba06b228d64f8ba74ec",
       "data": {
         "helloworld": {
           "time": 0.0,
@@ -547,8 +337,8 @@
       }
     },
     {
-      "date": "2017-03-31T03:22:39+00:00",
-      "commit": "474f7a91eec8cba83b7eb7a578a7adb70614f877",
+      "date": "2017-04-21T06:59:25+00:00",
+      "commit": "4ed95009d8d5d50c4f7aee35ad89c30a2258ffa9",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
@@ -561,8 +351,8 @@
       }
     },
     {
-      "date": "2017-03-31T11:13:20+00:00",
-      "commit": "a9329d3aa3974cfe7fda57a67b3898434f410131",
+      "date": "2017-04-21T14:02:37+00:00",
+      "commit": "5695c3e9435a5872e23a6bb61c1ea0b3ada83eef",
       "data": {
         "helloworld": {
           "time": 0.0,
@@ -575,8 +365,8 @@
       }
     },
     {
-      "date": "2017-03-31T16:04:18+00:00",
-      "commit": "40feadb966f825de7aa54a3138416c906b60f54a",
+      "date": "2017-04-21T16:36:41+00:00",
+      "commit": "1785bca5137fad1f26e4d3c347cbb68408a28fa9",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
@@ -589,8 +379,8 @@
       }
     },
     {
-      "date": "2017-03-31T23:23:49+00:00",
-      "commit": "2f1652870f5900bc41610d808b8bc2d51c901192",
+      "date": "2017-04-22T03:31:53+00:00",
+      "commit": "ff13b7c91813eb178c98a7abc661acaf5c41dc31",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
@@ -603,8 +393,8 @@
       }
     },
     {
-      "date": "2017-04-01T05:56:08+00:00",
-      "commit": "5e122f59ba23494d460466cca53c71646d99c767",
+      "date": "2017-04-22T11:50:40+00:00",
+      "commit": "6d841da4a0d7629f826117f99052e3d4a7997a7e",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
@@ -617,8 +407,8 @@
       }
     },
     {
-      "date": "2017-04-02T18:16:09+00:00",
-      "commit": "72ecd79a6c92bd946362e7696ee86a51f337e12f",
+      "date": "2017-04-22T14:17:36+00:00",
+      "commit": "9cc77d7690fc723b264962a4d01a6221be87d80e",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
@@ -631,8 +421,8 @@
       }
     },
     {
-      "date": "2017-04-03T03:26:09+00:00",
-      "commit": "5309a3e31d88def1f3ea966162ed4f81f161d500",
+      "date": "2017-04-22T17:37:04+00:00",
+      "commit": "cb4065b9ce4e2bb2c37994762462da76272d6907",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
@@ -645,8 +435,8 @@
       }
     },
     {
-      "date": "2017-04-04T17:23:32+00:00",
-      "commit": "2564711e803f62e04bebf10408cc1c11297c0caf",
+      "date": "2017-04-22T20:07:01+00:00",
+      "commit": "252d3da8a6c715ccafcf77d83b826f6fb899cfe5",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
@@ -659,8 +449,8 @@
       }
     },
     {
-      "date": "2017-04-05T09:23:27+00:00",
-      "commit": "ad5dfecc6ae23bb7d2b8075d705011918ab4f399",
+      "date": "2017-04-23T02:13:55+00:00",
+      "commit": "a94124488ae0dba1a8a4552a4724cddf9d266e2f",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
@@ -673,64 +463,36 @@
       }
     },
     {
-      "date": "2017-04-05T16:47:45+00:00",
-      "commit": "46f71a03f9b7bad2fa469113e3858ea2bdbbb5e5",
+      "date": "2017-04-23T08:35:00+00:00",
+      "commit": "23de823e93dc19ef1b9cb65b48860a892cd6ff18",
       "data": {
-        "regex.0.1.30": {
-          "time": 0.0,
-          "rss": 0
-        },
         "helloworld": {
-          "time": 0.0,
-          "rss": 0
-        }
-      }
-    },
-    {
-      "date": "2017-04-05T20:06:00+00:00",
-      "commit": "91ae22a012fae7fa7589b1bba77bf4579708ee33",
-      "data": {
-        "regex.0.1.30": {
           "time": 0.0,
           "rss": 0
         },
-        "helloworld": {
-          "time": 0.0,
-          "rss": 0
-        }
-      }
-    },
-    {
-      "date": "2017-04-06T01:00:15+00:00",
-      "commit": "6cd15a0e8fecce04fd99b77b25099bf374bb0f56",
-      "data": {
         "regex.0.1.30": {
-          "time": 0.0,
-          "rss": 0
-        },
-        "helloworld": {
           "time": 0.0,
           "rss": 0
         }
       }
     },
     {
-      "date": "2017-04-06T03:42:31+00:00",
-      "commit": "1a9b382168cbf405589fbba7215ace700c067879",
+      "date": "2017-04-23T20:11:50+00:00",
+      "commit": "2bd4b5c6db1468235f730bce403bf657123ecc57",
       "data": {
-        "regex.0.1.30": {
+        "helloworld": {
           "time": 0.0,
           "rss": 0
         },
-        "helloworld": {
+        "regex.0.1.30": {
           "time": 0.0,
           "rss": 0
         }
       }
     },
     {
-      "date": "2017-04-06T06:07:42+00:00",
-      "commit": "e5e92753cc3e12c3c468b6badaf340fe4443145c",
+      "date": "2017-04-23T23:06:50+00:00",
+      "commit": "15ce54096a589de277771ad1f55a334fe2661a64",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
@@ -743,22 +505,22 @@
       }
     },
     {
-      "date": "2017-04-06T08:53:36+00:00",
-      "commit": "9e84bf8096b71a731a65045120b65db72df24137",
+      "date": "2017-04-24T10:06:41+00:00",
+      "commit": "846891aeff1a2a73524c404c6eeff5e8daf4caa2",
       "data": {
-        "regex.0.1.30": {
+        "helloworld": {
           "time": 0.0,
           "rss": 0
         },
-        "helloworld": {
+        "regex.0.1.30": {
           "time": 0.0,
           "rss": 0
         }
       }
     },
     {
-      "date": "2017-04-06T11:21:55+00:00",
-      "commit": "44855a4cef3e83c76c386fdcf034447a8ee128e4",
+      "date": "2017-04-24T13:09:35+00:00",
+      "commit": "63c77214c1d38789652b465694b254205d1886e0",
       "data": {
         "helloworld": {
           "time": 0.0,
@@ -771,8 +533,8 @@
       }
     },
     {
-      "date": "2017-04-06T20:15:17+00:00",
-      "commit": "50c186419bb38e8ea2f1e6f9c31b754e3a1a3e65",
+      "date": "2017-04-24T22:18:16+00:00",
+      "commit": "0777c757a6832dc5f8f218377f99960f5477311f",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
@@ -785,36 +547,22 @@
       }
     },
     {
-      "date": "2017-04-06T22:51:51+00:00",
-      "commit": "2277f4bdcc1195a5f6c9c96d8d1fb32482cbd673",
+      "date": "2017-04-25T10:34:07+00:00",
+      "commit": "c7e724a148fbc1ca46508d953302b697ff35af16",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
           "rss": 0
         },
-        "helloworld": {
-          "time": 0.0,
-          "rss": 0
-        }
-      }
-    },
-    {
-      "date": "2017-04-07T04:56:45+00:00",
-      "commit": "b9c5197d4878253804d91e0c30ed92e0a965b663",
-      "data": {
         "helloworld": {
-          "time": 0.0,
-          "rss": 0
-        },
-        "regex.0.1.30": {
           "time": 0.0,
           "rss": 0
         }
       }
     },
     {
-      "date": "2017-04-07T08:36:11+00:00",
-      "commit": "4c59c92bc4d4d6e5b2b66c4cc08dd1a058283a0d",
+      "date": "2017-04-25T15:51:40+00:00",
+      "commit": "2b4c911581099e247a68b3a8adc782d778f5190b",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
@@ -827,8 +575,8 @@
       }
     },
     {
-      "date": "2017-04-07T12:51:18+00:00",
-      "commit": "c438c1fb39337b7712afc58df4f1f9c5112e5cc1",
+      "date": "2017-04-25T23:46:37+00:00",
+      "commit": "7e7114fe2e26c5ccd6ebbd5686410b61a47820dc",
       "data": {
         "helloworld": {
           "time": 0.0,
@@ -841,8 +589,8 @@
       }
     },
     {
-      "date": "2017-04-07T15:25:47+00:00",
-      "commit": "53f4bc311b5ff11a16185dd40dc116cf6b8cc162",
+      "date": "2017-04-26T03:26:12+00:00",
+      "commit": "4512424391768cfad54efb8ccdb1191f61e338c2",
       "data": {
         "helloworld": {
           "time": 0.0,
@@ -855,8 +603,8 @@
       }
     },
     {
-      "date": "2017-04-08T04:21:43+00:00",
-      "commit": "547c12b8a61d7d0c047649c236f84b59ca2d2cc9",
+      "date": "2017-04-26T06:18:17+00:00",
+      "commit": "dad9814eb0964a92494fef9ce23b80353dc14c46",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
@@ -869,8 +617,8 @@
       }
     },
     {
-      "date": "2017-04-08T06:56:17+00:00",
-      "commit": "3178d4318c669eb0a7bf985e2d603a8e9e1917e7",
+      "date": "2017-04-26T09:54:11+00:00",
+      "commit": "b0a4074c5e87d24ff630f6aa456a64698bff3ed2",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
@@ -883,8 +631,8 @@
       }
     },
     {
-      "date": "2017-04-08T09:23:28+00:00",
-      "commit": "4cadff61ef395f3937d950e35304969ced2ea0b0",
+      "date": "2017-04-26T12:34:45+00:00",
+      "commit": "0ee56f686db4c3657ab99d2a261314f749245593",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
@@ -897,8 +645,8 @@
       }
     },
     {
-      "date": "2017-04-08T11:47:48+00:00",
-      "commit": "fe39e94d6cd6eba00b3aadf323b3f4d029aad7eb",
+      "date": "2017-04-26T15:12:30+00:00",
+      "commit": "036983201d4e9aeb5c5e56e47c305971972b2569",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
@@ -911,8 +659,8 @@
       }
     },
     {
-      "date": "2017-04-08T14:05:06+00:00",
-      "commit": "a61011761deeab9e308e6d103b1dc7aaf334f6e3",
+      "date": "2017-04-26T21:26:14+00:00",
+      "commit": "612847bf7171403022f8b4f1df1b87e377dcf01c",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
@@ -925,8 +673,8 @@
       }
     },
     {
-      "date": "2017-04-08T19:47:31+00:00",
-      "commit": "666e7148d167de551a7c3692caf9966f49773f4c",
+      "date": "2017-04-27T00:04:03+00:00",
+      "commit": "6e0c5af9de7727074af21735bdc9197cb9f1ff49",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
@@ -939,8 +687,8 @@
       }
     },
     {
-      "date": "2017-04-08T22:37:35+00:00",
-      "commit": "b2d9b6323e3573839760ea3dc83a2c1658a01cf2",
+      "date": "2017-04-27T02:48:17+00:00",
+      "commit": "54ef80043a3864495555c96791118ab3a725fe6b",
       "data": {
         "helloworld": {
           "time": 0.0,
@@ -953,36 +701,22 @@
       }
     },
     {
-      "date": "2017-04-09T03:30:09+00:00",
-      "commit": "c2d186a3c9c651b408f95b2158a011678b4910c8",
+      "date": "2017-04-27T10:47:56+00:00",
+      "commit": "79b05fee0fd1423a49e9655d554eec7bfebb0e87",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
           "rss": 0
         },
-        "helloworld": {
-          "time": 0.0,
-          "rss": 0
-        }
-      }
-    },
-    {
-      "date": "2017-04-09T05:49:31+00:00",
-      "commit": "cff81da514068ea89e06d1a62357971d34094ea3",
-      "data": {
         "helloworld": {
           "time": 0.0,
           "rss": 0
-        },
-        "regex.0.1.30": {
-          "time": 0.0,
-          "rss": 0
         }
       }
     },
     {
-      "date": "2017-04-09T09:17:34+00:00",
-      "commit": "ebb10a6131834e14f0685ef399b531444d631e9c",
+      "date": "2017-04-27T13:17:55+00:00",
+      "commit": "4961d724f8d02870087c1912a55378458b0d6a90",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
@@ -995,50 +729,22 @@
       }
     },
     {
-      "date": "2017-04-09T13:08:10+00:00",
-      "commit": "2c48ae6f7ffae392d85c86240c67f49df01f44fd",
+      "date": "2017-04-27T16:38:19+00:00",
+      "commit": "94e884b6307a59f1e6e64aa7ebc1996b651a7629",
       "data": {
-        "regex.0.1.30": {
-          "time": 0.0,
-          "rss": 0
-        },
         "helloworld": {
-          "time": 0.0,
-          "rss": 0
-        }
-      }
-    },
-    {
-      "date": "2017-04-09T15:30:20+00:00",
-      "commit": "fa332c901575da70ac7a612609a26b752b1adc65",
-      "data": {
-        "regex.0.1.30": {
           "time": 0.0,
           "rss": 0
         },
-        "helloworld": {
-          "time": 0.0,
-          "rss": 0
-        }
-      }
-    },
-    {
-      "date": "2017-04-09T17:51:32+00:00",
-      "commit": "d616f47cd03a65fed13be2ee5527f24f6a4f7f92",
-      "data": {
         "regex.0.1.30": {
-          "time": 0.0,
-          "rss": 0
-        },
-        "helloworld": {
           "time": 0.0,
           "rss": 0
         }
       }
     },
     {
-      "date": "2017-04-09T20:54:50+00:00",
-      "commit": "ad36c2f5528d617db66c244d8bcbfc4b36da0ca0",
+      "date": "2017-04-27T21:54:07+00:00",
+      "commit": "a8ebd083fcc7120f8fffffa061525bb225a3e17b",
       "data": {
         "helloworld": {
           "time": 0.0,
@@ -1051,8 +757,8 @@
       }
     },
     {
-      "date": "2017-04-09T23:23:11+00:00",
-      "commit": "683fa7438ffe02c08a39ecfa8e997760e1090e7e",
+      "date": "2017-04-28T00:48:57+00:00",
+      "commit": "70baf4f13ec70cb17942704849b0f3c047ad347b",
       "data": {
         "helloworld": {
           "time": 0.0,
@@ -1065,8 +771,8 @@
       }
     },
     {
-      "date": "2017-04-10T02:24:44+00:00",
-      "commit": "13744ca91c93c17340e63290abd42479a3bafc1a",
+      "date": "2017-04-28T04:31:27+00:00",
+      "commit": "ace517da0d1e356aa5b42f4cdee6854538591ef2",
       "data": {
         "helloworld": {
           "time": 0.0,
@@ -1079,8 +785,8 @@
       }
     },
     {
-      "date": "2017-04-10T04:41:15+00:00",
-      "commit": "22bae87f3bc86fc5fecc78def65733a1116aedbe",
+      "date": "2017-04-28T12:09:37+00:00",
+      "commit": "2971d491b955fd8bb504c8ca675b8116b8b1550e",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
@@ -1093,8 +799,8 @@
       }
     },
     {
-      "date": "2017-04-10T09:45:16+00:00",
-      "commit": "2bdf368bdec589c689950e88eec973cd5df658fc",
+      "date": "2017-04-28T16:10:08+00:00",
+      "commit": "ad1461efb92ae85ce8227f52ca79149e368529d1",
       "data": {
         "helloworld": {
           "time": 0.0,
@@ -1107,50 +813,36 @@
       }
     },
     {
-      "date": "2017-04-10T13:07:35+00:00",
-      "commit": "8493dd6d6e8f5e1280ae3dc05135a7e2897c36ac",
+      "date": "2017-04-28T18:53:24+00:00",
+      "commit": "128aa262e8fe445f5c4d5c1f15dd28a2007c0234",
       "data": {
-        "regex.0.1.30": {
+        "helloworld": {
           "time": 0.0,
           "rss": 0
         },
-        "helloworld": {
+        "regex.0.1.30": {
           "time": 0.0,
           "rss": 0
         }
       }
     },
     {
-      "date": "2017-04-10T18:00:23+00:00",
-      "commit": "3b5754e5ce73d24c6684b3ed0c68a557dfdd2f52",
+      "date": "2017-04-28T22:28:11+00:00",
+      "commit": "810ed98d08158574e98b504c0955fce6c6a72ad9",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
           "rss": 0
         },
-        "helloworld": {
-          "time": 0.0,
-          "rss": 0
-        }
-      }
-    },
-    {
-      "date": "2017-04-10T21:56:13+00:00",
-      "commit": "730e5ad04e23f30cc24e4b87dfd5da807325e243",
-      "data": {
         "helloworld": {
-          "time": 0.0,
-          "rss": 0
-        },
-        "regex.0.1.30": {
           "time": 0.0,
           "rss": 0
         }
       }
     },
     {
-      "date": "2017-04-11T05:44:06+00:00",
-      "commit": "8d85504410e3e5dec2ea5fffd64b182d7a85750f",
+      "date": "2017-04-29T03:56:09+00:00",
+      "commit": "95467d33cb98c8a9be12da15be559e60628180f5",
       "data": {
         "helloworld": {
           "time": 0.0,
@@ -1163,78 +855,36 @@
       }
     },
     {
-      "date": "2017-04-11T08:57:39+00:00",
-      "commit": "6edc59685382d3ec0b6b89b05897a22a597c48a1",
+      "date": "2017-04-29T06:16:22+00:00",
+      "commit": "b9e9a03462e717cf54de573faf454ac979e08a0d",
       "data": {
-        "helloworld": {
-          "time": 0.0,
-          "rss": 0
-        },
         "regex.0.1.30": {
-          "time": 0.0,
-          "rss": 0
-        }
-      }
-    },
-    {
-      "date": "2017-04-11T12:13:49+00:00",
-      "commit": "c58c928e658d2e45f816fd05796a964aa83759da",
-      "data": {
-        "helloworld": {
           "time": 0.0,
           "rss": 0
         },
-        "regex.0.1.30": {
-          "time": 0.0,
-          "rss": 0
-        }
-      }
-    },
-    {
-      "date": "2017-04-11T20:56:00+00:00",
-      "commit": "f8107c0d7ce4f39364fc96d0eeb6a23673491f81",
-      "data": {
         "helloworld": {
-          "time": 0.0,
-          "rss": 0
-        },
-        "regex.0.1.30": {
           "time": 0.0,
           "rss": 0
         }
       }
     },
     {
-      "date": "2017-04-12T00:45:49+00:00",
-      "commit": "da32752d92589e99feab80921b9eecb6090cf310",
+      "date": "2017-04-29T08:36:57+00:00",
+      "commit": "12e76e24cc1466ffb2bd37cc7652a6dd7ba15735",
       "data": {
         "helloworld": {
           "time": 0.0,
           "rss": 0
         },
-        "regex.0.1.30": {
-          "time": 0.0,
-          "rss": 0
-        }
-      }
-    },
-    {
-      "date": "2017-04-12T05:26:10+00:00",
-      "commit": "8c6e2ff45248dde631ff93f6fc21049dbafd5cba",
-      "data": {
         "regex.0.1.30": {
-          "time": 0.0,
-          "rss": 0
-        },
-        "helloworld": {
           "time": 0.0,
           "rss": 0
         }
       }
     },
     {
-      "date": "2017-04-12T09:16:14+00:00",
-      "commit": "1dca19ae3fd195fa517e326a39bfee729da7cadb",
+      "date": "2017-04-29T12:59:45+00:00",
+      "commit": "e326e86b47edcded3313944a81f126a633032d86",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
@@ -1247,64 +897,36 @@
       }
     },
     {
-      "date": "2017-04-12T13:22:16+00:00",
-      "commit": "910c4816fdee01a1299d11a5e85ebb4aceee6d1a",
+      "date": "2017-04-29T15:18:52+00:00",
+      "commit": "b4d3ed64ec7f6d7a9fa0530377a29520a90a451f",
       "data": {
         "helloworld": {
           "time": 0.0,
           "rss": 0
         },
-        "regex.0.1.30": {
-          "time": 0.0,
-          "rss": 0
-        }
-      }
-    },
-    {
-      "date": "2017-04-12T19:58:10+00:00",
-      "commit": "14481f72102ba2abb5f314d5537fee90352981c5",
-      "data": {
         "regex.0.1.30": {
           "time": 0.0,
           "rss": 0
-        },
-        "helloworld": {
-          "time": 0.0,
-          "rss": 0
         }
       }
     },
     {
-      "date": "2017-04-13T00:28:11+00:00",
-      "commit": "d2e2ad559e28222f2333de4d2c1b2b12b9bd3646",
+      "date": "2017-04-29T20:38:15+00:00",
+      "commit": "afa1240e57330d85a372db4e28cd8bc8fa528ccb",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
           "rss": 0
         },
-        "helloworld": {
-          "time": 0.0,
-          "rss": 0
-        }
-      }
-    },
-    {
-      "date": "2017-04-13T06:46:29+00:00",
-      "commit": "6c03efd8f3a031c286a4afe936de10a31f6a1204",
-      "data": {
         "helloworld": {
-          "time": 0.0,
-          "rss": 0
-        },
-        "regex.0.1.30": {
           "time": 0.0,
           "rss": 0
         }
       }
     },
     {
-      "date": "2017-04-13T09:16:11+00:00",
-      "commit": "1f59c7ebb170b1ca98bc1d620afb02f7b3ae3fa7",
+      "date": "2017-04-30T02:48:11+00:00",
+      "commit": "ba5b91134073349cd343253399d1beb901186f9a",
       "data": {
         "helloworld": {
           "time": 0.0,
@@ -1317,8 +939,8 @@
       }
     },
     {
-      "date": "2017-04-13T11:47:33+00:00",
-      "commit": "43ef63d5b4279ef97ed921338a69b0d62101ca83",
+      "date": "2017-04-30T05:25:47+00:00",
+      "commit": "78f63181360269981085795b7feb0f4b6591f52f",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
@@ -1331,36 +953,22 @@
       }
     },
     {
-      "date": "2017-04-13T17:32:22+00:00",
-      "commit": "ea376822a17dd911244c313c5b07dffdfe3c023a",
+      "date": "2017-04-30T07:58:10+00:00",
+      "commit": "c0f86f5927377426fbaf72b17c87a6a7291406cb",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
           "rss": 0
         },
-        "helloworld": {
-          "time": 0.0,
-          "rss": 0
-        }
-      }
-    },
-    {
-      "date": "2017-04-13T20:21:12+00:00",
-      "commit": "28a74299778cdad4ea999e4ee8f8c1ef793338bd",
-      "data": {
         "helloworld": {
-          "time": 0.0,
-          "rss": 0
-        },
-        "regex.0.1.30": {
           "time": 0.0,
           "rss": 0
         }
       }
     },
     {
-      "date": "2017-04-14T02:02:13+00:00",
-      "commit": "4f32e0dfb287c2b3d0c48cb3b8090b3902960084",
+      "date": "2017-04-30T13:38:12+00:00",
+      "commit": "06fb4d25642a3f223db1441972dd5962085cfba1",
       "data": {
         "regex.0.1.30": {
           "time": 0.0,
@@ -1373,8 +981,8 @@
       }
     }
   ],
-  "start": "2017-03-15T02:02:13+00:00",
-  "end": "2017-04-14T02:02:13+00:00",
+  "start": "2017-03-31T13:38:12+00:00",
+  "end": "2017-04-30T13:38:12+00:00",
   "crates": [
     "helloworld",
     "regex.0.1.30"

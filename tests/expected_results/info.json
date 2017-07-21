@@ -5,6 +5,7 @@
     "html5ever-2016-08-25",
     "hyper.0.5.0",
     "inflate-0.1.0",
+    "issue-20936-deep-vector",
     "issue-32062-equality-relations-complexity",
     "issue-32278-big-array-of-strings",
     "jld-day15-parser",
@@ -24,6 +25,10 @@
     "syntex-0.42.2@000-base",
     "syntex-0.42.2@010-incr",
     "syntex-0.42.2@020-clean",
+    "tokio-webpush-simple@000-base",
+    "tokio-webpush-simple@010-incr",
+    "tokio-webpush-simple@020-clean",
+    "tokio-webpush-simple@030-minor-change",
     "tuple-stress"
   ],
   "phases": [
@@ -85,5 +90,5 @@
     "variance inference",
     "wf checking"
   ],
-  "as_of": "2017-04-14T02:02:13+00:00"
+  "as_of": "2017-04-30T13:38:12+00:00"
 }
