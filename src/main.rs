@@ -180,6 +180,11 @@ fn run() -> Result<i32> {
            (@arg DATE: --date +required +takes_value "Date to associate benchmark result with, YYYY-MM-DDTHH:MM:SS format.")
            (@arg RUSTC: +required +takes_value "the path to the local rustc to benchmark")
        )
+       (@subcommand remove_benchmark =>
+           (about: "remove data for a benchmark")
+           (@arg BENCHMARK: --benchmark +required +takes_value "benchmark name to remove data for")
+           (@arg OUTPUT_REPOSITORY: +required +takes_value "Repository to output to")
+       )
     ).get_matches();
     let benchmark_dir = PathBuf::from(matches.value_of_os("benchmarks_dir").unwrap());
     let filter = matches.value_of("filter");
@@ -212,6 +217,20 @@ fn run() -> Result<i32> {
             let sysroot = Sysroot::with_local_rustc(&commit, rustc, "x86_64-unknown-linux-gnu", preserve_sysroots, false)?;
             let result = bench_commit(&commit, None, sysroot, &benchmarks);
             serde_json::to_writer(&mut stdout(), &result)?;
+            Ok(0)
+        }
+        ("remove_benchmark", Some(sub_m)) => {
+            let out_repo = PathBuf::from(sub_m.value_of_os("OUTPUT_REPOSITORY").unwrap());
+            let benchmark = sub_m.value_of("BENCHMARK").unwrap();
+            let out_repo = outrepo::Repo::open(out_repo)?;
+            for commit in &commits {
+                if let Ok(mut data) = out_repo.load_commit_data(&commit, "x86_64-unknown-linux-gnu") {
+                    if data.benchmarks.remove(&*benchmark).is_none() {
+                        warn!("could not remove {} from {}", benchmark, commit.sha);
+                    }
+                    out_repo.add_commit_data(&data)?;
+                }
+            }
             Ok(0)
         }
         _ => {

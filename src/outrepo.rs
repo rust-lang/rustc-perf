@@ -109,7 +109,7 @@ impl Repo {
         Ok(data)
     }
 
-    fn add_commit_data(&self, data: &CommitData) -> Result<()> {
+    pub fn add_commit_data(&self, data: &CommitData) -> Result<()> {
         let commit = &data.commit;
         let filepath = self.times()
             .join(format!("{}-{}-{}.json", commit.date.to_rfc3339(), commit.sha, data.triple));
