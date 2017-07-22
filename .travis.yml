@@ -1,0 +1,14 @@
+language: rust
+rust:
+  - nightly
+
+script:
+  - for dir in benchmarks/*; do \
+        if [[ -d "$dir" ]]; then \
+            cd "$dir" \
+            patches=`make patches` \
+            for patch in "$patches"; do \
+                make "all$patch" \
+            done \
+        fi \
+    done
