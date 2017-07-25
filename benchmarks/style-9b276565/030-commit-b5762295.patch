@@ -1,0 +1,56 @@
+From b576229567041dc9ea8f882d92cf0faaf423308b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Emilio=20Cobos=20=C3=81lvarez?= <emilio@crisal.io>
+Date: Fri, 21 Jul 2017 17:59:54 +0200
+Subject: [PATCH] stylo: Set the NS_STYLE_IS_TEXT_COMBINED flag.
+
+This should fix at least
+layout/reftests/writing-mode/1135361-ruby-justify-1.html
+---
+ components/style/properties/computed_value_flags.rs | 5 +++++
+ components/style/style_adjuster.rs                  | 3 +++
+ ports/geckolib/glue.rs                              | 3 +++
+ 3 files changed, 11 insertions(+)
+
+diff --git a/components/style/properties/computed_value_flags.rs b/components/style/properties/computed_value_flags.rs
+index 50ad887417ae..2dc3d91e1f68 100644
+--- a/components/style/properties/computed_value_flags.rs
++++ b/components/style/properties/computed_value_flags.rs
+@@ -28,5 +28,10 @@ bitflags! {
+         /// This bit is propagated to all children of line participants.
+         /// It is currently used by ruby to make its content unbreakable.
+         const SHOULD_SUPPRESS_LINEBREAK = 1 << 1,
++
++        /// A flag used to mark text that that has text-combine-upright.
++        ///
++        /// This is used from Gecko's layout engine.
++        const IS_TEXT_COMBINED = 1 << 2,
+     }
+ }
+diff --git a/components/style/style_adjuster.rs b/components/style/style_adjuster.rs
+index afd00c5034cb..b7eeb5602170 100644
+--- a/components/style/style_adjuster.rs
++++ b/components/style/style_adjuster.rs
+@@ -107,6 +107,7 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
+     fn adjust_for_text_combine_upright(&mut self) {
+         use computed_values::text_combine_upright::T as text_combine_upright;
+         use computed_values::writing_mode::T as writing_mode;
++        use properties::computed_value_flags::IS_TEXT_COMBINED;
+
+         let writing_mode =
+             self.style.get_inheritedbox().clone_writing_mode();
+@@ -115,6 +116,7 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
+
+         if writing_mode != writing_mode::horizontal_tb &&
+            text_combine_upright == text_combine_upright::all {
++            self.style.flags.insert(IS_TEXT_COMBINED);
+             self.style.mutate_inheritedbox().set_writing_mode(writing_mode::horizontal_tb);
+         }
+     }
+@@ -409,6 +411,7 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
+             self.style.reset_border_struct();
+             self.style.reset_padding_struct();
+         }
++
+         // Force bidi isolation on all internal ruby boxes and ruby container
+         // per spec https://drafts.csswg.org/css-ruby-1/#bidi
+         if self_display.is_ruby_type() {
