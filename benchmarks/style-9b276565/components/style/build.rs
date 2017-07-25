@@ -15,7 +15,6 @@ extern crate toml;
 extern crate walkdir;
 
 use std::env;
-use std::path::Path;
 use std::process::{Command, exit};
 use walkdir::WalkDir;
 
@@ -69,7 +68,7 @@ fn generate_properties() {
         }
     }
 
-    let script = Path::new(file!()).parent().unwrap().join("properties").join("build.py");
+    let script = env::current_dir().unwrap().join("properties").join("build.py");
     let product = if cfg!(feature = "gecko") { "gecko" } else { "servo" };
     let status = Command::new(&*PYTHON)
         .arg(&script)

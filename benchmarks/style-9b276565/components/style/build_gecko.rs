@@ -590,17 +590,15 @@ mod bindings {
             fs::remove_dir_all(&path).expect("Fail to remove binding dir in dist");
         }
         fs::create_dir_all(&path).expect("Fail to create bindings dir in dist");
-        copy_dir(&*OUTDIR_PATH, &path, |_| {}).expect("Fail to copy generated files to dist dir");
-    }
+        copy_dir(&*OUTDIR_PATH, &path, |_| {}).expect("Fail to copy generated files to dist dir"); }
 }
 
 #[cfg(not(feature = "bindgen"))]
 mod bindings {
-    use std::path::Path;
     use super::common::*;
 
     pub fn generate() {
-        let dir = Path::new(file!()).parent().unwrap().join("gecko/generated");
+        let dir = ::std::env::current_dir().unwrap().join("gecko/generated");
         println!("cargo:rerun-if-changed={}", dir.display());
         copy_dir(&dir, &*OUTDIR_PATH, |path| {
             println!("cargo:rerun-if-changed={}", path.display());
