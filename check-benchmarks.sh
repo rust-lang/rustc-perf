@@ -7,7 +7,7 @@ for dir in benchmarks/*; do
     if [[ -d "$dir" ]]; then
         cd "$dir";
         patches=`make patches`;
-        for patch in "$patches"; do
+        for patch in "" $patches; do
             CARGO=cargo \
             RUSTC=rustc \
             make "all$patch";
