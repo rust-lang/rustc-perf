@@ -1,7 +1,7 @@
 #[macro_use] extern crate serde_derive;
 extern crate chrono;
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
 
@@ -35,6 +35,6 @@ pub struct Commit {
 pub struct CommitData {
     pub commit: Commit,
     // String in Result is the output of the command that failed
-    pub benchmarks: HashMap<String, Result<Vec<Patch>, String>>,
+    pub benchmarks: BTreeMap<String, Result<Vec<Patch>, String>>,
     pub triple: String,
 }

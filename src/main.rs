@@ -38,7 +38,7 @@ use std::fs;
 use std::str;
 use std::path::{Path, PathBuf};
 use std::io::{stdout, stderr, Write};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
 
@@ -63,7 +63,7 @@ fn bench_commit(
 
     let existing_data = repo.and_then(|r| r.load_commit_data(&commit, &sysroot.triple).ok());
 
-    let results: HashMap<_, _> = benchmarks.iter().map(|benchmark| {
+    let results: BTreeMap<_, _> = benchmarks.iter().map(|benchmark| {
         if let Some(ref data) = existing_data {
             if let Some(result) = data.benchmarks.get(&benchmark.name) {
                 return (benchmark.name.clone(), result.clone());
@@ -180,6 +180,10 @@ fn run() -> Result<i32> {
            (@arg DATE: --date +required +takes_value "Date to associate benchmark result with, YYYY-MM-DDTHH:MM:SS format.")
            (@arg RUSTC: +required +takes_value "the path to the local rustc to benchmark")
        )
+       (@subcommand remove_errs =>
+           (about: "remove errored data")
+           (@arg OUTPUT_REPOSITORY: +required +takes_value "Repository to output to")
+       )
        (@subcommand remove_benchmark =>
            (about: "remove data for a benchmark")
            (@arg BENCHMARK: --benchmark +required +takes_value "benchmark name to remove data for")
@@ -217,6 +221,18 @@ fn run() -> Result<i32> {
             let sysroot = Sysroot::with_local_rustc(&commit, rustc, "x86_64-unknown-linux-gnu", preserve_sysroots, false)?;
             let result = bench_commit(&commit, None, sysroot, &benchmarks);
             serde_json::to_writer(&mut stdout(), &result)?;
+            Ok(0)
+        }
+        ("remove_errs", Some(sub_m)) => {
+            let out_repo = PathBuf::from(sub_m.value_of_os("OUTPUT_REPOSITORY").unwrap());
+            let out_repo = outrepo::Repo::open(out_repo)?;
+            for commit in &commits {
+                if let Ok(mut data) = out_repo.load_commit_data(&commit, "x86_64-unknown-linux-gnu") {
+                    let benchmarks = data.benchmarks.into_iter().filter(|&(_, ref v)| v.is_ok()).collect();
+                    data.benchmarks = benchmarks;
+                    out_repo.add_commit_data(&data)?;
+                }
+            }
             Ok(0)
         }
         ("remove_benchmark", Some(sub_m)) => {
