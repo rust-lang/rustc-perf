@@ -33,5 +33,5 @@ all@040-commit2:
 
 patches:
 	@echo '@000-base'
-	# TODO: reenable
-	#@echo '@000-base @010-incr @020-clean @030-commit1 @040-commit2'
+# TODO: reenable
+#@echo '@000-base @010-incr @020-clean @030-commit1 @040-commit2'
