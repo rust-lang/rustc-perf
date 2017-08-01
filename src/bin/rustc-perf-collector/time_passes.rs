@@ -1,13 +1,16 @@
 //! Process `-Z time-passes` output
 
-use rustc_perf_collector::Pass;
+use rustc_perf_collector::{Pass, Stat};
 
 use errors::{Result, ResultExt};
 
-pub fn process_output(name: &str, output: Vec<u8>) -> Result<Vec<Pass>> {
+pub fn process_output(name: &str, output: Vec<u8>)
+    -> Result<(Vec<Pass>, Vec<Stat>)>
+{
     let output = String::from_utf8(output)
         .chain_err(|| format!("unable to convert output of {} to UTF-8", name))?;
     let mut passes = Vec::new();
+    let mut stats = Vec::new();
 
     let mut time_indent = None;
     for line in output.lines() {
@@ -46,41 +49,42 @@ pub fn process_output(name: &str, output: Vec<u8>) -> Result<Vec<Pass>> {
                 mem: mem,
             });
         } else {
-            //info!("unhandled line: {}", line);
+            extract_perf_stat(line, &mut stats)?;
+            info!("unhandled line: {}", line);
         }
     }
 
-    Ok(passes)
+    Ok((passes, stats))
 }
 
-pub struct PassAverager {
-    pub state: Vec<Pass>,
-    runs: u64
-}
-
-impl PassAverager {
-    pub fn new(state: Vec<Pass>) -> Self {
-        Self {
-            state: state,
-            runs: 0,
-        }
+fn extract_perf_stat(s: &str, stats: &mut Vec<Stat>) -> Result<()> {
+    // https://github.com/torvalds/linux/blob/bc78d646e708/tools/perf/Documentation/perf-stat.txt#L281
+    macro_rules! get {
+        ($e:expr) => (match $e {
+            Some(s) => s,
+            None => return Ok(()),
+        });
     }
-
-    pub fn average_with(
-        &mut self,
-        b: Vec<Pass>,
-    ) -> Result<()> {
-        self.runs += 1;
-
-        for a in &mut self.state {
-            let b = match b.iter().find(|p| p.name == a.name) {
-                Some(b) => b,
-                None => bail!("expected name {} to exist in both a and b", a.name),
-            };
-            a.time = a.time + ((b.time - a.time) / (self.runs as f64));
-            a.mem = a.mem + ((b.mem - b.mem) / self.runs);
-        }
-
-        Ok(())
+    let mut parts = s.split(';').map(|s| s.trim());
+    let cnt = get!(parts.next());
+    let _unit = get!(parts.next());
+    let name = get!(parts.next());
+    let _time = get!(parts.next());
+    let pct = get!(parts.next());
+    if parts.next().is_some() {
+        return Ok(())
     }
+    if cnt == "<not supported>" {
+        return Ok(())
+    }
+    if !pct.starts_with("100.") {
+        panic!("measurement of `{}` only active for {}% of the time", name, pct);
+    }
+    stats.push(Stat {
+        name: name.to_string(),
+        cnt: cnt.parse().chain_err(|| {
+            format!("failed to parse `{}` as an float", cnt)
+        })?,
+    });
+    Ok(())
 }

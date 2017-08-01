@@ -1,8 +1,9 @@
 //! Execute benchmarks in a sysroot.
 
-use std::str;
+use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::str;
 
 use tempdir::TempDir;
 
@@ -10,7 +11,7 @@ use rustc_perf_collector::{Patch, Run};
 
 use errors::{Result, ResultExt};
 use rust_sysroot::sysroot::Sysroot;
-use time_passes::{PassAverager, process_output};
+use time_passes::process_output;
 
 pub struct Benchmark {
     pub name: String,
@@ -29,6 +30,10 @@ impl Benchmark {
         info!("processing {}", self.name);
 
         let mut patch_runs: Vec<Patch> = Vec::new();
+        let has_perf = Command::new("perf").output().is_ok();
+        let mut fake_rustc = env::current_exe().unwrap();
+        fake_rustc.pop();
+        fake_rustc.push("rustc-fake");
         for _ in 0..3 {
             let tmp_dir = TempDir::new(&format!("rustc-benchmark-{}", self.name))?;
             info!("temporary directory is {}", tmp_dir.path().display());
@@ -56,14 +61,21 @@ impl Benchmark {
             }
 
             for patch in &patches {
-                info!("running `make all{}`", patch);
-                let output = make().arg(&format!("all{}", patch))
+                let mut make = make();
+                make.arg(&format!("all{}", patch))
                     .env("CARGO_OPTS", "")
                     .env("CARGO_RUSTC_OPTS", "-Z time-passes")
-                    .output()?;
+                    .env("RUSTC", &fake_rustc)
+                    .env("RUSTC_REAL", &sysroot.rustc);
+                if has_perf {
+                    make.env("USE_PERF", "1");
+                }
+                info!("running `{:?}`", make);
+                let output = make.output()?;
 
                 if !output.status.success() {
-                    bail!("stderr non empty: {},\n\n stdout={}",
+                    bail!("expected success, got {}\n\nstderr={}\n\n stdout={}",
+                        output.status,
                         String::from_utf8_lossy(&output.stderr),
                         String::from_utf8_lossy(&output.stdout)
                     );
@@ -81,8 +93,10 @@ impl Benchmark {
                 };
 
                 let combined_name = format!("{}{}", self.name, patch);
+                let (passes, stats) = process_output(&combined_name, output.stdout)?;
                 patch_runs[patch_index].runs.push(Run {
-                    passes: process_output(&combined_name, output.stdout)?,
+                    passes,
+                    stats,
                     name: combined_name,
                 });
             }
@@ -90,10 +104,33 @@ impl Benchmark {
 
         let mut patches = Vec::new();
         for patch_run in patch_runs {
+            let n = patch_run.runs.len();
             let mut runs = patch_run.runs.into_iter();
-            let mut pa = PassAverager::new(runs.next().unwrap().passes);
+            let Run { mut passes, mut stats, name: _ } = runs.next().unwrap();
             for run in runs {
-                pa.average_with(run.passes)?;
+                for a in &mut passes {
+                    let b = match run.passes.iter().find(|p| p.name == a.name) {
+                        Some(b) => b,
+                        None => bail!("expected name {} to exist in both a and b", a.name),
+                    };
+                    a.time += b.time;
+                    a.mem += b.mem;
+                }
+
+                for a in &mut stats {
+                    let b = match run.stats.iter().find(|p| p.name == a.name) {
+                        Some(b) => b,
+                        None => bail!("expected name {} to exist in both a and b", a.name),
+                    };
+                    a.cnt += b.cnt;
+                }
+            }
+            for pass in &mut passes {
+                pass.time /= n as f64;
+                pass.mem /= n as u64;
+            }
+            for stat in &mut stats {
+                stat.cnt /= n as f64;
             }
             patches.push(Patch {
                 name: patch_run.name.clone(),
@@ -101,7 +138,8 @@ impl Benchmark {
                 runs: vec![
                     Run {
                         name: patch_run.name + &patch_run.patch,
-                        passes: pa.state,
+                        passes,
+                        stats,
                     }
                 ],
             });

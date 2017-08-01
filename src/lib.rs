@@ -13,9 +13,17 @@ pub struct Pass {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Stat {
+    pub name: String,
+    pub cnt: f64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Run {
     pub name: String,
     pub passes: Vec<Pass>,
+    #[serde(default)]
+    pub stats: Vec<Stat>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
