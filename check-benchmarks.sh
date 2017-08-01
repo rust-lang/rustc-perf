@@ -1,6 +1,11 @@
 #!/bin/bash
 
+# print what we're doing
 set -x
+# fail if variables are unset
+set -u
+# exit if anything fails
+set -e
 
 for dir in benchmarks/*; do
     pwd;
