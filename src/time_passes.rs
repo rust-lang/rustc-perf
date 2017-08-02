@@ -9,9 +9,31 @@ pub fn process_output(name: &str, output: Vec<u8>) -> Result<Vec<Pass>> {
         .chain_err(|| format!("unable to convert output of {} to UTF-8", name))?;
     let mut passes = Vec::new();
 
+    let mut time_indent = None;
     for line in output.lines() {
-        if line.starts_with("time: ") {
-            let time = &line["time: ".len()..line.find(";").unwrap()];
+        if line.trim().starts_with("time: ") {
+            let indent = line.find("time:").unwrap();
+            if time_indent.is_some() && Some(indent) != time_indent {
+                // XXX: sub passes currently cause problems because their names are inconsistent in
+                // incremental runs, especially codegen passes
+                //let time = &line["  time: ".len()..line.find(";").unwrap()];
+                //let time: f64 = time.parse().chain_err(|| format!("parsed time: {:?}", time))?;
+
+                //let mem = &line[line.find("rss: ").unwrap() + 5..line.find("MB").unwrap()];
+                //let mem: u64 = mem.parse().chain_err(|| format!("parsed memory: {:?}", mem))?;
+
+                //let name = line[line.find("MB\t").unwrap() + 3..].to_string();
+                //sub_passes.insert(name.clone(), Pass {
+                //    name: name,
+                //    time: time,
+                //    mem: mem,
+                //    sub_passes: HashMap::new(),
+                //});
+                continue
+            }
+            time_indent = Some(indent);
+
+            let time = &line[indent + "time: ".len()..line.find(";").unwrap()];
             let time: f64 = time.parse().chain_err(|| format!("parsed time: {:?}", time))?;
 
             let mem = &line[line.find("rss: ").unwrap() + 5..line.find("MB").unwrap()];
@@ -23,22 +45,6 @@ pub fn process_output(name: &str, output: Vec<u8>) -> Result<Vec<Pass>> {
                 time: time,
                 mem: mem,
             });
-        } else if line.starts_with("  time: ") {
-            // XXX: sub passes currently cause problems because their names are inconsistent in
-            // incremental runs, especially codegen passes
-            //let time = &line["  time: ".len()..line.find(";").unwrap()];
-            //let time: f64 = time.parse().chain_err(|| format!("parsed time: {:?}", time))?;
-
-            //let mem = &line[line.find("rss: ").unwrap() + 5..line.find("MB").unwrap()];
-            //let mem: u64 = mem.parse().chain_err(|| format!("parsed memory: {:?}", mem))?;
-
-            //let name = line[line.find("MB\t").unwrap() + 3..].to_string();
-            //sub_passes.insert(name.clone(), Pass {
-            //    name: name,
-            //    time: time,
-            //    mem: mem,
-            //    sub_passes: HashMap::new(),
-            //});
         } else {
             //info!("unhandled line: {}", line);
         }
