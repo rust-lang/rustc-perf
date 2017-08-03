@@ -24,7 +24,7 @@ use serde_json;
 use futures::{self, Future, Stream};
 use futures_cpupool::CpuPool;
 use hyper::{self, Get, Post, StatusCode};
-use hyper::header::{ContentLength, ContentType};
+use hyper::header::{ContentLength, CacheControl, CacheDirective, ContentType};
 use hyper::mime;
 use hyper::server::{Http, Service, Request, Response};
 
@@ -410,6 +410,10 @@ impl Server {
                 let result = handler(body, &data);
                 Response::new()
                     .with_header(ContentType::json())
+                    .with_header(CacheControl(vec![
+                            CacheDirective::NoCache,
+                            CacheDirective::NoStore,
+                    ]))
                     .with_body(serde_json::to_string(&result).unwrap())
             })
         }).boxed()
