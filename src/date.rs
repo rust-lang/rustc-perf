@@ -12,7 +12,7 @@ use std::str::FromStr;
 use std::marker::PhantomData;
 use std::fmt;
 
-use chrono::{UTC, DateTime, TimeZone, Duration, Datelike};
+use chrono::{Utc, DateTime, TimeZone, Duration, Datelike};
 use serde::{self, Serialize, Deserialize};
 use util;
 
@@ -22,13 +22,13 @@ use errors::*;
 pub struct DeltaTime(#[serde(with = "util::round_float")] pub f64);
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Date(pub DateTime<UTC>);
+pub struct Date(pub DateTime<Utc>);
 
 impl FromStr for Date {
     type Err = Error;
     fn from_str(s: &str) -> Result<Date> {
         match DateTime::parse_from_rfc3339(s) {
-            Ok(value) => Ok(Date(value.with_timezone(&UTC))),
+            Ok(value) => Ok(Date(value.with_timezone(&Utc))),
             Err(err) => {
                 Err(err).chain_err(|| format!("parse failure of date {} with RFC 3339 format", s))
             }
@@ -39,9 +39,9 @@ impl FromStr for Date {
 impl Date {
     pub fn from_format(date: &str, format: &str) -> Result<Date> {
         match DateTime::parse_from_str(date, format) {
-            Ok(value) => Ok(Date(value.with_timezone(&UTC))),
+            Ok(value) => Ok(Date(value.with_timezone(&Utc))),
             Err(_) => {
-                match UTC.datetime_from_str(date, format) {
+                match Utc.datetime_from_str(date, format) {
                     Ok(dt) => Ok(Date(dt)),
                     Err(err) => {
                         Err(err).chain_err(|| {
@@ -56,7 +56,7 @@ impl Date {
     }
 
     pub fn ymd_hms(year: i32, month: u32, day: u32, h: u32, m: u32, s: u32) -> Date {
-        Date(UTC.ymd(year, month, day).and_hms(h, m, s))
+        Date(Utc.ymd(year, month, day).and_hms(h, m, s))
     }
 
     pub fn start_of_week(&self) -> Date {
@@ -72,14 +72,14 @@ impl fmt::Display for Date {
     }
 }
 
-impl From<DateTime<UTC>> for Date {
-    fn from(datetime: DateTime<UTC>) -> Date {
+impl From<DateTime<Utc>> for Date {
+    fn from(datetime: DateTime<Utc>) -> Date {
         Date(datetime)
     }
 }
 
-impl PartialEq<DateTime<UTC>> for Date {
-    fn eq(&self, other: &DateTime<UTC>) -> bool {
+impl PartialEq<DateTime<Utc>> for Date {
+    fn eq(&self, other: &DateTime<Utc>) -> bool {
         self.0 == *other
     }
 }
