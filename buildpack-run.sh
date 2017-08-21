@@ -1,1 +1,1 @@
-git clone https://github.com/rust-lang-nursery/rustc-timing.git data
+git clone https://github.com/alexcrichton/rustc-timing.git data

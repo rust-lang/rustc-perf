@@ -124,7 +124,7 @@ impl InputData {
             // If the repository doesn't yet exist, simplify clone it to the given location.
             info!("cloning repository into {}, since it doesn't exist before", repo_loc.display());
             git::execute_command(&env::current_dir()?, &[
-                "clone", "https://github.com/rust-lang-nursery/rustc-timing.git",
+                "clone", "https://github.com/alexcrichton/rustc-timing.git",
                 repo_loc.to_str().unwrap()
             ])?;
         }
