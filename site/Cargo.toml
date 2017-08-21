@@ -5,7 +5,7 @@ version = "0.1.0"
 
 [dependencies]
 env_logger = "0.4.2"
-error-chain = "0.10.0"
+error-chain = "0.11.0-rc.2"
 futures = "0.1.13"
 futures-cpupool = "0.1.5"
 log = "0.3.6"

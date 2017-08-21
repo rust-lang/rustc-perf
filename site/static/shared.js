@@ -26,6 +26,11 @@ function gatherChecks(name) {
     return { list: "List", content: result };
 }
 
+function getSelected(name) {
+    let e = document.getElementById(name);
+    return e.options[e.selectedIndex].value;
+}
+
 function toList(list_object, type) {
     if (list_object.list == "All") {
         let result = [];
@@ -90,6 +95,15 @@ function make_settings(callback, total_label) {
             }
             document.getElementById("phases").innerHTML = phases_html;
             addTotalHandler("check-phase");
+
+            for (let stat of data.stats) {
+                phases_html += `<option value="${stat}">${stat}</option>`;
+            }
+            let list = document.getElementById("stats");
+            if (list) {
+                list.innerHTML = phases_html;
+                list.value = 'instructions:u';
+            }
 
             var groupByCrate = document.getElementById("group-by-crate");
             if (groupByCrate) {

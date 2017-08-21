@@ -34,9 +34,16 @@ pub struct Pass {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct Stat {
+    pub name: String,
+    pub cnt: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Run {
     pub name: String,
     pub passes: Vec<Pass>,
+    pub stats: Vec<Stat>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -93,6 +100,10 @@ impl Run {
     pub fn get_pass(&self, pass: &str) -> Option<&Pass> {
         self.passes.iter().find(|p| p.name == pass)
     }
+
+    pub fn get_stat(&self, stat: &str) -> Option<f64> {
+        self.stats.iter().find(|s| s.name == stat).map(|s| s.cnt)
+    }
 }
 
 #[derive(Debug)]
@@ -104,6 +115,9 @@ pub struct InputData {
 
     /// A set containing all phase names, across all crates.
     pub phase_list: BTreeSet<String>,
+
+    /// All known statistics gathered for crates
+    pub stats_list: BTreeSet<String>,
 
     /// The last date that was seen while loading files. The DateTime variant is
     /// used here since the date may or may not contain a time. Since the
@@ -177,6 +191,7 @@ impl InputData {
         let mut last_date = None;
         let mut phase_list = BTreeSet::new();
         let mut crate_list = BTreeSet::new();
+        let mut stats_list = BTreeSet::new();
 
         for run in data.values() {
             if last_date.is_none() || last_date.as_ref().unwrap() < &run.commit.date {
@@ -189,6 +204,10 @@ impl InputData {
                 for pass in &patch.run().passes {
                     phase_list.insert(pass.name.clone());
                 }
+
+                for stat in &patch.run().stats {
+                    stats_list.insert(stat.name.clone());
+                }
             }
         }
 
@@ -198,12 +217,13 @@ impl InputData {
         let summary = Summary::new(&data, last_date);
 
         Ok(InputData {
-               summary: summary,
-               crate_list: crate_list,
-               phase_list: phase_list,
-               last_date: last_date,
-               data: data,
-           })
+            summary: summary,
+            crate_list: crate_list,
+            phase_list: phase_list,
+            stats_list: stats_list,
+            last_date: last_date,
+            data: data,
+        })
     }
 }
 

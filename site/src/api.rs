@@ -86,6 +86,9 @@ pub mod info {
         /// Sorted vector of phase names
         pub phases: BTreeSet<String>,
 
+        /// Sorted list of statistic names known
+        pub stats: BTreeSet<String>,
+
         /// Chronologically last loaded run date.
         pub as_of: Date,
     }
@@ -94,7 +97,7 @@ pub mod info {
 pub mod data {
     use super::List;
     use date::{Date, OptionalDate, Start, End};
-    use server::{DateData, GroupBy};
+    use server::{DateData, DateData2, GroupBy};
     use std::collections::BTreeSet;
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -121,6 +124,30 @@ pub mod data {
         pub end: Date,
         pub crates: BTreeSet<String>,
         pub phases: BTreeSet<String>,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    pub struct Request2 {
+        #[serde(rename="start")]
+        pub start_date: OptionalDate<Start>,
+
+        #[serde(rename="end")]
+        pub end_date: OptionalDate<End>,
+
+        /// Which crates to return data for
+        pub crates: List,
+
+        /// Which statistic to return data for
+        pub stat: String,
+    }
+
+    /// List of DateData's from oldest to newest
+    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+    pub struct Response2 {
+        pub data: Vec<DateData2>,
+        pub start: Date,
+        pub end: Date,
+        pub crates: BTreeSet<String>,
     }
 }
 
