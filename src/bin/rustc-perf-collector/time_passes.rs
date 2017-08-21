@@ -71,9 +71,6 @@ fn extract_perf_stat(s: &str, stats: &mut Vec<Stat>) -> Result<()> {
     let name = get!(parts.next());
     let _time = get!(parts.next());
     let pct = get!(parts.next());
-    if parts.next().is_some() {
-        return Ok(())
-    }
     if cnt == "<not supported>" {
         return Ok(())
     }
