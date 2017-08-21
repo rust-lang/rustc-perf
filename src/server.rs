@@ -128,6 +128,40 @@ fn serialize_kind() {
                GroupBy::Phase);
 }
 
+/// Data associated with a specific date
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DateData2 {
+    pub date: Date,
+    pub commit: String,
+    pub data: HashMap<String, f64>,
+}
+
+impl DateData2 {
+    pub fn for_day(
+        day: &CommitData,
+        crates: &BTreeSet<String>,
+        stat: &str,
+    ) -> DateData2 {
+        let crates = day.benchmarks.values().filter(|v| v.is_ok())
+            .flat_map(|patches| patches.as_ref().unwrap())
+            .filter(|patch| crates.contains(&patch.full_name()))
+            .collect::<Vec<_>>();
+
+        let mut data = HashMap::new();
+        for patch in &crates {
+            if let Some(stat) = patch.run().get_stat(stat) {
+                *data.entry(patch.full_name()).or_insert(0.0) += stat;
+            }
+        }
+
+        DateData2 {
+            date: day.commit.date,
+            commit: day.commit.sha.clone(),
+            data: data,
+        }
+    }
+}
+
 pub fn handle_summary(data: &InputData) -> summary::Response {
     fn summarize(comparison: &Comparison) -> DeltaTime {
         let mut sum = 0.0;
@@ -177,6 +211,7 @@ pub fn handle_info(data: &InputData) -> info::Response {
     info::Response {
         crates: data.crate_list.clone(),
         phases: data.phase_list.clone(),
+        stats: data.stats_list.clone(),
         as_of: data.last_date,
     }
 }
@@ -209,6 +244,35 @@ pub fn handle_data(body: data::Request, data: &InputData) -> data::Response {
         end: body.end_date.as_date(data.last_date),
         crates: body.crates.into_set(&data.crate_list),
         phases: body.phases.into_set(&data.phase_list),
+    }
+}
+
+pub fn handle_data2(body: data::Request2, data: &InputData) -> data::Response2 {
+    let mut result = util::optional_data_range(data, body.start_date.clone(), body.end_date.clone())
+        .map(|(_, day)| day)
+        .map(|day| DateData2::for_day(
+            day,
+            &body.crates.into_set(&data.crate_list),
+            &body.stat,
+        ))
+        .collect::<Vec<_>>();
+
+    // Return everything from the first non-empty data to the last non-empty data.
+    // Data may contain "holes" of empty data.
+    let first_idx = result
+        .iter()
+        .position(|day| !day.data.is_empty())
+        .unwrap_or(0);
+    let last_idx = result
+        .iter()
+        .rposition(|day| !day.data.is_empty())
+        .unwrap_or(0);
+    let result = result.drain(first_idx..(last_idx + 1)).collect();
+    data::Response2 {
+        data: result,
+        start: body.start_date.as_date(data.last_date),
+        end: body.end_date.as_date(data.last_date),
+        crates: body.crates.into_set(&data.crate_list),
     }
 }
 
@@ -505,6 +569,7 @@ impl Service for Server {
             "/perf/summary" => self.handle_get(&req, handle_summary),
             "/perf/info" => self.handle_get(&req, handle_info),
             "/perf/data" => self.handle_post(req, handle_data),
+            "/perf/data2" => self.handle_post(req, handle_data2),
             "/perf/get_tabular" => self.handle_post(req, handle_tabular),
             "/perf/get" => self.handle_post(req, handle_days),
             "/perf/stats" => self.handle_post(req, handle_stats),
