@@ -1,5 +1,6 @@
 //! Execute benchmarks in a sysroot.
 
+use std::cmp;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -104,7 +105,7 @@ impl Benchmark {
 
         let mut patches = Vec::new();
         for patch_run in patch_runs {
-            let n = patch_run.runs.len();
+            // let n = patch_run.runs.len();
             let mut runs = patch_run.runs.into_iter();
             let Run { mut passes, mut stats, name: _ } = runs.next().unwrap();
             for run in runs {
@@ -113,8 +114,8 @@ impl Benchmark {
                         Some(b) => b,
                         None => bail!("expected name {} to exist in both a and b", a.name),
                     };
-                    a.time += b.time;
-                    a.mem += b.mem;
+                    a.time = f64::min(a.time, b.time);
+                    a.mem = cmp::min(a.mem, b.mem);
                 }
 
                 for a in &mut stats {
@@ -122,16 +123,16 @@ impl Benchmark {
                         Some(b) => b,
                         None => bail!("expected name {} to exist in both a and b", a.name),
                     };
-                    a.cnt += b.cnt;
+                    a.cnt = f64::min(a.cnt, b.cnt);
                 }
             }
-            for pass in &mut passes {
-                pass.time /= n as f64;
-                pass.mem /= n as u64;
-            }
-            for stat in &mut stats {
-                stat.cnt /= n as f64;
-            }
+            // for pass in &mut passes {
+            //     pass.time /= n as f64;
+            //     pass.mem /= n as u64;
+            // }
+            // for stat in &mut stats {
+            //     stat.cnt /= n as f64;
+            // }
             patches.push(Patch {
                 name: patch_run.name.clone(),
                 patch: patch_run.patch.clone(),

@@ -75,7 +75,7 @@ fn print_memory() {
         let mut usage = mem::zeroed();
         let r = libc::getrusage(libc::RUSAGE_CHILDREN, &mut usage);
         if r == 0 {
-            println!("{},,max-rss,3,100.00", usage.ru_maxrss);
+            println!("{};;max-rss;3;100.00", usage.ru_maxrss);
         }
     }
 }
