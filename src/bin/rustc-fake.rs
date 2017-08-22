@@ -7,6 +7,7 @@ fn main() {
     let rustc = env::var_os("RUSTC_REAL").unwrap();
     let mut cmd = Command::new(&rustc);
     let any_time_passes = args.iter().any(|a| a.to_str() == Some("time-passes"));
+
     if env::var_os("USE_PERF").is_some() && any_time_passes {
         cmd = Command::new("perf");
         cmd.arg("stat")
@@ -16,14 +17,26 @@ fn main() {
             .arg(&rustc);
     }
     cmd.args(&args);
-    exec(&mut cmd)
+
+    if any_time_passes {
+        raise_priority();
+        assert!(cmd.status().expect("failed to spawn").success());
+        print_memory();
+    } else {
+        exec(&mut cmd);
+    }
 }
 
 #[cfg(unix)]
 fn exec(cmd: &mut Command) -> ! {
+    use std::os::unix::prelude::*;
+    panic!("failed to spawn: {}", cmd.exec());
+}
+
+#[cfg(unix)]
+fn raise_priority() {
     extern crate libc;
 
-    use std::os::unix::prelude::*;
     use std::io;
     use std::mem;
 
@@ -50,11 +63,27 @@ fn exec(cmd: &mut Command) -> ! {
             // and hope we've got elevated privileges on the actual perf bot.
         }
     }
+}
 
-    panic!("failed to spawn: {}", cmd.exec());
+#[cfg(unix)]
+fn print_memory() {
+    extern crate libc;
+
+    use std::mem;
+
+    unsafe {
+        let mut usage = mem::zeroed();
+        let r = libc::getrusage(libc::RUSAGE_CHILDREN, &mut usage);
+        if r == 0 {
+            println!("{},,max-rss,3,100.00", usage.ru_maxrss);
+        }
+    }
 }
 
 #[cfg(windows)]
-fn exec(cmd: &mut Command) -> ! {
-    std::process::exit(cmd.status().expect("failed to spawn").code().unwrap());
+fn raise_priority() {
+}
+
+#[cfg(windows)]
+fn print_memory() {
 }
