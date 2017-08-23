@@ -178,19 +178,19 @@
     function make_graph(state, push_state) {
         let start_date = state.start || getDate("start-date");
         let end_date = state.end || getDate("end-date");
-        let crates = state.crates || gatherChecks("check-crate");
+        let crates = state.crates || [];
         let phases = state.phases || gatherChecks("check-phase");
         let group_by = state.group_by || get_group_by();
         let stat = state.stat || getSelected("stats");
 
-        set_check_boxes(crates, phases, group_by);
+        set_check_boxes({list: 'All'}, phases, group_by);
         document.getElementById('stats').value = stat;
 
         let values = {
             start: start_date,
             end: end_date,
-            crates: crates,
-            stat: stat
+            stat: stat,
+            crates: {list: 'All'},
         };
         make_request("/data2", values).then(function(response) {
             response.json().then(function(data) {
@@ -202,6 +202,22 @@
                 set_date("end-date", end_date);
                 set_date("end-date", end_date);
                 init_graph(data, stat);
+                if (crates.length != 0) {
+                    hide_all();
+                    for (var i = 0; i < chart.series.length; i++) {
+                        var series = chart.series[i];
+                        var found = false;
+                        for (var j = 0; j < crates.length; j++) {
+                            if (series.name.includes(crates[j])) {
+                                found = true;
+                            }
+                        }
+                        if (found) {
+                            series.setVisible(true, false);
+                        }
+                    }
+                    chart.redraw();
+                }
 
                 if (push_state) {
                     let state = {
@@ -210,9 +226,6 @@
                         crates: crates,
                         stat: stat,
                     };
-                    if (crates['list'] == 'All') {
-                        delete state['crates'];
-                    }
                     push_state_to_history(state);
                 }
             });

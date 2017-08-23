@@ -233,7 +233,13 @@ pub struct Comparison {
     pub b: Commit,
 
     /// Maps crate names to a map of phases to each phase's delta time over the range.
-    pub by_crate: BTreeMap<String, BTreeMap<String, f64>>,
+    pub by_crate: BTreeMap<String, ByCrateComparison>,
+}
+
+#[derive(Debug, Default)]
+pub struct ByCrateComparison {
+    pub passes: BTreeMap<String, f64>,
+    pub stats: BTreeMap<String, f64>,
 }
 
 #[derive(Debug)]
@@ -313,8 +319,19 @@ impl Summary {
                     let b_t = b_run.get_pass(&a_pass.name).map(|p| p.time).unwrap_or(0.0);
                     println!("{}: {}: {} - {}: {}", a_run.name, a_pass.name, b_t, a_t, b_t - a_t);
                     by_crate.entry(a_run.name.clone())
-                        .or_insert_with(BTreeMap::new)
+                        .or_insert_with(ByCrateComparison::default)
+                        .passes
                         .insert(a_pass.name.clone(), b_t - a_t);
+                }
+
+                for a_stat in &a_run.stats {
+                    let a_t = a_stat.cnt;
+                    let b_t = b_run.get_stat(&a_stat.name).unwrap_or(0.0);
+                    println!("{}: {}: {} - {}: {}", a_run.name, a_stat.name, b_t, a_t, b_t - a_t);
+                    by_crate.entry(a_run.name.clone())
+                        .or_insert_with(ByCrateComparison::default)
+                        .stats
+                        .insert(a_stat.name.clone(), b_t - a_t);
                 }
             }
         }

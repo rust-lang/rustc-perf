@@ -163,47 +163,44 @@ impl DateData2 {
 }
 
 pub fn handle_summary(data: &InputData) -> summary::Response {
-    fn summarize(comparison: &Comparison) -> DeltaTime {
+    fn summarize(comparison: &Comparison, stat: &str) -> DeltaTime {
         let mut sum = 0.0;
         let mut count = 0; // crate count
         for krate in comparison.by_crate.values() {
             count += 1;
-            for (_, &phase_dt) in krate.iter() {
-                sum += phase_dt;
-            }
+            sum += krate.stats[stat] / 1000.0;
         }
 
         DeltaTime(sum / (count as f64))
     }
 
-    fn breakdown(comparison: &Comparison) -> BTreeMap<String, DeltaTime> {
+    fn breakdown(comparison: &Comparison, stat: &str) -> BTreeMap<String, DeltaTime> {
         let mut per_bench = BTreeMap::new();
 
         for (crate_name, krate) in &comparison.by_crate {
-            let mut sum = 0.0;
-            for &phase_dt in krate.values() {
-                sum += phase_dt;
-            }
-            per_bench.insert(crate_name.to_string(), DeltaTime(sum));
+            let time = krate.stats[stat] / 1000.0;
+            per_bench.insert(crate_name.to_string(), DeltaTime(time));
         }
 
         per_bench
     }
 
+    let stat = "cpu-clock";
     let dates = data.summary.comparisons.iter().map(|c| c.b.date).collect::<Vec<_>>();
 
     // overall number for each week
-    let summaries = data.summary.comparisons.iter().map(summarize).collect::<Vec<_>>();
+    let summaries = data.summary.comparisons.iter().map(|x| summarize(x, stat)).collect();
 
     // per benchmark, per week
-    let breakdown_data = data.summary.comparisons.iter().map(breakdown).collect::<Vec<_>>();
+    let breakdown_data = data.summary.comparisons.iter().map(|x| breakdown(x, stat)).collect();
 
     summary::Response {
-        total_summary: summarize(&data.summary.total),
-        total_breakdown: breakdown(&data.summary.total),
+        total_summary: summarize(&data.summary.total, stat),
+        total_breakdown: breakdown(&data.summary.total, stat),
         breakdown: breakdown_data,
         summaries: summaries,
         dates: dates,
+        stat: stat.to_string(),
     }
 }
 
