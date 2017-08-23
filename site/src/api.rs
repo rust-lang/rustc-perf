@@ -71,6 +71,9 @@ pub mod summary {
 
         /// 12 week long list of dates from which data was used for that week.
         pub dates: Vec<Date>,
+
+        /// The statistic that's being summarized
+        pub stat: String,
     }
 }
 
