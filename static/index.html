@@ -86,9 +86,10 @@
             d_class = "positive";
         }
 
-        if (datum == 0) {
-            datum = "-";
+        if (datum == 0 || datum === undefined) {
+            datum = "&mdash;";
         } else {
+            datum = datum.toFixed(2);
             datum += "s";
         }
 
