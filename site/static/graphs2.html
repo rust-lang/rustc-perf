@@ -7,6 +7,10 @@
 <body class="container">
     <div>&gt;  graphs, <a href="stats.html">stats</a>, <a href="compare.html">comparisons</a>, <a href="table.html">table view</a>.</div>
     <div style="width: 1000px; height: 600px;" id="chart-container"></div>
+    <div id="wut">
+      <a href="#" onClick="hide_all(); return false">Hide All</a>
+      <a href="#" onClick="show_all(); return false">Show All</a>
+    </div>
     <div id="settings">
         <span id="crates-outer" class="settings" style='display:none'>
             <h3 id="crates_label">Benchmarks</h3>
@@ -96,7 +100,6 @@
         for (var i = 0; i < crates_sorted.length; i++) {
             var crate = crates_sorted[i][0];
             var data = crates_sorted[i][1];
-            console.log(crate, data);
             datasets.push({
                 name: crate,
                 animation: false,
@@ -217,6 +220,26 @@
             console.log("Error fetching data:");
             console.log(err);
         });
+    }
+
+    function hide_all() {
+        if (!chart) {
+            return
+        }
+        for (var i = 0; i < chart.series.length; i++) {
+            chart.series[i].setVisible(false, false);
+        }
+        chart.redraw();
+    }
+
+    function show_all() {
+        if (!chart) {
+            return
+        }
+        for (var i = 0; i < chart.series.length; i++) {
+            chart.series[i].setVisible(true, false);
+        }
+        chart.redraw();
     }
 
     make_settings(make_graph);
