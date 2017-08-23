@@ -37,30 +37,16 @@ fn exec(cmd: &mut Command) -> ! {
 fn raise_priority() {
     extern crate libc;
 
-    use std::io;
-    use std::mem;
-
     unsafe {
-        // Pin ourselves to just one core in case we're running on a multicore
-        // system to try to normalize our results a bit
-        let mut set: libc::cpu_set_t = mem::zeroed();
-        libc::CPU_ZERO(&mut set);
-        libc::CPU_SET(0, &mut set);
-        let r = libc::sched_setaffinity(libc::getpid(),
-                                        mem::size_of_val(&set),
-                                        &set);
-        if r != 0 {
-            panic!("failed to set affinity: {}", io::Error::last_os_error());
-        }
-
         // Try to reduce jitter in wall time by increasing our priority to the
         // maximum
-        let r = libc::setpriority(libc::PRIO_PROCESS as _,
-                                  libc::getpid() as libc::id_t,
-                                  -20);
-        if r != 0 {
-            // this requires elevated privileges, so just ignore if this fails,
-            // and hope we've got elevated privileges on the actual perf bot.
+        for i in (1..21).rev() {
+            let r = libc::setpriority(libc::PRIO_PROCESS as _,
+                                      libc::getpid() as libc::id_t,
+                                      -i);
+            if r == 0 {
+                break
+            }
         }
     }
 }
