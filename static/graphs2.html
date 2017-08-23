@@ -175,10 +175,23 @@
         });
     }
 
+    function getSelectedCrates() {
+        var selected = [];
+        if (chart) {
+            for (var i = 0; i < chart.series.length; i++) {
+                var series = chart.series[i];
+                if (series.visible) {
+                    selected.push(series.name);
+                }
+            }
+        }
+        return selected;
+    }
+
     function make_graph(state, push_state) {
         let start_date = state.start || getDate("start-date");
         let end_date = state.end || getDate("end-date");
-        let crates = state.crates || [];
+        let crates = state.crates || getSelectedCrates();
         let phases = state.phases || gatherChecks("check-phase");
         let group_by = state.group_by || get_group_by();
         let stat = state.stat || getSelected("stats");
