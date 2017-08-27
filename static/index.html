@@ -50,6 +50,7 @@
         var week_count = data.breakdown.length;
         var bench_keys = Object.keys(data.breakdown[0]);
         bench_keys.sort();
+        var stat = data.stat;
 
         var html = `<table class="summary_table"><tr><th></th>`;
         for (var i = week_count - 1; i >= 0; --i) {
@@ -60,10 +61,10 @@
         for (var b of bench_keys) {
             html += "<tr><th>" + b + "</th>"
             for (var i = week_count - 1; i >= 0; --i) {
-                html += cell_for_data(data.breakdown[i][b], b, data.dates, i, 1);
+                html += cell_for_data(data.breakdown[i][b], b, data.dates, i, 1, stat);
             }
             // total column, subtract the week count from 0th date, which is actually the most recent date
-            html += cell_for_data(data.total_breakdown[b], b, data.dates, 0, week_count);
+            html += cell_for_data(data.total_breakdown[b], b, data.dates, 0, week_count, stat);
             html += "</tr>";
         }
         html += "<tr><th>average</th>";
@@ -78,7 +79,7 @@
         document.getElementById("summary_table").style.display = "block";
     }
 
-    function cell_for_data(datum, crate, dates, index, weeks) {
+    function cell_for_data(datum, crate, dates, index, weeks, stat) {
         var d_class = "neutral";
         if (datum <= -1) {
             d_class = "negative";
@@ -102,10 +103,10 @@
                 start: start,
                 end: end,
                 group_by: "phase",
-                crates: { "list": "List", content: [crate] },
-                phases: { "list": "All", content: null },
+                crates: [crate],
+                stat: stat,
             });
-            return `<td><a class="${d_class}" href="graphs.html${query_str}">${datum}</a></td>`;
+            return `<td><a class="${d_class}" href="graphs2.html${query_str}">${datum}</a></td>`;
         } else {
             return `<td class="${d_class}">${datum}</td>`;
         }
