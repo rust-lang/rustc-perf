@@ -1,0 +1,18 @@
+[package]
+name = "encoding-types"
+version = "0.2.0"
+authors = [ "Kang Seonghoon <public+rust@mearie.org>"
+          , "Simonas Kazlauskas <github@kazlauskas.me>"
+          ]
+
+description = "Traits and types for the encoding package"
+homepage = "https://github.com/lifthrasiir/rust-encoding"
+documentation = "https://lifthrasiir.github.io/rust-encoding/"
+repository = "https://github.com/lifthrasiir/rust-encoding"
+keywords = ["encoding", "unicode", "charset"]
+readme = "README.md"
+license = "MIT"
+
+[lib]
+name = "encoding_types"
+path = "lib.rs"

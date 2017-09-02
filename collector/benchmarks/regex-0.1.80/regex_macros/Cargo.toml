@@ -1,0 +1,35 @@
+[package]
+name = "regex_macros"
+version = "0.1.38"
+authors = ["The Rust Project Developers"]
+license = "MIT/Apache-2.0"
+repository = "https://github.com/rust-lang/regex"
+homepage = "https://github.com/rust-lang/regex"
+description = """
+An implementation of statically compiled regular expressions for Rust.
+
+Unless you specifically need compile time regular expressions or a matching
+engine that is guaranteed not to allocate, you should temporarily prefer using
+the plain regex crate (since it is almost always faster).
+"""
+
+[lib]
+name = "regex_macros"
+plugin = true
+
+[dependencies.regex]
+path = ".."
+version = "0.1.63"
+features = ["pattern"]
+
+[dependencies.regex-syntax]
+path = "../regex-syntax"
+version = "0.3.1"
+
+[dev-dependencies]
+# For generating random test data.
+rand = "0.3"
+
+[[test]]
+path = "../tests/test_plugin.rs"
+name = "plugin"
