@@ -12,8 +12,10 @@ fn main() {
         cmd = Command::new("perf");
         cmd.arg("stat")
             .arg("-x;")
-            .arg("-e").arg("instructions:u,cycles:u,task-clock,cpu-clock,faults")
-            .arg("--log-fd").arg("1")
+            .arg("-e")
+            .arg("instructions:u,cycles:u,task-clock,cpu-clock,faults")
+            .arg("--log-fd")
+            .arg("1")
             .arg(&rustc);
     }
     cmd.args(&args);
@@ -41,11 +43,9 @@ fn raise_priority() {
         // Try to reduce jitter in wall time by increasing our priority to the
         // maximum
         for i in (1..21).rev() {
-            let r = libc::setpriority(libc::PRIO_PROCESS as _,
-                                      libc::getpid() as libc::id_t,
-                                      -i);
+            let r = libc::setpriority(libc::PRIO_PROCESS as _, libc::getpid() as libc::id_t, -i);
             if r == 0 {
-                break
+                break;
             }
         }
     }
@@ -67,9 +67,7 @@ fn print_memory() {
 }
 
 #[cfg(windows)]
-fn raise_priority() {
-}
+fn raise_priority() {}
 
 #[cfg(windows)]
-fn print_memory() {
-}
+fn print_memory() {}

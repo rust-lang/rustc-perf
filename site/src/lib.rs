@@ -9,19 +9,19 @@
 
 #![feature(proc_macro, conservative_impl_trait)]
 
-#[macro_use]
-extern crate serde_derive;
+extern crate chrono;
 #[macro_use]
 extern crate error_chain;
-#[macro_use]
-extern crate log;
-extern crate chrono;
-extern crate serde;
-extern crate serde_json;
-extern crate hyper;
 extern crate futures;
 extern crate futures_cpupool;
+extern crate hyper;
+#[macro_use]
+extern crate log;
 extern crate rustc_perf_collector;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
+extern crate serde_json;
 
 mod errors {
     error_chain! {

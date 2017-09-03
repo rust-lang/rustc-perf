@@ -12,13 +12,16 @@ use std::collections::BTreeMap;
 use std::collections::btree_map::Range;
 use std::collections::Bound::Included;
 
-use load::{InputData, Commit, CommitData};
-use date::{OptionalDate, Date, Start, End};
+use load::{Commit, CommitData, InputData};
+use date::{Date, End, OptionalDate, Start};
 use errors::*;
 
 pub fn get_commit_data_from_end(data: &InputData, idx: Date) -> &CommitData {
     debug!("getting from end for {}", idx);
-    let a = Commit { sha: String::new(), date: idx };
+    let a = Commit {
+        sha: String::new(),
+        date: idx,
+    };
 
     let r = data.data.range(a..).next().map(|x| x.1).unwrap_or_else(|| {
         let r = data.data.range(..).next_back().unwrap().1;
@@ -31,7 +34,10 @@ pub fn get_commit_data_from_end(data: &InputData, idx: Date) -> &CommitData {
 
 pub fn get_commit_data_from_start(data: &InputData, idx: Date) -> &CommitData {
     debug!("getting from start for {}", idx);
-    let a = Commit { sha: String::new(), date: idx };
+    let a = Commit {
+        sha: String::new(),
+        date: idx,
+    };
 
     let r = data.data.range(a..).next().map(|x| x.1).unwrap_or_else(|| {
         let r = data.data.range(..).next().unwrap().1;
@@ -47,16 +53,26 @@ pub fn optional_data_range(
     a: OptionalDate<Start>,
     b: OptionalDate<End>,
 ) -> Range<Commit, CommitData> {
-    data_range(&data.data, a.as_date(data.last_date), b.as_date(data.last_date))
+    data_range(
+        &data.data,
+        a.as_date(data.last_date),
+        b.as_date(data.last_date),
+    )
 }
 
 pub fn data_range(
     data: &BTreeMap<Commit, CommitData>,
     a: Date,
-    b: Date
+    b: Date,
 ) -> Range<Commit, CommitData> {
-    let a = Commit { sha: String::new(), date: a };
-    let b = Commit { sha: String::new(), date: b };
+    let a = Commit {
+        sha: String::new(),
+        date: a,
+    };
+    let b = Commit {
+        sha: String::new(),
+        date: b,
+    };
 
     data.range((Included(a), Included(b)))
 }
@@ -68,4 +84,4 @@ pub fn get_repo_path() -> Result<String> {
         .ok_or("No argument supplied, needs location of data repo.".into())
 }
 
-pub use rustc_perf_collector::{round_float, null_means_nan};
+pub use rustc_perf_collector::{null_means_nan, round_float};

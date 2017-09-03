@@ -16,7 +16,7 @@ use time_passes::process_output;
 
 pub struct Benchmark {
     pub name: String,
-    pub path: PathBuf
+    pub path: PathBuf,
 }
 
 impl Benchmark {
@@ -40,8 +40,13 @@ impl Benchmark {
             info!("temporary directory is {}", tmp_dir.path().display());
 
             info!("copying files to temporary directory");
-            let output = self.command(sysroot, "cp").arg("-r").arg("-T").arg("--")
-                .arg(".").arg(tmp_dir.path()).output()?;
+            let output = self.command(sysroot, "cp")
+                .arg("-r")
+                .arg("-T")
+                .arg("--")
+                .arg(".")
+                .arg(tmp_dir.path())
+                .output()?;
 
             if !output.status.success() {
                 bail!("copy failed: {}", String::from_utf8_lossy(&output.stderr));
@@ -54,7 +59,12 @@ impl Benchmark {
 
             let output = make().arg("patches").output()?;
             let mut patches = str::from_utf8(&output.stdout)
-                .chain_err(|| format!("make patches in {} returned non UTF-8 output", self.path.display()))?
+                .chain_err(|| {
+                    format!(
+                        "make patches in {} returned non UTF-8 output",
+                        self.path.display()
+                    )
+                })?
                 .split_whitespace()
                 .collect::<Vec<_>>();
             if patches.is_empty() {
@@ -75,23 +85,25 @@ impl Benchmark {
                 let output = make.output()?;
 
                 if !output.status.success() {
-                    bail!("expected success, got {}\n\nstderr={}\n\n stdout={}",
+                    bail!(
+                        "expected success, got {}\n\nstderr={}\n\n stdout={}",
                         output.status,
                         String::from_utf8_lossy(&output.stderr),
                         String::from_utf8_lossy(&output.stdout)
                     );
                 }
 
-                let patch_index = if let Some(p) = patch_runs.iter().position(|p_run| p_run.patch == *patch) {
-                    p
-                } else {
-                    patch_runs.push(Patch {
-                        patch: patch.to_string(),
-                        name: self.name.clone(),
-                        runs: Vec::new(),
-                    });
-                    patch_runs.len() - 1
-                };
+                let patch_index =
+                    if let Some(p) = patch_runs.iter().position(|p_run| p_run.patch == *patch) {
+                        p
+                    } else {
+                        patch_runs.push(Patch {
+                            patch: patch.to_string(),
+                            name: self.name.clone(),
+                            runs: Vec::new(),
+                        });
+                        patch_runs.len() - 1
+                    };
 
                 let combined_name = format!("{}{}", self.name, patch);
                 let (passes, stats) = process_output(&combined_name, output.stdout)?;
@@ -107,7 +119,11 @@ impl Benchmark {
         for patch_run in patch_runs {
             // let n = patch_run.runs.len();
             let mut runs = patch_run.runs.into_iter();
-            let Run { mut passes, mut stats, name: _ } = runs.next().unwrap();
+            let Run {
+                mut passes,
+                mut stats,
+                name: _,
+            } = runs.next().unwrap();
             for run in runs {
                 for a in &mut passes {
                     let b = match run.passes.iter().find(|p| p.name == a.name) {
@@ -141,7 +157,7 @@ impl Benchmark {
                         name: patch_run.name + &patch_run.patch,
                         passes,
                         stats,
-                    }
+                    },
                 ],
             });
         }

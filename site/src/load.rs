@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::collections::{BTreeSet, BTreeMap};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
 use std::path::PathBuf;
 use std::io::Read;
@@ -23,7 +23,7 @@ use date::Date;
 
 const WEEKS_IN_SUMMARY: usize = 12;
 
-pub use rustc_perf_collector::{Pass, Stat, Run, Patch, Commit, CommitData};
+pub use rustc_perf_collector::{Commit, CommitData, Pass, Patch, Run, Stat};
 
 #[derive(Debug)]
 pub struct InputData {
@@ -55,11 +55,18 @@ impl InputData {
 
         if !repo_loc.exists() {
             // If the repository doesn't yet exist, simplify clone it to the given location.
-            info!("cloning repository into {}, since it doesn't exist before", repo_loc.display());
-            git::execute_command(&env::current_dir()?, &[
-                "clone", "https://github.com/rust-lang-nursery/rustc-timing.git",
-                repo_loc.to_str().unwrap()
-            ])?;
+            info!(
+                "cloning repository into {}, since it doesn't exist before",
+                repo_loc.display()
+            );
+            git::execute_command(
+                &env::current_dir()?,
+                &[
+                    "clone",
+                    "https://github.com/rust-lang-nursery/rustc-timing.git",
+                    repo_loc.to_str().unwrap(),
+                ],
+            )?;
         }
 
         // Read all files from repo_loc/processed
@@ -117,8 +124,11 @@ impl InputData {
                 last_date = Some(run.commit.date);
             }
 
-            for patch in run.benchmarks.values()
-                .filter(|v| v.is_ok()).flat_map(|v| v.as_ref().unwrap()) {
+            for patch in run.benchmarks
+                .values()
+                .filter(|v| v.is_ok())
+                .flat_map(|v| v.as_ref().unwrap())
+            {
                 crate_list.insert(patch.full_name());
                 for pass in &patch.run().passes {
                     phase_list.insert(pass.name.clone());
@@ -170,10 +180,7 @@ pub struct Summary {
 impl Summary {
     // Compute summary data. For each week, we find the last 3 weeks, and use
     // the median timing as the basis of the current week's summary.
-    fn new(
-        data: &BTreeMap<Commit, CommitData>,
-        last_date: Date,
-    ) -> Summary {
+    fn new(data: &BTreeMap<Commit, CommitData>, last_date: Date) -> Summary {
         // 12 week long mapping of crate names to by-phase percent changes with
         // the previous week.
         let mut weeks = Vec::with_capacity(WEEKS_IN_SUMMARY);
@@ -189,7 +196,11 @@ impl Summary {
             let last = week.next_back();
 
             if let (Some((_, first)), Some((_, last))) = (first, last) {
-                debug!("actual: start: {:?}, end: {:?}", first.commit.date, last.commit.date);
+                debug!(
+                    "actual: start: {:?}, end: {:?}",
+                    first.commit.date,
+                    last.commit.date
+                );
                 weeks.push(Summary::compare_points(first, last));
             } else {
                 warn!("week {} - {} has too few commits", start, end);
@@ -201,8 +212,10 @@ impl Summary {
             let end = last_date + Duration::weeks(1);
 
             let mut week = util::data_range(data, start, end);
-            Summary::compare_points(week.clone().next().expect("first commit exists").1,
-                week.next_back().expect("last commit exists").1)
+            Summary::compare_points(
+                week.clone().next().expect("first commit exists").1,
+                week.next_back().expect("last commit exists").1,
+            )
         };
 
         Summary {
@@ -214,30 +227,48 @@ impl Summary {
     fn compare_points(a: &CommitData, b: &CommitData) -> Comparison {
         let mut by_crate = BTreeMap::new();
         for a_benchmark in a.benchmarks() {
-            if a_benchmark.is_none() { continue; }
+            if a_benchmark.is_none() {
+                continue;
+            }
             let (crate_name, patches) = a_benchmark.unwrap();
             if !b.benchmarks.contains_key(crate_name) {
-                warn!("Comparing {} with {}: a contained {}, but b did not.",
-                    a.commit.sha, b.commit.sha, crate_name);
+                warn!(
+                    "Comparing {} with {}: a contained {}, but b did not.",
+                    a.commit.sha,
+                    b.commit.sha,
+                    crate_name
+                );
                 continue;
             }
 
             let a_patches = patches;
             let b_patches = b.benchmarks[crate_name].as_ref().map(|v| &v[..]).ok();
-            if b_patches.is_none() { continue; }
+            if b_patches.is_none() {
+                continue;
+            }
             let b_patches = b_patches.unwrap();
 
             for a_patch in a_patches {
                 let a_run = a_patch.run();
                 let b_patch = b_patches.iter().find(|p| p.run().name == a_run.name);
-                if b_patch.is_none() { continue; }
+                if b_patch.is_none() {
+                    continue;
+                }
                 let b_run = b_patch.unwrap().run();
 
                 for a_pass in &a_run.passes {
                     let a_t = a_pass.time;
                     let b_t = b_run.get_pass(&a_pass.name).map(|p| p.time).unwrap_or(0.0);
-                    println!("{}: {}: {} - {}: {}", a_run.name, a_pass.name, b_t, a_t, b_t - a_t);
-                    by_crate.entry(a_run.name.clone())
+                    println!(
+                        "{}: {}: {} - {}: {}",
+                        a_run.name,
+                        a_pass.name,
+                        b_t,
+                        a_t,
+                        b_t - a_t
+                    );
+                    by_crate
+                        .entry(a_run.name.clone())
                         .or_insert_with(ByCrateComparison::default)
                         .passes
                         .insert(a_pass.name.clone(), b_t - a_t);
@@ -246,8 +277,16 @@ impl Summary {
                 for a_stat in &a_run.stats {
                     let a_t = a_stat.cnt;
                     let b_t = b_run.get_stat(&a_stat.name).unwrap_or(0.0);
-                    println!("{}: {}: {} - {}: {}", a_run.name, a_stat.name, b_t, a_t, b_t - a_t);
-                    by_crate.entry(a_run.name.clone())
+                    println!(
+                        "{}: {}: {} - {}: {}",
+                        a_run.name,
+                        a_stat.name,
+                        b_t,
+                        a_t,
+                        b_t - a_t
+                    );
+                    by_crate
+                        .entry(a_run.name.clone())
                         .or_insert_with(ByCrateComparison::default)
                         .stats
                         .insert(a_stat.name.clone(), b_t - a_t);

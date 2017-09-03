@@ -1,15 +1,18 @@
 #![recursion_limit = "1024"]
 
-#[macro_use] extern crate clap;
-extern crate serde_json;
-#[macro_use] extern crate error_chain;
-extern crate rustc_perf_collector;
-extern crate env_logger;
-extern crate tempdir;
-#[macro_use] extern crate log;
-extern crate reqwest;
 extern crate chrono;
+#[macro_use]
+extern crate clap;
+extern crate env_logger;
+#[macro_use]
+extern crate error_chain;
+#[macro_use]
+extern crate log;
+extern crate reqwest;
 extern crate rust_sysroot;
+extern crate rustc_perf_collector;
+extern crate serde_json;
+extern crate tempdir;
 
 mod errors {
     // Create the Error, ErrorKind, ResultExt, and Result types
@@ -31,12 +34,12 @@ quick_main!(run);
 use std::fs;
 use std::str;
 use std::path::{Path, PathBuf};
-use std::io::{stdout, stderr, Write};
+use std::io::{stderr, stdout, Write};
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
 
-use rustc_perf_collector::{Date, Commit, CommitData};
+use rustc_perf_collector::{Commit, CommitData, Date};
 use rust_sysroot::git::Commit as GitCommit;
 use rust_sysroot::sysroot::Sysroot;
 
@@ -51,27 +54,42 @@ fn bench_commit(
     commit: &GitCommit,
     repo: Option<&outrepo::Repo>,
     sysroot: Sysroot,
-    benchmarks: &[Benchmark]
+    benchmarks: &[Benchmark],
 ) -> CommitData {
-    info!("benchmarking commit {} ({}) for triple {}", commit.sha, commit.date, sysroot.triple);
+    info!(
+        "benchmarking commit {} ({}) for triple {}",
+        commit.sha,
+        commit.date,
+        sysroot.triple
+    );
 
     let existing_data = repo.and_then(|r| r.load_commit_data(&commit, &sysroot.triple).ok());
 
-    let results: BTreeMap<_, _> = benchmarks.iter().map(|benchmark| {
-        if let Some(ref data) = existing_data {
-            if let Some(result) = data.benchmarks.get(&benchmark.name) {
-                return (benchmark.name.clone(), result.clone());
+    let results: BTreeMap<_, _> = benchmarks
+        .iter()
+        .map(|benchmark| {
+            if let Some(ref data) = existing_data {
+                if let Some(result) = data.benchmarks.get(&benchmark.name) {
+                    return (benchmark.name.clone(), result.clone());
+                }
             }
-        }
 
-        let result = benchmark.run(&sysroot);
+            let result = benchmark.run(&sysroot);
 
-        if result.is_err() {
-            info!("failure to benchmark {}, recorded: {:?}", benchmark.name, result);
-        }
+            if result.is_err() {
+                info!(
+                    "failure to benchmark {}, recorded: {:?}",
+                    benchmark.name,
+                    result
+                );
+            }
 
-        (benchmark.name.clone(), result.map_err(|e| format!("{:?}", e)))
-    }).collect();
+            (
+                benchmark.name.clone(),
+                result.map_err(|e| format!("{:?}", e)),
+            )
+        })
+        .collect();
 
     CommitData {
         commit: Commit {
@@ -79,7 +97,7 @@ fn bench_commit(
             date: Date(commit.date),
         },
         triple: sysroot.triple.clone(),
-        benchmarks: results
+        benchmarks: results,
     }
 }
 
@@ -90,7 +108,7 @@ fn get_benchmarks(benchmark_dir: &Path, filter: Option<&str>) -> Result<Vec<Benc
         let path = entry.path();
         let name = match entry.file_name().into_string() {
             Ok(s) => s,
-            Err(e) => bail!("non-utf8 benchmark name: {:?}", e)
+            Err(e) => bail!("non-utf8 benchmark name: {:?}", e),
         };
 
         if path.ends_with(".git") || path.ends_with("scripts") || !entry.file_type()?.is_dir() {
@@ -108,21 +126,29 @@ fn get_benchmarks(benchmark_dir: &Path, filter: Option<&str>) -> Result<Vec<Benc
         info!("benchmark {} - REGISTERED", name);
         benchmarks.push(Benchmark {
             path: path,
-            name: name
+            name: name,
         });
     }
     Ok(benchmarks)
 }
 
-fn process_commit(repo: &outrepo::Repo, commit: &GitCommit, benchmarks: &[Benchmark], preserve_sysroot: bool) -> Result<()> {
+fn process_commit(
+    repo: &outrepo::Repo,
+    commit: &GitCommit,
+    benchmarks: &[Benchmark],
+    preserve_sysroot: bool,
+) -> Result<()> {
     let sysroot = Sysroot::install(commit, "x86_64-unknown-linux-gnu", preserve_sysroot, false)?;
     repo.success(&bench_commit(commit, Some(repo), sysroot, benchmarks))
 }
 
 
-fn process_retries(commits: &[GitCommit], repo: &mut outrepo::Repo, benchmarks: &[Benchmark], preserve_sysroot: bool)
-                   -> Result<()>
-{
+fn process_retries(
+    commits: &[GitCommit],
+    repo: &mut outrepo::Repo,
+    benchmarks: &[Benchmark],
+    preserve_sysroot: bool,
+) -> Result<()> {
     while let Some(retry) = repo.next_retry() {
         info!("retrying {}", retry);
         let commit = commits.iter().find(|commit| commit.sha == retry).unwrap();
@@ -131,12 +157,16 @@ fn process_retries(commits: &[GitCommit], repo: &mut outrepo::Repo, benchmarks: 
     Ok(())
 }
 
-fn process_commits(commits: &[GitCommit], repo: &outrepo::Repo, benchmarks: &[Benchmark], preserve_sysroot: bool)
-                   -> Result<()>
-{
+fn process_commits(
+    commits: &[GitCommit],
+    repo: &outrepo::Repo,
+    benchmarks: &[Benchmark],
+    preserve_sysroot: bool,
+) -> Result<()> {
     println!("processing commits");
     if !commits.is_empty() {
-        let to_process = repo.find_missing_commits(commits, benchmarks, "x86_64-unknown-linux-gnu")?;
+        let to_process =
+            repo.find_missing_commits(commits, benchmarks, "x86_64-unknown-linux-gnu")?;
         // take 3 from the end -- this means that for each bors commit (which takes ~3 hours) we
         // test 3, which should allow us to eventually test all commits, but also keep up with the
         // latest rustc
@@ -202,7 +232,12 @@ fn run() -> Result<i32> {
         ("bench_commit", Some(sub_m)) => {
             let commit = sub_m.value_of("COMMIT").unwrap();
             let commit = commits.iter().find(|c| c.sha == commit).unwrap();
-            let sysroot = Sysroot::install(&commit, "x86_64-unknown-linux-gnu", preserve_sysroots, false)?;
+            let sysroot = Sysroot::install(
+                &commit,
+                "x86_64-unknown-linux-gnu",
+                preserve_sysroots,
+                false,
+            )?;
             let result = bench_commit(&commit, None, sysroot, &benchmarks);
             serde_json::to_writer(&mut stdout(), &result)?;
             Ok(0)
@@ -211,8 +246,18 @@ fn run() -> Result<i32> {
             let commit = sub_m.value_of("COMMIT").unwrap();
             let date = sub_m.value_of("DATE").unwrap();
             let rustc = sub_m.value_of("RUSTC").unwrap();
-            let commit = GitCommit { sha: commit.to_string(), date: DateTime::parse_from_rfc3339(date)?.with_timezone(&Utc), summary: String::new() };
-            let sysroot = Sysroot::with_local_rustc(&commit, rustc, "x86_64-unknown-linux-gnu", preserve_sysroots, false)?;
+            let commit = GitCommit {
+                sha: commit.to_string(),
+                date: DateTime::parse_from_rfc3339(date)?.with_timezone(&Utc),
+                summary: String::new(),
+            };
+            let sysroot = Sysroot::with_local_rustc(
+                &commit,
+                rustc,
+                "x86_64-unknown-linux-gnu",
+                preserve_sysroots,
+                false,
+            )?;
             let result = bench_commit(&commit, None, sysroot, &benchmarks);
             serde_json::to_writer(&mut stdout(), &result)?;
             Ok(0)
@@ -221,8 +266,12 @@ fn run() -> Result<i32> {
             let out_repo = PathBuf::from(sub_m.value_of_os("OUTPUT_REPOSITORY").unwrap());
             let out_repo = outrepo::Repo::open(out_repo)?;
             for commit in &commits {
-                if let Ok(mut data) = out_repo.load_commit_data(&commit, "x86_64-unknown-linux-gnu") {
-                    let benchmarks = data.benchmarks.into_iter().filter(|&(_, ref v)| v.is_ok()).collect();
+                if let Ok(mut data) = out_repo.load_commit_data(&commit, "x86_64-unknown-linux-gnu")
+                {
+                    let benchmarks = data.benchmarks
+                        .into_iter()
+                        .filter(|&(_, ref v)| v.is_ok())
+                        .collect();
                     data.benchmarks = benchmarks;
                     out_repo.add_commit_data(&data)?;
                 }
@@ -234,7 +283,8 @@ fn run() -> Result<i32> {
             let benchmark = sub_m.value_of("BENCHMARK").unwrap();
             let out_repo = outrepo::Repo::open(out_repo)?;
             for commit in &commits {
-                if let Ok(mut data) = out_repo.load_commit_data(&commit, "x86_64-unknown-linux-gnu") {
+                if let Ok(mut data) = out_repo.load_commit_data(&commit, "x86_64-unknown-linux-gnu")
+                {
                     if data.benchmarks.remove(&*benchmark).is_none() {
                         warn!("could not remove {} from {}", benchmark, commit.sha);
                     }

@@ -12,11 +12,11 @@ use std::env;
 use std::cmp::max;
 use std::fs::File;
 use std::io::Read;
-use std::sync::{RwLock, Arc};
-use std::collections::{HashMap, BTreeMap, BTreeSet};
+use std::sync::{Arc, RwLock};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
 use std::net::SocketAddr;
-use std::sync::atomic::{Ordering, AtomicBool};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -24,15 +24,15 @@ use serde_json;
 use futures::{self, Future, Stream};
 use futures_cpupool::CpuPool;
 use hyper::{self, Get, Post, StatusCode};
-use hyper::header::{ContentLength, CacheControl, CacheDirective, ContentType};
+use hyper::header::{CacheControl, CacheDirective, ContentLength, ContentType};
 use hyper::mime;
-use hyper::server::{Http, Service, Request, Response};
+use hyper::server::{Http, Request, Response, Service};
 
 use git;
-use date::{DeltaTime, Date};
+use date::{Date, DeltaTime};
 use util::{self, get_repo_path};
-pub use api::{self, summary, info, data, tabular, days, stats};
-use load::{Pass, CommitData, InputData, Comparison};
+pub use api::{self, data, days, info, stats, summary, tabular};
+use load::{CommitData, Comparison, InputData, Pass};
 
 use errors::*;
 
@@ -56,9 +56,11 @@ impl DateData {
         day: &CommitData,
         crates: &BTreeSet<String>,
         phases: &BTreeSet<String>,
-        group_by: GroupBy
+        group_by: GroupBy,
     ) -> DateData {
-        let crates = day.benchmarks.values().filter(|v| v.is_ok())
+        let crates = day.benchmarks
+            .values()
+            .filter(|v| v.is_ok())
             .flat_map(|patches| patches.as_ref().unwrap())
             .filter(|patch| crates.contains(&patch.full_name()))
             .collect::<Vec<_>>();
@@ -87,17 +89,13 @@ impl DateData {
 
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Recording {
-    #[serde(with = "util::round_float")]
-    pub time: f64,
+    #[serde(with = "util::round_float")] pub time: f64,
     pub rss: u64,
 }
 
 impl Recording {
     fn new() -> Recording {
-        Recording {
-            time: 0.0,
-            rss: 0,
-        }
+        Recording { time: 0.0, rss: 0 }
     }
 
     fn record(&mut self, phase: Option<&Pass>) {
@@ -110,22 +108,28 @@ impl Recording {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum GroupBy {
-    #[serde(rename="crate")]
-    Crate,
-    #[serde(rename="phase")]
-    Phase,
+    #[serde(rename = "crate")] Crate,
+    #[serde(rename = "phase")] Phase,
 }
 
 #[test]
 fn serialize_kind() {
-    assert_eq!(serde_json::to_string(&GroupBy::Crate).unwrap(),
-               r#""crate""#);
-    assert_eq!(serde_json::from_str::<GroupBy>(r#""crate""#).unwrap(),
-               GroupBy::Crate);
-    assert_eq!(serde_json::to_string(&GroupBy::Phase).unwrap(),
-               r#""phase""#);
-    assert_eq!(serde_json::from_str::<GroupBy>(r#""phase""#).unwrap(),
-               GroupBy::Phase);
+    assert_eq!(
+        serde_json::to_string(&GroupBy::Crate).unwrap(),
+        r#""crate""#
+    );
+    assert_eq!(
+        serde_json::from_str::<GroupBy>(r#""crate""#).unwrap(),
+        GroupBy::Crate
+    );
+    assert_eq!(
+        serde_json::to_string(&GroupBy::Phase).unwrap(),
+        r#""phase""#
+    );
+    assert_eq!(
+        serde_json::from_str::<GroupBy>(r#""phase""#).unwrap(),
+        GroupBy::Phase
+    );
 }
 
 /// Data associated with a specific date
@@ -137,12 +141,10 @@ pub struct DateData2 {
 }
 
 impl DateData2 {
-    pub fn for_day(
-        day: &CommitData,
-        crates: &BTreeSet<String>,
-        stat: &str,
-    ) -> DateData2 {
-        let crates = day.benchmarks.values().filter(|v| v.is_ok())
+    pub fn for_day(day: &CommitData, crates: &BTreeSet<String>, stat: &str) -> DateData2 {
+        let crates = day.benchmarks
+            .values()
+            .filter(|v| v.is_ok())
             .flat_map(|patches| patches.as_ref().unwrap())
             .filter(|patch| crates.contains(&patch.full_name()))
             .collect::<Vec<_>>();
@@ -186,13 +188,25 @@ pub fn handle_summary(data: &InputData) -> summary::Response {
     }
 
     let stat = "cpu-clock";
-    let dates = data.summary.comparisons.iter().map(|c| c.b.date).collect::<Vec<_>>();
+    let dates = data.summary
+        .comparisons
+        .iter()
+        .map(|c| c.b.date)
+        .collect::<Vec<_>>();
 
     // overall number for each week
-    let summaries = data.summary.comparisons.iter().map(|x| summarize(x, stat)).collect();
+    let summaries = data.summary
+        .comparisons
+        .iter()
+        .map(|x| summarize(x, stat))
+        .collect();
 
     // per benchmark, per week
-    let breakdown_data = data.summary.comparisons.iter().map(|x| breakdown(x, stat)).collect();
+    let breakdown_data = data.summary
+        .comparisons
+        .iter()
+        .map(|x| breakdown(x, stat))
+        .collect();
 
     summary::Response {
         total_summary: summarize(&data.summary.total, stat),
@@ -214,15 +228,18 @@ pub fn handle_info(data: &InputData) -> info::Response {
 }
 
 pub fn handle_data(body: data::Request, data: &InputData) -> data::Response {
-    let mut result = util::optional_data_range(data, body.start_date.clone(), body.end_date.clone())
-        .map(|(_, day)| day)
-        .map(|day| DateData::for_day(
-            day,
-            &body.crates.into_set(&data.crate_list),
-            &body.phases.into_set(&data.phase_list),
-            body.group_by
-        ))
-        .collect::<Vec<_>>();
+    let mut result =
+        util::optional_data_range(data, body.start_date.clone(), body.end_date.clone())
+            .map(|(_, day)| day)
+            .map(|day| {
+                DateData::for_day(
+                    day,
+                    &body.crates.into_set(&data.crate_list),
+                    &body.phases.into_set(&data.phase_list),
+                    body.group_by,
+                )
+            })
+            .collect::<Vec<_>>();
 
     // Return everything from the first non-empty data to the last non-empty data.
     // Data may contain "holes" of empty data.
@@ -245,14 +262,13 @@ pub fn handle_data(body: data::Request, data: &InputData) -> data::Response {
 }
 
 pub fn handle_data2(body: data::Request2, data: &InputData) -> data::Response2 {
-    let mut result = util::optional_data_range(data, body.start_date.clone(), body.end_date.clone())
-        .map(|(_, day)| day)
-        .map(|day| DateData2::for_day(
-            day,
-            &body.crates.into_set(&data.crate_list),
-            &body.stat,
-        ))
-        .collect::<Vec<_>>();
+    let mut result =
+        util::optional_data_range(data, body.start_date.clone(), body.end_date.clone())
+            .map(|(_, day)| day)
+            .map(|day| {
+                DateData2::for_day(day, &body.crates.into_set(&data.crate_list), &body.stat)
+            })
+            .collect::<Vec<_>>();
 
     // Return everything from the first non-empty data to the last non-empty data.
     // Data may contain "holes" of empty data.
@@ -277,12 +293,22 @@ pub fn handle_tabular(body: tabular::Request, data: &InputData) -> tabular::Resp
     let day = util::get_commit_data_from_end(data, body.date.as_date(data.last_date));
 
     let mut by_crate = HashMap::new();
-    let patches = day.benchmarks.values().filter(|v| v.is_ok())
+    let patches = day.benchmarks
+        .values()
+        .filter(|v| v.is_ok())
         .flat_map(|patches| patches.as_ref().unwrap());
     for patch in patches {
-        let by_phase = by_crate.entry(patch.full_name()).or_insert_with(HashMap::new);
+        let by_phase = by_crate
+            .entry(patch.full_name())
+            .or_insert_with(HashMap::new);
         for phase in &patch.run().passes {
-            by_phase.insert(phase.name.clone(), Recording { time: phase.time, rss: phase.mem });
+            by_phase.insert(
+                phase.name.clone(),
+                Recording {
+                    time: phase.time,
+                    rss: phase.mem,
+                },
+            );
         }
     }
 
@@ -299,13 +325,13 @@ pub fn handle_days(body: days::Request, data: &InputData) -> days::Response {
             util::get_commit_data_from_start(data, body.date_a.as_date(data.last_date)),
             &body.crates.into_set(&data.crate_list),
             &body.phases.into_set(&data.phase_list),
-            body.group_by
+            body.group_by,
         ),
         b: DateData::for_day(
             util::get_commit_data_from_end(data, body.date_b.as_date(data.last_date)),
             &body.crates.into_set(&data.crate_list),
             &body.phases.into_set(&data.phase_list),
-            body.group_by
+            body.group_by,
         ),
     }
 }
@@ -323,16 +349,17 @@ pub fn handle_stats(body: stats::Request, data: &InputData) -> stats::Response {
             commit_data,
             &body.crates.into_set(&data.crate_list),
             &body.phases.into_set(&data.phase_list),
-            body.group_by
+            body.group_by,
         );
         for (name, rec) in data.data {
             counted.entry(name).or_insert_with(Vec::new).push(rec.time);
         }
     }
 
-    let out = counted.into_iter().map(|(key, values)| {
-        (key, Stats::from(&values))
-    }).collect();
+    let out = counted
+        .into_iter()
+        .map(|(key, values)| (key, Stats::from(&values)))
+        .collect();
 
     stats::Response {
         start_date: start_date,
@@ -349,10 +376,8 @@ pub struct Stats {
     max: f64,
     mean: f64,
     variance: f64,
-    #[serde(deserialize_with = "util::null_means_nan")]
-    trend: f64,
-    #[serde(deserialize_with = "util::null_means_nan")]
-    trend_b: f64,
+    #[serde(deserialize_with = "util::null_means_nan")] trend: f64,
+    #[serde(deserialize_with = "util::null_means_nan")] trend_b: f64,
     n: usize,
 }
 
@@ -427,8 +452,9 @@ struct Server {
 
 impl Server {
     fn handle_get<F, S>(&self, req: &Request, handler: F) -> <Server as Service>::Future
-        where F: FnOnce(&InputData) -> S,
-              S: Serialize
+    where
+        F: FnOnce(&InputData) -> S,
+        S: Serialize,
     {
         assert_eq!(*req.method(), Get);
         let data = self.data.clone();
@@ -441,54 +467,65 @@ impl Server {
     }
 
     fn handle_post<'de, F, D, S>(&self, req: Request, handler: F) -> <Server as Service>::Future
-        where F: FnOnce(D, &InputData) -> S + Send + 'static,
-              D: DeserializeOwned,
-              S: Serialize,
+    where
+        F: FnOnce(D, &InputData) -> S + Send + 'static,
+        D: DeserializeOwned,
+        S: Serialize,
     {
         assert_eq!(*req.method(), Post);
-        let length = req.headers().get::<ContentLength>()
-        .expect("content-length to exist").0;
-        if length > 10_000 { // 10 kB
+        let length = req.headers()
+            .get::<ContentLength>()
+            .expect("content-length to exist")
+            .0;
+        if length > 10_000 {
+            // 10 kB
             return Box::new(futures::future::err(hyper::Error::TooLarge));
         }
         let data = self.data.clone();
         Box::new(self.pool.spawn_fn(move || {
-            req.body().fold(Vec::new(), |mut acc, chunk| {
-                acc.extend_from_slice(&*chunk);
-                futures::future::ok::<_, <Self as Service>::Error>(acc)
-            }).map(move |body| {
-                let data = data.read().unwrap();
-                let body: D = match serde_json::from_slice(&body) {
-                    Ok(d) => d,
-                    Err(err) => {
-                        error!("failed to deserialize request {}: {:?}",
-                            String::from_utf8_lossy(&body), err);
-                        return Response::new()
-                            .with_header(ContentType::plaintext())
-                            .with_body(format!("Failed to deserialize request; {:?}", err))
-                    }
-                };
-                let result = handler(body, &data);
-                Response::new()
-                    .with_header(ContentType::json())
-                    .with_header(CacheControl(vec![
-                            CacheDirective::NoCache,
-                            CacheDirective::NoStore,
-                    ]))
-                    .with_body(serde_json::to_string(&result).unwrap())
-            })
+            req.body()
+                .fold(Vec::new(), |mut acc, chunk| {
+                    acc.extend_from_slice(&*chunk);
+                    futures::future::ok::<_, <Self as Service>::Error>(acc)
+                })
+                .map(move |body| {
+                    let data = data.read().unwrap();
+                    let body: D = match serde_json::from_slice(&body) {
+                        Ok(d) => d,
+                        Err(err) => {
+                            error!(
+                                "failed to deserialize request {}: {:?}",
+                                String::from_utf8_lossy(&body),
+                                err
+                            );
+                            return Response::new()
+                                .with_header(ContentType::plaintext())
+                                .with_body(format!("Failed to deserialize request; {:?}", err));
+                        }
+                    };
+                    let result = handler(body, &data);
+                    Response::new()
+                        .with_header(ContentType::json())
+                        .with_header(CacheControl(
+                            vec![CacheDirective::NoCache, CacheDirective::NoStore],
+                        ))
+                        .with_body(serde_json::to_string(&result).unwrap())
+                })
         }))
     }
 
     fn handle_push(&self, _req: Request) -> <Self as Service>::Future {
         // set to updating
-        let was_updating = self.updating.compare_and_swap(false, true, Ordering::AcqRel);
+        let was_updating = self.updating
+            .compare_and_swap(false, true, Ordering::AcqRel);
 
         if was_updating {
-            return Box::new(futures::future::ok(Response::new()
-                .with_body(format!("Already updating!"))
-                .with_status(StatusCode::Ok)
-                .with_header(ContentType(mime::TEXT_PLAIN_UTF_8))));
+            return Box::new(futures::future::ok(
+                Response::new()
+                    .with_body(format!("Already updating!"))
+                    .with_status(StatusCode::Ok)
+                    .with_header(ContentType(mime::TEXT_PLAIN_UTF_8)),
+            ));
         }
 
         // FIXME we are throwing everything away and starting again. It would be
@@ -515,19 +552,27 @@ impl Server {
 
             updating.store(false, Ordering::Release);
 
-            Ok(serde_json::to_value("Successfully updated from filesystem")?)
+            Ok(serde_json::to_value(
+                "Successfully updated from filesystem",
+            )?)
         });
 
         let updating = self.updating.clone();
-        Box::new(response.map(|value| {
-            Response::new().with_body(serde_json::to_string(&value).unwrap())
-        }).or_else(move |err| {
-            updating.store(false, Ordering::Release);
-            futures::future::ok(Response::new()
-                .with_body(format!("Internal Server Error: {:?}", err))
-                .with_status(StatusCode::InternalServerError)
-                .with_header(ContentType(mime::TEXT_PLAIN_UTF_8)))
-        }))
+        Box::new(
+            response
+                .map(|value| {
+                    Response::new().with_body(serde_json::to_string(&value).unwrap())
+                })
+                .or_else(move |err| {
+                    updating.store(false, Ordering::Release);
+                    futures::future::ok(
+                        Response::new()
+                            .with_body(format!("Internal Server Error: {:?}", err))
+                            .with_status(StatusCode::InternalServerError)
+                            .with_header(ContentType(mime::TEXT_PLAIN_UTF_8)),
+                    )
+                }),
+        )
     }
 }
 
@@ -538,18 +583,27 @@ impl Service for Server {
     type Future = Box<Future<Item = Self::Response, Error = Self::Error>>;
 
     fn call(&self, req: Request) -> Self::Future {
-        let fs_path = format!("static{}", if req.path() == "" || req.path() == "/" {
-            "/index.html"
-        } else {
-            req.path()
-        });
+        let fs_path = format!(
+            "static{}",
+            if req.path() == "" || req.path() == "/" {
+                "/index.html"
+            } else {
+                req.path()
+            }
+        );
 
-        info!("handling: req.path()={:?}, fs_path={:?}", req.path(), fs_path);
+        info!(
+            "handling: req.path()={:?}, fs_path={:?}",
+            req.path(),
+            fs_path
+        );
 
         if fs_path.contains("./") | fs_path.contains("../") {
-            return Box::new(futures::future::ok(Response::new()
-                .with_header(ContentType::html())
-                .with_status(StatusCode::NotFound)));
+            return Box::new(futures::future::ok(
+                Response::new()
+                    .with_header(ContentType::html())
+                    .with_status(StatusCode::NotFound),
+            ));
         }
 
         if Path::new(&fs_path).is_file() {
@@ -570,11 +624,11 @@ impl Service for Server {
             "/perf/get" => self.handle_post(req, handle_days),
             "/perf/stats" => self.handle_post(req, handle_stats),
             "/perf/onpush" => self.handle_push(req),
-            _ => {
-                Box::new(futures::future::ok(Response::new()
+            _ => Box::new(futures::future::ok(
+                Response::new()
                     .with_header(ContentType::html())
-                    .with_status(StatusCode::NotFound)))
-            }
+                    .with_status(StatusCode::NotFound),
+            )),
         }
     }
 }
@@ -586,7 +640,12 @@ pub fn start(data: InputData) {
         updating: Arc::new(AtomicBool::new(false)),
     });
     let mut server_address: SocketAddr = "0.0.0.0:2346".parse().unwrap();
-    server_address.set_port(env::var("PORT").ok().and_then(|x| x.parse().ok()).unwrap_or(2346));
+    server_address.set_port(
+        env::var("PORT")
+            .ok()
+            .and_then(|x| x.parse().ok())
+            .unwrap_or(2346),
+    );
     let server = Http::new().bind(&server_address, move || Ok(server.clone()));
     server.unwrap().run().unwrap();
 }

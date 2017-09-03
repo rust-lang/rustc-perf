@@ -1,14 +1,15 @@
 #![feature(conservative_impl_trait)]
 
-extern crate serde;
-#[macro_use] extern crate serde_derive;
 extern crate chrono;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
 
 use std::collections::BTreeMap;
-use std::cmp::{PartialOrd, Ord, Ordering};
+use std::cmp::{Ord, Ordering, PartialOrd};
 
-use chrono::{Utc, DateTime, TimeZone, Duration, Datelike};
-use serde::{Serialize, Deserialize};
+use chrono::{DateTime, Datelike, Duration, TimeZone, Utc};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Pass {
@@ -27,8 +28,7 @@ pub struct Stat {
 pub struct Run {
     pub name: String,
     pub passes: Vec<Pass>,
-    #[serde(default)]
-    pub stats: Vec<Stat>,
+    #[serde(default)] pub stats: Vec<Stat>,
 }
 
 impl Run {
@@ -94,10 +94,10 @@ pub struct CommitData {
 }
 
 impl CommitData {
-    pub fn benchmarks<'a>(&'a self) -> impl Iterator<Item=Option<(&'a str, &'a [Patch])>> + 'a {
-        self.benchmarks.iter().map(|(k, v)| {
-            v.as_ref().map(|v| (k.as_str(), &v[..])).ok()
-        })
+    pub fn benchmarks<'a>(&'a self) -> impl Iterator<Item = Option<(&'a str, &'a [Patch])>> + 'a {
+        self.benchmarks
+            .iter()
+            .map(|(k, v)| v.as_ref().map(|v| (k.as_str(), &v[..])).ok())
     }
 }
 
@@ -127,29 +127,24 @@ impl FromStr for Date {
             Err(error) => Err(DateParseError {
                 input: s.to_string(),
                 format: format!("RFC 3339"),
-                error
+                error,
             }),
         }
     }
 }
 
 impl Date {
-    pub fn from_format(
-        date: &str,
-        format: &str,
-    ) -> Result<Date, DateParseError> {
+    pub fn from_format(date: &str, format: &str) -> Result<Date, DateParseError> {
         match DateTime::parse_from_str(date, format) {
             Ok(value) => Ok(Date(value.with_timezone(&Utc))),
-            Err(_) => {
-                match Utc.datetime_from_str(date, format) {
-                    Ok(dt) => Ok(Date(dt)),
-                    Err(err) => Err(DateParseError {
-                        input: date.to_string(),
-                        format: format.to_string(),
-                        error: err,
-                    })
-                }
-            }
+            Err(_) => match Utc.datetime_from_str(date, format) {
+                Ok(dt) => Ok(Date(dt)),
+                Err(err) => Err(DateParseError {
+                    input: date.to_string(),
+                    format: format.to_string(),
+                    error: err,
+                }),
+            },
         }
     }
 
@@ -160,7 +155,9 @@ impl Date {
     pub fn start_of_week(&self) -> Date {
         let weekday = self.0.weekday();
         // num_days_from_sunday is 0 for Sunday
-        Date(self.0 - Duration::days(weekday.num_days_from_sunday() as i64))
+        Date(
+            self.0 - Duration::days(weekday.num_days_from_sunday() as i64),
+        )
     }
 }
 
@@ -198,7 +195,8 @@ impl Add<Duration> for Date {
 
 impl Serialize for Date {
     fn serialize<S>(&self, serializer: S) -> ::std::result::Result<S::Ok, S::Error>
-        where S: serde::ser::Serializer
+    where
+        S: serde::ser::Serializer,
     {
         serializer.serialize_str(&self.0.to_rfc3339())
     }
@@ -206,7 +204,8 @@ impl Serialize for Date {
 
 impl<'de> Deserialize<'de> for Date {
     fn deserialize<D>(deserializer: D) -> ::std::result::Result<Date, D::Error>
-        where D: serde::de::Deserializer<'de>
+    where
+        D: serde::de::Deserializer<'de>,
     {
         struct DateVisitor;
 
@@ -214,12 +213,12 @@ impl<'de> Deserialize<'de> for Date {
             type Value = Date;
 
             fn visit_str<E>(self, value: &str) -> ::std::result::Result<Date, E>
-                where E: serde::de::Error
+            where
+                E: serde::de::Error,
             {
-                Date::from_str(value)
-                    .map_err(|_| {
-                        serde::de::Error::invalid_value(serde::de::Unexpected::Str(value), &self)
-                    })
+                Date::from_str(value).map_err(|_| {
+                    serde::de::Error::invalid_value(serde::de::Unexpected::Str(value), &self)
+                })
             }
 
             fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -284,7 +283,8 @@ impl OptionalDate<End> {
 
 impl<'de, B: Bound> serde::Deserialize<'de> for OptionalDate<B> {
     fn deserialize<D>(deserializer: D) -> ::std::result::Result<OptionalDate<B>, D::Error>
-        where D: serde::de::Deserializer<'de>
+    where
+        D: serde::de::Deserializer<'de>,
     {
         struct DateVisitor<B>(PhantomData<B>);
 
@@ -292,14 +292,17 @@ impl<'de, B: Bound> serde::Deserialize<'de> for OptionalDate<B> {
             type Value = OptionalDate<B>;
 
             fn visit_str<E>(self, value: &str) -> ::std::result::Result<OptionalDate<B>, E>
-                where E: serde::de::Error
+            where
+                E: serde::de::Error,
             {
                 match Date::from_str(value) {
                     Ok(date) => Ok(OptionalDate::new(date)),
                     Err(err) => {
                         if !value.is_empty() {
                             return Err(serde::de::Error::invalid_value(
-                                serde::de::Unexpected::Other(value), &&*format!("{:?}", err)));
+                                serde::de::Unexpected::Other(value),
+                                &&*format!("{:?}", err),
+                            ));
                         }
                         Ok(OptionalDate::CouldNotParse(value.to_string()))
                     }
@@ -317,7 +320,8 @@ impl<'de, B: Bound> serde::Deserialize<'de> for OptionalDate<B> {
 
 impl<B: Bound> serde::Serialize for OptionalDate<B> {
     fn serialize<S>(&self, serializer: S) -> ::std::result::Result<S::Ok, S::Error>
-        where S: serde::Serializer
+    where
+        S: serde::Serializer,
     {
         match *self {
             OptionalDate::Date(date, _) => date.serialize(serializer),
@@ -327,23 +331,26 @@ impl<B: Bound> serde::Serialize for OptionalDate<B> {
 }
 
 pub fn null_means_nan<'de, D>(deserializer: D) -> ::std::result::Result<f64, D::Error>
-    where D: serde::de::Deserializer<'de>
+where
+    D: serde::de::Deserializer<'de>,
 {
     Ok(Option::deserialize(deserializer)?.unwrap_or(0.0))
 }
 
 /// Rounds serialized and deserialized floats to 2 decimal places.
 pub mod round_float {
-    use serde::{Deserialize, Serializer, Deserializer};
+    use serde::{Deserialize, Deserializer, Serializer};
 
     pub fn serialize<S>(n: &f64, serializer: S) -> Result<S::Ok, S::Error>
-        where S: Serializer
+    where
+        S: Serializer,
     {
         serializer.serialize_f64((*n * 100.0).round() / 100.0)
     }
 
     pub fn deserialize<'de, D>(deserializer: D) -> Result<f64, D::Error>
-        where D: Deserializer<'de>
+    where
+        D: Deserializer<'de>,
     {
         let n = f64::deserialize(deserializer)?;
         Ok((n * 100.0).round() / 100.0)

@@ -3,11 +3,11 @@ extern crate lazy_static;
 #[macro_use]
 extern crate pretty_assertions;
 extern crate rustc_perf;
-extern crate serde_json;
 extern crate serde;
+extern crate serde_json;
 
 use std::fs::File;
-use std::io::{Write, Read};
+use std::io::{Read, Write};
 use std::path::Path;
 use std::cmp::PartialEq;
 
@@ -16,8 +16,8 @@ use serde::de::DeserializeOwned;
 
 use rustc_perf::server::{self, GroupBy};
 use rustc_perf::load::InputData;
-use rustc_perf::date::{OptionalDate, Date, Bound};
-use rustc_perf::api::{data, tabular, days, stats};
+use rustc_perf::date::{Bound, Date, OptionalDate};
+use rustc_perf::api::{data, days, stats, tabular};
 
 lazy_static! {
     static ref INPUT_DATA: InputData = InputData::from_fs("tests/data").unwrap();
@@ -60,7 +60,9 @@ where
     let expected_value = from_file(expected_file);
 
     if received_value != expected_value {
-        assert_eq!(expected_value, received_value,
+        assert_eq!(
+            expected_value,
+            received_value,
             "Compared {} body with server result, results not equal.",
             expected_file
         );
@@ -132,7 +134,10 @@ fn tabular() {
 }
 
 fn ymd_date<B: Bound>(year: i32, month: u32, day: u32) -> OptionalDate<B> {
-    OptionalDate::Date(Date::ymd_hms(year, month, day, 0, 0, 0), std::marker::PhantomData)
+    OptionalDate::Date(
+        Date::ymd_hms(year, month, day, 0, 0, 0),
+        std::marker::PhantomData,
+    )
 }
 
 #[test]

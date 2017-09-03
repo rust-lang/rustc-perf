@@ -99,17 +99,15 @@ pub mod info {
 
 pub mod data {
     use super::List;
-    use date::{Date, OptionalDate, Start, End};
+    use date::{Date, End, OptionalDate, Start};
     use server::{DateData, DateData2, GroupBy};
     use std::collections::BTreeSet;
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct Request {
-        #[serde(rename="start")]
-        pub start_date: OptionalDate<Start>,
+        #[serde(rename = "start")] pub start_date: OptionalDate<Start>,
 
-        #[serde(rename="end")]
-        pub end_date: OptionalDate<End>,
+        #[serde(rename = "end")] pub end_date: OptionalDate<End>,
         pub group_by: GroupBy,
 
         /// Which crates to return data for
@@ -131,11 +129,9 @@ pub mod data {
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct Request2 {
-        #[serde(rename="start")]
-        pub start_date: OptionalDate<Start>,
+        #[serde(rename = "start")] pub start_date: OptionalDate<Start>,
 
-        #[serde(rename="end")]
-        pub end_date: OptionalDate<End>,
+        #[serde(rename = "end")] pub end_date: OptionalDate<End>,
 
         /// Which crates to return data for
         pub crates: List,
@@ -157,7 +153,7 @@ pub mod data {
 pub mod tabular {
     use std::collections::HashMap;
 
-    use date::{OptionalDate, Date, End};
+    use date::{Date, End, OptionalDate};
     use server::Recording;
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
@@ -177,7 +173,7 @@ pub mod tabular {
 
 pub mod days {
     use super::List;
-    use date::{OptionalDate, Start, End};
+    use date::{End, OptionalDate, Start};
     use server::{DateData, GroupBy};
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
@@ -203,16 +199,14 @@ pub mod days {
 pub mod stats {
     use std::collections::HashMap;
 
-    use server::{Stats, GroupBy};
-    use date::{OptionalDate, Date, Start, End};
+    use server::{GroupBy, Stats};
+    use date::{Date, End, OptionalDate, Start};
     use super::List;
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct Request {
-        #[serde(rename="start")]
-        pub start_date: OptionalDate<Start>,
-        #[serde(rename="end")]
-        pub end_date: OptionalDate<End>,
+        #[serde(rename = "start")] pub start_date: OptionalDate<Start>,
+        #[serde(rename = "end")] pub end_date: OptionalDate<End>,
         pub crates: List,
         pub phases: List,
         pub group_by: GroupBy,
@@ -220,10 +214,8 @@ pub mod stats {
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct Response {
-        #[serde(rename="startDate")]
-        pub start_date: Date,
-        #[serde(rename="endDate")]
-        pub end_date: Date,
+        #[serde(rename = "startDate")] pub start_date: Date,
+        #[serde(rename = "endDate")] pub end_date: Date,
         // Grouped either by crate or phase, depending on group_by
         pub data: HashMap<String, Stats>,
     }

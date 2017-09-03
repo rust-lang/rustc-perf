@@ -4,9 +4,7 @@ use rustc_perf_collector::{Pass, Stat};
 
 use errors::{Result, ResultExt};
 
-pub fn process_output(name: &str, output: Vec<u8>)
-    -> Result<(Vec<Pass>, Vec<Stat>)>
-{
+pub fn process_output(name: &str, output: Vec<u8>) -> Result<(Vec<Pass>, Vec<Stat>)> {
     let output = String::from_utf8(output)
         .chain_err(|| format!("unable to convert output of {} to UTF-8", name))?;
     let mut passes = Vec::new();
@@ -32,15 +30,17 @@ pub fn process_output(name: &str, output: Vec<u8>)
                 //    mem: mem,
                 //    sub_passes: HashMap::new(),
                 //});
-                continue
+                continue;
             }
             time_indent = Some(indent);
 
             let time = &line[indent + "time: ".len()..line.find(";").unwrap()];
-            let time: f64 = time.parse().chain_err(|| format!("parsed time: {:?}", time))?;
+            let time: f64 = time.parse()
+                .chain_err(|| format!("parsed time: {:?}", time))?;
 
             let mem = &line[line.find("rss: ").unwrap() + 5..line.find("MB").unwrap()];
-            let mem: u64 = mem.parse().chain_err(|| format!("parsed memory: {:?}", mem))?;
+            let mem: u64 = mem.parse()
+                .chain_err(|| format!("parsed memory: {:?}", mem))?;
 
             let name = line[line.find("MB\t").unwrap() + 3..].to_string();
             passes.push(Pass {
@@ -72,16 +72,19 @@ fn extract_perf_stat(s: &str, stats: &mut Vec<Stat>) -> Result<()> {
     let _time = get!(parts.next());
     let pct = get!(parts.next());
     if cnt == "<not supported>" {
-        return Ok(())
+        return Ok(());
     }
     if !pct.starts_with("100.") {
-        panic!("measurement of `{}` only active for {}% of the time", name, pct);
+        panic!(
+            "measurement of `{}` only active for {}% of the time",
+            name,
+            pct
+        );
     }
     stats.push(Stat {
         name: name.to_string(),
-        cnt: cnt.parse().chain_err(|| {
-            format!("failed to parse `{}` as an float", cnt)
-        })?,
+        cnt: cnt.parse()
+            .chain_err(|| format!("failed to parse `{}` as an float", cnt))?,
     });
     Ok(())
 }

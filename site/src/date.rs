@@ -7,4 +7,4 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-pub use rustc_perf_collector::{Date, Start, End, OptionalDate, DeltaTime};
+pub use rustc_perf_collector::{Date, DeltaTime, End, OptionalDate, Start};
