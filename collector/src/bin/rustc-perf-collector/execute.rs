@@ -76,7 +76,7 @@ impl Benchmark {
                 let mut make = make();
                 make.arg(&format!("all{}", patch))
                     .env("CARGO_OPTS", "")
-                    .env("CARGO_RUSTC_OPTS", "-Z time-passes")
+                    .env("CARGO_RUSTC_OPTS", "-Ztime-passes")
                     .env("RUSTC", &fake_rustc)
                     .env("RUSTC_REAL", &sysroot.rustc);
                 if has_perf {

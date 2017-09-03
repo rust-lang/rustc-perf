@@ -6,9 +6,14 @@ fn main() {
 
     let rustc = env::var_os("RUSTC_REAL").unwrap();
     let mut cmd = Command::new(&rustc);
-    let any_time_passes = args.iter().any(|a| a.to_str() == Some("time-passes"));
 
-    if env::var_os("USE_PERF").is_some() && any_time_passes {
+    // easiest way to differentiate last pass
+    let time_passes = args.iter().position("-Ztime-passes");
+    if let Some(pos) = time_passes {
+        args.remove(pos);
+    }
+
+    if env::var_os("USE_PERF").is_some() && time_passes.is_some() {
         cmd = Command::new("perf");
         cmd.arg("stat")
             .arg("-x;")
