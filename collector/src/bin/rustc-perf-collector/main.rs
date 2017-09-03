@@ -1,11 +1,8 @@
 #![recursion_limit = "1024"]
 
 #[macro_use] extern crate clap;
-extern crate serde;
 extern crate serde_json;
 #[macro_use] extern crate error_chain;
-extern crate flate2;
-extern crate tar;
 extern crate rustc_perf_collector;
 extern crate env_logger;
 extern crate tempdir;
