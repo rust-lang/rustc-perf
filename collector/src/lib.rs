@@ -5,18 +5,15 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 
-use std::collections::BTreeMap;
 use std::cmp::{Ord, Ordering, PartialOrd};
+use std::collections::BTreeMap;
+use std::fmt;
+use std::marker::PhantomData;
+use std::ops::{Add, Sub};
+use std::str::FromStr;
 
 use chrono::{DateTime, Datelike, Duration, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Pass {
-    pub name: String,
-    pub time: f64,
-    pub mem: u64,
-}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Stat {
@@ -26,16 +23,10 @@ pub struct Stat {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Run {
-    pub name: String,
-    pub passes: Vec<Pass>,
     #[serde(default)] pub stats: Vec<Stat>,
 }
 
 impl Run {
-    pub fn get_pass(&self, pass: &str) -> Option<&Pass> {
-        self.passes.iter().find(|p| p.name == pass)
-    }
-
     pub fn get_stat(&self, stat: &str) -> Option<f64> {
         self.stats.iter().find(|s| s.name == stat).map(|s| s.cnt)
     }
@@ -43,16 +34,12 @@ impl Run {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Patch {
-    pub patch: String,
+    // Full name: benchmark@000-patch
     pub name: String,
     pub runs: Vec<Run>,
 }
 
 impl Patch {
-    pub fn full_name(&self) -> String {
-        self.name.clone() + &self.patch
-    }
-
     pub fn run(&self) -> &Run {
         assert_eq!(self.runs.len(), 1);
         &self.runs[0]
@@ -75,13 +62,15 @@ impl Eq for Commit {}
 
 impl PartialOrd for Commit {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.date.partial_cmp(&other.date)
+        Some(self.cmp(&other))
     }
 }
 
 impl Ord for Commit {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.date.cmp(&other.date)
+        self.date
+            .cmp(&other.date)
+            .then_with(|| self.sha.cmp(&other.sha))
     }
 }
 
@@ -100,11 +89,6 @@ impl CommitData {
             .map(|(k, v)| v.as_ref().map(|v| (k.as_str(), &v[..])).ok())
     }
 }
-
-use std::ops::{Add, Sub};
-use std::str::FromStr;
-use std::marker::PhantomData;
-use std::fmt;
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct DeltaTime(#[serde(with = "round_float")] pub f64);
