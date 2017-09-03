@@ -7,8 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::collections::{HashMap, BTreeSet, BTreeMap};
-use std::cmp::{PartialOrd, Ord, Ordering};
+use std::collections::{BTreeSet, BTreeMap};
 use std::fs::{self, File};
 use std::path::PathBuf;
 use std::io::Read;
@@ -24,87 +23,7 @@ use date::Date;
 
 const WEEKS_IN_SUMMARY: usize = 12;
 
-// FIXME: These definitions should live in a central location and be depended upon by both the
-// benchmark and website infrastructure. Currently, they are simply duplicated.
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct Pass {
-    pub name: String,
-    pub time: f64,
-    pub mem: u64,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct Stat {
-    pub name: String,
-    pub cnt: f64,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct Run {
-    pub name: String,
-    pub passes: Vec<Pass>,
-    pub stats: Vec<Stat>,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct Patch {
-    pub patch: String,
-    pub name: String,
-    pub runs: Vec<Run>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-pub struct Commit {
-    pub sha: String,
-    pub date: Date,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct CommitData {
-    pub commit: Commit,
-    pub benchmarks: HashMap<String, ::std::result::Result<Vec<Patch>, String>>,
-}
-
-impl PartialOrd for Commit {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.date.partial_cmp(&other.date)
-    }
-}
-
-impl Ord for Commit {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.date.cmp(&other.date)
-    }
-}
-
-impl CommitData {
-    pub fn benchmarks<'a>(&'a self) -> impl Iterator<Item=Option<(&'a str, &'a [Patch])>> + 'a {
-        self.benchmarks.iter().map(|(k, v)| {
-            v.as_ref().map(|v| (k.as_str(), &v[..])).ok()
-        })
-    }
-}
-
-impl Patch {
-    pub fn full_name(&self) -> String {
-        self.name.clone() + &self.patch
-    }
-
-    pub fn run(&self) -> &Run {
-        assert_eq!(self.runs.len(), 1);
-        &self.runs[0]
-    }
-}
-
-impl Run {
-    pub fn get_pass(&self, pass: &str) -> Option<&Pass> {
-        self.passes.iter().find(|p| p.name == pass)
-    }
-
-    pub fn get_stat(&self, stat: &str) -> Option<f64> {
-        self.stats.iter().find(|s| s.name == stat).map(|s| s.cnt)
-    }
-}
+pub use rustc_perf_collector::{Pass, Stat, Run, Patch, Commit, CommitData};
 
 #[derive(Debug)]
 pub struct InputData {

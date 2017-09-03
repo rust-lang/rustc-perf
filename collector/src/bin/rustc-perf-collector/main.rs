@@ -14,11 +14,8 @@ extern crate rust_sysroot;
 mod errors {
     // Create the Error, ErrorKind, ResultExt, and Result types
     error_chain! {
-        links {
-            RustSysroot(::rust_sysroot::errors::Error, ::rust_sysroot::errors::ErrorKind);
-        }
-
         foreign_links {
+            RustSysroot(::rust_sysroot::errors::Error);
             Reqwest(::reqwest::Error);
             Serde(::serde_json::Error);
             Chrono(::chrono::ParseError);
@@ -39,7 +36,7 @@ use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
 
-use rustc_perf_collector::{Commit, CommitData};
+use rustc_perf_collector::{Date, Commit, CommitData};
 use rust_sysroot::git::Commit as GitCommit;
 use rust_sysroot::sysroot::Sysroot;
 
@@ -79,7 +76,7 @@ fn bench_commit(
     CommitData {
         commit: Commit {
             sha: commit.sha.clone(),
-            date: commit.date,
+            date: Date(commit.date),
         },
         triple: sysroot.triple.clone(),
         benchmarks: results

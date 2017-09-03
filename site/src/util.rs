@@ -8,7 +8,6 @@
 // except according to those terms.
 
 use std::env;
-use std::f64;
 use std::collections::BTreeMap;
 use std::collections::btree_map::Range;
 use std::collections::Bound::Included;
@@ -16,8 +15,6 @@ use std::collections::Bound::Included;
 use load::{InputData, Commit, CommitData};
 use date::{OptionalDate, Date, Start, End};
 use errors::*;
-
-use serde::{Deserialize, Deserializer};
 
 pub fn get_commit_data_from_end(data: &InputData, idx: Date) -> &CommitData {
     debug!("getting from end for {}", idx);
@@ -71,26 +68,4 @@ pub fn get_repo_path() -> Result<String> {
         .ok_or("No argument supplied, needs location of data repo.".into())
 }
 
-pub fn null_means_nan<'de, D>(deserializer: D) -> ::std::result::Result<f64, D::Error>
-    where D: Deserializer<'de>
-{
-    Ok(Option::deserialize(deserializer)?.unwrap_or(0.0))
-}
-
-/// Rounds serialized and deserialized floats to 2 decimal places.
-pub mod round_float {
-    use serde::{Deserialize, Serializer, Deserializer};
-
-    pub fn serialize<S>(n: &f64, serializer: S) -> Result<S::Ok, S::Error>
-        where S: Serializer
-    {
-        serializer.serialize_f64((*n * 100.0).round() / 100.0)
-    }
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<f64, D::Error>
-        where D: Deserializer<'de>
-    {
-        let n = f64::deserialize(deserializer)?;
-        Ok((n * 100.0).round() / 100.0)
-    }
-}
+pub use rustc_perf_collector::{round_float, null_means_nan};

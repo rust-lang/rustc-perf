@@ -112,7 +112,7 @@ impl Repo {
     pub fn add_commit_data(&self, data: &CommitData) -> Result<()> {
         let commit = &data.commit;
         let filepath = self.times()
-            .join(format!("{}-{}-{}.json", commit.date.to_rfc3339(), commit.sha, data.triple));
+            .join(format!("{}-{}-{}.json", commit.date, commit.sha, data.triple));
         info!("creating file {}", filepath.display());
         let mut file = File::create(&filepath)?;
         serde_json::to_writer(&mut file, &data)?;

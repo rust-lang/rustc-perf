@@ -21,6 +21,7 @@ extern crate serde_json;
 extern crate hyper;
 extern crate futures;
 extern crate futures_cpupool;
+extern crate rustc_perf_collector;
 
 mod errors {
     error_chain! {
