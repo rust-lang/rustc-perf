@@ -46,7 +46,6 @@ use rust_sysroot::sysroot::Sysroot;
 mod git;
 mod execute;
 mod outrepo;
-mod time_passes;
 
 use execute::Benchmark;
 
