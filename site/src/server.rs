@@ -437,7 +437,7 @@ impl Server {
         let response = Response::new()
             .with_header(ContentType::json())
             .with_body(serde_json::to_string(&result).unwrap());
-        futures::future::ok(response).boxed()
+        Box::new(futures::future::ok(response))
     }
 
     fn handle_post<'de, F, D, S>(&self, req: Request, handler: F) -> <Server as Service>::Future
@@ -449,10 +449,10 @@ impl Server {
         let length = req.headers().get::<ContentLength>()
         .expect("content-length to exist").0;
         if length > 10_000 { // 10 kB
-            return futures::future::err(hyper::Error::TooLarge).boxed();
+            return Box::new(futures::future::err(hyper::Error::TooLarge));
         }
         let data = self.data.clone();
-        self.pool.spawn_fn(move || {
+        Box::new(self.pool.spawn_fn(move || {
             req.body().fold(Vec::new(), |mut acc, chunk| {
                 acc.extend_from_slice(&*chunk);
                 futures::future::ok::<_, <Self as Service>::Error>(acc)
@@ -477,7 +477,7 @@ impl Server {
                     ]))
                     .with_body(serde_json::to_string(&result).unwrap())
             })
-        }).boxed()
+        }))
     }
 
     fn handle_push(&self, _req: Request) -> <Self as Service>::Future {
@@ -485,11 +485,10 @@ impl Server {
         let was_updating = self.updating.compare_and_swap(false, true, Ordering::AcqRel);
 
         if was_updating {
-            return futures::future::ok(Response::new()
+            return Box::new(futures::future::ok(Response::new()
                 .with_body(format!("Already updating!"))
                 .with_status(StatusCode::Ok)
-                .with_header(ContentType(mime::TEXT_PLAIN_UTF_8)))
-                .boxed();
+                .with_header(ContentType(mime::TEXT_PLAIN_UTF_8))));
         }
 
         // FIXME we are throwing everything away and starting again. It would be
@@ -520,7 +519,7 @@ impl Server {
         });
 
         let updating = self.updating.clone();
-        response.map(|value| {
+        Box::new(response.map(|value| {
             Response::new().with_body(serde_json::to_string(&value).unwrap())
         }).or_else(move |err| {
             updating.store(false, Ordering::Release);
@@ -528,7 +527,7 @@ impl Server {
                 .with_body(format!("Internal Server Error: {:?}", err))
                 .with_status(StatusCode::InternalServerError)
                 .with_header(ContentType(mime::TEXT_PLAIN_UTF_8)))
-        }).boxed()
+        }))
     }
 }
 
@@ -548,18 +547,18 @@ impl Service for Server {
         info!("handling: req.path()={:?}, fs_path={:?}", req.path(), fs_path);
 
         if fs_path.contains("./") | fs_path.contains("../") {
-            return futures::future::ok(Response::new()
+            return Box::new(futures::future::ok(Response::new()
                 .with_header(ContentType::html())
-                .with_status(StatusCode::NotFound)).boxed();
+                .with_status(StatusCode::NotFound)));
         }
 
         if Path::new(&fs_path).is_file() {
-            return self.pool.spawn_fn(move || {
+            return Box::new(self.pool.spawn_fn(move || {
                 let mut f = File::open(&fs_path).unwrap();
                 let mut source = Vec::new();
                 f.read_to_end(&mut source).unwrap();
                 futures::future::ok(Response::new().with_body(source))
-            }).boxed();
+            }));
         }
 
         match req.path() {
@@ -572,9 +571,9 @@ impl Service for Server {
             "/perf/stats" => self.handle_post(req, handle_stats),
             "/perf/onpush" => self.handle_push(req),
             _ => {
-                futures::future::ok(Response::new()
+                Box::new(futures::future::ok(Response::new()
                     .with_header(ContentType::html())
-                    .with_status(StatusCode::NotFound)).boxed()
+                    .with_status(StatusCode::NotFound)))
             }
         }
     }
