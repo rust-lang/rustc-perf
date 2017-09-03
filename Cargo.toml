@@ -1,0 +1,8 @@
+[workspace]
+members = [
+    "collector",
+    "site",
+]
+
+[profile.release]
+debug = true
