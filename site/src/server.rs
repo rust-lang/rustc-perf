@@ -365,7 +365,7 @@ impl Service for Server {
 
     fn call(&self, req: Request) -> Self::Future {
         let fs_path = format!(
-            "static{}",
+            "site/static{}",
             if req.path() == "" || req.path() == "/" {
                 "/index.html"
             } else {
