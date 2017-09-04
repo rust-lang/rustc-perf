@@ -10,6 +10,10 @@ function getDate(id) {
     }
 }
 
+function getCommit(id) {
+    return document.getElementById(id).value;
+}
+
 function gatherChecks(name) {
     if (document.getElementById(name + "-total") &&
         document.getElementById(name + "-total").checked) {
@@ -65,7 +69,7 @@ function addTotalHandler(name) {
     };
 }
 
-// Get lists of the available crates and phases from the server and make
+// Get lists of the available crates from the server and make
 // the lists of checkboxes and other settings.
 // Assumes the initial graph is total/total/by crate
 function make_settings(callback, total_label) {
@@ -82,20 +86,7 @@ function make_settings(callback, total_label) {
     }
     return fetch(BASE_URL + "/info", {}).then(function(response) {
         response.json().then(function(data) {
-            var crates_html = checkbox("check-crate", "check-crate-total", true, total_label);
-            for (let crate of data.crates) {
-                crates_html += checkbox("check-crate", crate, false, truncate_name(crate));
-            }
-            document.getElementById("crates").innerHTML = crates_html;
-            addTotalHandler("check-crate");
-
-            var phases_html = checkbox("check-phase", "check-phase-total", true, total_label);
-            for (let phase of data.phases) {
-                phases_html += checkbox("check-phase", phase, false, truncate_name(phase));
-            }
-            document.getElementById("phases").innerHTML = phases_html;
-            addTotalHandler("check-phase");
-
+            let phases_html = "";
             for (let stat of data.stats) {
                 phases_html += `<option value="${stat}">${stat}</option>`;
             }
@@ -109,7 +100,6 @@ function make_settings(callback, total_label) {
             if (groupByCrate) {
                 groupByCrate.checked = true;
             }
-
             if (callback) {
                 // Respond to back/forwards properly.
                 window.onpopstate = function() {
@@ -156,72 +146,8 @@ function set_date(id, date) {
     }
 }
 
-function set_check_boxes(crates, phases, group_by) {
-    // Clear checkboxes
-    var ck_crates = document.getElementsByName('check-crate');
-    for (var i in ck_crates) {
-        ck_crates[i].checked = false;
-    }
-
-    var ck_phases = document.getElementsByName('check-phase');
-    for (var i in ck_phases) {
-        ck_phases[i].checked = false;
-    }
-
-    var totalCratesSet = crates.list == "All";
-    var totalPhasesSet = phases.list == "All";
-    var crates = toList(crates);
-    var phases = toList(phases);
-
-    if (totalCratesSet) {
-        document.getElementById("check-crate-total").checked = true;
-    }
-    if (totalPhasesSet) {
-        document.getElementById("check-phase-total").checked = true;
-    }
-
-    // Check crates/benchmarks/phases checkboxes.
-    for (let id of crates) {
-        let ck = document.getElementById(id);
-        if (ck) {
-            ck.checked = true;
-        } else {
-            console.log("Couldn't find", id);
-        }
-    }
-    for (let id of phases) {
-        let ck = document.getElementById(id);
-        if (ck) {
-            ck.checked = true;
-        } else {
-            console.log("Couldn't find", id);
-        }
-    }
-
-    if (group_by) {
-        var radios = document.getElementsByName("groupBy");
-        for (var r in radios) {
-            radios[r].checked = radios[r].value == group_by;
-        }
-    }
-}
-
-function get_group_by() {
-    // group by
-    let group_by;
-    let elements = document.getElementsByName("groupBy");
-    for (let element of elements) {
-        if (element.checked) {
-            group_by = element.value;
-            break;
-        }
-    }
-    if (!group_by) {
-        group_by = "crate";
-        document.getElementById("group-by-crate").checked = true;
-    }
-
-    return group_by;
+function set_commit(id, commit) {
+    document.getElementById(id).value = commit;
 }
 
 // A bunch of helper functions for helping with keeping URLs up to date and

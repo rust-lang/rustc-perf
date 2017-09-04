@@ -61,6 +61,11 @@ pub mod info {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CommitResponse {
+    pub commit: Option<String>,
+}
+
 pub mod data {
     use super::List;
     use date::{Date, End, OptionalDate, Start};
@@ -92,13 +97,12 @@ pub mod data {
 
 pub mod days {
     use super::List;
-    use date::{End, OptionalDate, Start};
     use server::DateData;
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct Request {
-        pub date_a: OptionalDate<Start>,
-        pub date_b: OptionalDate<End>,
+        pub commit_a: String,
+        pub commit_b: String,
 
         /// Which crates to return data for
         pub crates: List,

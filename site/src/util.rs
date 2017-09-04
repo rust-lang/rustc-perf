@@ -16,6 +16,11 @@ use load::{Commit, CommitData, InputData};
 use date::{Date, End, OptionalDate, Start};
 use errors::*;
 
+pub fn get_commit_data(data: &InputData, idx: String) -> &CommitData {
+    debug!("getting commit for {}", idx);
+    data.data.values().find(|cd| cd.commit.sha.starts_with(&idx)).unwrap()
+}
+
 pub fn get_commit_data_from_end(data: &InputData, idx: Date) -> &CommitData {
     debug!("getting from end for {}", idx);
     let a = Commit {

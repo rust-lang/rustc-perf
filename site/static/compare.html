@@ -8,27 +8,16 @@
     <div>&gt; <a href="index.html">graphs</a>, <a href="stats.html">stats</a>, <a href="compare.html">compare</a>.</div>
     <div id="content" style="display: none"></div>
     <div id="settings">
-        <span id="crates-outer" class="settings">
-            <h3 id="crates_label">Benchmarks</h3>
-            <label class="group-by">
-                <input type="radio" name="groupBy" id="group-by-crate" value="crate" checked="true">group by crate
-            </label>
-            <div id="crates">loading...</div>
+        <span id="commits" class="settings" style="text-align:left;">
+            <h3>Commits</h3>
+            Commit A: <input width="100em" placeholder="SHA" id="commit-a"></input><br>
+            Commit B: <input width="100em" placeholder="SHA" id="commit-b"></input><br>
+	    <select id='stats' name="stat">
+	    </select>
+        <div class="submit">
+            <a href="#" onClick="make_data({}, true); return false;">Submit</a>
+        </div>
         </span>
-        <span id="phases-outer" class="settings">
-            <h3>Phases</h3>
-            <label class="group-by">
-                <input type="radio" name="groupBy" id="group-by-phase" value="phase">group by phase
-            </label>
-            <div id="phases">loading...</div>
-        </span>
-        <span id="dates" class="settings">
-            <h3>Dates</h3>
-            start date: <input placeholder="yyyy-mm-dd" id="date-a"></input><br>
-            end date: <input placeholder="yyyy-mm-dd" id="date-b"></input>
-            <div class="submit">
-                <a href="#" onClick="make_data({}, true); return false;">Submit</a>
-            </div>
         </div>
     </div>
     <div id="as-of"></div>
@@ -46,33 +35,23 @@
         let html = "";
 
         if (datum) {
-            if (datum.time) {
-                html += "<td>" + datum.time.toFixed(2) + "s</td>";
-            } else {
-                html += "<td>-</td>";
-            }
-            if (datum.rss) {
-                html += "<td>" + datum.rss.toFixed(0) + "MB</td>";
-            } else {
-                html += "<td>-</td>";
-            }
+            html += "<td>" + datum.toFixed(2) + "</td>";
         } else {
             html += "<td>-</td>";
-            html += "<td>-</td>";
         }
-
-        html += `<td class="space"></td>`;
 
         return html;
     }
 
-    function add_percent(a, b, field) {
-        if (a && b && a[field] > 0) {
-            let percent = 100 * (b[field] - a[field]) / a[field];
-            if (percent > 0) {
+    function add_percent(a, b) {
+        if (a && b) {
+            let percent = 100 * (b - a) / a;
+            if (percent > 1) {
                 return `<td class="positive">${percent.toFixed(1)}%</td>`;
-            } else {
+            } else if (percent < -1) {
                 return `<td class="negative">${percent.toFixed(1)}%</td>`;
+            } else {
+                return `<td>${percent.toFixed(1)}%</td>`;
             }
         } else {
             return "<td>-</td>"
@@ -85,16 +64,15 @@
         // Heading: the two dates, and the time and rss percent changes.
         html += "<thead>";
         html += "<tr>";
-        html += `<td class="space"></td>`;
-        html += `<td class="space"></td>`;
 
-        html += "<th colspan=2>" + new Date(data.a.date).toLocaleString() + "</th>";
-        html += `<td class="space"></td>`;
-        html += "<th colspan=2>" + new Date(data.b.date).toLocaleString() + "</th>";
-        html += `<td class="space"></td>`;
+        html += "<th>" + "crate" + "</th>";
 
-        html += "<th>" + "% change (time)" + "</th>";
-        html += "<th>" + "% change (rss)" + "</th>";
+        html += "<th>" + new Date(data.a.date).toLocaleString()
+         + ` (${data.a.commit.substring(0,8)})` + "</th>";
+        html += "<th>" + new Date(data.b.date).toLocaleString()
+         + ` (${data.b.commit.substring(0,8)})` + "</th>";
+
+        html += "<th>" + "% change" + "</th>";
         html += "</tr>";
         html += "</thead>";
 
@@ -105,13 +83,11 @@
             html += "<tr>";
 
             html += "<th>" + truncate_name(name) + "</th>";
-            html += `<td class="space"></td>`;
 
             html += add_datum_fields(data.a.data[name]);
             html += add_datum_fields(data.b.data[name]);
 
-            html += add_percent(data.a.data[name], data.b.data[name], "time");
-            html += add_percent(data.a.data[name], data.b.data[name], "rss");
+            html += add_percent(data.a.data[name], data.b.data[name]);
 
             html += "</tr>";
         }
@@ -123,34 +99,27 @@
     }
 
     function make_data(state, push_state) {
-        let datea = state.date_a || getDate("date-a");
-        let dateb = state.date_b || getDate("date-b");
-        let crates = state.crates || gatherChecks("check-crate");
-        let phases = state.phases || gatherChecks("check-phase");
-        let group_by = state.group_by || get_group_by();
-
-        set_check_boxes(crates, phases, group_by);
+        let commit_a = state.commit_a || getCommit("commit-a");
+        let commit_b = state.commit_b || getCommit("commit-b");
+        let stat = state.stat || getSelected("stats");
 
         var values = {
-            date_a: datea,
-            date_b: dateb,
-            crates: crates,
-            phases: phases,
-            group_by: group_by
+            commit_a: commit_a,
+            commit_b: commit_b,
+            crates: {list: 'All'},
+            stat: stat,
         };
         make_request("/get", values).then(function(response) {
             response.json().then(function(data) {
                 populate_data(data);
-                set_date("date-a", data.a.date);
-                set_date("date-b", data.b.date);
+                set_commit("commit-a", data.a.commit);
+                set_commit("commit-b", data.b.commit);
 
                 if (push_state) {
                     push_state_to_history({
-                        date_a: data.a.date,
-                        date_b: data.b.date,
-                        crates: crates,
-                        phases: phases,
-                        group_by: group_by
+                        commit_a: data.a.commit,
+                        commit_b: data.b.commit,
+                        stat: stat,
                     });
                 }
 

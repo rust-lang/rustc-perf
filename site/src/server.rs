@@ -12,7 +12,7 @@ use std::env;
 use std::fs::File;
 use std::io::Read;
 use std::sync::{Arc, RwLock};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 use std::path::Path;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -26,11 +26,12 @@ use hyper::{self, Get, Post, StatusCode};
 use hyper::header::{CacheControl, CacheDirective, ContentLength, ContentType};
 use hyper::mime;
 use hyper::server::{Http, Request, Response, Service};
+use url::Url;
 
 use git;
 use date::Date;
 use util::{self, get_repo_path};
-pub use api::{self, data, days, info, stats};
+pub use api::{self, data, days, info, stats, CommitResponse};
 use load::{CommitData, InputData};
 
 use errors::*;
@@ -44,18 +45,17 @@ pub struct DateData {
 }
 
 impl DateData {
-    pub fn for_day(day: &CommitData, crates: &BTreeSet<String>, stat: &str) -> DateData {
+    pub fn for_day(day: &CommitData, stat: &str) -> DateData {
         let crates = day.benchmarks
             .values()
             .filter(|v| v.is_ok())
             .flat_map(|patches| patches.as_ref().unwrap())
-            .filter(|patch| crates.contains(&patch.name))
             .collect::<Vec<_>>();
 
         let mut data = HashMap::new();
         for patch in &crates {
             if let Some(stat) = patch.run().get_stat(stat) {
-                *data.entry(patch.name.clone()).or_insert(0.0) += stat;
+                data.insert(patch.name.clone(), stat);
             }
         }
 
@@ -80,7 +80,7 @@ pub fn handle_data(body: data::Request, data: &InputData) -> data::Response {
         util::optional_data_range(data, body.start_date.clone(), body.end_date.clone())
             .map(|(_, day)| day)
             .map(|day| {
-                DateData::for_day(day, &body.crates.into_set(&data.crate_list), &body.stat)
+                DateData::for_day(day, &body.stat)
             })
             .collect::<Vec<_>>();
 
@@ -106,13 +106,11 @@ pub fn handle_data(body: data::Request, data: &InputData) -> data::Response {
 pub fn handle_days(body: days::Request, data: &InputData) -> days::Response {
     days::Response {
         a: DateData::for_day(
-            util::get_commit_data_from_start(data, body.date_a.as_date(data.last_date)),
-            &body.crates.into_set(&data.crate_list),
+            util::get_commit_data(data, body.commit_a),
             &body.stat,
         ),
         b: DateData::for_day(
-            util::get_commit_data_from_end(data, body.date_b.as_date(data.last_date)),
-            &body.crates.into_set(&data.crate_list),
+            util::get_commit_data(data, body.commit_b),
             &body.stat,
         ),
     }
@@ -129,7 +127,6 @@ pub fn handle_stats(body: stats::Request, data: &InputData) -> stats::Response {
         end_date = commit_data.commit.date;
         let data = DateData::for_day(
             commit_data,
-            &body.crates.into_set(&data.crate_list),
             &body.stat,
         );
         for (name, rec) in data.data {
@@ -225,6 +222,27 @@ impl Stats {
     }
 }
 
+pub fn handle_date_commit(date: Date) -> CommitResponse {
+    let commits = ::rust_sysroot::get_commits().unwrap();
+
+    let commit = commits.into_iter().rfind(|c| c.date < date.0);
+
+    CommitResponse {
+        commit: commit.map(|c| c.sha),
+    }
+}
+
+pub fn handle_pr_commit(pr: u64) -> CommitResponse {
+    let commits = ::rust_sysroot::get_commits().unwrap();
+
+    let pr = format!("#{}", pr);
+    let commit = commits.into_iter().find(|c| c.summary.contains(&pr));
+
+    CommitResponse {
+        commit: commit.map(|c| c.sha),
+    }
+}
+
 struct Server {
     data: Arc<RwLock<InputData>>,
     pool: CpuPool,
@@ -241,6 +259,21 @@ impl Server {
         let data = self.data.clone();
         let data = data.read().unwrap();
         let result = handler(&data);
+        let response = Response::new()
+            .with_header(ContentType::json())
+            .with_body(serde_json::to_string(&result).unwrap());
+        Box::new(futures::future::ok(response))
+    }
+
+    fn handle_get_req<F, S>(&self, req: &Request, handler: F) -> <Server as Service>::Future
+    where
+        F: FnOnce(&Request, &InputData) -> S,
+        S: Serialize,
+    {
+        assert_eq!(*req.method(), Get);
+        let data = self.data.clone();
+        let data = data.read().unwrap();
+        let result = handler(req, &data);
         let response = Response::new()
             .with_header(ContentType::json())
             .with_body(serde_json::to_string(&result).unwrap());
@@ -401,6 +434,16 @@ impl Service for Server {
             "/perf/data" => self.handle_post(req, handle_data),
             "/perf/get" => self.handle_post(req, handle_days),
             "/perf/stats" => self.handle_post(req, handle_stats),
+            "/perf/pr_commit" => self.handle_get_req(&req, |req, _data| {
+                let url = Url::parse(req.uri().as_ref()).unwrap();
+                let pr = url.query_pairs().find(|&(ref k, _)| k == "pr");
+                handle_pr_commit(pr.unwrap().1.parse().unwrap())
+            }),
+            "/perf/date_commit" => self.handle_get_req(&req, |req, _data| {
+                let url = Url::parse(req.uri().as_ref()).unwrap();
+                let date = url.query_pairs().find(|&(ref k, _)| k == "date");
+                handle_date_commit(date.unwrap().1.parse().unwrap())
+            }),
             "/perf/onpush" => self.handle_push(req),
             _ => Box::new(futures::future::ok(
                 Response::new()

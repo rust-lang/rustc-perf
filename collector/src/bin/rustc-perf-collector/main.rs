@@ -141,7 +141,6 @@ fn process_commit(
     repo.success(&bench_commit(commit, Some(repo), sysroot, benchmarks))
 }
 
-
 fn process_retries(
     commits: &[GitCommit],
     repo: &mut outrepo::Repo,
@@ -230,15 +229,15 @@ fn run() -> Result<i32> {
         }
         ("bench_commit", Some(sub_m)) => {
             let commit = sub_m.value_of("COMMIT").unwrap();
-            let commit = commits.iter().find(|c| c.sha == commit).unwrap();
-            let sysroot = Sysroot::install(
-                &commit,
-                "x86_64-unknown-linux-gnu",
-                preserve_sysroots,
-                false,
-            )?;
-            let result = bench_commit(&commit, None, sysroot, &benchmarks);
-            serde_json::to_writer(&mut stdout(), &result)?;
+            let commit = commits.iter().find(|c| c.sha == commit).cloned().unwrap_or_else(|| {
+                warn!("utilizing fake commit!");
+                rust_sysroot::git::Commit {
+                    sha: commit.to_string(),
+                    date: Date::ymd_hms(2000, 01, 01, 0, 0, 0).0,
+                    summary: String::new(),
+                }
+            });
+            process_commit(&out_repo, &commit, &benchmarks, preserve_sysroots)?;
             Ok(0)
         }
         ("bench_local", Some(sub_m)) => {

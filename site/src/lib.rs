@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(proc_macro, conservative_impl_trait)]
+#![feature(proc_macro, iter_rfind, conservative_impl_trait)]
 
 extern crate chrono;
 #[macro_use]
@@ -22,6 +22,8 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
+extern crate rust_sysroot;
+extern crate url;
 
 mod errors {
     error_chain! {
