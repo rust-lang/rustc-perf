@@ -84,4 +84,4 @@ pub fn get_repo_path() -> Result<String> {
         .ok_or("No argument supplied, needs location of data repo.".into())
 }
 
-pub use rustc_perf_collector::{null_means_nan, round_float};
+pub use collector::{null_means_nan, round_float};

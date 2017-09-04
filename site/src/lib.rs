@@ -17,7 +17,7 @@ extern crate futures_cpupool;
 extern crate hyper;
 #[macro_use]
 extern crate log;
-extern crate rustc_perf_collector;
+extern crate collector;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;

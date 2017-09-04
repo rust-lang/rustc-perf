@@ -8,9 +8,9 @@
 // except according to those terms.
 
 extern crate env_logger;
-extern crate rustc_perf;
+extern crate site;
 
-use rustc_perf::{load, server, util};
+use site::{load, server, util};
 
 fn main() {
     env_logger::init().unwrap();

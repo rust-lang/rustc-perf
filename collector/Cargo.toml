@@ -1,6 +1,6 @@
 [package]
 authors = ["Mark Simulacrum <mark.simulacrum@gmail.com>"]
-name = "rustc-perf-collector"
+name = "collector"
 version = "0.1.0"
 
 [dependencies]
@@ -24,7 +24,7 @@ git = "https://github.com/Mark-Simulacrum/bisect-rust.git"
 optional = false
 
 [[bin]]
-name = "rustc-perf-collector"
+name = "collector"
 path = "src/bin/rustc-perf-collector/main.rs"
 
 [[bin]]

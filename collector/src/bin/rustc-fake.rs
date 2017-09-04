@@ -2,13 +2,13 @@ use std::env;
 use std::process::Command;
 
 fn main() {
-    let args = env::args_os().skip(1).collect::<Vec<_>>();
+    let mut args = env::args_os().skip(1).collect::<Vec<_>>();
 
     let rustc = env::var_os("RUSTC_REAL").unwrap();
     let mut cmd = Command::new(&rustc);
 
     // easiest way to differentiate last pass
-    let time_passes = args.iter().position("-Ztime-passes");
+    let time_passes = args.iter().position(|arg| arg == "-Ztime-passes");
     if let Some(pos) = time_passes {
         args.remove(pos);
     }
@@ -25,7 +25,7 @@ fn main() {
     }
     cmd.args(&args);
 
-    if any_time_passes {
+    if time_passes.is_some() {
         raise_priority();
         assert!(cmd.status().expect("failed to spawn").success());
         print_memory();

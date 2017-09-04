@@ -20,7 +20,7 @@ use util;
 use git;
 use date::Date;
 
-pub use rustc_perf_collector::{Commit, CommitData, Patch, Run, Stat};
+pub use collector::{Commit, CommitData, Patch, Run, Stat};
 
 #[derive(Debug)]
 pub struct InputData {

@@ -1,6 +1,6 @@
 [package]
 authors = ["Mark-Simulacrum <mark.simulacrum@gmail.com>", "Nicholas Cameron <ncameron@mozilla.com>", "The rustc-perf contributors"]
-name = "rustc-perf"
+name = "site"
 version = "0.1.0"
 
 [dependencies]
@@ -14,7 +14,7 @@ serde_derive = "1.0.0"
 serde_json = "1.0.0"
 hyper = "0.11"
 
-[dependencies.rustc-perf-collector]
+[dependencies.collector]
 path = "../collector"
 
 [dependencies.chrono]

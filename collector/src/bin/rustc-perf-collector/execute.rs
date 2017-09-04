@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 
 use tempdir::TempDir;
 
-use rustc_perf_collector::{Patch, Run, Stat};
+use collector::{Patch, Run, Stat};
 
 use errors::{Result, ResultExt};
 use rust_sysroot::sysroot::Sysroot;

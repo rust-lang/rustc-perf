@@ -10,7 +10,7 @@ extern crate error_chain;
 extern crate log;
 extern crate reqwest;
 extern crate rust_sysroot;
-extern crate rustc_perf_collector;
+extern crate collector;
 extern crate serde_json;
 extern crate tempdir;
 
@@ -39,7 +39,7 @@ use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
 
-use rustc_perf_collector::{Commit, CommitData, Date};
+use collector::{Commit, CommitData, Date};
 use rust_sysroot::git::Commit as GitCommit;
 use rust_sysroot::sysroot::Sysroot;
 
@@ -186,12 +186,13 @@ fn run() -> Result<i32> {
        (version: "0.1")
        (author: "The Rust Compiler Team")
        (about: "Collects Rust performance data")
-       (@arg benchmarks_dir: --benchmarks-dir +required +takes_value "Sets the directory benchmarks are found in")
+       (@arg benchmarks_dir: --benchmarks +required +takes_value "Sets the directory benchmarks are found in")
        (@arg filter: --filter +takes_value "Run only benchmarks that contain this")
        (@arg preserve_sysroots: -p --preserve "Don't delete sysroots after running.")
+       (@arg sync_git: --("sync-git") "Synchronize repository with remote")
+       (@arg output_repo: --("output-repo") +required +takes_value "Repository to output to")
        (@subcommand process =>
            (about: "syncs to git and collects performance data for all versions")
-           (@arg OUTPUT_REPOSITORY: +required +takes_value "Repository to output to")
        )
        (@subcommand bench_commit =>
            (about: "benchmark a bors merge from AWS and output data to stdout")
@@ -205,25 +206,24 @@ fn run() -> Result<i32> {
        )
        (@subcommand remove_errs =>
            (about: "remove errored data")
-           (@arg OUTPUT_REPOSITORY: +required +takes_value "Repository to output to")
        )
        (@subcommand remove_benchmark =>
            (about: "remove data for a benchmark")
            (@arg BENCHMARK: --benchmark +required +takes_value "benchmark name to remove data for")
-           (@arg OUTPUT_REPOSITORY: +required +takes_value "Repository to output to")
        )
     ).get_matches();
     let benchmark_dir = PathBuf::from(matches.value_of_os("benchmarks_dir").unwrap());
     let filter = matches.value_of("filter");
     let benchmarks = get_benchmarks(&benchmark_dir, filter)?;
     let preserve_sysroots = matches.is_present("preserve_sysroots");
+    let use_remote = matches.is_present("sync_git");
+    let out_repo = PathBuf::from(matches.value_of_os("output_repo").unwrap());
+    let mut out_repo = outrepo::Repo::open(out_repo, use_remote)?;
 
     let commits = rust_sysroot::get_commits()?;
 
     match matches.subcommand() {
-        ("process", Some(sub_m)) => {
-            let out_repo = PathBuf::from(sub_m.value_of_os("OUTPUT_REPOSITORY").unwrap());
-            let mut out_repo = outrepo::Repo::open(out_repo)?;
+        ("process", Some(_)) => {
             process_retries(&commits, &mut out_repo, &benchmarks, preserve_sysroots)?;
             process_commits(&commits, &out_repo, &benchmarks, preserve_sysroots)?;
             Ok(0)
@@ -261,9 +261,7 @@ fn run() -> Result<i32> {
             serde_json::to_writer(&mut stdout(), &result)?;
             Ok(0)
         }
-        ("remove_errs", Some(sub_m)) => {
-            let out_repo = PathBuf::from(sub_m.value_of_os("OUTPUT_REPOSITORY").unwrap());
-            let out_repo = outrepo::Repo::open(out_repo)?;
+        ("remove_errs", Some(_)) => {
             for commit in &commits {
                 if let Ok(mut data) = out_repo.load_commit_data(&commit, "x86_64-unknown-linux-gnu")
                 {
@@ -278,9 +276,7 @@ fn run() -> Result<i32> {
             Ok(0)
         }
         ("remove_benchmark", Some(sub_m)) => {
-            let out_repo = PathBuf::from(sub_m.value_of_os("OUTPUT_REPOSITORY").unwrap());
             let benchmark = sub_m.value_of("BENCHMARK").unwrap();
-            let out_repo = outrepo::Repo::open(out_repo)?;
             for commit in &commits {
                 if let Ok(mut data) = out_repo.load_commit_data(&commit, "x86_64-unknown-linux-gnu")
                 {

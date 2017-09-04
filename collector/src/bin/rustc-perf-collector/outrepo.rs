@@ -10,12 +10,13 @@ use std::str;
 use std::collections::HashSet;
 
 use serde_json;
-use rustc_perf_collector::CommitData;
+use collector::CommitData;
 use rust_sysroot::git::Commit as GitCommit;
 use execute::Benchmark;
 
 pub struct Repo {
     path: PathBuf,
+    use_remote: bool,
     retries: Vec<String>,
 }
 
@@ -38,9 +39,10 @@ impl Repo {
         Ok(())
     }
 
-    pub fn open(path: PathBuf) -> Result<Self> {
+    pub fn open(path: PathBuf, use_remote: bool) -> Result<Self> {
         let mut result = Repo {
             path: path,
+            use_remote,
             retries: vec![],
         };
 
@@ -49,8 +51,10 @@ impl Repo {
             bail!("`{}` file not present", result.retries_file().display());
         }
 
-        result.git(&["fetch"])?;
-        result.git(&["reset", "--hard", "@{upstream}"])?;
+        if result.use_remote {
+            result.git(&["fetch"])?;
+            result.git(&["reset", "--hard", "@{upstream}"])?;
+        }
 
         fs::create_dir_all(result.times()).chain_err(|| "can't create `times/`")?;
         result.load_retries()?;
@@ -115,7 +119,9 @@ impl Repo {
         self.write_retries()?;
         self.git(&["add", "retries", "times"])?;
         self.git(&["commit", "-m", message])?;
-        self.git(&["push"])?;
+        if self.use_remote {
+            self.git(&["push"])?;
+        }
         Ok(())
     }
 
