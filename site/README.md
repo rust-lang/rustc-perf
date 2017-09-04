@@ -8,10 +8,6 @@ which displays graphs to the user.
 https://github.com/rust-lang-nursery/rustc-timing contains the raw data
 from which rustc-perf pulls.
 
-https://github.com/rust-lang-nursery/rustc-benchmarks runs elsewhere and
-performs the tests whose results rustc-perf displays, then pushes them
-to the timings repo.
-
 Setup
 -----
 
