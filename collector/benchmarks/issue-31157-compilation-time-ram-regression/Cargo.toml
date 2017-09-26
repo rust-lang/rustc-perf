@@ -1,0 +1,9 @@
+[package]
+name = "parser"
+version = "0.1.0"
+authors = ["White-Oak <lpzhelud@gmail.com>"]
+
+[dependencies]
+
+[dependencies.peruse]
+git = "https://github.com/DanSimon/peruse.git"
