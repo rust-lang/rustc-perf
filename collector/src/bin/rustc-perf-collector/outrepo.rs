@@ -115,9 +115,13 @@ impl Repo {
     fn commit_and_push(&self, message: &str) -> Result<()> {
         self.write_retries()?;
         self.git(&["add", "retries", "times"])?;
-        self.git(&["commit", "-m", message])?;
-        if self.use_remote {
-            self.git(&["push"])?;
+        if let Ok(_) = self.git(&["diff-index", "--quiet", "--cached", "HEAD"]) {
+            self.git(&["commit", "-m", message])?;
+            if self.use_remote {
+                self.git(&["push"])?;
+            }
+        } else {
+            println!("nothing to commit...");
         }
         Ok(())
     }
