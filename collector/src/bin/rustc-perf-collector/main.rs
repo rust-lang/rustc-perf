@@ -200,7 +200,7 @@ fn run() -> Result<i32> {
        (@subcommand bench_local =>
            (about: "benchmark a bors merge from AWS and output data to stdout")
            (@arg COMMIT: --commit +required +takes_value "Commit hash to associate benchmark results with")
-           (@arg DATE: --date +required +takes_value "Date to associate benchmark result with, YYYY-MM-DDTHH:MM:SS format.")
+           (@arg DATE: --date +required +takes_value "Date to associate benchmark result with, in the RFC3339 \"YYYY-MM-DDTHH:MM:SS-HH:MM\" format.")
            (@arg RUSTC: +required +takes_value "the path to the local rustc to benchmark")
        )
        (@subcommand remove_errs =>
