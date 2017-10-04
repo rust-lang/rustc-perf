@@ -16,9 +16,9 @@
             <h3>Dates</h3>
             start date: <input placeholder="yyyy-mm-dd" id="start-date"></input><br>
             end date: <input placeholder="yyyy-mm-dd" id="end-date"></input><br>
-	    <select id='stats' name="stat">
-	    </select>
-        <div class="submit">
+            Absolute data: <input id='absolute' name="absolute" type="checkbox"><br>
+            <select id='stats' name="stat"></select>
+            <div class="submit">
             <a href="#" onClick="make_graph({}, true); return false;">Submit</a>
         </div>
         </span>
@@ -34,6 +34,7 @@
 
     function init_graph(response, stat) {
         var data = response.data;
+        let absolute = response.absolute;
 
         var crates = {};
         var firsts = {};
@@ -48,46 +49,47 @@
             }
 
             for (var crate in datum.data) {
-              var value = datum.data[crate];
-              if (!(crate in crates)) {
-                  firsts[crate] = value;
-                  crates[crate] = [{
-                      commit: datum.commit,
-                      url: url,
-                      y: 0.0,
-                      x: date.valueOf() // number of milliseconds since 1970
-                  }];
-              } else {
-                  crates[crate].push({
-                      commit: datum.commit,
-                      url: url,
-                      y: ((value - firsts[crate]) / firsts[crate]) * 100.0,
-                      x: date.valueOf()
-                  });
-              }
+                var value = datum.data[crate];
+                if (stat == "cpu-clock") {
+                    // convert to seconds, perf-stat reports time in milliseconds
+                    value /= 1000;
+                }
+
+                if (!(crate in crates)) {
+                    firsts[crate] = value;
+                    crates[crate] = [{
+                        crate: crate,
+                        commit: datum.commit,
+                        url: url,
+                        absolute: value,
+                        percent: 0.0,
+                        y: absolute ? value : 0.0,
+                        x: date.valueOf() // number of milliseconds since 1970
+                    }];
+                } else {
+                    let percent = ((value - firsts[crate]) / firsts[crate]) * 100.0;
+                    crates[crate].push({
+                        crate: crate,
+                        commit: datum.commit,
+                        url: url,
+                        absolute: value,
+                        percent: percent,
+                        y: absolute ? value : percent,
+                        x: date.valueOf()
+                    });
+                }
             }
         }
 
-        var crates_sorted = [];
-        for (var crate in crates) {
-            crates_sorted.push([crate, crates[crate]]);
-        }
-        crates_sorted.sort(function(a, b) {
-            if (a[0] < b[0]) {
-                return -1;
-            } else if (a[0] > b[0]) {
-                return 1;
-            } else {
-                return 0;
-            }
-        });
+        var crates_sorted = Object.keys(crates);
+        crates_sorted.sort();
+        crates_sorted = crates_sorted.map(crate => crates[crate]);
 
         var datasets = [];
         for (var i = 0; i < crates_sorted.length; i++) {
-            var crate = crates_sorted[i][0];
-            var data = crates_sorted[i][1];
+            var data = crates_sorted[i];
             datasets.push({
-                name: crate,
+                name: data[0].crate,
                 animation: false,
                 allowPointSelect: true,
                 data: data,
@@ -102,14 +104,18 @@
         }
 
         var title = "";
+        var yAxis = "Value";
         if (stat == "instructions:u") {
             title = "Number of CPU instructions";
+            yAxis = "Instructions";
         }
         if (stat == "cycles:u") {
             title = "Number of CPU cycles";
+            yAxis = "Cycles";
         }
         if (stat == "cpu-clock") {
             title = "Wall time execution";
+            yAxis = "Seconds";
         }
         chart = new Highcharts.chart('chart-container', {
             chart: {
@@ -130,13 +136,19 @@
                     var date = new Date(this.x);
                     var commit = this.point.commit.substr(0, 10);
                     return "<b>" + date.toLocaleString() + " - " + commit + "</b>" +
-                        "<br>" + this.series.name + ": " + this.y;
+                        "<br>" + this.series.name + ": " + this.point.absolute.toFixed(2) + " " +
+                        yAxis.toLowerCase() + " (" +
+                        this.point.percent.toFixed(2) + "% from start)";
                 }
             },
             xAxis: {
                 type: "datetime",
             },
-            yAxis: {
+            yAxis: absolute ? {
+                title: {
+                    text: yAxis,
+                }
+            } : {
                 softMax: 5,
                 softMin: -5,
                 minRange: 0.1,
@@ -179,6 +191,13 @@
         let end_date = state.end || getDate("end-date");
         let crates = state.crates || getSelectedCrates();
         let stat = state.stat || getSelected("stats");
+        let absolute = false;
+
+        if (document.getElementById("absolute").checked) {
+            absolute = true;
+        } else {
+            absolute = state.absolute || false;
+        }
 
         document.getElementById('stats').value = stat;
 
@@ -192,6 +211,8 @@
             response.json().then(function(data) {
                 let start_date = data.start;
                 let end_date = data.end;
+
+                data.absolute = absolute;
 
                 var series = data.crates;
                 set_date("start-date", start_date);
@@ -221,6 +242,7 @@
                         end: end_date,
                         crates: crates,
                         stat: stat,
+                        absolute: absolute,
                     };
                     push_state_to_history(state);
                 }
