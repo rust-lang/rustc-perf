@@ -1,5 +1,6 @@
 use std::env;
 use std::process::Command;
+use std::time::{Instant, Duration};
 
 fn main() {
     let mut args = env::args_os().skip(1).collect::<Vec<_>>();
@@ -27,8 +28,11 @@ fn main() {
 
     if time_passes.is_some() {
         raise_priority();
+        let start = Instant::now();
         assert!(cmd.status().expect("failed to spawn").success());
+        let dur = start.elapsed();
         print_memory();
+        print_time(dur);
     } else {
         exec(&mut cmd);
     }
@@ -66,9 +70,20 @@ fn print_memory() {
         let mut usage = mem::zeroed();
         let r = libc::getrusage(libc::RUSAGE_CHILDREN, &mut usage);
         if r == 0 {
+            // for explanation of all the semicolons, see `print_time` below
             println!("{};;max-rss;3;100.00", usage.ru_maxrss);
         }
     }
+}
+
+fn print_time(dur: Duration) {
+    // Format output the same as `perf stat` in CSV mode, explained at
+    // http://man7.org/linux/man-pages/man1/perf-stat.1.html#CSV_FORMAT
+    //
+    // tl;dr; it's:
+    //
+    //      $value ; $unit ; $name ; $runtime ; $pct
+    println!("{}.{:09};;wall-time;4;100.00", dur.as_secs(), dur.subsec_nanos());
 }
 
 #[cfg(windows)]
