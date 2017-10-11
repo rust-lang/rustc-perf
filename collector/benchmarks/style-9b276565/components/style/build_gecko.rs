@@ -44,22 +44,8 @@ mod bindings {
     use super::super::PYTHON;
     use toml;
 
-    const STRUCTS_DEBUG_FILE: &'static str = "structs_debug.rs";
-    const STRUCTS_RELEASE_FILE: &'static str = "structs_release.rs";
+    const STRUCTS_FILE: &'static str = "structs.rs";
     const BINDINGS_FILE: &'static str = "bindings.rs";
-
-    #[derive(Clone, Copy, PartialEq)]
-    enum BuildType {
-        Debug,
-        Release,
-    }
-
-    fn structs_file(build_type: BuildType) -> &'static str {
-        match build_type {
-            BuildType::Debug => STRUCTS_DEBUG_FILE,
-            BuildType::Release => STRUCTS_RELEASE_FILE
-        }
-    }
 
     fn read_config(path: &PathBuf) -> toml::Table {
         println!("cargo:rerun-if-changed={}", path.to_str().unwrap());
@@ -176,7 +162,7 @@ mod bindings {
     }
 
     trait BuilderExt {
-        fn get_initial_builder(build_type: BuildType) -> Builder;
+        fn get_initial_builder() -> Builder;
         fn include<T: Into<String>>(self, file: T) -> Builder;
         fn zero_size_type(self, ty: &str, structs_list: &HashSet<&str>) -> Builder;
         fn borrowed_type(self, ty: &str) -> Builder;
@@ -213,14 +199,14 @@ mod bindings {
     }
 
     impl BuilderExt for Builder {
-        fn get_initial_builder(build_type: BuildType) -> Builder {
+        fn get_initial_builder() -> Builder {
             let mut builder = Builder::default();
             for dir in SEARCH_PATHS.iter() {
                 builder = builder.clang_arg("-I").clang_arg(dir.to_str().unwrap());
             }
             builder = builder.include(add_include("mozilla-config.h"));
 
-            if build_type == BuildType::Debug {
+            if env::var("CARGO_FEATURE_GECKO_DEBUG").is_ok() {
                 builder = builder.clang_arg("-DDEBUG=1").clang_arg("-DJS_DEBUG=1");
             }
 
@@ -292,7 +278,7 @@ mod bindings {
             },
         };
         for fixup in fixups.iter() {
-            result = Regex::new(&format!(r"\b{}\b", fixup.pat)).unwrap().replace_all(&result, fixup.rep.as_str())
+            result = Regex::new(&fixup.pat).unwrap().replace_all(&result, &*fixup.rep)
                 .into_owned().into();
         }
         let bytes = result.into_bytes();
@@ -376,7 +362,7 @@ mod bindings {
         }
     }
 
-    fn generate_structs(build_type: BuildType) {
+    fn generate_structs() {
         #[derive(Debug)]
         struct Callbacks(HashMap<String, RegexSet>);
         impl ParseCallbacks for Callbacks {
@@ -394,7 +380,7 @@ mod bindings {
             }
         }
 
-        let builder = Builder::get_initial_builder(build_type)
+        let builder = Builder::get_initial_builder()
             .enable_cxx_namespaces()
             .with_codegen_config(CodegenConfig {
                 types: true,
@@ -426,7 +412,7 @@ mod bindings {
                 let servo = item["servo"].as_str().unwrap();
                 let gecko_name = gecko.rsplit("::").next().unwrap();
                 fixups.push(Fixup {
-                    pat: format!("root::{}", gecko),
+                    pat: format!("\\broot::{}\\b", gecko),
                     rep: format!("::gecko_bindings::structs::{}", gecko_name)
                 });
                 builder.hide_type(gecko)
@@ -434,7 +420,7 @@ mod bindings {
                                       if generic { "<T>" } else { "" }))
             })
             .get_builder();
-        write_binding_file(builder, structs_file(build_type), &fixups);
+        write_binding_file(builder, STRUCTS_FILE, &fixups);
     }
 
     fn setup_logging() -> bool {
@@ -483,7 +469,7 @@ mod bindings {
     }
 
     fn generate_bindings() {
-        let builder = Builder::get_initial_builder(BuildType::Release)
+        let builder = Builder::get_initial_builder()
             .disable_name_namespacing()
             .with_codegen_config(CodegenConfig {
                 functions: true,
@@ -550,7 +536,8 @@ mod bindings {
     }
 
     fn generate_atoms() {
-        let script = Path::new(file!()).parent().unwrap().join("gecko").join("regen_atoms.py");
+        let script = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
+            .join("gecko").join("regen_atoms.py");
         println!("cargo:rerun-if-changed={}", script.display());
         let status = Command::new(&*PYTHON)
             .arg(&script)
@@ -578,8 +565,7 @@ mod bindings {
             }
         }
         run_tasks! {
-            generate_structs(BuildType::Debug),
-            generate_structs(BuildType::Release),
+            generate_structs(),
             generate_bindings(),
             generate_atoms(),
         }
@@ -590,15 +576,18 @@ mod bindings {
             fs::remove_dir_all(&path).expect("Fail to remove binding dir in dist");
         }
         fs::create_dir_all(&path).expect("Fail to create bindings dir in dist");
-        copy_dir(&*OUTDIR_PATH, &path, |_| {}).expect("Fail to copy generated files to dist dir"); }
+        copy_dir(&*OUTDIR_PATH, &path, |_| {}).expect("Fail to copy generated files to dist dir");
+    }
 }
 
 #[cfg(not(feature = "bindgen"))]
 mod bindings {
+    use std::env;
+    use std::path::PathBuf;
     use super::common::*;
 
     pub fn generate() {
-        let dir = ::std::env::current_dir().unwrap().join("gecko/generated");
+        let dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("gecko/generated");
         println!("cargo:rerun-if-changed={}", dir.display());
         copy_dir(&dir, &*OUTDIR_PATH, |path| {
             println!("cargo:rerun-if-changed={}", path.display());

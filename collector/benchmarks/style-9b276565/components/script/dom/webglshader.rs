@@ -4,22 +4,21 @@
 
 // https://www.khronos.org/registry/webgl/specs/latest/1.0/webgl.idl
 use angle::hl::{BuiltInResources, Output, ShaderValidator};
-use canvas_traits::CanvasMsg;
-use dom::bindings::cell::DOMRefCell;
+use canvas_traits::webgl::{webgl_channel, WebGLCommand, WebGLMsgSender, WebGLParameter, WebGLResult, WebGLShaderId};
+use dom::bindings::cell::DomRefCell;
 use dom::bindings::codegen::Bindings::WebGLShaderBinding;
-use dom::bindings::js::Root;
 use dom::bindings::reflector::reflect_dom_object;
+use dom::bindings::root::DomRoot;
 use dom::bindings::str::DOMString;
+use dom::webgl_extensions::WebGLExtensions;
+use dom::webgl_extensions::ext::oesstandardderivatives::OESStandardDerivatives;
 use dom::webglobject::WebGLObject;
 use dom::window::Window;
 use dom_struct::dom_struct;
-use ipc_channel::ipc::IpcSender;
 use std::cell::Cell;
 use std::sync::{ONCE_INIT, Once};
-use webrender_api;
-use webrender_api::{WebGLCommand, WebGLParameter, WebGLResult, WebGLShaderId};
 
-#[derive(Clone, Copy, PartialEq, Debug, JSTraceable, HeapSizeOf)]
+#[derive(Clone, Copy, Debug, HeapSizeOf, JSTraceable, PartialEq)]
 pub enum ShaderCompilationStatus {
     NotCompiled,
     Succeeded,
@@ -31,13 +30,13 @@ pub struct WebGLShader {
     webgl_object: WebGLObject,
     id: WebGLShaderId,
     gl_type: u32,
-    source: DOMRefCell<Option<DOMString>>,
-    info_log: DOMRefCell<Option<String>>,
+    source: DomRefCell<Option<DOMString>>,
+    info_log: DomRefCell<Option<String>>,
     is_deleted: Cell<bool>,
     attached_counter: Cell<u32>,
     compilation_status: Cell<ShaderCompilationStatus>,
     #[ignore_heap_size_of = "Defined in ipc-channel"]
-    renderer: IpcSender<CanvasMsg>,
+    renderer: WebGLMsgSender,
 }
 
 #[cfg(not(target_os = "android"))]
@@ -49,7 +48,7 @@ const SHADER_OUTPUT_FORMAT: Output = Output::Essl;
 static GLSLANG_INITIALIZATION: Once = ONCE_INIT;
 
 impl WebGLShader {
-    fn new_inherited(renderer: IpcSender<CanvasMsg>,
+    fn new_inherited(renderer: WebGLMsgSender,
                      id: WebGLShaderId,
                      shader_type: u32)
                      -> WebGLShader {
@@ -58,8 +57,8 @@ impl WebGLShader {
             webgl_object: WebGLObject::new_inherited(),
             id: id,
             gl_type: shader_type,
-            source: DOMRefCell::new(None),
-            info_log: DOMRefCell::new(None),
+            source: DomRefCell::new(None),
+            info_log: DomRefCell::new(None),
             is_deleted: Cell::new(false),
             attached_counter: Cell::new(0),
             compilation_status: Cell::new(ShaderCompilationStatus::NotCompiled),
@@ -68,21 +67,21 @@ impl WebGLShader {
     }
 
     pub fn maybe_new(window: &Window,
-                     renderer: IpcSender<CanvasMsg>,
+                     renderer: WebGLMsgSender,
                      shader_type: u32)
-                     -> Option<Root<WebGLShader>> {
-        let (sender, receiver) = webrender_api::channel::msg_channel().unwrap();
-        renderer.send(CanvasMsg::WebGL(WebGLCommand::CreateShader(shader_type, sender))).unwrap();
+                     -> Option<DomRoot<WebGLShader>> {
+        let (sender, receiver) = webgl_channel().unwrap();
+        renderer.send(WebGLCommand::CreateShader(shader_type, sender)).unwrap();
 
         let result = receiver.recv().unwrap();
         result.map(|shader_id| WebGLShader::new(window, renderer, shader_id, shader_type))
     }
 
     pub fn new(window: &Window,
-               renderer: IpcSender<CanvasMsg>,
+               renderer: WebGLMsgSender,
                id: WebGLShaderId,
                shader_type: u32)
-               -> Root<WebGLShader> {
+               -> DomRoot<WebGLShader> {
         reflect_dom_object(box WebGLShader::new_inherited(renderer, id, shader_type),
                            window,
                            WebGLShaderBinding::Wrap)
@@ -100,7 +99,7 @@ impl WebGLShader {
     }
 
     /// glCompileShader
-    pub fn compile(&self) {
+    pub fn compile(&self, ext: &WebGLExtensions) {
         if self.compilation_status.get() != ShaderCompilationStatus::NotCompiled {
             debug!("Compiling already compiled shader {}", self.id);
         }
@@ -108,6 +107,7 @@ impl WebGLShader {
         if let Some(ref source) = *self.source.borrow() {
             let mut params = BuiltInResources::default();
             params.FragmentPrecisionHigh = 1;
+            params.OES_standard_derivatives = ext.is_enabled::<OESStandardDerivatives>() as i32;
             let validator = ShaderValidator::for_webgl(self.gl_type,
                                                        SHADER_OUTPUT_FORMAT,
                                                        &params).unwrap();
@@ -118,7 +118,7 @@ impl WebGLShader {
                     // will succeed.
                     // It could be interesting to retrieve the info log from the paint thread though
                     let msg = WebGLCommand::CompileShader(self.id, translated_source);
-                    self.renderer.send(CanvasMsg::WebGL(msg)).unwrap();
+                    self.renderer.send(msg).unwrap();
                     self.compilation_status.set(ShaderCompilationStatus::Succeeded);
                 },
                 Err(error) => {
@@ -142,7 +142,7 @@ impl WebGLShader {
     pub fn delete(&self) {
         if !self.is_deleted.get() {
             self.is_deleted.set(true);
-            let _ = self.renderer.send(CanvasMsg::WebGL(WebGLCommand::DeleteShader(self.id)));
+            let _ = self.renderer.send(WebGLCommand::DeleteShader(self.id));
         }
     }
 
@@ -170,8 +170,8 @@ impl WebGLShader {
 
     /// glGetParameter
     pub fn parameter(&self, param_id: u32) -> WebGLResult<WebGLParameter> {
-        let (sender, receiver) = webrender_api::channel::msg_channel().unwrap();
-        self.renderer.send(CanvasMsg::WebGL(WebGLCommand::GetShaderParameter(self.id, param_id, sender))).unwrap();
+        let (sender, receiver) = webgl_channel().unwrap();
+        self.renderer.send(WebGLCommand::GetShaderParameter(self.id, param_id, sender)).unwrap();
         receiver.recv().unwrap()
     }
 

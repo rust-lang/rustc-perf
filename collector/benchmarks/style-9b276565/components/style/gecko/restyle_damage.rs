@@ -6,10 +6,9 @@
 
 use gecko_bindings::bindings;
 use gecko_bindings::structs;
-use gecko_bindings::structs::{nsChangeHint, nsStyleContext};
+use gecko_bindings::structs::nsChangeHint;
 use matching::{StyleChange, StyleDifference};
 use properties::ComputedValues;
-use servo_arc::Arc;
 use std::ops::{BitAnd, BitOr, BitOrAssign, Not};
 
 /// The representation of Gecko's restyle damage is just a wrapper over
@@ -19,47 +18,51 @@ pub struct GeckoRestyleDamage(nsChangeHint);
 
 impl GeckoRestyleDamage {
     /// Trivially construct a new `GeckoRestyleDamage`.
+    #[inline]
     pub fn new(raw: nsChangeHint) -> Self {
         GeckoRestyleDamage(raw)
     }
 
     /// Get the inner change hint for this damage.
+    #[inline]
     pub fn as_change_hint(&self) -> nsChangeHint {
         self.0
     }
 
     /// Get an empty change hint, that is (`nsChangeHint(0)`).
+    #[inline]
     pub fn empty() -> Self {
         GeckoRestyleDamage(nsChangeHint(0))
     }
 
     /// Returns whether this restyle damage represents the empty damage.
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.0 == nsChangeHint(0)
     }
 
     /// Computes the `StyleDifference` (including the appropriate change hint)
-    /// given an old style (in the form of a `nsStyleContext`, and a new style
-    /// (in the form of `ComputedValues`).
-    ///
-    /// Note that we could in theory just get two `ComputedValues` here and diff
-    /// them, but Gecko has an interesting optimization when they mark accessed
-    /// structs, so they effectively only diff structs that have ever been
-    /// accessed from layout.
+    /// given an old and a new style.
     pub fn compute_style_difference(
-        source: &nsStyleContext,
         old_style: &ComputedValues,
-        new_style: &Arc<ComputedValues>,
+        new_style: &ComputedValues,
     ) -> StyleDifference {
-        let mut any_style_changed: bool = false;
+        let mut any_style_changed = false;
+        let mut reset_only = false;
         let hint = unsafe {
-            bindings::Gecko_CalcStyleDifference(old_style,
-                                                new_style,
-                                                source.mBits,
-                                                &mut any_style_changed)
+            bindings::Gecko_CalcStyleDifference(
+                old_style,
+                new_style,
+                &mut any_style_changed,
+                &mut reset_only,
+            )
         };
-        let change = if any_style_changed { StyleChange::Changed } else { StyleChange::Unchanged };
-        StyleDifference::new(GeckoRestyleDamage(hint), change)
+        let change = if any_style_changed {
+            StyleChange::Changed { reset_only }
+        } else {
+            StyleChange::Unchanged
+        };
+        StyleDifference::new(GeckoRestyleDamage(nsChangeHint(hint)), change)
     }
 
     /// Returns true if this restyle damage contains all the damage of |other|.
@@ -71,15 +74,6 @@ impl GeckoRestyleDamage {
     /// other damage.
     pub fn reconstruct() -> Self {
         GeckoRestyleDamage(structs::nsChangeHint_nsChangeHint_ReconstructFrame)
-    }
-
-    /// Assuming |self| is applied to an element, returns the set of damage that
-    /// would be superfluous to apply for descendants.
-    pub fn handled_for_descendants(self) -> Self {
-        let hint = unsafe {
-            bindings::Gecko_HintsHandledForDescendants(self.0)
-        };
-        GeckoRestyleDamage(hint)
     }
 }
 

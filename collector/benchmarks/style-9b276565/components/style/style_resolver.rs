@@ -5,20 +5,30 @@
 //! Style resolution for a given element or pseudo-element.
 
 use applicable_declarations::ApplicableDeclarationList;
-use cascade_info::CascadeInfo;
 use context::{CascadeInputs, ElementCascadeInputs, StyleContext};
 use data::{ElementStyles, EagerPseudoStyles};
 use dom::TElement;
 use log::LogLevel::Trace;
 use matching::{CascadeVisitedMode, MatchMethods};
 use properties::{AnimationRules, CascadeFlags, ComputedValues};
-use properties::{IS_ROOT_ELEMENT, PROHIBIT_DISPLAY_CONTENTS, SKIP_ROOT_AND_ITEM_BASED_DISPLAY_FIXUP};
+use properties::{IS_LINK, IS_ROOT_ELEMENT, IS_VISITED_LINK};
+use properties::{PROHIBIT_DISPLAY_CONTENTS, SKIP_ROOT_AND_ITEM_BASED_DISPLAY_FIXUP};
 use properties::{VISITED_DEPENDENT_ONLY, cascade};
+use properties::longhands::display::computed_value::T as display;
 use rule_tree::StrongRuleNode;
 use selector_parser::{PseudoElement, SelectorImpl};
 use selectors::matching::{ElementSelectorFlags, MatchingContext, MatchingMode, VisitedHandlingMode};
 use servo_arc::Arc;
 use stylist::RuleInclusion;
+
+/// Whether pseudo-elements should be resolved or not.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PseudoElementResolution {
+    /// Only resolve pseudo-styles if possibly applicable.
+    IfApplicable,
+    /// Force pseudo-element resolution.
+    Force,
+}
 
 /// A struct that takes care of resolving the style of a given element.
 pub struct StyleResolverForElement<'a, 'ctx, 'le, E>
@@ -30,6 +40,7 @@ where
     element: E,
     context: &'a mut StyleContext<'ctx, E>,
     rule_inclusion: RuleInclusion,
+    pseudo_resolution: PseudoElementResolution,
     _marker: ::std::marker::PhantomData<&'le E>,
 }
 
@@ -38,10 +49,40 @@ struct MatchingResults {
     relevant_link_found: bool,
 }
 
+/// A style returned from the resolver machinery.
+pub struct ResolvedStyle(pub Arc<ComputedValues>);
+
 /// The primary style of an element or an element-backed pseudo-element.
 pub struct PrimaryStyle {
-    /// The style per se.
-    pub style: Arc<ComputedValues>,
+    /// The style itself.
+    pub style: ResolvedStyle,
+    /// Whether the style was reused from another element via the rule node (see
+    /// `StyleSharingCache::lookup_by_rules`).
+    pub reused_via_rule_node: bool,
+}
+
+/// A set of style returned from the resolver machinery.
+pub struct ResolvedElementStyles {
+    /// Primary style.
+    pub primary: PrimaryStyle,
+    /// Pseudo styles.
+    pub pseudos: EagerPseudoStyles,
+}
+
+impl PrimaryStyle {
+    /// Convenience accessor for the style.
+    pub fn style(&self) -> &ComputedValues {
+        &*self.style.0
+    }
+}
+
+impl From<ResolvedElementStyles> for ElementStyles {
+    fn from(r: ResolvedElementStyles) -> ElementStyles {
+        ElementStyles {
+            primary: Some(r.primary.style.0),
+            pseudos: r.pseudos,
+        }
+    }
 }
 
 fn with_default_parent_styles<E, F, R>(element: E, f: F) -> R
@@ -51,17 +92,7 @@ where
 {
     let parent_el = element.inheritance_parent();
     let parent_data = parent_el.as_ref().and_then(|e| e.borrow_data());
-    let parent_style = parent_data.as_ref().map(|d| {
-        // Sometimes Gecko eagerly styles things without processing
-        // pending restyles first. In general we'd like to avoid this,
-        // but there can be good reasons (for example, needing to
-        // construct a frame for some small piece of newly-added
-        // content in order to do something specific with that frame,
-        // but not wanting to flush all of layout).
-        debug_assert!(cfg!(feature = "gecko") ||
-                      parent_el.unwrap().has_current_styles(d));
-        d.styles.primary()
-    });
+    let parent_style = parent_data.as_ref().map(|d| d.styles.primary());
 
     let mut layout_parent_el = parent_el.clone();
     let layout_parent_data;
@@ -75,6 +106,29 @@ where
     f(parent_style.map(|x| &**x), layout_parent_style.map(|s| &**s))
 }
 
+fn eager_pseudo_is_definitely_not_generated(
+    pseudo: &PseudoElement,
+    style: &ComputedValues,
+) -> bool {
+    use properties::computed_value_flags::{INHERITS_CONTENT, INHERITS_DISPLAY};
+
+    if !pseudo.is_before_or_after() {
+        return false;
+    }
+
+    if !style.flags.intersects(INHERITS_DISPLAY) &&
+       style.get_box().clone_display() == display::none {
+        return true;
+    }
+
+    if !style.flags.intersects(INHERITS_CONTENT) &&
+       style.ineffective_content_property() {
+        return true;
+    }
+
+    false
+}
+
 impl<'a, 'ctx, 'le, E> StyleResolverForElement<'a, 'ctx, 'le, E>
 where
     'ctx: 'a,
@@ -86,11 +140,13 @@ where
         element: E,
         context: &'a mut StyleContext<'ctx, E>,
         rule_inclusion: RuleInclusion,
+        pseudo_resolution: PseudoElementResolution,
     ) -> Self {
         Self {
             element,
             context,
             rule_inclusion,
+            pseudo_resolution,
             _marker: ::std::marker::PhantomData,
         }
     }
@@ -114,61 +170,74 @@ where
             None
         };
 
-        let mut visited_style = None;
-        let should_compute_visited_style =
-            relevant_link_found ||
-            parent_style.and_then(|s| s.get_visited_style()).is_some();
-
-        let pseudo = self.element.implemented_pseudo_element();
-        if should_compute_visited_style {
-            visited_style = Some(self.cascade_style(
-                visited_rules.as_ref().or(Some(&primary_results.rule_node)),
-                /* style_if_visited = */ None,
-                parent_style,
-                layout_parent_style,
-                CascadeVisitedMode::Visited,
-                /* pseudo = */ pseudo.as_ref(),
-            ));
-        }
-        let style = self.cascade_style(
-            Some(&primary_results.rule_node),
-            visited_style,
+        self.cascade_primary_style(
+            CascadeInputs {
+                rules: Some(primary_results.rule_node),
+                visited_rules,
+            },
             parent_style,
             layout_parent_style,
-            CascadeVisitedMode::Unvisited,
-            /* pseudo = */ pseudo.as_ref(),
-        );
-
-        PrimaryStyle { style, }
+        )
     }
 
+    fn cascade_primary_style(
+        &mut self,
+        inputs: CascadeInputs,
+        parent_style: Option<&ComputedValues>,
+        layout_parent_style: Option<&ComputedValues>,
+    ) -> PrimaryStyle {
+        // Before doing the cascade, check the sharing cache and see if we can
+        // reuse the style via rule node identity.
+        let may_reuse =
+            !self.element.is_native_anonymous() &&
+            parent_style.is_some() &&
+            inputs.rules.is_some();
+
+        if may_reuse {
+            let cached = self.context.thread_local.sharing_cache.lookup_by_rules(
+                self.context.shared,
+                parent_style.unwrap(),
+                inputs.rules.as_ref().unwrap(),
+                inputs.visited_rules.as_ref(),
+                self.element,
+            );
+            if let Some(mut primary_style) = cached {
+                self.context.thread_local.statistics.styles_reused += 1;
+                primary_style.reused_via_rule_node |= true;
+                return primary_style;
+            }
+        }
+
+        // No style to reuse. Cascade the style, starting with visited style
+        // if necessary.
+        PrimaryStyle {
+            style: self.cascade_style_and_visited(
+                inputs,
+                parent_style,
+                layout_parent_style,
+                /* pseudo = */ None,
+            ),
+            reused_via_rule_node: false,
+        }
+    }
 
     /// Resolve the style of a given element, and all its eager pseudo-elements.
     pub fn resolve_style(
         &mut self,
         parent_style: Option<&ComputedValues>,
         layout_parent_style: Option<&ComputedValues>,
-    ) -> ElementStyles {
-        use properties::longhands::display::computed_value::T as display;
-
+    ) -> ResolvedElementStyles {
         let primary_style =
             self.resolve_primary_style(parent_style, layout_parent_style);
 
         let mut pseudo_styles = EagerPseudoStyles::default();
-        if primary_style.style.get_box().clone_display() == display::none {
-            return ElementStyles {
-                // FIXME(emilio): Remove the Option<>.
-                primary: Some(primary_style.style),
-                pseudos: pseudo_styles,
-            }
-        }
 
         if self.element.implemented_pseudo_element().is_none() {
             let layout_parent_style_for_pseudo =
-                if primary_style.style.is_display_contents() {
+                if primary_style.style().is_display_contents() {
                     layout_parent_style
                 } else {
-                    Some(&*primary_style.style)
+                    Some(primary_style.style())
                 };
             SelectorImpl::each_eagerly_cascaded_pseudo_element(|pseudo| {
                 let pseudo_style = self.resolve_pseudo_style(
@@ -176,22 +245,26 @@ where
                     &primary_style,
                     layout_parent_style_for_pseudo
                 );
+
                 if let Some(style) = pseudo_style {
-                    pseudo_styles.set(&pseudo, style);
+                    if !matches!(self.pseudo_resolution, PseudoElementResolution::Force) &&
+                       eager_pseudo_is_definitely_not_generated(&pseudo, &style.0) {
+                        return;
+                    }
+                    pseudo_styles.set(&pseudo, style.0);
                 }
             })
         }
 
-        ElementStyles {
-            // FIXME(emilio): Remove the Option<>.
-            primary: Some(primary_style.style),
+        ResolvedElementStyles {
+            primary: primary_style,
             pseudos: pseudo_styles,
         }
     }
 
     /// Resolve an element's styles with the default inheritance parent/layout
     /// parents.
-    pub fn resolve_style_with_default_parents(&mut self) -> ElementStyles {
+    pub fn resolve_style_with_default_parents(&mut self) -> ResolvedElementStyles {
         with_default_parent_styles(self.element, |parent_style, layout_parent_style| {
             self.resolve_style(parent_style, layout_parent_style)
         })
@@ -201,7 +274,7 @@ where
     pub fn cascade_style_and_visited_with_default_parents(
         &mut self,
         inputs: CascadeInputs,
-    ) -> Arc<ComputedValues> {
+    ) -> ResolvedStyle {
         with_default_parent_styles(self.element, |parent_style, layout_parent_style| {
             self.cascade_style_and_visited(
                 inputs,
@@ -218,9 +291,9 @@ where
         parent_style: Option<&ComputedValues>,
         layout_parent_style: Option<&ComputedValues>,
         pseudo: Option<&PseudoElement>,
-    ) -> Arc<ComputedValues> {
+    ) -> ResolvedStyle {
         let mut style_if_visited = None;
-        if parent_style.map_or(false, |s| s.get_visited_style().is_some()) ||
+        if parent_style.map_or(false, |s| s.visited_style().is_some()) ||
             inputs.visited_rules.is_some() {
             style_if_visited = Some(self.cascade_style(
                 inputs.visited_rules.as_ref().or(inputs.rules.as_ref()),
@@ -231,13 +304,16 @@ where
                 pseudo,
             ));
         }
-        self.cascade_style(
-            inputs.rules.as_ref(),
-            style_if_visited,
-            parent_style,
-            layout_parent_style,
-            CascadeVisitedMode::Unvisited,
-            pseudo,
+
+        ResolvedStyle(
+            self.cascade_style(
+                inputs.rules.as_ref(),
+                style_if_visited,
+                parent_style,
+                layout_parent_style,
+                CascadeVisitedMode::Unvisited,
+                pseudo,
+            )
         )
     }
 
@@ -245,54 +321,47 @@ where
     pub fn cascade_styles_with_default_parents(
         &mut self,
         inputs: ElementCascadeInputs,
-    ) -> ElementStyles {
-        use properties::longhands::display::computed_value::T as display;
+    ) -> ResolvedElementStyles {
         with_default_parent_styles(self.element, move |parent_style, layout_parent_style| {
-            let primary_style = PrimaryStyle {
-                style: self.cascade_style_and_visited(
-                   inputs.primary,
-                   parent_style,
-                   layout_parent_style,
-                   /* pseudo = */ None,
-                ),
-            };
+            let primary_style = self.cascade_primary_style(
+                inputs.primary,
+                parent_style,
+                layout_parent_style,
+            );
 
             let mut pseudo_styles = EagerPseudoStyles::default();
-            let pseudo_array = inputs.pseudos.into_array();
-            if pseudo_array.is_none() ||
-                primary_style.style.get_box().clone_display() == display::none {
-                return ElementStyles {
-                    primary: Some(primary_style.style),
-                    pseudos: pseudo_styles,
-                }
-            }
-
-            {
+            if let Some(mut pseudo_array) = inputs.pseudos.into_array() {
                 let layout_parent_style_for_pseudo =
-                    if primary_style.style.is_display_contents() {
+                    if primary_style.style().is_display_contents() {
                         layout_parent_style
                     } else {
-                        Some(&*primary_style.style)
+                        Some(primary_style.style())
                     };
 
-                for (i, mut inputs) in pseudo_array.unwrap().iter_mut().enumerate() {
+                for (i, inputs) in pseudo_array.iter_mut().enumerate() {
                     if let Some(inputs) = inputs.take() {
                         let pseudo = PseudoElement::from_eager_index(i);
-                        pseudo_styles.set(
-                            &pseudo,
+
+                        let style =
                             self.cascade_style_and_visited(
                                 inputs,
-                                Some(&*primary_style.style),
+                                Some(primary_style.style()),
                                 layout_parent_style_for_pseudo,
                                 Some(&pseudo),
-                            )
-                        )
+                            );
+
+                        if !matches!(self.pseudo_resolution, PseudoElementResolution::Force) &&
+                           eager_pseudo_is_definitely_not_generated(&pseudo, &style.0) {
+                            continue;
+                        }
+
+                        pseudo_styles.set(&pseudo, style.0);
                     }
                 }
             }
 
-            ElementStyles {
-                primary: Some(primary_style.style),
+            ResolvedElementStyles {
+                primary: primary_style,
                 pseudos: pseudo_styles,
             }
         })
@@ -303,9 +372,9 @@ where
         pseudo: &PseudoElement,
         originating_element_style: &PrimaryStyle,
         layout_parent_style: Option<&ComputedValues>,
-    ) -> Option<Arc<ComputedValues>> {
+    ) -> Option<ResolvedStyle> {
         let rules = self.match_pseudo(
-            &originating_element_style.style,
+            originating_element_style.style(),
             pseudo,
             VisitedHandlingMode::AllLinksUnvisited
         );
@@ -315,9 +384,9 @@ where
         };
 
         let mut visited_rules = None;
-        if originating_element_style.style.get_visited_style().is_some() {
+        if originating_element_style.style().visited_style().is_some() {
             visited_rules = self.match_pseudo(
-                &originating_element_style.style,
+                originating_element_style.style(),
                 pseudo,
                 VisitedHandlingMode::RelevantLinkVisited,
             );
@@ -328,7 +397,7 @@ where
                 rules: Some(rules),
                 visited_rules
             },
-            Some(&originating_element_style.style),
+            Some(originating_element_style.style()),
             layout_parent_style,
             Some(pseudo),
         ))
@@ -344,12 +413,14 @@ where
 
         let map = &mut self.context.thread_local.selector_flags;
         let bloom_filter = self.context.thread_local.bloom_filter.filter();
+        let nth_index_cache = &mut self.context.thread_local.nth_index_cache;
         let mut matching_context =
             MatchingContext::new_for_visited(
                 MatchingMode::Normal,
                 Some(bloom_filter),
+                Some(nth_index_cache),
                 visited_handling,
-                self.context.shared.quirks_mode
+                self.context.shared.quirks_mode(),
             );
 
         let stylist = &self.context.shared.stylist;
@@ -384,7 +455,7 @@ where
         );
 
         if log_enabled!(Trace) {
-            trace!("Matched rules:");
+            trace!("Matched rules for {:?}:", self.element);
             for rn in rule_node.self_and_ancestors() {
                 let source = rn.style_source();
                 if source.is_some() {
@@ -417,13 +488,15 @@ where
         }
 
         let bloom_filter = self.context.thread_local.bloom_filter.filter();
+        let nth_index_cache = &mut self.context.thread_local.nth_index_cache;
 
         let mut matching_context =
             MatchingContext::new_for_visited(
                 MatchingMode::ForStatelessPseudoElement,
                 Some(bloom_filter),
+                Some(nth_index_cache),
                 visited_handling,
-                self.context.shared.quirks_mode
+                self.context.shared.quirks_mode(),
             );
 
         let map = &mut self.context.thread_local.selector_flags;
@@ -467,19 +540,34 @@ where
         cascade_visited: CascadeVisitedMode,
         pseudo: Option<&PseudoElement>,
     ) -> Arc<ComputedValues> {
-        let mut cascade_info = CascadeInfo::new();
+        debug_assert!(
+            self.element.implemented_pseudo_element().is_none() || pseudo.is_none(),
+            "Pseudo-elements can't have other pseudos!"
+        );
+        debug_assert!(pseudo.map_or(true, |p| p.is_eager()));
+
         let mut cascade_flags = CascadeFlags::empty();
 
-        if self.element.skip_root_and_item_based_display_fixup() {
+        if self.element.skip_root_and_item_based_display_fixup() ||
+           pseudo.map_or(false, |p| p.skip_item_based_display_fixup()) {
             cascade_flags.insert(SKIP_ROOT_AND_ITEM_BASED_DISPLAY_FIXUP);
         }
+
+        if pseudo.is_none() && self.element.is_link() {
+            cascade_flags.insert(IS_LINK);
+            if self.element.is_visited_link() &&
+                self.context.shared.visited_styles_enabled {
+                cascade_flags.insert(IS_VISITED_LINK);
+            }
+        }
+
         if cascade_visited.visited_dependent_only() {
             // If this element is a link, we want its visited style to inherit
             // from the regular style of its parent, because only the
             // visitedness of the relevant link should influence style.
             if pseudo.is_some() || !self.element.is_link() {
                 parent_style = parent_style.map(|s| {
-                    s.get_visited_style().unwrap_or(s)
+                    s.visited_style().unwrap_or(s)
                 });
             }
             cascade_flags.insert(VISITED_DEPENDENT_ONLY);
@@ -491,22 +579,30 @@ where
         }
 
         let implemented_pseudo = self.element.implemented_pseudo_element();
+        let pseudo = pseudo.or(implemented_pseudo.as_ref());
+
+        let mut conditions = Default::default();
         let values =
             cascade(
                 self.context.shared.stylist.device(),
-                pseudo.or(implemented_pseudo.as_ref()),
+                pseudo,
                 rules.unwrap_or(self.context.shared.stylist.rule_tree().root()),
                 &self.context.shared.guards,
                 parent_style,
+                parent_style,
                 layout_parent_style,
                 style_if_visited,
-                Some(&mut cascade_info),
                 &self.context.thread_local.font_metrics_provider,
                 cascade_flags,
-                self.context.shared.quirks_mode
+                self.context.shared.quirks_mode(),
+                Some(&self.context.thread_local.rule_cache),
+                &mut conditions,
             );
 
-        cascade_info.finish(&self.element.as_node());
+        self.context
+            .thread_local
+            .rule_cache
+            .insert_if_possible(&values, pseudo, &conditions);
 
         values
     }

@@ -6,14 +6,13 @@ use dom::activation::{ActivationSource, synthetic_click_activation};
 use dom::attr::Attr;
 use dom::bindings::codegen::Bindings::ElementBinding::ElementMethods;
 use dom::bindings::codegen::Bindings::EventHandlerBinding::EventHandlerNonNull;
-use dom::bindings::codegen::Bindings::EventHandlerBinding::OnErrorEventHandlerNonNull;
 use dom::bindings::codegen::Bindings::HTMLElementBinding;
 use dom::bindings::codegen::Bindings::HTMLElementBinding::HTMLElementMethods;
 use dom::bindings::codegen::Bindings::WindowBinding::WindowMethods;
 use dom::bindings::error::{Error, ErrorResult};
 use dom::bindings::inheritance::{ElementTypeId, HTMLElementTypeId, NodeTypeId};
 use dom::bindings::inheritance::Castable;
-use dom::bindings::js::{JS, MutNullableJS, Root, RootedReference};
+use dom::bindings::root::{Dom, DomRoot, MutNullableDom, RootedReference};
 use dom::bindings::str::DOMString;
 use dom::cssstyledeclaration::{CSSModificationAccess, CSSStyleDeclaration, CSSStyleOwner};
 use dom::document::{Document, FocusType};
@@ -32,7 +31,6 @@ use dom::virtualmethods::VirtualMethods;
 use dom_struct::dom_struct;
 use html5ever::{LocalName, Prefix};
 use std::ascii::AsciiExt;
-use std::borrow::ToOwned;
 use std::default::Default;
 use std::rc::Rc;
 use style::attr::AttrValue;
@@ -41,8 +39,8 @@ use style::element_state::*;
 #[dom_struct]
 pub struct HTMLElement {
     element: Element,
-    style_decl: MutNullableJS<CSSStyleDeclaration>,
-    dataset: MutNullableJS<DOMStringMap>,
+    style_decl: MutNullableDom<CSSStyleDeclaration>,
+    dataset: MutNullableDom<DOMStringMap>,
 }
 
 impl HTMLElement {
@@ -63,7 +61,7 @@ impl HTMLElement {
     }
 
     #[allow(unrooted_must_root)]
-    pub fn new(local_name: LocalName, prefix: Option<Prefix>, document: &Document) -> Root<HTMLElement> {
+    pub fn new(local_name: LocalName, prefix: Option<Prefix>, document: &Document) -> DomRoot<HTMLElement> {
         Node::reflect_node(box HTMLElement::new_inherited(local_name, prefix, document),
                            document,
                            HTMLElementBinding::Wrap)
@@ -113,11 +111,11 @@ impl HTMLElement {
 
 impl HTMLElementMethods for HTMLElement {
     // https://html.spec.whatwg.org/multipage/#the-style-attribute
-    fn Style(&self) -> Root<CSSStyleDeclaration> {
+    fn Style(&self) -> DomRoot<CSSStyleDeclaration> {
         self.style_decl.or_init(|| {
             let global = window_from_node(self);
             CSSStyleDeclaration::new(&global,
-                                     CSSStyleOwner::Element(JS::from_ref(self.upcast())),
+                                     CSSStyleOwner::Element(Dom::from_ref(self.upcast())),
                                      None,
                                      CSSModificationAccess::ReadWrite)
         })
@@ -145,7 +143,7 @@ impl HTMLElementMethods for HTMLElement {
     document_and_element_event_handlers!();
 
     // https://html.spec.whatwg.org/multipage/#dom-dataset
-    fn Dataset(&self) -> Root<DOMStringMap> {
+    fn Dataset(&self) -> DomRoot<DOMStringMap> {
         self.dataset.or_init(|| DOMStringMap::new(self))
     }
 
@@ -315,7 +313,7 @@ impl HTMLElementMethods for HTMLElement {
     }
 
     // https://drafts.csswg.org/cssom-view/#dom-htmlelement-offsetparent
-    fn GetOffsetParent(&self) -> Option<Root<Element>> {
+    fn GetOffsetParent(&self) -> Option<DomRoot<Element>> {
         if self.is::<HTMLBodyElement>() || self.is::<HTMLHtmlElement>() {
             return None;
         }
@@ -374,12 +372,16 @@ impl HTMLElementMethods for HTMLElement {
 
 // https://html.spec.whatwg.org/multipage/#attr-data-*
 
+static DATA_PREFIX: &str = "data-";
+static DATA_HYPHEN_SEPARATOR: char = '\x2d';
+
 fn to_snake_case(name: DOMString) -> DOMString {
-    let mut attr_name = "data-".to_owned();
+    let mut attr_name = String::with_capacity(name.len() + DATA_PREFIX.len());
+    attr_name.push_str(DATA_PREFIX);
     for ch in name.chars() {
-        if ch.is_uppercase() {
-            attr_name.push('\x2d');
-            attr_name.extend(ch.to_lowercase());
+        if ch.is_ascii_uppercase() {
+            attr_name.push(DATA_HYPHEN_SEPARATOR);
+            attr_name.push(ch.to_ascii_lowercase());
         } else {
             attr_name.push(ch);
         }
@@ -394,23 +396,21 @@ fn to_snake_case(name: DOMString) -> DOMString {
 // without the data prefix.
 
 fn to_camel_case(name: &str) -> Option<DOMString> {
-    if !name.starts_with("data-") {
+    if !name.starts_with(DATA_PREFIX) {
         return None;
     }
     let name = &name[5..];
-    let has_uppercase = name.chars().any(|curr_char| {
-        curr_char.is_ascii() && curr_char.is_uppercase()
-    });
+    let has_uppercase = name.chars().any(|curr_char| curr_char.is_ascii_uppercase());
     if has_uppercase {
         return None;
     }
-    let mut result = "".to_owned();
+    let mut result = String::with_capacity(name.len().saturating_sub(DATA_PREFIX.len()));
     let mut name_chars = name.chars();
     while let Some(curr_char) = name_chars.next() {
         //check for hyphen followed by character
-        if curr_char == '\x2d' {
+        if curr_char == DATA_HYPHEN_SEPARATOR {
             if let Some(next_char) = name_chars.next() {
-                if next_char.is_ascii() && next_char.is_lowercase() {
+                if next_char.is_ascii_lowercase() {
                     result.push(next_char.to_ascii_uppercase());
                 } else {
                     result.push(curr_char);
@@ -503,7 +503,7 @@ impl HTMLElement {
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-lfe-labels
-    pub fn labels(&self) -> Root<NodeList> {
+    pub fn labels(&self) -> DomRoot<NodeList> {
         debug_assert!(self.is_labelable_element());
 
         let element = self.upcast::<Element>();
@@ -514,14 +514,14 @@ impl HTMLElement {
         let ancestors =
             self.upcast::<Node>()
                 .ancestors()
-                .filter_map(Root::downcast::<HTMLElement>)
+                .filter_map(DomRoot::downcast::<HTMLElement>)
                 // If we reach a labelable element, we have a guarantee no ancestors above it
                 // will be a label for this HTMLElement
                 .take_while(|elem| !elem.is_labelable_element())
-                .filter_map(Root::downcast::<HTMLLabelElement>)
+                .filter_map(DomRoot::downcast::<HTMLLabelElement>)
                 .filter(|elem| !elem.upcast::<Element>().has_attribute(&local_name!("for")))
                 .filter(|elem| elem.first_labelable_descendant().r() == Some(self))
-                .map(Root::upcast::<Node>);
+                .map(DomRoot::upcast::<Node>);
 
         let id = element.Id();
         let id = match &id as &str {
@@ -533,10 +533,10 @@ impl HTMLElement {
         let root_element = element.root_element();
         let root_node = root_element.upcast::<Node>();
         let children = root_node.traverse_preorder()
-                                .filter_map(Root::downcast::<Element>)
+                                .filter_map(DomRoot::downcast::<Element>)
                                 .filter(|elem| elem.is::<HTMLLabelElement>())
                                 .filter(|elem| elem.get_string_attribute(&local_name!("for")) == id)
-                                .map(Root::upcast::<Node>);
+                                .map(DomRoot::upcast::<Node>);
 
         NodeList::new_simple_list(&window, children.chain(ancestors))
     }

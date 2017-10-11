@@ -3,12 +3,12 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use cssparser::{Parser as CssParser, ParserInput};
-use dom::bindings::cell::DOMRefCell;
+use dom::bindings::cell::DomRefCell;
 use dom::bindings::codegen::Bindings::HTMLStyleElementBinding;
 use dom::bindings::codegen::Bindings::HTMLStyleElementBinding::HTMLStyleElementMethods;
 use dom::bindings::codegen::Bindings::NodeBinding::NodeMethods;
 use dom::bindings::inheritance::Castable;
-use dom::bindings::js::{MutNullableJS, Root};
+use dom::bindings::root::{DomRoot, MutNullableDom};
 use dom::cssstylesheet::CSSStyleSheet;
 use dom::document::Document;
 use dom::element::{Element, ElementCreator};
@@ -20,7 +20,6 @@ use dom::virtualmethods::VirtualMethods;
 use dom_struct::dom_struct;
 use html5ever::{LocalName, Prefix};
 use net_traits::ReferrerPolicy;
-use script_layout_interface::message::Msg;
 use servo_arc::Arc;
 use std::cell::Cell;
 use style::media_queries::parse_media_query_list;
@@ -33,8 +32,8 @@ use stylesheet_loader::{StylesheetLoader, StylesheetOwner};
 pub struct HTMLStyleElement {
     htmlelement: HTMLElement,
     #[ignore_heap_size_of = "Arc"]
-    stylesheet: DOMRefCell<Option<Arc<Stylesheet>>>,
-    cssom_stylesheet: MutNullableJS<CSSStyleSheet>,
+    stylesheet: DomRefCell<Option<Arc<Stylesheet>>>,
+    cssom_stylesheet: MutNullableDom<CSSStyleSheet>,
     /// https://html.spec.whatwg.org/multipage/#a-style-sheet-that-is-blocking-scripts
     parser_inserted: Cell<bool>,
     in_stack_of_open_elements: Cell<bool>,
@@ -50,8 +49,8 @@ impl HTMLStyleElement {
                      creator: ElementCreator) -> HTMLStyleElement {
         HTMLStyleElement {
             htmlelement: HTMLElement::new_inherited(local_name, prefix, document),
-            stylesheet: DOMRefCell::new(None),
-            cssom_stylesheet: MutNullableJS::new(None),
+            stylesheet: DomRefCell::new(None),
+            cssom_stylesheet: MutNullableDom::new(None),
             parser_inserted: Cell::new(creator.is_parser_created()),
             in_stack_of_open_elements: Cell::new(creator.is_parser_created()),
             pending_loads: Cell::new(0),
@@ -64,7 +63,7 @@ impl HTMLStyleElement {
     pub fn new(local_name: LocalName,
                prefix: Option<Prefix>,
                document: &Document,
-               creator: ElementCreator) -> Root<HTMLStyleElement> {
+               creator: ElementCreator) -> DomRoot<HTMLStyleElement> {
         Node::reflect_node(box HTMLStyleElement::new_inherited(local_name, prefix, document, creator),
                            document,
                            HTMLStyleElementBinding::Wrap)
@@ -75,7 +74,7 @@ impl HTMLStyleElement {
         let element = self.upcast::<Element>();
         assert!(node.is_in_doc());
 
-        let win = window_from_node(node);
+        let window = window_from_node(node);
         let doc = document_from_node(self);
 
         let mq_attribute = element.get_attribute(&ns!(), &local_name!("media"));
@@ -85,22 +84,24 @@ impl HTMLStyleElement {
         };
 
         let data = node.GetTextContent().expect("Element.textContent must be a string");
-        let url = win.get_url();
+        let url = window.get_url();
         let context = CssParserContext::new_for_cssom(&url,
-                                                      win.css_error_reporter(),
                                                       Some(CssRuleType::Media),
                                                       PARSING_MODE_DEFAULT,
                                                       doc.quirks_mode());
         let shared_lock = node.owner_doc().style_shared_lock().clone();
         let mut input = ParserInput::new(&mq_str);
-        let mq = Arc::new(shared_lock.wrap(
-                    parse_media_query_list(&context, &mut CssParser::new(&mut input))));
+        let css_error_reporter = window.css_error_reporter();
+        let mq = Arc::new(shared_lock.wrap(parse_media_query_list(&context,
+                                                                  &mut CssParser::new(&mut input),
+                                                                  css_error_reporter)));
         let loader = StylesheetLoader::for_element(self.upcast());
-        let sheet = Stylesheet::from_str(&data, win.get_url(), Origin::Author, mq,
+        let sheet = Stylesheet::from_str(&data, window.get_url(),
+                                         Origin::Author, mq,
                                          shared_lock, Some(&loader),
-                                         win.css_error_reporter(),
+                                         css_error_reporter,
                                          doc.quirks_mode(),
-                                         self.line_number);
+                                         self.line_number as u32);
 
         let sheet = Arc::new(sheet);
 
@@ -109,17 +110,25 @@ impl HTMLStyleElement {
             self.upcast::<EventTarget>().fire_event(atom!("load"));
         }
 
-        win.layout_chan().send(Msg::AddStylesheet(sheet.clone())).unwrap();
-        *self.stylesheet.borrow_mut() = Some(sheet);
+        self.set_stylesheet(sheet);
+    }
+
+    // FIXME(emilio): This is duplicated with HTMLLinkElement::set_stylesheet.
+    pub fn set_stylesheet(&self, s: Arc<Stylesheet>) {
+        let doc = document_from_node(self);
+        if let Some(ref s) = *self.stylesheet.borrow() {
+            doc.remove_stylesheet(self.upcast(), s)
+        }
+        *self.stylesheet.borrow_mut() = Some(s.clone());
         self.cssom_stylesheet.set(None);
-        doc.invalidate_stylesheets();
+        doc.add_stylesheet(self.upcast(), s);
     }
 
     pub fn get_stylesheet(&self) -> Option<Arc<Stylesheet>> {
         self.stylesheet.borrow().clone()
     }
 
-    pub fn get_cssom_stylesheet(&self) -> Option<Root<CSSStyleSheet>> {
+    pub fn get_cssom_stylesheet(&self) -> Option<DomRoot<CSSStyleSheet>> {
         self.get_stylesheet().map(|sheet| {
             self.cssom_stylesheet.or_init(|| {
                 CSSStyleSheet::new(&window_from_node(self),
@@ -180,8 +189,11 @@ impl VirtualMethods for HTMLStyleElement {
             s.unbind_from_tree(context);
         }
 
-        let doc = document_from_node(self);
-        doc.invalidate_stylesheets();
+        if context.tree_in_doc {
+            if let Some(s) = self.stylesheet.borrow_mut().take() {
+                document_from_node(self).remove_stylesheet(self.upcast(), &s)
+            }
+        }
     }
 }
 
@@ -224,7 +236,7 @@ impl StylesheetOwner for HTMLStyleElement {
 
 impl HTMLStyleElementMethods for HTMLStyleElement {
     // https://drafts.csswg.org/cssom/#dom-linkstyle-sheet
-    fn GetSheet(&self) -> Option<Root<DOMStyleSheet>> {
-        self.get_cssom_stylesheet().map(Root::upcast)
+    fn GetSheet(&self) -> Option<DomRoot<DOMStyleSheet>> {
+        self.get_cssom_stylesheet().map(DomRoot::upcast)
     }
 }

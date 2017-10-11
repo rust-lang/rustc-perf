@@ -6,39 +6,24 @@
 
 use app_units::Au;
 use context::LayoutContext;
-use display_list_builder::DisplayListBuildState;
+use display_list_builder::{DisplayListBuildState, StackingContextCollectionState};
 use euclid::{Point2D, Vector2D};
 use floats::SpeculatedFloatPlacement;
-use flow::{self, Flow, ImmutableFlowUtils, InorderFlowTraversal, MutableFlowUtils};
-use flow::{PostorderFlowTraversal, PreorderFlowTraversal};
-use flow::IS_ABSOLUTELY_POSITIONED;
+use flow::{self, Flow, ImmutableFlowUtils, IS_ABSOLUTELY_POSITIONED};
 use fragment::{FragmentBorderBoxIterator, CoordinateSystem};
 use generated_content::ResolveGeneratedContent;
 use incremental::RelayoutMode;
 use servo_config::opts;
 use style::servo::restyle_damage::{REFLOW, REFLOW_OUT_OF_FLOW, STORE_OVERFLOW};
 use traversal::{AssignBSizes, AssignISizes, BubbleISizes, BuildDisplayList};
-
-pub use style::sequential::traverse_dom;
+use traversal::{InorderFlowTraversal, PostorderFlowTraversal, PreorderFlowTraversal};
 
 pub fn resolve_generated_content(root: &mut Flow, layout_context: &LayoutContext) {
-    fn doit(flow: &mut Flow, level: u32, traversal: &mut ResolveGeneratedContent) {
-        if !traversal.should_process(flow) {
-            return;
-        }
-
-        traversal.process(flow, level);
-
-        for kid in flow::mut_base(flow).children.iter_mut() {
-            doit(kid, level + 1, traversal)
-        }
-    }
-
-    let mut traversal = ResolveGeneratedContent::new(&layout_context);
-    doit(root, 0, &mut traversal)
+    ResolveGeneratedContent::new(&layout_context).traverse(root, 0);
 }
 
-pub fn traverse_flow_tree_preorder(root: &mut Flow, layout_context: &LayoutContext, relayout_mode: RelayoutMode) {
+/// Run the main layout passes sequentially.
+pub fn reflow(root: &mut Flow, layout_context: &LayoutContext, relayout_mode: RelayoutMode) {
     fn doit(flow: &mut Flow,
             assign_inline_sizes: AssignISizes,
             assign_block_sizes: AssignBSizes,
@@ -68,10 +53,7 @@ pub fn traverse_flow_tree_preorder(root: &mut Flow, layout_context: &LayoutConte
         let bubble_inline_sizes = BubbleISizes {
             layout_context: &layout_context,
         };
-        {
-            let root: &mut Flow = root;
-            root.traverse_postorder(&bubble_inline_sizes);
-        }
+        bubble_inline_sizes.traverse(root);
     }
 
     let assign_inline_sizes = AssignISizes {
@@ -87,9 +69,10 @@ pub fn traverse_flow_tree_preorder(root: &mut Flow, layout_context: &LayoutConte
 pub fn build_display_list_for_subtree<'a>(flow_root: &mut Flow,
                                           layout_context: &'a LayoutContext)
                                           -> DisplayListBuildState<'a> {
-    let mut state = DisplayListBuildState::new(layout_context);
+    let mut state = StackingContextCollectionState::new(layout_context.id);
     flow_root.collect_stacking_contexts(&mut state);
 
+    let state = DisplayListBuildState::new(layout_context, state);
     let mut build_display_list = BuildDisplayList {
         state: state,
     };
@@ -111,7 +94,7 @@ pub fn iterate_through_flow_tree_fragment_border_boxes(root: &mut Flow, iterator
                                             flow::base(kid).stacking_relative_position +
                                             stacking_context_position.to_vector();
                 let relative_position = kid.as_block()
-                    .stacking_relative_position(CoordinateSystem::Own);
+                    .stacking_relative_border_box(CoordinateSystem::Own);
                 if let Some(matrix) = kid.as_block()
                        .fragment
                        .transform_matrix(&relative_position) {
@@ -133,7 +116,7 @@ pub fn store_overflow(layout_context: &LayoutContext, flow: &mut Flow) {
         return;
     }
 
-    for mut kid in flow::mut_base(flow).child_iter_mut() {
+    for kid in flow::mut_base(flow).child_iter_mut() {
         store_overflow(layout_context, kid);
     }
 

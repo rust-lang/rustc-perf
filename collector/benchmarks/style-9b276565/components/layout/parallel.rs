@@ -8,50 +8,38 @@
 
 #![allow(unsafe_code)]
 
+use block::BlockFlow;
 use context::LayoutContext;
-use flow::{self, Flow, MutableFlowUtils, PostorderFlowTraversal, PreorderFlowTraversal};
+use flow::{self, Flow};
 use flow_ref::FlowRef;
 use profile_traits::time::{self, TimerMetadata, profile};
 use rayon;
 use servo_config::opts;
 use smallvec::SmallVec;
 use std::mem;
+use std::ptr;
 use std::sync::atomic::{AtomicIsize, Ordering};
-use style::dom::UnsafeNode;
-use traversal::{AssignISizes, BubbleISizes};
-use traversal::AssignBSizes;
-
-pub use style::parallel::traverse_dom;
+use traversal::{AssignBSizes, AssignISizes, BubbleISizes};
+use traversal::{PostorderFlowTraversal, PreorderFlowTraversal};
 
 /// Traversal chunk size.
 const CHUNK_SIZE: usize = 16;
 
-pub type FlowList = SmallVec<[UnsafeNode; CHUNK_SIZE]>;
-
-#[allow(dead_code)]
-fn static_assertion(node: UnsafeNode) {
-    unsafe {
-        let _: UnsafeFlow = ::std::intrinsics::transmute(node);
-    }
-}
+pub type FlowList = SmallVec<[UnsafeFlow; CHUNK_SIZE]>;
 
 /// Vtable + pointer representation of a Flow trait object.
-pub type UnsafeFlow = (usize, usize);
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub struct UnsafeFlow(*const Flow);
+
+unsafe impl Sync for UnsafeFlow {}
+unsafe impl Send for UnsafeFlow {}
 
 fn null_unsafe_flow() -> UnsafeFlow {
-    (0, 0)
+    UnsafeFlow(ptr::null::<BlockFlow>())
 }
 
 pub fn mut_owned_flow_to_unsafe_flow(flow: *mut FlowRef) -> UnsafeFlow {
-    unsafe {
-        mem::transmute::<&Flow, UnsafeFlow>(&**flow)
-    }
-}
-
-pub fn borrowed_flow_to_unsafe_flow(flow: &Flow) -> UnsafeFlow {
-    unsafe {
-        mem::transmute::<&Flow, UnsafeFlow>(flow)
-    }
+    unsafe { UnsafeFlow(&**flow) }
 }
 
 /// Information that we need stored in each flow.
@@ -82,7 +70,7 @@ impl FlowParallelInfo {
 ///
 /// The only communication between siblings is that they both
 /// fetch-and-subtract the parent's children count.
-fn buttom_up_flow(mut unsafe_flow: UnsafeFlow,
+fn bottom_up_flow(mut unsafe_flow: UnsafeFlow,
                   assign_bsize_traversal: &AssignBSizes) {
     loop {
         // Get a real flow.
@@ -113,7 +101,7 @@ fn buttom_up_flow(mut unsafe_flow: UnsafeFlow,
         // of our parent to finish processing? If so, we can continue
         // on with our parent; otherwise, we've gotta wait.
         let parent: &mut Flow = unsafe {
-            mem::transmute(unsafe_parent)
+            &mut *(unsafe_parent.0 as *mut Flow)
         };
         let parent_base = flow::mut_base(parent);
         if parent_base.parallel.children_count.fetch_sub(1, Ordering::Relaxed) == 1 {
@@ -127,6 +115,7 @@ fn buttom_up_flow(mut unsafe_flow: UnsafeFlow,
 }
 
 fn top_down_flow<'scope>(unsafe_flows: &[UnsafeFlow],
+                         pool: &'scope rayon::ThreadPool,
                          scope: &rayon::Scope<'scope>,
                          assign_isize_traversal: &'scope AssignISizes,
                          assign_bsize_traversal: &'scope AssignBSizes)
@@ -138,13 +127,8 @@ fn top_down_flow<'scope>(unsafe_flows: &[UnsafeFlow],
         unsafe {
             // Get a real flow.
             let flow: &mut Flow = mem::transmute(*unsafe_flow);
-
-            // FIXME(emilio): With the switch to rayon we can no longer
-            // access a thread id from here easily. Either instrument
-            // rayon (the unstable feature) to get a worker thread
-            // identifier, or remove all the layout tinting mode.
-            //
-            // flow::mut_base(flow).thread_id = proxy.worker_index();
+            flow::mut_base(flow).thread_id =
+                pool.current_thread_index().unwrap() as u8;
 
             if assign_isize_traversal.should_process(flow) {
                 // Perform the appropriate traversal.
@@ -154,13 +138,13 @@ fn top_down_flow<'scope>(unsafe_flows: &[UnsafeFlow],
             // Possibly enqueue the children.
             for kid in flow::child_iter_mut(flow) {
                 had_children = true;
-                discovered_child_flows.push(borrowed_flow_to_unsafe_flow(kid));
+                discovered_child_flows.push(UnsafeFlow(kid));
             }
         }
 
         // If there were no more children, start assigning block-sizes.
         if !had_children {
-            buttom_up_flow(*unsafe_flow, &assign_bsize_traversal)
+            bottom_up_flow(*unsafe_flow, &assign_bsize_traversal)
         }
     }
 
@@ -171,6 +155,7 @@ fn top_down_flow<'scope>(unsafe_flows: &[UnsafeFlow],
     if discovered_child_flows.len() <= CHUNK_SIZE {
         // We can handle all the children in this work unit.
         top_down_flow(&discovered_child_flows,
+                      pool,
                       scope,
                       &assign_isize_traversal,
                       &assign_bsize_traversal);
@@ -181,16 +166,17 @@ fn top_down_flow<'scope>(unsafe_flows: &[UnsafeFlow],
         for chunk in chunks {
             let nodes = chunk.iter().cloned().collect::<FlowList>();
             scope.spawn(move |scope| {
-                top_down_flow(&nodes, scope, &assign_isize_traversal, &assign_bsize_traversal);
+                top_down_flow(&nodes, pool, scope, &assign_isize_traversal, &assign_bsize_traversal);
             });
         }
         if let Some(chunk) = first_chunk {
-            top_down_flow(chunk, scope, &assign_isize_traversal, &assign_bsize_traversal);
+            top_down_flow(chunk, pool, scope, &assign_isize_traversal, &assign_bsize_traversal);
         }
     }
 }
 
-pub fn traverse_flow_tree_preorder(
+/// Run the main layout passes in parallel.
+pub fn reflow(
         root: &mut Flow,
         profiler_metadata: Option<TimerMetadata>,
         time_profiler_chan: time::ProfilerChan,
@@ -198,18 +184,18 @@ pub fn traverse_flow_tree_preorder(
         queue: &rayon::ThreadPool) {
     if opts::get().bubble_inline_sizes_separately {
         let bubble_inline_sizes = BubbleISizes { layout_context: &context };
-        root.traverse_postorder(&bubble_inline_sizes);
+        bubble_inline_sizes.traverse(root);
     }
 
     let assign_isize_traversal = &AssignISizes { layout_context: &context };
     let assign_bsize_traversal = &AssignBSizes { layout_context: &context };
-    let nodes = [borrowed_flow_to_unsafe_flow(root)];
+    let nodes = [UnsafeFlow(root)];
 
     queue.install(move || {
         rayon::scope(move |scope| {
             profile(time::ProfilerCategory::LayoutParallelWarmup,
                     profiler_metadata, time_profiler_chan, move || {
-                        top_down_flow(&nodes, scope, assign_isize_traversal, assign_bsize_traversal);
+                        top_down_flow(&nodes, queue, scope, assign_isize_traversal, assign_bsize_traversal);
             });
         });
     });

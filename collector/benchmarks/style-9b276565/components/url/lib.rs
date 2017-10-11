@@ -28,7 +28,7 @@ use url::{Url, Position};
 
 pub use url::Host;
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, HeapSizeOf)]
+#[derive(Clone, Eq, Hash, HeapSizeOf, Ord, PartialEq, PartialOrd)]
 pub struct ServoUrl(Arc<Url>);
 
 impl ServoUrl {
@@ -83,6 +83,10 @@ impl ServoUrl {
     pub fn is_secure_scheme(&self) -> bool {
         let scheme = self.scheme();
         scheme == "https" || scheme == "wss"
+    }
+
+    pub fn is_chrome(&self) -> bool {
+        self.scheme() == "chrome"
     }
 
     pub fn as_str(&self) -> &str {

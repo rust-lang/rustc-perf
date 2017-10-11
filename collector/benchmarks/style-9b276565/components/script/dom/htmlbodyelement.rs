@@ -4,11 +4,10 @@
 
 use cssparser::RGBA;
 use dom::attr::Attr;
-use dom::bindings::codegen::Bindings::EventHandlerBinding::{EventHandlerNonNull, OnBeforeUnloadEventHandlerNonNull};
 use dom::bindings::codegen::Bindings::HTMLBodyElementBinding::{self, HTMLBodyElementMethods};
 use dom::bindings::codegen::Bindings::WindowBinding::WindowMethods;
 use dom::bindings::inheritance::Castable;
-use dom::bindings::js::{LayoutJS, Root};
+use dom::bindings::root::{LayoutDom, DomRoot};
 use dom::bindings::str::DOMString;
 use dom::document::Document;
 use dom::element::{AttributeMutation, Element, RawLayoutElementHelpers};
@@ -19,7 +18,7 @@ use dom::node::{Node, document_from_node, window_from_node};
 use dom::virtualmethods::VirtualMethods;
 use dom_struct::dom_struct;
 use html5ever::{LocalName, Prefix};
-use script_traits::ScriptMsg as ConstellationMsg;
+use script_traits::ScriptMsg;
 use servo_url::ServoUrl;
 use style::attr::AttrValue;
 use time;
@@ -43,7 +42,7 @@ impl HTMLBodyElement {
 
     #[allow(unrooted_must_root)]
     pub fn new(local_name: LocalName, prefix: Option<Prefix>, document: &Document)
-               -> Root<HTMLBodyElement> {
+               -> DomRoot<HTMLBodyElement> {
         Node::reflect_node(box HTMLBodyElement::new_inherited(local_name, prefix, document),
                            document,
                            HTMLBodyElementBinding::Wrap)
@@ -89,7 +88,7 @@ pub trait HTMLBodyElementLayoutHelpers {
     fn get_background(&self) -> Option<ServoUrl>;
 }
 
-impl HTMLBodyElementLayoutHelpers for LayoutJS<HTMLBodyElement> {
+impl HTMLBodyElementLayoutHelpers for LayoutDom<HTMLBodyElement> {
     #[allow(unsafe_code)]
     fn get_background_color(&self) -> Option<RGBA> {
         unsafe {
@@ -126,6 +125,14 @@ impl VirtualMethods for HTMLBodyElement {
         Some(self.upcast::<HTMLElement>() as &VirtualMethods)
     }
 
+    fn attribute_affects_presentational_hints(&self, attr: &Attr) -> bool {
+        if attr.local_name() == &local_name!("bgcolor") {
+            return true;
+        }
+
+        self.super_type().unwrap().attribute_affects_presentational_hints(attr)
+    }
+
     fn bind_to_tree(&self, tree_in_doc: bool) {
         if let Some(ref s) = self.super_type() {
             s.bind_to_tree(tree_in_doc);
@@ -138,8 +145,8 @@ impl VirtualMethods for HTMLBodyElement {
         let window = window_from_node(self);
         let document = window.Document();
         document.set_reflow_timeout(time::precise_time_ns() + INITIAL_REFLOW_DELAY);
-        let event = ConstellationMsg::HeadParsed;
-        window.upcast::<GlobalScope>().constellation_chan().send(event).unwrap();
+        let event = ScriptMsg::HeadParsed;
+        window.upcast::<GlobalScope>().script_to_constellation_chan().send(event).unwrap();
     }
 
     fn parse_plain_attribute(&self, name: &LocalName, value: DOMString) -> AttrValue {

@@ -10,21 +10,23 @@
 use app_units::Au;
 use context::QuirksMode;
 use cssparser::{AtRuleParser, DeclarationListParser, DeclarationParser, Parser, parse_important};
-use cssparser::{CompactCowStr, ToCss as ParserToCss};
-use error_reporting::ContextualParseError;
+use cssparser::{CowRcStr, ToCss as ParserToCss};
+use error_reporting::{ContextualParseError, ParseErrorReporter};
 use euclid::TypedSize2D;
 use font_metrics::get_metrics_provider_for_product;
 use media_queries::Device;
-use parser::{Parse, ParserContext, log_css_error};
+use parser::{ParserContext, ParserErrorContext};
 use properties::StyleBuilder;
-use selectors::parser::SelectorParseError;
-use shared_lock::{SharedRwLockReadGuard, ToCssWithGuard};
+use rule_cache::RuleCacheConditions;
+use selectors::parser::SelectorParseErrorKind;
+use shared_lock::{SharedRwLockReadGuard, StylesheetGuards, ToCssWithGuard};
 use std::ascii::AsciiExt;
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::fmt;
 use std::iter::Enumerate;
 use std::str::Chars;
-use style_traits::{PinchZoomFactor, ToCss, ParseError, StyleParseError};
+use style_traits::{PinchZoomFactor, ToCss, ParseError, StyleParseErrorKind};
 use style_traits::viewport::{Orientation, UserZoom, ViewportConstraints, Zoom};
 use stylesheets::{StylesheetInDocument, Origin};
 use values::computed::{Context, ToComputedValue};
@@ -151,7 +153,7 @@ impl ToCss for ViewportLength {
     {
         match *self {
             ViewportLength::Specified(ref length) => length.to_css(dest),
-            ViewportLength::ExtendToZoom => write!(dest, "extend-to-zoom"),
+            ViewportLength::ExtendToZoom => dest.write_str("extend-to-zoom"),
         }
     }
 }
@@ -271,16 +273,17 @@ fn parse_shorthand<'i, 't>(context: &ParserContext, input: &mut Parser<'i, 't>)
 }
 
 impl<'a, 'b, 'i> AtRuleParser<'i> for ViewportRuleParser<'a, 'b> {
-    type Prelude = ();
+    type PreludeNoBlock = ();
+    type PreludeBlock = ();
     type AtRule = Vec<ViewportDescriptorDeclaration>;
-    type Error = SelectorParseError<'i, StyleParseError<'i>>;
+    type Error = StyleParseErrorKind<'i>;
 }
 
 impl<'a, 'b, 'i> DeclarationParser<'i> for ViewportRuleParser<'a, 'b> {
     type Declaration = Vec<ViewportDescriptorDeclaration>;
-    type Error = SelectorParseError<'i, StyleParseError<'i>>;
+    type Error = StyleParseErrorKind<'i>;
 
-    fn parse_value<'t>(&mut self, name: CompactCowStr<'i>, input: &mut Parser<'i, 't>)
+    fn parse_value<'t>(&mut self, name: CowRcStr<'i>, input: &mut Parser<'i, 't>)
                        -> Result<Vec<ViewportDescriptorDeclaration>, ParseError<'i>> {
         macro_rules! declaration {
             ($declaration:ident($parse:expr)) => {
@@ -320,7 +323,7 @@ impl<'a, 'b, 'i> DeclarationParser<'i> for ViewportRuleParser<'a, 'b> {
             "max-zoom" => ok!(MaxZoom(Zoom::parse)),
             "user-zoom" => ok!(UserZoom(UserZoom::parse)),
             "orientation" => ok!(Orientation(Orientation::parse)),
-            _ => Err(SelectorParseError::UnexpectedIdent(name.clone()).into()),
+            _ => Err(input.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(name.clone()))),
         }
     }
 }
@@ -346,8 +349,14 @@ fn is_whitespace_separator_or_equals(c: &char) -> bool {
     WHITESPACE.contains(c) || SEPARATOR.contains(c) || *c == '='
 }
 
-impl Parse for ViewportRule {
-    fn parse<'i, 't>(context: &ParserContext, input: &mut Parser<'i, 't>) -> Result<Self, ParseError<'i>> {
+impl ViewportRule {
+    /// Parse a single @viewport rule.
+    pub fn parse<'i, 't, R>(context: &ParserContext,
+                            error_context: &ParserErrorContext<R>,
+                            input: &mut Parser<'i, 't>)
+                            -> Result<Self, ParseError<'i>>
+        where R: ParseErrorReporter
+    {
         let parser = ViewportRuleParser { context: context };
 
         let mut cascade = Cascade::new();
@@ -359,11 +368,10 @@ impl Parse for ViewportRule {
                         cascade.add(Cow::Owned(declarations))
                     }
                 }
-                Err(err) => {
-                    let pos = err.span.start;
-                    let error = ContextualParseError::UnsupportedViewportDescriptorDeclaration(
-                        parser.input.slice(err.span), err.error);
-                    log_css_error(parser.input, pos, error, &context);
+                Err((error, slice)) => {
+                    let location = error.location;
+                    let error = ContextualParseError::UnsupportedViewportDescriptorDeclaration(slice, error);
+                    context.log_css_error(error_context, location, error);
                 }
             }
         }
@@ -564,16 +572,16 @@ impl Cascade {
 
     pub fn from_stylesheets<'a, I, S>(
         stylesheets: I,
-        guard: &SharedRwLockReadGuard,
+        guards: &StylesheetGuards,
         device: &Device
     ) -> Self
     where
-        I: Iterator<Item = &'a S>,
+        I: Iterator<Item = (&'a S, Origin)>,
         S: StylesheetInDocument + 'static,
     {
         let mut cascade = Self::new();
-        for stylesheet in stylesheets {
-            stylesheet.effective_viewport_rules(device, guard, |rule| {
+        for (stylesheet, origin) in stylesheets {
+            stylesheet.effective_viewport_rules(device, guards.for_origin(origin), |rule| {
                 for declaration in &rule.declarations {
                     cascade.add(Cow::Borrowed(declaration))
                 }
@@ -702,6 +710,7 @@ impl MaybeNew for ViewportConstraints {
 
         let default_values = device.default_computed_values();
 
+        let mut conditions = RuleCacheConditions::default();
         let context = Context {
             is_root_element: false,
             builder: StyleBuilder::for_derived_style(device, default_values, None, None),
@@ -709,6 +718,9 @@ impl MaybeNew for ViewportConstraints {
             cached_system_font: None,
             in_media_query: false,
             quirks_mode: quirks_mode,
+            for_smil_animation: false,
+            for_non_inherited_property: None,
+            rule_cache_conditions: RefCell::new(&mut conditions),
         };
 
         // DEVICE-ADAPT § 9.3 Resolving 'extend-to-zoom'
@@ -729,7 +741,7 @@ impl MaybeNew for ViewportConstraints {
                     match *$value {
                         ViewportLength::Specified(ref length) => match *length {
                             LengthOrPercentageOrAuto::Length(ref value) =>
-                                Some(value.to_computed_value(&context)),
+                                Some(Au::from(value.to_computed_value(&context))),
                             LengthOrPercentageOrAuto::Percentage(value) =>
                                 Some(initial_viewport.$dimension.scale_by(value.0)),
                             LengthOrPercentageOrAuto::Auto => None,

@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use dom::bindings::cell::DOMRefCell;
+use dom::bindings::cell::DomRefCell;
 use dom::bindings::codegen::Bindings::BlobBinding::BlobMethods;
 use dom::bindings::codegen::Bindings::DocumentBinding::DocumentMethods;
 use dom::bindings::codegen::Bindings::EventBinding::EventMethods;
@@ -13,9 +13,9 @@ use dom::bindings::codegen::Bindings::HTMLFormElementBinding::HTMLFormElementMet
 use dom::bindings::codegen::Bindings::HTMLInputElementBinding::HTMLInputElementMethods;
 use dom::bindings::codegen::Bindings::HTMLTextAreaElementBinding::HTMLTextAreaElementMethods;
 use dom::bindings::inheritance::{Castable, ElementTypeId, HTMLElementTypeId, NodeTypeId};
-use dom::bindings::js::{JS, MutNullableJS, Root, RootedReference};
 use dom::bindings::refcounted::Trusted;
 use dom::bindings::reflector::DomObject;
+use dom::bindings::root::{Dom, DomOnceCell, DomRoot, RootedReference};
 use dom::bindings::str::DOMString;
 use dom::blob::Blob;
 use dom::document::Document;
@@ -48,27 +48,25 @@ use encoding::label::encoding_from_whatwg_label;
 use html5ever::{LocalName, Prefix};
 use hyper::header::{Charset, ContentDisposition, ContentType, DispositionParam, DispositionType};
 use hyper::method::Method;
-use msg::constellation_msg::PipelineId;
-use script_thread::{MainThreadScriptMsg, Runnable};
+use script_thread::MainThreadScriptMsg;
 use script_traits::LoadData;
 use servo_rand::random;
 use std::borrow::ToOwned;
 use std::cell::Cell;
-use std::sync::mpsc::Sender;
 use style::attr::AttrValue;
 use style::str::split_html_space_chars;
 use task_source::TaskSource;
 
-#[derive(JSTraceable, PartialEq, Clone, Copy, HeapSizeOf)]
+#[derive(Clone, Copy, HeapSizeOf, JSTraceable, PartialEq)]
 pub struct GenerationId(u32);
 
 #[dom_struct]
 pub struct HTMLFormElement {
     htmlelement: HTMLElement,
     marked_for_reset: Cell<bool>,
-    elements: MutNullableJS<HTMLFormControlsCollection>,
+    elements: DomOnceCell<HTMLFormControlsCollection>,
     generation_id: Cell<GenerationId>,
-    controls: DOMRefCell<Vec<JS<Element>>>,
+    controls: DomRefCell<Vec<Dom<Element>>>,
 }
 
 impl HTMLFormElement {
@@ -80,14 +78,14 @@ impl HTMLFormElement {
             marked_for_reset: Cell::new(false),
             elements: Default::default(),
             generation_id: Cell::new(GenerationId(0)),
-            controls: DOMRefCell::new(Vec::new()),
+            controls: DomRefCell::new(Vec::new()),
         }
     }
 
     #[allow(unrooted_must_root)]
     pub fn new(local_name: LocalName,
                prefix: Option<Prefix>,
-               document: &Document) -> Root<HTMLFormElement> {
+               document: &Document) -> DomRoot<HTMLFormElement> {
         Node::reflect_node(box HTMLFormElement::new_inherited(local_name, prefix, document),
                            document,
                            HTMLFormElementBinding::Wrap)
@@ -167,14 +165,10 @@ impl HTMLFormElementMethods for HTMLFormElement {
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-form-elements
-    fn Elements(&self) -> Root<HTMLFormControlsCollection> {
-        if let Some(elements) = self.elements.get() {
-            return elements;
-        }
-
-        #[derive(JSTraceable, HeapSizeOf)]
+    fn Elements(&self) -> DomRoot<HTMLFormControlsCollection> {
+        #[derive(HeapSizeOf, JSTraceable)]
         struct ElementsFilter {
-            form: Root<HTMLFormElement>
+            form: DomRoot<HTMLFormElement>
         }
         impl CollectionFilter for ElementsFilter {
             fn filter<'a>(&self, elem: &'a Element, _root: &'a Node) -> bool {
@@ -222,11 +216,11 @@ impl HTMLFormElementMethods for HTMLFormElement {
                 }
             }
         }
-        let filter = box ElementsFilter { form: Root::from_ref(self) };
-        let window = window_from_node(self);
-        let elements = HTMLFormControlsCollection::new(&window, self.upcast(), filter);
-        self.elements.set(Some(&elements));
-        elements
+        DomRoot::from_ref(self.elements.init_once(|| {
+            let filter = box ElementsFilter { form: DomRoot::from_ref(self) };
+            let window = window_from_node(self);
+            HTMLFormControlsCollection::new(&window, self.upcast(), filter)
+        }))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-form-length
@@ -235,19 +229,19 @@ impl HTMLFormElementMethods for HTMLFormElement {
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-form-item
-    fn IndexedGetter(&self, index: u32) -> Option<Root<Element>> {
+    fn IndexedGetter(&self, index: u32) -> Option<DomRoot<Element>> {
         let elements = self.Elements();
         elements.IndexedGetter(index)
     }
 }
 
-#[derive(Copy, Clone, HeapSizeOf, PartialEq)]
+#[derive(Clone, Copy, HeapSizeOf, PartialEq)]
 pub enum SubmittedFrom {
     FromForm,
     NotFromForm
 }
 
-#[derive(Copy, Clone, HeapSizeOf)]
+#[derive(Clone, Copy, HeapSizeOf)]
 pub enum ResetFrom {
     FromForm,
     NotFromForm
@@ -432,23 +426,29 @@ impl HTMLFormElement {
         let window = window_from_node(self);
 
         // Step 1
-        // Each planned navigation runnable is tagged with a generation ID, and
-        // before the runnable is handled, it first checks whether the HTMLFormElement's
+        // Each planned navigation task is tagged with a generation ID, and
+        // before the task is handled, it first checks whether the HTMLFormElement's
         // generation ID is the same as its own generation ID.
-        let GenerationId(prev_id) = self.generation_id.get();
-        self.generation_id.set(GenerationId(prev_id + 1));
+        let generation_id = GenerationId(self.generation_id.get().0 + 1);
+        self.generation_id.set(generation_id);
 
-        // Step 2
-        let nav = box PlannedNavigation {
-            load_data: load_data,
-            pipeline_id: window.upcast::<GlobalScope>().pipeline_id(),
-            script_chan: window.main_thread_script_chan().clone(),
-            generation_id: self.generation_id.get(),
-            form: Trusted::new(self)
-        };
+        // Step 2.
+        let pipeline_id = window.upcast::<GlobalScope>().pipeline_id();
+        let script_chan = window.main_thread_script_chan().clone();
+        let this = Trusted::new(self);
+        let task = task!(navigate_to_form_planned_navigation: move || {
+            if generation_id != this.root().generation_id.get() {
+                return;
+            }
+            script_chan.send(MainThreadScriptMsg::Navigate(
+                pipeline_id,
+                load_data,
+                false,
+            )).unwrap();
+        });
 
-        // Step 3
-        window.dom_manipulation_task_source().queue(nav, window.upcast()).unwrap();
+        // Step 3.
+        window.dom_manipulation_task_source().queue(task, window.upcast()).unwrap();
     }
 
     /// Interactively validate the constraints of form elements
@@ -520,7 +520,7 @@ impl HTMLFormElement {
 
             // Step 3.1: The field element has a datalist element ancestor.
             if child.ancestors()
-                    .any(|a| Root::downcast::<HTMLDataListElement>(a).is_some()) {
+                    .any(|a| DomRoot::downcast::<HTMLDataListElement>(a).is_some()) {
                 continue;
             }
             if let NodeTypeId::Element(ElementTypeId::HTMLElement(element)) = child.type_id() {
@@ -674,14 +674,14 @@ impl HTMLFormElement {
     }
 }
 
-#[derive(JSTraceable, HeapSizeOf, Clone)]
+#[derive(Clone, HeapSizeOf, JSTraceable)]
 pub enum FormDatumValue {
     #[allow(dead_code)]
-    File(Root<File>),
+    File(DomRoot<File>),
     String(DOMString)
 }
 
-#[derive(HeapSizeOf, JSTraceable, Clone)]
+#[derive(Clone, HeapSizeOf, JSTraceable)]
 pub struct FormDatum {
     pub ty: DOMString,
     pub name: DOMString,
@@ -701,14 +701,14 @@ impl FormDatum {
     }
 }
 
-#[derive(Copy, Clone, HeapSizeOf)]
+#[derive(Clone, Copy, HeapSizeOf)]
 pub enum FormEncType {
     TextPlainEncoded,
     UrlEncoded,
     FormDataEncoded
 }
 
-#[derive(Copy, Clone, HeapSizeOf)]
+#[derive(Clone, Copy, HeapSizeOf)]
 pub enum FormMethod {
     FormGet,
     FormPost,
@@ -718,13 +718,13 @@ pub enum FormMethod {
 #[derive(HeapSizeOf)]
 #[allow(dead_code)]
 pub enum FormSubmittableElement {
-    ButtonElement(Root<HTMLButtonElement>),
-    InputElement(Root<HTMLInputElement>),
+    ButtonElement(DomRoot<HTMLButtonElement>),
+    InputElement(DomRoot<HTMLInputElement>),
     // TODO: HTMLKeygenElement unimplemented
     // KeygenElement(&'a HTMLKeygenElement),
-    ObjectElement(Root<HTMLObjectElement>),
-    SelectElement(Root<HTMLSelectElement>),
-    TextAreaElement(Root<HTMLTextAreaElement>),
+    ObjectElement(DomRoot<HTMLObjectElement>),
+    SelectElement(DomRoot<HTMLSelectElement>),
+    TextAreaElement(DomRoot<HTMLTextAreaElement>),
 }
 
 impl FormSubmittableElement {
@@ -740,26 +740,26 @@ impl FormSubmittableElement {
 
     fn from_element(element: &Element) -> FormSubmittableElement {
         if let Some(input) = element.downcast::<HTMLInputElement>() {
-            FormSubmittableElement::InputElement(Root::from_ref(&input))
+            FormSubmittableElement::InputElement(DomRoot::from_ref(&input))
         }
         else if let Some(input) = element.downcast::<HTMLButtonElement>() {
-            FormSubmittableElement::ButtonElement(Root::from_ref(&input))
+            FormSubmittableElement::ButtonElement(DomRoot::from_ref(&input))
         }
         else if let Some(input) = element.downcast::<HTMLObjectElement>() {
-            FormSubmittableElement::ObjectElement(Root::from_ref(&input))
+            FormSubmittableElement::ObjectElement(DomRoot::from_ref(&input))
         }
         else if let Some(input) = element.downcast::<HTMLSelectElement>() {
-            FormSubmittableElement::SelectElement(Root::from_ref(&input))
+            FormSubmittableElement::SelectElement(DomRoot::from_ref(&input))
         }
         else if let Some(input) = element.downcast::<HTMLTextAreaElement>() {
-            FormSubmittableElement::TextAreaElement(Root::from_ref(&input))
+            FormSubmittableElement::TextAreaElement(DomRoot::from_ref(&input))
         } else {
             unreachable!()
         }
     }
 }
 
-#[derive(Copy, Clone, HeapSizeOf)]
+#[derive(Clone, Copy, HeapSizeOf)]
 pub enum FormSubmitter<'a> {
     FormElement(&'a HTMLFormElement),
     InputElement(&'a HTMLInputElement),
@@ -862,7 +862,7 @@ impl<'a> FormSubmitter<'a> {
 }
 
 pub trait FormControl: DomObject {
-    fn form_owner(&self) -> Option<Root<HTMLFormElement>>;
+    fn form_owner(&self) -> Option<DomRoot<HTMLFormElement>>;
 
     fn set_form_owner(&self, form: Option<&HTMLFormElement>);
 
@@ -891,7 +891,7 @@ pub trait FormControl: DomObject {
         let old_owner = self.form_owner();
         let has_form_id = elem.has_attribute(&local_name!("form"));
         let nearest_form_ancestor = node.ancestors()
-                                        .filter_map(Root::downcast::<HTMLFormElement>)
+                                        .filter_map(DomRoot::downcast::<HTMLFormElement>)
                                         .next();
 
         // Step 1
@@ -905,7 +905,7 @@ pub trait FormControl: DomObject {
             // Step 3
             let doc = document_from_node(node);
             let form_id = elem.get_string_attribute(&local_name!("form"));
-            doc.GetElementById(form_id).and_then(Root::downcast::<HTMLFormElement>)
+            doc.GetElementById(form_id).and_then(DomRoot::downcast::<HTMLFormElement>)
         } else {
             // Step 4
             nearest_form_ancestor
@@ -1106,26 +1106,6 @@ impl FormControlElementHelpers for Element {
         }
     }
 }
-
-struct PlannedNavigation {
-    load_data: LoadData,
-    pipeline_id: PipelineId,
-    script_chan: Sender<MainThreadScriptMsg>,
-    generation_id: GenerationId,
-    form: Trusted<HTMLFormElement>
-}
-
-impl Runnable for PlannedNavigation {
-    fn name(&self) -> &'static str { "PlannedNavigation" }
-
-    fn handler(self: Box<PlannedNavigation>) {
-        if self.generation_id == self.form.root().generation_id.get() {
-            let script_chan = self.script_chan.clone();
-            script_chan.send(MainThreadScriptMsg::Navigate(self.pipeline_id, self.load_data, false)).unwrap();
-        }
-    }
-}
-
 
 // https://html.spec.whatwg.org/multipage/#multipart/form-data-encoding-algorithm
 pub fn encode_multipart_form_data(form_data: &mut Vec<FormDatum>,

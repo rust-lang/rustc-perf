@@ -9,9 +9,9 @@
 use cssparser::{Parser as CssParser, ParserInput};
 use selectors::Element;
 use selectors::parser::SelectorList;
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
 use style_traits::ParseError;
-use stylesheets::{Origin, Namespaces};
+use stylesheets::{Origin, Namespaces, UrlExtraData};
 
 /// A convenient alias for the type that represents an attribute value used for
 /// selector parser implementation.
@@ -35,16 +35,6 @@ pub use servo::restyle_damage::ServoRestyleDamage as RestyleDamage;
 #[cfg(feature = "gecko")]
 pub use gecko::restyle_damage::GeckoRestyleDamage as RestyleDamage;
 
-/// A type that represents the previous computed values needed for restyle
-/// damage calculation.
-#[cfg(feature = "servo")]
-pub type PreExistingComputedValues = ::properties::ComputedValues;
-
-/// A type that represents the previous computed values needed for restyle
-/// damage calculation.
-#[cfg(feature = "gecko")]
-pub type PreExistingComputedValues = ::gecko_bindings::structs::nsStyleContext;
-
 /// Servo's selector parser.
 #[cfg_attr(feature = "servo", derive(HeapSizeOf))]
 pub struct SelectorParser<'a> {
@@ -52,6 +42,9 @@ pub struct SelectorParser<'a> {
     pub stylesheet_origin: Origin,
     /// The namespace set of the stylesheet.
     pub namespaces: &'a Namespaces,
+    /// The extra URL data of the stylesheet, which is used to look up
+    /// whether we are parsing a chrome:// URL style sheet.
+    pub url_data: Option<&'a UrlExtraData>,
 }
 
 impl<'a> SelectorParser<'a> {
@@ -65,6 +58,7 @@ impl<'a> SelectorParser<'a> {
         let parser = SelectorParser {
             stylesheet_origin: Origin::Author,
             namespaces: &namespaces,
+            url_data: None,
         };
         let mut input = ParserInput::new(input);
         SelectorList::parse(&parser, &mut CssParser::new(&mut input))
@@ -74,13 +68,19 @@ impl<'a> SelectorParser<'a> {
     pub fn in_user_agent_stylesheet(&self) -> bool {
         matches!(self.stylesheet_origin, Origin::UserAgent)
     }
+
+    /// Whether we're parsing selectors in a stylesheet that has chrome
+    /// privilege.
+    pub fn in_chrome_stylesheet(&self) -> bool {
+        self.url_data.map_or(false, |d| d.is_chrome())
+    }
 }
 
 /// This enumeration determines if a pseudo-element is eagerly cascaded or not.
 ///
 /// If you're implementing a public selector for `Servo` that the end-user might
 /// customize, then you probably need to make it eager.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PseudoElementCascadeType {
     /// Eagerly cascaded pseudo-elements are "normal" pseudo-elements (i.e.
     /// `::before` and `::after`). They inherit styles normally as another
@@ -111,20 +111,96 @@ pub trait ElementExt: Element<Impl=SelectorImpl> + Debug {
     fn matches_user_and_author_rules(&self) -> bool;
 }
 
-impl SelectorImpl {
-    /// A helper to traverse each precomputed pseudo-element, executing `fun` on
-    /// it.
-    ///
-    /// The optimization comment in `each_eagerly_cascaded_pseudo_element` also
-    /// applies here.
-    #[inline]
-    pub fn each_precomputed_pseudo_element<F>(mut fun: F)
-        where F: FnMut(PseudoElement),
-    {
-        Self::each_simple_pseudo_element(|pseudo| {
-            if pseudo.is_precomputed() {
-                fun(pseudo)
+/// A per-functional-pseudo map, from a given pseudo to a `T`.
+#[cfg_attr(feature = "gecko", derive(MallocSizeOf))]
+#[cfg_attr(feature = "servo", derive(HeapSizeOf))]
+pub struct PerPseudoElementMap<T> {
+    entries: [Option<T>; SIMPLE_PSEUDO_COUNT],
+}
+
+impl<T> Default for PerPseudoElementMap<T> {
+    fn default() -> Self {
+        Self {
+            entries: PseudoElement::simple_pseudo_none_array(),
+        }
+    }
+}
+
+impl<T> Debug for PerPseudoElementMap<T>
+where
+    T: Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("[")?;
+        let mut first = true;
+        for entry in self.entries.iter() {
+            if !first {
+                f.write_str(", ")?;
             }
-        })
+            first = false;
+            entry.fmt(f)?;
+        }
+        f.write_str("]")
+    }
+}
+
+impl<T> PerPseudoElementMap<T> {
+    /// Get an entry in the map.
+    pub fn get(&self, pseudo: &PseudoElement) -> Option<&T> {
+        let index = match pseudo.simple_index() {
+            Some(i) => i,
+            None => return None,
+        };
+        self.entries[index].as_ref()
+    }
+
+    /// Clear this enumerated array.
+    pub fn clear(&mut self) {
+        *self = Self::default();
+    }
+
+    /// Invokes a callback on each non-None entry.
+    pub fn for_each<F: FnMut(&mut T)>(&mut self, mut f: F) {
+        for entry in self.entries.iter_mut() {
+            if entry.is_some() {
+                f(entry.as_mut().unwrap());
+            }
+        }
+    }
+
+    /// Set an entry value.
+    ///
+    /// Returns an error if the element is not a simple pseudo.
+    pub fn set(&mut self, pseudo: &PseudoElement, value: T) -> Result<(), ()> {
+        let index = match pseudo.simple_index() {
+            Some(i) => i,
+            None => return Err(()),
+        };
+        self.entries[index] = Some(value);
+        Ok(())
+    }
+
+    /// Get an entry for `pseudo`, or create it with calling `f`.
+    pub fn get_or_insert_with<F>(
+        &mut self,
+        pseudo: &PseudoElement,
+        f: F,
+    ) -> Result<&mut T, ()>
+    where
+        F: FnOnce() -> T,
+    {
+        let index = match pseudo.simple_index() {
+            Some(i) => i,
+            None => return Err(()),
+        };
+        if self.entries[index].is_none() {
+            self.entries[index] = Some(f());
+        }
+        Ok(self.entries[index].as_mut().unwrap())
+    }
+
+    /// Get an iterator for the entries.
+    pub fn iter(&self) -> ::std::slice::Iter<Option<T>> {
+        self.entries.iter()
     }
 }

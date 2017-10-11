@@ -6,8 +6,8 @@ use cssparser::{Parser, ParserInput};
 use dom::bindings::codegen::Bindings::MediaListBinding;
 use dom::bindings::codegen::Bindings::MediaListBinding::MediaListMethods;
 use dom::bindings::codegen::Bindings::WindowBinding::WindowBinding::WindowMethods;
-use dom::bindings::js::{JS, Root};
 use dom::bindings::reflector::{DomObject, Reflector, reflect_dom_object};
+use dom::bindings::root::{Dom, DomRoot};
 use dom::bindings::str::DOMString;
 use dom::cssstylesheet::CSSStyleSheet;
 use dom::window::Window;
@@ -23,7 +23,7 @@ use style_traits::{PARSING_MODE_DEFAULT, ToCss};
 #[dom_struct]
 pub struct MediaList {
     reflector_: Reflector,
-    parent_stylesheet: JS<CSSStyleSheet>,
+    parent_stylesheet: Dom<CSSStyleSheet>,
     #[ignore_heap_size_of = "Arc"]
     media_queries: Arc<Locked<StyleMediaList>>,
 }
@@ -33,7 +33,7 @@ impl MediaList {
     pub fn new_inherited(parent_stylesheet: &CSSStyleSheet,
                          media_queries: Arc<Locked<StyleMediaList>>) -> MediaList {
         MediaList {
-            parent_stylesheet: JS::from_ref(parent_stylesheet),
+            parent_stylesheet: Dom::from_ref(parent_stylesheet),
             reflector_: Reflector::new(),
             media_queries: media_queries,
         }
@@ -42,7 +42,7 @@ impl MediaList {
     #[allow(unrooted_must_root)]
     pub fn new(window: &Window, parent_stylesheet: &CSSStyleSheet,
                media_queries: Arc<Locked<StyleMediaList>>)
-        -> Root<MediaList> {
+        -> DomRoot<MediaList> {
         reflect_dom_object(box MediaList::new_inherited(parent_stylesheet, media_queries),
                            window,
                            MediaListBinding::Wrap)
@@ -63,7 +63,7 @@ impl MediaListMethods for MediaList {
     // https://drafts.csswg.org/cssom/#dom-medialist-mediatext
     fn SetMediaText(&self, value: DOMString) {
         let mut guard = self.shared_lock().write();
-        let mut media_queries = self.media_queries.write_with(&mut guard);
+        let media_queries = self.media_queries.write_with(&mut guard);
         // Step 2
         if value.is_empty() {
             // Step 1
@@ -74,13 +74,14 @@ impl MediaListMethods for MediaList {
         let mut input = ParserInput::new(&value);
         let mut parser = Parser::new(&mut input);
         let global = self.global();
-        let win = global.as_window();
-        let url = win.get_url();
-        let quirks_mode = win.Document().quirks_mode();
-        let context = ParserContext::new_for_cssom(&url, win.css_error_reporter(), Some(CssRuleType::Media),
+        let window = global.as_window();
+        let url = window.get_url();
+        let quirks_mode = window.Document().quirks_mode();
+        let context = ParserContext::new_for_cssom(&url, Some(CssRuleType::Media),
                                                    PARSING_MODE_DEFAULT,
                                                    quirks_mode);
-        *media_queries = parse_media_query_list(&context, &mut parser);
+        *media_queries = parse_media_query_list(&context, &mut parser,
+                                                window.css_error_reporter());
     }
 
     // https://drafts.csswg.org/cssom/#dom-medialist-length
@@ -114,7 +115,7 @@ impl MediaListMethods for MediaList {
         let win = global.as_window();
         let url = win.get_url();
         let quirks_mode = win.Document().quirks_mode();
-        let context = ParserContext::new_for_cssom(&url, win.css_error_reporter(), Some(CssRuleType::Media),
+        let context = ParserContext::new_for_cssom(&url, Some(CssRuleType::Media),
                                                    PARSING_MODE_DEFAULT,
                                                    quirks_mode);
         let m = MediaQuery::parse(&context, &mut parser);
@@ -143,7 +144,7 @@ impl MediaListMethods for MediaList {
         let win = global.as_window();
         let url = win.get_url();
         let quirks_mode = win.Document().quirks_mode();
-        let context = ParserContext::new_for_cssom(&url, win.css_error_reporter(), Some(CssRuleType::Media),
+        let context = ParserContext::new_for_cssom(&url, Some(CssRuleType::Media),
                                                    PARSING_MODE_DEFAULT,
                                                    quirks_mode);
         let m = MediaQuery::parse(&context, &mut parser);
@@ -154,7 +155,7 @@ impl MediaListMethods for MediaList {
         // Step 3
         let m_serialized = m.unwrap().to_css_string();
         let mut guard = self.shared_lock().write();
-        let mut media_list = self.media_queries.write_with(&mut guard);
+        let media_list = self.media_queries.write_with(&mut guard);
         let new_vec = media_list.media_queries.drain(..)
                                 .filter(|q| m_serialized != q.to_css_string())
                                 .collect();

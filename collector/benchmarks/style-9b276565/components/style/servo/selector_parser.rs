@@ -8,29 +8,30 @@
 
 use {Atom, Prefix, Namespace, LocalName, CaseSensitivityExt};
 use attr::{AttrIdentifier, AttrValue};
-use cssparser::{Parser as CssParser, ToCss, serialize_identifier, CompactCowStr};
+use cssparser::{Parser as CssParser, ToCss, serialize_identifier, CowRcStr, SourceLocation};
 use dom::{OpaqueNode, TElement, TNode};
 use element_state::ElementState;
 use fnv::FnvHashMap;
 use invalidation::element::element_wrapper::ElementSnapshot;
+use properties::ComputedValues;
 use properties::PropertyFlags;
+use properties::longhands::display::computed_value as display;
 use selector_parser::{AttrValue as SelectorAttrValue, ElementExt, PseudoElementCascadeType, SelectorParser};
 use selectors::Element;
 use selectors::attr::{AttrSelectorOperation, NamespaceConstraint, CaseSensitivity};
-use selectors::parser::{SelectorMethods, SelectorParseError};
+use selectors::parser::{SelectorMethods, SelectorParseErrorKind};
 use selectors::visitor::SelectorVisitor;
 use std::ascii::AsciiExt;
-use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Debug;
 use std::mem;
 use std::ops::{Deref, DerefMut};
-use style_traits::{ParseError, StyleParseError};
+use style_traits::{ParseError, StyleParseErrorKind};
 
 /// A pseudo-element, both public and private.
 ///
 /// NB: If you add to this list, be sure to update `each_simple_pseudo_element` too.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 #[cfg_attr(feature = "servo", derive(HeapSizeOf))]
 #[allow(missing_docs)]
 #[repr(usize)]
@@ -40,6 +41,8 @@ pub enum PseudoElement {
     Before,
     Selection,
     // If/when :first-letter is added, update is_first_letter accordingly.
+
+    // If/when :first-line is added, update is_first_line accordingly.
 
     // If/when ::first-letter, ::first-line, or ::placeholder are added, adjust
     // our property_restriction implementation to do property filtering for
@@ -60,6 +63,10 @@ pub enum PseudoElement {
     ServoInlineBlockWrapper,
     ServoInlineAbsolute,
 }
+
+/// The count of simple (non-functional) pseudo-elements (that is, all
+/// pseudo-elements for now).
+pub const SIMPLE_PSEUDO_COUNT: usize = PseudoElement::ServoInlineAbsolute as usize + 1;
 
 impl ::selectors::parser::PseudoElement for PseudoElement {
     type Impl = SelectorImpl;
@@ -103,6 +110,17 @@ impl PseudoElement {
         self.clone() as usize
     }
 
+    /// An index for this pseudo-element to be indexed in an enumerated array.
+    #[inline]
+    pub fn simple_index(&self) -> Option<usize> {
+        Some(self.clone() as usize)
+    }
+
+    /// An array of `None`, one per simple pseudo-element.
+    pub fn simple_pseudo_none_array<T>() -> [Option<T>; SIMPLE_PSEUDO_COUNT] {
+        Default::default()
+    }
+
     /// Creates a pseudo-element from an eager index.
     #[inline]
     pub fn from_eager_index(i: usize) -> Self {
@@ -112,15 +130,33 @@ impl PseudoElement {
         result
     }
 
-    /// Whether the current pseudo element is :before or :after.
+    /// Whether the current pseudo element is ::before or ::after.
     #[inline]
     pub fn is_before_or_after(&self) -> bool {
-        matches!(*self, PseudoElement::After | PseudoElement::Before)
+        self.is_before() || self.is_after()
+    }
+
+    /// Whether this pseudo-element is the ::before pseudo.
+    #[inline]
+    pub fn is_before(&self) -> bool {
+        *self == PseudoElement::Before
+    }
+
+    /// Whether this pseudo-element is the ::after pseudo.
+    #[inline]
+    pub fn is_after(&self) -> bool {
+        *self == PseudoElement::After
     }
 
     /// Whether the current pseudo element is :first-letter
     #[inline]
     pub fn is_first_letter(&self) -> bool {
+        false
+    }
+
+    /// Whether the current pseudo element is :first-line
+    #[inline]
+    pub fn is_first_line(&self) -> bool {
         false
     }
 
@@ -134,6 +170,18 @@ impl PseudoElement {
     #[inline]
     pub fn is_lazy(&self) -> bool {
         self.cascade_type() == PseudoElementCascadeType::Lazy
+    }
+
+    /// Whether this pseudo-element is for an anonymous box.
+    pub fn is_anon_box(&self) -> bool {
+        self.is_precomputed()
+    }
+
+    /// Whether this pseudo-element skips flex/grid container
+    /// display-based fixup.
+    #[inline]
+    pub fn skip_item_based_display_fixup(&self) -> bool {
+        !self.is_before_or_after()
     }
 
     /// Whether this pseudo-element is precomputed.
@@ -182,6 +230,21 @@ impl PseudoElement {
     pub fn property_restriction(&self) -> Option<PropertyFlags> {
         None
     }
+
+    /// Whether this pseudo-element should actually exist if it has
+    /// the given styles.
+    pub fn should_exist(&self, style: &ComputedValues) -> bool
+    {
+        let display = style.get_box().clone_display();
+        if display == display::T::none {
+            return false;
+        }
+        if self.is_before_or_after() && style.ineffective_content_property() {
+            return false;
+        }
+
+        true
+    }
 }
 
 /// The type used for storing pseudo-class string arguments.
@@ -189,7 +252,7 @@ pub type PseudoClassStringArg = Box<str>;
 
 /// A non tree-structural pseudo-class.
 /// See https://drafts.csswg.org/selectors-4/#structural-pseudos
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 #[cfg_attr(feature = "servo", derive(HeapSizeOf))]
 #[allow(missing_docs)]
 pub enum NonTSPseudoClass {
@@ -332,9 +395,9 @@ impl ::selectors::SelectorImpl for SelectorImpl {
 
 impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
     type Impl = SelectorImpl;
-    type Error = StyleParseError<'i>;
+    type Error = StyleParseErrorKind<'i>;
 
-    fn parse_non_ts_pseudo_class(&self, name: CompactCowStr<'i>)
+    fn parse_non_ts_pseudo_class(&self, location: SourceLocation, name: CowRcStr<'i>)
                                  -> Result<NonTSPseudoClass, ParseError<'i>> {
         use self::NonTSPseudoClass::*;
         let pseudo_class = match_ignore_ascii_case! { &name,
@@ -355,39 +418,41 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "visited" => Visited,
             "-servo-nonzero-border" => {
                 if !self.in_user_agent_stylesheet() {
-                    return Err(SelectorParseError::UnexpectedIdent(
-                        "-servo-nonzero-border".into()).into());
+                    return Err(location.new_custom_error(
+                        SelectorParseErrorKind::UnexpectedIdent("-servo-nonzero-border".into())
+                    ))
                 }
                 ServoNonZeroBorder
             },
-            _ => return Err(SelectorParseError::UnexpectedIdent(name.clone()).into()),
+            _ => return Err(location.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(name.clone()))),
         };
 
         Ok(pseudo_class)
     }
 
     fn parse_non_ts_functional_pseudo_class<'t>(&self,
-                                                name: CompactCowStr<'i>,
+                                                name: CowRcStr<'i>,
                                                 parser: &mut CssParser<'i, 't>)
                                                 -> Result<NonTSPseudoClass, ParseError<'i>> {
         use self::NonTSPseudoClass::*;
         let pseudo_class = match_ignore_ascii_case!{ &name,
             "lang" => {
-                Lang(parser.expect_ident_or_string()?.into_owned().into_boxed_str())
+                Lang(parser.expect_ident_or_string()?.as_ref().into())
             }
             "-servo-case-sensitive-type-attr" => {
                 if !self.in_user_agent_stylesheet() {
-                    return Err(SelectorParseError::UnexpectedIdent(name.clone()).into());
+                    return Err(parser.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(name.clone())));
                 }
-                ServoCaseSensitiveTypeAttr(Atom::from(Cow::from(parser.expect_ident()?)))
+                ServoCaseSensitiveTypeAttr(Atom::from(parser.expect_ident()?.as_ref()))
             }
-            _ => return Err(SelectorParseError::UnexpectedIdent(name.clone()).into())
+            _ => return Err(parser.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(name.clone())))
         };
 
         Ok(pseudo_class)
     }
 
-    fn parse_pseudo_element(&self, name: CompactCowStr<'i>) -> Result<PseudoElement, ParseError<'i>> {
+    fn parse_pseudo_element(&self, location: SourceLocation, name: CowRcStr<'i>)
+                             -> Result<PseudoElement, ParseError<'i>> {
         use self::PseudoElement::*;
         let pseudo_element = match_ignore_ascii_case! { &name,
             "before" => Before,
@@ -395,77 +460,77 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "selection" => Selection,
             "-servo-details-summary" => {
                 if !self.in_user_agent_stylesheet() {
-                    return Err(SelectorParseError::UnexpectedIdent(name.clone()).into())
+                    return Err(location.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(name.clone())))
                 }
                 DetailsSummary
             },
             "-servo-details-content" => {
                 if !self.in_user_agent_stylesheet() {
-                    return Err(SelectorParseError::UnexpectedIdent(name.clone()).into())
+                    return Err(location.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(name.clone())))
                 }
                 DetailsContent
             },
             "-servo-text" => {
                 if !self.in_user_agent_stylesheet() {
-                    return Err(SelectorParseError::UnexpectedIdent(name.clone()).into())
+                    return Err(location.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(name.clone())))
                 }
                 ServoText
             },
             "-servo-input-text" => {
                 if !self.in_user_agent_stylesheet() {
-                    return Err(SelectorParseError::UnexpectedIdent(name.clone()).into())
+                    return Err(location.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(name.clone())))
                 }
                 ServoInputText
             },
             "-servo-table-wrapper" => {
                 if !self.in_user_agent_stylesheet() {
-                    return Err(SelectorParseError::UnexpectedIdent(name.clone()).into())
+                    return Err(location.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(name.clone())))
                 }
                 ServoTableWrapper
             },
             "-servo-anonymous-table-wrapper" => {
                 if !self.in_user_agent_stylesheet() {
-                    return Err(SelectorParseError::UnexpectedIdent(name.clone()).into())
+                    return Err(location.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(name.clone())))
                 }
                 ServoAnonymousTableWrapper
             },
             "-servo-anonymous-table" => {
                 if !self.in_user_agent_stylesheet() {
-                    return Err(SelectorParseError::UnexpectedIdent(name.clone()).into())
+                    return Err(location.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(name.clone())))
                 }
                 ServoAnonymousTable
             },
             "-servo-anonymous-table-row" => {
                 if !self.in_user_agent_stylesheet() {
-                    return Err(SelectorParseError::UnexpectedIdent(name.clone()).into())
+                    return Err(location.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(name.clone())))
                 }
                 ServoAnonymousTableRow
             },
             "-servo-anonymous-table-cell" => {
                 if !self.in_user_agent_stylesheet() {
-                    return Err(SelectorParseError::UnexpectedIdent(name.clone()).into())
+                    return Err(location.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(name.clone())))
                 }
                 ServoAnonymousTableCell
             },
             "-servo-anonymous-block" => {
                 if !self.in_user_agent_stylesheet() {
-                    return Err(SelectorParseError::UnexpectedIdent(name.clone()).into())
+                    return Err(location.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(name.clone())))
                 }
                 ServoAnonymousBlock
             },
             "-servo-inline-block-wrapper" => {
                 if !self.in_user_agent_stylesheet() {
-                    return Err(SelectorParseError::UnexpectedIdent(name.clone()).into())
+                    return Err(location.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(name.clone())))
                 }
                 ServoInlineBlockWrapper
             },
             "-servo-input-absolute" => {
                 if !self.in_user_agent_stylesheet() {
-                    return Err(SelectorParseError::UnexpectedIdent(name.clone()).into())
+                    return Err(location.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(name.clone())))
                 }
                 ServoInlineAbsolute
             },
-            _ => return Err(SelectorParseError::UnexpectedIdent(name.clone()).into())
+            _ => return Err(location.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(name.clone())))
 
         };
 
@@ -497,28 +562,6 @@ impl SelectorImpl {
         for i in 0..EAGER_PSEUDO_COUNT {
             fun(PseudoElement::from_eager_index(i));
         }
-    }
-
-    /// Executes `fun` for each pseudo-element.
-    #[inline]
-    pub fn each_simple_pseudo_element<F>(mut fun: F)
-        where F: FnMut(PseudoElement),
-    {
-        fun(PseudoElement::Before);
-        fun(PseudoElement::After);
-        fun(PseudoElement::DetailsContent);
-        fun(PseudoElement::DetailsSummary);
-        fun(PseudoElement::Selection);
-        fun(PseudoElement::ServoText);
-        fun(PseudoElement::ServoInputText);
-        fun(PseudoElement::ServoTableWrapper);
-        fun(PseudoElement::ServoAnonymousTableWrapper);
-        fun(PseudoElement::ServoAnonymousTable);
-        fun(PseudoElement::ServoAnonymousTableRow);
-        fun(PseudoElement::ServoAnonymousTableCell);
-        fun(PseudoElement::ServoAnonymousBlock);
-        fun(PseudoElement::ServoInlineBlockWrapper);
-        fun(PseudoElement::ServoInlineAbsolute);
     }
 
     /// Returns the pseudo-class state flag for selector matching.

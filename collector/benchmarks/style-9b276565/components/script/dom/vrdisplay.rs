@@ -2,10 +2,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use canvas_traits::CanvasMsg;
+use canvas_traits::webgl::{webgl_channel, WebGLReceiver, WebVRCommand};
 use core::ops::Deref;
 use dom::bindings::callback::ExceptionHandling;
-use dom::bindings::cell::DOMRefCell;
+use dom::bindings::cell::DomRefCell;
 use dom::bindings::codegen::Bindings::PerformanceBinding::PerformanceBinding::PerformanceMethods;
 use dom::bindings::codegen::Bindings::VRDisplayBinding;
 use dom::bindings::codegen::Bindings::VRDisplayBinding::VRDisplayMethods;
@@ -15,10 +15,10 @@ use dom::bindings::codegen::Bindings::WebGLRenderingContextBinding::WebGLRenderi
 use dom::bindings::codegen::Bindings::WindowBinding::FrameRequestCallback;
 use dom::bindings::codegen::Bindings::WindowBinding::WindowBinding::WindowMethods;
 use dom::bindings::inheritance::Castable;
-use dom::bindings::js::{MutNullableJS, MutJS, Root};
 use dom::bindings::num::Finite;
 use dom::bindings::refcounted::Trusted;
 use dom::bindings::reflector::{DomObject, reflect_dom_object};
+use dom::bindings::root::{DomRoot, MutDom, MutNullableDom};
 use dom::bindings::str::DOMString;
 use dom::event::Event;
 use dom::eventtarget::EventTarget;
@@ -32,46 +32,43 @@ use dom::vrpose::VRPose;
 use dom::vrstageparameters::VRStageParameters;
 use dom::webglrenderingcontext::WebGLRenderingContext;
 use dom_struct::dom_struct;
-use ipc_channel::ipc;
-use ipc_channel::ipc::{IpcSender, IpcReceiver};
+use ipc_channel::ipc::{self, IpcSender};
 use js::jsapi::JSContext;
 use script_runtime::CommonScriptMsg;
 use script_runtime::ScriptThreadEventCategory::WebVREvent;
-use script_thread::Runnable;
 use std::cell::Cell;
 use std::mem;
 use std::rc::Rc;
 use std::sync::mpsc;
 use std::thread;
-use webrender_api::VRCompositorCommand;
 use webvr_traits::{WebVRDisplayData, WebVRDisplayEvent, WebVRFrameData, WebVRLayer, WebVRMsg};
 
 #[dom_struct]
 pub struct VRDisplay {
     eventtarget: EventTarget,
     #[ignore_heap_size_of = "Defined in rust-webvr"]
-    display: DOMRefCell<WebVRDisplayData>,
+    display: DomRefCell<WebVRDisplayData>,
     depth_near: Cell<f64>,
     depth_far: Cell<f64>,
     presenting: Cell<bool>,
-    left_eye_params: MutJS<VREyeParameters>,
-    right_eye_params: MutJS<VREyeParameters>,
-    capabilities: MutJS<VRDisplayCapabilities>,
-    stage_params: MutNullableJS<VRStageParameters>,
+    left_eye_params: MutDom<VREyeParameters>,
+    right_eye_params: MutDom<VREyeParameters>,
+    capabilities: MutDom<VRDisplayCapabilities>,
+    stage_params: MutNullableDom<VRStageParameters>,
     #[ignore_heap_size_of = "Defined in rust-webvr"]
-    frame_data: DOMRefCell<WebVRFrameData>,
+    frame_data: DomRefCell<WebVRFrameData>,
     #[ignore_heap_size_of = "Defined in rust-webvr"]
-    layer: DOMRefCell<WebVRLayer>,
-    layer_ctx: MutNullableJS<WebGLRenderingContext>,
+    layer: DomRefCell<WebVRLayer>,
+    layer_ctx: MutNullableDom<WebGLRenderingContext>,
     #[ignore_heap_size_of = "Defined in rust-webvr"]
     next_raf_id: Cell<u32>,
     /// List of request animation frame callbacks
     #[ignore_heap_size_of = "closures are hard"]
-    raf_callback_list: DOMRefCell<Vec<(u32, Option<Rc<FrameRequestCallback>>)>>,
+    raf_callback_list: DomRefCell<Vec<(u32, Option<Rc<FrameRequestCallback>>)>>,
     // Compositor VRFrameData synchonization
     frame_data_status: Cell<VRFrameDataStatus>,
     #[ignore_heap_size_of = "channels are hard"]
-    frame_data_receiver: DOMRefCell<Option<IpcReceiver<Result<Vec<u8>, ()>>>>,
+    frame_data_receiver: DomRefCell<Option<WebGLReceiver<Result<Vec<u8>, ()>>>>,
     running_display_raf: Cell<bool>,
     paused: Cell<bool>,
     stopped_on_pause: Cell<bool>,
@@ -81,7 +78,7 @@ unsafe_no_jsmanaged_fields!(WebVRDisplayData);
 unsafe_no_jsmanaged_fields!(WebVRFrameData);
 unsafe_no_jsmanaged_fields!(WebVRLayer);
 
-#[derive(Clone, Copy, PartialEq, Eq, HeapSizeOf)]
+#[derive(Clone, Copy, Eq, HeapSizeOf, PartialEq)]
 enum VRFrameDataStatus {
     Waiting,
     Synced,
@@ -99,21 +96,21 @@ impl VRDisplay {
 
         VRDisplay {
             eventtarget: EventTarget::new_inherited(),
-            display: DOMRefCell::new(display.clone()),
+            display: DomRefCell::new(display.clone()),
             depth_near: Cell::new(0.01),
             depth_far: Cell::new(10000.0),
             presenting: Cell::new(false),
-            left_eye_params: MutJS::new(&*VREyeParameters::new(display.left_eye_parameters.clone(), &global)),
-            right_eye_params: MutJS::new(&*VREyeParameters::new(display.right_eye_parameters.clone(), &global)),
-            capabilities: MutJS::new(&*VRDisplayCapabilities::new(display.capabilities.clone(), &global)),
-            stage_params: MutNullableJS::new(stage.as_ref().map(|v| v.deref())),
-            frame_data: DOMRefCell::new(Default::default()),
-            layer: DOMRefCell::new(Default::default()),
-            layer_ctx: MutNullableJS::default(),
+            left_eye_params: MutDom::new(&*VREyeParameters::new(display.left_eye_parameters.clone(), &global)),
+            right_eye_params: MutDom::new(&*VREyeParameters::new(display.right_eye_parameters.clone(), &global)),
+            capabilities: MutDom::new(&*VRDisplayCapabilities::new(display.capabilities.clone(), &global)),
+            stage_params: MutNullableDom::new(stage.as_ref().map(|v| v.deref())),
+            frame_data: DomRefCell::new(Default::default()),
+            layer: DomRefCell::new(Default::default()),
+            layer_ctx: MutNullableDom::default(),
             next_raf_id: Cell::new(1),
-            raf_callback_list: DOMRefCell::new(vec![]),
+            raf_callback_list: DomRefCell::new(vec![]),
             frame_data_status: Cell::new(VRFrameDataStatus::Waiting),
-            frame_data_receiver: DOMRefCell::new(None),
+            frame_data_receiver: DomRefCell::new(None),
             running_display_raf: Cell::new(false),
             // Some VR implementations (e.g. Daydream) can be paused in some life cycle situations
             // such as showing and hiding the controller pairing screen.
@@ -124,7 +121,7 @@ impl VRDisplay {
         }
     }
 
-    pub fn new(global: &GlobalScope, display: WebVRDisplayData) -> Root<VRDisplay> {
+    pub fn new(global: &GlobalScope, display: WebVRDisplayData) -> DomRoot<VRDisplay> {
         reflect_dom_object(box VRDisplay::new_inherited(&global, display),
                            global,
                            VRDisplayBinding::Wrap)
@@ -151,20 +148,20 @@ impl VRDisplayMethods for VRDisplay {
     }
 
     // https://w3c.github.io/webvr/#dom-vrdisplay-capabilities
-    fn Capabilities(&self) -> Root<VRDisplayCapabilities> {
-        Root::from_ref(&*self.capabilities.get())
+    fn Capabilities(&self) -> DomRoot<VRDisplayCapabilities> {
+        DomRoot::from_ref(&*self.capabilities.get())
     }
 
     // https://w3c.github.io/webvr/#dom-vrdisplay-stageparameters
-    fn GetStageParameters(&self) -> Option<Root<VRStageParameters>> {
-        self.stage_params.get().map(|s| Root::from_ref(&*s))
+    fn GetStageParameters(&self) -> Option<DomRoot<VRStageParameters>> {
+        self.stage_params.get().map(|s| DomRoot::from_ref(&*s))
     }
 
     // https://w3c.github.io/webvr/#dom-vrdisplay-geteyeparameters
-    fn GetEyeParameters(&self, eye: VREye) -> Root<VREyeParameters> {
+    fn GetEyeParameters(&self, eye: VREye) -> DomRoot<VREyeParameters> {
         match eye {
-            VREye::Left => Root::from_ref(&*self.left_eye_params.get()),
-            VREye::Right => Root::from_ref(&*self.right_eye_params.get())
+            VREye::Left => DomRoot::from_ref(&*self.left_eye_params.get()),
+            VREye::Right => DomRoot::from_ref(&*self.right_eye_params.get())
         }
     }
 
@@ -214,7 +211,7 @@ impl VRDisplayMethods for VRDisplay {
     }
 
     // https://w3c.github.io/webvr/#dom-vrdisplay-getpose
-    fn GetPose(&self) -> Root<VRPose> {
+    fn GetPose(&self) -> DomRoot<VRPose> {
         VRPose::new(&self.global(), &self.frame_data.borrow().pose)
     }
 
@@ -268,7 +265,7 @@ impl VRDisplayMethods for VRDisplay {
     fn CancelAnimationFrame(&self, handle: u32) {
         if self.presenting.get() {
             let mut list = self.raf_callback_list.borrow_mut();
-            if let Some(mut pair) = list.iter_mut().find(|pair| pair.0 == handle) {
+            if let Some(pair) = list.iter_mut().find(|pair| pair.0 == handle) {
                 pair.1 = None;
             }
         } else {
@@ -287,7 +284,7 @@ impl VRDisplayMethods for VRDisplay {
         // WebVR spec: If canPresent is false the promise MUST be rejected
         if !self.display.borrow().capabilities.can_present {
             let msg = "VRDisplay canPresent is false".to_string();
-            promise.reject_native(promise.global().get_cx(), &msg);
+            promise.reject_native(&msg);
             return promise;
         }
 
@@ -297,7 +294,7 @@ impl VRDisplayMethods for VRDisplay {
         // That functionality is not allowed by this revision of the spec.
         if layers.len() != 1 {
             let msg = "The number of layers must be 1".to_string();
-            promise.reject_native(promise.global().get_cx(), &msg);
+            promise.reject_native(&msg);
             return promise;
         }
 
@@ -314,7 +311,7 @@ impl VRDisplayMethods for VRDisplay {
             },
             Err(msg) => {
                 let msg = msg.to_string();
-                promise.reject_native(promise.global().get_cx(), &msg);
+                promise.reject_native(&msg);
                 return promise;
             }
         };
@@ -323,7 +320,7 @@ impl VRDisplayMethods for VRDisplay {
         if self.presenting.get() {
             *self.layer.borrow_mut() = layer_bounds;
             self.layer_ctx.set(Some(&layer_ctx));
-            promise.resolve_native(promise.global().get_cx(), &());
+            promise.resolve_native(&());
             return promise;
         }
 
@@ -338,10 +335,10 @@ impl VRDisplayMethods for VRDisplay {
                 *self.layer.borrow_mut() = layer_bounds;
                 self.layer_ctx.set(Some(&layer_ctx));
                 self.init_present();
-                promise.resolve_native(promise.global().get_cx(), &());
+                promise.resolve_native(&());
             },
             Err(e) => {
-                promise.reject_native(promise.global().get_cx(), &e);
+                promise.reject_native(&e);
             }
         }
 
@@ -356,7 +353,7 @@ impl VRDisplayMethods for VRDisplay {
         // WebVR spec: If the VRDisplay is not presenting the promise MUST be rejected.
         if !self.presenting.get() {
             let msg = "VRDisplay is not presenting".to_string();
-            promise.reject_native(promise.global().get_cx(), &msg);
+            promise.reject_native(&msg);
             return promise;
         }
 
@@ -369,10 +366,10 @@ impl VRDisplayMethods for VRDisplay {
         match receiver.recv().unwrap() {
             Ok(()) => {
                 self.stop_present();
-                promise.resolve_native(promise.global().get_cx(), &());
+                promise.resolve_native(&());
             },
             Err(e) => {
-                promise.reject_native(promise.global().get_cx(), &e);
+                promise.reject_native(&e);
             }
         }
 
@@ -386,11 +383,10 @@ impl VRDisplayMethods for VRDisplay {
             return;
         }
 
-        let api_sender = self.layer_ctx.get().unwrap().ipc_renderer();
-        let display_id = self.display.borrow().display_id as u64;
+        let display_id = self.display.borrow().display_id;
         let layer = self.layer.borrow();
-        let msg = VRCompositorCommand::SubmitFrame(display_id, layer.left_bounds, layer.right_bounds);
-        api_sender.send(CanvasMsg::WebVR(msg)).unwrap();
+        let msg = WebVRCommand::SubmitFrame(display_id, layer.left_bounds, layer.right_bounds);
+        self.layer_ctx.get().unwrap().send_vr_command(msg);
     }
 
     // https://w3c.github.io/webvr/spec/1.1/#dom-vrdisplay-getlayers
@@ -482,18 +478,18 @@ impl VRDisplay {
     }
 
     fn notify_event(&self, event: &WebVRDisplayEvent) {
-        let root = Root::from_ref(&*self);
+        let root = DomRoot::from_ref(&*self);
         let event = VRDisplayEvent::new_from_webvr(&self.global(), &root, &event);
         event.upcast::<Event>().fire(self.global().upcast::<EventTarget>());
     }
 
     fn init_present(&self) {
         self.presenting.set(true);
-        let (sync_sender, sync_receiver) = ipc::channel().unwrap();
+        let (sync_sender, sync_receiver) = webgl_channel().unwrap();
         *self.frame_data_receiver.borrow_mut() = Some(sync_receiver);
 
-        let display_id = self.display.borrow().display_id as u64;
-        let api_sender = self.layer_ctx.get().unwrap().ipc_renderer();
+        let display_id = self.display.borrow().display_id;
+        let api_sender = self.layer_ctx.get().unwrap().webgl_sender();
         let js_sender = self.global().script_chan();
         let address = Trusted::new(&*self);
         let near_init = self.depth_near.get();
@@ -511,18 +507,19 @@ impl VRDisplay {
             let mut far = far_init;
 
             // Initialize compositor
-            api_sender.send(CanvasMsg::WebVR(VRCompositorCommand::Create(display_id))).unwrap();
+            api_sender.send_vr(WebVRCommand::Create(display_id)).unwrap();
             loop {
                 // Run RAF callbacks on JavaScript thread
-                let msg = box NotifyDisplayRAF {
-                    address: address.clone(),
-                    sender: raf_sender.clone()
-                };
-                js_sender.send(CommonScriptMsg::RunnableMsg(WebVREvent, msg)).unwrap();
+                let this = address.clone();
+                let sender = raf_sender.clone();
+                let task = box task!(handle_vrdisplay_raf: move || {
+                    this.root().handle_raf(&sender);
+                });
+                js_sender.send(CommonScriptMsg::Task(WebVREvent, task)).unwrap();
 
                 // Run Sync Poses in parallell on Render thread
-                let msg = VRCompositorCommand::SyncPoses(display_id, near, far, sync_sender.clone());
-                api_sender.send(CanvasMsg::WebVR(msg)).unwrap();
+                let msg = WebVRCommand::SyncPoses(display_id, near, far, sync_sender.clone());
+                api_sender.send_vr(msg).unwrap();
 
                 // Wait until both SyncPoses & RAF ends
                 if let Ok(depth) = raf_receiver.recv().unwrap() {
@@ -541,10 +538,9 @@ impl VRDisplay {
         self.presenting.set(false);
         *self.frame_data_receiver.borrow_mut() = None;
 
-        let api_sender = self.layer_ctx.get().unwrap().ipc_renderer();
-        let display_id = self.display.borrow().display_id as u64;
-        let msg = VRCompositorCommand::Release(display_id);
-        api_sender.send(CanvasMsg::WebVR(msg)).unwrap();
+        let api_sender = self.layer_ctx.get().unwrap().webgl_sender();
+        let display_id = self.display.borrow().display_id;
+        api_sender.send_vr(WebVRCommand::Release(display_id)).unwrap();
     }
 
     // Only called when the JSContext is destroyed while presenting.
@@ -612,22 +608,7 @@ impl VRDisplay {
     }
 }
 
-struct NotifyDisplayRAF {
-    address: Trusted<VRDisplay>,
-    sender: mpsc::Sender<Result<(f64, f64), ()>>
-}
-
-impl Runnable for NotifyDisplayRAF {
-    fn name(&self) -> &'static str { "NotifyDisplayRAF" }
-
-    fn handler(self: Box<Self>) {
-        let display = self.address.root();
-        display.handle_raf(&self.sender);
-    }
-}
-
-
-// WebVR Spect: If the number of values in the leftBounds/rightBounds arrays
+// WebVR Spec: If the number of values in the leftBounds/rightBounds arrays
 // is not 0 or 4 for any of the passed layers the promise is rejected
 fn parse_bounds(src: &Option<Vec<Finite<f32>>>, dst: &mut [f32; 4]) -> Result<(), &'static str> {
     match *src {
@@ -649,7 +630,7 @@ fn parse_bounds(src: &Option<Vec<Finite<f32>>>, dst: &mut [f32; 4]) -> Result<()
 
 fn validate_layer(cx: *mut JSContext,
                   layer: &VRLayer)
-                  -> Result<(WebVRLayer, Root<WebGLRenderingContext>), &'static str> {
+                  -> Result<(WebVRLayer, DomRoot<WebGLRenderingContext>), &'static str> {
     let ctx = layer.source.as_ref().map(|ref s| s.get_or_init_webgl_context(cx, None)).unwrap_or(None);
     if let Some(ctx) = ctx {
         let mut data = WebVRLayer::default();

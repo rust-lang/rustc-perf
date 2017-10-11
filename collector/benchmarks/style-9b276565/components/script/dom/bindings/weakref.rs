@@ -12,8 +12,8 @@
 //! `WeakBox` itself is dropped too.
 
 use core::nonzero::NonZero;
-use dom::bindings::js::Root;
 use dom::bindings::reflector::DomObject;
+use dom::bindings::root::DomRoot;
 use dom::bindings::trace::JSTraceable;
 use heapsize::HeapSizeOf;
 use js::jsapi::{JSTracer, JS_GetReservedSlot, JS_SetReservedSlot};
@@ -58,7 +58,7 @@ pub trait WeakReferenceable: DomObject + Sized {
                 trace!("Creating new WeakBox holder for {:p}.", self);
                 ptr = Box::into_raw(box WeakBox {
                     count: Cell::new(1),
-                    value: Cell::new(Some(NonZero::new(self))),
+                    value: Cell::new(Some(NonZero::new_unchecked(self))),
                 });
                 JS_SetReservedSlot(object, DOM_WEAK_SLOT, PrivateValue(ptr as *const c_void));
             }
@@ -70,7 +70,7 @@ pub trait WeakReferenceable: DomObject + Sized {
                    new_count);
             box_.count.set(new_count);
             WeakRef {
-                ptr: NonZero::new(ptr),
+                ptr: NonZero::new_unchecked(ptr),
             }
         }
     }
@@ -84,9 +84,11 @@ impl<T: WeakReferenceable> WeakRef<T> {
         value.downgrade()
     }
 
-    /// Root a weak reference. Returns `None` if the object was already collected.
-    pub fn root(&self) -> Option<Root<T>> {
-        unsafe { &*self.ptr.get() }.value.get().map(Root::new)
+    /// DomRoot a weak reference. Returns `None` if the object was already collected.
+    pub fn root(&self) -> Option<DomRoot<T>> {
+        unsafe { &*self.ptr.get() }.value.get().map(|ptr| unsafe {
+            DomRoot::from_ref(&*ptr.get())
+        })
     }
 
     /// Return whether the weakly-referenced object is still alive.
@@ -179,9 +181,9 @@ impl<T: WeakReferenceable> MutableWeakRef<T> {
         }
     }
 
-    /// Root a mutable weak reference. Returns `None` if the object
+    /// DomRoot a mutable weak reference. Returns `None` if the object
     /// was already collected.
-    pub fn root(&self) -> Option<Root<T>> {
+    pub fn root(&self) -> Option<DomRoot<T>> {
         unsafe { &*self.cell.get() }.as_ref().and_then(WeakRef::root)
     }
 }

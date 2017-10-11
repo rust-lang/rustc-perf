@@ -7,8 +7,8 @@ use dom::bindings::codegen::Bindings::CSSKeyframesRuleBinding;
 use dom::bindings::codegen::Bindings::CSSKeyframesRuleBinding::CSSKeyframesRuleMethods;
 use dom::bindings::error::ErrorResult;
 use dom::bindings::inheritance::Castable;
-use dom::bindings::js::{MutNullableJS, Root};
 use dom::bindings::reflector::{DomObject, reflect_dom_object};
+use dom::bindings::root::{DomRoot, MutNullableDom};
 use dom::bindings::str::DOMString;
 use dom::csskeyframerule::CSSKeyframeRule;
 use dom::cssrule::{CSSRule, SpecificCSSRule};
@@ -26,7 +26,7 @@ pub struct CSSKeyframesRule {
     cssrule: CSSRule,
     #[ignore_heap_size_of = "Arc"]
     keyframesrule: Arc<Locked<KeyframesRule>>,
-    rulelist: MutNullableJS<CSSRuleList>,
+    rulelist: MutNullableDom<CSSRuleList>,
 }
 
 impl CSSKeyframesRule {
@@ -35,19 +35,19 @@ impl CSSKeyframesRule {
         CSSKeyframesRule {
             cssrule: CSSRule::new_inherited(parent_stylesheet),
             keyframesrule: keyframesrule,
-            rulelist: MutNullableJS::new(None),
+            rulelist: MutNullableDom::new(None),
         }
     }
 
     #[allow(unrooted_must_root)]
     pub fn new(window: &Window, parent_stylesheet: &CSSStyleSheet,
-               keyframesrule: Arc<Locked<KeyframesRule>>) -> Root<CSSKeyframesRule> {
+               keyframesrule: Arc<Locked<KeyframesRule>>) -> DomRoot<CSSKeyframesRule> {
         reflect_dom_object(box CSSKeyframesRule::new_inherited(parent_stylesheet, keyframesrule),
                            window,
                            CSSKeyframesRuleBinding::Wrap)
     }
 
-    fn rulelist(&self) -> Root<CSSRuleList> {
+    fn rulelist(&self) -> DomRoot<CSSRuleList> {
         self.rulelist.or_init(|| {
             let parent_stylesheet = &self.upcast::<CSSRule>().parent_stylesheet();
             CSSRuleList::new(self.global().as_window(),
@@ -76,7 +76,7 @@ impl CSSKeyframesRule {
 
 impl CSSKeyframesRuleMethods for CSSKeyframesRule {
     // https://drafts.csswg.org/css-animations/#dom-csskeyframesrule-cssrules
-    fn CssRules(&self) -> Root<CSSRuleList> {
+    fn CssRules(&self) -> DomRoot<CSSRuleList> {
         self.rulelist()
     }
 
@@ -104,10 +104,10 @@ impl CSSKeyframesRuleMethods for CSSKeyframesRule {
     }
 
     // https://drafts.csswg.org/css-animations/#dom-csskeyframesrule-findrule
-    fn FindRule(&self, selector: DOMString) -> Option<Root<CSSKeyframeRule>> {
+    fn FindRule(&self, selector: DOMString) -> Option<DomRoot<CSSKeyframeRule>> {
         self.find_rule(&selector).and_then(|idx| {
             self.rulelist().item(idx as u32)
-        }).and_then(Root::downcast)
+        }).and_then(DomRoot::downcast)
     }
 
     // https://drafts.csswg.org/css-animations/#dom-csskeyframesrule-name
@@ -121,7 +121,7 @@ impl CSSKeyframesRuleMethods for CSSKeyframesRule {
         // Spec deviation: https://github.com/w3c/csswg-drafts/issues/801
         // Setting this property to a CSS-wide keyword or `none` does not throw,
         // it stores a value that serializes as a quoted string.
-        let name = KeyframesName::from_ident(value.into());
+        let name = KeyframesName::from_ident(&value);
         let mut guard = self.cssrule.shared_lock().write();
         self.keyframesrule.write_with(&mut guard).name = name;
         Ok(())

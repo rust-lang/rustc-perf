@@ -108,7 +108,7 @@ ${helpers.single_keyword("flex-wrap", "nowrap wrap wrap-reverse",
 
     ${helpers.predefined_type(name="justify-items",
                               type="JustifyItems",
-                              initial_value="specified::JustifyItems::auto()",
+                              initial_value="computed::JustifyItems::auto()",
                               spec="https://drafts.csswg.org/css-align/#propdef-justify-items",
                               animation_value_type="discrete")}
 
@@ -117,17 +117,17 @@ ${helpers.single_keyword("flex-wrap", "nowrap wrap wrap-reverse",
 % endif
 
 // Flex item properties
-${helpers.predefined_type("flex-grow", "Number",
-                          "0.0", "parse_non_negative",
+${helpers.predefined_type("flex-grow", "NonNegativeNumber",
+                          "From::from(0.0)",
                           spec="https://drafts.csswg.org/css-flexbox/#flex-grow-property",
                           extra_prefixes="webkit",
-                          animation_value_type="ComputedValue")}
+                          animation_value_type="NonNegativeNumber")}
 
-${helpers.predefined_type("flex-shrink", "Number",
-                          "1.0", "parse_non_negative",
+${helpers.predefined_type("flex-shrink", "NonNegativeNumber",
+                          "From::from(1.0)",
                           spec="https://drafts.csswg.org/css-flexbox/#flex-shrink-property",
                           extra_prefixes="webkit",
-                          animation_value_type="ComputedValue")}
+                          animation_value_type="NonNegativeNumber")}
 
 // https://drafts.csswg.org/css-align/#align-self-property
 % if product == "servo":
@@ -166,7 +166,7 @@ ${helpers.predefined_type("order", "Integer", "0",
                               logical=False,
                               spec="https://drafts.csswg.org/css-flexbox/#flex-basis-property",
                               extra_prefixes="webkit",
-                              animation_value_type="ComputedValue")}
+                              animation_value_type="MozLength")}
 % else:
     // FIXME: This property should be animatable.
     ${helpers.predefined_type("flex-basis",
@@ -187,17 +187,17 @@ ${helpers.predefined_type("order", "Integer", "0",
         ${helpers.gecko_size_type("%s" % size, "MozLength", "auto()",
                                   logical,
                                   spec=spec % size,
-                                  animation_value_type="ComputedValue")}
+                                  animation_value_type="MozLength")}
         // min-width, min-height, min-block-size, min-inline-size,
         // max-width, max-height, max-block-size, max-inline-size
         ${helpers.gecko_size_type("min-%s" % size, "MozLength", "auto()",
                                   logical,
                                   spec=spec % size,
-                                  animation_value_type="ComputedValue")}
+                                  animation_value_type="MozLength")}
         ${helpers.gecko_size_type("max-%s" % size, "MaxLength", "none()",
                                   logical,
                                   spec=spec % size,
-                                  animation_value_type="ComputedValue")}
+                                  animation_value_type="MaxLength")}
     % else:
         // servo versions (no keyword support)
         ${helpers.predefined_type("%s" % size,
@@ -209,7 +209,7 @@ ${helpers.predefined_type("order", "Integer", "0",
                                   animation_value_type="ComputedValue", logical = logical)}
         ${helpers.predefined_type("min-%s" % size,
                                   "LengthOrPercentage",
-                                  "computed::LengthOrPercentage::Length(Au(0))",
+                                  "computed::LengthOrPercentage::Length(computed::Length::new(0.))",
                                   "parse_non_negative",
                                   spec=spec % ("min-%s" % size),
                                   animation_value_type="ComputedValue",
@@ -232,7 +232,6 @@ ${helpers.single_keyword("box-sizing",
                          spec="https://drafts.csswg.org/css-ui/#propdef-box-sizing",
                          gecko_enum_prefix="StyleBoxSizing",
                          custom_consts={ "content-box": "Content", "border-box": "Border" },
-                         gecko_inexhaustive=True,
                          animation_value_type="discrete")}
 
 ${helpers.single_keyword("object-fit", "fill contain cover none scale-down",
@@ -249,11 +248,10 @@ ${helpers.predefined_type("object-position",
 
 % for kind in ["row", "column"]:
     ${helpers.predefined_type("grid-%s-gap" % kind,
-                              "LengthOrPercentage",
-                              "computed::LengthOrPercentage::Length(Au(0))",
-                              "parse_non_negative",
+                              "NonNegativeLengthOrPercentage",
+                              "computed::NonNegativeLengthOrPercentage::zero()",
                               spec="https://drafts.csswg.org/css-grid/#propdef-grid-%s-gap" % kind,
-                              animation_value_type="ComputedValue",
+                              animation_value_type="NonNegativeLengthOrPercentage",
                               products="gecko")}
 
     % for range in ["start", "end"]:
@@ -282,7 +280,7 @@ ${helpers.predefined_type("object-position",
                               products="gecko",
                               spec="https://drafts.csswg.org/css-grid/#propdef-grid-template-%ss" % kind,
                               boxed=True,
-                              animation_value_type="none")}
+                              animation_value_type="discrete")}
 
 % endfor
 
@@ -292,28 +290,26 @@ ${helpers.predefined_type("object-position",
         animation_value_type="discrete">
     use std::fmt;
     use style_traits::ToCss;
-    use values::computed::ComputedValueAsSpecified;
 
     pub type SpecifiedValue = computed_value::T;
 
     pub mod computed_value {
-        #[derive(PartialEq, Clone, Eq, Copy, Debug)]
+        #[derive(Clone, Copy, Debug, Eq, PartialEq, ToComputedValue)]
+        #[cfg_attr(feature = "gecko", derive(MallocSizeOf))]
         #[cfg_attr(feature = "servo", derive(HeapSizeOf))]
         pub enum AutoFlow {
             Row,
             Column,
         }
 
-        #[derive(PartialEq, Clone, Eq, Copy, Debug)]
+        #[derive(Clone, Copy, Debug, Eq, PartialEq, ToComputedValue)]
+        #[cfg_attr(feature = "gecko", derive(MallocSizeOf))]
         #[cfg_attr(feature = "servo", derive(HeapSizeOf))]
         pub struct T {
             pub autoflow: AutoFlow,
             pub dense: bool,
         }
     }
-
-    no_viewport_percentage!(SpecifiedValue);
-    impl ComputedValueAsSpecified for SpecifiedValue {}
 
     impl ToCss for computed_value::T {
         fn to_css<W>(&self, dest: &mut W) -> fmt::Result where W: fmt::Write {
@@ -344,6 +340,7 @@ ${helpers.predefined_type("object-position",
         let mut dense = false;
 
         while !input.is_exhausted() {
+            let location = input.current_source_location();
             let ident = input.expect_ident()?;
             let success = match_ignore_ascii_case! { &ident,
                 "row" if value.is_none() => {
@@ -361,7 +358,7 @@ ${helpers.predefined_type("object-position",
                 _ => false
             };
             if !success {
-                return Err(SelectorParseError::UnexpectedIdent(ident).into());
+                return Err(location.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(ident.clone())));
             }
         }
 
@@ -371,7 +368,7 @@ ${helpers.predefined_type("object-position",
                 dense: dense,
             })
         } else {
-            Err(StyleParseError::UnspecifiedError.into())
+            Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
         }
     }
 
@@ -416,15 +413,13 @@ ${helpers.predefined_type("object-position",
 <%helpers:longhand name="grid-template-areas"
         spec="https://drafts.csswg.org/css-grid/#propdef-grid-template-areas"
         products="gecko"
-        animation_value_type="none"
-        disable_when_testing="True"
+        animation_value_type="discrete"
         boxed="True">
-    use std::collections::HashMap;
+    use hash::FnvHashMap;
     use std::fmt;
     use std::ops::Range;
     use str::HTML_SPACE_CHARACTERS;
     use style_traits::ToCss;
-    use values::computed::ComputedValueAsSpecified;
 
     pub mod computed_value {
         pub use super::SpecifiedValue as T;
@@ -442,33 +437,36 @@ ${helpers.predefined_type("object-position",
         SpecifiedValue::parse(context, input)
     }
 
-    #[derive(Clone, PartialEq)]
+    #[cfg_attr(feature = "gecko", derive(MallocSizeOf))]
+    #[derive(Clone, Debug, PartialEq)]
     pub struct TemplateAreas {
         pub areas: Box<[NamedArea]>,
         pub strings: Box<[Box<str>]>,
         pub width: u32,
     }
 
-    #[derive(Clone, PartialEq)]
+    #[cfg_attr(feature = "gecko", derive(MallocSizeOf))]
+    #[derive(Clone, Debug, PartialEq)]
     pub struct NamedArea {
         pub name: Box<str>,
         pub rows: Range<u32>,
         pub columns: Range<u32>,
     }
 
-    no_viewport_percentage!(TemplateAreas);
-    impl ComputedValueAsSpecified for TemplateAreas {}
+    trivial_to_computed_value!(TemplateAreas);
 
     impl Parse for TemplateAreas {
-        fn parse<'i, 't>(_context: &ParserContext, input: &mut Parser<'i, 't>)
-                         -> Result<Self, ParseError<'i>> {
+        fn parse<'i, 't>(
+            _context: &ParserContext,
+            input: &mut Parser<'i, 't>,
+        ) -> Result<Self, ParseError<'i>> {
             let mut strings = vec![];
-            while let Ok(string) = input.try(Parser::expect_string) {
-                strings.push(string.into_owned().into_boxed_str());
+            while let Ok(string) = input.try(|i| i.expect_string().map(|s| s.as_ref().into())) {
+                strings.push(string);
             }
 
             TemplateAreas::from_vec(strings)
-                .map_err(|()| StyleParseError::UnspecifiedError.into())
+                .map_err(|()| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
         }
     }
 
@@ -481,7 +479,7 @@ ${helpers.predefined_type("object-position",
             let mut width = 0;
             {
                 let mut row = 0u32;
-                let mut area_indices = HashMap::<(&str), usize>::new();
+                let mut area_indices = FnvHashMap::<(&str), usize>::default();
                 for string in &strings {
                     let mut current_area_index: Option<usize> = None;
                     row += 1;

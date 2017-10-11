@@ -41,6 +41,7 @@ use dom::htmloptionelement::HTMLOptionElement;
 use dom::htmloutputelement::HTMLOutputElement;
 use dom::htmlscriptelement::HTMLScriptElement;
 use dom::htmlselectelement::HTMLSelectElement;
+use dom::htmlsourceelement::HTMLSourceElement;
 use dom::htmlstyleelement::HTMLStyleElement;
 use dom::htmltablecellelement::HTMLTableCellElement;
 use dom::htmltableelement::HTMLTableElement;
@@ -67,6 +68,15 @@ pub trait VirtualMethods {
     fn attribute_mutated(&self, attr: &Attr, mutation: AttributeMutation) {
         if let Some(s) = self.super_type() {
             s.attribute_mutated(attr, mutation);
+        }
+    }
+
+    /// Returns `true` if given attribute `attr` affects style of the
+    /// given element.
+    fn attribute_affects_presentational_hints(&self, attr: &Attr) -> bool {
+        match self.super_type() {
+            Some(s) => s.attribute_affects_presentational_hints(attr),
+            None => false
         }
     }
 
@@ -221,6 +231,9 @@ pub fn vtable_for(node: &Node) -> &VirtualMethods {
         }
         NodeTypeId::Element(ElementTypeId::HTMLElement(HTMLElementTypeId::HTMLSelectElement)) => {
             node.downcast::<HTMLSelectElement>().unwrap() as &VirtualMethods
+        }
+        NodeTypeId::Element(ElementTypeId::HTMLElement(HTMLElementTypeId::HTMLSourceElement)) => {
+            node.downcast::<HTMLSourceElement>().unwrap() as &VirtualMethods
         }
         NodeTypeId::Element(ElementTypeId::HTMLElement(HTMLElementTypeId::HTMLStyleElement)) => {
             node.downcast::<HTMLStyleElement>().unwrap() as &VirtualMethods

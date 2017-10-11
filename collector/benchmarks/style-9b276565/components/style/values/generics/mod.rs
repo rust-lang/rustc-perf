@@ -9,13 +9,14 @@ use counter_style::{Symbols, parse_counter_style_name};
 use cssparser::Parser;
 use parser::{Parse, ParserContext};
 use std::fmt;
-use style_traits::{Comma, OneOrMoreSeparated, ParseError, StyleParseError, ToCss};
+use style_traits::{Comma, OneOrMoreSeparated, ParseError, StyleParseErrorKind, ToCss};
 use super::CustomIdent;
-use values::specified::url::SpecifiedUrl;
 
 pub mod background;
 pub mod basic_shape;
 pub mod border;
+#[path = "box.rs"]
+pub mod box_;
 pub mod effects;
 pub mod flex;
 #[cfg(feature = "gecko")]
@@ -24,6 +25,8 @@ pub mod grid;
 pub mod image;
 pub mod position;
 pub mod rect;
+pub mod size;
+pub mod svg;
 pub mod text;
 pub mod transform;
 
@@ -50,13 +53,27 @@ impl SymbolsType {
             SymbolsType::Fixed => structs::NS_STYLE_COUNTER_SYSTEM_FIXED as u8,
         }
     }
+
+    /// Convert Gecko value to symbol type.
+    pub fn from_gecko_keyword(gecko_value: u32) -> SymbolsType {
+        use gecko_bindings::structs;
+        match gecko_value {
+            structs::NS_STYLE_COUNTER_SYSTEM_CYCLIC => SymbolsType::Cyclic,
+            structs::NS_STYLE_COUNTER_SYSTEM_NUMERIC => SymbolsType::Numeric,
+            structs::NS_STYLE_COUNTER_SYSTEM_ALPHABETIC => SymbolsType::Alphabetic,
+            structs::NS_STYLE_COUNTER_SYSTEM_SYMBOLIC => SymbolsType::Symbolic,
+            structs::NS_STYLE_COUNTER_SYSTEM_FIXED => SymbolsType::Fixed,
+            x => panic!("Unexpected value for symbol type {}", x)
+        }
+    }
 }
 
 /// https://drafts.csswg.org/css-counter-styles/#typedef-counter-style
 ///
 /// Since wherever <counter-style> is used, 'none' is a valid value as
 /// well, we combine them into one type to make code simpler.
-#[derive(Clone, Debug, Eq, PartialEq, ToCss)]
+#[cfg_attr(feature = "gecko", derive(MallocSizeOf))]
+#[derive(Clone, Debug, Eq, PartialEq, ToComputedValue, ToCss)]
 pub enum CounterStyleOrNone {
     /// `none`
     None,
@@ -79,7 +96,6 @@ impl CounterStyleOrNone {
     }
 }
 
-no_viewport_percentage!(CounterStyleOrNone);
 
 impl Parse for CounterStyleOrNone {
     fn parse<'i, 't>(context: &ParserContext, input: &mut Parser<'i, 't>) -> Result<Self, ParseError<'i>> {
@@ -98,16 +114,16 @@ impl Parse for CounterStyleOrNone {
                 // numeric system.
                 if (symbols_type == SymbolsType::Alphabetic ||
                     symbols_type == SymbolsType::Numeric) && symbols.0.len() < 2 {
-                    return Err(StyleParseError::UnspecifiedError.into());
+                    return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
                 }
                 // Identifier is not allowed in symbols() function.
                 if symbols.0.iter().any(|sym| !sym.is_allowed_in_symbols()) {
-                    return Err(StyleParseError::UnspecifiedError.into());
+                    return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
                 }
                 Ok(CounterStyleOrNone::Symbols(symbols_type, symbols))
             });
         }
-        Err(StyleParseError::UnspecifiedError.into())
+        Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
     }
 }
 
@@ -115,8 +131,9 @@ impl Parse for CounterStyleOrNone {
 ///
 /// For font-feature-settings, this is a tag and an integer,
 /// for font-variation-settings this is a tag and a float
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "gecko", derive(MallocSizeOf))]
 #[cfg_attr(feature = "servo", derive(HeapSizeOf))]
+#[derive(Clone, Debug, Eq, PartialEq, ToComputedValue)]
 pub struct FontSettingTag<T> {
     /// A four-character tag, packed into a u32 (one byte per character)
     pub tag: u32,
@@ -151,17 +168,21 @@ impl<T: Parse> Parse for FontSettingTag<T> {
         use byteorder::{ReadBytesExt, BigEndian};
         use std::io::Cursor;
 
-        let tag = input.expect_string()?;
-
-        // allowed strings of length 4 containing chars: <U+20, U+7E>
-        if tag.len() != 4 ||
-           tag.chars().any(|c| c < ' ' || c > '~')
+        let u_tag;
         {
-            return Err(StyleParseError::UnspecifiedError.into())
-        }
+            let location = input.current_source_location();
+            let tag = input.expect_string()?;
 
-        let mut raw = Cursor::new(tag.as_bytes());
-        let u_tag = raw.read_u32::<BigEndian>().unwrap();
+            // allowed strings of length 4 containing chars: <U+20, U+7E>
+            if tag.len() != 4 ||
+               tag.chars().any(|c| c < ' ' || c > '~')
+            {
+                return Err(location.new_custom_error(StyleParseErrorKind::UnspecifiedError))
+            }
+
+            let mut raw = Cursor::new(tag.as_bytes());
+            u_tag = raw.read_u32::<BigEndian>().unwrap();
+        }
 
         Ok(FontSettingTag { tag: u_tag, value: T::parse(context, input)? })
     }
@@ -169,8 +190,9 @@ impl<T: Parse> Parse for FontSettingTag<T> {
 
 
 /// A font settings value for font-variation-settings or font-feature-settings
+#[cfg_attr(feature = "gecko", derive(MallocSizeOf))]
 #[cfg_attr(feature = "servo", derive(HeapSizeOf))]
-#[derive(Clone, Debug, Eq, PartialEq, ToCss)]
+#[derive(Clone, Debug, Eq, PartialEq, ToComputedValue, ToCss)]
 pub enum FontSettings<T> {
     /// No settings (default)
     Normal,
@@ -193,15 +215,18 @@ impl<T: Parse> Parse for FontSettings<T> {
 ///
 /// Do not use this type anywhere except within FontSettings
 /// because it serializes with the preceding space
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "gecko", derive(MallocSizeOf))]
 #[cfg_attr(feature = "servo", derive(HeapSizeOf))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ToComputedValue)]
 pub struct FontSettingTagInt(pub u32);
+
 /// A number value to be used for font-variation-settings
 ///
 /// Do not use this type anywhere except within FontSettings
 /// because it serializes with the preceding space
-#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "gecko", derive(Animate, ComputeSquaredDistance, MallocSizeOf))]
 #[cfg_attr(feature = "servo", derive(HeapSizeOf))]
+#[derive(Clone, Debug, PartialEq, ToComputedValue)]
 pub struct FontSettingTagFloat(pub f32);
 
 impl ToCss for FontSettingTagInt {
@@ -209,7 +234,10 @@ impl ToCss for FontSettingTagInt {
         match self.0 {
             1 => Ok(()),
             0 => dest.write_str(" off"),
-            x => write!(dest, " {}", x)
+            x => {
+                dest.write_char(' ')?;
+                x.to_css(dest)
+            }
         }
     }
 }
@@ -221,7 +249,7 @@ impl Parse for FontSettingTagInt {
             if value >= 0 {
                 Ok(FontSettingTagInt(value as u32))
             } else {
-                Err(StyleParseError::UnspecifiedError.into())
+                Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
             }
         } else if let Ok(_) = input.try(|input| input.expect_ident_matching("on")) {
             // on is an alias for '1'
@@ -250,89 +278,16 @@ impl ToCss for FontSettingTagFloat {
     }
 }
 
+/// A wrapper of Non-negative values.
+#[cfg_attr(feature = "gecko", derive(MallocSizeOf))]
+#[cfg_attr(feature = "servo", derive(Deserialize, HeapSizeOf, Serialize))]
+#[derive(Animate, Clone, ComputeSquaredDistance, Copy, Debug)]
+#[derive(PartialEq, PartialOrd, ToAnimatedZero, ToComputedValue, ToCss)]
+pub struct NonNegative<T>(pub T);
 
-/// An SVG paint value
-///
-/// https://www.w3.org/TR/SVG2/painting.html#SpecifyingPaint
-#[cfg_attr(feature = "servo", derive(HeapSizeOf))]
-#[derive(Clone, Debug, PartialEq, ToAnimatedValue, ToComputedValue, ToCss)]
-pub struct SVGPaint<ColorType> {
-    /// The paint source
-    pub kind: SVGPaintKind<ColorType>,
-    /// The fallback color
-    pub fallback: Option<ColorType>,
-}
-
-/// An SVG paint value without the fallback
-///
-/// Whereas the spec only allows PaintServer
-/// to have a fallback, Gecko lets the context
-/// properties have a fallback as well.
-#[cfg_attr(feature = "servo", derive(HeapSizeOf))]
-#[derive(Clone, Debug, PartialEq, ToAnimatedValue, ToComputedValue, ToCss)]
-pub enum SVGPaintKind<ColorType> {
-    /// `none`
-    None,
-    /// `<color>`
-    Color(ColorType),
-    /// `url(...)`
-    PaintServer(SpecifiedUrl),
-    /// `context-fill`
-    ContextFill,
-    /// `context-stroke`
-    ContextStroke,
-}
-
-impl<ColorType> SVGPaintKind<ColorType> {
-    /// Parse a keyword value only
-    fn parse_ident<'i, 't>(input: &mut Parser<'i, 't>) -> Result<Self, ParseError<'i>> {
-        try_match_ident_ignore_ascii_case! { input.expect_ident()?,
-            "none" => Ok(SVGPaintKind::None),
-            "context-fill" => Ok(SVGPaintKind::ContextFill),
-            "context-stroke" => Ok(SVGPaintKind::ContextStroke),
-        }
-    }
-}
-
-/// Parse SVGPaint's fallback.
-/// fallback is keyword(none) or Color.
-/// https://svgwg.org/svg2-draft/painting.html#SpecifyingPaint
-fn parse_fallback<'i, 't, ColorType: Parse>(context: &ParserContext,
-                                            input: &mut Parser<'i, 't>)
-                                            -> Option<ColorType> {
-    if input.try(|i| i.expect_ident_matching("none")).is_ok() {
-        None
-    } else {
-        input.try(|i| ColorType::parse(context, i)).ok()
-    }
-}
-
-impl<ColorType: Parse> Parse for SVGPaint<ColorType> {
-    fn parse<'i, 't>(context: &ParserContext, input: &mut Parser<'i, 't>) -> Result<Self, ParseError<'i>> {
-        if let Ok(url) = input.try(|i| SpecifiedUrl::parse(context, i)) {
-            Ok(SVGPaint {
-                kind: SVGPaintKind::PaintServer(url),
-                fallback: parse_fallback(context, input),
-            })
-        } else if let Ok(kind) = input.try(SVGPaintKind::parse_ident) {
-            if let SVGPaintKind::None = kind {
-                Ok(SVGPaint {
-                    kind: kind,
-                    fallback: None,
-                })
-            } else {
-                Ok(SVGPaint {
-                    kind: kind,
-                    fallback: parse_fallback(context, input),
-                })
-            }
-        } else if let Ok(color) = input.try(|i| ColorType::parse(context, i)) {
-            Ok(SVGPaint {
-                kind: SVGPaintKind::Color(color),
-                fallback: None,
-            })
-        } else {
-            Err(StyleParseError::UnspecifiedError.into())
-        }
-    }
-}
+/// A wrapper of greater-than-or-equal-to-one values.
+#[cfg_attr(feature = "gecko", derive(MallocSizeOf))]
+#[cfg_attr(feature = "servo", derive(Deserialize, HeapSizeOf, Serialize))]
+#[derive(Animate, Clone, ComputeSquaredDistance, Copy, Debug)]
+#[derive(PartialEq, PartialOrd, ToAnimatedZero, ToComputedValue, ToCss)]
+pub struct GreaterThanOrEqualToOne<T>(pub T);

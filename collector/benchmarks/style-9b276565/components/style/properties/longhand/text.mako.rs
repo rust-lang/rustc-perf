@@ -18,8 +18,8 @@
     use std::fmt;
     use style_traits::ToCss;
 
-    no_viewport_percentage!(SpecifiedValue);
 
+    #[cfg_attr(feature = "gecko", derive(MallocSizeOf))]
     #[cfg_attr(feature = "servo", derive(HeapSizeOf))]
     #[derive(Clone, Debug, Eq, PartialEq, ToCss)]
     pub enum Side {
@@ -28,6 +28,7 @@
         String(Box<str>),
     }
 
+    #[cfg_attr(feature = "gecko", derive(MallocSizeOf))]
     #[cfg_attr(feature = "servo", derive(HeapSizeOf))]
     #[derive(Clone, Debug, Eq, PartialEq, ToCss)]
     pub struct SpecifiedValue {
@@ -38,7 +39,8 @@
     pub mod computed_value {
         pub use super::Side;
 
-        #[derive(Debug, Clone, PartialEq)]
+        #[derive(Clone, Debug, PartialEq)]
+        #[cfg_attr(feature = "gecko", derive(MallocSizeOf))]
         #[cfg_attr(feature = "servo", derive(HeapSizeOf))]
         pub struct T {
             // When the specified value only has one side, that's the "second"
@@ -117,17 +119,21 @@
     impl Parse for Side {
         fn parse<'i, 't>(_context: &ParserContext, input: &mut Parser<'i, 't>)
                          -> Result<Side, ParseError<'i>> {
-            match input.next()? {
-                Token::Ident(ident) => {
-                    try_match_ident_ignore_ascii_case! { ident,
+            let location = input.current_source_location();
+            match *input.next()? {
+                Token::Ident(ref ident) => {
+                    match_ignore_ascii_case! { ident,
                         "clip" => Ok(Side::Clip),
                         "ellipsis" => Ok(Side::Ellipsis),
+                        _ => Err(location.new_custom_error(
+                            SelectorParseErrorKind::UnexpectedIdent(ident.clone())
+                        ))
                     }
                 }
-                Token::QuotedString(v) => {
-                    Ok(Side::String(v.into_owned().into_boxed_str()))
+                Token::QuotedString(ref v) => {
+                    Ok(Side::String(v.as_ref().to_owned().into_boxed_str()))
                 }
-                other => Err(BasicParseError::UnexpectedToken(other).into()),
+                ref t => Err(location.new_unexpected_token_error(t.clone())),
             }
         }
     }
@@ -136,24 +142,20 @@
 ${helpers.single_keyword("unicode-bidi",
                          "normal embed isolate bidi-override isolate-override plaintext",
                          animation_value_type="discrete",
-                         need_clone="True",
                          spec="https://drafts.csswg.org/css-writing-modes/#propdef-unicode-bidi")}
 
 <%helpers:longhand name="text-decoration-line"
                    custom_cascade="${product == 'servo'}"
-                   need_clone=True
                    animation_value_type="discrete"
                    flags="APPLIES_TO_FIRST_LETTER APPLIES_TO_FIRST_LINE APPLIES_TO_PLACEHOLDER",
                    spec="https://drafts.csswg.org/css-text-decor/#propdef-text-decoration-line">
     use std::fmt;
     use style_traits::ToCss;
-    use values::computed::ComputedValueAsSpecified;
-
-    impl ComputedValueAsSpecified for SpecifiedValue {}
-    no_viewport_percentage!(SpecifiedValue);
 
     bitflags! {
+        #[cfg_attr(feature = "gecko", derive(MallocSizeOf))]
         #[cfg_attr(feature = "servo", derive(HeapSizeOf))]
+        #[derive(ToComputedValue)]
         pub flags SpecifiedValue: u8 {
             const NONE = 0,
             const UNDERLINE = 0x01,
@@ -224,6 +226,7 @@ ${helpers.single_keyword("unicode-bidi",
 
         loop {
             let result: Result<_, ParseError> = input.try(|input| {
+                let location = input.current_source_location();
                 match input.expect_ident() {
                     Ok(ident) => {
                         (match_ignore_ascii_case! { &ident,
@@ -236,7 +239,9 @@ ${helpers.single_keyword("unicode-bidi",
                             "blink" => if result.contains(BLINK) { Err(()) }
                                        else { empty = false; result.insert(BLINK); Ok(()) },
                             _ => Err(())
-                        }).map_err(|()| SelectorParseError::UnexpectedIdent(ident).into())
+                        }).map_err(|()| {
+                            location.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(ident.clone()))
+                        })
                     }
                     Err(e) => return Err(e.into())
                 }
@@ -246,7 +251,7 @@ ${helpers.single_keyword("unicode-bidi",
             }
         }
 
-        if !empty { Ok(result) } else { Err(StyleParseError::UnspecifiedError.into()) }
+        if !empty { Ok(result) } else { Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError)) }
     }
 
     % if product == "servo":
@@ -268,14 +273,16 @@ ${helpers.single_keyword("text-decoration-style",
                          spec="https://drafts.csswg.org/css-text-decor/#propdef-text-decoration-style")}
 
 ${helpers.predefined_type(
-    "text-decoration-color", "Color",
+    "text-decoration-color",
+    "Color",
     "computed_value::T::currentcolor()",
     initial_specified_value="specified::Color::currentcolor()",
     products="gecko",
-    animation_value_type="IntermediateColor",
+    animation_value_type="AnimatedColor",
     ignored_when_colors_disabled=True,
     flags="APPLIES_TO_FIRST_LETTER APPLIES_TO_FIRST_LINE APPLIES_TO_PLACEHOLDER",
-    spec="https://drafts.csswg.org/css-text-decor/#propdef-text-decoration-color")}
+    spec="https://drafts.csswg.org/css-text-decor/#propdef-text-decoration-color",
+)}
 
 ${helpers.predefined_type(
     "initial-letter",

@@ -17,7 +17,7 @@ fnv = "1.0"
 gfx = {path = "../gfx"}
 gfx_traits = {path = "../gfx_traits"}
 heapsize = "0.4"
-html5ever = "0.18"
+html5ever = "0.20.0"
 ipc-channel = "0.8"
 layout = {path = "../layout"}
 layout_traits = {path = "../layout_traits"}
@@ -41,4 +41,5 @@ servo_config = {path = "../config"}
 servo_geometry = {path = "../geometry"}
 servo_url = {path = "../url"}
 style = {path = "../style"}
+style_traits = {path = "../style_traits"}
 webrender_api = {git = "https://github.com/servo/webrender", features = ["ipc"]}

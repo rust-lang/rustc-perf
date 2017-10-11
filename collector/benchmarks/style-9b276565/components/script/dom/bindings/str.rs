@@ -4,11 +4,12 @@
 
 //! The `ByteString` struct.
 
-use cssparser::CompactCowStr;
+use cssparser::CowRcStr;
 use html5ever::{LocalName, Namespace};
 use servo_atoms::Atom;
 use std::ascii::AsciiExt;
 use std::borrow::{Borrow, Cow, ToOwned};
+use std::default::Default;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
@@ -18,7 +19,7 @@ use std::str;
 use std::str::{Bytes, FromStr};
 
 /// Encapsulates the IDL `ByteString` type.
-#[derive(JSTraceable, Clone, Eq, PartialEq, HeapSizeOf, Debug)]
+#[derive(Clone, Debug, Default, Eq, HeapSizeOf, JSTraceable, PartialEq)]
 pub struct ByteString(Vec<u8>);
 
 impl ByteString {
@@ -77,7 +78,7 @@ impl ops::Deref for ByteString {
 
 /// A string that is constructed from a UCS-2 buffer by replacing invalid code
 /// points with the replacement character.
-#[derive(Clone, HeapSizeOf)]
+#[derive(Clone, Default, HeapSizeOf)]
 pub struct USVString(pub String);
 
 
@@ -122,7 +123,7 @@ pub fn is_token(s: &[u8]) -> bool {
 ///
 /// [idl]: https://heycam.github.io/webidl/#idl-DOMString
 ///
-/// Cenceptually, a DOMString has the same value space as a JavaScript String,
+/// Conceptually, a DOMString has the same value space as a JavaScript String,
 /// i.e., an array of 16-bit *code units* representing UTF-16, potentially with
 /// unpaired surrogates present (also sometimes called WTF-16).
 ///
@@ -298,8 +299,8 @@ impl<'a> Into<Cow<'a, str>> for DOMString {
     }
 }
 
-impl<'a> Into<CompactCowStr<'a>> for DOMString {
-    fn into(self) -> CompactCowStr<'a> {
+impl<'a> Into<CowRcStr<'a>> for DOMString {
+    fn into(self) -> CowRcStr<'a> {
         self.0.into()
     }
 }

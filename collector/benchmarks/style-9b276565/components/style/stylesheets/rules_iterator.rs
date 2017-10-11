@@ -70,7 +70,7 @@ impl<'a, 'b, C> Iterator for RulesIterator<'a, 'b, C>
 
             let rule;
             let sub_iter = {
-                let mut nested_iter = self.stack.last_mut().unwrap();
+                let nested_iter = self.stack.last_mut().unwrap();
                 rule = match nested_iter.next() {
                     Some(r) => r,
                     None => {
@@ -86,7 +86,8 @@ impl<'a, 'b, C> Iterator for RulesIterator<'a, 'b, C>
                     CssRule::CounterStyle(_) |
                     CssRule::Viewport(_) |
                     CssRule::Keyframes(_) |
-                    CssRule::Page(_) => {
+                    CssRule::Page(_) |
+                    CssRule::FontFeatureValues(_) => {
                         return Some(rule)
                     },
                     CssRule::Import(ref import_rule) => {

@@ -7,33 +7,30 @@
 <% data.new_style_struct("Column", inherited=False) %>
 
 ${helpers.predefined_type("column-width",
-                          "length::LengthOrAuto",
+                          "length::NonNegativeLengthOrAuto",
                           "Either::Second(Auto)",
                           initial_specified_value="Either::Second(Auto)",
-                          parse_method="parse_non_negative_length",
                           extra_prefixes="moz",
-                          animation_value_type="ComputedValue",
+                          animation_value_type="NonNegativeLengthOrAuto",
                           experimental=True,
                           spec="https://drafts.csswg.org/css-multicol/#propdef-column-width")}
 
 
 ${helpers.predefined_type("column-count",
-                          "IntegerOrAuto",
+                          "PositiveIntegerOrAuto",
                           "Either::Second(Auto)",
-                          parse_method="parse_positive",
                           initial_specified_value="Either::Second(Auto)",
                           experimental="True",
-                          animation_value_type="ComputedValue",
+                          animation_value_type="PositiveIntegerOrAuto",
                           extra_prefixes="moz",
                           spec="https://drafts.csswg.org/css-multicol/#propdef-column-count")}
 
 ${helpers.predefined_type("column-gap",
-                          "length::LengthOrNormal",
+                          "length::NonNegativeLengthOrNormal",
                           "Either::Second(Normal)",
-                          parse_method='parse_non_negative_length',
                           extra_prefixes="moz",
                           experimental=True,
-                          animation_value_type="ComputedValue",
+                          animation_value_type="NonNegativeLengthOrNormal",
                           spec="https://drafts.csswg.org/css-multicol/#propdef-column-gap")}
 
 ${helpers.single_keyword("column-fill", "balance auto", extra_prefixes="moz",
@@ -42,21 +39,26 @@ ${helpers.single_keyword("column-fill", "balance auto", extra_prefixes="moz",
 
 ${helpers.predefined_type("column-rule-width",
                           "BorderSideWidth",
-                          "Au::from_px(3)",
+                          "::values::computed::NonNegativeLength::new(3.)",
                           initial_specified_value="specified::BorderSideWidth::Medium",
-                          computed_type="::app_units::Au",
+                          computed_type="::values::computed::NonNegativeLength",
                           products="gecko",
                           spec="https://drafts.csswg.org/css-multicol/#propdef-column-rule-width",
-                          animation_value_type="ComputedValue",
+                          animation_value_type="NonNegativeLength",
                           extra_prefixes="moz")}
 
 // https://drafts.csswg.org/css-multicol-1/#crc
-${helpers.predefined_type("column-rule-color", "Color",
-                          "computed_value::T::currentcolor()",
-                          initial_specified_value="specified::Color::currentcolor()",
-                          products="gecko", animation_value_type="IntermediateColor", extra_prefixes="moz",
-                          need_clone=True, ignored_when_colors_disabled=True,
-                          spec="https://drafts.csswg.org/css-multicol/#propdef-column-rule-color")}
+${helpers.predefined_type(
+    "column-rule-color",
+    "Color",
+    "computed_value::T::currentcolor()",
+    initial_specified_value="specified::Color::currentcolor()",
+    products="gecko",
+    animation_value_type="AnimatedColor",
+    extra_prefixes="moz",
+    ignored_when_colors_disabled=True,
+    spec="https://drafts.csswg.org/css-multicol/#propdef-column-rule-color",
+)}
 
 ${helpers.single_keyword("column-span", "none all",
                          products="gecko", animation_value_type="discrete",

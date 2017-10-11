@@ -3,7 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /// Gecko's pseudo-element definition.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum PseudoElement {
     % for pseudo in PSEUDOS:
         /// ${pseudo.value}
@@ -15,10 +15,17 @@ pub enum PseudoElement {
     % endfor
 }
 
+/// Important: If you change this, you should also update Gecko's
+/// nsCSSPseudoElements::IsEagerlyCascadedInServo.
 <% EAGER_PSEUDOS = ["Before", "After", "FirstLine", "FirstLetter"] %>
+<% TREE_PSEUDOS = [pseudo for pseudo in PSEUDOS if pseudo.is_tree_pseudo_element()] %>
+<% SIMPLE_PSEUDOS = [pseudo for pseudo in PSEUDOS if not pseudo.is_tree_pseudo_element()] %>
 
 /// The number of eager pseudo-elements.
 pub const EAGER_PSEUDO_COUNT: usize = ${len(EAGER_PSEUDOS)};
+
+/// The number of non-functional pseudo-elements.
+pub const SIMPLE_PSEUDO_COUNT: usize = ${len(SIMPLE_PSEUDOS)};
 
 /// The list of eager pseudos.
 pub const EAGER_PSEUDOS: [PseudoElement; EAGER_PSEUDO_COUNT] = [
@@ -27,24 +34,11 @@ pub const EAGER_PSEUDOS: [PseudoElement; EAGER_PSEUDO_COUNT] = [
     % endfor
 ];
 
-<% TREE_PSEUDOS = [pseudo for pseudo in PSEUDOS if pseudo.is_tree_pseudo_element()] %>
-<% SIMPLE_PSEUDOS = [pseudo for pseudo in PSEUDOS if not pseudo.is_tree_pseudo_element()] %>
-
 <%def name="pseudo_element_variant(pseudo, tree_arg='..')">\
 PseudoElement::${pseudo.capitalized()}${"({})".format(tree_arg) if pseudo.is_tree_pseudo_element() else ""}\
 </%def>
 
 impl PseudoElement {
-    /// Executes a closure with each simple (not functional)
-    /// pseudo-element as an argument.
-    pub fn each_simple<F>(mut fun: F)
-        where F: FnMut(Self),
-    {
-        % for pseudo in SIMPLE_PSEUDOS:
-            fun(${pseudo_element_variant(pseudo)});
-        % endfor
-    }
-
     /// Get the pseudo-element as an atom.
     #[inline]
     pub fn atom(&self) -> Atom {
@@ -55,9 +49,30 @@ impl PseudoElement {
         }
     }
 
+    /// Returns an index if the pseudo-element is a simple (non-functional)
+    /// pseudo.
+    #[inline]
+    pub fn simple_index(&self) -> Option<usize> {
+        match *self {
+            % for i, pseudo in enumerate(SIMPLE_PSEUDOS):
+            ${pseudo_element_variant(pseudo)} => Some(${i}),
+            % endfor
+            _ => None,
+        }
+    }
+
+    /// Returns an array of `None` values.
+    ///
+    /// FIXME(emilio): Integer generics can't come soon enough.
+    pub fn simple_pseudo_none_array<T>() -> [Option<T>; SIMPLE_PSEUDO_COUNT] {
+        [
+            ${",\n".join(["None" for pseudo in SIMPLE_PSEUDOS])}
+        ]
+    }
+
     /// Whether this pseudo-element is an anonymous box.
     #[inline]
-    fn is_anon_box(&self) -> bool {
+    pub fn is_anon_box(&self) -> bool {
         match *self {
             % for pseudo in PSEUDOS:
                 % if pseudo.is_anon_box():
@@ -128,7 +143,7 @@ impl PseudoElement {
     }
 
     /// Get a PseudoInfo for a pseudo
-    pub fn pseudo_info(&self) -> (*mut structs::nsIAtom, CSSPseudoElementType) {
+    pub fn pseudo_info(&self) -> (*mut structs::nsAtom, CSSPseudoElementType) {
         (self.atom().as_ptr(), self.pseudo_type())
     }
 

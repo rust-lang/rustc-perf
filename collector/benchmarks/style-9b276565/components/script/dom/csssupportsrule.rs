@@ -5,8 +5,8 @@
 use cssparser::{Parser, ParserInput};
 use dom::bindings::codegen::Bindings::CSSSupportsRuleBinding;
 use dom::bindings::codegen::Bindings::WindowBinding::WindowBinding::WindowMethods;
-use dom::bindings::js::Root;
 use dom::bindings::reflector::{DomObject, reflect_dom_object};
+use dom::bindings::root::DomRoot;
 use dom::bindings::str::DOMString;
 use dom::cssconditionrule::CSSConditionRule;
 use dom::cssrule::SpecificCSSRule;
@@ -40,7 +40,7 @@ impl CSSSupportsRule {
 
     #[allow(unrooted_must_root)]
     pub fn new(window: &Window, parent_stylesheet: &CSSStyleSheet,
-               supportsrule: Arc<Locked<SupportsRule>>) -> Root<CSSSupportsRule> {
+               supportsrule: Arc<Locked<SupportsRule>>) -> DomRoot<CSSSupportsRule> {
         reflect_dom_object(box CSSSupportsRule::new_inherited(parent_stylesheet, supportsrule),
                            window,
                            CSSSupportsRuleBinding::Wrap)
@@ -63,7 +63,7 @@ impl CSSSupportsRule {
             let win = global.as_window();
             let url = win.Document().url();
             let quirks_mode = win.Document().quirks_mode();
-            let context = ParserContext::new_for_cssom(&url, win.css_error_reporter(), Some(CssRuleType::Supports),
+            let context = ParserContext::new_for_cssom(&url, Some(CssRuleType::Supports),
                                                        PARSING_MODE_DEFAULT,
                                                        quirks_mode);
             let enabled = cond.eval(&context);

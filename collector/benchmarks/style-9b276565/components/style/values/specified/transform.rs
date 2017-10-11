@@ -6,8 +6,8 @@
 
 use cssparser::Parser;
 use parser::{Parse, ParserContext};
-use selectors::parser::SelectorParseError;
-use style_traits::{ParseError, StyleParseError};
+use selectors::parser::SelectorParseErrorKind;
+use style_traits::{ParseError, StyleParseErrorKind};
 use values::computed::{Context, LengthOrPercentage as ComputedLengthOrPercentage};
 use values::computed::{Percentage as ComputedPercentage, ToComputedValue};
 use values::computed::transform::TimingFunction as ComputedTimingFunction;
@@ -21,8 +21,9 @@ use values::specified::position::{Side, X, Y};
 pub type TransformOrigin = GenericTransformOrigin<OriginComponent<X>, OriginComponent<Y>, Length>;
 
 /// The specified value of a component of a CSS `<transform-origin>`.
+#[cfg_attr(feature = "gecko", derive(MallocSizeOf))]
 #[cfg_attr(feature = "servo", derive(HeapSizeOf))]
-#[derive(Clone, Debug, HasViewportPercentage, PartialEq, ToCss)]
+#[derive(Clone, Debug, PartialEq, ToCss)]
 pub enum OriginComponent<S> {
     /// `center`
     Center,
@@ -134,8 +135,8 @@ impl<S> OriginComponent<S> {
 #[cfg(feature = "gecko")]
 #[inline]
 fn allow_frames_timing() -> bool {
-    use gecko_bindings::bindings;
-    unsafe { bindings::Gecko_IsFramesTimingEnabled() }
+    use gecko_bindings::structs::mozilla;
+    unsafe { mozilla::StylePrefs_sFramesTimingFunctionEnabled }
 }
 
 #[cfg(feature = "servo")]
@@ -147,15 +148,16 @@ impl Parse for TimingFunction {
         if let Ok(keyword) = input.try(TimingKeyword::parse) {
             return Ok(GenericTimingFunction::Keyword(keyword));
         }
-        if let Ok(ident) = input.try(|i| i.expect_ident()) {
+        if let Ok(ident) = input.try(|i| i.expect_ident_cloned()) {
             let position = match_ignore_ascii_case! { &ident,
                 "step-start" => StepPosition::Start,
                 "step-end" => StepPosition::End,
-                _ => return Err(SelectorParseError::UnexpectedIdent(ident.clone()).into()),
+                _ => return Err(input.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(ident.clone()))),
             };
             return Ok(GenericTimingFunction::Steps(Integer::new(1), position));
         }
-        let function = input.expect_function()?;
+        let location = input.current_source_location();
+        let function = input.expect_function()?.clone();
         input.parse_nested_block(move |i| {
             (match_ignore_ascii_case! { &function,
                 "cubic-bezier" => {
@@ -168,7 +170,7 @@ impl Parse for TimingFunction {
                     let y2 = Number::parse(context, i)?;
 
                     if x1.get() < 0.0 || x1.get() > 1.0 || x2.get() < 0.0 || x2.get() > 1.0 {
-                        return Err(StyleParseError::UnspecifiedError.into());
+                        return Err(i.new_custom_error(StyleParseErrorKind::UnspecifiedError));
                     }
 
                     Ok(GenericTimingFunction::CubicBezier { x1, y1, x2, y2 })
@@ -190,7 +192,7 @@ impl Parse for TimingFunction {
                     }
                 },
                 _ => Err(()),
-            }).map_err(|()| StyleParseError::UnexpectedFunction(function).into())
+            }).map_err(|()| location.new_custom_error(StyleParseErrorKind::UnexpectedFunction(function.clone())))
         })
     }
 }

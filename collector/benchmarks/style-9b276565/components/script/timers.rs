@@ -3,7 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use dom::bindings::callback::ExceptionHandling::Report;
-use dom::bindings::cell::DOMRefCell;
+use dom::bindings::cell::DomRefCell;
 use dom::bindings::codegen::Bindings::FunctionBinding::Function;
 use dom::bindings::reflector::DomObject;
 use dom::bindings::str::DOMString;
@@ -27,7 +27,7 @@ use std::collections::HashMap;
 use std::default::Default;
 use std::rc::Rc;
 
-#[derive(JSTraceable, PartialEq, Eq, Copy, Clone, HeapSizeOf, Hash, PartialOrd, Ord, Debug)]
+#[derive(Clone, Copy, Debug, Eq, Hash, HeapSizeOf, JSTraceable, Ord, PartialEq, PartialOrd)]
 pub struct OneshotTimerHandle(i32);
 
 #[derive(DenyPublicFields, HeapSizeOf, JSTraceable)]
@@ -38,7 +38,7 @@ pub struct OneshotTimers {
     #[ignore_heap_size_of = "Defined in std"]
     scheduler_chan: IpcSender<TimerSchedulerMsg>,
     next_timer_handle: Cell<OneshotTimerHandle>,
-    timers: DOMRefCell<Vec<OneshotTimer>>,
+    timers: DomRefCell<Vec<OneshotTimer>>,
     suspended_since: Cell<Option<MsDuration>>,
     /// Initially 0, increased whenever the associated document is reactivated
     /// by the amount of ms the document was inactive. The current time can be
@@ -65,7 +65,7 @@ struct OneshotTimer {
 // This enum is required to work around the fact that trait objects do not support generic methods.
 // A replacement trait would have a method such as
 //     `invoke<T: DomObject>(self: Box<Self>, this: &T, js_timers: &JsTimers);`.
-#[derive(JSTraceable, HeapSizeOf)]
+#[derive(HeapSizeOf, JSTraceable)]
 pub enum OneshotTimerCallback {
     XhrTimeout(XHRTimeoutCallback),
     EventSourceTimeout(EventSourceTimeoutCallback),
@@ -117,7 +117,7 @@ impl OneshotTimers {
             timer_event_chan: timer_event_chan,
             scheduler_chan: scheduler_chan,
             next_timer_handle: Cell::new(OneshotTimerHandle(1)),
-            timers: DOMRefCell::new(Vec::new()),
+            timers: DomRefCell::new(Vec::new()),
             suspended_since: Cell::new(None),
             suspension_offset: Cell::new(Length::new(0)),
             expected_event_id: Cell::new(TimerEventId(0)),
@@ -301,20 +301,20 @@ impl OneshotTimers {
     }
 }
 
-#[derive(JSTraceable, PartialEq, Eq, Copy, Clone, HeapSizeOf, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Eq, Hash, HeapSizeOf, JSTraceable, Ord, PartialEq, PartialOrd)]
 pub struct JsTimerHandle(i32);
 
 #[derive(DenyPublicFields, HeapSizeOf, JSTraceable)]
 pub struct JsTimers {
     next_timer_handle: Cell<JsTimerHandle>,
-    active_timers: DOMRefCell<HashMap<JsTimerHandle, JsTimerEntry>>,
+    active_timers: DomRefCell<HashMap<JsTimerHandle, JsTimerEntry>>,
     /// The nesting level of the currently executing timer task or 0.
     nesting_level: Cell<u32>,
     /// Used to introduce a minimum delay in event intervals
     min_duration: Cell<Option<MsDuration>>,
 }
 
-#[derive(JSTraceable, HeapSizeOf)]
+#[derive(HeapSizeOf, JSTraceable)]
 struct JsTimerEntry {
     oneshot_handle: OneshotTimerHandle,
 }
@@ -323,7 +323,7 @@ struct JsTimerEntry {
 // (ie. function value to invoke and all arguments to pass
 //      to the function when calling it)
 // TODO: Handle rooting during invocation when movable GC is turned on
-#[derive(JSTraceable, HeapSizeOf)]
+#[derive(HeapSizeOf, JSTraceable)]
 pub struct JsTimerTask {
     #[ignore_heap_size_of = "Because it is non-owning"]
     handle: JsTimerHandle,
@@ -335,7 +335,7 @@ pub struct JsTimerTask {
 }
 
 // Enum allowing more descriptive values for the is_interval field
-#[derive(JSTraceable, PartialEq, Copy, Clone, HeapSizeOf)]
+#[derive(Clone, Copy, HeapSizeOf, JSTraceable, PartialEq)]
 pub enum IsInterval {
     Interval,
     NonInterval,
@@ -347,7 +347,7 @@ pub enum TimerCallback {
     FunctionTimerCallback(Rc<Function>),
 }
 
-#[derive(JSTraceable, Clone)]
+#[derive(Clone, JSTraceable)]
 enum InternalTimerCallback {
     StringTimerCallback(DOMString),
     FunctionTimerCallback(Rc<Function>, Rc<Box<[Heap<JSVal>]>>),
@@ -364,7 +364,7 @@ impl JsTimers {
     pub fn new() -> JsTimers {
         JsTimers {
             next_timer_handle: Cell::new(JsTimerHandle(1)),
-            active_timers: DOMRefCell::new(HashMap::new()),
+            active_timers: DomRefCell::new(HashMap::new()),
             nesting_level: Cell::new(0),
             min_duration: Cell::new(None),
         }

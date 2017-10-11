@@ -7,18 +7,16 @@
 //! the script thread. The script thread contains a JobQueue, which stores all scheduled Jobs
 //! by multiple service worker clients in a Vec.
 
-use dom::bindings::cell::DOMRefCell;
+use dom::bindings::cell::DomRefCell;
 use dom::bindings::error::Error;
-use dom::bindings::js::JS;
 use dom::bindings::refcounted::{Trusted, TrustedPromise};
 use dom::bindings::reflector::DomObject;
+use dom::bindings::root::Dom;
 use dom::client::Client;
-use dom::globalscope::GlobalScope;
 use dom::promise::Promise;
 use dom::serviceworkerregistration::ServiceWorkerRegistration;
 use dom::urlhelper::UrlHelper;
-use js::jsapi::JSAutoCompartment;
-use script_thread::{ScriptThread, Runnable};
+use script_thread::ScriptThread;
 use servo_url::ServoUrl;
 use std::cmp::PartialEq;
 use std::collections::HashMap;
@@ -26,7 +24,7 @@ use std::rc::Rc;
 use task_source::TaskSource;
 use task_source::dom_manipulation::DOMManipulationTaskSource;
 
-#[derive(PartialEq, Copy, Clone, Debug, JSTraceable)]
+#[derive(Clone, Copy, Debug, JSTraceable, PartialEq)]
 pub enum JobType {
     Register,
     Unregister,
@@ -48,7 +46,7 @@ pub struct Job {
     pub promise: Rc<Promise>,
     pub equivalent_jobs: Vec<Job>,
     // client can be a window client, worker client so `Client` will be an enum in future
-    pub client: JS<Client>,
+    pub client: Dom<Client>,
     pub referrer: ServoUrl
 }
 
@@ -66,7 +64,7 @@ impl Job {
             script_url: script_url,
             promise: promise,
             equivalent_jobs: vec![],
-            client: JS::from_ref(client),
+            client: Dom::from_ref(client),
             referrer: client.creation_url()
         }
     }
@@ -93,39 +91,17 @@ impl PartialEq for Job {
     }
 }
 
-pub struct AsyncJobHandler {
-    pub scope_url: ServoUrl,
-}
-
-impl AsyncJobHandler {
-    fn new(scope_url: ServoUrl) -> AsyncJobHandler {
-        AsyncJobHandler {
-            scope_url: scope_url,
-        }
-    }
-}
-
-impl Runnable for AsyncJobHandler {
-    #[allow(unrooted_must_root)]
-    fn main_thread_handler(self: Box<AsyncJobHandler>, script_thread: &ScriptThread) {
-        script_thread.dispatch_job_queue(self);
-    }
-}
-
 #[must_root]
 #[derive(JSTraceable)]
-pub struct JobQueue(pub DOMRefCell<HashMap<ServoUrl, Vec<Job>>>);
+pub struct JobQueue(pub DomRefCell<HashMap<ServoUrl, Vec<Job>>>);
 
 impl JobQueue {
     pub fn new() -> JobQueue {
-        JobQueue(DOMRefCell::new(HashMap::new()))
+        JobQueue(DomRefCell::new(HashMap::new()))
     }
     #[allow(unrooted_must_root)]
     // https://w3c.github.io/ServiceWorker/#schedule-job-algorithm
-    pub fn schedule_job(&self,
-                        job: Job,
-                        global: &GlobalScope,
-                        script_thread: &ScriptThread) {
+    pub fn schedule_job(&self, job: Job, script_thread: &ScriptThread) {
         debug!("scheduling {:?} job", job.job_type);
         let mut queue_ref = self.0.borrow_mut();
         let job_queue = queue_ref.entry(job.scope_url.clone()).or_insert(vec![]);
@@ -133,13 +109,12 @@ impl JobQueue {
         if job_queue.is_empty() {
             let scope_url = job.scope_url.clone();
             job_queue.push(job);
-            let run_job_handler = box AsyncJobHandler::new(scope_url);
-            let _ = script_thread.dom_manipulation_task_source().queue(run_job_handler, global);
+            let _ = script_thread.schedule_job_queue(scope_url);
             debug!("queued task to run newly-queued job");
         } else {
             // Step 2
             let mut last_job = job_queue.pop().unwrap();
-            if job == last_job && !last_job.promise.is_settled() {
+            if job == last_job && !last_job.promise.is_fulfilled() {
                 last_job.append_equivalent_job(job);
                 job_queue.push(last_job);
                 debug!("appended equivalent job");
@@ -155,30 +130,29 @@ impl JobQueue {
 
     #[allow(unrooted_must_root)]
     // https://w3c.github.io/ServiceWorker/#run-job-algorithm
-    pub fn run_job(&self, run_job_handler: Box<AsyncJobHandler>, script_thread: &ScriptThread) {
+    pub fn run_job(&self, scope_url: ServoUrl, script_thread: &ScriptThread) {
         debug!("running a job");
         let url = {
             let queue_ref = self.0.borrow();
             let front_job = {
-                let job_vec = queue_ref.get(&run_job_handler.scope_url);
+                let job_vec = queue_ref.get(&scope_url);
                 job_vec.unwrap().first().unwrap()
             };
-            let scope_url = front_job.scope_url.clone();
+            let front_scope_url = front_job.scope_url.clone();
             match front_job.job_type {
-                JobType::Register => self.run_register(front_job, run_job_handler, script_thread),
+                JobType::Register => self.run_register(front_job, scope_url, script_thread),
                 JobType::Update => self.update(front_job, script_thread),
                 JobType::Unregister => unreachable!(),
             };
-            scope_url
+            front_scope_url
         };
         self.finish_job(url, script_thread);
     }
 
     #[allow(unrooted_must_root)]
     // https://w3c.github.io/ServiceWorker/#register-algorithm
-    fn run_register(&self, job: &Job, register_job_handler: Box<AsyncJobHandler>, script_thread: &ScriptThread) {
+    fn run_register(&self, job: &Job, scope_url: ServoUrl, script_thread: &ScriptThread) {
         debug!("running register job");
-        let AsyncJobHandler { scope_url, .. } = *register_job_handler;
         // Step 1-3
         if !UrlHelper::is_origin_trustworthy(&job.script_url) {
             // Step 1.1
@@ -237,8 +211,7 @@ impl JobQueue {
 
         if run_job {
             debug!("further jobs in queue after finishing");
-            let handler = box AsyncJobHandler::new(scope_url);
-            self.run_job(handler, script_thread);
+            self.run_job(scope_url, script_thread);
         }
     }
 
@@ -286,46 +259,25 @@ impl JobQueue {
     }
 }
 
-struct AsyncPromiseSettle {
-    global: Trusted<GlobalScope>,
-    promise: TrustedPromise,
-    settle_type: SettleType,
-}
-
-impl Runnable for AsyncPromiseSettle {
-    #[allow(unrooted_must_root)]
-    fn handler(self: Box<AsyncPromiseSettle>) {
-        let global = self.global.root();
-        let settle_type = self.settle_type.clone();
-        let promise = self.promise.root();
-        settle_job_promise(&*global, &*promise, settle_type)
-    }
-}
-
-impl AsyncPromiseSettle {
-    #[allow(unrooted_must_root)]
-    fn new(promise: Rc<Promise>, settle_type: SettleType) -> AsyncPromiseSettle {
-        AsyncPromiseSettle {
-            global: Trusted::new(&*promise.global()),
-            promise: TrustedPromise::new(promise),
-            settle_type: settle_type,
-        }
-    }
-}
-
-fn settle_job_promise(global: &GlobalScope, promise: &Promise, settle: SettleType) {
-    let _ac = JSAutoCompartment::new(global.get_cx(), promise.reflector().get_jsobject().get());
+fn settle_job_promise(promise: &Promise, settle: SettleType) {
     match settle {
-        SettleType::Resolve(reg) => promise.resolve_native(global.get_cx(), &*reg.root()),
-        SettleType::Reject(err) => promise.reject_error(global.get_cx(), err),
+        SettleType::Resolve(reg) => promise.resolve_native(&*reg.root()),
+        SettleType::Reject(err) => promise.reject_error(err),
     };
 }
 
+#[allow(unrooted_must_root)]
 fn queue_settle_promise_for_job(job: &Job, settle: SettleType, task_source: &DOMManipulationTaskSource) {
-    let task = box AsyncPromiseSettle::new(job.promise.clone(), settle);
     let global = job.client.global();
-    let _ = task_source.queue(task, &*global);
-
+    let promise = TrustedPromise::new(job.promise.clone());
+    // FIXME(nox): Why are errors silenced here?
+    let _ = task_source.queue(
+        task!(settle_promise_for_job: move || {
+            let promise = promise.root();
+            settle_job_promise(&promise, settle)
+        }),
+        &*global,
+    );
 }
 
 // https://w3c.github.io/ServiceWorker/#reject-job-promise-algorithm

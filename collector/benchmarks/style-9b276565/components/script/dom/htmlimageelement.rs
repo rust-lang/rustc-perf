@@ -3,10 +3,11 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use app_units::{Au, AU_PER_PX};
+use cssparser::{Parser, ParserInput};
 use document_loader::{LoadType, LoadBlocker};
 use dom::activation::Activatable;
 use dom::attr::Attr;
-use dom::bindings::cell::DOMRefCell;
+use dom::bindings::cell::DomRefCell;
 use dom::bindings::codegen::Bindings::DOMRectBinding::DOMRectBinding::DOMRectMethods;
 use dom::bindings::codegen::Bindings::ElementBinding::ElementBinding::ElementMethods;
 use dom::bindings::codegen::Bindings::HTMLImageElementBinding;
@@ -15,9 +16,9 @@ use dom::bindings::codegen::Bindings::MouseEventBinding::MouseEventMethods;
 use dom::bindings::codegen::Bindings::WindowBinding::WindowMethods;
 use dom::bindings::error::Fallible;
 use dom::bindings::inheritance::Castable;
-use dom::bindings::js::{LayoutJS, MutNullableJS, Root};
 use dom::bindings::refcounted::Trusted;
 use dom::bindings::reflector::DomObject;
+use dom::bindings::root::{DomRoot, LayoutDom, MutNullableDom};
 use dom::bindings::str::DOMString;
 use dom::document::Document;
 use dom::element::{AttributeMutation, Element, RawLayoutElementHelpers};
@@ -48,17 +49,43 @@ use net_traits::image_cache::UsePlaceholder;
 use net_traits::request::{RequestInit, Type as RequestType};
 use network_listener::{NetworkListener, PreInvoke};
 use num_traits::ToPrimitive;
-use script_thread::{Runnable, ScriptThread};
+use script_thread::ScriptThread;
 use servo_url::ServoUrl;
 use servo_url::origin::ImmutableOrigin;
 use std::cell::{Cell, RefMut};
+use std::char;
 use std::default::Default;
 use std::i32;
 use std::sync::{Arc, Mutex};
-use style::attr::{AttrValue, LengthOrPercentageOrAuto};
+use style::attr::{AttrValue, LengthOrPercentageOrAuto, parse_double, parse_unsigned_integer};
+use style::context::QuirksMode;
+use style::media_queries::MediaQuery;
+use style::parser::ParserContext;
+use style::str::is_ascii_digit;
+use style::values::specified::{Length, ViewportPercentageLength};
+use style::values::specified::length::NoCalcLength;
+use style_traits::ParsingMode;
 use task_source::TaskSource;
 
-#[derive(Clone, Copy, JSTraceable, HeapSizeOf)]
+enum ParseState {
+    InDescriptor,
+    InParens,
+    AfterDescriptor,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ImageSource {
+    pub url: String,
+    pub descriptor: Descriptor,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Descriptor {
+    pub wid: Option<u32>,
+    pub den: Option<f64>,
+}
+
+#[derive(Clone, Copy, HeapSizeOf, JSTraceable)]
 #[allow(dead_code)]
 enum State {
     Unavailable,
@@ -66,12 +93,19 @@ enum State {
     CompletelyAvailable,
     Broken,
 }
-#[derive(Copy, Clone, JSTraceable, HeapSizeOf)]
+
+#[derive(Debug, PartialEq)]
+pub struct Size {
+    pub query: Option<MediaQuery>,
+    pub length: Length,
+}
+
+#[derive(Clone, Copy, HeapSizeOf, JSTraceable)]
 enum ImageRequestPhase {
     Pending,
     Current
 }
-#[derive(JSTraceable, HeapSizeOf)]
+#[derive(HeapSizeOf, JSTraceable)]
 #[must_root]
 struct ImageRequest {
     state: State,
@@ -87,44 +121,15 @@ struct ImageRequest {
 pub struct HTMLImageElement {
     htmlelement: HTMLElement,
     image_request: Cell<ImageRequestPhase>,
-    current_request: DOMRefCell<ImageRequest>,
-    pending_request: DOMRefCell<ImageRequest>,
-    form_owner: MutNullableJS<HTMLFormElement>,
+    current_request: DomRefCell<ImageRequest>,
+    pending_request: DomRefCell<ImageRequest>,
+    form_owner: MutNullableDom<HTMLFormElement>,
     generation: Cell<u32>,
 }
 
 impl HTMLImageElement {
     pub fn get_url(&self) -> Option<ServoUrl> {
         self.current_request.borrow().parsed_url.clone()
-    }
-}
-
-struct ImageResponseHandlerRunnable {
-    element: Trusted<HTMLImageElement>,
-    image: ImageResponse,
-    generation: u32,
-}
-
-impl ImageResponseHandlerRunnable {
-    fn new(element: Trusted<HTMLImageElement>, image: ImageResponse, generation: u32)
-           -> ImageResponseHandlerRunnable {
-        ImageResponseHandlerRunnable {
-            element: element,
-            image: image,
-            generation: generation,
-        }
-    }
-}
-
-impl Runnable for ImageResponseHandlerRunnable {
-    fn name(&self) -> &'static str { "ImageResponseHandlerRunnable" }
-
-    fn handler(self: Box<Self>) {
-        let element = self.element.root();
-        // Ignore any image response for a previous request that has been discarded.
-        if element.generation.get() == self.generation {
-            element.process_image_response(self.image);
-        }
     }
 }
 
@@ -193,15 +198,25 @@ impl HTMLImageElement {
 
             let window = window_from_node(elem);
             let task_source = window.networking_task_source();
-            let wrapper = window.get_runnable_wrapper();
+            let task_canceller = window.task_canceller();
             let generation = elem.generation.get();
             ROUTER.add_route(responder_receiver.to_opaque(), box move |message| {
                 debug!("Got image {:?}", message);
                 // Return the image via a message to the script thread, which marks
                 // the element as dirty and triggers a reflow.
-                let runnable = ImageResponseHandlerRunnable::new(
-                    trusted_node.clone(), message.to().unwrap(), generation);
-                let _ = task_source.queue_with_wrapper(box runnable, &wrapper);
+                let element = trusted_node.clone();
+                let image = message.to().unwrap();
+                // FIXME(nox): Why are errors silenced here?
+                let _ = task_source.queue_with_canceller(
+                    task!(process_image_response: move || {
+                        let element = element.root();
+                        // Ignore any image response for a previous request that has been discarded.
+                        if generation == element.generation.get() {
+                            element.process_image_response(image);
+                        }
+                    }),
+                    &task_canceller,
+                );
             });
 
             image_cache.add_listener(id, ImageResponder::new(responder_sender, id));
@@ -251,7 +266,7 @@ impl HTMLImageElement {
         let listener = NetworkListener {
             context: context,
             task_source: window.networking_task_source(),
-            wrapper: Some(window.get_runnable_wrapper()),
+            canceller: Some(window.task_canceller()),
         };
         ROUTER.add_route(action_receiver.to_opaque(), box move |message| {
             listener.notify_fetch(message.to().unwrap());
@@ -354,58 +369,6 @@ impl HTMLImageElement {
         request.metadata = None;
     }
 
-    /// Step 11.4 of https://html.spec.whatwg.org/multipage/#update-the-image-data
-    fn set_current_request_url_to_selected_fire_error_and_loadend(&self, src: DOMString) {
-        struct Task {
-            img: Trusted<HTMLImageElement>,
-            src: String,
-        }
-        impl Runnable for Task {
-            fn handler(self: Box<Self>) {
-                let img = self.img.root();
-                {
-                    let mut current_request = img.current_request.borrow_mut();
-                    current_request.source_url = Some(DOMString::from_string(self.src));
-                }
-                img.upcast::<EventTarget>().fire_event(atom!("error"));
-                img.upcast::<EventTarget>().fire_event(atom!("loadend"));
-                img.abort_request(State::Broken, ImageRequestPhase::Current);
-                img.abort_request(State::Broken, ImageRequestPhase::Pending);
-            }
-        }
-
-        let task = box Task {
-            img: Trusted::new(self),
-            src: src.into()
-        };
-        let document = document_from_node(self);
-        let window = document.window();
-        let task_source = window.dom_manipulation_task_source();
-        let _ = task_source.queue(task, window.upcast());
-    }
-
-    /// Step 10 of html.spec.whatwg.org/multipage/#update-the-image-data
-    fn dispatch_loadstart_progress_event(&self) {
-        struct FireprogressEventTask {
-            img: Trusted<HTMLImageElement>,
-        }
-        impl Runnable for FireprogressEventTask {
-            fn handler(self: Box<Self>) {
-                let progressevent = ProgressEvent::new(&self.img.root().global(),
-                    atom!("loadstart"), EventBubbles::DoesNotBubble, EventCancelable::NotCancelable,
-                    false, 0, 0);
-                progressevent.upcast::<Event>().fire(self.img.root().upcast());
-            }
-        }
-        let runnable = box FireprogressEventTask {
-            img: Trusted::new(self),
-        };
-        let document = document_from_node(self);
-        let window = document.window();
-        let task = window.dom_manipulation_task_source();
-        let _ = task.queue(runnable, window.upcast());
-    }
-
     /// https://html.spec.whatwg.org/multipage/#update-the-source-set
     fn update_source_set(&self) -> Vec<DOMString> {
         let elem = self.upcast::<Element>();
@@ -421,67 +384,6 @@ impl HTMLImageElement {
     fn select_image_source(&self) -> Option<DOMString> {
         // TODO: select an image source from source set
         self.update_source_set().first().cloned()
-    }
-
-    /// Step 9.2 of https://html.spec.whatwg.org/multipage/#update-the-image-data
-    fn set_current_request_url_to_none_fire_error(&self) {
-        struct SetUrlToNoneTask {
-            img: Trusted<HTMLImageElement>,
-        }
-        impl Runnable for SetUrlToNoneTask {
-            fn handler(self: Box<Self>) {
-                let img = self.img.root();
-                {
-                    let mut current_request = img.current_request.borrow_mut();
-                    current_request.source_url = None;
-                    current_request.parsed_url = None;
-                }
-                let elem = img.upcast::<Element>();
-                if elem.has_attribute(&local_name!("src")) {
-                    img.upcast::<EventTarget>().fire_event(atom!("error"));
-                }
-                img.abort_request(State::Broken, ImageRequestPhase::Current);
-                img.abort_request(State::Broken, ImageRequestPhase::Pending);
-            }
-        }
-
-        let task = box SetUrlToNoneTask {
-            img: Trusted::new(self),
-        };
-        let document = document_from_node(self);
-        let window = document.window();
-        let task_source = window.dom_manipulation_task_source();
-        let _ = task_source.queue(task, window.upcast());
-    }
-
-    /// Step 5.3.7 of https://html.spec.whatwg.org/multipage/#update-the-image-data
-    fn set_current_request_url_to_string_and_fire_load(&self, src: DOMString, url: ServoUrl) {
-        struct SetUrlToStringTask {
-            img: Trusted<HTMLImageElement>,
-            src: String,
-            url: ServoUrl
-        }
-        impl Runnable for SetUrlToStringTask {
-            fn handler(self: Box<Self>) {
-                let img = self.img.root();
-                {
-                    let mut current_request = img.current_request.borrow_mut();
-                    current_request.parsed_url = Some(self.url.clone());
-                    current_request.source_url = Some(self.src.into());
-                }
-                // TODO: restart animation, if set
-                img.upcast::<EventTarget>().fire_event(atom!("load"));
-            }
-        }
-        let runnable = box SetUrlToStringTask {
-            img: Trusted::new(self),
-            src: src.into(),
-            url: url
-        };
-        let document = document_from_node(self);
-        let window = document.window();
-        let task = window.dom_manipulation_task_source();
-        let _ = task.queue(runnable, window.upcast());
     }
 
     fn init_image_request(&self,
@@ -544,30 +446,93 @@ impl HTMLImageElement {
     /// Step 8-12 of html.spec.whatwg.org/multipage/#update-the-image-data
     fn update_the_image_data_sync_steps(&self) {
         let document = document_from_node(self);
-        // Step 8
-        // TODO: take pixel density into account
-        match self.select_image_source() {
+        let window = document.window();
+        let task_source = window.dom_manipulation_task_source();
+        let this = Trusted::new(self);
+        let src = match self.select_image_source() {
             Some(src) => {
-                // Step 10
-                self.dispatch_loadstart_progress_event();
-                // Step 11
-                let base_url = document.base_url();
-                let parsed_url = base_url.join(&src);
-                match parsed_url {
-                    Ok(url) => {
-                         // Step 12
-                        self.prepare_image_request(&url, &src);
-                    },
-                    Err(_) => {
-                        // Step 11.1-11.5
-                        self.set_current_request_url_to_selected_fire_error_and_loadend(src);
-                    }
-                }
+                // Step 8.
+                // TODO: Handle pixel density.
+                src
             },
             None => {
-                // Step 9
-                self.set_current_request_url_to_none_fire_error();
+                // Step 9.
+                // FIXME(nox): Why are errors silenced here?
+                let _ = task_source.queue(
+                    task!(image_null_source_error: move || {
+                        let this = this.root();
+                        {
+                            let mut current_request =
+                                this.current_request.borrow_mut();
+                            current_request.source_url = None;
+                            current_request.parsed_url = None;
+                        }
+                        if this.upcast::<Element>().has_attribute(&local_name!("src")) {
+                            this.upcast::<EventTarget>().fire_event(atom!("error"));
+                        }
+                        // FIXME(nox): According to the spec, setting the current
+                        // request to the broken state is done prior to queuing a
+                        // task, why is this here?
+                        this.abort_request(State::Broken, ImageRequestPhase::Current);
+                        this.abort_request(State::Broken, ImageRequestPhase::Pending);
+                    }),
+                    window.upcast(),
+                );
+                return;
             },
+        };
+        // Step 10.
+        let target = Trusted::new(self.upcast::<EventTarget>());
+        // FIXME(nox): Why are errors silenced here?
+        let _ = task_source.queue(
+            task!(fire_progress_event: move || {
+                let target = target.root();
+
+                let event = ProgressEvent::new(
+                    &target.global(),
+                    atom!("loadstart"),
+                    EventBubbles::DoesNotBubble,
+                    EventCancelable::NotCancelable,
+                    false,
+                    0,
+                    0,
+                );
+                event.upcast::<Event>().fire(&target);
+            }),
+            window.upcast(),
+        );
+        // Step 11
+        let base_url = document.base_url();
+        let parsed_url = base_url.join(&src);
+        match parsed_url {
+            Ok(url) => {
+                    // Step 12
+                self.prepare_image_request(&url, &src);
+            },
+            Err(_) => {
+                // Step 11.1-11.5.
+                let src = String::from(src);
+                // FIXME(nox): Why are errors silenced here?
+                let _ = task_source.queue(
+                    task!(image_selected_source_error: move || {
+                        let this = this.root();
+                        {
+                            let mut current_request =
+                                this.current_request.borrow_mut();
+                            current_request.source_url = Some(src.into());
+                        }
+                        this.upcast::<EventTarget>().fire_event(atom!("error"));
+                        this.upcast::<EventTarget>().fire_event(atom!("loadend"));
+
+                        // FIXME(nox): According to the spec, setting the current
+                        // request to the broken state is done prior to queuing a
+                        // task, why is this here?
+                        this.abort_request(State::Broken, ImageRequestPhase::Current);
+                        this.abort_request(State::Broken, ImageRequestPhase::Pending);
+                    }),
+                    window.upcast(),
+                );
+            }
         }
     }
 
@@ -615,15 +580,30 @@ impl HTMLImageElement {
                     current_request.final_url = Some(url);
                     current_request.image = Some(image.clone());
                     current_request.metadata = Some(metadata);
-                    self.set_current_request_url_to_string_and_fire_load(src, img_url);
-                    return
+                    let this = Trusted::new(self);
+                    let src = String::from(src);
+                    let _ = window.dom_manipulation_task_source().queue(
+                        task!(image_load_event: move || {
+                            let this = this.root();
+                            {
+                                let mut current_request =
+                                    this.current_request.borrow_mut();
+                                current_request.parsed_url = Some(img_url);
+                                current_request.source_url = Some(src.into());
+                            }
+                            // TODO: restart animation, if set.
+                            this.upcast::<EventTarget>().fire_event(atom!("load"));
+                        }),
+                        window.upcast(),
+                    );
+                    return;
                 }
             }
         }
         // step 6, await a stable state.
         self.generation.set(self.generation.get() + 1);
         let task = ImageElementMicrotask::StableStateUpdateImageDataTask {
-            elem: Root::from_ref(self),
+            elem: DomRoot::from_ref(self),
             generation: self.generation.get(),
         };
         ScriptThread::await_stable_state(Microtask::ImageElement(task));
@@ -633,7 +613,7 @@ impl HTMLImageElement {
         HTMLImageElement {
             htmlelement: HTMLElement::new_inherited(local_name, prefix, document),
             image_request: Cell::new(ImageRequestPhase::Current),
-            current_request: DOMRefCell::new(ImageRequest {
+            current_request: DomRefCell::new(ImageRequest {
                 state: State::Unavailable,
                 parsed_url: None,
                 source_url: None,
@@ -642,7 +622,7 @@ impl HTMLImageElement {
                 blocker: None,
                 final_url: None,
             }),
-            pending_request: DOMRefCell::new(ImageRequest {
+            pending_request: DomRefCell::new(ImageRequest {
                 state: State::Unavailable,
                 parsed_url: None,
                 source_url: None,
@@ -659,7 +639,7 @@ impl HTMLImageElement {
     #[allow(unrooted_must_root)]
     pub fn new(local_name: LocalName,
                prefix: Option<Prefix>,
-               document: &Document) -> Root<HTMLImageElement> {
+               document: &Document) -> DomRoot<HTMLImageElement> {
         Node::reflect_node(box HTMLImageElement::new_inherited(local_name, prefix, document),
                            document,
                            HTMLImageElementBinding::Wrap)
@@ -667,7 +647,7 @@ impl HTMLImageElement {
 
     pub fn Image(window: &Window,
                  width: Option<u32>,
-                 height: Option<u32>) -> Fallible<Root<HTMLImageElement>> {
+                 height: Option<u32>) -> Fallible<DomRoot<HTMLImageElement>> {
         let document = window.Document();
         let image = HTMLImageElement::new(local_name!("img"), None, &document);
         if let Some(w) = width {
@@ -679,7 +659,7 @@ impl HTMLImageElement {
 
         Ok(image)
     }
-    pub fn areas(&self) -> Option<Vec<Root<HTMLAreaElement>>> {
+    pub fn areas(&self) -> Option<Vec<DomRoot<HTMLAreaElement>>> {
         let elem = self.upcast::<Element>();
         let usemap_attr = match elem.get_attribute(&ns!(), &local_name!("usemap")) {
             Some(attr) => attr,
@@ -700,7 +680,7 @@ impl HTMLImageElement {
 
         let useMapElements = document_from_node(self).upcast::<Node>()
                                 .traverse_preorder()
-                                .filter_map(Root::downcast::<HTMLMapElement>)
+                                .filter_map(DomRoot::downcast::<HTMLMapElement>)
                                 .find(|n| n.upcast::<Element>().get_string_attribute(&LocalName::from("name")) == last);
 
         useMapElements.map(|mapElem| mapElem.get_area_elements())
@@ -715,10 +695,10 @@ impl HTMLImageElement {
 
 }
 
-#[derive(JSTraceable, HeapSizeOf)]
+#[derive(HeapSizeOf, JSTraceable)]
 pub enum ImageElementMicrotask {
     StableStateUpdateImageDataTask {
-        elem: Root<HTMLImageElement>,
+        elem: DomRoot<HTMLImageElement>,
         generation: u32,
     }
 }
@@ -748,7 +728,7 @@ pub trait LayoutHTMLImageElementHelpers {
     fn get_height(&self) -> LengthOrPercentageOrAuto;
 }
 
-impl LayoutHTMLImageElementHelpers for LayoutJS<HTMLImageElement> {
+impl LayoutHTMLImageElementHelpers for LayoutDom<HTMLImageElement> {
     #[allow(unsafe_code)]
     unsafe fn image(&self) -> Option<Arc<Image>> {
         (*self.unsafe_get()).current_request.borrow_for_layout().image.clone()
@@ -780,6 +760,60 @@ impl LayoutHTMLImageElementHelpers for LayoutJS<HTMLImageElement> {
                 .unwrap_or(LengthOrPercentageOrAuto::Auto)
         }
     }
+}
+
+//https://html.spec.whatwg.org/multipage/#parse-a-sizes-attribute
+pub fn parse_a_sizes_attribute(input: DOMString, width: Option<u32>) -> Vec<Size> {
+    let mut sizes = Vec::<Size>::new();
+    for unparsed_size in input.split(',') {
+        let whitespace = unparsed_size.chars().rev().take_while(|c| char::is_whitespace(*c)).count();
+        let trimmed: String = unparsed_size.chars().take(unparsed_size.chars().count() - whitespace).collect();
+
+        if trimmed.is_empty() {
+            continue;
+        }
+        let mut input = ParserInput::new(&trimmed);
+        let url = ServoUrl::parse("about:blank").unwrap();
+        let context = ParserContext::new_for_cssom(&url,
+                                                   None,
+                                                   ParsingMode::empty(),
+                                                   QuirksMode::NoQuirks);
+        let mut parser = Parser::new(&mut input);
+        let length = parser.try(|i| Length::parse_non_negative(&context, i));
+        match length {
+            Ok(len) => sizes.push(Size {
+                length: len,
+                query: None
+            }),
+            Err(_) => {
+                let mut media_query_parser = parser;
+                let media_query = media_query_parser.try(|i| MediaQuery::parse(&context, i));
+                if let Ok(query) = media_query {
+                    let length = Length::parse_non_negative(&context, &mut media_query_parser);
+                        if let Ok(length) = length {
+                            sizes.push(Size {
+                                length: length,
+                                query: Some(query)
+                        })
+                    }
+                }
+            },
+        }
+    }
+    if sizes.is_empty() {
+        let size = match width {
+            Some(w) => Size {
+                length: Length::from_px(w as f32),
+                query: None
+            },
+            None => Size {
+                length: Length::NoCalc(NoCalcLength::ViewportPercentage(ViewportPercentageLength::Vw(100.))),
+                query: None
+            },
+        };
+        sizes.push(size);
+    }
+    sizes
 }
 
 impl HTMLImageElementMethods for HTMLImageElement {
@@ -991,7 +1025,7 @@ impl VirtualMethods for HTMLImageElement {
 }
 
 impl FormControl for HTMLImageElement {
-    fn form_owner(&self) -> Option<Root<HTMLFormElement>> {
+    fn form_owner(&self) -> Option<DomRoot<HTMLFormElement>> {
         self.form_owner.get()
     }
 
@@ -1031,4 +1065,178 @@ fn image_dimension_setter(element: &Element, attr: LocalName, value: u32) {
     let dim = LengthOrPercentageOrAuto::Length(Au::from_px(pixel_value as i32));
     let value = AttrValue::Dimension(value.to_string(), dim);
     element.set_attribute(&attr, value);
+}
+
+/// Collect sequence of code points
+pub fn collect_sequence_characters<F>(s: &str, predicate: F) -> (&str, &str)
+    where F: Fn(&char) -> bool
+{
+    for (i, ch) in s.chars().enumerate() {
+        if !predicate(&ch) {
+            return (&s[0..i], &s[i..])
+        }
+    }
+
+    return (s, "");
+}
+
+/// Parse an `srcset` attribute - https://html.spec.whatwg.org/multipage/#parsing-a-srcset-attribute.
+pub fn parse_a_srcset_attribute(input: &str) -> Vec<ImageSource> {
+    let mut url_len = 0;
+    let mut candidates: Vec<ImageSource> = vec![];
+    while url_len < input.len() {
+        let position = &input[url_len..];
+        let (spaces, position) = collect_sequence_characters(position, |c| *c == ',' || char::is_whitespace(*c));
+        // add the length of the url that we parse to advance the start index
+        let space_len = spaces.char_indices().count();
+        url_len += space_len;
+        if position.is_empty() {
+            return candidates;
+        }
+        let (url, spaces) = collect_sequence_characters(position, |c| !char::is_whitespace(*c));
+        // add the counts of urls that we parse to advance the start index
+        url_len += url.chars().count();
+        let comma_count = url.chars().rev().take_while(|c| *c == ',').count();
+        let url: String = url.chars().take(url.chars().count() - comma_count).collect();
+        // add 1 to start index, for the comma
+        url_len += comma_count + 1;
+        let (space, position) = collect_sequence_characters(spaces, |c| char::is_whitespace(*c));
+        let space_len = space.len();
+        url_len += space_len;
+        let mut descriptors = Vec::new();
+        let mut current_descriptor = String::new();
+        let mut state = ParseState::InDescriptor;
+        let mut char_stream = position.chars().enumerate();
+        let mut buffered: Option<(usize, char)> = None;
+        loop {
+            let next_char = buffered.take().or_else(|| char_stream.next());
+            if next_char.is_some() {
+                url_len += 1;
+            }
+            match state {
+                ParseState::InDescriptor => {
+                    match next_char {
+                        Some((_, ' ')) => {
+                            if !current_descriptor.is_empty() {
+                                descriptors.push(current_descriptor.clone());
+                                current_descriptor = String::new();
+                                state = ParseState::AfterDescriptor;
+                            }
+                            continue;
+                        }
+                        Some((_, ',')) => {
+                            if !current_descriptor.is_empty() {
+                                descriptors.push(current_descriptor.clone());
+                            }
+                            break;
+                        }
+                        Some((_, c @ '(')) => {
+                            current_descriptor.push(c);
+                            state = ParseState::InParens;
+                            continue;
+                        }
+                        Some((_, c)) => {
+                            current_descriptor.push(c);
+                        }
+                        None => {
+                            if !current_descriptor.is_empty() {
+                                descriptors.push(current_descriptor.clone());
+                            }
+                            break;
+                        }
+                    }
+                }
+                ParseState::InParens => {
+                    match next_char {
+                        Some((_, c @ ')')) => {
+                            current_descriptor.push(c);
+                            state = ParseState::InDescriptor;
+                            continue;
+                        }
+                        Some((_, c)) => {
+                            current_descriptor.push(c);
+                            continue;
+                        }
+                        None => {
+                            if !current_descriptor.is_empty() {
+                                descriptors.push(current_descriptor.clone());
+                            }
+                            break;
+                        }
+                    }
+                }
+                ParseState::AfterDescriptor => {
+                    match next_char {
+                        Some((_, ' ')) => {
+                            state = ParseState::AfterDescriptor;
+                            continue;
+                        }
+                        Some((idx, c)) => {
+                            state = ParseState::InDescriptor;
+                            buffered = Some((idx, c));
+                            continue;
+                        }
+                        None => {
+                            if !current_descriptor.is_empty() {
+                                descriptors.push(current_descriptor.clone());
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut error = false;
+        let mut width: Option<u32> = None;
+        let mut density: Option<f64> = None;
+        let mut future_compat_h: Option<u32> = None;
+        for descriptor in descriptors {
+            let (digits, remaining) = collect_sequence_characters(&descriptor, |c| is_ascii_digit(c) || *c == '.');
+            let valid_non_negative_integer = parse_unsigned_integer(digits.chars());
+            let has_w = remaining == "w";
+            let valid_floating_point = parse_double(digits);
+            let has_x = remaining == "x";
+            let has_h = remaining == "h";
+            if valid_non_negative_integer.is_ok() && has_w {
+                let result = valid_non_negative_integer;
+                error = result.is_err();
+                if width.is_some() || density.is_some() {
+                    error = true;
+                }
+                if let Ok(w) = result {
+                    width = Some(w);
+                }
+            } else if valid_floating_point.is_ok() && has_x {
+                let result = valid_floating_point;
+                error = result.is_err();
+                if width.is_some() || density.is_some() || future_compat_h.is_some() {
+                    error = true;
+                }
+                if let Ok(x) = result {
+                    density = Some(x);
+                }
+            } else if valid_non_negative_integer.is_ok() && has_h {
+                let result = valid_non_negative_integer;
+                error = result.is_err();
+                if density.is_some() || future_compat_h.is_some() {
+                    error = true;
+                }
+                if let Ok(h) = result {
+                    future_compat_h = Some(h);
+                }
+            } else {
+                error = true;
+            }
+        }
+        if future_compat_h.is_some() && width.is_none() {
+            error = true;
+        }
+        if !error {
+            let descriptor = Descriptor { wid: width, den: density };
+            let image_source = ImageSource { url: url, descriptor: descriptor };
+            candidates.push(image_source);
+        }
+    }
+    candidates
 }

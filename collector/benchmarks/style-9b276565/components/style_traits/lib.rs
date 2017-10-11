@@ -19,15 +19,26 @@ extern crate app_units;
 extern crate euclid;
 #[cfg(feature = "servo")] extern crate heapsize;
 #[cfg(feature = "servo")] #[macro_use] extern crate heapsize_derive;
+#[cfg(feature = "gecko")] extern crate malloc_size_of;
+#[cfg(feature = "gecko")] #[macro_use] extern crate malloc_size_of_derive;
 extern crate selectors;
 #[cfg(feature = "servo")] #[macro_use] extern crate serde;
+#[cfg(feature = "servo")] extern crate webrender_api;
+extern crate servo_arc;
+#[cfg(feature = "servo")] extern crate servo_atoms;
 
-use cssparser::{CompactCowStr, Token};
-use selectors::parser::SelectorParseError;
+#[cfg(feature = "servo")] pub use webrender_api::DevicePixel;
 
-/// Opaque type stored in type-unsafe work queues for parallel layout.
-/// Must be transmutable to and from `TNode`.
-pub type UnsafeNode = (usize, usize);
+use cssparser::{CowRcStr, Token};
+use selectors::parser::SelectorParseErrorKind;
+#[cfg(feature = "servo")] use servo_atoms::Atom;
+
+/// One hardware pixel.
+///
+/// This unit corresponds to the smallest addressable element of the display hardware.
+#[cfg(not(feature = "servo"))]
+#[derive(Clone, Copy, Debug)]
+pub enum DevicePixel {}
 
 /// Represents a mobile style pinch zoom factor.
 /// TODO(gw): Once WR supports pinch zoom, use a type directly from webrender_api.
@@ -59,12 +70,6 @@ impl PinchZoomFactor {
 #[derive(Clone, Copy, Debug)]
 pub enum CSSPixel {}
 
-/// One hardware pixel.
-///
-/// This unit corresponds to the smallest addressable element of the display hardware.
-#[derive(Copy, Clone, Debug)]
-pub enum DevicePixel {}
-
 // In summary, the hierarchy of pixel units and the factors to convert from one to the next:
 //
 // DevicePixel
@@ -78,34 +83,40 @@ pub mod values;
 pub mod viewport;
 
 pub use values::{Comma, CommaWithSpace, OneOrMoreSeparated, Separator, Space, ToCss};
-pub use viewport::HasViewportPercentage;
 
 /// The error type for all CSS parsing routines.
-pub type ParseError<'i> = cssparser::ParseError<'i, SelectorParseError<'i, StyleParseError<'i>>>;
+pub type ParseError<'i> = cssparser::ParseError<'i, StyleParseErrorKind<'i>>;
+
+/// Error in property value parsing
+pub type ValueParseError<'i> = cssparser::ParseError<'i, ValueParseErrorKind<'i>>;
 
 #[derive(Clone, Debug, PartialEq)]
 /// Errors that can be encountered while parsing CSS values.
-pub enum StyleParseError<'i> {
+pub enum StyleParseErrorKind<'i> {
     /// A bad URL token in a DVB.
-    BadUrlInDeclarationValueBlock(CompactCowStr<'i>),
+    BadUrlInDeclarationValueBlock(CowRcStr<'i>),
     /// A bad string token in a DVB.
-    BadStringInDeclarationValueBlock(CompactCowStr<'i>),
+    BadStringInDeclarationValueBlock(CowRcStr<'i>),
     /// Unexpected closing parenthesis in a DVB.
     UnbalancedCloseParenthesisInDeclarationValueBlock,
     /// Unexpected closing bracket in a DVB.
     UnbalancedCloseSquareBracketInDeclarationValueBlock,
     /// Unexpected closing curly bracket in a DVB.
     UnbalancedCloseCurlyBracketInDeclarationValueBlock,
-    /// A property declaration parsing error.
-    PropertyDeclaration(PropertyDeclarationParseError<'i>),
     /// A property declaration value had input remaining after successfully parsing.
     PropertyDeclarationValueNotExhausted,
     /// An unexpected dimension token was encountered.
-    UnexpectedDimension(CompactCowStr<'i>),
-    /// A media query using a ranged expression with no value was encountered.
+    UnexpectedDimension(CowRcStr<'i>),
+    /// Expected identifier not found.
+    ExpectedIdentifier(Token<'i>),
+    /// Missing or invalid media feature name.
+    MediaQueryExpectedFeatureName(CowRcStr<'i>),
+    /// Missing or invalid media feature value.
+    MediaQueryExpectedFeatureValue,
+    /// min- or max- properties must have a value.
     RangedExpressionWithNoValue,
     /// A function was encountered that was not expected.
-    UnexpectedFunction(CompactCowStr<'i>),
+    UnexpectedFunction(CowRcStr<'i>),
     /// @namespace must be before any rule but @charset and @import
     UnexpectedNamespaceRule,
     /// @import must be before any rule but @charset
@@ -113,24 +124,28 @@ pub enum StyleParseError<'i> {
     /// Unexpected @charset rule encountered.
     UnexpectedCharsetRule,
     /// Unsupported @ rule
-    UnsupportedAtRule(CompactCowStr<'i>),
+    UnsupportedAtRule(CowRcStr<'i>),
     /// A placeholder for many sources of errors that require more specific variants.
     UnspecifiedError,
     /// An unexpected token was found within a namespace rule.
     UnexpectedTokenWithinNamespace(Token<'i>),
-}
+    /// An error was encountered while parsing a property value.
+    ValueError(ValueParseErrorKind<'i>),
+    /// An error was encountered while parsing a selector
+    SelectorError(SelectorParseErrorKind<'i>),
 
-/// The result of parsing a property declaration.
-#[derive(Eq, PartialEq, Clone, Debug)]
-pub enum PropertyDeclarationParseError<'i> {
     /// The property declaration was for an unknown property.
-    UnknownProperty(CompactCowStr<'i>),
+    UnknownProperty(CowRcStr<'i>),
     /// An unknown vendor-specific identifier was encountered.
     UnknownVendorProperty,
     /// The property declaration was for a disabled experimental property.
     ExperimentalProperty,
+    /// The property declaration contained an invalid color value.
+    InvalidColor(CowRcStr<'i>, Token<'i>),
+    /// The property declaration contained an invalid filter value.
+    InvalidFilter(CowRcStr<'i>, Token<'i>),
     /// The property declaration contained an invalid value.
-    InvalidValue(CompactCowStr<'i>),
+    OtherInvalidValue(CowRcStr<'i>),
     /// The declaration contained an animation property, and we were parsing
     /// this as a keyframe block (so that property should be ignored).
     ///
@@ -140,15 +155,47 @@ pub enum PropertyDeclarationParseError<'i> {
     NotAllowedInPageRule,
 }
 
-impl<'a> From<StyleParseError<'a>> for ParseError<'a> {
-    fn from(this: StyleParseError<'a>) -> Self {
-        cssparser::ParseError::Custom(SelectorParseError::Custom(this))
+impl<'i> From<ValueParseErrorKind<'i>> for StyleParseErrorKind<'i> {
+    fn from(this: ValueParseErrorKind<'i>) -> Self {
+        StyleParseErrorKind::ValueError(this)
     }
 }
 
-impl<'a> From<PropertyDeclarationParseError<'a>> for ParseError<'a> {
-    fn from(this: PropertyDeclarationParseError<'a>) -> Self {
-        cssparser::ParseError::Custom(SelectorParseError::Custom(StyleParseError::PropertyDeclaration(this)))
+impl<'i> From<SelectorParseErrorKind<'i>> for StyleParseErrorKind<'i> {
+    fn from(this: SelectorParseErrorKind<'i>) -> Self {
+        StyleParseErrorKind::SelectorError(this)
+    }
+}
+
+/// Specific errors that can be encountered while parsing property values.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ValueParseErrorKind<'i> {
+    /// An invalid token was encountered while parsing a color value.
+    InvalidColor(Token<'i>),
+    /// An invalid filter value was encountered.
+    InvalidFilter(Token<'i>),
+}
+
+impl<'i> StyleParseErrorKind<'i> {
+    /// Create an InvalidValue parse error
+    pub fn new_invalid(name: CowRcStr<'i>, value_error: ParseError<'i>) -> ParseError<'i> {
+        let variant = match value_error.kind {
+            cssparser::ParseErrorKind::Custom(StyleParseErrorKind::ValueError(e)) => {
+                match e {
+                    ValueParseErrorKind::InvalidColor(token) => {
+                        StyleParseErrorKind::InvalidColor(name, token)
+                    }
+                    ValueParseErrorKind::InvalidFilter(token) => {
+                        StyleParseErrorKind::InvalidFilter(name, token)
+                    }
+                }
+            }
+            _ => StyleParseErrorKind::OtherInvalidValue(name),
+        };
+        cssparser::ParseError {
+            kind: cssparser::ParseErrorKind::Custom(variant),
+            location: value_error.location,
+        }
     }
 }
 
@@ -180,3 +227,9 @@ impl ParsingMode {
     }
 }
 
+#[cfg(feature = "servo")]
+/// Speculatively execute paint code in the worklet thread pool.
+pub trait SpeculativePainter: Send + Sync {
+    /// https://drafts.css-houdini.org/css-paint-api/#draw-a-paint-image
+    fn speculatively_draw_a_paint_image(&self, properties: Vec<(Atom, String)>, arguments: Vec<String>);
+}

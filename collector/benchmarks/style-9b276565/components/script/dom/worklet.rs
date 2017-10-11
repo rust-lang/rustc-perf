@@ -17,12 +17,10 @@ use dom::bindings::codegen::Bindings::WorkletBinding::WorkletOptions;
 use dom::bindings::codegen::Bindings::WorkletBinding::Wrap;
 use dom::bindings::error::Error;
 use dom::bindings::inheritance::Castable;
-use dom::bindings::js::JS;
-use dom::bindings::js::Root;
-use dom::bindings::js::RootCollection;
 use dom::bindings::refcounted::TrustedPromise;
 use dom::bindings::reflector::Reflector;
 use dom::bindings::reflector::reflect_dom_object;
+use dom::bindings::root::{Dom, DomRoot, RootCollection, ThreadLocalStackRoots};
 use dom::bindings::str::USVString;
 use dom::bindings::trace::JSTraceable;
 use dom::bindings::trace::RootedTraceableBox;
@@ -49,11 +47,8 @@ use net_traits::request::RequestMode;
 use net_traits::request::Type as RequestType;
 use script_runtime::CommonScriptMsg;
 use script_runtime::ScriptThreadEventCategory;
-use script_runtime::StackRootTLS;
 use script_runtime::new_rt_and_cx;
-use script_thread::MainThreadScriptMsg;
-use script_thread::Runnable;
-use script_thread::ScriptThread;
+use script_thread::{MainThreadScriptMsg, ScriptThread};
 use servo_rand;
 use servo_url::ImmutableOrigin;
 use servo_url::ServoUrl;
@@ -71,6 +66,7 @@ use std::thread;
 use style::thread_state;
 use swapper::Swapper;
 use swapper::swapper;
+use task::TaskBox;
 use uuid::Uuid;
 
 // Magic numbers
@@ -81,7 +77,7 @@ const MIN_GC_THRESHOLD: u32 = 1_000_000;
 /// https://drafts.css-houdini.org/worklets/#worklet
 pub struct Worklet {
     reflector: Reflector,
-    window: JS<Window>,
+    window: Dom<Window>,
     worklet_id: WorkletId,
     global_type: WorkletGlobalScopeType,
 }
@@ -90,13 +86,13 @@ impl Worklet {
     fn new_inherited(window: &Window, global_type: WorkletGlobalScopeType) -> Worklet {
         Worklet {
             reflector: Reflector::new(),
-            window: JS::from_ref(window),
+            window: Dom::from_ref(window),
             worklet_id: WorkletId::new(),
             global_type: global_type,
         }
     }
 
-    pub fn new(window: &Window, global_type: WorkletGlobalScopeType) -> Root<Worklet> {
+    pub fn new(window: &Window, global_type: WorkletGlobalScopeType) -> DomRoot<Worklet> {
         debug!("Creating worklet {:?}.", global_type);
         reflect_dom_object(box Worklet::new_inherited(window, global_type), window, Wrap)
     }
@@ -124,7 +120,7 @@ impl WorkletMethods for Worklet {
             Err(err) => {
                 // Step 4.
                 debug!("URL {:?} parse error {:?}.", module_url.0, err);
-                promise.reject_error(self.window.get_cx(), Error::Syntax);
+                promise.reject_error(Error::Syntax);
                 return promise;
             }
         };
@@ -152,7 +148,7 @@ impl WorkletMethods for Worklet {
 }
 
 /// A guid for worklets.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, JSTraceable)]
+#[derive(Clone, Copy, Debug, Eq, Hash, JSTraceable, PartialEq)]
 pub struct WorkletId(Uuid);
 
 known_heap_size!(0, WorkletId);
@@ -399,7 +395,7 @@ struct WorkletThread {
     global_init: WorkletGlobalScopeInit,
 
     /// The global scopes created by this thread
-    global_scopes: HashMap<WorkletId, JS<WorkletGlobalScope>>,
+    global_scopes: HashMap<WorkletId, Dom<WorkletGlobalScope>>,
 
     /// A one-place buffer for control messages
     control_buffer: Option<WorkletControl>,
@@ -432,7 +428,7 @@ impl WorkletThread {
             debug!("Initializing worklet thread.");
             thread_state::initialize(thread_state::SCRIPT | thread_state::IN_WORKER);
             let roots = RootCollection::new();
-            let _stack_roots_tls = StackRootTLS::new(&roots);
+            let _stack_roots = ThreadLocalStackRoots::new(&roots);
             let mut thread = RootedTraceableBox::new(WorkletThread {
                 role: role,
                 control_receiver: control_receiver,
@@ -541,15 +537,15 @@ impl WorkletThread {
                                 worklet_id: WorkletId,
                                 global_type: WorkletGlobalScopeType,
                                 base_url: ServoUrl)
-                                -> Root<WorkletGlobalScope>
+                                -> DomRoot<WorkletGlobalScope>
     {
         match self.global_scopes.entry(worklet_id) {
-            hash_map::Entry::Occupied(entry) => Root::from_ref(entry.get()),
+            hash_map::Entry::Occupied(entry) => DomRoot::from_ref(entry.get()),
             hash_map::Entry::Vacant(entry) => {
                 debug!("Creating new worklet global scope.");
                 let executor = WorkletExecutor::new(worklet_id, self.primary_sender.clone());
                 let result = global_type.new(&self.runtime, pipeline_id, base_url, executor, &self.global_init);
-                entry.insert(JS::from_ref(&*result));
+                entry.insert(Dom::from_ref(&*result));
                 result
             },
         }
@@ -600,7 +596,7 @@ impl WorkletThread {
             debug!("Failed to load script.");
             let old_counter = pending_tasks_struct.set_counter_to(-1);
             if old_counter > 0 {
-                self.run_in_script_thread(promise.reject_runnable(Error::Abort));
+                self.run_in_script_thread(promise.reject_task(Error::Abort));
             }
         } else {
             // Step 5.
@@ -609,8 +605,8 @@ impl WorkletThread {
             if old_counter == 1 {
                 debug!("Resolving promise.");
                 let msg = MainThreadScriptMsg::WorkletLoaded(pipeline_id);
-                self.global_init.script_sender.send(msg).expect("Worklet thread outlived script thread.");
-                self.run_in_script_thread(promise.resolve_runnable(()));
+                self.global_init.to_script_thread_sender.send(msg).expect("Worklet thread outlived script thread.");
+                self.run_in_script_thread(promise.resolve_task(()));
             }
         }
     }
@@ -645,18 +641,19 @@ impl WorkletThread {
         }
     }
 
-    /// Run a runnable in the main script thread.
-    fn run_in_script_thread<R>(&self, runnable: R) where
-        R: 'static + Send + Runnable,
+    /// Run a task in the main script thread.
+    fn run_in_script_thread<T>(&self, task: T)
+    where
+        T: TaskBox + 'static,
     {
-        let msg = CommonScriptMsg::RunnableMsg(ScriptThreadEventCategory::WorkletEvent, box runnable);
+        let msg = CommonScriptMsg::Task(ScriptThreadEventCategory::WorkletEvent, box task);
         let msg = MainThreadScriptMsg::Common(msg);
-        self.global_init.script_sender.send(msg).expect("Worklet thread outlived script thread.");
+        self.global_init.to_script_thread_sender.send(msg).expect("Worklet thread outlived script thread.");
     }
 }
 
 /// An executor of worklet tasks
-#[derive(Clone, JSTraceable, HeapSizeOf)]
+#[derive(Clone, HeapSizeOf, JSTraceable)]
 pub struct WorkletExecutor {
     worklet_id: WorkletId,
     #[ignore_heap_size_of = "channels are hard"]

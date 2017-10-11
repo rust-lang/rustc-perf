@@ -9,17 +9,17 @@
 #![deny(missing_docs)]
 
 use Atom;
-pub use cssparser::{RGBA, Token, Parser, serialize_identifier, BasicParseError, CompactCowStr};
+pub use cssparser::{RGBA, Token, Parser, serialize_identifier, CowRcStr, SourceLocation};
 use parser::{Parse, ParserContext};
-use selectors::parser::SelectorParseError;
+use selectors::parser::SelectorParseErrorKind;
 use std::ascii::AsciiExt;
-use std::borrow::Cow;
 use std::fmt::{self, Debug};
 use std::hash;
-use style_traits::{ToCss, ParseError, StyleParseError};
+use style_traits::{ToCss, ParseError, StyleParseErrorKind};
 
 pub mod animated;
 pub mod computed;
+pub mod distance;
 pub mod generics;
 pub mod specified;
 
@@ -29,30 +29,45 @@ pub type CSSFloat = f32;
 /// A CSS integer value.
 pub type CSSInteger = i32;
 
-/// The default font size.
-pub const FONT_MEDIUM_PX: i32 = 16;
-
 define_keyword_type!(None_, "none");
 define_keyword_type!(Auto, "auto");
 define_keyword_type!(Normal, "normal");
 
+/// Serialize a normalized value into percentage.
+pub fn serialize_percentage<W>(value: CSSFloat, dest: &mut W)
+    -> fmt::Result where W: fmt::Write
+{
+    (value * 100.).to_css(dest)?;
+    dest.write_str("%")
+}
+
+/// Serialize a value with given unit into dest.
+pub fn serialize_dimension<W>(value: CSSFloat, unit: &str, dest: &mut W)
+    -> fmt::Result where W: fmt::Write
+{
+    value.to_css(dest)?;
+    dest.write_str(unit)
+}
+
 /// Convenience void type to disable some properties and values through types.
 #[cfg_attr(feature = "servo", derive(Deserialize, HeapSizeOf, Serialize))]
-#[derive(Clone, Copy, Debug, HasViewportPercentage, PartialEq, ToComputedValue, ToCss)]
+#[derive(Clone, Copy, Debug, PartialEq, ToComputedValue, ToCss)]
 pub enum Impossible {}
 
 impl Parse for Impossible {
     fn parse<'i, 't>(
         _context: &ParserContext,
-        _input: &mut Parser<'i, 't>)
+        input: &mut Parser<'i, 't>)
     -> Result<Self, ParseError<'i>> {
-        Err(StyleParseError::UnspecifiedError.into())
+        Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
     }
 }
 
 /// A struct representing one of two kinds of values.
+#[cfg_attr(feature = "gecko", derive(MallocSizeOf))]
 #[cfg_attr(feature = "servo", derive(HeapSizeOf))]
-#[derive(Clone, Copy, HasViewportPercentage, PartialEq, ToAnimatedValue, ToComputedValue, ToCss)]
+#[derive(Animate, Clone, ComputeSquaredDistance, Copy)]
+#[derive(PartialEq, ToAnimatedValue, ToAnimatedZero, ToComputedValue, ToCss)]
 pub enum Either<A, B> {
     /// The first value.
     First(A),
@@ -81,24 +96,26 @@ impl<A: Parse, B: Parse> Parse for Either<A, B> {
 }
 
 /// https://drafts.csswg.org/css-values-4/#custom-idents
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, ToComputedValue)]
+#[cfg_attr(feature = "gecko", derive(MallocSizeOf))]
 #[cfg_attr(feature = "servo", derive(HeapSizeOf))]
 pub struct CustomIdent(pub Atom);
 
 impl CustomIdent {
     /// Parse an already-tokenizer identifier
-    pub fn from_ident<'i>(ident: CompactCowStr<'i>, excluding: &[&str]) -> Result<Self, ParseError<'i>> {
-        let valid = match_ignore_ascii_case! { &ident,
+    pub fn from_ident<'i>(location: SourceLocation, ident: &CowRcStr<'i>, excluding: &[&str])
+                          -> Result<Self, ParseError<'i>> {
+        let valid = match_ignore_ascii_case! { ident,
             "initial" | "inherit" | "unset" | "default" => false,
             _ => true
         };
         if !valid {
-            return Err(SelectorParseError::UnexpectedIdent(ident).into());
+            return Err(location.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(ident.clone())));
         }
         if excluding.iter().any(|s| ident.eq_ignore_ascii_case(s)) {
-            Err(StyleParseError::UnspecifiedError.into())
+            Err(location.new_custom_error(StyleParseErrorKind::UnspecifiedError))
         } else {
-            Ok(CustomIdent(Atom::from(Cow::from(ident))))
+            Ok(CustomIdent(Atom::from(ident.as_ref())))
         }
     }
 }
@@ -110,7 +127,8 @@ impl ToCss for CustomIdent {
 }
 
 /// https://drafts.csswg.org/css-animations/#typedef-keyframes-name
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug, ToComputedValue)]
+#[cfg_attr(feature = "gecko", derive(MallocSizeOf))]
 #[cfg_attr(feature = "servo", derive(HeapSizeOf))]
 pub enum KeyframesName {
     /// <custom-ident>
@@ -121,12 +139,24 @@ pub enum KeyframesName {
 
 impl KeyframesName {
     /// https://drafts.csswg.org/css-animations/#dom-csskeyframesrule-name
-    pub fn from_ident(value: String) -> Self {
-        let custom_ident = CustomIdent::from_ident((&*value).into(), &["none"]).ok();
+    pub fn from_ident(value: &str) -> Self {
+        let location = SourceLocation { line: 0, column: 0 };
+        let custom_ident = CustomIdent::from_ident(location, &value.into(), &["none"]).ok();
         match custom_ident {
             Some(ident) => KeyframesName::Ident(ident),
             None => KeyframesName::QuotedString(value.into()),
         }
+    }
+
+    /// Create a new KeyframesName from Atom.
+    #[cfg(feature = "gecko")]
+    pub fn from_atom(atom: Atom) -> Self {
+        debug_assert_ne!(atom, atom!(""));
+
+        // FIXME: We might want to preserve <string>, but currently Gecko
+        // stores both of <custom-ident> and <string> into nsAtom, so
+        // we can't tell it.
+        KeyframesName::Ident(CustomIdent(atom))
     }
 
     /// The name as an Atom
@@ -154,10 +184,11 @@ impl hash::Hash for KeyframesName {
 
 impl Parse for KeyframesName {
     fn parse<'i, 't>(_context: &ParserContext, input: &mut Parser<'i, 't>) -> Result<Self, ParseError<'i>> {
+        let location = input.current_source_location();
         match input.next() {
-            Ok(Token::Ident(s)) => Ok(KeyframesName::Ident(CustomIdent::from_ident(s, &["none"])?)),
-            Ok(Token::QuotedString(s)) => Ok(KeyframesName::QuotedString(Atom::from(Cow::from(s)))),
-            Ok(t) => Err(BasicParseError::UnexpectedToken(t).into()),
+            Ok(&Token::Ident(ref s)) => Ok(KeyframesName::Ident(CustomIdent::from_ident(location, s, &["none"])?)),
+            Ok(&Token::QuotedString(ref s)) => Ok(KeyframesName::QuotedString(Atom::from(s.as_ref()))),
+            Ok(t) => Err(location.new_unexpected_token_error(t.clone())),
             Err(e) => Err(e.into()),
         }
     }
@@ -179,4 +210,3 @@ define_css_keyword_enum!(ExtremumLength:
                          "-moz-min-content" => MinContent,
                          "-moz-fit-content" => FitContent,
                          "-moz-available" => FillAvailable);
-no_viewport_percentage!(ExtremumLength);

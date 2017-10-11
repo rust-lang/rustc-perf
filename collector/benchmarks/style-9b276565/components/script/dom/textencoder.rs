@@ -6,8 +6,8 @@ use core::nonzero::NonZero;
 use dom::bindings::codegen::Bindings::TextEncoderBinding;
 use dom::bindings::codegen::Bindings::TextEncoderBinding::TextEncoderMethods;
 use dom::bindings::error::Fallible;
-use dom::bindings::js::Root;
 use dom::bindings::reflector::{Reflector, reflect_dom_object};
+use dom::bindings::root::DomRoot;
 use dom::bindings::str::{DOMString, USVString};
 use dom::globalscope::GlobalScope;
 use dom_struct::dom_struct;
@@ -27,14 +27,14 @@ impl TextEncoder {
         }
     }
 
-    pub fn new(global: &GlobalScope) -> Root<TextEncoder> {
+    pub fn new(global: &GlobalScope) -> DomRoot<TextEncoder> {
         reflect_dom_object(box TextEncoder::new_inherited(),
                            global,
                            TextEncoderBinding::Wrap)
     }
 
     // https://encoding.spec.whatwg.org/#dom-textencoder
-    pub fn Constructor(global: &GlobalScope) -> Fallible<Root<TextEncoder>> {
+    pub fn Constructor(global: &GlobalScope) -> Fallible<DomRoot<TextEncoder>> {
         Ok(TextEncoder::new(global))
     }
 }
@@ -53,6 +53,6 @@ impl TextEncoderMethods for TextEncoder {
         rooted!(in(cx) let mut js_object = ptr::null_mut());
         assert!(Uint8Array::create(cx, CreateWith::Slice(&encoded), js_object.handle_mut()).is_ok());
 
-        NonZero::new(js_object.get())
+        NonZero::new_unchecked(js_object.get())
     }
 }

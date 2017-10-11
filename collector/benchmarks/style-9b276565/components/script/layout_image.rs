@@ -62,7 +62,7 @@ pub fn fetch_image_for_layout(url: ServoUrl,
     let listener = NetworkListener {
         context: context,
         task_source: window.networking_task_source(),
-        wrapper: Some(window.get_runnable_wrapper()),
+        canceller: Some(window.task_canceller()),
     };
     ROUTER.add_route(action_receiver.to_opaque(), box move |message| {
         listener.notify_fetch(message.to().unwrap());
@@ -77,5 +77,5 @@ pub fn fetch_image_for_layout(url: ServoUrl,
     };
 
     // Layout image loads do not delay the document load event.
-    document.mut_loader().fetch_async_background(request, action_sender);
+    document.loader().fetch_async_background(request, action_sender);
 }
