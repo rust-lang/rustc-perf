@@ -1,6 +1,7 @@
 .PHONY: all
 
 CARGO_OPTS += --features gecko --manifest-path components/style/Cargo.toml
+CARGO_RUSTC_OPTS += --cap-lints=warn
 
 all@000-base:
 	$(CARGO) rustc $(CARGO_OPTS) -- $(CARGO_RUSTC_OPTS)
