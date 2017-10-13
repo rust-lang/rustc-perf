@@ -14,6 +14,7 @@ serde_derive = "1.0.0"
 serde_json = "1.0.0"
 hyper = "0.11"
 url = "1.5"
+antidote = "1.0"
 
 [dependencies.collector]
 path = "../collector"

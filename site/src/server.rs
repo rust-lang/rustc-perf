@@ -11,7 +11,7 @@ use std::str;
 use std::env;
 use std::fs::File;
 use std::io::Read;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::collections::HashMap;
 use std::path::Path;
 use std::net::SocketAddr;
@@ -33,6 +33,7 @@ use date::Date;
 use util::{self, get_repo_path};
 pub use api::{self, data, days, info, stats, CommitResponse};
 use load::{CommitData, InputData};
+use antidote::RwLock;
 
 use errors::*;
 
@@ -257,7 +258,7 @@ impl Server {
     {
         assert_eq!(*req.method(), Get);
         let data = self.data.clone();
-        let data = data.read().unwrap();
+        let data = data.read();
         let result = handler(&data);
         let response = Response::new()
             .with_header(ContentType::json())
@@ -272,7 +273,7 @@ impl Server {
     {
         assert_eq!(*req.method(), Get);
         let data = self.data.clone();
-        let data = data.read().unwrap();
+        let data = data.read();
         let result = handler(req, &data);
         let response = Response::new()
             .with_header(ContentType::json())
@@ -303,7 +304,7 @@ impl Server {
                     futures::future::ok::<_, <Self as Service>::Error>(acc)
                 })
                 .map(move |body| {
-                    let data = data.read().unwrap();
+                    let data = data.read();
                     let body: D = match serde_json::from_slice(&body) {
                         Ok(d) => d,
                         Err(err) => {
@@ -359,7 +360,7 @@ impl Server {
             let new_data = InputData::from_fs(&repo_path)?;
 
             // Retrieve the stored InputData from the request.
-            let mut data = rwlock.write().unwrap();
+            let mut data = rwlock.write();
 
             // Write the new data back into the request
             *data = new_data;

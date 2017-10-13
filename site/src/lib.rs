@@ -24,6 +24,7 @@ extern crate serde_derive;
 extern crate serde_json;
 extern crate rust_sysroot;
 extern crate url;
+extern crate antidote;
 
 mod errors {
     error_chain! {
