@@ -169,7 +169,9 @@ fn process_commits(
         // test 3, which should allow us to eventually test all commits, but also keep up with the
         // latest rustc
         for commit in to_process.iter().rev().take(3) {
-            process_commit(repo, &commit, &benchmarks, preserve_sysroot)?;
+            if let Err(err) = process_commit(repo, &commit, &benchmarks, preserve_sysroot) {
+                repo.write_broken_commit(commit, err)?;
+            }
         }
     } else {
         info!("Nothing to do; no commits.");

@@ -1,6 +1,6 @@
 //! Write benchmark information to the output repository
 
-use errors::{Result, ResultExt};
+use errors::{Result, ResultExt, Error};
 
 use std::fs::{self, read_dir, File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Write};
@@ -192,6 +192,18 @@ impl Repo {
         for retry in self.retries.iter() {
             writeln!(retries, "{}", retry)?;
         }
+        Ok(())
+    }
+
+    pub fn write_broken_commit(&self, commit: &GitCommit, err: Error) -> Result<()> {
+        info!("writing broken commit {:?}: {:?}", commit, err);
+        let mut broken = OpenOptions::new()
+            .write(true)
+            .append(true)
+            .create(true)
+            .open(self.broken_commits_file())
+            .chain_err(|| "can't create `broken-commits-log`")?;
+        writeln!(broken, "{}: \"{:?}\"", commit.sha, err)?;
         Ok(())
     }
 
