@@ -352,9 +352,16 @@ impl Service for Server {
             "/perf/data" => self.handle_post(req, handle_data),
             "/perf/get" => self.handle_post(req, handle_days),
             "/perf/pr_commit" => self.handle_get_req(&req, |req, _data| {
-                let url = Url::parse(req.uri().as_ref()).unwrap();
-                let pr = url.query_pairs().find(|&(ref k, _)| k == "pr");
-                handle_pr_commit(pr.unwrap().1.parse().unwrap())
+                let res = req.query()
+                    .unwrap_or_default()
+                    .split('&').find(|q| q.starts_with("pr="))
+                    .and_then(|p| p.split('=').next())
+                    .and_then(|pr| pr.parse().ok()).map(|pr| handle_pr_commit(pr));
+                if let Some(res) = res {
+                    res
+                } else {
+                    CommitResponse { commit: None }
+                }
             }),
             "/perf/date_commit" => self.handle_get_req(&req, |req, _data| {
                 let url = Url::parse(req.uri().as_ref()).unwrap();
