@@ -78,10 +78,7 @@ pub fn handle_info(data: &InputData) -> info::Response {
 
 pub fn handle_data(body: data::Request, data: &InputData) -> ServerResult<data::Response> {
     debug!("handle_data: start = {:?}, end = {:?}", body.start, body.end);
-    let range = match util::data_range(&data, &body.start, &body.end) {
-        Ok(range) => range,
-        Err(err) => return ServerResult::Err(err),
-    };
+    let range = util::data_range(&data, &body.start, &body.end)?;
     let mut result = range.into_iter()
             .map(|(_, day)| day)
             .map(|day| {
@@ -100,28 +97,16 @@ pub fn handle_data(body: data::Request, data: &InputData) -> ServerResult<data::
         .rposition(|day| !day.data.is_empty())
         .unwrap_or(0);
     let result = result.drain(first_idx..(last_idx + 1)).collect();
-    ServerResult::Ok(data::Response {
+    Ok(data::Response {
         data: result,
         crates: body.crates.into_set(&data.crate_list),
     })
 }
 
 pub fn handle_days(body: days::Request, data: &InputData) -> ServerResult<days::Response> {
-    let mut range = match util::data_range(&data, &body.start, &body.end) {
-        Ok(range) => {
-            if range.len() < 2 {
-                return ServerResult::Err(format!("not enough commits between {:?} and {:?}",
-                        body.start, body.end));
-            }
-            range
-        },
-        Err(reason) => {
-            return ServerResult::Err(reason);
-        }
-    };
-    let a = range.swap_remove(0);
-    let b = range.pop().unwrap();
-    ServerResult::Ok(days::Response {
+    let a = util::find_commit(data, &body.start, true)?;
+    let b = util::find_commit(data, &body.end, false)?;
+    Ok(days::Response {
         a: DateData::for_day(a.1, &body.stat),
         b: DateData::for_day(b.1, &body.stat),
     })
@@ -224,7 +209,7 @@ impl Server {
                     };
                     let result = handler(body, &data);
                     match result {
-                        ServerResult::Ok(result) => {
+                        Ok(result) => {
                             Response::new()
                                 .with_header(ContentType::json())
                                 .with_header(CacheControl(
@@ -232,7 +217,7 @@ impl Server {
                                 ))
                                 .with_body(serde_json::to_string(&result).unwrap())
                         },
-                        ServerResult::Err(err) => {
+                        Err(err) => {
                             Response::new()
                                 .with_header(ContentType::plaintext())
                                 .with_header(CacheControl(

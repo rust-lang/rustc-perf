@@ -52,6 +52,12 @@ pub struct Commit {
     pub date: Date,
 }
 
+impl Commit {
+    pub fn is_try(&self) -> bool {
+        self.date.0.naive_utc().date() == NaiveDate::from_ymd(2000, 1, 1)
+    }
+}
+
 impl PartialEq for Commit {
     fn eq(&self, other: &Self) -> bool {
         self.sha == other.sha

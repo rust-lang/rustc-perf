@@ -14,6 +14,7 @@
 //! The responses are calculated in the server.rs file.
 
 use std::collections::BTreeSet;
+use std::result::Result as StdResult;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "list", content = "content")]
@@ -44,10 +45,7 @@ impl List {
     }
 }
 
-pub enum ServerResult<T> {
-    Ok(T),
-    Err(String),
-}
+pub type ServerResult<T> = StdResult<T, String>;
 
 pub mod info {
     use date::Date;

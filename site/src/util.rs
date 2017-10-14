@@ -15,6 +15,45 @@ use errors::*;
 
 use chrono::Duration;
 
+pub fn find_commit<'a>(
+    data: &'a InputData,
+    idx: &Bound,
+    left: bool,
+) -> ::std::result::Result<(&'a Commit, &'a CommitData), String> {
+    let last_month = data.last_date.0.naive_utc().date() - Duration::days(30);
+    for (commit, cd) in &data.data {
+        let found = match *idx {
+            Bound::Commit(ref sha) => commit.sha == *sha,
+            Bound::Date(ref date) => {
+                if left {
+                    commit.date.0.naive_utc().date() == *date
+                } else {
+                    // if the commit date is equal to the next date (after the bound) then we want
+                    // to stop, since this is an inclusive range.
+                    commit.date.0.naive_utc().date() == date.succ()
+                }
+            },
+            Bound::None => {
+                if left {
+                    last_month <= commit.date.0.naive_utc().date()
+                } else {
+                    // all the data
+                    false
+                }
+            },
+        };
+        if found {
+            return Ok((commit, cd));
+        }
+    }
+
+    if !left && *idx == Bound::None {
+        return data.data.iter().last().ok_or_else(|| format!("at least one commit"));
+    }
+
+    Err(format!("could not find commit by bound {:?}, start={:?}", idx, left))
+}
+
 pub fn data_range<'a>(
     data: &'a InputData,
     a: &Bound,
@@ -22,42 +61,17 @@ pub fn data_range<'a>(
 ) -> ::std::result::Result<Vec<(&'a Commit, &'a CommitData)>, String> {
     let mut ret = Vec::new();
     let mut in_range = false;
-    let mut found_left_bound = false;
+    let left_bound = find_commit(data, a, true)?.0;
+    let right_bound = find_commit(data, b, false)?.0;
     for (commit, cd) in &data.data {
+        if commit.sha == left_bound.sha {
+            in_range = true;
+        }
         if in_range {
             ret.push((commit, cd));
-            let is_end = match *b {
-                Bound::Commit(ref sha) => commit.sha == *sha,
-                // if the commit date is equal to the next date (after the bound) then we want to
-                // stop, since this is an inclusive range.
-                Bound::Date(ref date) => commit.date.0.naive_utc().date() == date.succ(),
-                Bound::None => false, // all the data
-            };
-            in_range = !is_end;
-            if !in_range { break; }
-        } else {
-            in_range = match *a {
-                Bound::Commit(ref sha) => commit.sha == *sha,
-                Bound::Date(ref date) => commit.date.0.naive_utc().date() == *date,
-                Bound::None => {
-                    let left = data.last_date.0.naive_utc().date() - Duration::days(30);
-                    left == commit.date.0.naive_utc().date()
-                },
-            };
-            if in_range {
-                found_left_bound = true;
-                ret.push((commit, cd));
-            }
         }
-    }
-    if !found_left_bound {
-        if let Bound::Commit(ref sha) = *a {
-            return Err(format!("did not find left commit bound: {:?}", sha));
-        }
-    }
-    if let Bound::Commit(ref sha) = *b {
-        if in_range {
-            return Err(format!("did not find right commit bound: {:?}", sha));
+        if commit.sha == right_bound.sha {
+            break;
         }
     }
 
