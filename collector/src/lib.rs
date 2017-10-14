@@ -8,11 +8,11 @@ extern crate serde_derive;
 use std::cmp::{Ord, Ordering, PartialOrd};
 use std::collections::BTreeMap;
 use std::fmt;
-use std::marker::PhantomData;
 use std::ops::{Add, Sub};
 use std::str::FromStr;
 
 use chrono::{DateTime, Datelike, Duration, TimeZone, Utc};
+use chrono::naive::NaiveDate;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -95,6 +95,70 @@ pub struct DeltaTime(#[serde(with = "round_float")] pub f64);
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Date(pub DateTime<Utc>);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Bound {
+    // sha, unverified
+    Commit(String),
+    Date(NaiveDate),
+    None,
+}
+
+impl Serialize for Bound {
+    fn serialize<S>(&self, serializer: S) -> ::std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        let s = match *self {
+            Bound::Commit(ref s) => s.clone(),
+            Bound::Date(ref date) => date.format("%Y-%m-%d").to_string(),
+            Bound::None => String::new(),
+        };
+        serializer.serialize_str(&s)
+    }
+}
+
+impl<'de> Deserialize<'de> for Bound {
+    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Bound, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        struct BoundVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for BoundVisitor {
+            type Value = Bound;
+
+            fn visit_str<E>(self, value: &str) -> ::std::result::Result<Bound, E>
+            where
+                E: serde::de::Error,
+            {
+                if value.is_empty() {
+                    return Ok(Bound::None);
+                }
+
+                let bound = value.parse::<NaiveDate>()
+                    .map(|d| Bound::Date(d))
+                    .unwrap_or(Bound::Commit(value.to_string()));
+                if let Bound::Commit(ref sha) = bound {
+                    if sha.len() != 40 {
+                        return Err(
+                            serde::de::Error::invalid_value(
+                                serde::de::Unexpected::Str(value),
+                                &self,
+                        ));
+                    }
+                }
+                Ok(bound)
+            }
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("either a YYYY-mm-dd date or a 40 character long git commit hash")
+            }
+        }
+
+        deserializer.deserialize_str(BoundVisitor)
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DateParseError {
@@ -211,106 +275,6 @@ impl<'de> Deserialize<'de> for Date {
         }
 
         deserializer.deserialize_str(DateVisitor)
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Start {}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum End {}
-
-pub trait Bound {}
-impl Bound for Start {}
-impl Bound for End {}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum OptionalDate<B: Bound> {
-    Date(Date, PhantomData<B>),
-    CouldNotParse(String),
-}
-
-impl<B: Bound> OptionalDate<B> {
-    pub fn new(date: Date) -> Self {
-        OptionalDate::Date(date, PhantomData)
-    }
-
-    pub fn is_date(&self) -> bool {
-        match *self {
-            OptionalDate::Date(..) => true,
-            _ => false,
-        }
-    }
-}
-
-impl OptionalDate<Start> {
-    pub fn as_date(&self, last_date: Date) -> Date {
-        // Handle missing start by returning 30 days before end.
-        if let OptionalDate::Date(date, _) = *self {
-            date
-        } else {
-            last_date - Duration::days(30)
-        }
-    }
-}
-
-impl OptionalDate<End> {
-    pub fn as_date(&self, last_date: Date) -> Date {
-        // Handle missing end by using the last available date.
-        if let OptionalDate::Date(date, _) = *self {
-            date
-        } else {
-            last_date
-        }
-    }
-}
-
-impl<'de, B: Bound> serde::Deserialize<'de> for OptionalDate<B> {
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<OptionalDate<B>, D::Error>
-    where
-        D: serde::de::Deserializer<'de>,
-    {
-        struct DateVisitor<B>(PhantomData<B>);
-
-        impl<'de, B: Bound> serde::de::Visitor<'de> for DateVisitor<B> {
-            type Value = OptionalDate<B>;
-
-            fn visit_str<E>(self, value: &str) -> ::std::result::Result<OptionalDate<B>, E>
-            where
-                E: serde::de::Error,
-            {
-                match Date::from_str(value) {
-                    Ok(date) => Ok(OptionalDate::new(date)),
-                    Err(err) => {
-                        if !value.is_empty() {
-                            return Err(serde::de::Error::invalid_value(
-                                serde::de::Unexpected::Other(value),
-                                &&*format!("{:?}", err),
-                            ));
-                        }
-                        Ok(OptionalDate::CouldNotParse(value.to_string()))
-                    }
-                }
-            }
-
-            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                f.write_str("OptionalDate")
-            }
-        }
-
-        deserializer.deserialize_str(DateVisitor::<B>(PhantomData))
-    }
-}
-
-impl<B: Bound> serde::Serialize for OptionalDate<B> {
-    fn serialize<S>(&self, serializer: S) -> ::std::result::Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        match *self {
-            OptionalDate::Date(date, _) => date.serialize(serializer),
-            OptionalDate::CouldNotParse(_) => serializer.serialize_str(""), // TODO: Warning?
-        }
     }
 }
 

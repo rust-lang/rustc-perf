@@ -31,7 +31,7 @@ use url::Url;
 use git;
 use date::Date;
 use util::{self, get_repo_path};
-pub use api::{self, data, days, info, stats, CommitResponse};
+pub use api::{self, data, days, info, CommitResponse, ServerResult};
 use load::{CommitData, InputData};
 use antidote::RwLock;
 
@@ -76,9 +76,13 @@ pub fn handle_info(data: &InputData) -> info::Response {
     }
 }
 
-pub fn handle_data(body: data::Request, data: &InputData) -> data::Response {
-    let mut result =
-        util::optional_data_range(data, body.start_date.clone(), body.end_date.clone())
+pub fn handle_data(body: data::Request, data: &InputData) -> ServerResult<data::Response> {
+    debug!("handle_data: start = {:?}, end = {:?}", body.start, body.end);
+    let range = match util::data_range(&data, &body.start, &body.end) {
+        Ok(range) => range,
+        Err(err) => return ServerResult::Err(err),
+    };
+    let mut result = range.into_iter()
             .map(|(_, day)| day)
             .map(|day| {
                 DateData::for_day(day, &body.stat)
@@ -96,131 +100,31 @@ pub fn handle_data(body: data::Request, data: &InputData) -> data::Response {
         .rposition(|day| !day.data.is_empty())
         .unwrap_or(0);
     let result = result.drain(first_idx..(last_idx + 1)).collect();
-    data::Response {
+    ServerResult::Ok(data::Response {
         data: result,
-        start: body.start_date.as_date(data.last_date),
-        end: body.end_date.as_date(data.last_date),
         crates: body.crates.into_set(&data.crate_list),
-    }
+    })
 }
 
-pub fn handle_days(body: days::Request, data: &InputData) -> days::Response {
-    days::Response {
-        a: DateData::for_day(
-            util::get_commit_data(data, body.commit_a),
-            &body.stat,
-        ),
-        b: DateData::for_day(
-            util::get_commit_data(data, body.commit_b),
-            &body.stat,
-        ),
-    }
-}
-
-pub fn handle_stats(body: stats::Request, data: &InputData) -> stats::Response {
-    let mut counted: HashMap<String, Vec<f64>> = HashMap::new();
-    let mut start_date = body.start_date.as_date(data.last_date);
-    let mut end_date = body.end_date.as_date(data.last_date);
-    for (_, commit_data) in util::data_range(&data.data, start_date, end_date) {
-        if counted.is_empty() {
-            start_date = commit_data.commit.date;
-        }
-        end_date = commit_data.commit.date;
-        let data = DateData::for_day(
-            commit_data,
-            &body.stat,
-        );
-        for (name, rec) in data.data {
-            counted.entry(name).or_insert_with(Vec::new).push(rec);
-        }
-    }
-
-    let out = counted
-        .into_iter()
-        .map(|(key, values)| (key, Stats::from(&values)))
-        .collect();
-
-    stats::Response {
-        start_date: start_date,
-        end_date: end_date,
-        data: out,
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct Stats {
-    first: f64,
-    last: f64,
-    min: f64,
-    max: f64,
-    mean: f64,
-    variance: f64,
-    #[serde(deserialize_with = "util::null_means_nan")] trend: f64,
-    #[serde(deserialize_with = "util::null_means_nan")] trend_b: f64,
-    n: usize,
-}
-
-impl Stats {
-    fn from(sums: &[f64]) -> Stats {
-        if sums.is_empty() {
-            return Stats::default();
-        }
-
-        let first = sums[0];
-        let last = *sums.last().unwrap();
-
-        let mut min = first;
-        let mut max = first;
-        let q1_idx = sums.len() / 4;
-        let q4_idx = 3 * sums.len() / 4;
-        let mut total = 0.0;
-        let mut q1_total = 0.0;
-        let mut q4_total = 0.0;
-        for (i, &cur) in sums.iter().enumerate() {
-            min = min.min(cur);
-            max = max.max(cur);
-
-            total += cur;
-            if i < q1_idx {
-                // Within the first quartile
-                q1_total += cur;
+pub fn handle_days(body: days::Request, data: &InputData) -> ServerResult<days::Response> {
+    let mut range = match util::data_range(&data, &body.start, &body.end) {
+        Ok(range) => {
+            if range.len() < 2 {
+                return ServerResult::Err(format!("not enough commits between {:?} and {:?}",
+                        body.start, body.end));
             }
-            if i >= q4_idx {
-                // Within the fourth quartile
-                q4_total += cur;
-            }
+            range
+        },
+        Err(reason) => {
+            return ServerResult::Err(reason);
         }
-
-        // Calculate the variance
-        let mean = total / (sums.len() as f64);
-        let mut var_total = 0.0;
-        for sum in sums {
-            let diff = sum - mean;
-            var_total += diff * diff;
-        }
-        let variance = var_total / ((sums.len() - 1) as f64);
-
-        let trend = if sums.len() >= 10 {
-            let q1_mean = q1_total / (q1_idx as f64);
-            let q4_mean = q4_total / ((sums.len() - q4_idx) as f64);
-            100.0 * ((q4_mean - q1_mean) / first)
-        } else {
-            0.0
-        };
-        let trend_b = 100.0 * ((last - first) / first);
-
-        Stats {
-            first: first,
-            last: last,
-            min: min,
-            max: max,
-            mean: mean,
-            variance: variance,
-            trend: if trend.is_nan() { trend } else { 0.0 },
-            trend_b: if trend_b.is_nan() { trend_b } else { 0.0 },
-            n: sums.len(),
-        }
-    }
+    };
+    let a = range.swap_remove(0);
+    let b = range.pop().unwrap();
+    ServerResult::Ok(days::Response {
+        a: DateData::for_day(a.1, &body.stat),
+        b: DateData::for_day(b.1, &body.stat),
+    })
 }
 
 pub fn handle_date_commit(date: Date) -> CommitResponse {
@@ -283,7 +187,7 @@ impl Server {
 
     fn handle_post<'de, F, D, S>(&self, req: Request, handler: F) -> <Server as Service>::Future
     where
-        F: FnOnce(D, &InputData) -> S + Send + 'static,
+        F: FnOnce(D, &InputData) -> ServerResult<S> + Send + 'static,
         D: DeserializeOwned,
         S: Serialize,
     {
@@ -319,12 +223,24 @@ impl Server {
                         }
                     };
                     let result = handler(body, &data);
-                    Response::new()
-                        .with_header(ContentType::json())
-                        .with_header(CacheControl(
-                            vec![CacheDirective::NoCache, CacheDirective::NoStore],
-                        ))
-                        .with_body(serde_json::to_string(&result).unwrap())
+                    match result {
+                        ServerResult::Ok(result) => {
+                            Response::new()
+                                .with_header(ContentType::json())
+                                .with_header(CacheControl(
+                                    vec![CacheDirective::NoCache, CacheDirective::NoStore],
+                                ))
+                                .with_body(serde_json::to_string(&result).unwrap())
+                        },
+                        ServerResult::Err(err) => {
+                            Response::new()
+                                .with_header(ContentType::plaintext())
+                                .with_header(CacheControl(
+                                    vec![CacheDirective::NoCache, CacheDirective::NoStore],
+                                ))
+                                .with_body(err)
+                        }
+                    }
                 })
         }))
     }
@@ -358,6 +274,7 @@ impl Server {
 
             info!("updating from filesystem...");
             let new_data = InputData::from_fs(&repo_path)?;
+            debug!("last date = {:?}", new_data.last_date);
 
             // Retrieve the stored InputData from the request.
             let mut data = rwlock.write();
@@ -434,7 +351,6 @@ impl Service for Server {
             "/perf/info" => self.handle_get(&req, handle_info),
             "/perf/data" => self.handle_post(req, handle_data),
             "/perf/get" => self.handle_post(req, handle_days),
-            "/perf/stats" => self.handle_post(req, handle_stats),
             "/perf/pr_commit" => self.handle_get_req(&req, |req, _data| {
                 let url = Url::parse(req.uri().as_ref()).unwrap();
                 let pr = url.query_pairs().find(|&(ref k, _)| k == "pr");

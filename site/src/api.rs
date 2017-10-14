@@ -44,6 +44,11 @@ impl List {
     }
 }
 
+pub enum ServerResult<T> {
+    Ok(T),
+    Err(String),
+}
+
 pub mod info {
     use date::Date;
     use std::collections::BTreeSet;
@@ -68,15 +73,14 @@ pub struct CommitResponse {
 
 pub mod data {
     use super::List;
-    use date::{Date, End, OptionalDate, Start};
     use server::DateData;
+    use collector::Bound;
     use std::collections::BTreeSet;
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct Request {
-        #[serde(rename = "start")] pub start_date: OptionalDate<Start>,
-
-        #[serde(rename = "end")] pub end_date: OptionalDate<End>,
+        pub start: Bound,
+        pub end: Bound,
 
         /// Which crates to return data for
         pub crates: List,
@@ -89,8 +93,6 @@ pub mod data {
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct Response {
         pub data: Vec<DateData>,
-        pub start: Date,
-        pub end: Date,
         pub crates: BTreeSet<String>,
     }
 }
@@ -98,11 +100,12 @@ pub mod data {
 pub mod days {
     use super::List;
     use server::DateData;
+    use collector::Bound;
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct Request {
-        pub commit_a: String,
-        pub commit_b: String,
+        pub start: Bound,
+        pub end: Bound,
 
         /// Which crates to return data for
         pub crates: List,
@@ -113,29 +116,5 @@ pub mod days {
     pub struct Response {
         pub a: DateData,
         pub b: DateData,
-    }
-}
-
-pub mod stats {
-    use std::collections::HashMap;
-
-    use server::Stats;
-    use date::{Date, End, OptionalDate, Start};
-    use super::List;
-
-    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-    pub struct Request {
-        #[serde(rename = "start")] pub start_date: OptionalDate<Start>,
-        #[serde(rename = "end")] pub end_date: OptionalDate<End>,
-        pub crates: List,
-        pub stat: String,
-    }
-
-    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-    pub struct Response {
-        #[serde(rename = "startDate")] pub start_date: Date,
-        #[serde(rename = "endDate")] pub end_date: Date,
-        // crate -> statistics over date range
-        pub data: HashMap<String, Stats>,
     }
 }

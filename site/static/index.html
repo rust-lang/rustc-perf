@@ -13,14 +13,11 @@
     </div>
     <div id="settings">
         <span id="dates" class="settings" style="text-align:left;">
-            <h3>Dates</h3>
-            start date: <input placeholder="yyyy-mm-dd" id="start-date"></input><br>
-            end date: <input placeholder="yyyy-mm-dd" id="end-date"></input><br>
-            Absolute data: <input id='absolute' name="absolute" type="checkbox"><br>
+            start: <input placeholder="yyyy-mm-dd or commit" id="start-bound"></input>
+            end: <input placeholder="yyyy-mm-dd or commit" id="end-bound"></input>
+            Absolute data: <input id='absolute' name="absolute" type="checkbox">
             <select id='stats' name="stat"></select>
-            <div class="submit">
             <a href="#" onClick="make_graph({}, true); return false;">Submit</a>
-        </div>
         </span>
         </div>
     </div>
@@ -45,7 +42,8 @@
 
             var url = null;
             if (x > 0) {
-                url = "https://github.com/rust-lang/rust/compare/" + data[x - 1].commit + "..." + data[x].commit;
+                url = window.location.origin + "/compare.html?start=" + data[x - 1].commit +
+                    "&end=" + data[x].commit + "&stat=" + stat;
             }
 
             for (var crate in datum.data) {
@@ -187,8 +185,8 @@
     }
 
     function make_graph(state, push_state) {
-        let start_date = state.start || getDate("start-date");
-        let end_date = state.end || getDate("end-date");
+        let start = state.start || document.getElementById("start-bound").value;
+        let end = state.end || document.getElementById("end-bound").value;
         let crates = state.crates || getSelectedCrates();
         let stat = state.stat || getSelected("stats");
         let absolute = false;
@@ -196,34 +194,28 @@
         if (document.getElementById("absolute").checked) {
             absolute = true;
         } else {
-            absolute = state.absolute || false;
+            absolute = state.absolute == "true" || false;
         }
 
         document.getElementById('stats').value = stat;
+        document.getElementById("absolute").checked = absolute;
 
         let values = {
-            start: start_date,
-            end: end_date,
+            start: start,
+            end: end,
             stat: stat,
             crates: {list: 'All'},
         };
         make_request("/data", values).then(function(response) {
             response.json().then(function(data) {
-                let start_date = data.start;
-                let end_date = data.end;
-
                 data.absolute = absolute;
 
-                var series = data.crates;
-                set_date("start-date", start_date);
-                set_date("end-date", end_date);
-                set_date("end-date", end_date);
                 init_graph(data, stat);
                 if (crates.length != 0) {
                     hide_all();
-                    for (var i = 0; i < chart.series.length; i++) {
-                        var series = chart.series[i];
-                        var found = false;
+                    for (let i = 0; i < chart.series.length; i++) {
+                        let series = chart.series[i];
+                        let found = false;
                         for (var j = 0; j < crates.length; j++) {
                             if (series.name.includes(crates[j])) {
                                 found = true;
@@ -237,14 +229,8 @@
                 }
 
                 if (push_state) {
-                    let state = {
-                        start: start_date,
-                        end: end_date,
-                        crates: crates,
-                        stat: stat,
-                        absolute: absolute,
-                    };
-                    push_state_to_history(state);
+                    values.crates = getSelectedCrates();
+                    push_state_to_history(values);
                 }
             });
         }, function(err) {

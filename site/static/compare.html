@@ -10,8 +10,8 @@
     <div id="settings">
         <span id="commits" class="settings" style="text-align:left;">
             <h3>Commits</h3>
-            Commit A: <input width="100em" placeholder="SHA" id="commit-a"></input><br>
-            Commit B: <input width="100em" placeholder="SHA" id="commit-b"></input><br>
+            Commit/Date A: <input width="100em" placeholder="YYYY-MM-DD or SHA" id="start-bound"></input><br>
+            Commit/Date B: <input width="100em" placeholder="YYYY-MM-DD or SHA" id="end-bound"></input><br>
 	    <select id='stats' name="stat">
 	    </select>
         <div class="submit">
@@ -65,12 +65,25 @@
         html += "<thead>";
         html += "<tr>";
 
-        html += "<th>" + "crate" + "</th>";
+        html += "<th>" + "<a href=\"" +
+            "https://github.com/rust-lang/rust/compare/" + data.a.commit + "..." +
+            data.b.commit +
+            "\">compare</a>" + "</th>";
 
-        html += "<th>" + new Date(data.a.date).toLocaleString()
-         + ` (${data.a.commit.substring(0,8)})` + "</th>";
-        html += "<th>" + new Date(data.b.date).toLocaleString()
-         + ` (${data.b.commit.substring(0,8)})` + "</th>";
+        function print_date(date) {
+            function pad_str(i) {
+                return (i < 10) ? "0" + i : "" + i;
+            }
+
+            return `${date.getUTCFullYear()}-${pad_str(date.getUTCMonth())}-${pad_str(date.getUTCDate())}`;
+        }
+
+        html += "<th>" + print_date(new Date(data.a.date))
+            + ` (<a href="https://github.com/rust-lang/rust/commit/${data.a.commit}"
+                >${data.a.commit.substring(0,8)}</a>)` + "</th>";
+        html += "<th>" + print_date(new Date(data.b.date))
+            + ` (<a href="https://github.com/rust-lang/rust/commit/${data.b.commit}"
+                >${data.b.commit.substring(0,8)}</a>)` + "</th>";
 
         html += "<th>" + "% change" + "</th>";
         html += "</tr>";
@@ -99,30 +112,32 @@
     }
 
     function make_data(state, push_state) {
-        let commit_a = state.commit_a || getCommit("commit-a");
-        let commit_b = state.commit_b || getCommit("commit-b");
+        let start = state.start || getValue("start-bound");
+        let end = state.end || getValue("end-bound");
         let stat = state.stat || getSelected("stats");
 
         var values = {
-            commit_a: commit_a,
-            commit_b: commit_b,
+            start, end,
             crates: {list: 'All'},
             stat: stat,
         };
         make_request("/get", values).then(function(response) {
             response.json().then(function(data) {
                 populate_data(data);
-                set_commit("commit-a", data.a.commit);
-                set_commit("commit-b", data.b.commit);
+                if (getValue("start-bound") === "") {
+                    set_date("start-bound", data.a.date);
+                }
+                if (getValue("end-bound") === "") {
+                    set_date("end-bound", data.b.date);
+                }
 
                 if (push_state) {
                     push_state_to_history({
-                        commit_a: data.a.commit,
-                        commit_b: data.b.commit,
+                        start: data.a.commit,
+                        end: data.b.commit,
                         stat: stat,
                     });
                 }
-
             });
         }, function(err) {
             console.log("Error fetching data:");

@@ -8,78 +8,60 @@
 // except according to those terms.
 
 use std::env;
-use std::collections::BTreeMap;
-use std::collections::btree_map::Range;
-use std::collections::Bound::Included;
 
 use load::{Commit, CommitData, InputData};
-use date::{Date, End, OptionalDate, Start};
+use collector::Bound;
 use errors::*;
 
-pub fn get_commit_data(data: &InputData, idx: String) -> &CommitData {
-    debug!("getting commit for {}", idx);
-    data.data.values().find(|cd| cd.commit.sha.starts_with(&idx)).unwrap()
-}
+use chrono::Duration;
 
-pub fn get_commit_data_from_end(data: &InputData, idx: Date) -> &CommitData {
-    debug!("getting from end for {}", idx);
-    let a = Commit {
-        sha: String::new(),
-        date: idx,
-    };
+pub fn data_range<'a>(
+    data: &'a InputData,
+    a: &Bound,
+    b: &Bound,
+) -> ::std::result::Result<Vec<(&'a Commit, &'a CommitData)>, String> {
+    let mut ret = Vec::new();
+    let mut in_range = false;
+    let mut found_left_bound = false;
+    for (commit, cd) in &data.data {
+        if in_range {
+            ret.push((commit, cd));
+            let is_end = match *b {
+                Bound::Commit(ref sha) => commit.sha == *sha,
+                // if the commit date is equal to the next date (after the bound) then we want to
+                // stop, since this is an inclusive range.
+                Bound::Date(ref date) => commit.date.0.naive_utc().date() == date.succ(),
+                Bound::None => false, // all the data
+            };
+            in_range = !is_end;
+            if !in_range { break; }
+        } else {
+            in_range = match *a {
+                Bound::Commit(ref sha) => commit.sha == *sha,
+                Bound::Date(ref date) => commit.date.0.naive_utc().date() == *date,
+                Bound::None => {
+                    let left = data.last_date.0.naive_utc().date() - Duration::days(30);
+                    left == commit.date.0.naive_utc().date()
+                },
+            };
+            if in_range {
+                found_left_bound = true;
+                ret.push((commit, cd));
+            }
+        }
+    }
+    if !found_left_bound {
+        if let Bound::Commit(ref sha) = *a {
+            return Err(format!("did not find left commit bound: {:?}", sha));
+        }
+    }
+    if let Bound::Commit(ref sha) = *b {
+        if in_range {
+            return Err(format!("did not find right commit bound: {:?}", sha));
+        }
+    }
 
-    let r = data.data.range(a..).next().map(|x| x.1).unwrap_or_else(|| {
-        let r = data.data.range(..).next_back().unwrap().1;
-        debug!("failed to get, instead using: {}", r.commit.date);
-        r
-    });
-    debug!("got = {}", r.commit.date);
-    r
-}
-
-pub fn get_commit_data_from_start(data: &InputData, idx: Date) -> &CommitData {
-    debug!("getting from start for {}", idx);
-    let a = Commit {
-        sha: String::new(),
-        date: idx,
-    };
-
-    let r = data.data.range(a..).next().map(|x| x.1).unwrap_or_else(|| {
-        let r = data.data.range(..).next().unwrap().1;
-        debug!("failed to get, instead using: {}", r.commit.date);
-        r
-    });
-    debug!("got = {}", r.commit.date);
-    r
-}
-
-pub fn optional_data_range(
-    data: &InputData,
-    a: OptionalDate<Start>,
-    b: OptionalDate<End>,
-) -> Range<Commit, CommitData> {
-    data_range(
-        &data.data,
-        a.as_date(data.last_date),
-        b.as_date(data.last_date),
-    )
-}
-
-pub fn data_range(
-    data: &BTreeMap<Commit, CommitData>,
-    a: Date,
-    b: Date,
-) -> Range<Commit, CommitData> {
-    let a = Commit {
-        sha: String::new(),
-        date: a,
-    };
-    let b = Commit {
-        sha: String::new(),
-        date: b,
-    };
-
-    data.range((Included(a), Included(b)))
+    Ok(ret)
 }
 
 /// Reads the repository path from the arguments passed to main()

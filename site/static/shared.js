@@ -10,7 +10,7 @@ function getDate(id) {
     }
 }
 
-function getCommit(id) {
+function getValue(id) {
     return document.getElementById(id).value;
 }
 
@@ -144,10 +144,11 @@ function set_date(id, date) {
     } else {
         console.warn("could not set", id, "to:", date, "; invalid date");
     }
+    return document.getElementById(id).value;
 }
 
-function set_commit(id, commit) {
-    document.getElementById(id).value = commit;
+function set_value(id, value) {
+    document.getElementById(id).value = value;
 }
 
 // A bunch of helper functions for helping with keeping URLs up to date and
