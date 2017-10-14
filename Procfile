@@ -1,1 +1,1 @@
-web: RUST_LOG=rustc_perf=debug ./target/release/site data
+web: RUST_LOG=site=debug ./target/release/site data
