@@ -115,6 +115,10 @@
             title = "Wall time execution";
             yAxis = "Seconds";
         }
+        if (stat == "wall-time") {
+            title = "Wall time execution";
+            yAxis = "Seconds";
+        }
         chart = new Highcharts.chart('chart-container', {
             chart: {
                 zoomType: "xy",
@@ -204,6 +208,7 @@
             start: start,
             end: end,
             stat: stat,
+            absolute: absolute,
             crates: {list: 'All'},
         };
         make_request("/data", values).then(function(response) {
@@ -211,6 +216,7 @@
                 data.absolute = absolute;
 
                 init_graph(data, stat);
+                let quantity = 0;
                 if (crates.length != 0) {
                     hide_all();
                     for (let i = 0; i < chart.series.length; i++) {
@@ -219,9 +225,11 @@
                         for (var j = 0; j < crates.length; j++) {
                             if (series.name.includes(crates[j])) {
                                 found = true;
+                                break;
                             }
                         }
                         if (found) {
+                            quantity += 1;
                             series.setVisible(true, false);
                         }
                     }
@@ -230,6 +238,9 @@
 
                 if (push_state) {
                     values.crates = getSelectedCrates();
+                    if (quantity == crates.length) {
+                        delete values.crates;
+                    }
                     push_state_to_history(values);
                 }
             });
