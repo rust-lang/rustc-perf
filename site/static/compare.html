@@ -27,6 +27,14 @@
     <script>
     make_as_of();
 
+    function print_date(date) {
+        function pad_str(i) {
+            return (i < 10) ? "0" + i : "" + i;
+        }
+
+        return `${date.getUTCFullYear()}-${pad_str(date.getUTCMonth())}-${pad_str(date.getUTCDate())}`;
+    }
+
     function unique(arr) {
         return arr.filter((value, idx) => arr.indexOf(value) == idx);
     }
@@ -70,14 +78,6 @@
             data.b.commit +
             "\">compare</a>" + "</th>";
 
-        function print_date(date) {
-            function pad_str(i) {
-                return (i < 10) ? "0" + i : "" + i;
-            }
-
-            return `${date.getUTCFullYear()}-${pad_str(date.getUTCMonth())}-${pad_str(date.getUTCDate())}`;
-        }
-
         html += "<th>" + print_date(new Date(data.a.date))
             + ` (<a href="https://github.com/rust-lang/rust/commit/${data.a.commit}"
                 >${data.a.commit.substring(0,8)}</a>)` + "</th>";
@@ -116,6 +116,16 @@
         let end = state.end || getValue("end-bound");
         let stat = state.stat || getSelected("stats");
 
+        if (state.start) {
+            set_value("start-bound", state.start);
+        }
+        if (state.end) {
+            set_value("end-bound", state.end);
+        }
+        if (state.stat) {
+            setSelected("stats", state.stat);
+        }
+
         var values = {
             start, end,
             crates: {list: 'All'},
@@ -124,12 +134,6 @@
         make_request("/get", values).then(function(response) {
             response.json().then(function(data) {
                 populate_data(data);
-                if (getValue("start-bound") === "") {
-                    set_date("start-bound", data.a.date);
-                }
-                if (getValue("end-bound") === "") {
-                    set_date("end-bound", data.b.date);
-                }
 
                 if (push_state) {
                     push_state_to_history({

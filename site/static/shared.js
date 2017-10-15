@@ -35,6 +35,16 @@ function getSelected(name) {
     return e.options[e.selectedIndex].value;
 }
 
+function setSelected(id, text) {
+    let e = document.getElementById(id);
+    for (let i = 0; i < e.options.length; i++) {
+        if (e.options[i].text === text) {
+            e.options[i].selected = true;
+            return;
+        }
+    }
+}
+
 function toList(list_object, type) {
     if (list_object.list == "All") {
         let result = [];
