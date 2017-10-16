@@ -1,0 +1,430 @@
+#crates-heading {
+    width: 100%;
+    padding: 20px;
+    background-color: $main-bg-dark;
+    margin-bottom: 20px;
+    @include border-radius(5px);
+    @include display-flex;
+    @include flex-wrap(wrap);
+    @include align-items(center);
+
+    .wide {
+        @include display-flex;
+        @include flex-wrap(wrap);
+        @include align-items(center);
+        width: 100%;
+    }
+
+    .info {
+        @include display-flex;
+        @include flex-wrap(wrap);
+        @include align-items(baseline);
+        img {
+            @include align-self(center);
+        }
+        .team-info {
+            @include flex-direction(column);
+        }
+    }
+    h1 {
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+    h2 { color: $main-color-light; padding-left: 10px; }
+    .right {
+        @include flex(2);
+        @include display-flex;
+        @include flex-direction(row-reverse);
+        @include align-items(center);
+    }
+    @media only screen and (max-width: 650px) {
+        .right { display: none; }
+    }
+
+    &.crate-index, &.crate-search {
+        @include flex-wrap(wrap);
+    }
+}
+
+#selection {
+    width: 100%;
+    @include display-flex;
+    @include justify-content(space-between);
+    padding: 20px;
+    @include border-radius(5px);
+    background-color: white;
+    margin-bottom: 40px;
+
+    a {
+        text-decoration: none;
+        font-weight: bold;
+        color: inherit;
+        padding: 5px;
+    }
+    a:hover { background-color: $main-bg-dark; }
+    a.active { background-color: $main-bg-dark; }
+
+    select {
+        display: none;
+        width: 100%;
+        padding: 5px;
+    }
+
+    @media only screen and (max-width: 650px) {
+        padding: 0;
+        background-color: inherit;
+        a { display: none; }
+        select { display: block; }
+    }
+}
+
+#results {
+    width: 100%;
+    @include display-flex;
+    @include justify-content(space-between);
+    margin-bottom: 25px;
+
+    .cur, .total { color: $main-color; font-weight: bold; }
+
+    .dropdown-container { font-size: 85%; }
+    a.dropdown {
+        background-color: $main-bg-dark;
+        padding: 10px;
+        display: inline-block;
+        @include border-radius(5px);
+    }
+}
+
+.white-rows {
+    background-color: white;
+    padding: 0 20px;
+    margin-bottom: 20px;
+    @include display-flex;
+    @include flex-direction(column);
+
+    .row {
+        width: 100%;
+        border-bottom: 2px solid $gray-border;
+        padding: 20px 0;
+        @include display-flex;
+        @include justify-content(space-between);
+        @include flex-wrap(wrap);
+
+        &:last-of-type { border: none; }
+    }
+}
+
+.crate {
+    .desc {
+        padding-top: 5px;
+        @include display-flex;
+        @include flex-direction(column);
+        width: 75%;
+    }
+
+    .info a {
+        color: $main-color;
+        font-weight: bold;
+        text-decoration: none;
+        font-size: 120%;
+    }
+    .vers {
+        margin-left: 10px;
+    }
+
+    .stats {
+        width: 25%;
+        color: $main-color-light;
+    }
+    .downloads {
+        @include display-flex;
+        @include align-items(center);
+        padding-bottom: 5px;
+    }
+    .recent-downloads {
+        @include display-flex;
+        @include align-items(center);
+    }
+
+    .rev-dep-downloads {padding-left: 7px}
+}
+
+.exact-match {
+    margin-bottom: 40px;
+    border-bottom: solid beige;
+    div {
+        padding: 10px;
+    }
+    h1 {
+        color: green
+    }
+}
+
+.quick-links {
+    ul {
+        @include display-flex;
+        @include flex-direction(row);
+
+        font-size: 80%;
+        list-style-type: none;
+        margin: 1em 0 0 0;
+        padding: 0;
+
+
+        li {
+            margin-right: 1em;
+
+            &:last-child {
+                margin-right: 0;
+            }
+        }
+    }
+}
+
+.pagination {
+    text-align: center;
+    font-size: 90%;
+    margin-bottom: 20px;
+
+    a {
+        color: $main-color-light;
+        text-decoration: none;
+        padding: 5px 6px;
+    }
+    a:hover { background-color: $main-bg-dark; }
+    a.active { background-color: $main-bg-dark; }
+}
+
+.crate-info {
+    @include display-flex;
+    @include flex-direction(column);
+    padding-bottom: 20px;
+    border-bottom: 5px solid $gray-border;
+    margin-bottom: 20px;
+
+    @media only screen and (min-width: 820px) {
+        @include flex-direction(row);
+
+        .docs {
+            @include flex(7);
+            padding-right: 40px;
+            max-width: 640px;
+        }
+        .authorship {
+            @include flex(3);
+            border-left: 2px solid $gray-border;
+            padding-left: 20px;
+
+            .top, .bottom {
+                @include flex-direction(column);
+            }
+
+            ul {
+              padding-left: 20px;
+            }
+        }
+    }
+
+    @media only screen and (max-width: 480px) {
+        .authorship {
+            .top, .bottom {
+                @include flex-direction(column);
+            }
+        }
+    }
+
+    .authorship {
+        .top, .bottom {
+            @include display-flex;
+
+            > * { @include flex(1); }
+        }
+    }
+
+    .about {
+        line-height: 180%;
+        margin-bottom: 40px;
+    }
+
+
+    ul.owners, ul.keywords {
+        @include display-flex;
+        @include flex-wrap(wrap);
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        li { margin: 0 7px 7px 0; }
+    }
+
+    .install {
+        font-size: 120%;
+        padding: 10px;
+        background-color: darken($main-bg-dark, 8%);
+        @include display-flex;
+
+        .action {
+            display: none;
+            text-align: center;
+            padding-top: 18px;
+            padding-right: 10px;
+        }
+        code {
+            @include flex(1);
+            background: $main-color;
+            color: white;
+            padding: 20px;
+        }
+        button, button:active {
+            padding: 5px 0;
+            background-color: #FFFFFF;
+            border: none;
+            width: 60px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #edebdd;
+        }
+        @media only screen and (min-width: 500px) {
+            .action { @include flex(2); display: block; }
+            code { @include flex(8); }
+        }
+    }
+    .copy-result {
+        text-align: right;
+
+        span {
+            font-size: 80%;
+            font-weight: bold;
+        }
+        .copy-success {
+            color: $link-color;
+        }
+        .copy-failure {
+            color: red;
+        }
+    }
+    .crate-readme {
+        line-height: 1.5;
+
+        img {
+            max-width: 100%;
+        }
+
+        pre {
+            overflow-x: auto;
+        }
+
+        p {
+            code {
+                background-color: #fff;
+                padding: 0 2px;
+            }
+        }
+
+        table {
+            border-collapse: collapse;
+
+            th, td {
+                border: 1px solid #dfe2e5;
+                padding: 6px 13px;
+            }
+        }
+    }
+    .last-update {
+        color: $main-color-light;
+        font-size: 90%;
+        line-height: 25px;
+    }
+    .date {
+        font-weight: bold;
+        margin-bottom: 40px;
+    }
+}
+
+#crate-downloads {
+    @include display-flex;
+    @include flex-wrap(wrap);
+
+    h3 { width: 100%; }
+    .stat {
+        border-left: 1px solid $gray-border;
+        padding: 10px 20px;
+        @include display-flex;
+        @include flex-wrap(wrap);
+        @include flex-direction(column);
+        @include flex-grow(1);
+
+        .num {
+            font-size: 160%;
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+    }
+
+    .stats {
+        @include flex-grow(7);
+        @include display-flex;
+        @include flex-wrap(wrap);
+    }
+    .versions {
+        @include flex-grow(3);
+        text-align: center;
+        @include display-flex;
+        @include flex-direction(column);
+        .small { padding: 10px; }
+    }
+
+    .button-holder { position: relative; }
+
+    .graph {
+        @include flex-grow(10);
+        width: 100%;
+        margin: 30px 0;
+        padding-bottom: 20px;
+
+        h4 { color: $main-color-light; }
+    }
+    .graph-data {
+        width: 100%;
+        height: 500px;
+    }
+}
+
+#crate-links {
+    @include display-flex;
+    padding-bottom: 20px;
+    border-bottom: 5px solid $gray-border;
+    margin-bottom: 30px;
+
+    h3 { margin-bottom: 5px; }
+    .section {
+        @include flex(1);
+        margin-right: 10px;
+        li { line-height: 24px; }
+        .date { color: $main-color-light; padding-left: 5px; }
+    }
+
+    ul { list-style: none; padding: 0; }
+
+    @media only screen and (max-width: 380px) {
+        @include flex-direction(column);
+    }
+    @media only screen and (max-width: 730px) {
+        #crate-dev-dependencies { display: none; }
+    }
+    @media only screen and (max-width: 430px) {
+        #crate-dependencies { display: none; }
+    }
+}
+
+.all-versions-back { margin-bottom: 20px; }
+
+#crate-all-versions {
+    margin-top: 10px;
+
+    .small { margin-left: 20px; display: inline-block; }
+    a.arrow {
+        display: inline-block;
+        float: right;
+    }
+}

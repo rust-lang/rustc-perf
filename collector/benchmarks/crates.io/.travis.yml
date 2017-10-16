@@ -1,0 +1,74 @@
+language: rust
+sudo: required
+dist: trusty
+
+branches:
+  except:
+  - staging.tmp
+
+cache:
+  cargo: true
+
+addons:
+  chrome: stable
+
+before_install:
+  - nvm install 8.1.3
+
+install:
+  - pip install 'travis-cargo<0.2' --user && export PATH=$HOME/.local/bin:$PATH
+  - npm install
+  - cargo install --force diesel_cli --vers 0.16.0 --debug --no-default-features --features postgres && export PATH=$HOME/.cargo/bin:$PATH
+
+before_script:
+  - diesel database setup
+
+addons:
+  postgresql: "9.5"
+  apt:
+    sources:
+      - kalakris-cmake
+    packages:
+      - cmake
+      - libcurl4-openssl-dev
+      - libelf-dev
+      - libdw-dev
+
+matrix:
+  fast_finish: true
+  allow_failures:
+    - rust: nightly
+  include:
+  - rust: nightly-2017-09-20
+    env: RUSTFMT=YESPLEASE
+    script:
+    - cargo install --force rustfmt-nightly --vers 0.2.7
+    - export LD_LIBRARY_PATH=$(rustc --print sysroot)/lib:$LD_LIBRARY_PATH
+    - rustfmt --version
+    - cargo fmt -- --write-mode=diff
+  - rust: stable
+    script:
+    - cargo build
+    - cargo test
+    - npm test
+  - rust: nightly-2017-09-20
+    env: CLIPPY=YESPLEASE
+    script:
+    - cargo check --features "lint"
+  - rust: beta
+    script:
+    - cargo build
+    - cargo test
+  - rust: nightly
+    script:
+    - cargo build
+    - cargo test
+
+env:
+  global:
+    - DATABASE_URL=postgres://postgres:@localhost/cargo_registry_test
+    - TEST_DATABASE_URL=postgres://postgres:@localhost/cargo_registry_test
+
+notifications:
+  email:
+    on_success: never
