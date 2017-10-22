@@ -119,6 +119,10 @@
             title = "Wall time execution";
             yAxis = "Seconds";
         }
+        if (stat == "max-rss") {
+            title = "Maximum resident set size";
+            yAxis = "Kilobytes";
+        }
         chart = new Highcharts.chart('chart-container', {
             chart: {
                 zoomType: "xy",
