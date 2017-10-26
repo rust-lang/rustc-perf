@@ -1,8 +1,0 @@
-sudo: false
-language: rust
-cache: cargo
-rust:
-  - nightly
-script:
-  - cargo build --verbose
-  - cargo test --verbose

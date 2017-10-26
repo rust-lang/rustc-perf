@@ -1,3 +1,6 @@
+// This test is currently out-of-date. Disabled. See issue #165.
+#![cfg(any())]
+
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]

@@ -1,0 +1,14 @@
+language: rust
+sudo: false
+
+cache: cargo
+
+rust:
+  - nightly
+
+env:
+  - CHECK='cd collector && ./check-benchmarks.sh'
+  - CHECK='cargo build --verbose && cargo test --verbose'
+
+script:
+  - sh -x -c "$CHECK"
