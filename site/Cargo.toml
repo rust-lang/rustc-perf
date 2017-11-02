@@ -15,13 +15,10 @@ serde_json = "1.0.0"
 hyper = "0.11"
 url = "1.5"
 antidote = "1.0"
+chrono = "0.4"
 
 [dependencies.collector]
 path = "../collector"
-
-[dependencies.chrono]
-features = ["serde"]
-version = "0.4"
 
 [dependencies.rust_sysroot]
 git = "https://github.com/Mark-Simulacrum/bisect-rust.git"
@@ -29,4 +26,4 @@ optional = false
 
 [dev-dependencies]
 lazy_static = "0.2.1"
-pretty_assertions = "0.1.2"
+pretty_assertions = "0.4"

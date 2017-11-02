@@ -8,7 +8,6 @@ extern crate env_logger;
 extern crate error_chain;
 #[macro_use]
 extern crate log;
-extern crate reqwest;
 extern crate rust_sysroot;
 extern crate collector;
 extern crate serde_json;
@@ -19,7 +18,6 @@ mod errors {
     error_chain! {
         foreign_links {
             RustSysroot(::rust_sysroot::errors::Error);
-            Reqwest(::reqwest::Error);
             Serde(::serde_json::Error);
             Chrono(::chrono::ParseError);
             Io(::std::io::Error);
