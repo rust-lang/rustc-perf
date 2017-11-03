@@ -2,132 +2,223 @@
 
 use std::env;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{self, Command};
 use std::str;
-use std::collections::BTreeMap;
+use std::f64;
+use std::fs;
+use std::collections::{HashSet, HashMap};
 
 use tempdir::TempDir;
 
-use collector::{Patch, Run, Stat};
+use collector::{Patch, BenchmarkState, Run, Stat, Benchmark as BenchmarkData};
 
+use cargo_metadata;
 use errors::{Result, ResultExt};
 use rust_sysroot::sysroot::Sysroot;
 
 pub struct Benchmark {
     pub name: String,
     pub path: PathBuf,
+    patches: Vec<Patch>,
 }
 
 impl Benchmark {
+    pub fn new(name: String, path: PathBuf) -> Result<Self> {
+        let mut patches = vec![];
+        for entry in fs::read_dir(&path)? {
+            let entry = entry?;
+            let path = entry.path();
+            if let Some(ext) = path.extension() {
+                if ext == "patch" {
+                    patches.push(path.clone());
+                }
+            }
+        }
+
+        patches.sort();
+
+        let patches = patches.into_iter().map(|p| Patch::new(p)).collect();
+
+        Ok(Benchmark {
+            name, path, patches
+        })
+    }
+
     pub fn command<P: AsRef<Path>>(&self, sysroot: &Sysroot, path: P) -> Command {
         let mut command = sysroot.command(path);
         command.current_dir(&self.path);
         command
     }
 
+    fn make_temp_dir(&self, sysroot: &Sysroot) -> Result<TempDir> {
+        let tmp_dir = TempDir::new(&format!("rustc-benchmark-{}", self.name))?;
+        info!("temporary directory is {}", tmp_dir.path().display());
+
+        info!("copying files to temporary directory");
+        let output = self.command(sysroot, "cp")
+        .arg("-r")
+        .arg("-T")
+        .arg("--")
+        .arg(".")
+        .arg(tmp_dir.path())
+        .output()?;
+
+        if !output.status.success() {
+            bail!("copy failed: {}", String::from_utf8_lossy(&output.stderr));
+        }
+        Ok(tmp_dir)
+    }
+
     /// Run a specific benchmark on a specific commit
-    pub fn run(&self, sysroot: &Sysroot) -> Result<Vec<Patch>> {
+    pub fn run(&self, sysroot: &Sysroot) -> Result<BenchmarkData> {
         info!("processing {}", self.name);
 
-        let mut patch_runs = BTreeMap::new();
         let has_perf = Command::new("perf").output().is_ok();
         let mut fake_rustc = env::current_exe().unwrap();
         fake_rustc.pop();
         fake_rustc.push("rustc-fake");
-        for _ in 0..3 {
-            let tmp_dir = TempDir::new(&format!("rustc-benchmark-{}", self.name))?;
-            info!("temporary directory is {}", tmp_dir.path().display());
 
-            info!("copying files to temporary directory");
-            let output = self.command(sysroot, "cp")
-                .arg("-r")
-                .arg("-T")
-                .arg("--")
-                .arg(".")
-                .arg(tmp_dir.path())
-                .output()?;
+        let mut metadata = cargo_metadata::metadata_deps(Some(&self.path.join("Cargo.toml")), true)?;
+        assert_eq!(metadata.workspace_members.len(), 1,
+            "Only one workspace member for {:?}", self.path);
+        let package_id = metadata.workspace_members.pop().unwrap();
+        let package = metadata.packages.into_iter().find(|p| p.id == package_id).unwrap();
+        assert_eq!(package.targets.len(), 1, "Only one target for {}", package.name);
 
-            if !output.status.success() {
-                bail!("copy failed: {}", String::from_utf8_lossy(&output.stderr));
-            }
-            let make = || {
-                let mut command = sysroot.command("make");
-                command.current_dir(tmp_dir.path());
-                command
-            };
+        let mut ret = BenchmarkData {
+            name: self.name.clone(),
+            runs: Vec::new(),
+        };
 
-            let output = make().arg("patches").output()?;
-            let mut patches = str::from_utf8(&output.stdout)
-                .chain_err(|| {
-                    format!(
-                        "make patches in {} returned non UTF-8 output",
-                        self.path.display()
-                    )
-                })?
-                .split_whitespace()
-                .collect::<Vec<_>>();
-            if patches.is_empty() {
-                patches.push("");
+        for opt in &[false, true] {
+            let mut clean_stats = Vec::new();
+            let mut incr_stats = Vec::new();
+            let mut incr_clean_stats = Vec::new();
+            let mut incr_patched_stats: Vec<(Patch, Vec<Vec<Stat>>)> = vec![];
+
+            let mut standard_args = vec!["rustc", "-p", &package_id, "--all-features"];
+            if *opt {
+                standard_args.push("--release");
             }
 
-            for patch in &patches {
-                let name = self.name.clone() + &patch;
-                let mut make = make();
-                make.arg(&format!("all{}", patch))
-                    .env("CARGO_OPTS", "")
-                    .env("CARGO_RUSTC_OPTS", "-Ztime-passes")
-                    .env("RUSTC", &fake_rustc)
-                    .env("RUSTC_REAL", &sysroot.rustc);
-                if has_perf {
-                    make.env("USE_PERF", "1");
-                }
-                info!("running `{:?}`", make);
-                let output = make.output()?;
+            standard_args.push("--");
+            standard_args.push("-Ztime-passes");
+            for _ in 0..3 {
+                let tmp_dir = self.make_temp_dir(sysroot)?;
+                let cargo_no_args = |incremental: bool| {
+                    let mut cargo = sysroot.command("cargo");
+                    cargo
+                        .current_dir(tmp_dir.path())
+                        .env("RUSTC", &fake_rustc)
+                        .env("RUSTC_REAL", &sysroot.rustc)
+                        .env("CARGO_INCREMENTAL", &format!("{}", incremental as usize));
 
-                if !output.status.success() {
-                    bail!(
-                        "expected success, got {}\n\nstderr={}\n\n stdout={}",
-                        output.status,
-                        String::from_utf8_lossy(&output.stderr),
-                        String::from_utf8_lossy(&output.stdout)
-                    );
+                    if has_perf {
+                        cargo.env("USE_PERF", "1");
+                    }
+
+                    cargo
+                };
+                let cargo = |incremental: bool| {
+                    let mut cargo = cargo_no_args(incremental);
+                    cargo.args(&standard_args);
+                    cargo
+                };
+
+                let run = |mut cmd: Command| -> Result<process::Output> {
+                    info!("running: {:?}", cmd);
+                    let output = cmd.output()?;
+                    if !output.status.success() {
+                        bail!(
+                            "expected success, got {}\n\nstderr={}\n\n stdout={}",
+                            output.status,
+                            String::from_utf8_lossy(&output.stderr),
+                            String::from_utf8_lossy(&output.stdout)
+                        );
+                    }
+                    Ok(output)
+                };
+
+                let touch_all = || -> Result<()> {
+                    let mut cmd = sysroot.command("bash");
+                    cmd.current_dir(tmp_dir.path())
+                        .args(&["-c", "find . -name *.rs | xargs touch"]);
+                    run(cmd)?;
+                    Ok(())
+                };
+
+                // Only one thing is required from each benchmark: a println.diff file which adds a
+                // println! statement to a random function. All benchmarks are uniform in this.
+
+                // prebuild the dependencies without recording timing information
+                {
+                    let mut cargo = cargo(false);
+                    cargo.env("USE_PERF", "0");
+                    run(cargo)?;
+                    let mut cargo = cargo_no_args(false);
+                    cargo.args(&["clean", "-p", &package_id]);
+                    run(cargo)?;
                 }
 
-                patch_runs
-                    .entry(name.clone())
-                    .or_insert_with(|| {
-                        Patch {
-                            name: name.clone(),
-                            runs: Vec::new(),
+                clean_stats.push(process_output(&self.name, run(cargo(false))?.stdout)?);
+                touch_all()?;
+                incr_stats.push(process_output(&self.name, run(cargo(true))?.stdout)?);
+                touch_all()?;
+                incr_clean_stats.push(process_output(&self.name, run(cargo(true))?.stdout)?);
+                for patch in &self.patches {
+                    patch.apply(tmp_dir.path())?;
+                    touch_all()?;
+                    if let Some(mut entry) = incr_patched_stats.iter_mut()
+                        .find(|s| &s.0 == patch) {
+                        entry.1.push(process_output(&self.name, run(cargo(true))?.stdout)?);
+                        continue;
+                    }
+
+                    incr_patched_stats.push((
+                            patch.clone(),
+                            vec![process_output(&self.name, run(cargo(true))?.stdout)?]
+                    ));
+                }
+            }
+
+            let process_stats = |state: BenchmarkState, runs: Vec<Vec<Stat>>| -> Run {
+                let mut stats: HashMap<String, Vec<f64>> = HashMap::new();
+                for run in runs {
+                    for stat in run {
+                        stats.entry(stat.name.clone()).or_insert_with(|| Vec::new()).push(stat.cnt);
+                    }
+                }
+                // all stats should be present in all runs
+                assert_eq!(stats.values().map(|v| v.len()).collect::<HashSet<_>>().len(), 1);
+                let stats = stats.into_iter()
+                    .map(|(stat, counts)| {
+                        Stat {
+                            name: stat,
+                            cnt: counts.into_iter().fold(f64::INFINITY, |acc, v| f64::min(acc, v)),
                         }
                     })
-                    .runs
-                    .push(Run {
-                        stats: process_output(&name, output.stdout)?,
-                    });
-            }
-        }
+                    .collect();
 
-        let mut patches = Vec::new();
-        for (_, patch) in patch_runs {
-            let mut runs = patch.runs.into_iter();
-            let Run { mut stats } = runs.next().unwrap();
-            for run in runs {
-                for a in &mut stats {
-                    let b = match run.stats.iter().find(|p| p.name == a.name) {
-                        Some(b) => b,
-                        None => bail!("expected name {} to exist in both a and b", a.name),
-                    };
-                    a.cnt = f64::min(a.cnt, b.cnt);
+                Run {
+                    stats,
+                    release: *opt,
+                    state: state,
                 }
+            };
+
+            ret.runs.push(process_stats(BenchmarkState::Clean, clean_stats));
+            ret.runs.push(process_stats(BenchmarkState::IncrementalStart, incr_stats));
+            ret.runs.push(process_stats(BenchmarkState::IncrementalClean, incr_clean_stats));
+
+            for (patch, results) in incr_patched_stats {
+                ret.runs.push(process_stats(
+                    BenchmarkState::IncrementalPatched(patch),
+                    results,
+                ));
             }
-            patches.push(Patch {
-                name: patch.name,
-                runs: vec![Run { stats }],
-            });
         }
 
-        Ok(patches)
+        Ok(ret)
     }
 }
 
@@ -165,8 +256,7 @@ fn process_output(name: &str, output: Vec<u8>) -> Result<Vec<Stat>> {
         }
         stats.push(Stat {
             name: name.to_string(),
-            cnt: cnt.parse()
-                .chain_err(|| format!("failed to parse `{}` as an float", cnt))?,
+            cnt: cnt.parse().chain_err(|| format!("failed to parse `{}` as an float", cnt))?,
         });
     }
 

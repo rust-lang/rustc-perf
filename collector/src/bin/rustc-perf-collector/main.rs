@@ -12,6 +12,7 @@ extern crate rust_sysroot;
 extern crate collector;
 extern crate serde_json;
 extern crate tempdir;
+extern crate cargo_metadata;
 
 mod errors {
     // Create the Error, ErrorKind, ResultExt, and Result types
@@ -21,6 +22,7 @@ mod errors {
             Serde(::serde_json::Error);
             Chrono(::chrono::ParseError);
             Io(::std::io::Error);
+            Metadata(::cargo_metadata::Error);
         }
     }
 }
@@ -121,10 +123,7 @@ fn get_benchmarks(benchmark_dir: &Path, filter: Option<&str>) -> Result<Vec<Benc
         }
 
         info!("benchmark {} - REGISTERED", name);
-        benchmarks.push(Benchmark {
-            path: path,
-            name: name,
-        });
+        benchmarks.push(Benchmark::new(name, path)?);
     }
     Ok(benchmarks)
 }
