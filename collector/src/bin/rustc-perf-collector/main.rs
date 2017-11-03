@@ -133,9 +133,8 @@ fn process_commit(
     repo: &outrepo::Repo,
     commit: &GitCommit,
     benchmarks: &[Benchmark],
-    preserve_sysroot: bool,
 ) -> Result<()> {
-    let sysroot = Sysroot::install(commit, "x86_64-unknown-linux-gnu", preserve_sysroot, false)?;
+    let sysroot = Sysroot::install(commit, "x86_64-unknown-linux-gnu", false, false)?;
     repo.success(&bench_commit(commit, Some(repo), sysroot, benchmarks))
 }
 
@@ -143,12 +142,11 @@ fn process_retries(
     commits: &[GitCommit],
     repo: &mut outrepo::Repo,
     benchmarks: &[Benchmark],
-    preserve_sysroot: bool,
 ) -> Result<()> {
     while let Some(retry) = repo.next_retry() {
         info!("retrying {}", retry);
         let commit = commits.iter().find(|commit| commit.sha == retry).unwrap();
-        process_commit(repo, commit, benchmarks, preserve_sysroot)?;
+        process_commit(repo, commit, benchmarks)?;
     }
     Ok(())
 }
@@ -157,7 +155,6 @@ fn process_commits(
     commits: &[GitCommit],
     repo: &outrepo::Repo,
     benchmarks: &[Benchmark],
-    preserve_sysroot: bool,
 ) -> Result<()> {
     println!("processing commits");
     if !commits.is_empty() {
@@ -167,7 +164,7 @@ fn process_commits(
         // test 3, which should allow us to eventually test all commits, but also keep up with the
         // latest rustc
         for commit in to_process.iter().rev().take(3) {
-            if let Err(err) = process_commit(repo, &commit, &benchmarks, preserve_sysroot) {
+            if let Err(err) = process_commit(repo, &commit, &benchmarks) {
                 repo.write_broken_commit(commit, err)?;
             }
         }
@@ -185,9 +182,7 @@ fn run() -> Result<i32> {
        (version: "0.1")
        (author: "The Rust Compiler Team")
        (about: "Collects Rust performance data")
-       (@arg benchmarks_dir: --benchmarks +required +takes_value "Sets the directory benchmarks are found in")
        (@arg filter: --filter +takes_value "Run only benchmarks that contain this")
-       (@arg preserve_sysroots: -p --preserve "Don't delete sysroots after running.")
        (@arg sync_git: --("sync-git") "Synchronize repository with remote")
        (@arg output_repo: --("output-repo") +required +takes_value "Repository to output to")
        (@subcommand process =>
@@ -211,10 +206,9 @@ fn run() -> Result<i32> {
            (@arg BENCHMARK: --benchmark +required +takes_value "benchmark name to remove data for")
        )
     ).get_matches();
-    let benchmark_dir = PathBuf::from(matches.value_of_os("benchmarks_dir").unwrap());
+    let benchmark_dir = PathBuf::from("collector/benchmarks");
     let filter = matches.value_of("filter");
     let benchmarks = get_benchmarks(&benchmark_dir, filter)?;
-    let preserve_sysroots = matches.is_present("preserve_sysroots");
     let use_remote = matches.is_present("sync_git");
     let out_repo = PathBuf::from(matches.value_of_os("output_repo").unwrap());
     let mut out_repo = outrepo::Repo::open(out_repo, use_remote)?;
@@ -223,8 +217,8 @@ fn run() -> Result<i32> {
 
     match matches.subcommand() {
         ("process", Some(_)) => {
-            process_retries(&commits, &mut out_repo, &benchmarks, preserve_sysroots)?;
-            process_commits(&commits, &out_repo, &benchmarks, preserve_sysroots)?;
+            process_retries(&commits, &mut out_repo, &benchmarks)?;
+            process_commits(&commits, &out_repo, &benchmarks)?;
             Ok(0)
         }
         ("bench_commit", Some(sub_m)) => {
@@ -237,7 +231,7 @@ fn run() -> Result<i32> {
                     summary: String::new(),
                 }
             });
-            process_commit(&out_repo, &commit, &benchmarks, preserve_sysroots)?;
+            process_commit(&out_repo, &commit, &benchmarks)?;
             Ok(0)
         }
         ("bench_local", Some(sub_m)) => {
@@ -253,7 +247,7 @@ fn run() -> Result<i32> {
                 &commit,
                 rustc,
                 "x86_64-unknown-linux-gnu",
-                preserve_sysroots,
+                false,
                 false,
             )?;
             let result = bench_commit(&commit, None, sysroot, &benchmarks);
