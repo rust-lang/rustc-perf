@@ -1,0 +1,35 @@
+[package]
+name = "syn"
+version = "0.11.11" # don't forget to update version in readme for breaking changes
+authors = ["David Tolnay <dtolnay@gmail.com>"]
+license = "MIT/Apache-2.0"
+description = "Nom parser for Rust source code"
+repository = "https://github.com/dtolnay/syn"
+documentation = "https://dtolnay.github.io/syn/syn/"
+categories = ["development-tools::procedural-macro-helpers"]
+include = ["Cargo.toml", "src/**/*.rs", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+publish = false # this branch contains breaking changes
+
+[features]
+default = ["parsing", "printing", "clone-impls"]
+full = []
+parsing = ["quote", "synom/parsing"]
+printing = ["quote", "synom/printing"]
+visit = []
+visit_mut = []
+fold = []
+clone-impls = ["synom/clone-impls"]
+extra-traits = ["synom/extra-traits"]
+
+[dependencies]
+quote = { git = 'https://github.com/dtolnay/quote', optional = true }
+proc-macro2 = "0.1"
+unicode-xid = "0.1"
+synom = { version = "0.11", path = "synom" }
+
+[dev-dependencies]
+error-chain = "0.10"
+syntex_pos = "0.59"
+syntex_syntax = "0.59"
+tempdir = "0.3.5"
+walkdir = "1.0.1"
