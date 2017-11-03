@@ -11,6 +11,7 @@ use std::collections::HashSet;
 
 use serde_json;
 use collector::CommitData;
+use chrono::{Utc, Duration};
 use rust_sysroot::git::Commit as GitCommit;
 use execute::Benchmark;
 
@@ -95,6 +96,9 @@ impl Repo {
 
         let missing = commits
             .iter()
+            .filter(|c| {
+                Utc::now().signed_duration_since(c.date) < Duration::days(29)
+            })
             .filter(|c| {
                 !have.contains(&c.sha) || {
                     self.load_commit_data(c, triple)
