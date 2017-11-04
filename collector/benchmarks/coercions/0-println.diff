@@ -1,0 +1,10 @@
+diff --git a/src/main.rs b/src/main.rs
+index 3fb7c5f..63e7f0f 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -65574,4 +65574,4 @@ pub static MAPPING: [&'static str; 0xffff] = [
+     "",
+ ];
+
+-fn main() { }
++fn main() { println!("test"); }

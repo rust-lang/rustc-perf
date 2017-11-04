@@ -1,0 +1,12 @@
+diff --git a/src/category.rs b/src/category.rs
+index 1e50c9f..99cd628 100644
+--- a/src/category.rs
++++ b/src/category.rs
+@@ -185,6 +185,7 @@ impl<'a> NewCategory<'a> {
+ 
+ /// Handles the `GET /categories` route.
+ pub fn index(req: &mut Request) -> CargoResult<Response> {
++    println!("testing");
+     let conn = req.db_conn()?;
+     let (offset, limit) = req.pagination(10, 100)?;
+     let query = req.query();

@@ -16,10 +16,17 @@ use cargo_metadata;
 use errors::{Result, ResultExt};
 use rust_sysroot::sysroot::Sysroot;
 
+#[derive(Debug, Clone, Deserialize)]
+struct BenchmarkConfig {
+    cargo_opts: Option<String>,
+    cargo_rustc_opts: Option<String>,
+}
+
 pub struct Benchmark {
     pub name: String,
     pub path: PathBuf,
     patches: Vec<Patch>,
+    config: Option<BenchmarkConfig>,
 }
 
 impl Benchmark {
@@ -39,8 +46,15 @@ impl Benchmark {
 
         let patches = patches.into_iter().map(|p| Patch::new(p)).collect();
 
+        let config_path = path.join("perf-config.json");
+        let config: Option<BenchmarkConfig> = if config_path.exists() {
+            serde_json::from_reader(File::open(&config_path)?)?
+        } else {
+            None
+        };
+
         Ok(Benchmark {
-            name, path, patches
+            name, path, patches, config
         })
     }
 

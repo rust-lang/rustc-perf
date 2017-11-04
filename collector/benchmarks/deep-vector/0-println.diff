@@ -1,0 +1,12 @@
+diff --git a/src/main.rs b/src/main.rs
+index be24263..c505898 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -20,6 +20,7 @@
+ // Too big for our poor macro infrastructure.
+ 
+ pub fn main() {
++    println!("test");
+     let _x = vec!(
+         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,

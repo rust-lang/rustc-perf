@@ -1,0 +1,10 @@
+diff --git a/src/main.rs b/src/main.rs
+index fbd6858..32ca64c 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -58,3 +58,5 @@ fn test<I>(i: I) -> Result<((), I), ()> where I: Iterator<Item = i32> {
+         .parse(i)
+         .map(|(_, i)| ((), i))
+ }
++
++fn _dummy() {}

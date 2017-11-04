@@ -1,0 +1,12 @@
+diff --git a/src/lib.rs b/src/lib.rs
+index b5f3996..8d7766d 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -184,6 +184,7 @@ impl<'a> BitStream<'a> {
+     }
+
+     fn fill(&mut self) -> BitState {
++        println!("testing");
+         while self.state.n + 8 <= 32 && self.use_byte() {}
+         self.state
+     }

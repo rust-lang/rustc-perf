@@ -1,0 +1,4 @@
+{
+    "cargo_opts": "--features gecko --manifest-path components/style/Cargo.toml",
+    "cargo_rustc_opts": "--cap-lints=warn"
+}

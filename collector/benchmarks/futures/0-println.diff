@@ -1,0 +1,12 @@
+diff --git a/src/all/mod.rs b/src/all/mod.rs
+index 33012dd..cc730bd 100644
+--- a/src/all/mod.rs
++++ b/src/all/mod.rs
+@@ -14,6 +14,7 @@ fn unselect<T, U, E>(r: Result<(T, U), (E, U)>) -> Result<T, E> {
+ 
+ #[test]
+ fn result_smoke() {
++    println!("testing");
+     fn is_future_v<A, B, C>(_: C)
+         where A: Send + 'static,
+               B: Send + 'static,

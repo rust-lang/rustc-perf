@@ -15,10 +15,6 @@ opt-level = 2
 name = "cargo_registry"
 doctest = false
 
-[[test]]
-name = "all"
-path = "src/tests/all.rs"
-
 [package.metadata.docs.rs]
 rustdoc-args = [
     "--no-defaults",

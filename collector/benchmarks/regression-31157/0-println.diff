@@ -1,0 +1,12 @@
+diff --git a/src/lexer.rs b/src/lexer.rs
+index ef94253..6b0d0be 100644
+--- a/src/lexer.rs
++++ b/src/lexer.rs
+@@ -9,6 +9,7 @@ use std::str::FromStr;
+ 
+ 
+ pub fn token() -> Box<Parser<I=str, O=Vec<Token>>> {
++    println!("testing");
+ 
+   fn lt(s: &str, t: Token) -> RegexLiteralParser<Token> {
+     str_lit(&(String::from_str(r"^[ \t]*").unwrap() + s), t)

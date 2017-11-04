@@ -84,7 +84,7 @@ impl Patch {
 
     pub fn apply(&self, dir: &Path) -> Result<(), String> {
         let mut cmd = process::Command::new("patch");
-        cmd.current_dir(dir).args(&["-Np2", "-i"]).arg(&self.path);
+        cmd.current_dir(dir).args(&["-Np1", "-i"]).arg(&self.path);
         if cmd.status().map(|s| !s.success()).unwrap_or(false) {
             return Err(format!("could not execute {:?}.", cmd));
         }
