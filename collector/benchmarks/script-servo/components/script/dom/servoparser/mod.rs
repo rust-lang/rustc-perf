@@ -46,7 +46,7 @@ use script_traits::DocumentActivity;
 use servo_config::prefs::PREFS;
 use servo_config::resource_files::read_resource_file;
 use servo_url::ServoUrl;
-use std::ascii::AsciiExt;
+#[allow(unused_imports)] use std::ascii::AsciiExt;
 use std::borrow::Cow;
 use std::cell::Cell;
 use std::mem;

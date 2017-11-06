@@ -16,7 +16,7 @@ use dom::serviceworker::ServiceWorker;
 use dom_struct::dom_struct;
 use script_thread::ScriptThread;
 use serviceworkerjob::{Job, JobType};
-use std::ascii::AsciiExt;
+#[allow(unused_imports)] use std::ascii::AsciiExt;
 use std::default::Default;
 use std::rc::Rc;
 

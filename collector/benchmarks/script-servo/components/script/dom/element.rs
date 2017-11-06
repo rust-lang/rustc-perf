@@ -93,7 +93,7 @@ use selectors::matching::{ElementSelectorFlags, MatchingContext, RelevantLinkSta
 use selectors::sink::Push;
 use servo_arc::Arc;
 use servo_atoms::Atom;
-use std::ascii::AsciiExt;
+#[allow(unused_imports)] use std::ascii::AsciiExt;
 use std::borrow::Cow;
 use std::cell::{Cell, Ref};
 use std::default::Default;

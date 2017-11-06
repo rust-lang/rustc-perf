@@ -12,7 +12,7 @@ use dom::globalscope::GlobalScope;
 use dom_struct::dom_struct;
 use encoding_rs::Encoding;
 use js::jsapi::{JSContext, JSObject};
-use std::ascii::AsciiExt;
+#[allow(unused_imports)] use std::ascii::AsciiExt;
 use std::borrow::ToOwned;
 
 #[dom_struct]

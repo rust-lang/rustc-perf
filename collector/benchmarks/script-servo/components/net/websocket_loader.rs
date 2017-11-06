@@ -20,7 +20,7 @@ use net_traits::{CookieSource, MessageData, NetworkError};
 use net_traits::{WebSocketDomAction, WebSocketNetworkEvent};
 use net_traits::request::{Destination, RequestInit, RequestMode};
 use servo_url::ServoUrl;
-use std::ascii::AsciiExt;
+#[allow(unused_imports)] use std::ascii::AsciiExt;
 use std::io::{self, Write};
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex};

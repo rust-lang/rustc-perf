@@ -12,7 +12,7 @@
 use hyper::method::Method;
 use net_traits::request::{CredentialsMode, Origin, Request};
 use servo_url::ServoUrl;
-use std::ascii::AsciiExt;
+#[allow(unused_imports)] use std::ascii::AsciiExt;
 use time::{self, Timespec};
 
 /// Union type for CORS cache entries
