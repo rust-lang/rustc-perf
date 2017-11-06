@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::{self, Command};
 use std::str;
 use std::f64;
-use std::fs;
+use std::fs::{self, File};
 use std::collections::{HashSet, HashMap};
 
 use tempdir::TempDir;
@@ -15,18 +15,20 @@ use collector::{Patch, BenchmarkState, Run, Stat, Benchmark as BenchmarkData};
 use cargo_metadata;
 use errors::{Result, ResultExt};
 use rust_sysroot::sysroot::Sysroot;
+use serde_json;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 struct BenchmarkConfig {
     cargo_opts: Option<String>,
     cargo_rustc_opts: Option<String>,
+    cargo_toml: Option<PathBuf>,
 }
 
 pub struct Benchmark {
     pub name: String,
     pub path: PathBuf,
     patches: Vec<Patch>,
-    config: Option<BenchmarkConfig>,
+    config: BenchmarkConfig,
 }
 
 impl Benchmark {
@@ -47,10 +49,10 @@ impl Benchmark {
         let patches = patches.into_iter().map(|p| Patch::new(p)).collect();
 
         let config_path = path.join("perf-config.json");
-        let config: Option<BenchmarkConfig> = if config_path.exists() {
+        let config: BenchmarkConfig = if config_path.exists() {
             serde_json::from_reader(File::open(&config_path)?)?
         } else {
-            None
+            BenchmarkConfig::default()
         };
 
         Ok(Benchmark {
@@ -92,7 +94,8 @@ impl Benchmark {
         fake_rustc.pop();
         fake_rustc.push("rustc-fake");
 
-        let mut metadata = cargo_metadata::metadata_deps(Some(&self.path.join("Cargo.toml")), true)?;
+        let cargo_toml = self.config.cargo_toml.clone().unwrap_or(PathBuf::from("Cargo.toml"));
+        let mut metadata = cargo_metadata::metadata_deps(Some(&self.path.join(cargo_toml)), true)?;
         assert_eq!(metadata.workspace_members.len(), 1,
             "Only one workspace member for {:?}", self.path);
         let package_id = metadata.workspace_members.pop().unwrap();
@@ -110,13 +113,32 @@ impl Benchmark {
             let mut incr_clean_stats = Vec::new();
             let mut incr_patched_stats: Vec<(Patch, Vec<Vec<Stat>>)> = vec![];
 
-            let mut standard_args = vec!["rustc", "-p", &package_id, "--all-features"];
+            let mut standard_args = vec!["rustc".to_string()];
+            standard_args.extend(
+                self.config.cargo_opts.clone()
+                    .map(|s| s.split_whitespace()
+                        .map(|s| s.to_string())
+                        .collect::<Vec<String>>())
+                    .unwrap_or_default());
+            standard_args.extend(vec![
+                "-p".to_string(),
+                package_id.clone(),
+            ]);
+            if self.config.cargo_opts.as_ref().map_or(true, |s| !s.contains("feature")) {
+                standard_args.push("--all-features".to_string());
+            }
             if *opt {
-                standard_args.push("--release");
+                standard_args.push("--release".to_string());
             }
 
-            standard_args.push("--");
-            standard_args.push("-Ztime-passes");
+            standard_args.push("--".to_string());
+            standard_args.extend(
+                self.config.cargo_rustc_opts.clone()
+                    .map(|s| s.split_whitespace()
+                        .map(|s| s.to_string())
+                        .collect::<Vec<String>>())
+                    .unwrap_or_default());
+            standard_args.push("-Ztime-passes".to_string());
             for _ in 0..3 {
                 let tmp_dir = self.make_temp_dir(sysroot)?;
                 let cargo_no_args = |incremental: bool| {

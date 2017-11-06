@@ -13,6 +13,9 @@ extern crate collector;
 extern crate serde_json;
 extern crate tempdir;
 extern crate cargo_metadata;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
 
 mod errors {
     // Create the Error, ErrorKind, ResultExt, and Result types
