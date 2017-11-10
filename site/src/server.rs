@@ -46,8 +46,8 @@ pub struct DateData {
 }
 
 impl DateData {
-    pub fn for_day(day: &CommitData, stat: &str) -> DateData {
-        let crates = day.benchmarks
+    pub fn for_day(commit: &CommitData, stat: &str) -> DateData {
+        let crates = commit.benchmarks
             .values()
             .filter(|v| v.is_ok())
             .flat_map(|patches| patches.as_ref().unwrap())

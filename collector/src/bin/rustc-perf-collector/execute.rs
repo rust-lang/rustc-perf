@@ -10,7 +10,7 @@ use std::collections::{HashSet, HashMap};
 
 use tempdir::TempDir;
 
-use collector::{Patch, BenchmarkState, Run, Stat, Benchmark as BenchmarkData};
+use collector::{Patch, BenchmarkState, Run, Stat, Benchmark as CollectedBenchmark};
 
 use cargo_metadata;
 use errors::{Result, ResultExt};
@@ -86,7 +86,7 @@ impl Benchmark {
     }
 
     /// Run a specific benchmark on a specific commit
-    pub fn run(&self, sysroot: &Sysroot) -> Result<BenchmarkData> {
+    pub fn run(&self, sysroot: &Sysroot) -> Result<CollectedBenchmark> {
         info!("processing {}", self.name);
 
         let has_perf = Command::new("perf").output().is_ok();
@@ -102,7 +102,7 @@ impl Benchmark {
         let package = metadata.packages.into_iter().find(|p| p.id == package_id).unwrap();
         assert_eq!(package.targets.len(), 1, "Only one target for {}", package.name);
 
-        let mut ret = BenchmarkData {
+        let mut ret = CollectedBenchmark {
             name: self.name.clone(),
             runs: Vec::new(),
         };
