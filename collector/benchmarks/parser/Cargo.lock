@@ -1,14 +1,14 @@
-[root]
+[[package]]
+name = "combine"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
 name = "day15"
 version = "0.1.0"
 dependencies = [
  "combine 1.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
-
-[[package]]
-name = "combine"
-version = "1.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [metadata]
 "checksum combine 1.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "9b68ff98e25582baa07a31b50b9976b75705774b737df42cb30629e56f678f01"

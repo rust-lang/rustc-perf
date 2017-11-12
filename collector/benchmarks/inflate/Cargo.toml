@@ -9,4 +9,3 @@ keywords = ["deflate", "decompression", "compression", "piston"]
 
 [features]
 default = []
-unstable = []

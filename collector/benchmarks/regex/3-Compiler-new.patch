@@ -1,0 +1,12 @@
+diff --git a/src/compile.rs b/src/compile.rs
+index 9db743f..fb812ae 100644
+--- a/src/compile.rs
++++ b/src/compile.rs
+@@ -54,6 +54,7 @@ impl Compiler {
+     ///
+     /// Various options can be set before calling `compile` on an expression.
+     pub fn new() -> Self {
++        {}
+         Compiler {
+             insts: vec![],
+             compiled: Program::new(),

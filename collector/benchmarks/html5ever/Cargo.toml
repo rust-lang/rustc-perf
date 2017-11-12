@@ -15,25 +15,8 @@ name = "html5ever"
 # https://github.com/rust-lang/cargo/issues/1512
 doctest = false
 
-[[test]]
-name = "tree_builder"
-harness = false
-
-[[test]]
-name = "tokenizer"
-harness = false
-
-[[test]]
-name = "serializer"
-
-[[bench]]
-name = "tokenizer"
-harness = false
-
 [features]
-unstable = ["tendril/unstable", "string_cache/unstable"]
-heap_size = ["heapsize", "heapsize_plugin"]
-codegen = ["html5ever_macros"]
+none = []
 
 [dependencies]
 log = "0"

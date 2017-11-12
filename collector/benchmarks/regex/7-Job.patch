@@ -1,0 +1,14 @@
+diff --git a/src/backtrack.rs b/src/backtrack.rs
+index 3c06254..4b72fd4 100644
+--- a/src/backtrack.rs
++++ b/src/backtrack.rs
+@@ -82,8 +82,8 @@ impl Cache {
+ /// stack to do it.
+ #[derive(Clone, Copy, Debug)]
+ enum Job {
+-    Inst { ip: InstPtr, at: InputAt },
+     SaveRestore { slot: usize, old_pos: Option<usize> },
++    Inst { ip: InstPtr, at: InputAt },
+ }
+
+ impl<'a, 'm, 'r, 's, I: Input> Bounded<'a, 'm, 'r, 's, I> {

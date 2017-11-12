@@ -32,6 +32,7 @@ use git;
 use date::Date;
 use util::{self, get_repo_path};
 pub use api::{self, data, days, info, CommitResponse, ServerResult};
+use collector::Run;
 use load::{CommitData, InputData};
 use antidote::RwLock;
 
@@ -42,28 +43,27 @@ use errors::*;
 pub struct DateData {
     pub date: Date,
     pub commit: String,
-    pub data: HashMap<String, f64>,
+    pub data: HashMap<String, Vec<(String, Run, f64)>>,
 }
 
 impl DateData {
     pub fn for_day(commit: &CommitData, stat: &str) -> DateData {
-        let crates = commit.benchmarks
-            .values()
-            .filter(|v| v.is_ok())
-            .flat_map(|patches| patches.as_ref().unwrap())
-            .collect::<Vec<_>>();
-
-        let mut data = HashMap::new();
-        for patch in &crates {
-            if let Some(stat) = patch.run().get_stat(stat) {
-                data.insert(patch.name.clone(), stat);
+        let benchmarks = commit.benchmarks.values().filter_map(|v| v.as_ref().ok());
+        let mut out = HashMap::new();
+        for benchmark in benchmarks {
+            let mut runs = Vec::new();
+            for run in &benchmark.runs {
+                if let Some(stat) = run.get_stat(stat) {
+                    runs.push((run.name(), run.clone(), stat));
+                }
             }
+            out.insert(benchmark.name.clone(), runs);
         }
 
         DateData {
-            date: day.commit.date,
-            commit: day.commit.sha.clone(),
-            data: data,
+            date: commit.commit.date,
+            commit: commit.commit.sha.clone(),
+            data: out,
         }
     }
 }

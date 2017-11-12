@@ -1,4 +1,4 @@
-[root]
+[[package]]
 name = "issue-43572-unused-uses"
 version = "0.1.0"
 

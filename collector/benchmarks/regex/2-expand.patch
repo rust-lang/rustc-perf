@@ -1,0 +1,12 @@
+diff --git a/src/expand.rs b/src/expand.rs
+index 9bea703..a28b82d 100644
+--- a/src/expand.rs
++++ b/src/expand.rs
+@@ -5,6 +5,7 @@ use memchr::memchr;
+ use bytes::Captures;
+
+ pub fn expand(caps: &Captures, mut replacement: &[u8], dst: &mut Vec<u8>) {
++    { }
+     while !replacement.is_empty() {
+         match memchr(b'$', replacement) {
+             None => break,

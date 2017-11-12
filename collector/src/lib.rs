@@ -76,13 +76,19 @@ impl Patch {
             let len = name.len();
             // take final space off
             name.truncate(len - 1);
+            let name = name.replace(".patch", "");
             (index, name)
         };
 
-        Patch { path, index, name }
+        Patch {
+            path: PathBuf::from(path.file_name().unwrap()),
+            index,
+            name,
+        }
     }
 
     pub fn apply(&self, dir: &Path) -> Result<(), String> {
+        eprintln!("applying {} to {:?}", self.name, dir);
         let mut cmd = process::Command::new("patch");
         cmd.current_dir(dir).args(&["-Np1", "-i"]).arg(&self.path);
         if cmd.status().map(|s| !s.success()).unwrap_or(false) {
@@ -93,7 +99,7 @@ impl Patch {
 }
 
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
 pub enum BenchmarkState {
     Clean,
     IncrementalStart,
@@ -107,13 +113,13 @@ pub struct Benchmark {
     pub name: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
 pub struct Stat {
     pub name: String,
     pub cnt: f64,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
 pub struct Run {
     pub stats: Vec<Stat>,
     pub release: bool,
@@ -121,6 +127,23 @@ pub struct Run {
 }
 
 impl Run {
+    pub fn name(&self) -> String {
+        let base = match self.state {
+            BenchmarkState::Clean => format!("clean"),
+            BenchmarkState::IncrementalStart => format!("baseline incremental"),
+            BenchmarkState::IncrementalClean => format!("clean incremental"),
+            BenchmarkState::IncrementalPatched(ref patch) => {
+                format!("patched incremental: {}", patch.name)
+            }
+        };
+        let opt = if self.release {
+            "-opt"
+        } else {
+            ""
+        };
+        base + opt
+    }
+
     pub fn get_stat(&self, stat: &str) -> Option<f64> {
         self.stats.iter().find(|s| s.name == stat).map(|s| s.cnt)
     }

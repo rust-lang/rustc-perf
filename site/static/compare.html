@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
@@ -8,16 +9,15 @@
     <div>&gt; <a href="index.html">graphs</a>, <a href="compare.html">compare</a>.</div>
     <div id="content" style="display: none"></div>
     <div id="settings">
-        <span id="commits" class="settings" style="text-align:left;">
+        <div id="commits" class="settings" style="text-align:left;">
             <h3>Commits</h3>
-            Commit/Date A: <input width="100em" placeholder="YYYY-MM-DD or SHA" id="start-bound"></input><br>
-            Commit/Date B: <input width="100em" placeholder="YYYY-MM-DD or SHA" id="end-bound"></input><br>
-	    <select id='stats' name="stat">
-	    </select>
-        <div class="submit">
-            <a href="#" onClick="make_data({}, true); return false;">Submit</a>
-        </div>
-        </span>
+            Commit/Date A: <input width="100em" placeholder="YYYY-MM-DD or SHA" id="start-bound" /><br>
+            Commit/Date B: <input width="100em" placeholder="YYYY-MM-DD or SHA" id="end-bound" /><br>
+            <select id='stats' name="stat">
+            </select>
+            <div class="submit">
+                <a href="#" onClick="make_data({}, true); return false;">Submit</a>
+            </div>
         </div>
     </div>
     <div id="as-of"></div>
@@ -41,13 +41,11 @@
 
     function add_datum_fields(datum) {
         let html = "";
-
         if (datum) {
             html += "<td>" + datum.toFixed(2) + "</td>";
         } else {
             html += "<td>-</td>";
         }
-
         return html;
     }
 
@@ -93,16 +91,25 @@
         test_names.sort();
 
         for (let name of test_names) {
+            html += "<tr><td>&nbsp;</td></tr>";
             html += "<tr>";
-
-            html += "<th>" + truncate_name(name) + "</th>";
-
-            html += add_datum_fields(data.a.data[name]);
-            html += add_datum_fields(data.b.data[name]);
-
-            html += add_percent(data.a.data[name], data.b.data[name]);
-
+            html += "<th colspan=10 style='text-align: center;'>" + truncate_name(name) + "</th>";
             html += "</tr>";
+            let added_release_row = false;
+            for (let i = 0; i < data.a.data[name].length; i++) {
+                let a = data.a.data[name][i];
+                let b = data.b.data[name][i];
+                if (a[1].release && !added_release_row) {
+                    html += "<tr><td>&nbsp;</td></tr>";
+                    added_release_row = true;
+                }
+                html += "<tr>";
+                html += "<td>" + a[0] + "</td>";
+                html += add_datum_fields(a[2]);
+                html += add_datum_fields(b[2]);
+                html += add_percent(a[2], b[2]);
+                html += "</tr>";
+            }
         }
 
         html += "</table>";

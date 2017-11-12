@@ -12,10 +12,23 @@ use tempdir::TempDir;
 
 use collector::{Patch, BenchmarkState, Run, Stat, Benchmark as CollectedBenchmark};
 
-use cargo_metadata;
 use errors::{Result, ResultExt};
 use rust_sysroot::sysroot::Sysroot;
 use serde_json;
+
+fn run(mut cmd: Command) -> Result<process::Output> {
+    info!("running: {:?}", cmd);
+    let output = cmd.output()?;
+    if !output.status.success() {
+        bail!(
+            "expected success, got {}\n\nstderr={}\n\n stdout={}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr),
+            String::from_utf8_lossy(&output.stdout)
+        );
+    }
+    Ok(output)
+}
 
 #[derive(Debug, Clone, Default, Deserialize)]
 struct BenchmarkConfig {
@@ -50,7 +63,9 @@ impl Benchmark {
 
         let config_path = path.join("perf-config.json");
         let config: BenchmarkConfig = if config_path.exists() {
-            serde_json::from_reader(File::open(&config_path)?)?
+            serde_json::from_reader(File::open(&config_path)
+                .chain_err(|| format!("failed to open {:?}", config_path))?)
+                .chain_err(|| format!("failed to parse {:?}", config_path))?
         } else {
             BenchmarkConfig::default()
         };
@@ -68,16 +83,14 @@ impl Benchmark {
 
     fn make_temp_dir(&self, sysroot: &Sysroot) -> Result<TempDir> {
         let tmp_dir = TempDir::new(&format!("rustc-benchmark-{}", self.name))?;
-        info!("temporary directory is {}", tmp_dir.path().display());
-
-        info!("copying files to temporary directory");
         let output = self.command(sysroot, "cp")
-        .arg("-r")
-        .arg("-T")
-        .arg("--")
-        .arg(".")
-        .arg(tmp_dir.path())
-        .output()?;
+            .arg("-r")
+            .arg("-T")
+            .arg("--")
+            .arg(".")
+            .arg(tmp_dir.path())
+            .output()
+            .chain_err(|| format!("copying {} to tmp dir", self.name))?;
 
         if !output.status.success() {
             bail!("copy failed: {}", String::from_utf8_lossy(&output.stderr));
@@ -90,17 +103,10 @@ impl Benchmark {
         info!("processing {}", self.name);
 
         let has_perf = Command::new("perf").output().is_ok();
+        assert!(has_perf);
         let mut fake_rustc = env::current_exe().unwrap();
         fake_rustc.pop();
         fake_rustc.push("rustc-fake");
-
-        let cargo_toml = self.config.cargo_toml.clone().unwrap_or(PathBuf::from("Cargo.toml"));
-        let mut metadata = cargo_metadata::metadata_deps(Some(&self.path.join(cargo_toml)), true)?;
-        assert_eq!(metadata.workspace_members.len(), 1,
-            "Only one workspace member for {:?}", self.path);
-        let package_id = metadata.workspace_members.pop().unwrap();
-        let package = metadata.packages.into_iter().find(|p| p.id == package_id).unwrap();
-        assert_eq!(package.targets.len(), 1, "Only one target for {}", package.name);
 
         let mut ret = CollectedBenchmark {
             name: self.name.clone(),
@@ -113,32 +119,6 @@ impl Benchmark {
             let mut incr_clean_stats = Vec::new();
             let mut incr_patched_stats: Vec<(Patch, Vec<Vec<Stat>>)> = vec![];
 
-            let mut standard_args = vec!["rustc".to_string()];
-            standard_args.extend(
-                self.config.cargo_opts.clone()
-                    .map(|s| s.split_whitespace()
-                        .map(|s| s.to_string())
-                        .collect::<Vec<String>>())
-                    .unwrap_or_default());
-            standard_args.extend(vec![
-                "-p".to_string(),
-                package_id.clone(),
-            ]);
-            if self.config.cargo_opts.as_ref().map_or(true, |s| !s.contains("feature")) {
-                standard_args.push("--all-features".to_string());
-            }
-            if *opt {
-                standard_args.push("--release".to_string());
-            }
-
-            standard_args.push("--".to_string());
-            standard_args.extend(
-                self.config.cargo_rustc_opts.clone()
-                    .map(|s| s.split_whitespace()
-                        .map(|s| s.to_string())
-                        .collect::<Vec<String>>())
-                    .unwrap_or_default());
-            standard_args.push("-Ztime-passes".to_string());
             for _ in 0..3 {
                 let tmp_dir = self.make_temp_dir(sysroot)?;
                 let cargo_no_args = |incremental: bool| {
@@ -147,32 +127,49 @@ impl Benchmark {
                         .current_dir(tmp_dir.path())
                         .env("RUSTC", &fake_rustc)
                         .env("RUSTC_REAL", &sysroot.rustc)
-                        .env("CARGO_INCREMENTAL", &format!("{}", incremental as usize));
-
-                    if has_perf {
-                        cargo.env("USE_PERF", "1");
-                    }
+                        .env("CARGO_INCREMENTAL", &format!("{}", incremental as usize))
+                        .env("USE_PERF", "1");
 
                     cargo
                 };
+                let mut cmd = cargo_no_args(false);
+                cmd.arg("generate-lockfile");
+                run(cmd)?;
+                let mut cmd = cargo_no_args(false);
+                cmd.arg("pkgid");
+                let package_id = String::from_utf8(run(cmd)?.stdout).unwrap();
+                let package_id = package_id.trim();
+
+                let mut standard_args = vec!["rustc".to_string()];
+                standard_args.extend(
+                    self.config.cargo_opts.clone()
+                    .map(|s| s.split_whitespace()
+                        .map(|s| s.to_string())
+                        .collect::<Vec<String>>())
+                    .unwrap_or_default());
+                standard_args.extend(vec![
+                    "-p".to_string(),
+                    package_id.to_string(),
+                ]);
+                if self.config.cargo_opts.as_ref().map_or(true, |s| !s.contains("feature")) {
+                    standard_args.push("--all-features".to_string());
+                }
+                if *opt {
+                    standard_args.push("--release".to_string());
+                }
+
+                standard_args.push("--".to_string());
+                standard_args.extend(
+                    self.config.cargo_rustc_opts.clone()
+                    .map(|s| s.split_whitespace()
+                        .map(|s| s.to_string())
+                        .collect::<Vec<String>>())
+                    .unwrap_or_default());
+                standard_args.push("-Ztime-passes".to_string());
                 let cargo = |incremental: bool| {
                     let mut cargo = cargo_no_args(incremental);
                     cargo.args(&standard_args);
                     cargo
-                };
-
-                let run = |mut cmd: Command| -> Result<process::Output> {
-                    info!("running: {:?}", cmd);
-                    let output = cmd.output()?;
-                    if !output.status.success() {
-                        bail!(
-                            "expected success, got {}\n\nstderr={}\n\n stdout={}",
-                            output.status,
-                            String::from_utf8_lossy(&output.stderr),
-                            String::from_utf8_lossy(&output.stdout)
-                        );
-                    }
-                    Ok(output)
                 };
 
                 let touch_all = || -> Result<()> {
@@ -188,11 +185,18 @@ impl Benchmark {
 
                 // prebuild the dependencies without recording timing information
                 {
-                    let mut cargo = cargo(false);
+                    let mut cargo = cargo_no_args(false);
+                    cargo.arg("build");
+                    if *opt {
+                        cargo.arg("--release");
+                    }
                     cargo.env("USE_PERF", "0");
                     run(cargo)?;
                     let mut cargo = cargo_no_args(false);
                     cargo.args(&["clean", "-p", &package_id]);
+                    if *opt {
+                        cargo.arg("--release");
+                    }
                     run(cargo)?;
                 }
 
@@ -217,37 +221,13 @@ impl Benchmark {
                 }
             }
 
-            let process_stats = |state: BenchmarkState, runs: Vec<Vec<Stat>>| -> Run {
-                let mut stats: HashMap<String, Vec<f64>> = HashMap::new();
-                for run in runs {
-                    for stat in run {
-                        stats.entry(stat.name.clone()).or_insert_with(|| Vec::new()).push(stat.cnt);
-                    }
-                }
-                // all stats should be present in all runs
-                assert_eq!(stats.values().map(|v| v.len()).collect::<HashSet<_>>().len(), 1);
-                let stats = stats.into_iter()
-                    .map(|(stat, counts)| {
-                        Stat {
-                            name: stat,
-                            cnt: counts.into_iter().fold(f64::INFINITY, |acc, v| f64::min(acc, v)),
-                        }
-                    })
-                    .collect();
-
-                Run {
-                    stats,
-                    release: *opt,
-                    state: state,
-                }
-            };
-
-            ret.runs.push(process_stats(BenchmarkState::Clean, clean_stats));
-            ret.runs.push(process_stats(BenchmarkState::IncrementalStart, incr_stats));
-            ret.runs.push(process_stats(BenchmarkState::IncrementalClean, incr_clean_stats));
+            ret.runs.push(process_stats(*opt, BenchmarkState::Clean, clean_stats));
+            ret.runs.push(process_stats(*opt, BenchmarkState::IncrementalStart, incr_stats));
+            ret.runs.push(process_stats(*opt, BenchmarkState::IncrementalClean, incr_clean_stats));
 
             for (patch, results) in incr_patched_stats {
                 ret.runs.push(process_stats(
+                    *opt,
                     BenchmarkState::IncrementalPatched(patch),
                     results,
                 ));
@@ -297,4 +277,29 @@ fn process_output(name: &str, output: Vec<u8>) -> Result<Vec<Stat>> {
     }
 
     Ok(stats)
+}
+
+fn process_stats(opt: bool, state: BenchmarkState, runs: Vec<Vec<Stat>>) -> Run {
+    let mut stats: HashMap<String, Vec<f64>> = HashMap::new();
+    for run in runs.clone() {
+        for stat in run {
+            stats.entry(stat.name.clone()).or_insert_with(|| Vec::new()).push(stat.cnt);
+        }
+    }
+    // all stats should be present in all runs
+    assert_eq!(stats.values().map(|v| v.len()).collect::<HashSet<_>>().len(), 1);
+    let stats = stats.into_iter()
+        .map(|(stat, counts)| {
+            Stat {
+                name: stat,
+                cnt: counts.into_iter().fold(f64::INFINITY, |acc, v| f64::min(acc, v)),
+            }
+        })
+        .collect();
+
+    Run {
+        stats,
+        release: opt,
+        state: state,
+    }
 }
