@@ -1,0 +1,4 @@
+{
+    "cargo_opts": "--manifest-path components/script/Cargo.toml --no-default-features",
+    "cargo_toml": "components/script/Cargo.toml"
+}

@@ -125,6 +125,7 @@ impl Benchmark {
                     let mut cargo = sysroot.command("cargo");
                     cargo
                         .current_dir(tmp_dir.path())
+                        .env("RUSTFLAGS", "--cap-lints warn")
                         .env("RUSTC", &fake_rustc)
                         .env("RUSTC_REAL", &sysroot.rustc)
                         .env("CARGO_INCREMENTAL", &format!("{}", incremental as usize))
