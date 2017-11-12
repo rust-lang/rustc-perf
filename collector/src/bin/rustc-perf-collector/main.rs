@@ -78,11 +78,11 @@ fn bench_commit(
 
             let result = benchmark.run(&sysroot);
 
-            if result.is_err() {
+            if let Err(ref s) = result {
                 info!(
-                    "failure to benchmark {}, recorded: {:?}",
+                    "failure to benchmark {}, recorded: {}",
                     benchmark.name,
-                    result
+                    s
                 );
             }
 

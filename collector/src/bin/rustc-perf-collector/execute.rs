@@ -134,10 +134,11 @@ impl Benchmark {
                     cargo
                 };
                 let mut cmd = cargo_no_args(false);
-                cmd.arg("generate-lockfile");
-                run(cmd)?;
-                let mut cmd = cargo_no_args(false);
                 cmd.arg("pkgid");
+                if let Some(ref cargo_toml) = self.config.cargo_toml {
+                    cmd.arg("--manifest-path");
+                    cmd.arg(cargo_toml);
+                }
                 let package_id = String::from_utf8(run(cmd)?.stdout).unwrap();
                 let package_id = package_id.trim();
 
@@ -188,6 +189,11 @@ impl Benchmark {
                 {
                     let mut cargo = cargo_no_args(false);
                     cargo.arg("build");
+                    cargo.args(&self.config.cargo_opts.as_ref()
+                        .map(|s| s.split_whitespace()
+                            .map(|s| s.to_string())
+                            .collect::<Vec<String>>())
+                        .unwrap_or_default());
                     if *opt {
                         cargo.arg("--release");
                     }
