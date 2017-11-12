@@ -61,7 +61,6 @@ assert_eq!(err.kind(), &ErrorKind::UnclosedParen);
 */
 
 #![deny(missing_docs)]
-#![cfg_attr(test, deny(warnings))]
 
 #[cfg(test)] extern crate quickcheck;
 #[cfg(test)] extern crate rand;

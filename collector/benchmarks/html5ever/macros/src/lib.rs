@@ -8,7 +8,6 @@
 // except according to those terms.
 
 #![feature(quote, rustc_private)]
-#![deny(warnings)]
 
 extern crate syntax;
 

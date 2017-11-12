@@ -10,7 +10,6 @@
 #![crate_name="html5ever"]
 #![crate_type="dylib"]
 
-#![cfg_attr(test, deny(warnings))]
 #![allow(unused_parens)]
 
 #![cfg_attr(feature = "heap_size", feature(plugin, custom_derive))]

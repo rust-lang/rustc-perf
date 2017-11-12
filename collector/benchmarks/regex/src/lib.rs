@@ -447,7 +447,6 @@
 //! another matching engine with fixed memory requirements.)
 
 #![deny(missing_docs)]
-#![cfg_attr(test, deny(warnings))]
 #![cfg_attr(feature = "pattern", feature(pattern))]
 #![cfg_attr(feature = "simd-accel", feature(cfg_target_feature))]
 #![doc(html_logo_url = "https://www.rust-lang.org/logos/rust-logo-128x128-blk-v2.png",
