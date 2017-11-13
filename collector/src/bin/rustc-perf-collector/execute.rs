@@ -153,9 +153,6 @@ impl Benchmark {
                     "-p".to_string(),
                     package_id.to_string(),
                 ]);
-                if self.config.cargo_opts.as_ref().map_or(true, |s| !s.contains("feature")) {
-                    standard_args.push("--all-features".to_string());
-                }
                 if *opt {
                     standard_args.push("--release".to_string());
                 }
