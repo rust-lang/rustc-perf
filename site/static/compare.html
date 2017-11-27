@@ -16,7 +16,7 @@
             <select id='stats' name="stat">
             </select>
             <div class="submit">
-                <a href="#" onClick="make_data({}, true); return false;">Submit</a>
+                <a href="#" onClick="submit_settings(); return false;">Submit</a>
             </div>
         </div>
     </div>
@@ -25,8 +25,6 @@
     <script src="libs/fetch.js"></script>
     <script src="shared.js"></script>
     <script>
-    make_as_of();
-
     function print_date(date) {
         function pad_str(i) {
             return (i < 10) ? "0" + i : "" + i;
@@ -119,44 +117,28 @@
         document.getElementById("content").style.display = "block";
     }
 
-    function make_data(state, push_state) {
-        let start = state.start || getValue("start-bound");
-        let end = state.end || getValue("end-bound");
-        let stat = state.stat || getSelected("stats");
-
-        if (state.start) {
-            set_value("start-bound", state.start);
-        }
-        if (state.end) {
-            set_value("end-bound", state.end);
-        }
-        if (state.stat) {
-            setSelected("stats", state.stat);
-        }
-
-        var values = {
-            start, end,
-            crates: {list: 'All'},
-            stat: stat,
-        };
-        make_request("/get", values).then(function(response) {
-            response.json().then(function(data) {
-                populate_data(data);
-
-                if (push_state) {
-                    push_state_to_history({
-                        start: data.a.commit,
-                        end: data.b.commit,
-                        stat: stat,
-                    });
-                }
-            });
-        }, function(err) {
-            console.log("Error fetching data:");
-            console.log(err);
+    function make_data(state) {
+        let values = Object.assign({}, {
+            start: "",
+            end: "",
+            stat: "instruction:u",
+        }, state);
+        make_request("/get", values).then(function(data) {
+            populate_data(data);
         });
     }
 
-    make_settings(make_data);
+    function submit_settings() {
+        let start = document.getElementById("start-bound").value;
+        let end = document.getElementById("end-bound").value;
+        let stat = getSelected("stats");
+        let params = new URLSearchParams();
+        params.append("start", start);
+        params.append("end", end);
+        params.append("stat", stat);
+        window.location.search = params.toString();
+    }
+
+    load_state(make_data);
     </script>
 </html>

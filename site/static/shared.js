@@ -82,18 +82,7 @@ function addTotalHandler(name) {
 // Get lists of the available crates from the server and make
 // the lists of checkboxes and other settings.
 // Assumes the initial graph is total/total/by crate
-function make_settings(callback, total_label) {
-    function checkbox(name, id, checked, body) {
-        if (checked) {
-            return `<label><input type="checkbox" checked="true" name="${name}" id="${id}">${body}</label></br>`;
-        } else {
-            return `<label><input type="checkbox" name="${name}" id="${id}">${body}</label></br>`;
-        }
-    }
-
-    if (!total_label) {
-        total_label = "total";
-    }
+function make_settings(callback) {
     return fetch(BASE_URL + "/info", {}).then(function(response) {
         response.json().then(function(data) {
             let phases_html = "";
@@ -105,35 +94,12 @@ function make_settings(callback, total_label) {
                 list.innerHTML = phases_html;
                 list.value = 'instructions:u';
             }
-
-            var groupByCrate = document.getElementById("group-by-crate");
-            if (groupByCrate) {
-                groupByCrate.checked = true;
-            }
-            if (callback) {
-                // Respond to back/forwards properly.
-                window.onpopstate = function() {
-                    dispatch_on_params(callback);
-                };
-
-                // Load the page from a URL.
-                dispatch_on_params(callback);
-            }
+            document.getElementById("as-of").innerHTML =
+                "Updated as of: " + (new Date(data.as_of)).toLocaleString();
+            callback();
         });
     }, function(err) {
         document.getElementById("settings").innerHTML = "Error fetching info";
-        console.log("Error fetching info:");
-        console.log(err);
-    });
-}
-
-function make_as_of() {
-    return fetch(BASE_URL + "/info", {}).then(function(response) {
-        response.json().then(function(data) {
-            document.getElementById("as-of").innerHTML = "Updated as of: " + (new Date(data.as_of)).toLocaleString();
-        });
-    }, function(err) {
-        document.getElementById("as-of").innerHTML = "Error fetching info";
         console.log("Error fetching info:");
         console.log(err);
     });
@@ -220,13 +186,45 @@ function query_string_for_state(state) {
     return result;
 }
 
+function load_state(callback) {
+    let params = new URLSearchParams(window.location.search.slice(1));
+    let state = {};
+    for (let param of params) {
+        let key = param[0];
+        let value = param[1];
+        if (key == "absolute") {
+            value = value == "true" ? true : false;
+        }
+        state[key] = value;
+    }
+    if (state.start) {
+        document.getElementById("start-bound").value = state.start;
+    }
+    if (state.end) {
+        document.getElementById("end-bound").value = state.end;
+    }
+    if (state.absolute === true || state.absolute === false) {
+        document.getElementById("absolute").checked = state.absolute;
+    }
+    make_settings(() => {
+        if (state.stat) {
+            setSelected("stats", state.stat);
+        }
+        callback(state);
+    });
+}
+
 // This one is for making the request we send to the backend.
 function make_request(path, body) {
     return fetch(BASE_URL + path, {
         method: "POST",
         body: JSON.stringify(body),
         mode: "cors"
+    }).then(response => {
+        return response.clone().json().catch(() => {
+            return response.text().then(data => alert(data));
+        });
+    }, err => {
+        console.log("error fetching ", path, ": ", err);
     });
 }
-
-make_as_of();

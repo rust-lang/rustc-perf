@@ -11,7 +11,7 @@
         end: <input placeholder="yyyy-mm-dd or commit" id="end-bound"></input>
         Absolute data: <input id='absolute' name="absolute" type="checkbox">
         <select id='stats' name="stat"></select>
-        <a href="#" onClick="make_graph({}, true); return false;">Submit</a>
+        <a href="#" onClick="submit_settings(); return false;">Submit</a>
     </div>
     <div id="charts"></div>
     <div id="as-of"></div>
@@ -19,12 +19,9 @@
     <script src="libs/highcharts.js"></script>
     <script src="libs/fetch.js"></script>
     <script src="shared.js"></script>
+
     <script>
-
-    function init_graph(response) {
-        let stat = "wall-time";
-        let absolute = true;
-
+    function init_graph(response, stat, absolute) {
         let sorted_names = Object.keys(response);
         sorted_names.sort();
         document.getElementById("charts").style.display = "none";
@@ -45,6 +42,8 @@
         } else if (stat == "max-rss") {
             title = "Maximum resident set size";
             yAxis = "Kilobytes";
+        } else if (stat == "faults") {
+            title = "Faults";
         }
 
         function clickHandler(event) {
@@ -147,60 +146,31 @@
         });
     }
 
-    function getSelectedCrates() {
-        var selected = [];
-        if (chart) {
-            for (var i = 0; i < chart.series.length; i++) {
-                var series = chart.series[i];
-                if (series.visible) {
-                    selected.push(series.name);
-                }
-            }
-        }
-        return selected;
-    }
-
-    function make_graph(state, push_state) {
-        let values = {
-            start: "f93a4928c2168bcc475b4fe77ba9f9e5494ffe1c",
-            end: "d0f8e2913a93573c78cddfd297944cff4eb4c41a",
-            stat: "wall-time",
-            absolute: true,
-        };
+    function make_graph(state) {
+        let values = Object.assign({}, {
+            start: "",
+            end: "",
+            stat: "instructions:u",
+            absolute: false,
+        }, state);
         make_request("/graph", values).then(function(response) {
-            response.json().then(function(data) {
-                init_graph(data, values.stat);
-                if (push_state) {
-                    push_state_to_history(values);
-                }
-            });
-        }, function(err) {
-            console.log("Error fetching data:");
-            console.log(err);
+            init_graph(response, values.stat, values.absolute);
         });
     }
 
-    function hide_all() {
-        if (!chart) {
-            return
-        }
-        for (var i = 0; i < chart.series.length; i++) {
-            chart.series[i].setVisible(false, false);
-        }
-        chart.redraw();
+    function submit_settings() {
+        let start = document.getElementById("start-bound").value;
+        let end = document.getElementById("end-bound").value;
+        let absolute = document.getElementById("absolute").checked;
+        let stat = getSelected("stats");
+        let params = new URLSearchParams();
+        params.append("start", start);
+        params.append("end", end);
+        params.append("absolute", absolute);
+        params.append("stat", stat);
+        window.location.search = params.toString();
     }
 
-    function show_all() {
-        if (!chart) {
-            return
-        }
-        for (var i = 0; i < chart.series.length; i++) {
-            chart.series[i].setVisible(true, false);
-        }
-        chart.redraw();
-    }
-
-    make_settings(make_graph);
+    load_state(make_graph);
     </script>
 </html>
-
