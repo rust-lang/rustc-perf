@@ -7,6 +7,7 @@ use std::str;
 use std::f64;
 use std::fs::{self, File};
 use std::collections::{HashSet, HashMap};
+use std::cmp;
 
 use tempdir::TempDir;
 
@@ -39,13 +40,41 @@ fn touch_all(path: &Path) -> Result<()> {
 }
 
 
-#[derive(Debug, Clone, Default, Deserialize)]
+fn default_runs() -> usize {
+    3
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Deserialize)]
 struct BenchmarkConfig {
     cargo_opts: Option<String>,
     cargo_rustc_opts: Option<String>,
     cargo_toml: Option<String>,
     #[serde(default)]
     disabled: bool,
+    #[serde(default = "default_runs")]
+    runs: usize,
+    #[serde(default = "default_true")]
+    run_optimized: bool,
+    #[serde(default = "default_true")]
+    run_debug: bool,
+}
+
+impl Default for BenchmarkConfig {
+    fn default() -> BenchmarkConfig {
+        BenchmarkConfig {
+            cargo_opts: None,
+            cargo_rustc_opts: None,
+            cargo_toml: None,
+            disabled: false,
+            runs: default_runs(),
+            run_optimized: true,
+            run_debug: true,
+        }
+    }
 }
 
 pub struct Benchmark {
@@ -216,6 +245,7 @@ impl Benchmark {
 
     /// Run a specific benchmark on a specific commit
     pub fn run(&self, sysroot: &Sysroot, iterations: usize) -> Result<CollectedBenchmark> {
+        let iterations = cmp::min(iterations, self.config.runs);
         eprintln!("processing {}", self.name);
         if self.config.disabled {
             eprintln!("skipping {}: disabled", self.name);
@@ -230,7 +260,15 @@ impl Benchmark {
             runs: Vec::new(),
         };
 
-        for &opt in &[Release(false), Release(true)] {
+        let mut opts = Vec::with_capacity(2);
+        if self.config.run_debug {
+            opts.push(Release(false));
+        }
+        if self.config.run_optimized {
+            opts.push(Release(true));
+        }
+
+        for opt in opts {
             let mut clean_stats = Vec::new();
             let mut incr_stats = Vec::new();
             let mut incr_clean_stats = Vec::new();

@@ -223,7 +223,7 @@ fn run() -> Result<i32> {
     let out_repo = PathBuf::from(matches.value_of_os("output_repo").unwrap());
     let mut out_repo = outrepo::Repo::open(out_repo, use_remote)?;
 
-    let commits = rust_sysroot::get_commits()?;
+    let commits = rust_sysroot::get_commits(rust_sysroot::EPOCH_COMMIT, "master")?;
 
     match matches.subcommand() {
         ("test_benchmarks", Some(_)) => {

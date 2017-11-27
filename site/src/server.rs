@@ -167,7 +167,7 @@ pub fn handle_days(body: days::Request, data: &InputData) -> ServerResult<days::
 }
 
 pub fn handle_date_commit(date: Date) -> CommitResponse {
-    let commits = ::rust_sysroot::get_commits().unwrap();
+    let commits = ::rust_sysroot::get_commits(::rust_sysroot::EPOCH_COMMIT, "master").unwrap();
 
     let commit = commits.into_iter().rfind(|c| c.date < date.0);
 
@@ -177,7 +177,7 @@ pub fn handle_date_commit(date: Date) -> CommitResponse {
 }
 
 pub fn handle_pr_commit(pr: u64) -> CommitResponse {
-    let commits = ::rust_sysroot::get_commits().unwrap();
+    let commits = ::rust_sysroot::get_commits(::rust_sysroot::EPOCH_COMMIT, "master").unwrap();
 
     let pr = format!("#{}", pr);
     let commit = commits.into_iter().find(|c| c.summary.contains(&pr));
