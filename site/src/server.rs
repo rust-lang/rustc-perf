@@ -31,7 +31,7 @@ use url::Url;
 use git;
 use date::Date;
 use util::{self, get_repo_path};
-pub use api::{self, data, days, info, CommitResponse, ServerResult};
+pub use api::{self, data, graph, days, info, CommitResponse, ServerResult};
 use collector::Run;
 use load::{CommitData, InputData};
 use antidote::RwLock;
@@ -51,12 +51,23 @@ impl DateData {
         let benchmarks = commit.benchmarks.values().filter_map(|v| v.as_ref().ok());
         let mut out = HashMap::new();
         for benchmark in benchmarks {
+            let mut runs_opt = Vec::new();
             let mut runs = Vec::new();
             for run in &benchmark.runs {
-                if let Some(stat) = run.get_stat(stat) {
-                    runs.push((run.name(), run.clone(), stat));
+                let v = if run.release {
+                    &mut runs_opt
+                } else {
+                    &mut runs
+                };
+                if let Some(mut value) = run.get_stat(stat) {
+                    if stat == "cpu-clock" {
+                        // convert to seconds; perf records it in milliseconds
+                        value /= 1000.0;
+                    }
+                    v.push((run.name(), run.clone(), value));
                 }
             }
+            out.insert(benchmark.name.clone() + "-opt", runs_opt);
             out.insert(benchmark.name.clone(), runs);
         }
 
@@ -74,6 +85,52 @@ pub fn handle_info(data: &InputData) -> info::Response {
         stats: data.stats_list.clone(),
         as_of: data.last_date,
     }
+}
+
+
+pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<graph::Response> {
+    let out = handle_data(data::Request {
+        start: body.start.clone(),
+        end: body.end.clone(),
+        stat: body.stat.clone(),
+    }, data)?.0;
+
+    // crate list * 2 because we have both opt and non-opt variants.
+    let mut result = HashMap::with_capacity(data.crate_list.len() * 2);
+    let elements = out.len();
+    let mut last_commit = None;
+    for date_data in out {
+        let commit = date_data.commit;
+        for (name, runs) in date_data.data {
+            let mut entry = result.entry(name)
+                .or_insert_with(|| HashMap::with_capacity(runs.len()));
+            for (name, _, value) in runs {
+                let mut entry = entry.entry(name.clone())
+                    .or_insert_with(|| Vec::<graph::GraphData>::with_capacity(elements));
+                let first = entry.first().map(|d| d.absolute);
+                let percent = first.map_or(0.0, |f| (value - f) / f * 100.0);
+                entry
+                    .push(graph::GraphData {
+                        benchmark: name,
+                        commit: commit.clone(),
+                        url: last_commit.as_ref().map(|c| {
+                            format!("/compare.html?start={}&end={}&stat={}",
+                                c,
+                                commit,
+                                body.stat,
+                            )
+                        }),
+                        absolute: value,
+                        percent: percent,
+                        y: if body.absolute { value } else { percent },
+                        x: date_data.date.0.timestamp() as u64, // all dates are since 1970
+                    });
+            }
+        }
+        last_commit = Some(commit);
+    }
+
+    Ok(graph::Response(result))
 }
 
 pub fn handle_data(body: data::Request, data: &InputData) -> ServerResult<data::Response> {
@@ -97,10 +154,7 @@ pub fn handle_data(body: data::Request, data: &InputData) -> ServerResult<data::
         .rposition(|day| !day.data.is_empty())
         .unwrap_or(0);
     let result = result.drain(first_idx..(last_idx + 1)).collect();
-    Ok(data::Response {
-        data: result,
-        crates: body.crates.into_set(&data.crate_list),
-    })
+    Ok(data::Response(result))
 }
 
 pub fn handle_days(body: days::Request, data: &InputData) -> ServerResult<days::Response> {
@@ -335,6 +389,7 @@ impl Service for Server {
         match req.path() {
             "/perf/info" => self.handle_get(&req, handle_info),
             "/perf/data" => self.handle_post(req, handle_data),
+            "/perf/graph" => self.handle_post(req, handle_graph),
             "/perf/get" => self.handle_post(req, handle_days),
             "/perf/pr_commit" => self.handle_get_req(&req, |req, _data| {
                 let res = req.query()

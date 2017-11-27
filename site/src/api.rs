@@ -70,18 +70,13 @@ pub struct CommitResponse {
 }
 
 pub mod data {
-    use super::List;
     use server::DateData;
     use collector::Bound;
-    use std::collections::BTreeSet;
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct Request {
         pub start: Bound,
         pub end: Bound,
-
-        /// Which crates to return data for
-        pub crates: List,
 
         /// Which statistic to return data for
         pub stat: String,
@@ -89,14 +84,38 @@ pub mod data {
 
     /// List of DateData's from oldest to newest
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-    pub struct Response {
-        pub data: Vec<DateData>,
-        pub crates: BTreeSet<String>,
+    pub struct Response(pub Vec<DateData>);
+}
+
+pub mod graph {
+    use collector::Bound;
+    use std::collections::HashMap;
+
+    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+    pub struct Request {
+        pub start: Bound,
+        pub end: Bound,
+        pub stat: String,
+        pub absolute: bool,
     }
+
+    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+    pub struct GraphData {
+        pub benchmark: String,
+        pub commit: String,
+        pub url: Option<String>,
+        pub absolute: f64,
+        pub percent: f64,
+        pub y: f64,
+        pub x: u64,
+    }
+
+    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+    /// Crate -> Benchmark -> [GraphData]
+    pub struct Response(pub HashMap<String, HashMap<String, Vec<GraphData>>>);
 }
 
 pub mod days {
-    use super::List;
     use server::DateData;
     use collector::Bound;
 
@@ -105,8 +124,6 @@ pub mod days {
         pub start: Bound,
         pub end: Bound,
 
-        /// Which crates to return data for
-        pub crates: List,
         pub stat: String,
     }
 

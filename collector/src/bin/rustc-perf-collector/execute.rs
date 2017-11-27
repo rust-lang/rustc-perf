@@ -30,11 +30,22 @@ fn run(mut cmd: Command) -> Result<process::Output> {
     Ok(output)
 }
 
+fn touch_all(path: &Path) -> Result<()> {
+    let mut cmd = Command::new("bash");
+    cmd.current_dir(path)
+        .args(&["-c", "find . -name *.rs | xargs touch"]);
+    run(cmd)?;
+    Ok(())
+}
+
+
 #[derive(Debug, Clone, Default, Deserialize)]
 struct BenchmarkConfig {
     cargo_opts: Option<String>,
     cargo_rustc_opts: Option<String>,
-    cargo_toml: Option<PathBuf>,
+    cargo_toml: Option<String>,
+    #[serde(default)]
+    disabled: bool,
 }
 
 pub struct Benchmark {
@@ -42,6 +53,96 @@ pub struct Benchmark {
     pub path: PathBuf,
     patches: Vec<Patch>,
     config: BenchmarkConfig,
+}
+
+struct CargoProcess<'sysroot> {
+    sysroot: &'sysroot Sysroot,
+    incremental: Incremental,
+    release: Release,
+    perf: bool,
+    manifest_path: String,
+    cargo_args: Vec<String>,
+    rustc_args: Vec<String>,
+}
+
+#[derive(Copy, Clone, Debug)]
+struct Incremental(bool);
+
+#[derive(Copy, Clone, Debug)]
+struct Release(bool);
+
+impl<'sysroot> CargoProcess<'sysroot> {
+    fn base(&self) -> Command {
+        let mut cargo = self.sysroot.command("cargo");
+        cargo
+            .env("SHELL", env::var_os("SHELL").unwrap_or_default())
+            .env("RUSTC", &*FAKE_RUSTC)
+            .env("RUSTC_REAL", &self.sysroot.rustc)
+            .env("CARGO_INCREMENTAL", &format!("{}", self.incremental.0 as usize))
+            .env("USE_PERF", &format!("{}", self.perf as usize));
+        cargo
+    }
+
+    fn perf(mut self, perf: bool) -> Self {
+        self.perf = perf;
+        self
+    }
+
+    fn run(self, cwd: &Path, cargo: Cargo) -> Result<process::Output> {
+        let mut cmd = self.base();
+        cmd.current_dir(cwd);
+        cmd.arg(cargo.to_cmd());
+        {
+            let mut cargo = self.base();
+            cargo.current_dir(cwd)
+                .arg("pkgid")
+                .arg("--manifest-path")
+                .arg(&self.manifest_path);
+            let out = run(cargo).unwrap_or_else(|e| {
+                panic!("failed to obtain pkgid in {:?}: {:?}", cwd, e);
+            }).stdout;
+            let package_id = str::from_utf8(&out).unwrap();
+            cmd.arg("-p").arg(package_id.trim());
+        }
+        if self.release.0 {
+            cmd.arg("--release");
+        }
+        cmd.arg("--manifest-path")
+            .arg(&self.manifest_path);
+        if let Cargo::Rustc { .. } = cargo {
+            cmd.args(&self.cargo_args);
+        }
+        cmd.arg("--");
+        if let Cargo::Rustc { .. } = cargo {
+            cmd.args(&self.rustc_args);
+            cmd.arg("-Ztime-passes");
+        }
+        run(cmd)
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+enum Cargo {
+    Rustc,
+    Clean,
+}
+
+impl Cargo {
+    fn to_cmd<'a>(self) -> &'a str {
+        match self {
+            Cargo::Rustc => "rustc",
+            Cargo::Clean => "clean",
+        }
+    }
+}
+
+lazy_static! {
+    static ref FAKE_RUSTC: PathBuf = {
+        let mut fake_rustc = env::current_exe().unwrap();
+        fake_rustc.pop();
+        fake_rustc.push("rustc-fake");
+        fake_rustc
+    };
 }
 
 impl Benchmark {
@@ -71,167 +172,119 @@ impl Benchmark {
         };
 
         Ok(Benchmark {
-            name, path, patches, config
+            name, path, patches, config,
         })
     }
 
-    pub fn command<P: AsRef<Path>>(&self, sysroot: &Sysroot, path: P) -> Command {
-        let mut command = sysroot.command(path);
-        command.current_dir(&self.path);
-        command
-    }
-
-    fn make_temp_dir(&self, sysroot: &Sysroot) -> Result<TempDir> {
+    fn make_temp_dir(&self, base: &Path) -> Result<TempDir> {
         let tmp_dir = TempDir::new(&format!("rustc-benchmark-{}", self.name))?;
-        let output = self.command(sysroot, "cp")
+        let mut cmd = Command::new("cp");
+        cmd
             .arg("-r")
             .arg("-T")
             .arg("--")
-            .arg(".")
-            .arg(tmp_dir.path())
-            .output()
-            .chain_err(|| format!("copying {} to tmp dir", self.name))?;
-
-        if !output.status.success() {
-            bail!("copy failed: {}", String::from_utf8_lossy(&output.stderr));
-        }
+            .arg(base)
+            .arg(tmp_dir.path());
+        run(cmd).chain_err(|| format!("copying {} to tmp dir", self.name))?;
         Ok(tmp_dir)
     }
 
+    fn cargo<'a>(
+        &self,
+        sysroot: &'a Sysroot,
+        incremental: Incremental,
+        release: Release,
+    ) -> CargoProcess<'a> {
+        CargoProcess {
+            sysroot: sysroot,
+            incremental: incremental,
+            release: release,
+            perf: true,
+            manifest_path:
+                self.config.cargo_toml.clone().unwrap_or_else(|| String::from("Cargo.toml")),
+            cargo_args:
+            self.config.cargo_opts.clone()
+                    .unwrap_or_default()
+                    .split_whitespace().map(String::from)
+            .collect(),
+            rustc_args: self.config.cargo_rustc_opts.clone()
+                .unwrap_or_default()
+                .split_whitespace().map(String::from)
+                .collect(),
+        }
+    }
+
     /// Run a specific benchmark on a specific commit
-    pub fn run(&self, sysroot: &Sysroot) -> Result<CollectedBenchmark> {
-        info!("processing {}", self.name);
+    pub fn run(&self, sysroot: &Sysroot, iterations: usize) -> Result<CollectedBenchmark> {
+        eprintln!("processing {}", self.name);
+        if self.config.disabled {
+            eprintln!("skipping {}: disabled", self.name);
+            bail!("disabled benchmark");
+        }
 
         let has_perf = Command::new("perf").output().is_ok();
         assert!(has_perf);
-        let mut fake_rustc = env::current_exe().unwrap();
-        fake_rustc.pop();
-        fake_rustc.push("rustc-fake");
 
         let mut ret = CollectedBenchmark {
             name: self.name.clone(),
             runs: Vec::new(),
         };
 
-        for opt in &[false, true] {
+        for &opt in &[Release(false), Release(true)] {
             let mut clean_stats = Vec::new();
             let mut incr_stats = Vec::new();
             let mut incr_clean_stats = Vec::new();
-            let mut incr_patched_stats: Vec<(Patch, Vec<Vec<Stat>>)> = vec![];
+            let mut incr_patched_stats: Vec<(Patch, Vec<Vec<Stat>>)> = Vec::new();
 
-            for _ in 0..3 {
-                let tmp_dir = self.make_temp_dir(sysroot)?;
-                let cargo_no_args = |incremental: bool| {
-                    let mut cargo = sysroot.command("cargo");
-                    cargo
-                        .current_dir(tmp_dir.path())
-                        .env("RUSTFLAGS", "--cap-lints warn")
-                        .env("RUSTC", &fake_rustc)
-                        .env("RUSTC_REAL", &sysroot.rustc)
-                        .env("CARGO_INCREMENTAL", &format!("{}", incremental as usize))
-                        .env("USE_PERF", "1");
+            eprintln!("Benchmarking {} with {:?}", self.name, opt);
 
-                    cargo
-                };
-                let mut cmd = cargo_no_args(false);
-                cmd.arg("pkgid");
-                if let Some(ref cargo_toml) = self.config.cargo_toml {
-                    cmd.arg("--manifest-path");
-                    cmd.arg(cargo_toml);
-                }
-                let package_id = String::from_utf8(run(cmd)?.stdout).unwrap();
-                let package_id = package_id.trim();
+            let base_build = self.make_temp_dir(&self.path)?;
+            let clean = self.cargo(sysroot, Incremental(false), opt)
+                .run(base_build.path(), Cargo::Rustc)?;
+            clean_stats.push(process_output(clean.stdout)?);
+            self.cargo(sysroot, Incremental(false), opt)
+                .perf(false)
+                .run(base_build.path(), Cargo::Clean)?;
 
-                let mut standard_args = vec!["rustc".to_string()];
-                standard_args.extend(
-                    self.config.cargo_opts.clone()
-                    .map(|s| s.split_whitespace()
-                        .map(|s| s.to_string())
-                        .collect::<Vec<String>>())
-                    .unwrap_or_default());
-                standard_args.extend(vec![
-                    "-p".to_string(),
-                    package_id.to_string(),
-                ]);
-                if *opt {
-                    standard_args.push("--release".to_string());
-                }
+            for _ in 0..iterations {
+                let tmp_dir = self.make_temp_dir(base_build.path())?;
 
-                standard_args.push("--".to_string());
-                standard_args.extend(
-                    self.config.cargo_rustc_opts.clone()
-                    .map(|s| s.split_whitespace()
-                        .map(|s| s.to_string())
-                        .collect::<Vec<String>>())
-                    .unwrap_or_default());
-                standard_args.push("-Ztime-passes".to_string());
-                let cargo = |incremental: bool| {
-                    let mut cargo = cargo_no_args(incremental);
-                    cargo.args(&standard_args);
-                    cargo
-                };
+                let clean = self.cargo(sysroot, Incremental(false), opt)
+                    .run(tmp_dir.path(), Cargo::Rustc)?;
+                touch_all(tmp_dir.path())?;
+                let incr = self.cargo(sysroot, Incremental(true), opt)
+                    .run(tmp_dir.path(), Cargo::Rustc)?;
+                touch_all(tmp_dir.path())?;
+                let incr_clean = self.cargo(sysroot, Incremental(true), opt)
+                    .run(tmp_dir.path(), Cargo::Rustc)?;
 
-                let touch_all = || -> Result<()> {
-                    let mut cmd = sysroot.command("bash");
-                    cmd.current_dir(tmp_dir.path())
-                        .args(&["-c", "find . -name *.rs | xargs touch"]);
-                    run(cmd)?;
-                    Ok(())
-                };
+                clean_stats.push(process_output(clean.stdout)?);
+                incr_stats.push(process_output(incr.stdout)?);
+                incr_clean_stats.push(process_output(incr_clean.stdout)?);
 
-                // Only one thing is required from each benchmark: a println.diff file which adds a
-                // println! statement to a random function. All benchmarks are uniform in this.
-
-                // prebuild the dependencies without recording timing information
-                {
-                    let mut cargo = cargo_no_args(false);
-                    cargo.arg("build");
-                    cargo.args(&self.config.cargo_opts.as_ref()
-                        .map(|s| s.split_whitespace()
-                            .map(|s| s.to_string())
-                            .collect::<Vec<String>>())
-                        .unwrap_or_default());
-                    if *opt {
-                        cargo.arg("--release");
-                    }
-                    cargo.env("USE_PERF", "0");
-                    run(cargo)?;
-                    let mut cargo = cargo_no_args(false);
-                    cargo.args(&["clean", "-p", &package_id]);
-                    if *opt {
-                        cargo.arg("--release");
-                    }
-                    run(cargo)?;
-                }
-
-                clean_stats.push(process_output(&self.name, run(cargo(false))?.stdout)?);
-                touch_all()?;
-                incr_stats.push(process_output(&self.name, run(cargo(true))?.stdout)?);
-                touch_all()?;
-                incr_clean_stats.push(process_output(&self.name, run(cargo(true))?.stdout)?);
                 for patch in &self.patches {
                     patch.apply(tmp_dir.path())?;
-                    touch_all()?;
+                    touch_all(tmp_dir.path())?;
+                    let out = self.cargo(sysroot, Incremental(true), opt)
+                        .run(tmp_dir.path(), Cargo::Rustc)?;
+                    let out = process_output(out.stdout)?;
                     if let Some(mut entry) = incr_patched_stats.iter_mut()
                         .find(|s| &s.0 == patch) {
-                        entry.1.push(process_output(&self.name, run(cargo(true))?.stdout)?);
+                        entry.1.push(out);
                         continue;
                     }
 
-                    incr_patched_stats.push((
-                            patch.clone(),
-                            vec![process_output(&self.name, run(cargo(true))?.stdout)?]
-                    ));
+                    incr_patched_stats.push((patch.clone(), vec![out]));
                 }
             }
 
-            ret.runs.push(process_stats(*opt, BenchmarkState::Clean, clean_stats));
-            ret.runs.push(process_stats(*opt, BenchmarkState::IncrementalStart, incr_stats));
-            ret.runs.push(process_stats(*opt, BenchmarkState::IncrementalClean, incr_clean_stats));
+            ret.runs.push(process_stats(opt.0, BenchmarkState::Clean, clean_stats));
+            ret.runs.push(process_stats(opt.0, BenchmarkState::IncrementalStart, incr_stats));
+            ret.runs.push(process_stats(opt.0, BenchmarkState::IncrementalClean, incr_clean_stats));
 
             for (patch, results) in incr_patched_stats {
                 ret.runs.push(process_stats(
-                    *opt,
+                    opt.0,
                     BenchmarkState::IncrementalPatched(patch),
                     results,
                 ));
@@ -242,9 +295,8 @@ impl Benchmark {
     }
 }
 
-fn process_output(name: &str, output: Vec<u8>) -> Result<Vec<Stat>> {
-    let output = String::from_utf8(output)
-        .chain_err(|| format!("unable to convert output of {} to UTF-8", name))?;
+fn process_output(output: Vec<u8>) -> Result<Vec<Stat>> {
+    let output = String::from_utf8(output)?;
     let mut stats = Vec::new();
 
     for line in output.lines() {
