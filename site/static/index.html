@@ -55,7 +55,8 @@
         }
 
         function formatter() {
-            let date = new Date(this.x);
+            let date = new Date();
+            date.setUTCMilliseconds(this.x);
             let commit = this.point.commit.substr(0, 10);
             return "<b>" + date.toLocaleString() + " - " + commit + "</b>" +
                 "<br>" + this.series.name + ": " + this.point.absolute.toFixed(2) + " " +
