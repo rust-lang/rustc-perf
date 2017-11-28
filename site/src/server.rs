@@ -67,8 +67,12 @@ impl DateData {
                     v.push((run.name(), run.clone(), value));
                 }
             }
-            out.insert(benchmark.name.clone() + "-opt", runs_opt);
-            out.insert(benchmark.name.clone(), runs);
+            if !runs_opt.is_empty() {
+                out.insert(benchmark.name.clone() + "-opt", runs_opt);
+            }
+            if !runs.is_empty() {
+                out.insert(benchmark.name.clone(), runs);
+            }
         }
 
         DateData {
