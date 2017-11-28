@@ -91,18 +91,12 @@
         for (let name of test_names) {
             if (data.a.data[name].length > 0) {
                 html += "<tr><td>&nbsp;</td></tr>";
-                html += "<tr><td>&nbsp;</td></tr>";
                 html += "<tr>";
                 html += "<th colspan=10 style='text-align: center;'>" + truncate_name(name) + "</th>";
                 html += "</tr>";
-                let added_release_row = false;
                 for (let i = 0; i < data.a.data[name].length; i++) {
                     let a = data.a.data[name][i];
                     let b = data.b.data[name][i];
-                    if (a[1].release && !added_release_row) {
-                        html += "<tr><td>&nbsp;</td></tr>";
-                        added_release_row = true;
-                    }
                     html += "<tr>";
                     html += "<td>" + a[0] + "</td>";
                     html += add_datum_fields(a[2]);
