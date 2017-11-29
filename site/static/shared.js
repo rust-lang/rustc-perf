@@ -205,6 +205,12 @@ function load_state(callback) {
     }
     if (state.absolute === true || state.absolute === false) {
         document.getElementById("absolute").checked = state.absolute;
+    } else {
+        // check absolute by default
+        let element = document.getElementById("absolute");
+        if (element) {
+            element.checked = true;
+        }
     }
     make_settings(() => {
         if (state.stat) {

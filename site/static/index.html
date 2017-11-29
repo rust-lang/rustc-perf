@@ -114,7 +114,8 @@
                 yAxis: absolute ? {
                     title: {
                         text: yAxis,
-                    }
+                    },
+                    min: 0,
                 } : {
                     softMax: 5,
                     softMin: -5,
@@ -153,7 +154,7 @@
             start: "",
             end: "",
             stat: "instructions:u",
-            absolute: false,
+            absolute: true,
         }, state);
         make_request("/graph", values).then(function(response) {
             init_graph(response, values.stat, values.absolute);
