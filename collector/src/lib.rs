@@ -51,7 +51,7 @@ impl Ord for Commit {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
 pub struct Patch {
     index: usize,
     name: String,
@@ -99,12 +99,41 @@ impl Patch {
 }
 
 
-#[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Deserialize, Serialize)]
 pub enum BenchmarkState {
     Clean,
     IncrementalStart,
     IncrementalClean,
     IncrementalPatched(Patch),
+}
+
+impl BenchmarkState {
+    pub fn is_base_compile(&self) -> bool {
+        if let BenchmarkState::Clean = *self {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_patch(&self) -> bool {
+        if let BenchmarkState::IncrementalPatched(_) = *self {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn name(&self) -> String {
+        match *self {
+            BenchmarkState::Clean => format!("clean"),
+            BenchmarkState::IncrementalStart => format!("baseline incremental"),
+            BenchmarkState::IncrementalClean => format!("clean incremental"),
+            BenchmarkState::IncrementalPatched(ref patch) => {
+                format!("patched incremental: {}", patch.name)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -127,21 +156,20 @@ pub struct Run {
 }
 
 impl Run {
+    pub fn is_trivial(&self) -> bool {
+        if let BenchmarkState::IncrementalPatched(ref patch) = self.state {
+            return patch.name == "println";
+        }
+        false
+    }
+
     pub fn name(&self) -> String {
-        let base = match self.state {
-            BenchmarkState::Clean => format!("clean"),
-            BenchmarkState::IncrementalStart => format!("baseline incremental"),
-            BenchmarkState::IncrementalClean => format!("clean incremental"),
-            BenchmarkState::IncrementalPatched(ref patch) => {
-                format!("patched incremental: {}", patch.name)
-            }
-        };
         let opt = if self.release {
             "-opt"
         } else {
             ""
         };
-        base + opt
+        self.state.name() + opt
     }
 
     pub fn get_stat(&self, stat: &str) -> Option<f64> {

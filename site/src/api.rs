@@ -111,8 +111,10 @@ pub mod graph {
     }
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-    /// Crate -> Benchmark -> [GraphData]
-    pub struct Response(pub HashMap<String, HashMap<String, Vec<GraphData>>>);
+    pub struct Response {
+        /// Crate -> Benchmark -> [GraphData]
+        pub benchmarks: HashMap<String, HashMap<String, Vec<GraphData>>>,
+    }
 }
 
 pub mod days {

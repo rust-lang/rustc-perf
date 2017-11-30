@@ -22,8 +22,9 @@
     <script src="shared.js"></script>
 
     <script>
+    let summaryYAxis = "Multiplier of baseline non-incr";
     function init_graph(response, stat, absolute) {
-        let sorted_names = Object.keys(response);
+        let sorted_names = Object.keys(response.benchmarks);
         sorted_names.sort();
         document.getElementById("charts").style.display = "none";
         let title = "";
@@ -54,16 +55,6 @@
             return false;
         }
 
-        function formatter() {
-            let date = new Date();
-            date.setUTCMilliseconds(this.x);
-            let commit = this.point.commit.substr(0, 10);
-            return "<b>" + date.toLocaleString() + " - " + commit + "</b>" +
-                "<br>" + this.series.name + ": " + this.point.absolute.toFixed(2) + " " +
-                yAxis.toLowerCase() + " (" +
-                this.point.percent.toFixed(2) + "% from start)";
-        }
-
         let elements = [];
         for (let crate_name of sorted_names) {
             let element = document.createElement("div");
@@ -73,11 +64,11 @@
         let graphs = [];
         for (let crate_name of sorted_names) {
             graphs.push(() => {
-            let benchmark_names = Object.keys(response[crate_name]);
+            let benchmark_names = Object.keys(response.benchmarks[crate_name]);
             benchmark_names.sort();
             let datasets = [];
             for (let name of benchmark_names) {
-                let data = response[crate_name][name];
+                let data = response.benchmarks[crate_name][name];
                 datasets.push({
                     name: data[0].benchmark,
                     animation: false,
@@ -106,14 +97,23 @@
                 series: datasets,
                 tooltip: {
                     crosshairs: [true],
-                    formatter: formatter,
+                    formatter: function formatter() {
+                        let date = new Date();
+                        date.setUTCMilliseconds(this.x);
+                        let commit = this.point.commit.substr(0, 10);
+                        let yAxis = crate_name.startsWith("Summary") ? summaryYAxis : yAxis;
+                        return "<b>" + date.toLocaleString() + " - " + commit + "</b>" +
+                            "<br>" + this.series.name + ": " + this.point.absolute.toFixed(2) + " " +
+                            yAxis.toLowerCase() + " (" +
+                            this.point.percent.toFixed(2) + "% from start)";
+                    },
                 },
                 xAxis: {
                     type: "datetime",
                 },
                 yAxis: absolute ? {
                     title: {
-                        text: yAxis,
+                        text: crate_name.startsWith("Summary") ? summaryYAxis : yAxis,
                     },
                     min: 0,
                 } : {

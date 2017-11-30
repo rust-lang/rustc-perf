@@ -103,12 +103,23 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
     let mut result = HashMap::with_capacity(data.crate_list.len() * 2);
     let elements = out.len();
     let mut last_commit = None;
+    let mut initial_base_compile = None;
+    let mut initial_release_base_compile = None;
     for date_data in out {
         let commit = date_data.commit;
+        let mut summary_points = HashMap::new();
         for (name, runs) in date_data.data {
-            let mut entry = result.entry(name)
+            let mut entry = result.entry(name.clone())
                 .or_insert_with(|| HashMap::with_capacity(runs.len()));
-            for (name, _, value) in runs {
+            let mut base_compile = false;
+            let mut trivial = false;
+            for (name, run, value) in runs.clone() {
+                if run.state.is_base_compile() {
+                    base_compile = true;
+                } else if run.is_trivial() {
+                    trivial = true;
+                }
+
                 let mut entry = entry.entry(name.clone())
                     .or_insert_with(|| Vec::<graph::GraphData>::with_capacity(elements));
                 let first = entry.first().map(|d| d.absolute);
@@ -130,11 +141,62 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
                         x: date_data.date.0.timestamp() as u64, // all dates are since 1970
                     });
             }
+            if base_compile && trivial {
+                for (_, run, value) in runs {
+                    // TODO: Come up with a way to summarize non-standard patches
+                    if run.state.is_patch() && !run.is_trivial() {
+                        continue;
+                    }
+                    summary_points.entry((run.release, run.state))
+                        .or_insert_with(Vec::new)
+                        .push(value);
+                }
+            }
+        }
+        for (&(release, ref state), values) in &summary_points {
+            let value = values.iter().sum::<f64>() / (values.len() as f64);
+            if !release && state.is_base_compile() && initial_base_compile.is_none() {
+                initial_base_compile = Some(value);
+            }
+            if release && state.is_base_compile() && initial_release_base_compile.is_none() {
+                initial_release_base_compile = Some(value);
+            }
+        }
+        for ((release, state), values) in summary_points {
+            let summary = result.entry(String::from("Summary") + if release { "-opt" } else {""})
+                .or_insert_with(HashMap::new);
+            let entry = summary.entry(state.name()).or_insert_with(Vec::new);
+            let value = values.iter().sum::<f64>() / (values.len() as f64);
+            let value = value / if release {
+                initial_release_base_compile.unwrap()
+            } else {
+                initial_base_compile.unwrap()
+            };
+            let first = entry.first().map(|d: &graph::GraphData| d.absolute);
+            let percent = first.map_or(0.0, |f| (value - f) / f * 100.0);
+            let url = last_commit.as_ref().map(|c| {
+                    format!("/compare.html?start={}&end={}&stat={}",
+                        c,
+                        commit,
+                        body.stat,
+                        )
+                });
+            entry.push(graph::GraphData {
+                benchmark: state.name(),
+                commit: commit.clone(),
+                url: url,
+                absolute: value,
+                percent: percent,
+                y: if body.absolute { value } else { percent },
+                x: date_data.date.0.timestamp() as u64, // all dates are since 1970
+            });
         }
         last_commit = Some(commit);
     }
 
-    Ok(graph::Response(result))
+    Ok(graph::Response {
+        benchmarks: result,
+    })
 }
 
 pub fn handle_data(body: data::Request, data: &InputData) -> ServerResult<data::Response> {
