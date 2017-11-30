@@ -4,6 +4,14 @@
     <meta charset="utf-8">
     <title>rustc performance data</title>
     <link rel="stylesheet" type="text/css" href="perf.css">
+    <style>
+        #charts {
+            width: 100%;
+        }
+        div[id^="chart-container"] {
+            max-width: 50%;
+        }
+    </style>
 </head>
 <body class="container">
     <div>&gt; <a href="index.html">graphs</a>, <a href="compare.html">compare</a>.</div>
@@ -55,11 +63,22 @@
             return false;
         }
 
-        let elements = [];
+        let by_crate = {};
         for (let crate_name of sorted_names) {
-            let element = document.createElement("div");
-            element.id = "chart-container-" + crate_name;
-            document.getElementById("charts").appendChild(element);
+            let key = crate_name.replace("-opt", "");
+            if (!by_crate[key]) by_crate[key] = [];
+            by_crate[key].push(crate_name);
+        }
+        for (let crate_names of Object.values(by_crate)) {
+            let wrapper = document.createElement("table");
+            let row = document.createElement("tr");
+            wrapper.appendChild(row);
+            for (let crate_name of crate_names) {
+                let element = document.createElement("td");
+                element.id = "chart-container-" + crate_name;
+                row.appendChild(element);
+            }
+            document.getElementById("charts").appendChild(wrapper);
         }
         let graphs = [];
         for (let crate_name of sorted_names) {
@@ -67,6 +86,7 @@
             let benchmark_names = Object.keys(response.benchmarks[crate_name]);
             benchmark_names.sort();
             let datasets = [];
+            let max = response.max[crate_name.replace("-opt", "")];
             for (let name of benchmark_names) {
                 let data = response.benchmarks[crate_name][name];
                 datasets.push({
@@ -101,10 +121,10 @@
                         let date = new Date();
                         date.setUTCMilliseconds(this.x);
                         let commit = this.point.commit.substr(0, 10);
-                        let yAxis = crate_name.startsWith("Summary") ? summaryYAxis : yAxis;
+                        let y_axis = crate_name.startsWith("Summary") ? summaryYAxis : yAxis;
                         return "<b>" + date.toLocaleString() + " - " + commit + "</b>" +
                             "<br>" + this.series.name + ": " + this.point.absolute.toFixed(2) + " " +
-                            yAxis.toLowerCase() + " (" +
+                            y_axis.toLowerCase() + " (" +
                             this.point.percent.toFixed(2) + "% from start)";
                     },
                 },
@@ -112,12 +132,19 @@
                     type: "datetime",
                 },
                 yAxis: absolute ? {
-                    title: {
+                    title: crate_name.includes("-opt") ? { text: "" } : {
                         text: crate_name.startsWith("Summary") ? summaryYAxis : yAxis,
                     },
+                    labels: crate_name.includes("-opt") ? {
+                        enabled: false,
+                    } : {},
                     min: 0,
+                    max: max * 1.05,
+                    softMax: max * 1.05,
+                    ceiling: max * 1.05,
+                    floor: 0,
                 } : {
-                    softMax: 5,
+                    max: max * 1.05,
                     softMin: -5,
                     minRange: 0.1,
                     title: {

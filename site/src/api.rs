@@ -114,6 +114,7 @@ pub mod graph {
     pub struct Response {
         /// Crate -> Benchmark -> [GraphData]
         pub benchmarks: HashMap<String, HashMap<String, Vec<GraphData>>>,
+        pub max: HashMap<String, f64>,
     }
 }
 

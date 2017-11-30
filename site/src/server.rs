@@ -120,13 +120,13 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
                     trivial = true;
                 }
 
-                let mut entry = entry.entry(name.clone())
+                let mut entry = entry.entry(name)
                     .or_insert_with(|| Vec::<graph::GraphData>::with_capacity(elements));
                 let first = entry.first().map(|d| d.absolute);
                 let percent = first.map_or(0.0, |f| (value - f) / f * 100.0);
                 entry
                     .push(graph::GraphData {
-                        benchmark: name,
+                        benchmark: run.state.name(),
                         commit: commit.clone(),
                         url: last_commit.as_ref().map(|c| {
                             format!("/compare.html?start={}&end={}&stat={}",
@@ -194,7 +194,21 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
         last_commit = Some(commit);
     }
 
+    let mut maxes = HashMap::new();
+    for (ref crate_name, ref benchmarks) in &result {
+        let name = crate_name.replace("-opt", "");
+        let mut max = 0.0f64;
+        for points in benchmarks.values() {
+            for point in points {
+                max = max.max(point.y);
+            }
+        }
+        let max = maxes.get(&name).cloned().unwrap_or(0.0f64).max(max);
+        maxes.insert(name, max);
+    }
+
     Ok(graph::Response {
+        max: maxes,
         benchmarks: result,
     })
 }

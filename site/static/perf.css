@@ -1,13 +1,6 @@
 body {
     font-family: monospace;
-    margin-top: 20px;
-    margin-bottom: 10px;
-    max-width: 1000px;
-}
-@media (min-width: 992px) {
-    body {
-        margin-left: 5%;
-    }
+    margin: 1em auto;
 }
 p {
     margin-top: 1.2em;
