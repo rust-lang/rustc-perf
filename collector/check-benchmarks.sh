@@ -18,6 +18,7 @@ for dir in *; do
             start_time=$(date -u '+%s%N')
             CARGO=cargo \
             RUSTC=rustc \
+            CARGO_RUSTC_OPTS=--cap-lints=warn \
             make "all$patch";
             end_time=$(date -u '+%s%N')
             duration=$(($end_time-$start_time))
