@@ -138,7 +138,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
                         absolute: value,
                         percent: percent,
                         y: if body.absolute { value } else { percent },
-                        x: date_data.date.0.timestamp() as u64, // all dates are since 1970
+                        x: date_data.date.0.timestamp() as u64 * 1000, // all dates are since 1970
                     });
             }
             if base_compile && trivial {
@@ -188,7 +188,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
                 absolute: value,
                 percent: percent,
                 y: if body.absolute { value } else { percent },
-                x: date_data.date.0.timestamp() as u64, // all dates are since 1970
+                x: date_data.date.0.timestamp() as u64 * 1000, // all dates are since 1970
             });
         }
         last_commit = Some(commit);

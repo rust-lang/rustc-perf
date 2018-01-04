@@ -121,8 +121,7 @@
                 tooltip: {
                     crosshairs: [true],
                     formatter: function formatter() {
-                        let date = new Date();
-                        date.setUTCMilliseconds(this.x);
+                        let date = new Date(this.x);
                         let commit = this.point.commit.substr(0, 10);
                         let y_axis = crate_name.startsWith("Summary") ? summaryYAxis : yAxis;
                         return "<b>" + date.toLocaleString() + " - " + commit + "</b>" +
