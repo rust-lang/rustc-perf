@@ -1,0 +1,12 @@
+diff --git a/src/search.rs b/src/search.rs
+index 293b018..6453a66 100644
+--- a/src/search.rs
++++ b/src/search.rs
+@@ -23,6 +23,7 @@ struct CalorieCounter {
+ }
+ impl CalorieCounter {
+     fn new(stats: &[Stats], target: Num) -> CalorieCounter {
++        println!("testing");
+         let c0 = stats[0].calories;
+         let (imin, imax) = stats.iter().scan((c0, c0), |state, stat| {
+             let (lmin, lmax) = *state;

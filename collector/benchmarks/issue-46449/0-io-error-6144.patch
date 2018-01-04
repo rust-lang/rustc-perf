@@ -1,0 +1,13 @@
+diff --git a/src/lib.rs b/src/lib.rs
+index 4b9db94..c44dea6 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -2,7 +2,7 @@ extern crate futures;
+
+ use futures::{Future, Poll};
+
+-const BUFFER_SIZE: usize = 1;
++const BUFFER_SIZE: usize = 6144;
+ pub struct Error(::std::io::Error);
+
+ struct Dummy<T>(T);

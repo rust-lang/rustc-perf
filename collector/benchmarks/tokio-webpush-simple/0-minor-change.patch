@@ -1,0 +1,22 @@
+diff --git a/src/main.rs b/src/main.rs
+index d0051aa..a4e0f2e 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -333,6 +333,17 @@ impl Client {
+                         }
+                     }
+                     Either::A(ClientMessage::Unregister { channel_id }) => {
++                        let mut uaids = cx.uaids.borrow_mut();
++                        let mut channels = cx.channels.borrow_mut();
++                        let client = uaids.get_mut(&uaid).unwrap();
++                        if channels.contains_key(&channel_id) {
++                            if channels[&channel_id].uaid == uaid {
++                                channels.remove(&channel_id);
++                                client.channel_ids.retain(|c| {
++                                    *c != channel_id
++                                });
++                            }
++                        }
+                         ServerMessage::Unregister {
+                             status: 200,
+                             channel_id: channel_id,

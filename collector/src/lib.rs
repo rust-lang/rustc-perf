@@ -10,41 +10,12 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::ops::{Add, Sub};
 use std::str::FromStr;
+use std::path::{Path, PathBuf};
+use std::process;
 
 use chrono::{DateTime, Datelike, Duration, TimeZone, Utc};
 use chrono::naive::NaiveDate;
 use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Stat {
-    pub name: String,
-    pub cnt: f64,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Run {
-    #[serde(default)] pub stats: Vec<Stat>,
-}
-
-impl Run {
-    pub fn get_stat(&self, stat: &str) -> Option<f64> {
-        self.stats.iter().find(|s| s.name == stat).map(|s| s.cnt)
-    }
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Patch {
-    // Full name: benchmark@000-patch
-    pub name: String,
-    pub runs: Vec<Run>,
-}
-
-impl Patch {
-    pub fn run(&self) -> &Run {
-        assert_eq!(self.runs.len(), 1);
-        &self.runs[0]
-    }
-}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Commit {
@@ -80,20 +51,138 @@ impl Ord for Commit {
     }
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
+pub struct Patch {
+    index: usize,
+    name: String,
+    path: PathBuf,
+}
+
+impl Patch {
+    pub fn new(path: PathBuf) -> Self {
+        assert!(path.is_file());
+        let (index, name) = {
+            let file_name = path.file_name().unwrap().to_string_lossy();
+            let mut parts = file_name.split("-");
+            let index = parts.next().unwrap().parse().unwrap_or_else(|e| {
+                panic!("{:?} should be in the format 000-name.patch, \
+                but did not start with a number: {:?}", &path, e);
+            });
+            let mut name = parts.fold(String::new(), |mut acc, part| {
+                acc.push_str(part);
+                acc.push(' ');
+                acc
+            });
+            let len = name.len();
+            // take final space off
+            name.truncate(len - 1);
+            let name = name.replace(".patch", "");
+            (index, name)
+        };
+
+        Patch {
+            path: PathBuf::from(path.file_name().unwrap()),
+            index,
+            name,
+        }
+    }
+
+    pub fn apply(&self, dir: &Path) -> Result<(), String> {
+        eprintln!("applying {} to {:?}", self.name, dir);
+        let mut cmd = process::Command::new("patch");
+        cmd.current_dir(dir).args(&["-Np1", "-i"]).arg(&self.path);
+        if cmd.status().map(|s| !s.success()).unwrap_or(false) {
+            return Err(format!("could not execute {:?}.", cmd));
+        }
+        Ok(())
+    }
+}
+
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Deserialize, Serialize)]
+pub enum BenchmarkState {
+    Clean,
+    IncrementalStart,
+    IncrementalClean,
+    IncrementalPatched(Patch),
+}
+
+impl BenchmarkState {
+    pub fn is_base_compile(&self) -> bool {
+        if let BenchmarkState::Clean = *self {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_patch(&self) -> bool {
+        if let BenchmarkState::IncrementalPatched(_) = *self {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn name(&self) -> String {
+        match *self {
+            BenchmarkState::Clean => format!("clean"),
+            BenchmarkState::IncrementalStart => format!("baseline incremental"),
+            BenchmarkState::IncrementalClean => format!("clean incremental"),
+            BenchmarkState::IncrementalPatched(ref patch) => {
+                format!("patched incremental: {}", patch.name)
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Benchmark {
+    pub runs: Vec<Run>,
+    pub name: String,
+}
+
+#[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
+pub struct Stat {
+    pub name: String,
+    pub cnt: f64,
+}
+
+#[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
+pub struct Run {
+    pub stats: Vec<Stat>,
+    pub release: bool,
+    pub state: BenchmarkState,
+}
+
+impl Run {
+    pub fn is_trivial(&self) -> bool {
+        if let BenchmarkState::IncrementalPatched(ref patch) = self.state {
+            return patch.name == "println";
+        }
+        false
+    }
+
+    pub fn name(&self) -> String {
+        let opt = if self.release {
+            "-opt"
+        } else {
+            ""
+        };
+        self.state.name() + opt
+    }
+
+    pub fn get_stat(&self, stat: &str) -> Option<f64> {
+        self.stats.iter().find(|s| s.name == stat).map(|s| s.cnt)
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CommitData {
     pub commit: Commit,
     // String in Result is the output of the command that failed
-    pub benchmarks: BTreeMap<String, Result<Vec<Patch>, String>>,
+    pub benchmarks: BTreeMap<String, Result<Benchmark, String>>,
     pub triple: String,
-}
-
-impl CommitData {
-    pub fn benchmarks<'a>(&'a self) -> impl Iterator<Item = Option<(&'a str, &'a [Patch])>> + 'a {
-        self.benchmarks
-            .iter()
-            .map(|(k, v)| v.as_ref().map(|v| (k.as_str(), &v[..])).ok())
-    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Serialize, Deserialize)]

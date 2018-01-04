@@ -1,26 +1,28 @@
+<!DOCTYPE html>
 <html>
 <head>
-<meta charset="utf-8">
-<title>rustc performance data</title>
-<link rel="stylesheet" type="text/css" href="perf.css">
+    <meta charset="utf-8">
+    <title>rustc performance data</title>
+    <link rel="stylesheet" type="text/css" href="perf.css">
+    <style>
+        #charts {
+            width: 100%;
+        }
+        div[id^="chart-container"] {
+            max-width: 50%;
+        }
+    </style>
 </head>
 <body class="container">
     <div>&gt; <a href="index.html">graphs</a>, <a href="compare.html">compare</a>.</div>
-    <div style="width: 1000px; height: 600px;" id="chart-container"></div>
-    <div>
-      <a href="#" onClick="hide_all(); return false">Hide All</a>
-      <a href="#" onClick="show_all(); return false">Show All</a>
-    </div>
     <div id="settings">
-        <span id="dates" class="settings" style="text-align:left;">
-            start: <input placeholder="yyyy-mm-dd or commit" id="start-bound"></input>
-            end: <input placeholder="yyyy-mm-dd or commit" id="end-bound"></input>
-            Absolute data: <input id='absolute' name="absolute" type="checkbox">
-            <select id='stats' name="stat"></select>
-            <a href="#" onClick="make_graph({}, true); return false;">Submit</a>
-        </span>
-        </div>
+        start: <input placeholder="yyyy-mm-dd or commit" id="start-bound" />
+        end: <input placeholder="yyyy-mm-dd or commit" id="end-bound" />
+        Absolute data: <input id='absolute' name="absolute" type="checkbox">
+        <select id='stats' name="stat"></select>
+        <a href="#" onClick="submit_settings(); return false;">Submit</a>
     </div>
+    <div id="charts"></div>
     <div id="as-of"></div>
     <a href="https://github.com/rust-lang-nursery/rustc-perf">
         <img style="position: absolute; top: 0; right: 0; border: 0;" src="https://camo.githubusercontent.com/38ef81f8aca64bb9a64448d0d70f1308ef5341ab/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f72696768745f6461726b626c75655f3132313632312e706e67" alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_darkblue_121621.png">
@@ -29,255 +31,179 @@
     <script src="libs/highcharts.js"></script>
     <script src="libs/fetch.js"></script>
     <script src="shared.js"></script>
+
     <script>
-    var chart;
-
-    function init_graph(response, stat) {
-        var data = response.data;
-        let absolute = response.absolute;
-
-        var crates = {};
-        var firsts = {};
-
-        for (var x = 0; x < data.length; x++) {
-            let datum = data[x];
-            var date = new Date(datum.date);
-
-            var url = null;
-            if (x > 0) {
-                url = window.location.origin + "/compare.html?start=" + data[x - 1].commit +
-                    "&end=" + data[x].commit + "&stat=" + stat;
-            }
-
-            for (var crate in datum.data) {
-                var value = datum.data[crate];
-                if (stat == "cpu-clock") {
-                    // convert to seconds, perf-stat reports time in milliseconds
-                    value /= 1000;
-                }
-
-                if (!(crate in crates)) {
-                    firsts[crate] = value;
-                    crates[crate] = [{
-                        crate: crate,
-                        commit: datum.commit,
-                        url: url,
-                        absolute: value,
-                        percent: 0.0,
-                        y: absolute ? value : 0.0,
-                        x: date.valueOf() // number of milliseconds since 1970
-                    }];
-                } else {
-                    let percent = ((value - firsts[crate]) / firsts[crate]) * 100.0;
-                    crates[crate].push({
-                        crate: crate,
-                        commit: datum.commit,
-                        url: url,
-                        absolute: value,
-                        percent: percent,
-                        y: absolute ? value : percent,
-                        x: date.valueOf()
-                    });
-                }
-            }
-        }
-
-        var crates_sorted = Object.keys(crates);
-        crates_sorted.sort();
-        crates_sorted = crates_sorted.map(crate => crates[crate]);
-
-        var datasets = [];
-        for (var i = 0; i < crates_sorted.length; i++) {
-            var data = crates_sorted[i];
-            datasets.push({
-                name: data[0].crate,
-                animation: false,
-                allowPointSelect: true,
-                data: data,
-                marker: {
-                    enabled: true
-                },
-            });
-        }
-
-        if (chart) {
-            chart.destroy();
-        }
-
-        var title = "";
-        var yAxis = "Value";
+    let summaryYAxis = "Multiplier of baseline non-incr";
+    function init_graph(response, stat, absolute) {
+        let sorted_names = Object.keys(response.benchmarks);
+        sorted_names.sort();
+        document.getElementById("charts").style.display = "none";
+        let title = "";
+        let yAxis = "Value";
         if (stat == "instructions:u") {
             title = "Number of CPU instructions";
             yAxis = "Instructions";
-        }
-        if (stat == "cycles:u") {
+        } else if (stat == "cycles:u") {
             title = "Number of CPU cycles";
             yAxis = "Cycles";
-        }
-        if (stat == "cpu-clock") {
+        } else if (stat == "cpu-clock") {
             title = "Wall time execution";
             yAxis = "Seconds";
-        }
-        if (stat == "wall-time") {
+        } else if (stat == "wall-time") {
             title = "Wall time execution";
             yAxis = "Seconds";
-        }
-        if (stat == "max-rss") {
+        } else if (stat == "max-rss") {
             title = "Maximum resident set size";
             yAxis = "Kilobytes";
+        } else if (stat == "faults") {
+            title = "Faults";
         }
-        chart = new Highcharts.chart('chart-container', {
-            chart: {
-                zoomType: "xy",
-                renderTo: "chart-container",
-                type: "line",
-            },
-            title: {
-                text: title,
-            },
-            rangeSelector: {
-                selected: 1,
-            },
-            series: datasets,
-            tooltip: {
-                crosshairs: [true],
-                formatter: function () {
-                    var date = new Date(this.x);
-                    var commit = this.point.commit.substr(0, 10);
-                    return "<b>" + date.toLocaleString() + " - " + commit + "</b>" +
-                        "<br>" + this.series.name + ": " + this.point.absolute.toFixed(2) + " " +
-                        yAxis.toLowerCase() + " (" +
-                        this.point.percent.toFixed(2) + "% from start)";
-                }
-            },
-            xAxis: {
-                type: "datetime",
-            },
-            yAxis: absolute ? {
+
+        function clickHandler(event) {
+            if (this.options.url) {
+                window.open(this.options.url, "_blank");
+            }
+            return false;
+        }
+
+        let by_crate = {};
+        for (let crate_name of sorted_names) {
+            let key = crate_name.replace("-opt", "");
+            if (!by_crate[key]) by_crate[key] = [];
+            by_crate[key].push(crate_name);
+        }
+        for (let crate_names of Object.values(by_crate)) {
+            let wrapper = document.createElement("table");
+            let row = document.createElement("tr");
+            wrapper.appendChild(row);
+            for (let crate_name of crate_names) {
+                let element = document.createElement("td");
+                element.id = "chart-container-" + crate_name;
+                row.appendChild(element);
+            }
+            document.getElementById("charts").appendChild(wrapper);
+        }
+        let graphs = [];
+        for (let crate_name of sorted_names) {
+            graphs.push(() => {
+            let benchmark_names = Object.keys(response.benchmarks[crate_name]);
+            benchmark_names.sort();
+            let datasets = [];
+            let max = response.max[crate_name.replace("-opt", "")];
+            for (let name of benchmark_names) {
+                let data = response.benchmarks[crate_name][name];
+                datasets.push({
+                    name: data[0].benchmark,
+                    animation: false,
+                    allowPointSelect: true,
+                    data: data,
+                    marker: {
+                        enabled: true
+                    },
+                });
+            }
+
+            let id = "chart-container-" + crate_name;
+            let element = document.getElementById(id);
+            let chart = new Highcharts.chart(element, {
+                chart: {
+                    zoomType: "xy",
+                    renderTo: element,
+                    type: "line",
+                },
                 title: {
-                    text: yAxis,
-                }
-            } : {
-                softMax: 5,
-                softMin: -5,
-                minRange: 0.1,
-                title: {
-                    text: "% change",
-                }
-            },
-            plotOptions: {
-                line: {
-                    point: {
-                        events: {
-                            click: function (event) {
-                                if (this.options.url) {
-                                    window.open(this.options.url, "_blank");
-                                }
-                                return false;
+                    text: crate_name + " - " + title,
+                },
+                rangeSelector: {
+                    selected: 1,
+                },
+                series: datasets,
+                tooltip: {
+                    crosshairs: [true],
+                    formatter: function formatter() {
+                        let date = new Date();
+                        date.setUTCMilliseconds(this.x);
+                        let commit = this.point.commit.substr(0, 10);
+                        let y_axis = crate_name.startsWith("Summary") ? summaryYAxis : yAxis;
+                        return "<b>" + date.toLocaleString() + " - " + commit + "</b>" +
+                            "<br>" + this.series.name + ": " + this.point.absolute.toFixed(2) + " " +
+                            y_axis.toLowerCase() + " (" +
+                            this.point.percent.toFixed(2) + "% from start)";
+                    },
+                },
+                xAxis: {
+                    type: "datetime",
+                },
+                yAxis: absolute ? {
+                    title: crate_name.includes("-opt") ? { text: "" } : {
+                        text: crate_name.startsWith("Summary") ? summaryYAxis : yAxis,
+                    },
+                    labels: crate_name.includes("-opt") ? {
+                        enabled: false,
+                    } : {},
+                    min: 0,
+                    max: max * 1.05,
+                    softMax: max * 1.05,
+                    ceiling: max * 1.05,
+                    floor: 0,
+                } : {
+                    max: max * 1.05,
+                    softMin: -5,
+                    minRange: 0.1,
+                    title: {
+                        text: "% change",
+                    }
+                },
+                plotOptions: {
+                    line: {
+                        point: {
+                            events: {
+                                click: clickHandler,
                             }
                         }
                     }
-                }
-            }
-        });
-    }
-
-    function getSelectedCrates() {
-        var selected = [];
-        if (chart) {
-            for (var i = 0; i < chart.series.length; i++) {
-                var series = chart.series[i];
-                if (series.visible) {
-                    selected.push(series.name);
-                }
-            }
-        }
-        return selected;
-    }
-
-    function make_graph(state, push_state) {
-        let start = state.start || document.getElementById("start-bound").value;
-        let end = state.end || document.getElementById("end-bound").value;
-        let crates = state.crates || getSelectedCrates();
-        let stat = state.stat || getSelected("stats");
-        let absolute = false;
-
-        if (document.getElementById("absolute").checked) {
-            absolute = true;
-        } else {
-            absolute = state.absolute == "true" || false;
-        }
-
-        document.getElementById('stats').value = stat;
-        document.getElementById("absolute").checked = absolute;
-
-        let values = {
-            start: start,
-            end: end,
-            stat: stat,
-            absolute: absolute,
-            crates: {list: 'All'},
-        };
-        make_request("/data", values).then(function(response) {
-            response.json().then(function(data) {
-                data.absolute = absolute;
-
-                init_graph(data, stat);
-                let quantity = 0;
-                if (crates.length != 0) {
-                    hide_all();
-                    for (let i = 0; i < chart.series.length; i++) {
-                        let series = chart.series[i];
-                        let found = false;
-                        for (var j = 0; j < crates.length; j++) {
-                            if (series.name.includes(crates[j])) {
-                                found = true;
-                                break;
-                            }
-                        }
-                        if (found) {
-                            quantity += 1;
-                            series.setVisible(true, false);
-                        }
-                    }
-                    chart.redraw();
-                }
-
-                if (push_state) {
-                    values.crates = getSelectedCrates();
-                    if (quantity == crates.length) {
-                        delete values.crates;
-                    }
-                    push_state_to_history(values);
                 }
             });
-        }, function(err) {
-            console.log("Error fetching data:");
-            console.log(err);
+            });
+        }
+        processGraphs(graphs);
+        document.getElementById("charts").style.display = "block";
+    }
+
+    function processGraphs(graphs) {
+        requestAnimationFrame(() => {
+            graphs.shift()();
+            if (graphs.length > 0) {
+                processGraphs(graphs);
+            }
         });
     }
 
-    function hide_all() {
-        if (!chart) {
-            return
-        }
-        for (var i = 0; i < chart.series.length; i++) {
-            chart.series[i].setVisible(false, false);
-        }
-        chart.redraw();
+    function make_graph(state) {
+        let values = Object.assign({}, {
+            start: "",
+            end: "",
+            stat: "instructions:u",
+            absolute: true,
+        }, state);
+        make_request("/graph", values).then(function(response) {
+            init_graph(response, values.stat, values.absolute);
+        });
     }
 
-    function show_all() {
-        if (!chart) {
-            return
-        }
-        for (var i = 0; i < chart.series.length; i++) {
-            chart.series[i].setVisible(true, false);
-        }
-        chart.redraw();
+    function submit_settings() {
+        let start = document.getElementById("start-bound").value;
+        let end = document.getElementById("end-bound").value;
+        let absolute = document.getElementById("absolute").checked;
+        let stat = getSelected("stats");
+        let params = new URLSearchParams();
+        params.append("start", start);
+        params.append("end", end);
+        params.append("absolute", absolute);
+        params.append("stat", stat);
+        window.location.search = params.toString();
     }
 
-    make_settings(make_graph);
+    load_state(make_graph);
     </script>
 </html>
-

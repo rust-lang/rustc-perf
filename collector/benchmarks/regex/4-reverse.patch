@@ -1,0 +1,12 @@
+diff --git a/src/compile.rs b/src/compile.rs
+index 9db743f..4e56c2d 100644
+--- a/src/compile.rs
++++ b/src/compile.rs
+@@ -114,6 +114,7 @@ impl Compiler {
+     /// When set, the machine returned is suitable for matching text in
+     /// reverse. In particular, all concatenations are flipped.
+     pub fn reverse(mut self, yes: bool) -> Self {
++        {}
+         self.compiled.is_reverse = yes;
+         self
+     }

@@ -12,6 +12,12 @@ extern crate rust_sysroot;
 extern crate collector;
 extern crate serde_json;
 extern crate tempdir;
+extern crate cargo_metadata;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
+#[macro_use]
+extern crate lazy_static;
 
 mod errors {
     // Create the Error, ErrorKind, ResultExt, and Result types
@@ -21,6 +27,8 @@ mod errors {
             Serde(::serde_json::Error);
             Chrono(::chrono::ParseError);
             Io(::std::io::Error);
+            Metadata(::cargo_metadata::Error);
+            Utf8(::std::string::FromUtf8Error);
         }
     }
 }
@@ -52,6 +60,7 @@ fn bench_commit(
     repo: Option<&outrepo::Repo>,
     sysroot: Sysroot,
     benchmarks: &[Benchmark],
+    iterations: usize,
 ) -> CommitData {
     info!(
         "benchmarking commit {} ({}) for triple {}",
@@ -71,13 +80,13 @@ fn bench_commit(
                 }
             }
 
-            let result = benchmark.run(&sysroot);
+            let result = benchmark.run(&sysroot, iterations);
 
-            if result.is_err() {
+            if let Err(ref s) = result {
                 info!(
-                    "failure to benchmark {}, recorded: {:?}",
+                    "failure to benchmark {}, recorded: {}",
                     benchmark.name,
-                    result
+                    s
                 );
             }
 
@@ -120,12 +129,10 @@ fn get_benchmarks(benchmark_dir: &Path, filter: Option<&str>) -> Result<Vec<Benc
             }
         }
 
-        info!("benchmark {} - REGISTERED", name);
-        benchmarks.push(Benchmark {
-            path: path,
-            name: name,
-        });
+        info!("benchmark {} - registered", name);
+        benchmarks.push(Benchmark::new(name, path)?);
     }
+    benchmarks.sort_by_key(|benchmark| benchmark.name.clone());
     Ok(benchmarks)
 }
 
@@ -133,22 +140,20 @@ fn process_commit(
     repo: &outrepo::Repo,
     commit: &GitCommit,
     benchmarks: &[Benchmark],
-    preserve_sysroot: bool,
 ) -> Result<()> {
-    let sysroot = Sysroot::install(commit, "x86_64-unknown-linux-gnu", preserve_sysroot, false)?;
-    repo.success(&bench_commit(commit, Some(repo), sysroot, benchmarks))
+    let sysroot = Sysroot::install(commit, "x86_64-unknown-linux-gnu", false, false)?;
+    repo.success(&bench_commit(commit, Some(repo), sysroot, benchmarks, 3))
 }
 
 fn process_retries(
     commits: &[GitCommit],
     repo: &mut outrepo::Repo,
     benchmarks: &[Benchmark],
-    preserve_sysroot: bool,
 ) -> Result<()> {
     while let Some(retry) = repo.next_retry() {
         info!("retrying {}", retry);
         let commit = commits.iter().find(|commit| commit.sha == retry).unwrap();
-        process_commit(repo, commit, benchmarks, preserve_sysroot)?;
+        process_commit(repo, commit, benchmarks)?;
     }
     Ok(())
 }
@@ -157,7 +162,6 @@ fn process_commits(
     commits: &[GitCommit],
     repo: &outrepo::Repo,
     benchmarks: &[Benchmark],
-    preserve_sysroot: bool,
 ) -> Result<()> {
     println!("processing commits");
     if !commits.is_empty() {
@@ -167,7 +171,7 @@ fn process_commits(
         // test 3, which should allow us to eventually test all commits, but also keep up with the
         // latest rustc
         for commit in to_process.iter().rev().take(3) {
-            if let Err(err) = process_commit(repo, &commit, &benchmarks, preserve_sysroot) {
+            if let Err(err) = process_commit(repo, &commit, &benchmarks) {
                 repo.write_broken_commit(commit, err)?;
             }
         }
@@ -185,9 +189,7 @@ fn run() -> Result<i32> {
        (version: "0.1")
        (author: "The Rust Compiler Team")
        (about: "Collects Rust performance data")
-       (@arg benchmarks_dir: --benchmarks +required +takes_value "Sets the directory benchmarks are found in")
        (@arg filter: --filter +takes_value "Run only benchmarks that contain this")
-       (@arg preserve_sysroots: -p --preserve "Don't delete sysroots after running.")
        (@arg sync_git: --("sync-git") "Synchronize repository with remote")
        (@arg output_repo: --("output-repo") +required +takes_value "Repository to output to")
        (@subcommand process =>
@@ -210,21 +212,35 @@ fn run() -> Result<i32> {
            (about: "remove data for a benchmark")
            (@arg BENCHMARK: --benchmark +required +takes_value "benchmark name to remove data for")
        )
+       (@subcommand test_benchmarks =>
+           (about: "test some set of benchmarks, controlled by --filter")
+       )
     ).get_matches();
-    let benchmark_dir = PathBuf::from(matches.value_of_os("benchmarks_dir").unwrap());
+    let benchmark_dir = PathBuf::from("collector/benchmarks");
     let filter = matches.value_of("filter");
     let benchmarks = get_benchmarks(&benchmark_dir, filter)?;
-    let preserve_sysroots = matches.is_present("preserve_sysroots");
     let use_remote = matches.is_present("sync_git");
     let out_repo = PathBuf::from(matches.value_of_os("output_repo").unwrap());
     let mut out_repo = outrepo::Repo::open(out_repo, use_remote)?;
 
-    let commits = rust_sysroot::get_commits()?;
+    let commits = rust_sysroot::get_commits(rust_sysroot::EPOCH_COMMIT, "master")?;
 
     match matches.subcommand() {
+        ("test_benchmarks", Some(_)) => {
+            let to_process =
+                out_repo.find_missing_commits(&commits, &benchmarks, "x86_64-unknown-linux-gnu")?;
+            // take 3 from the end -- this means that for each bors commit (which takes ~3 hours) we
+            // test 3, which should allow us to eventually test all commits, but also keep up with the
+            // latest rustc
+            if let Some(commit) = to_process.last() {
+                let sysroot = Sysroot::install(commit, "x86_64-unknown-linux-gnu", false, false)?;
+                bench_commit(commit, None, sysroot, &benchmarks, 1);
+            }
+            Ok(0)
+        }
         ("process", Some(_)) => {
-            process_retries(&commits, &mut out_repo, &benchmarks, preserve_sysroots)?;
-            process_commits(&commits, &out_repo, &benchmarks, preserve_sysroots)?;
+            process_retries(&commits, &mut out_repo, &benchmarks)?;
+            process_commits(&commits, &out_repo, &benchmarks)?;
             Ok(0)
         }
         ("bench_commit", Some(sub_m)) => {
@@ -237,7 +253,7 @@ fn run() -> Result<i32> {
                     summary: String::new(),
                 }
             });
-            process_commit(&out_repo, &commit, &benchmarks, preserve_sysroots)?;
+            process_commit(&out_repo, &commit, &benchmarks)?;
             Ok(0)
         }
         ("bench_local", Some(sub_m)) => {
@@ -253,10 +269,10 @@ fn run() -> Result<i32> {
                 &commit,
                 rustc,
                 "x86_64-unknown-linux-gnu",
-                preserve_sysroots,
+                false,
                 false,
             )?;
-            let result = bench_commit(&commit, None, sysroot, &benchmarks);
+            let result = bench_commit(&commit, None, sysroot, &benchmarks, 3);
             serde_json::to_writer(&mut stdout(), &result)?;
             Ok(0)
         }

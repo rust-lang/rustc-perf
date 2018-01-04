@@ -139,11 +139,12 @@ impl Repo {
             commit.sha,
             triple
         ));
-        info!("loading file {}", filepath.display());
+        trace!("loading file {}", filepath.display());
         let mut file = File::open(&filepath)?;
         let mut contents = String::new();
         file.read_to_string(&mut contents)?;
-        let data = serde_json::from_str(&contents)?;
+        let data = serde_json::from_str(&contents)
+            .chain_err(|| format!("failed to read JSON from {:?}", filepath))?;
         Ok(data)
     }
 

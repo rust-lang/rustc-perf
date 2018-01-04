@@ -1,0 +1,7 @@
+# `compile_one()` is a private method in a large CGU.
+# `is_valid_cap_letter()` is a private function in a small CGU.
+# `expand()` is a public function in a small CGU.
+# `new()` is a public method in a large CGU called in one other module
+# `BYTE_FREQUENCIES` is a public static used in one other module
+# `sparse::SparseSet` is a struct used in two other modules
+# `backtrack::Job` is a local enum used in one module

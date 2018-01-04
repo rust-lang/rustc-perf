@@ -1,0 +1,63 @@
+[[package]]
+name = "encoding"
+version = "0.3.0-dev"
+dependencies = [
+ "encoding-index-japanese 1.20141219.6",
+ "encoding-index-korean 1.20141219.6",
+ "encoding-index-simpchinese 1.20160120.0",
+ "encoding-index-singlebyte 1.20160120.0",
+ "encoding-index-tradchinese 1.20141219.6",
+ "encoding-types 0.2.0",
+ "getopts 0.2.15 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "encoding-index-japanese"
+version = "1.20141219.6"
+dependencies = [
+ "encoding_index_tests 0.1.5",
+]
+
+[[package]]
+name = "encoding-index-korean"
+version = "1.20141219.6"
+dependencies = [
+ "encoding_index_tests 0.1.5",
+]
+
+[[package]]
+name = "encoding-index-simpchinese"
+version = "1.20160120.0"
+dependencies = [
+ "encoding_index_tests 0.1.5",
+]
+
+[[package]]
+name = "encoding-index-singlebyte"
+version = "1.20160120.0"
+dependencies = [
+ "encoding_index_tests 0.1.5",
+]
+
+[[package]]
+name = "encoding-index-tradchinese"
+version = "1.20141219.6"
+dependencies = [
+ "encoding_index_tests 0.1.5",
+]
+
+[[package]]
+name = "encoding-types"
+version = "0.2.0"
+
+[[package]]
+name = "encoding_index_tests"
+version = "0.1.5"
+
+[[package]]
+name = "getopts"
+version = "0.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[metadata]
+"checksum getopts 0.2.15 (registry+https://github.com/rust-lang/crates.io-index)" = "65922871abd2f101a2eb0eaebadc66668e54a87ad9c3dd82520b5f86ede5eff9"

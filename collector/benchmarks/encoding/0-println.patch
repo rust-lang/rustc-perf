@@ -1,0 +1,12 @@
+diff --git a/src/all.rs b/src/all.rs
+index 15bec32..4df8638 100644
+--- a/src/all.rs
++++ b/src/all.rs
+@@ -91,6 +91,7 @@ pub mod whatwg {
+ 
+ /// Returns a list of references to the encodings available.
+ pub fn encodings() -> &'static [EncodingRef] {
++    println!("testing");
+     // TODO should be generated automatically
+     const ENCODINGS: &'static [EncodingRef] = &[
+         ERROR,

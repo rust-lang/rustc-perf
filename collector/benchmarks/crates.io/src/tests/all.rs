@@ -1,5 +1,3 @@
-#![deny(warnings)]
-
 extern crate cargo_registry;
 extern crate chrono;
 extern crate conduit;

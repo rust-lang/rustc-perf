@@ -110,19 +110,19 @@ impl InputData {
         let mut crate_list = BTreeSet::new();
         let mut stats_list = BTreeSet::new();
 
-        for run in data.values() {
-            if last_date.is_none() || last_date.as_ref().unwrap() < &run.commit.date {
-                last_date = Some(run.commit.date);
+        for commit_data in data.values() {
+            if last_date.is_none() || last_date.as_ref().unwrap() < &commit_data.commit.date {
+                last_date = Some(commit_data.commit.date);
             }
 
-            for patch in run.benchmarks
-                .values()
-                .filter(|v| v.is_ok())
-                .flat_map(|v| v.as_ref().unwrap())
-            {
-                crate_list.insert(patch.name.clone());
-                for stat in &patch.run().stats {
-                    stats_list.insert(stat.name.clone());
+            let benchmarks = commit_data.benchmarks.values().filter_map(|v| v.as_ref().ok());
+            for benchmark in benchmarks {
+                for run in &benchmark.runs {
+                    let run_name = benchmark.name.clone() + &run.name();
+                    crate_list.insert(run_name);
+                    for stat in &run.stats {
+                        stats_list.insert(stat.name.clone());
+                    }
                 }
             }
         }

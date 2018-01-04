@@ -15,10 +15,6 @@ opt-level = 2
 name = "cargo_registry"
 doctest = false
 
-[[test]]
-name = "all"
-path = "src/tests/all.rs"
-
 [package.metadata.docs.rs]
 rustdoc-args = [
     "--no-defaults",
@@ -52,7 +48,6 @@ diesel_full_text_search = "0.16.0"
 serde_json = "1.0.0"
 serde_derive = "1.0.0"
 serde = "1.0.0"
-clippy = { version = "=0.0.162", optional = true }
 chrono = { version = "0.4.0", features = ["serde"] }
 comrak = { version = "0.1.9", default-features = false }
 ammonia = "0.7.0"
@@ -83,7 +78,3 @@ tokio-service = "0.1"
 [build-dependencies]
 dotenv = "0.10"
 diesel = { version = "0.16.0", features = ["postgres"] }
-
-[features]
-unstable = []
-lint = ["clippy"]

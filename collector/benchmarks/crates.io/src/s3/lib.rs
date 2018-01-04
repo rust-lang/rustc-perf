@@ -1,5 +1,3 @@
-#![deny(warnings)]
-
 extern crate base64;
 extern crate curl;
 extern crate openssl;

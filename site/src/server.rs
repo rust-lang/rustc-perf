@@ -31,7 +31,8 @@ use url::Url;
 use git;
 use date::Date;
 use util::{self, get_repo_path};
-pub use api::{self, data, days, info, CommitResponse, ServerResult};
+pub use api::{self, data, graph, days, info, CommitResponse, ServerResult};
+use collector::Run;
 use load::{CommitData, InputData};
 use antidote::RwLock;
 
@@ -42,28 +43,42 @@ use errors::*;
 pub struct DateData {
     pub date: Date,
     pub commit: String,
-    pub data: HashMap<String, f64>,
+    pub data: HashMap<String, Vec<(String, Run, f64)>>,
 }
 
 impl DateData {
-    pub fn for_day(day: &CommitData, stat: &str) -> DateData {
-        let crates = day.benchmarks
-            .values()
-            .filter(|v| v.is_ok())
-            .flat_map(|patches| patches.as_ref().unwrap())
-            .collect::<Vec<_>>();
-
-        let mut data = HashMap::new();
-        for patch in &crates {
-            if let Some(stat) = patch.run().get_stat(stat) {
-                data.insert(patch.name.clone(), stat);
+    pub fn for_day(commit: &CommitData, stat: &str) -> DateData {
+        let benchmarks = commit.benchmarks.values().filter_map(|v| v.as_ref().ok());
+        let mut out = HashMap::new();
+        for benchmark in benchmarks {
+            let mut runs_opt = Vec::new();
+            let mut runs = Vec::new();
+            for run in &benchmark.runs {
+                let v = if run.release {
+                    &mut runs_opt
+                } else {
+                    &mut runs
+                };
+                if let Some(mut value) = run.get_stat(stat) {
+                    if stat == "cpu-clock" {
+                        // convert to seconds; perf records it in milliseconds
+                        value /= 1000.0;
+                    }
+                    v.push((run.name(), run.clone(), value));
+                }
+            }
+            if !runs_opt.is_empty() {
+                out.insert(benchmark.name.clone() + "-opt", runs_opt);
+            }
+            if !runs.is_empty() {
+                out.insert(benchmark.name.clone(), runs);
             }
         }
 
         DateData {
-            date: day.commit.date,
-            commit: day.commit.sha.clone(),
-            data: data,
+            date: commit.commit.date,
+            commit: commit.commit.sha.clone(),
+            data: out,
         }
     }
 }
@@ -74,6 +89,128 @@ pub fn handle_info(data: &InputData) -> info::Response {
         stats: data.stats_list.clone(),
         as_of: data.last_date,
     }
+}
+
+
+pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<graph::Response> {
+    let out = handle_data(data::Request {
+        start: body.start.clone(),
+        end: body.end.clone(),
+        stat: body.stat.clone(),
+    }, data)?.0;
+
+    // crate list * 2 because we have both opt and non-opt variants.
+    let mut result = HashMap::with_capacity(data.crate_list.len() * 2);
+    let elements = out.len();
+    let mut last_commit = None;
+    let mut initial_base_compile = None;
+    let mut initial_release_base_compile = None;
+    for date_data in out {
+        let commit = date_data.commit;
+        let mut summary_points = HashMap::new();
+        for (name, runs) in date_data.data {
+            let mut entry = result.entry(name.clone())
+                .or_insert_with(|| HashMap::with_capacity(runs.len()));
+            let mut base_compile = false;
+            let mut trivial = false;
+            for (name, run, value) in runs.clone() {
+                if run.state.is_base_compile() {
+                    base_compile = true;
+                } else if run.is_trivial() {
+                    trivial = true;
+                }
+
+                let mut entry = entry.entry(name)
+                    .or_insert_with(|| Vec::<graph::GraphData>::with_capacity(elements));
+                let first = entry.first().map(|d| d.absolute);
+                let percent = first.map_or(0.0, |f| (value - f) / f * 100.0);
+                entry
+                    .push(graph::GraphData {
+                        benchmark: run.state.name(),
+                        commit: commit.clone(),
+                        url: last_commit.as_ref().map(|c| {
+                            format!("/compare.html?start={}&end={}&stat={}",
+                                c,
+                                commit,
+                                body.stat,
+                            )
+                        }),
+                        absolute: value,
+                        percent: percent,
+                        y: if body.absolute { value } else { percent },
+                        x: date_data.date.0.timestamp() as u64, // all dates are since 1970
+                    });
+            }
+            if base_compile && trivial {
+                for (_, run, value) in runs {
+                    // TODO: Come up with a way to summarize non-standard patches
+                    if run.state.is_patch() && !run.is_trivial() {
+                        continue;
+                    }
+                    summary_points.entry((run.release, run.state))
+                        .or_insert_with(Vec::new)
+                        .push(value);
+                }
+            }
+        }
+        for (&(release, ref state), values) in &summary_points {
+            let value = values.iter().sum::<f64>() / (values.len() as f64);
+            if !release && state.is_base_compile() && initial_base_compile.is_none() {
+                initial_base_compile = Some(value);
+            }
+            if release && state.is_base_compile() && initial_release_base_compile.is_none() {
+                initial_release_base_compile = Some(value);
+            }
+        }
+        for ((release, state), values) in summary_points {
+            let summary = result.entry(String::from("Summary") + if release { "-opt" } else {""})
+                .or_insert_with(HashMap::new);
+            let entry = summary.entry(state.name()).or_insert_with(Vec::new);
+            let value = values.iter().sum::<f64>() / (values.len() as f64);
+            let value = value / if release {
+                initial_release_base_compile.unwrap()
+            } else {
+                initial_base_compile.unwrap()
+            };
+            let first = entry.first().map(|d: &graph::GraphData| d.absolute);
+            let percent = first.map_or(0.0, |f| (value - f) / f * 100.0);
+            let url = last_commit.as_ref().map(|c| {
+                    format!("/compare.html?start={}&end={}&stat={}",
+                        c,
+                        commit,
+                        body.stat,
+                        )
+                });
+            entry.push(graph::GraphData {
+                benchmark: state.name(),
+                commit: commit.clone(),
+                url: url,
+                absolute: value,
+                percent: percent,
+                y: if body.absolute { value } else { percent },
+                x: date_data.date.0.timestamp() as u64, // all dates are since 1970
+            });
+        }
+        last_commit = Some(commit);
+    }
+
+    let mut maxes = HashMap::new();
+    for (ref crate_name, ref benchmarks) in &result {
+        let name = crate_name.replace("-opt", "");
+        let mut max = 0.0f64;
+        for points in benchmarks.values() {
+            for point in points {
+                max = max.max(point.y);
+            }
+        }
+        let max = maxes.get(&name).cloned().unwrap_or(0.0f64).max(max);
+        maxes.insert(name, max);
+    }
+
+    Ok(graph::Response {
+        max: maxes,
+        benchmarks: result,
+    })
 }
 
 pub fn handle_data(body: data::Request, data: &InputData) -> ServerResult<data::Response> {
@@ -97,10 +234,7 @@ pub fn handle_data(body: data::Request, data: &InputData) -> ServerResult<data::
         .rposition(|day| !day.data.is_empty())
         .unwrap_or(0);
     let result = result.drain(first_idx..(last_idx + 1)).collect();
-    Ok(data::Response {
-        data: result,
-        crates: body.crates.into_set(&data.crate_list),
-    })
+    Ok(data::Response(result))
 }
 
 pub fn handle_days(body: days::Request, data: &InputData) -> ServerResult<days::Response> {
@@ -113,7 +247,7 @@ pub fn handle_days(body: days::Request, data: &InputData) -> ServerResult<days::
 }
 
 pub fn handle_date_commit(date: Date) -> CommitResponse {
-    let commits = ::rust_sysroot::get_commits().unwrap();
+    let commits = ::rust_sysroot::get_commits(::rust_sysroot::EPOCH_COMMIT, "master").unwrap();
 
     let commit = commits.into_iter().rfind(|c| c.date < date.0);
 
@@ -123,7 +257,7 @@ pub fn handle_date_commit(date: Date) -> CommitResponse {
 }
 
 pub fn handle_pr_commit(pr: u64) -> CommitResponse {
-    let commits = ::rust_sysroot::get_commits().unwrap();
+    let commits = ::rust_sysroot::get_commits(::rust_sysroot::EPOCH_COMMIT, "master").unwrap();
 
     let pr = format!("#{}", pr);
     let commit = commits.into_iter().find(|c| c.summary.contains(&pr));
@@ -335,6 +469,7 @@ impl Service for Server {
         match req.path() {
             "/perf/info" => self.handle_get(&req, handle_info),
             "/perf/data" => self.handle_post(req, handle_data),
+            "/perf/graph" => self.handle_post(req, handle_graph),
             "/perf/get" => self.handle_post(req, handle_days),
             "/perf/pr_commit" => self.handle_get_req(&req, |req, _data| {
                 let res = req.query()

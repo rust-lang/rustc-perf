@@ -1,0 +1,24 @@
+diff --git a/src/main.rs b/src/main.rs
+index 3028a52..d33e1e9 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -28,7 +28,7 @@
+ //         random.uniform(10.0, 19.999),
+ //         random.uniform(20.0, 29.999)))
+ 
+-static BIG_ARRAY_OF_TUPLES: [(i32, (f64, f64, f64)); 0xffff] = [
++static BIG_ARRAY_OF_TUPLES: [(i32, (f64, f64, f64)); 0x10000] = [
+     (641161, (2.988, 10.544, 29.598)),
+     (808569, (3.303, 18.434, 28.774)),
+     (669534, (0.411, 15.099, 24.342)),
+@@ -65564,8 +65564,9 @@ static BIG_ARRAY_OF_TUPLES: [(i32, (f64, f64, f64)); 0xffff] = [
+     (139687, (6.400, 18.330, 27.485)),
+     (145425, (1.189, 14.458, 26.236)),
+     (209150, (5.216, 15.229, 23.389)),
++    (209150, (5.216, 15.229, 23.389)),
+ ];
+ 
+ fn main() {
+-    assert!(BIG_ARRAY_OF_TUPLES.len() == 0xffff);
++    assert!(BIG_ARRAY_OF_TUPLES.len() == 0x10000);
+ }

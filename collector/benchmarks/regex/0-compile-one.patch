@@ -1,0 +1,13 @@
+diff --git a/src/compile.rs b/src/compile.rs
+index 9db743f..ef1948e 100644
+--- a/src/compile.rs
++++ b/src/compile.rs
+@@ -137,6 +137,8 @@ impl Compiler {
+     }
+
+     fn compile_one(mut self, expr: &Expr) -> result::Result<Program, Error> {
++        {} // @030
++
+         // If we're compiling a forward DFA and we aren't anchored, then
+         // add a `.*?` before the first capture group.
+         // Other matching engines handle this by baking the logic into the

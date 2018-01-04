@@ -1,0 +1,21 @@
+diff --git a/src/main.rs b/src/main.rs
+index 3fb7c5f..775773b 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -36,7 +36,7 @@
+ // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ 
+ 
+-pub static MAPPING: [&'static str; 0xffff] = [
++pub static MAPPING: [&'static str; 0x10000] = [
+     "\u{0}",
+     "\u{1}",
+     "\u{2}",
+@@ -65572,6 +65572,7 @@ pub static MAPPING: [&'static str; 0xffff] = [
+     "",
+     "",
+     "",
++    "",
+ ];
+ 
+ fn main() { }

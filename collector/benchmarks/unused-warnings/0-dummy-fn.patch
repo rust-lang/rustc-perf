@@ -1,0 +1,9 @@
+diff --git a/src/main.rs b/src/main.rs
+index 6e9e0b3..5a33fa5 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -20011,3 +20011,4 @@ use foo as foo19999;
+ use foo as foo20000;
+ fn foo() {}
+ fn main() {}
++fn _dummy() {}
