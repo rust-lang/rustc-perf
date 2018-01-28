@@ -92,20 +92,39 @@
         test_names.sort();
 
         for (let name of test_names) {
-            if (data.a.data[name].length > 0) {
+            let source = data.a.data[name] || data.b.data[name];
+            if (source && source.length > 0) {
                 html += "<tr><td>&nbsp;</td></tr>";
                 html += "<tr>";
                 html += "<th colspan=10 style='text-align: center;'>" + truncate_name(name) + "</th>";
                 html += "</tr>";
-                for (let i = 0; i < data.a.data[name].length; i++) {
-                    let a = data.a.data[name][i];
-                    let b = data.b.data[name][i];
-                    html += "<tr>";
-                    html += "<td>" + a[0] + "</td>";
-                    html += add_datum_fields(a[2]);
-                    html += add_datum_fields(b[2]);
-                    html += add_percent(a[2], b[2]);
-                    html += "</tr>";
+                for (let i = 0; i < source.length; i++) {
+                    if (data.a.data[name] !== undefined && data.b.data[name] !== undefined) {
+                        let a = data.a.data[name][i];
+                        let b = data.b.data[name][i];
+                        html += "<tr>";
+                        html += "<td>" + a[0] + "</td>";
+                        html += add_datum_fields(a[2]);
+                        html += add_datum_fields(b[2]);
+                        html += add_percent(a[2], b[2]);
+                        html += "</tr>";
+                    } else if (data.a.data[name] === undefined) {
+                        let b = data.b.data[name][i];
+                        html += "<tr>";
+                        html += "<td>" + b[0] + "</td>";
+                        html += add_datum_fields(null);
+                        html += add_datum_fields(b[2]);
+                        html += add_percent(null, b[2]);
+                        html += "</tr>";
+                    } else {
+                        let a = data.a.data[name][i];
+                        html += "<tr>";
+                        html += "<td>" + a[0] + "</td>";
+                        html += add_datum_fields(a[2]);
+                        html += add_datum_fields(null);
+                        html += add_percent(a[2], null);
+                        html += "</tr>";
+                    }
                 }
             }
         }
