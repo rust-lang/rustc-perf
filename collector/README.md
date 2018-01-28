@@ -36,19 +36,17 @@ comparison page to compare the before/after runs.
 ### @bors try builds
 
 Alternatively, you can ping `simulacrum` on IRC to run the benchmarks on the server for a try build.
-This, today, consists of running `bench_commit $COMMIT_HASH` for the try build, and will take
-around ~15 minutes once the try build completes. This is often the preferred approach, though does
-take longer than running locally (as you have to wait for the try build to complete on Travis).
+This, today, consists of queueing `$COMMIT_HASH`, and will take around 45 minutes to a couple hours
+once the try build completes. This is the preferred approach, though does take longer than running
+locally (as you have to wait for the try build to complete on Travis), and the currently running
+commits to finish benchmarking.
 
 On the current benchmark server, the following command will benchmark and push results for a given
 commit (including a try auto commit).
 
 ```bash
-RUST_LOG=collector=debug,rust_sysroot=debug ./target/release/collector \
-    --benchmarks collector/benchmarks \
-    --output-repo rustc-timing \
-    bench_commit 0ea9f24fb9ec914e29f759b5e1ede9fcd496a1d5 \
-    && git -C rustc-timing push
+cd code/rustc-perf
+echo '$COMMIT_HASH' >> try
 ```
 
 ## How it works
