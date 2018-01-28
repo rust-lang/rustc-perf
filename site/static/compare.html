@@ -33,7 +33,7 @@
             return (i < 10) ? "0" + i : "" + i;
         }
 
-        return `${date.getUTCFullYear()}-${pad_str(date.getUTCMonth())}-${pad_str(date.getUTCDate())}`;
+        return `${date.getUTCFullYear()}-${pad_str(date.getUTCMonth() + 1)}-${pad_str(date.getUTCDate())}`;
     }
 
     function unique(arr) {
