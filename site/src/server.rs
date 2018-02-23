@@ -223,6 +223,10 @@ pub fn handle_data(body: data::Request, data: &InputData) -> ServerResult<data::
             })
             .collect::<Vec<_>>();
 
+    if result.is_empty() {
+        return Err(format!("empty range: {:?} to {:?} contained no commits", body.start, body.end));
+    }
+
     // Return everything from the first non-empty data to the last non-empty data.
     // Data may contain "holes" of empty data.
     let first_idx = result
