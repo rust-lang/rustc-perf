@@ -50,18 +50,25 @@
         return html;
     }
 
-    function add_percent(a, b) {
+    function percent_chg(a, b) {
         if (a && b) {
-            let percent = 100 * (b - a) / a;
-            if (percent > 1) {
-                return `<td class="positive">${percent.toFixed(1)}%</td>`;
-            } else if (percent < -1) {
-                return `<td class="negative">${percent.toFixed(1)}%</td>`;
+            return 100 * (b - a) / a;
+        } else {
+            return null;
+        }
+    }
+
+    function add_percent(pct) {
+        if (pct) {
+            if (pct > 1) {
+                return `<span class="positive">${pct.toFixed(1)}%</span>`;
+            } else if (pct < -1) {
+                return `<span class="negative">${pct.toFixed(1)}%</span>`;
             } else {
-                return `<td>${percent.toFixed(1)}%</td>`;
+                return `<span>${pct.toFixed(1)}%</span>`;
             }
         } else {
-            return "<td>-</td>"
+            return "<span>-</span>"
         }
     }
 
@@ -89,43 +96,81 @@
         html += "</thead>";
 
         let test_names = unique([...Object.keys(data.a.data), ...Object.keys(data.b.data)]);
-        test_names.sort();
 
-        for (let name of test_names) {
+        let fields = test_names.map(name => ({name, fields: to_fields(name)}));
+
+        function to_fields(name) {
             let source = data.a.data[name] || data.b.data[name];
+            let fields = [];
             if (source && source.length > 0) {
-                html += "<tr><td>&nbsp;</td></tr>";
-                html += "<tr>";
-                html += "<th colspan=10 style='text-align: center;'>" + truncate_name(name) + "</th>";
-                html += "</tr>";
                 for (let i = 0; i < source.length; i++) {
+                    let casename;
+                    let datum_a;
+                    let datum_b;
                     if (data.a.data[name] !== undefined && data.b.data[name] !== undefined) {
                         let a = data.a.data[name][i];
                         let b = data.b.data[name][i];
-                        html += "<tr>";
-                        html += "<td>" + a[0] + "</td>";
-                        html += add_datum_fields(a[2]);
-                        html += add_datum_fields(b[2]);
-                        html += add_percent(a[2], b[2]);
-                        html += "</tr>";
+                        casename = a[0];
+                        datum_a = a[2];
+                        datum_b = b[2];
                     } else if (data.a.data[name] === undefined) {
                         let b = data.b.data[name][i];
-                        html += "<tr>";
-                        html += "<td>" + b[0] + "</td>";
-                        html += add_datum_fields(null);
-                        html += add_datum_fields(b[2]);
-                        html += add_percent(null, b[2]);
-                        html += "</tr>";
+                        casename = b[0];
+                        datum_a = null;
+                        datum_b = b[2];
                     } else {
                         let a = data.a.data[name][i];
-                        html += "<tr>";
-                        html += "<td>" + a[0] + "</td>";
-                        html += add_datum_fields(a[2]);
-                        html += add_datum_fields(null);
-                        html += add_percent(a[2], null);
-                        html += "</tr>";
+                        casename = a[0];
+                        datum_a = a[2];
+                        datum_b = null;
                     }
+                    fields.push({
+                        casename,
+                        datum_a,
+                        datum_b,
+                        percent: percent_chg(datum_a, datum_b),
+                    });
                 }
+            }
+            return fields;
+        }
+
+        for (let field of fields) {
+            let pcts = field.fields.map(field => field.percent)
+                .filter(p => p != undefined && p != null);
+            field.max_pct = Math.max(...pcts);
+            field.min_pct = Math.min(...pcts);
+            field.farthest_pct = Math.max(...pcts.map(p => Math.abs(p)));
+            let sum = pcts.reduce((a, b) => a + b);
+            let avg = sum / pcts.length;
+            field.avg_pct = avg;
+            field.max_casename_len = Math.max(...field.fields.map(f => f.casename.length));
+        }
+
+        fields.sort((a, b) => {
+            return b.farthest_pct - a.farthest_pct;
+        });
+
+        let max_name_width = Math.max(...fields.map(f => f.max_casename_len));
+
+        for (let field of fields) {
+            html += "<tr><td>&nbsp;</td></tr>";
+            html += "<tr data-field-start=true>";
+            html += `<th style="width: ${max_name_width/2}em;" data-js-name=${field.name}>` +
+                `<details class=toggle-table><summary>` +
+                truncate_name(field.name) + "</summary></details></th>";
+            html += "<td> avg: " + add_percent(field.avg_pct) + "</td>";
+            html += "<td text-align=center> min: " + add_percent(field.min_pct) + "</td>";
+            html += "<td> max: " + add_percent(field.max_pct) + "</td>";
+            html += "</tr>";
+            for (let i = 0; i < field.fields.length; i++) {
+                let entry = field.fields[i];
+                html += "<tr>";
+                html += "<td>" + entry.casename + "</td>";
+                html += add_datum_fields(entry.datum_a);
+                html += add_datum_fields(entry.datum_b);
+                html += "<td>" + add_percent(entry.percent) + "</td>";
+                html += "</tr>";
             }
         }
 
@@ -133,6 +178,27 @@
 
         document.getElementById("content").innerHTML = html;
         document.getElementById("content").style.display = "block";
+        for (let element of document.querySelectorAll(".toggle-table")) {
+            let name = element.parentElement.getAttribute("data-js-name");
+            let in_body = [];
+            let next = element.parentElement.parentElement.nextElementSibling;
+            while (next && next.getAttribute("data-field-start") !== "true") {
+                in_body.push(next);
+                next = next.nextElementSibling;
+            }
+            for (let detail of in_body) {
+                detail.style.display = "none";
+            }
+            element.addEventListener("toggle", evt => {
+                for (let detail of in_body) {
+                    if (element.open) {
+                        detail.style.display = "";
+                    } else {
+                        detail.style.display = "none";
+                    }
+                }
+            });
+        }
     }
 
     function make_data(state) {
