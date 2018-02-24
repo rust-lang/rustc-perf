@@ -13,7 +13,7 @@ extern crate site;
 use site::{load, server, util};
 
 fn main() {
-    env_logger::init().unwrap();
+    env_logger::init();
 
     let data = load::InputData::from_fs(&util::get_repo_path().unwrap()).unwrap();
 

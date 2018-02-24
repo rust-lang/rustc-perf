@@ -182,7 +182,7 @@ fn process_commits(
 }
 
 fn run() -> Result<i32> {
-    env_logger::init().expect("logger initialization successful");
+    env_logger::init();
     git::fetch_rust(Path::new("rust.git"))?;
 
     let matches = clap_app!(rustc_perf_collector =>
