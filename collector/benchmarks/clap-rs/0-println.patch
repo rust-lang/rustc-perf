@@ -1,0 +1,12 @@
+diff --git a/src/app/usage.rs b/src/app/usage.rs
+index 6090588..73495c7 100644
+--- a/src/app/usage.rs
++++ b/src/app/usage.rs
+@@ -24,6 +24,7 @@ pub fn create_error_usage<'a, 'b>(
+     matcher: &'b ArgMatcher<'a>,
+     extra: Option<&str>,
+ ) -> String {
++    println!("testing!");
+     let mut args: Vec<_> = matcher
+         .arg_names()
+         .iter()
