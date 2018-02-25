@@ -59,7 +59,7 @@
     }
 
     function add_percent(pct) {
-        if (pct) {
+        if (pct && pct != Infinity && pct != -Infinity) {
             if (pct > 1) {
                 return `<span class="positive">${pct.toFixed(1)}%</span>`;
             } else if (pct < -1) {
@@ -141,7 +141,7 @@
             field.max_pct = Math.max(...pcts);
             field.min_pct = Math.min(...pcts);
             field.farthest_pct = Math.max(...pcts.map(p => Math.abs(p)));
-            let sum = pcts.reduce((a, b) => a + b);
+            let sum = pcts.reduce((a, b) => a + b, 0);
             let avg = sum / pcts.length;
             field.avg_pct = avg;
             field.max_casename_len = Math.max(...field.fields.map(f => f.casename.length));

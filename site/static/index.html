@@ -7,9 +7,7 @@
     <style>
         #charts {
             width: 100%;
-        }
-        div[id^="chart-container"] {
-            max-width: 50%;
+            max-width: 100%;
         }
     </style>
 </head>
@@ -68,7 +66,7 @@
 
         let by_crate = {};
         for (let crate_name of sorted_names) {
-            let key = crate_name.replace("-opt", "");
+            let key = crate_name.replace("-opt", "").replace("-check", "");
             if (!by_crate[key]) by_crate[key] = [];
             by_crate[key].push(crate_name);
         }
@@ -78,9 +76,22 @@
             wrapper.appendChild(row);
             for (let crate_name of crate_names) {
                 let element = document.createElement("td");
-                element.id = "chart-container-" + crate_name;
+                let element_1 = document.createElement("div");
+                let element_2 = document.createElement("div");
+                element_1.style.position = "absolute";
+                element_1.style.width = "100%";
+                element_1.id = "chart-container-" + crate_name;
+                element_2.style.position = "relative";
+                element_2.style.width = "100%";
+                element_2.style.height = "450px";
+                element_2.appendChild(element_1);
+                element.id = "chart-top-outer-container-" + crate_name;
+                element.style.width = "33%";
+                element.appendChild(element_2);
                 row.appendChild(element);
             }
+            row.style.width = "100%";
+            wrapper.style.width = "100%";
             document.getElementById("charts").appendChild(wrapper);
         }
         let graphs = [];
@@ -89,7 +100,7 @@
             let benchmark_names = Object.keys(response.benchmarks[crate_name]);
             benchmark_names.sort();
             let datasets = [];
-            let max = response.max[crate_name.replace("-opt", "")];
+            let max = response.max[crate_name.replace("-opt", "").replace("-check", "")];
             for (let name of benchmark_names) {
                 let data = response.benchmarks[crate_name][name];
                 datasets.push({
@@ -112,7 +123,7 @@
                     type: "line",
                 },
                 title: {
-                    text: crate_name + " - " + title,
+                    text: crate_name + "<br>" + title,
                 },
                 rangeSelector: {
                     selected: 1,

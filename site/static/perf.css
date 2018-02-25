@@ -1,6 +1,6 @@
 body {
     font-family: monospace;
-    margin: 1em auto;
+    margin: 3em auto;
 }
 p {
     margin-top: 1.2em;
@@ -70,25 +70,10 @@ img {
   border: 0;
 }
 .container {
-  padding-right: 15px;
-  padding-left: 15px;
+  padding-right: 4em;
+  padding-left: 4em;
   margin-right: auto;
   margin-left: auto;
-}
-@media (min-width: 768px) {
-  .container {
-    width: 750px;
-  }
-}
-@media (min-width: 992px) {
-  .container {
-    width: 970px;
-  }
-}
-@media (min-width: 1200px) {
-  .container {
-    width: 1170px;
-  }
 }
 
 .big_summary {

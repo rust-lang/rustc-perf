@@ -105,8 +105,8 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
         stat: body.stat.clone(),
     }, data)?.0;
 
-    // crate list * 2 because we have both opt and non-opt variants.
-    let mut result = HashMap::with_capacity(data.crate_list.len() * 2);
+    // crate list * 3 because we have normal, opt, and check variants.
+    let mut result = HashMap::with_capacity(data.crate_list.len() * 3);
     let elements = out.len();
     let mut last_commit = None;
     let mut initial_base_compile = None;
