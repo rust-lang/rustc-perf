@@ -51,11 +51,14 @@ impl DateData {
         let benchmarks = commit.benchmarks.values().filter_map(|v| v.as_ref().ok());
         let mut out = HashMap::new();
         for benchmark in benchmarks {
+            let mut runs_check = Vec::new();
             let mut runs_opt = Vec::new();
             let mut runs = Vec::new();
             for run in &benchmark.runs {
                 let v = if run.release {
                     &mut runs_opt
+                } else if run.check {
+                    &mut runs_check
                 } else {
                     &mut runs
                 };
@@ -69,6 +72,9 @@ impl DateData {
             }
             if !runs_opt.is_empty() {
                 out.insert(benchmark.name.clone() + "-opt", runs_opt);
+            }
+            if !runs_check.is_empty() {
+                out.insert(benchmark.name.clone() + "-check", runs_check);
             }
             if !runs.is_empty() {
                 out.insert(benchmark.name.clone(), runs);
@@ -104,6 +110,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
     let elements = out.len();
     let mut last_commit = None;
     let mut initial_base_compile = None;
+    let mut initial_check_base_compile = None;
     let mut initial_release_base_compile = None;
     for date_data in out {
         let commit = date_data.commit;
@@ -147,28 +154,34 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
                     if run.state.is_patch() && !run.is_trivial() {
                         continue;
                     }
-                    summary_points.entry((run.release, run.state))
+                    summary_points.entry((run.release, run.check, run.state))
                         .or_insert_with(Vec::new)
                         .push(value);
                 }
             }
         }
-        for (&(release, ref state), values) in &summary_points {
+        for (&(release, check, ref state), values) in &summary_points {
             let value = values.iter().sum::<f64>() / (values.len() as f64);
-            if !release && state.is_base_compile() && initial_base_compile.is_none() {
+            if !release && !check && state.is_base_compile() && initial_base_compile.is_none() {
                 initial_base_compile = Some(value);
+            }
+            if check && state.is_base_compile() && initial_check_base_compile.is_none() {
+                initial_check_base_compile = Some(value);
             }
             if release && state.is_base_compile() && initial_release_base_compile.is_none() {
                 initial_release_base_compile = Some(value);
             }
         }
-        for ((release, state), values) in summary_points {
-            let summary = result.entry(String::from("Summary") + if release { "-opt" } else {""})
+        for ((release, check, state), values) in summary_points {
+            let appendix = if release { "-opt" } else if check { "-check" } else { "" };
+            let summary = result.entry(String::from("Summary") + appendix)
                 .or_insert_with(HashMap::new);
             let entry = summary.entry(state.name()).or_insert_with(Vec::new);
             let value = values.iter().sum::<f64>() / (values.len() as f64);
             let value = value / if release {
                 initial_release_base_compile.unwrap()
+            } else if check {
+                initial_check_base_compile.unwrap()
             } else {
                 initial_base_compile.unwrap()
             };

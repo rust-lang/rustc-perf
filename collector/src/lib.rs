@@ -151,6 +151,8 @@ pub struct Stat {
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
 pub struct Run {
     pub stats: Vec<Stat>,
+    #[serde(default)]
+    pub check: bool,
     pub release: bool,
     pub state: BenchmarkState,
 }
@@ -166,6 +168,8 @@ impl Run {
     pub fn name(&self) -> String {
         let opt = if self.release {
             "-opt"
+        } else if self.check {
+            "-check"
         } else {
             ""
         };

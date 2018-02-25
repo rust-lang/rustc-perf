@@ -87,7 +87,7 @@ pub struct Benchmark {
 struct CargoProcess<'sysroot> {
     sysroot: &'sysroot Sysroot,
     incremental: Incremental,
-    release: Release,
+    options: Options,
     perf: bool,
     manifest_path: String,
     cargo_args: Vec<String>,
@@ -96,9 +96,6 @@ struct CargoProcess<'sysroot> {
 
 #[derive(Copy, Clone, Debug)]
 struct Incremental(bool);
-
-#[derive(Copy, Clone, Debug)]
-struct Release(bool);
 
 impl<'sysroot> CargoProcess<'sysroot> {
     fn base(&self) -> Command {
@@ -117,10 +114,18 @@ impl<'sysroot> CargoProcess<'sysroot> {
         self
     }
 
-    fn run(self, cwd: &Path, cargo: Cargo) -> Result<process::Output> {
+    fn run(self, cwd: &Path, mut cargo: Cargo) -> Result<process::Output> {
         let mut cmd = self.base();
         cmd.current_dir(cwd);
-        cmd.arg(cargo.to_cmd());
+        if self.options.check && cargo == Cargo::Build {
+            cargo = Cargo::Check;
+        }
+        cmd.arg(match cargo {
+            Cargo::Check | Cargo::Build => {
+                "rustc"
+            }
+            Cargo::Clean => "clean"
+        });
         {
             let mut cargo = self.base();
             cargo.current_dir(cwd)
@@ -133,34 +138,42 @@ impl<'sysroot> CargoProcess<'sysroot> {
             let package_id = str::from_utf8(&out).unwrap();
             cmd.arg("-p").arg(package_id.trim());
         }
-        if self.release.0 {
+        if cargo == Cargo::Check {
+            cmd.arg("--profile").arg("check");
+        }
+        if self.options.release {
             cmd.arg("--release");
         }
         cmd.arg("--manifest-path")
             .arg(&self.manifest_path);
-        if let Cargo::Rustc { .. } = cargo {
+        if cargo.takes_args() {
             cmd.args(&self.cargo_args);
-        }
-        cmd.arg("--");
-        if let Cargo::Rustc { .. } = cargo {
-            cmd.args(&self.rustc_args);
+            cmd.arg("--");
             cmd.arg("-Ztime-passes");
+            cmd.args(&self.rustc_args);
         }
         run(cmd)
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum Cargo {
-    Rustc,
+    Build,
+    Check,
     Clean,
 }
 
+#[derive(Debug, PartialEq, Clone, Copy)]
+struct Options {
+    release: bool,
+    check: bool,
+}
+
 impl Cargo {
-    fn to_cmd<'a>(self) -> &'a str {
+    fn takes_args(self) -> bool {
         match self {
-            Cargo::Rustc => "rustc",
-            Cargo::Clean => "clean",
+            Cargo::Build | Cargo::Check => true,
+            Cargo::Clean => false,
         }
     }
 }
@@ -222,12 +235,12 @@ impl Benchmark {
         &self,
         sysroot: &'a Sysroot,
         incremental: Incremental,
-        release: Release,
+        options: Options,
     ) -> CargoProcess<'a> {
         CargoProcess {
             sysroot: sysroot,
             incremental: incremental,
-            release: release,
+            options: options,
             perf: true,
             manifest_path:
                 self.config.cargo_toml.clone().unwrap_or_else(|| String::from("Cargo.toml")),
@@ -260,12 +273,13 @@ impl Benchmark {
             runs: Vec::new(),
         };
 
-        let mut opts = Vec::with_capacity(2);
+        let mut opts = Vec::with_capacity(3);
         if self.config.run_debug {
-            opts.push(Release(false));
+            opts.push(Options { check: true, release: false });
+            opts.push(Options { check: false, release: false });
         }
         if self.config.run_optimized {
-            opts.push(Release(true));
+            opts.push(Options { check: false, release: true });
         }
 
         for opt in opts {
@@ -278,7 +292,7 @@ impl Benchmark {
 
             let base_build = self.make_temp_dir(&self.path)?;
             let clean = self.cargo(sysroot, Incremental(false), opt)
-                .run(base_build.path(), Cargo::Rustc)?;
+                .run(base_build.path(), Cargo::Build)?;
             clean_stats.push(process_output(clean.stdout)?);
             self.cargo(sysroot, Incremental(false), opt)
                 .perf(false)
@@ -288,13 +302,13 @@ impl Benchmark {
                 let tmp_dir = self.make_temp_dir(base_build.path())?;
 
                 let clean = self.cargo(sysroot, Incremental(false), opt)
-                    .run(tmp_dir.path(), Cargo::Rustc)?;
+                    .run(tmp_dir.path(), Cargo::Build)?;
                 touch_all(tmp_dir.path())?;
                 let incr = self.cargo(sysroot, Incremental(true), opt)
-                    .run(tmp_dir.path(), Cargo::Rustc)?;
+                    .run(tmp_dir.path(), Cargo::Build)?;
                 touch_all(tmp_dir.path())?;
                 let incr_clean = self.cargo(sysroot, Incremental(true), opt)
-                    .run(tmp_dir.path(), Cargo::Rustc)?;
+                    .run(tmp_dir.path(), Cargo::Build)?;
 
                 clean_stats.push(process_output(clean.stdout)?);
                 incr_stats.push(process_output(incr.stdout)?);
@@ -304,7 +318,7 @@ impl Benchmark {
                     patch.apply(tmp_dir.path())?;
                     touch_all(tmp_dir.path())?;
                     let out = self.cargo(sysroot, Incremental(true), opt)
-                        .run(tmp_dir.path(), Cargo::Rustc)?;
+                        .run(tmp_dir.path(), Cargo::Build)?;
                     let out = process_output(out.stdout)?;
                     if let Some(mut entry) = incr_patched_stats.iter_mut()
                         .find(|s| &s.0 == patch) {
@@ -316,13 +330,13 @@ impl Benchmark {
                 }
             }
 
-            ret.runs.push(process_stats(opt.0, BenchmarkState::Clean, clean_stats));
-            ret.runs.push(process_stats(opt.0, BenchmarkState::IncrementalStart, incr_stats));
-            ret.runs.push(process_stats(opt.0, BenchmarkState::IncrementalClean, incr_clean_stats));
+            ret.runs.push(process_stats(opt, BenchmarkState::Clean, clean_stats));
+            ret.runs.push(process_stats(opt, BenchmarkState::IncrementalStart, incr_stats));
+            ret.runs.push(process_stats(opt, BenchmarkState::IncrementalClean, incr_clean_stats));
 
             for (patch, results) in incr_patched_stats {
                 ret.runs.push(process_stats(
-                    opt.0,
+                    opt,
                     BenchmarkState::IncrementalPatched(patch),
                     results,
                 ));
@@ -373,7 +387,7 @@ fn process_output(output: Vec<u8>) -> Result<Vec<Stat>> {
     Ok(stats)
 }
 
-fn process_stats(opt: bool, state: BenchmarkState, runs: Vec<Vec<Stat>>) -> Run {
+fn process_stats(options: Options, state: BenchmarkState, runs: Vec<Vec<Stat>>) -> Run {
     let mut stats: HashMap<String, Vec<f64>> = HashMap::new();
     for run in runs.clone() {
         for stat in run {
@@ -381,7 +395,13 @@ fn process_stats(opt: bool, state: BenchmarkState, runs: Vec<Vec<Stat>>) -> Run 
         }
     }
     // all stats should be present in all runs
-    assert_eq!(stats.values().map(|v| v.len()).collect::<HashSet<_>>().len(), 1);
+    let map = stats.values().map(|v| v.len()).collect::<HashSet<_>>();
+    if map.len() != 1 {
+        eprintln!("lengths: {:?}", map);
+        eprintln!("runs: {:?}", runs);
+        eprintln!("stats: {:?}", stats);
+        panic!("expected all stats to be present in all runs");
+    }
     let stats = stats.into_iter()
         .map(|(stat, counts)| {
             Stat {
@@ -393,7 +413,8 @@ fn process_stats(opt: bool, state: BenchmarkState, runs: Vec<Vec<Stat>>) -> Run 
 
     Run {
         stats,
-        release: opt,
+        check: options.check,
+        release: options.release,
         state: state,
     }
 }
