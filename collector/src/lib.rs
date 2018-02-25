@@ -4,6 +4,8 @@ extern crate chrono;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
+extern crate log;
 
 use std::cmp::{Ord, Ordering, PartialOrd};
 use std::collections::BTreeMap;
@@ -11,7 +13,7 @@ use std::fmt;
 use std::ops::{Add, Sub};
 use std::str::FromStr;
 use std::path::{Path, PathBuf};
-use std::process;
+use std::process::{self, Stdio};
 
 use chrono::{DateTime, Datelike, Duration, TimeZone, Utc};
 use chrono::naive::NaiveDate;
@@ -54,7 +56,7 @@ impl Ord for Commit {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
 pub struct Patch {
     index: usize,
-    name: String,
+    pub name: String,
     path: PathBuf,
 }
 
@@ -88,9 +90,10 @@ impl Patch {
     }
 
     pub fn apply(&self, dir: &Path) -> Result<(), String> {
-        eprintln!("applying {} to {:?}", self.name, dir);
+        debug!("applying {} to {:?}", self.name, dir);
         let mut cmd = process::Command::new("patch");
         cmd.current_dir(dir).args(&["-Np1", "-i"]).arg(&self.path);
+        cmd.stdout(Stdio::null());
         if cmd.status().map(|s| !s.success()).unwrap_or(false) {
             return Err(format!("could not execute {:?}.", cmd));
         }

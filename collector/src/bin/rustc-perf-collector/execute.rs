@@ -18,7 +18,7 @@ use rust_sysroot::sysroot::Sysroot;
 use serde_json;
 
 fn run(mut cmd: Command) -> Result<process::Output> {
-    info!("running: {:?}", cmd);
+    trace!("running: {:?}", cmd);
     let output = cmd.output()?;
     if !output.status.success() {
         bail!(
@@ -120,6 +120,7 @@ impl<'sysroot> CargoProcess<'sysroot> {
         if self.options.check && cargo == Cargo::Build {
             cargo = Cargo::Check;
         }
+        debug!("running cargo {:?}{}", cargo, if self.options.release { " --release" } else {""});
         cmd.arg(match cargo {
             Cargo::Check | Cargo::Build => {
                 "rustc"
@@ -259,7 +260,6 @@ impl Benchmark {
     /// Run a specific benchmark on a specific commit
     pub fn run(&self, sysroot: &Sysroot, iterations: usize) -> Result<CollectedBenchmark> {
         let iterations = cmp::min(iterations, self.config.runs);
-        eprintln!("processing {}", self.name);
         if self.config.disabled {
             eprintln!("skipping {}: disabled", self.name);
             bail!("disabled benchmark");
@@ -288,7 +288,8 @@ impl Benchmark {
             let mut incr_clean_stats = Vec::new();
             let mut incr_patched_stats: Vec<(Patch, Vec<Vec<Stat>>)> = Vec::new();
 
-            eprintln!("Benchmarking {} with {:?}", self.name, opt);
+            info!("Benchmarking {} with release: {}, check: {}, iterations: {}",
+                self.name, opt.release, opt.check, iterations);
 
             let base_build = self.make_temp_dir(&self.path)?;
             let clean = self.cargo(sysroot, Incremental(false), opt)
@@ -298,7 +299,8 @@ impl Benchmark {
                 .perf(false)
                 .run(base_build.path(), Cargo::Clean)?;
 
-            for _ in 0..iterations {
+            for i in 0..iterations {
+                debug!("Benchmark iteration {}/{}", i + 1, iterations);
                 let tmp_dir = self.make_temp_dir(base_build.path())?;
 
                 let clean = self.cargo(sysroot, Incremental(false), opt)
@@ -315,6 +317,7 @@ impl Benchmark {
                 incr_clean_stats.push(process_output(incr_clean.stdout)?);
 
                 for patch in &self.patches {
+                    debug!("applying patch {}", patch.name);
                     patch.apply(tmp_dir.path())?;
                     touch_all(tmp_dir.path())?;
                     let out = self.cargo(sysroot, Incremental(true), opt)

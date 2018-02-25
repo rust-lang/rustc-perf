@@ -71,31 +71,32 @@ fn bench_commit(
 
     let existing_data = repo.and_then(|r| r.load_commit_data(&commit, &sysroot.triple).ok());
 
-    let results: BTreeMap<_, _> = benchmarks
-        .iter()
-        .map(|benchmark| {
-            if let Some(ref data) = existing_data {
-                if let Some(result) = data.benchmarks.get(&benchmark.name) {
-                    return (benchmark.name.clone(), result.clone());
-                }
+    let mut results = BTreeMap::new();
+    if let Some(ref data) = existing_data {
+        for benchmark in benchmarks {
+            if let Some(result) = data.benchmarks.get(&benchmark.name) {
+                results.insert(benchmark.name.clone(), result.clone());
             }
+        }
+    }
+    for benchmark in benchmarks {
+        if results.contains_key(&benchmark.name) {
+            continue;
+        }
 
-            let result = benchmark.run(&sysroot, iterations);
+        let result = benchmark.run(&sysroot, iterations);
 
-            if let Err(ref s) = result {
-                info!(
-                    "failure to benchmark {}, recorded: {}",
-                    benchmark.name,
-                    s
-                );
-            }
+        if let Err(ref s) = result {
+            info!(
+                "failure to benchmark {}, recorded: {}",
+                benchmark.name,
+                s
+            );
+        }
 
-            (
-                benchmark.name.clone(),
-                result.map_err(|e| format!("{:?}", e)),
-            )
-        })
-        .collect();
+        results.insert(benchmark.name.clone(), result.map_err(|e| format!("{:?}", e)));
+        info!("{} benchmarks left", benchmarks.len() - results.len());
+    }
 
     CommitData {
         commit: Commit {
@@ -118,18 +119,18 @@ fn get_benchmarks(benchmark_dir: &Path, filter: Option<&str>) -> Result<Vec<Benc
         };
 
         if path.ends_with(".git") || path.ends_with("scripts") || !entry.file_type()?.is_dir() {
-            info!("benchmark {} - ignored", name);
+            debug!("benchmark {} - ignored", name);
             continue;
         }
 
         if let Some(filter) = filter {
             if !name.contains(filter) {
-                info!("benchmark {} - filtered", name);
+                debug!("benchmark {} - filtered", name);
                 continue;
             }
         }
 
-        info!("benchmark {} - registered", name);
+        debug!("benchmark {} - registered", name);
         benchmarks.push(Benchmark::new(name, path)?);
     }
     benchmarks.sort_by_key(|benchmark| benchmark.name.clone());
