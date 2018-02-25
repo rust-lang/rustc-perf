@@ -34,7 +34,7 @@ fn run(mut cmd: Command) -> Result<process::Output> {
 fn touch_all(path: &Path) -> Result<()> {
     let mut cmd = Command::new("bash");
     cmd.current_dir(path)
-        .args(&["-c", "find . -name *.rs | xargs touch"]);
+        .args(&["-c", "find . -name '*.rs' | xargs touch"]);
     run(cmd)?;
     Ok(())
 }
@@ -384,6 +384,8 @@ fn process_output(output: Vec<u8>) -> Result<Vec<Stat>> {
         });
     }
 
+    assert!(stats.len() >= 1, "at least one stat collected, stdout: {:?}", output);
+
     Ok(stats)
 }
 
@@ -397,6 +399,8 @@ fn process_stats(options: Options, state: BenchmarkState, runs: Vec<Vec<Stat>>) 
     // all stats should be present in all runs
     let map = stats.values().map(|v| v.len()).collect::<HashSet<_>>();
     if map.len() != 1 {
+        eprintln!("options: {:?}", options);
+        eprintln!("state: {:?}", state);
         eprintln!("lengths: {:?}", map);
         eprintln!("runs: {:?}", runs);
         eprintln!("stats: {:?}", stats);
