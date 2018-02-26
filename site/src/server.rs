@@ -198,7 +198,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
 
     let mut maxes = HashMap::with_capacity(result.len());
     for (ref crate_name, ref benchmarks) in &result {
-        let name = crate_name.replace("-opt", "");
+        let name = crate_name.replace("-opt", "").replace("-check", "");
         let mut max = 0.0f64;
         for points in benchmarks.values() {
             for point in points {
