@@ -58,8 +58,10 @@
         }
 
         function clickHandler(event) {
-            if (this.options.url) {
-                window.open(this.options.url, "_blank");
+            if (this.options.prev_commit) {
+                window.open("/compare.html?start=" + this.options.prev_commit +
+                    "&end=" + this.options.commit +
+                    "&stat=" + stat, "_blank");
             }
             return false;
         }

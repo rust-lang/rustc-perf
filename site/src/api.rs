@@ -103,7 +103,7 @@ pub mod graph {
     pub struct GraphData {
         pub benchmark: String,
         pub commit: String,
-        pub url: Option<String>,
+        pub prev_commit: Option<String>,
         pub absolute: f64,
         pub percent: f64,
         pub y: f64,

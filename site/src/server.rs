@@ -8,9 +8,8 @@
 // except according to those terms.
 
 use std::str;
-use std::env;
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::sync::Arc;
 use std::collections::HashMap;
 use std::path::Path;
@@ -23,10 +22,13 @@ use serde_json;
 use futures::{self, Future, Stream};
 use futures_cpupool::CpuPool;
 use hyper::{self, Get, Post, StatusCode};
-use hyper::header::{CacheControl, CacheDirective, ContentLength, ContentType};
+use hyper::header::{AcceptEncoding, Encoding, CacheControl, CacheDirective};
+use hyper::header::{ContentEncoding, ContentLength, ContentType};
 use hyper::mime;
 use hyper::server::{Http, Request, Response, Service};
 use url::Url;
+use flate2::Compression;
+use flate2::write::GzEncoder;
 
 use git;
 use date::Date;
@@ -49,11 +51,11 @@ pub struct DateData {
 impl DateData {
     pub fn for_day(commit: &CommitData, stat: &str) -> DateData {
         let benchmarks = commit.benchmarks.values().filter_map(|v| v.as_ref().ok());
-        let mut out = HashMap::new();
+        let mut out = HashMap::with_capacity(commit.benchmarks.len() * 3);
         for benchmark in benchmarks {
-            let mut runs_check = Vec::new();
-            let mut runs_opt = Vec::new();
-            let mut runs = Vec::new();
+            let mut runs_check = Vec::with_capacity(benchmark.runs.len() / 3);
+            let mut runs_opt = Vec::with_capacity(benchmark.runs.len() / 3);
+            let mut runs = Vec::with_capacity(benchmark.runs.len() / 3);
             for run in &benchmark.runs {
                 let v = if run.release {
                     &mut runs_opt
@@ -135,13 +137,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
                     .push(graph::GraphData {
                         benchmark: run.state.name(),
                         commit: commit.clone(),
-                        url: last_commit.as_ref().map(|c| {
-                            format!("/compare.html?start={}&end={}&stat={}",
-                                c,
-                                commit,
-                                body.stat,
-                            )
-                        }),
+                        prev_commit: last_commit.clone(),
                         absolute: value,
                         percent: percent,
                         y: if body.absolute { value } else { percent },
@@ -187,17 +183,10 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
             };
             let first = entry.first().map(|d: &graph::GraphData| d.absolute);
             let percent = first.map_or(0.0, |f| (value - f) / f * 100.0);
-            let url = last_commit.as_ref().map(|c| {
-                    format!("/compare.html?start={}&end={}&stat={}",
-                        c,
-                        commit,
-                        body.stat,
-                        )
-                });
             entry.push(graph::GraphData {
                 benchmark: state.name(),
                 commit: commit.clone(),
-                url: url,
+                prev_commit: last_commit.clone(),
                 absolute: value,
                 percent: percent,
                 y: if body.absolute { value } else { percent },
@@ -207,7 +196,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
         last_commit = Some(commit);
     }
 
-    let mut maxes = HashMap::new();
+    let mut maxes = HashMap::with_capacity(result.len());
     for (ref crate_name, ref benchmarks) in &result {
         let name = crate_name.replace("-opt", "");
         let mut max = 0.0f64;
@@ -336,6 +325,8 @@ impl Server {
             // 10 kB
             return Box::new(futures::future::err(hyper::Error::TooLarge));
         }
+        let accepts_gzip = req.headers().get::<AcceptEncoding>()
+            .map_or(false, |e| e.iter().any(|e| e.item == Encoding::Gzip));
         let data = self.data.clone();
         Box::new(self.pool.spawn_fn(move || {
             req.body()
@@ -361,12 +352,23 @@ impl Server {
                     let result = handler(body, &data);
                     match result {
                         Ok(result) => {
-                            Response::new()
+                            let mut response = Response::new()
                                 .with_header(ContentType::json())
                                 .with_header(CacheControl(
                                     vec![CacheDirective::NoCache, CacheDirective::NoStore],
-                                ))
-                                .with_body(serde_json::to_string(&result).unwrap())
+                                ));
+                            let body = serde_json::to_string(&result).unwrap();
+                            if accepts_gzip {
+                                let mut encoder = GzEncoder::new(Vec::new(), Compression::best());
+                                encoder.write_all(body.as_bytes()).unwrap();
+                                let body = encoder.finish().unwrap();
+                                response
+                                    .with_header(ContentEncoding(vec![Encoding::Gzip]))
+                                    .with_body(body)
+                            } else {
+                                response
+                                    .with_body(body)
+                            }
                         },
                         Err(err) => {
                             Response::new()
@@ -515,19 +517,14 @@ impl Service for Server {
     }
 }
 
-pub fn start(data: InputData) {
+pub fn start(data: InputData, port: u16) {
     let server = Arc::new(Server {
         data: Arc::new(RwLock::new(data)),
         pool: CpuPool::new_num_cpus(),
         updating: Arc::new(AtomicBool::new(false)),
     });
     let mut server_address: SocketAddr = "0.0.0.0:2346".parse().unwrap();
-    server_address.set_port(
-        env::var("PORT")
-            .ok()
-            .and_then(|x| x.parse().ok())
-            .unwrap_or(2346),
-    );
+    server_address.set_port(port);
     let server = Http::new().bind(&server_address, move || Ok(server.clone()));
     server.unwrap().run().unwrap();
 }

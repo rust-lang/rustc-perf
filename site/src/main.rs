@@ -11,13 +11,15 @@ extern crate env_logger;
 extern crate site;
 
 use site::{load, server, util};
+use std::env;
 
 fn main() {
     env_logger::init();
 
     let data = load::InputData::from_fs(&util::get_repo_path().unwrap()).unwrap();
 
-    println!("Starting server!");
+    let port = env::var("PORT").ok().and_then(|x| x.parse().ok()).unwrap_or(2346);
+    println!("Starting server with port={:?}", port);
 
-    server::start(data);
+    server::start(data, port);
 }
