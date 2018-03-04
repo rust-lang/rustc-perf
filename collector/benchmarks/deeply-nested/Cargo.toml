@@ -1,0 +1,6 @@
+[package]
+name = "deeply-nested"
+version = "0.1.0"
+authors = ["Tatsuyuki Ishi <ishitatsuyuki@gmail.com>"]
+
+[dependencies]
