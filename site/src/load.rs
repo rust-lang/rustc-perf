@@ -18,7 +18,7 @@ use serde_json;
 use errors::*;
 use util;
 use git;
-use date::Date;
+use collector::Date;
 
 pub use collector::{Commit, CommitData, Patch, Run, Stat};
 

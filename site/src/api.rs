@@ -48,7 +48,7 @@ impl List {
 pub type ServerResult<T> = StdResult<T, String>;
 
 pub mod info {
-    use date::Date;
+    use collector::Date;
     use std::collections::BTreeSet;
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

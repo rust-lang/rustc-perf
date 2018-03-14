@@ -31,10 +31,9 @@ use flate2::Compression;
 use flate2::write::GzEncoder;
 
 use git;
-use date::Date;
 use util::{self, get_repo_path};
 pub use api::{self, data, days, graph, info, CommitResponse, ServerResult};
-use collector::Run;
+use collector::{Date, Run};
 use load::{CommitData, InputData};
 use antidote::RwLock;
 
