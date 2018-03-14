@@ -7,8 +7,12 @@ rust:
   - nightly
 
 env:
+  - CHECK='cargo fmt --all -- --write-mode=diff'
   - CHECK='cd collector && ./check-benchmarks.sh'
-  - CHECK='cargo build --verbose && cargo test --verbose'
+  - CHECK='cargo check'
+
+before_script:
+  - rustup component add rustfmt-preview
 
 script:
   - sh -x -c "$CHECK"
