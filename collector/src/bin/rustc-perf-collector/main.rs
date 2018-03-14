@@ -225,14 +225,11 @@ fn run() -> Result<i32> {
 
     match matches.subcommand() {
         ("test_benchmarks", Some(_)) => {
-            let to_process =
-                out_repo.find_missing_commits(&commits, &benchmarks, "x86_64-unknown-linux-gnu")?;
-            // take 3 from the end -- this means that for each bors commit (which takes ~3 hours) we
-            // test 3, which should allow us to eventually test all commits, but also keep up with the
-            // latest rustc
-            if let Some(commit) = to_process.last() {
+            if let Some(commit) = commits.last() {
                 let sysroot = Sysroot::install(commit, "x86_64-unknown-linux-gnu", false, false)?;
                 bench_commit(commit, None, sysroot, &benchmarks, 1);
+            } else {
+                panic!("no commits");
             }
             Ok(0)
         }
