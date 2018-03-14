@@ -22,7 +22,7 @@ use serde_json;
 use futures::{self, Future, Stream};
 use futures_cpupool::CpuPool;
 use hyper::{self, Get, Post, StatusCode};
-use hyper::header::{AcceptEncoding, Encoding, CacheControl, CacheDirective};
+use hyper::header::{AcceptEncoding, CacheControl, CacheDirective, Encoding};
 use hyper::header::{ContentEncoding, ContentLength, ContentType};
 use hyper::mime;
 use hyper::server::{Http, Request, Response, Service};
@@ -33,7 +33,7 @@ use flate2::write::GzEncoder;
 use git;
 use date::Date;
 use util::{self, get_repo_path};
-pub use api::{self, data, graph, days, info, CommitResponse, ServerResult};
+pub use api::{self, data, days, graph, info, CommitResponse, ServerResult};
 use collector::Run;
 use load::{CommitData, InputData};
 use antidote::RwLock;
@@ -99,13 +99,15 @@ pub fn handle_info(data: &InputData) -> info::Response {
     }
 }
 
-
 pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<graph::Response> {
-    let out = handle_data(data::Request {
-        start: body.start.clone(),
-        end: body.end.clone(),
-        stat: body.stat.clone(),
-    }, data)?.0;
+    let out = handle_data(
+        data::Request {
+            start: body.start.clone(),
+            end: body.end.clone(),
+            stat: body.stat.clone(),
+        },
+        data,
+    )?.0;
 
     // crate list * 3 because we have normal, opt, and check variants.
     let mut result = HashMap::with_capacity(data.crate_list.len() * 3);
@@ -118,7 +120,8 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
         let commit = date_data.commit;
         let mut summary_points = HashMap::new();
         for (name, runs) in date_data.data {
-            let mut entry = result.entry(name.clone())
+            let mut entry = result
+                .entry(name.clone())
                 .or_insert_with(|| HashMap::with_capacity(runs.len()));
             let mut base_compile = false;
             let mut trivial = false;
@@ -129,20 +132,20 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
                     trivial = true;
                 }
 
-                let mut entry = entry.entry(name)
+                let mut entry = entry
+                    .entry(name)
                     .or_insert_with(|| Vec::<graph::GraphData>::with_capacity(elements));
                 let first = entry.first().map(|d| d.absolute);
                 let percent = first.map_or(0.0, |f| (value - f) / f * 100.0);
-                entry
-                    .push(graph::GraphData {
-                        benchmark: run.state.name(),
-                        commit: commit.clone(),
-                        prev_commit: last_commit.clone(),
-                        absolute: value,
-                        percent: percent,
-                        y: if body.absolute { value } else { percent },
-                        x: date_data.date.0.timestamp() as u64 * 1000, // all dates are since 1970
-                    });
+                entry.push(graph::GraphData {
+                    benchmark: run.state.name(),
+                    commit: commit.clone(),
+                    prev_commit: last_commit.clone(),
+                    absolute: value,
+                    percent: percent,
+                    y: if body.absolute { value } else { percent },
+                    x: date_data.date.0.timestamp() as u64 * 1000, // all dates are since 1970
+                });
             }
             if base_compile && trivial {
                 for (_, run, value) in runs {
@@ -150,7 +153,8 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
                     if run.state.is_patch() && !run.is_trivial() {
                         continue;
                     }
-                    summary_points.entry((run.release, run.check, run.state))
+                    summary_points
+                        .entry((run.release, run.check, run.state))
                         .or_insert_with(Vec::new)
                         .push(value);
                 }
@@ -169,8 +173,15 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
             }
         }
         for ((release, check, state), values) in summary_points {
-            let appendix = if release { "-opt" } else if check { "-check" } else { "" };
-            let summary = result.entry(String::from("Summary") + appendix)
+            let appendix = if release {
+                "-opt"
+            } else if check {
+                "-check"
+            } else {
+                ""
+            };
+            let summary = result
+                .entry(String::from("Summary") + appendix)
                 .or_insert_with(HashMap::new);
             let entry = summary.entry(state.name()).or_insert_with(Vec::new);
             let value = values.iter().sum::<f64>() / (values.len() as f64);
@@ -216,17 +227,22 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
 }
 
 pub fn handle_data(body: data::Request, data: &InputData) -> ServerResult<data::Response> {
-    debug!("handle_data: start = {:?}, end = {:?}", body.start, body.end);
+    debug!(
+        "handle_data: start = {:?}, end = {:?}",
+        body.start, body.end
+    );
     let range = util::data_range(&data, &body.start, &body.end)?;
-    let mut result = range.into_iter()
-            .map(|(_, day)| day)
-            .map(|day| {
-                DateData::for_day(day, &body.stat)
-            })
-            .collect::<Vec<_>>();
+    let mut result = range
+        .into_iter()
+        .map(|(_, day)| day)
+        .map(|day| DateData::for_day(day, &body.stat))
+        .collect::<Vec<_>>();
 
     if result.is_empty() {
-        return Err(format!("empty range: {:?} to {:?} contained no commits", body.start, body.end));
+        return Err(format!(
+            "empty range: {:?} to {:?} contained no commits",
+            body.start, body.end
+        ));
     }
 
     // Return everything from the first non-empty data to the last non-empty data.
@@ -325,7 +341,8 @@ impl Server {
             // 10 kB
             return Box::new(futures::future::err(hyper::Error::TooLarge));
         }
-        let accepts_gzip = req.headers().get::<AcceptEncoding>()
+        let accepts_gzip = req.headers()
+            .get::<AcceptEncoding>()
             .map_or(false, |e| e.iter().any(|e| e.item == Encoding::Gzip));
         let data = self.data.clone();
         Box::new(self.pool.spawn_fn(move || {
@@ -354,9 +371,10 @@ impl Server {
                         Ok(result) => {
                             let mut response = Response::new()
                                 .with_header(ContentType::json())
-                                .with_header(CacheControl(
-                                    vec![CacheDirective::NoCache, CacheDirective::NoStore],
-                                ));
+                                .with_header(CacheControl(vec![
+                                    CacheDirective::NoCache,
+                                    CacheDirective::NoStore,
+                                ]));
                             let body = serde_json::to_string(&result).unwrap();
                             if accepts_gzip {
                                 let mut encoder = GzEncoder::new(Vec::new(), Compression::best());
@@ -366,18 +384,16 @@ impl Server {
                                     .with_header(ContentEncoding(vec![Encoding::Gzip]))
                                     .with_body(body)
                             } else {
-                                response
-                                    .with_body(body)
+                                response.with_body(body)
                             }
-                        },
-                        Err(err) => {
-                            Response::new()
-                                .with_header(ContentType::plaintext())
-                                .with_header(CacheControl(
-                                    vec![CacheDirective::NoCache, CacheDirective::NoStore],
-                                ))
-                                .with_body(err)
                         }
+                        Err(err) => Response::new()
+                            .with_header(ContentType::plaintext())
+                            .with_header(CacheControl(vec![
+                                CacheDirective::NoCache,
+                                CacheDirective::NoStore,
+                            ]))
+                            .with_body(err),
                     }
                 })
         }))
@@ -430,9 +446,7 @@ impl Server {
         let updating = self.updating.clone();
         Box::new(
             response
-                .map(|value| {
-                    Response::new().with_body(serde_json::to_string(&value).unwrap())
-                })
+                .map(|value| Response::new().with_body(serde_json::to_string(&value).unwrap()))
                 .or_else(move |err| {
                     updating.store(false, Ordering::Release);
                     futures::future::ok(
@@ -493,9 +507,11 @@ impl Service for Server {
             "/perf/pr_commit" => self.handle_get_req(&req, |req, _data| {
                 let res = req.query()
                     .unwrap_or_default()
-                    .split('&').find(|q| q.starts_with("pr="))
+                    .split('&')
+                    .find(|q| q.starts_with("pr="))
                     .and_then(|p| p.split('=').next())
-                    .and_then(|pr| pr.parse().ok()).map(|pr| handle_pr_commit(pr));
+                    .and_then(|pr| pr.parse().ok())
+                    .map(|pr| handle_pr_commit(pr));
                 if let Some(res) = res {
                     res
                 } else {

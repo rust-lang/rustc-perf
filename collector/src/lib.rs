@@ -1,11 +1,11 @@
 #![feature(conservative_impl_trait)]
 
 extern crate chrono;
+#[macro_use]
+extern crate log;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
-#[macro_use]
-extern crate log;
 
 use std::cmp::{Ord, Ordering, PartialOrd};
 use std::collections::BTreeMap;
@@ -67,8 +67,11 @@ impl Patch {
             let file_name = path.file_name().unwrap().to_string_lossy();
             let mut parts = file_name.split("-");
             let index = parts.next().unwrap().parse().unwrap_or_else(|e| {
-                panic!("{:?} should be in the format 000-name.patch, \
-                but did not start with a number: {:?}", &path, e);
+                panic!(
+                    "{:?} should be in the format 000-name.patch, \
+                     but did not start with a number: {:?}",
+                    &path, e
+                );
             });
             let mut name = parts.fold(String::new(), |mut acc, part| {
                 acc.push_str(part);
@@ -100,7 +103,6 @@ impl Patch {
         Ok(())
     }
 }
-
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Deserialize, Serialize)]
 pub enum BenchmarkState {
@@ -238,15 +240,15 @@ impl<'de> Deserialize<'de> for Bound {
                     return Ok(Bound::None);
                 }
 
-                let bound = value.parse::<NaiveDate>()
+                let bound = value
+                    .parse::<NaiveDate>()
                     .map(|d| Bound::Date(d))
                     .unwrap_or(Bound::Commit(value.to_string()));
                 if let Bound::Commit(ref sha) = bound {
                     if sha.len() != 40 {
-                        return Err(
-                            serde::de::Error::invalid_value(
-                                serde::de::Unexpected::Str(value),
-                                &self,
+                        return Err(serde::de::Error::invalid_value(
+                            serde::de::Unexpected::Str(value),
+                            &self,
                         ));
                     }
                 }
@@ -305,9 +307,7 @@ impl Date {
     pub fn start_of_week(&self) -> Date {
         let weekday = self.0.weekday();
         // num_days_from_sunday is 0 for Sunday
-        Date(
-            self.0 - Duration::days(weekday.num_days_from_sunday() as i64),
-        )
+        Date(self.0 - Duration::days(weekday.num_days_from_sunday() as i64))
     }
 }
 

@@ -64,8 +64,7 @@ where
 
     if received_value != expected_value {
         assert_eq!(
-            expected_value,
-            received_value,
+            expected_value, received_value,
             "Compared {} body with server result, results not equal.",
             expected_file
         );
@@ -79,7 +78,6 @@ fn summary() {
         "tests/expected_results/summary.json",
     );
 }
-
 
 #[test]
 fn info() {

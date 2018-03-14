@@ -1,23 +1,23 @@
 #![recursion_limit = "1024"]
 
+extern crate cargo_metadata;
 extern crate chrono;
 #[macro_use]
 extern crate clap;
+extern crate collector;
 extern crate env_logger;
 #[macro_use]
 extern crate error_chain;
 #[macro_use]
+extern crate lazy_static;
+#[macro_use]
 extern crate log;
 extern crate rust_sysroot;
-extern crate collector;
-extern crate serde_json;
-extern crate tempdir;
-extern crate cargo_metadata;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
-#[macro_use]
-extern crate lazy_static;
+extern crate serde_json;
+extern crate tempdir;
 
 mod errors {
     // Create the Error, ErrorKind, ResultExt, and Result types
@@ -64,9 +64,7 @@ fn bench_commit(
 ) -> CommitData {
     info!(
         "benchmarking commit {} ({}) for triple {}",
-        commit.sha,
-        commit.date,
-        sysroot.triple
+        commit.sha, commit.date, sysroot.triple
     );
 
     let existing_data = repo.and_then(|r| r.load_commit_data(&commit, &sysroot.triple).ok());
@@ -87,14 +85,13 @@ fn bench_commit(
         let result = benchmark.run(&sysroot, iterations);
 
         if let Err(ref s) = result {
-            info!(
-                "failure to benchmark {}, recorded: {}",
-                benchmark.name,
-                s
-            );
+            info!("failure to benchmark {}, recorded: {}", benchmark.name, s);
         }
 
-        results.insert(benchmark.name.clone(), result.map_err(|e| format!("{:?}", e)));
+        results.insert(
+            benchmark.name.clone(),
+            result.map_err(|e| format!("{:?}", e)),
+        );
         info!("{} benchmarks left", benchmarks.len() - results.len());
     }
 
@@ -246,14 +243,18 @@ fn run() -> Result<i32> {
         }
         ("bench_commit", Some(sub_m)) => {
             let commit = sub_m.value_of("COMMIT").unwrap();
-            let commit = commits.iter().find(|c| c.sha == commit).cloned().unwrap_or_else(|| {
-                warn!("utilizing fake commit!");
-                rust_sysroot::git::Commit {
-                    sha: commit.to_string(),
-                    date: Date::ymd_hms(2000, 01, 01, 0, 0, 0).0,
-                    summary: String::new(),
-                }
-            });
+            let commit = commits
+                .iter()
+                .find(|c| c.sha == commit)
+                .cloned()
+                .unwrap_or_else(|| {
+                    warn!("utilizing fake commit!");
+                    rust_sysroot::git::Commit {
+                        sha: commit.to_string(),
+                        date: Date::ymd_hms(2000, 01, 01, 0, 0, 0).0,
+                        summary: String::new(),
+                    }
+                });
             process_commit(&out_repo, &commit, &benchmarks)?;
             Ok(0)
         }

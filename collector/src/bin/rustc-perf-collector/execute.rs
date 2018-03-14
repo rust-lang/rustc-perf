@@ -6,12 +6,12 @@ use std::process::{self, Command};
 use std::str;
 use std::f64;
 use std::fs::{self, File};
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
 use std::cmp;
 
 use tempdir::TempDir;
 
-use collector::{Patch, BenchmarkState, Run, Stat, Benchmark as CollectedBenchmark};
+use collector::{Benchmark as CollectedBenchmark, BenchmarkState, Patch, Run, Stat};
 
 use errors::{Result, ResultExt};
 use rust_sysroot::sysroot::Sysroot;
@@ -38,7 +38,6 @@ fn touch_all(path: &Path) -> Result<()> {
     run(cmd)?;
     Ok(())
 }
-
 
 fn default_runs() -> usize {
     3
@@ -104,7 +103,10 @@ impl<'sysroot> CargoProcess<'sysroot> {
             .env("SHELL", env::var_os("SHELL").unwrap_or_default())
             .env("RUSTC", &*FAKE_RUSTC)
             .env("RUSTC_REAL", &self.sysroot.rustc)
-            .env("CARGO_INCREMENTAL", &format!("{}", self.incremental.0 as usize))
+            .env(
+                "CARGO_INCREMENTAL",
+                &format!("{}", self.incremental.0 as usize),
+            )
             .env("USE_PERF", &format!("{}", self.perf as usize));
         cargo
     }
@@ -120,22 +122,31 @@ impl<'sysroot> CargoProcess<'sysroot> {
         if self.options.check && cargo == Cargo::Build {
             cargo = Cargo::Check;
         }
-        debug!("running cargo {:?}{}", cargo, if self.options.release { " --release" } else {""});
-        cmd.arg(match cargo {
-            Cargo::Check | Cargo::Build => {
-                "rustc"
+        debug!(
+            "running cargo {:?}{}",
+            cargo,
+            if self.options.release {
+                " --release"
+            } else {
+                ""
             }
-            Cargo::Clean => "clean"
+        );
+        cmd.arg(match cargo {
+            Cargo::Check | Cargo::Build => "rustc",
+            Cargo::Clean => "clean",
         });
         {
             let mut cargo = self.base();
-            cargo.current_dir(cwd)
+            cargo
+                .current_dir(cwd)
                 .arg("pkgid")
                 .arg("--manifest-path")
                 .arg(&self.manifest_path);
-            let out = run(cargo).unwrap_or_else(|e| {
-                panic!("failed to obtain pkgid in {:?}: {:?}", cwd, e);
-            }).stdout;
+            let out = run(cargo)
+                .unwrap_or_else(|e| {
+                    panic!("failed to obtain pkgid in {:?}: {:?}", cwd, e);
+                })
+                .stdout;
             let package_id = str::from_utf8(&out).unwrap();
             cmd.arg("-p").arg(package_id.trim());
         }
@@ -145,8 +156,7 @@ impl<'sysroot> CargoProcess<'sysroot> {
         if self.options.release {
             cmd.arg("--release");
         }
-        cmd.arg("--manifest-path")
-            .arg(&self.manifest_path);
+        cmd.arg("--manifest-path").arg(&self.manifest_path);
         if cargo.takes_args() {
             cmd.args(&self.cargo_args);
             cmd.arg("--");
@@ -207,23 +217,24 @@ impl Benchmark {
 
         let config_path = path.join("perf-config.json");
         let config: BenchmarkConfig = if config_path.exists() {
-            serde_json::from_reader(File::open(&config_path)
-                .chain_err(|| format!("failed to open {:?}", config_path))?)
+            serde_json::from_reader(File::open(&config_path).chain_err(|| format!("failed to open {:?}", config_path))?)
                 .chain_err(|| format!("failed to parse {:?}", config_path))?
         } else {
             BenchmarkConfig::default()
         };
 
         Ok(Benchmark {
-            name, path, patches, config,
+            name,
+            path,
+            patches,
+            config,
         })
     }
 
     fn make_temp_dir(&self, base: &Path) -> Result<TempDir> {
         let tmp_dir = TempDir::new(&format!("rustc-benchmark-{}", self.name))?;
         let mut cmd = Command::new("cp");
-        cmd
-            .arg("-r")
+        cmd.arg("-r")
             .arg("-T")
             .arg("--")
             .arg(base)
@@ -243,16 +254,23 @@ impl Benchmark {
             incremental: incremental,
             options: options,
             perf: true,
-            manifest_path:
-                self.config.cargo_toml.clone().unwrap_or_else(|| String::from("Cargo.toml")),
-            cargo_args:
-            self.config.cargo_opts.clone()
-                    .unwrap_or_default()
-                    .split_whitespace().map(String::from)
-            .collect(),
-            rustc_args: self.config.cargo_rustc_opts.clone()
+            manifest_path: self.config
+                .cargo_toml
+                .clone()
+                .unwrap_or_else(|| String::from("Cargo.toml")),
+            cargo_args: self.config
+                .cargo_opts
+                .clone()
                 .unwrap_or_default()
-                .split_whitespace().map(String::from)
+                .split_whitespace()
+                .map(String::from)
+                .collect(),
+            rustc_args: self.config
+                .cargo_rustc_opts
+                .clone()
+                .unwrap_or_default()
+                .split_whitespace()
+                .map(String::from)
                 .collect(),
         }
     }
@@ -275,11 +293,20 @@ impl Benchmark {
 
         let mut opts = Vec::with_capacity(3);
         if self.config.run_debug {
-            opts.push(Options { check: true, release: false });
-            opts.push(Options { check: false, release: false });
+            opts.push(Options {
+                check: true,
+                release: false,
+            });
+            opts.push(Options {
+                check: false,
+                release: false,
+            });
         }
         if self.config.run_optimized {
-            opts.push(Options { check: false, release: true });
+            opts.push(Options {
+                check: false,
+                release: true,
+            });
         }
 
         for opt in opts {
@@ -288,8 +315,10 @@ impl Benchmark {
             let mut incr_clean_stats = Vec::new();
             let mut incr_patched_stats: Vec<(Patch, Vec<Vec<Stat>>)> = Vec::new();
 
-            info!("Benchmarking {} with release: {}, check: {}, iterations: {}",
-                self.name, opt.release, opt.check, iterations);
+            info!(
+                "Benchmarking {} with release: {}, check: {}, iterations: {}",
+                self.name, opt.release, opt.check, iterations
+            );
 
             let base_build = self.make_temp_dir(&self.path)?;
             let clean = self.cargo(sysroot, Incremental(false), opt)
@@ -323,8 +352,7 @@ impl Benchmark {
                     let out = self.cargo(sysroot, Incremental(true), opt)
                         .run(tmp_dir.path(), Cargo::Build)?;
                     let out = process_output(out.stdout)?;
-                    if let Some(mut entry) = incr_patched_stats.iter_mut()
-                        .find(|s| &s.0 == patch) {
+                    if let Some(mut entry) = incr_patched_stats.iter_mut().find(|s| &s.0 == patch) {
                         entry.1.push(out);
                         continue;
                     }
@@ -333,9 +361,18 @@ impl Benchmark {
                 }
             }
 
-            ret.runs.push(process_stats(opt, BenchmarkState::Clean, clean_stats));
-            ret.runs.push(process_stats(opt, BenchmarkState::IncrementalStart, incr_stats));
-            ret.runs.push(process_stats(opt, BenchmarkState::IncrementalClean, incr_clean_stats));
+            ret.runs
+                .push(process_stats(opt, BenchmarkState::Clean, clean_stats));
+            ret.runs.push(process_stats(
+                opt,
+                BenchmarkState::IncrementalStart,
+                incr_stats,
+            ));
+            ret.runs.push(process_stats(
+                opt,
+                BenchmarkState::IncrementalClean,
+                incr_clean_stats,
+            ));
 
             for (patch, results) in incr_patched_stats {
                 ret.runs.push(process_stats(
@@ -355,7 +392,7 @@ fn process_output(output: Vec<u8>) -> Result<Vec<Stat>> {
     let mut stats = Vec::new();
 
     for line in output.lines() {
-        // https://github.com/torvalds/linux/blob/bc78d646e708/tools/perf/Documentation/perf-stat.txt#L281
+        // github.com/torvalds/linux/blob/bc78d646e708/tools/perf/Documentation/perf-stat.txt#L281
         macro_rules! get {
             ($e:expr) => (match $e {
                 Some(s) => s,
@@ -377,17 +414,21 @@ fn process_output(output: Vec<u8>) -> Result<Vec<Stat>> {
         if !pct.starts_with("100.") {
             panic!(
                 "measurement of `{}` only active for {}% of the time",
-                name,
-                pct
+                name, pct
             );
         }
         stats.push(Stat {
             name: name.to_string(),
-            cnt: cnt.parse().chain_err(|| format!("failed to parse `{}` as an float", cnt))?,
+            cnt: cnt.parse()
+                .chain_err(|| format!("failed to parse `{}` as an float", cnt))?,
         });
     }
 
-    assert!(stats.len() >= 1, "at least one stat collected, stdout: {:?}", output);
+    assert!(
+        stats.len() >= 1,
+        "at least one stat collected, stdout: {:?}",
+        output
+    );
 
     Ok(stats)
 }
@@ -396,7 +437,10 @@ fn process_stats(options: Options, state: BenchmarkState, runs: Vec<Vec<Stat>>) 
     let mut stats: HashMap<String, Vec<f64>> = HashMap::new();
     for run in runs.clone() {
         for stat in run {
-            stats.entry(stat.name.clone()).or_insert_with(|| Vec::new()).push(stat.cnt);
+            stats
+                .entry(stat.name.clone())
+                .or_insert_with(|| Vec::new())
+                .push(stat.cnt);
         }
     }
     // all stats should be present in all runs
@@ -409,12 +453,13 @@ fn process_stats(options: Options, state: BenchmarkState, runs: Vec<Vec<Stat>>) 
         eprintln!("stats: {:?}", stats);
         panic!("expected all stats to be present in all runs");
     }
-    let stats = stats.into_iter()
-        .map(|(stat, counts)| {
-            Stat {
-                name: stat,
-                cnt: counts.into_iter().fold(f64::INFINITY, |acc, v| f64::min(acc, v)),
-            }
+    let stats = stats
+        .into_iter()
+        .map(|(stat, counts)| Stat {
+            name: stat,
+            cnt: counts
+                .into_iter()
+                .fold(f64::INFINITY, |acc, v| f64::min(acc, v)),
         })
         .collect();
 

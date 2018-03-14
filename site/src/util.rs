@@ -32,7 +32,7 @@ pub fn find_commit<'a>(
                     // to stop, since this is an inclusive range.
                     commit.date.0.naive_utc().date() == date.succ()
                 }
-            },
+            }
             Bound::None => {
                 if left {
                     last_month <= commit.date.0.naive_utc().date()
@@ -40,7 +40,7 @@ pub fn find_commit<'a>(
                     // all the data
                     false
                 }
-            },
+            }
         };
         if found {
             return Ok((commit, cd));
@@ -48,10 +48,16 @@ pub fn find_commit<'a>(
     }
 
     if !left && *idx == Bound::None {
-        return data.data.iter().last().ok_or_else(|| format!("at least one commit"));
+        return data.data
+            .iter()
+            .last()
+            .ok_or_else(|| format!("at least one commit"));
     }
 
-    Err(format!("could not find commit by bound {:?}, start={:?}", idx, left))
+    Err(format!(
+        "could not find commit by bound {:?}, start={:?}",
+        idx, left
+    ))
 }
 
 pub fn data_range<'a>(

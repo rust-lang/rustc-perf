@@ -115,7 +115,10 @@ impl InputData {
                 last_date = Some(commit_data.commit.date);
             }
 
-            let benchmarks = commit_data.benchmarks.values().filter_map(|v| v.as_ref().ok());
+            let benchmarks = commit_data
+                .benchmarks
+                .values()
+                .filter_map(|v| v.as_ref().ok());
             for benchmark in benchmarks {
                 for run in &benchmark.runs {
                     let run_name = benchmark.name.clone() + &run.name();

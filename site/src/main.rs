@@ -18,7 +18,10 @@ fn main() {
 
     let data = load::InputData::from_fs(&util::get_repo_path().unwrap()).unwrap();
 
-    let port = env::var("PORT").ok().and_then(|x| x.parse().ok()).unwrap_or(2346);
+    let port = env::var("PORT")
+        .ok()
+        .and_then(|x| x.parse().ok())
+        .unwrap_or(2346);
     println!("Starting server with port={:?}", port);
 
     server::start(data, port);

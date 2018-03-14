@@ -32,9 +32,7 @@ pub fn execute_command(working_dir: &Path, args: &[&str]) -> Result<()> {
     if status.success() {
         Ok(())
     } else {
-        Err(
-            ErrorKind::CommandFailed(format!("{} {:?}", GIT, args)).into(),
-        )
+        Err(ErrorKind::CommandFailed(format!("{} {:?}", GIT, args)).into())
     }
 }
 

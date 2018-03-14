@@ -9,23 +9,23 @@
 
 #![feature(proc_macro, iter_rfind, conservative_impl_trait)]
 
+extern crate antidote;
 extern crate chrono;
+extern crate collector;
 #[macro_use]
 extern crate error_chain;
+extern crate flate2;
 extern crate futures;
 extern crate futures_cpupool;
 extern crate hyper;
 #[macro_use]
 extern crate log;
-extern crate collector;
+extern crate rust_sysroot;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
-extern crate rust_sysroot;
 extern crate url;
-extern crate antidote;
-extern crate flate2;
 
 mod errors {
     error_chain! {

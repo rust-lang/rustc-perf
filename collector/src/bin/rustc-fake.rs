@@ -1,6 +1,6 @@
 use std::env;
 use std::process::Command;
-use std::time::{Instant, Duration};
+use std::time::{Duration, Instant};
 
 fn main() {
     let mut args = env::args_os().skip(1).collect::<Vec<_>>();
@@ -83,7 +83,11 @@ fn print_time(dur: Duration) {
     // tl;dr; it's:
     //
     //      $value ; $unit ; $name ; $runtime ; $pct
-    println!("{}.{:09};;wall-time;4;100.00", dur.as_secs(), dur.subsec_nanos());
+    println!(
+        "{}.{:09};;wall-time;4;100.00",
+        dur.as_secs(),
+        dur.subsec_nanos()
+    );
 }
 
 #[cfg(windows)]

@@ -1,6 +1,6 @@
 //! Write benchmark information to the output repository
 
-use errors::{Result, ResultExt, Error};
+use errors::{Error, Result, ResultExt};
 
 use std::fs::{self, read_dir, File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Write};
@@ -11,7 +11,7 @@ use std::collections::HashSet;
 
 use serde_json;
 use collector::CommitData;
-use chrono::{Utc, Duration};
+use chrono::{Duration, Utc};
 use rust_sysroot::git::Commit as GitCommit;
 use execute::Benchmark;
 
@@ -96,9 +96,7 @@ impl Repo {
 
         let missing = commits
             .iter()
-            .filter(|c| {
-                Utc::now().signed_duration_since(c.date) < Duration::days(29)
-            })
+            .filter(|c| Utc::now().signed_duration_since(c.date) < Duration::days(29))
             .filter(|c| {
                 !have.contains(&c.sha) || {
                     self.load_commit_data(c, triple)
@@ -152,9 +150,7 @@ impl Repo {
         let commit = &data.commit;
         let filepath = self.times().join(format!(
             "{}-{}-{}.json",
-            commit.date,
-            commit.sha,
-            data.triple
+            commit.date, commit.sha, data.triple
         ));
         info!("creating file {}", filepath.display());
         let mut file = File::create(&filepath)?;
@@ -168,19 +164,19 @@ impl Repo {
             .write(true)
             .create(true)
             .open(self.retries_file())
-            .chain_err(|| {
-                format!("can't create `{}`", self.retries_file().display())
-            })?;
+            .chain_err(|| format!("can't create `{}`", self.retries_file().display()))?;
         let mut retries_s = String::new();
         retries.read_to_string(&mut retries_s)?;
         self.retries = retries_s
             .split('\n')
             .map(|line| line.trim())
             .filter(|line| !line.is_empty())
-            .map(|line| if line.len() == 40 {
-                Ok(line.to_owned())
-            } else {
-                bail!("bad retry hash `{}`", line)
+            .map(|line| {
+                if line.len() == 40 {
+                    Ok(line.to_owned())
+                } else {
+                    bail!("bad retry hash `{}`", line)
+                }
             })
             .collect::<Result<_>>()?;
         info!("loaded retries: {:?}", self.retries);
