@@ -1,4 +1,5 @@
 language: rust
+sudo: true
 
 cache: cargo
 
@@ -6,13 +7,16 @@ rust:
   - nightly
 
 before_script:
-  - sudo apt-get install -y linux-tools-common linux-tools-generic
   - rustup component add rustfmt-preview
-  - git clone https://github.com/rust-lang-nursery/rustc-timing.git
+
+before_install:
+  - sudo apt-get update
+  - sudo apt-get install -y linux-tools-common linux-tools-generic linux-tools-`uname -r` linux-cloud-tools-`uname -r`
+  - echo -1 | sudo tee /proc/sys/kernel/perf_event_paranoid
 
 env:
   - CHECK='cargo fmt --all -- --write-mode=diff'
-  - CHECK='cargo build && RUST_LOG=collector=trace,rust_sysroot=debug cargo run -p collector --bin collector -- --output-repo rustc-timing test_benchmarks'
+  - CHECK='ci/check-benchmarks.sh'
   - CHECK='cargo check'
 
 script:
