@@ -12,7 +12,7 @@ before_script:
 
 env:
   - CHECK='cargo fmt --all -- --write-mode=diff'
-  - CHECK='cargo run -p collector --bin collector -- --output-repo rustc-timing test_benchmarks'
+  - CHECK='cargo build && RUST_LOG=collector=trace,rust_sysroot=debug cargo run -p collector --bin collector -- --output-repo rustc-timing test_benchmarks'
   - CHECK='cargo check'
 
 script:
