@@ -17,6 +17,8 @@ use errors::{Result, ResultExt};
 use rust_sysroot::sysroot::Sysroot;
 use serde_json;
 
+use Mode;
+
 fn run(mut cmd: Command) -> Result<process::Output> {
     trace!("running: {:?}", cmd);
     let output = cmd.output()?;
@@ -276,7 +278,12 @@ impl Benchmark {
     }
 
     /// Run a specific benchmark on a specific commit
-    pub fn run(&self, sysroot: &Sysroot, iterations: usize) -> Result<CollectedBenchmark> {
+    pub fn run(
+        &self,
+        sysroot: &Sysroot,
+        iterations: usize,
+        mode: Mode,
+    ) -> Result<CollectedBenchmark> {
         let iterations = cmp::min(iterations, self.config.runs);
         if self.config.disabled {
             eprintln!("skipping {}: disabled", self.name);
@@ -292,21 +299,31 @@ impl Benchmark {
         };
 
         let mut opts = Vec::with_capacity(3);
-        if self.config.run_debug {
-            opts.push(Options {
-                check: true,
-                release: false,
-            });
-            opts.push(Options {
-                check: false,
-                release: false,
-            });
-        }
-        if self.config.run_optimized {
-            opts.push(Options {
-                check: false,
-                release: true,
-            });
+        match mode {
+            Mode::Normal => {
+                if self.config.run_debug {
+                    opts.push(Options {
+                        check: true,
+                        release: false,
+                    });
+                    opts.push(Options {
+                        check: false,
+                        release: false,
+                    });
+                }
+                if self.config.run_optimized {
+                    opts.push(Options {
+                        check: false,
+                        release: true,
+                    });
+                }
+            }
+            Mode::Test => {
+                opts.push(Options {
+                    check: true,
+                    release: false,
+                });
+            }
         }
 
         for opt in opts {
