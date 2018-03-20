@@ -55,12 +55,19 @@ mod outrepo;
 
 use execute::Benchmark;
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Mode {
+    Test,
+    Normal,
+}
+
 fn bench_commit(
     commit: &GitCommit,
     repo: Option<&outrepo::Repo>,
     sysroot: Sysroot,
     benchmarks: &[Benchmark],
     iterations: usize,
+    mode: Mode,
 ) -> CommitData {
     info!(
         "benchmarking commit {} ({}) for triple {}",
@@ -82,7 +89,7 @@ fn bench_commit(
             continue;
         }
 
-        let result = benchmark.run(&sysroot, iterations);
+        let result = benchmark.run(&sysroot, iterations, mode);
 
         if let Err(ref s) = result {
             info!("failure to benchmark {}, recorded: {}", benchmark.name, s);
@@ -105,7 +112,11 @@ fn bench_commit(
     }
 }
 
-fn get_benchmarks(benchmark_dir: &Path, filter: Option<&str>) -> Result<Vec<Benchmark>> {
+fn get_benchmarks(
+    benchmark_dir: &Path,
+    filter: Option<&str>,
+    exclude: Option<&str>,
+) -> Result<Vec<Benchmark>> {
     let mut benchmarks = Vec::new();
     for entry in fs::read_dir(benchmark_dir).chain_err(|| "failed to list benchmarks")? {
         let entry = entry?;
@@ -127,7 +138,14 @@ fn get_benchmarks(benchmark_dir: &Path, filter: Option<&str>) -> Result<Vec<Benc
             }
         }
 
-        debug!("benchmark {} - registered", name);
+        if let Some(exclude) = exclude {
+            if name.contains(exclude) {
+                debug!("benchmark {} - filtered", name);
+                continue;
+            }
+        }
+
+        debug!("benchmark `{}`- registered", name);
         benchmarks.push(Benchmark::new(name, path)?);
     }
     benchmarks.sort_by_key(|benchmark| benchmark.name.clone());
@@ -140,7 +158,14 @@ fn process_commit(
     benchmarks: &[Benchmark],
 ) -> Result<()> {
     let sysroot = Sysroot::install(commit, "x86_64-unknown-linux-gnu", false, false)?;
-    repo.success(&bench_commit(commit, Some(repo), sysroot, benchmarks, 3))
+    repo.success(&bench_commit(
+        commit,
+        Some(repo),
+        sysroot,
+        benchmarks,
+        3,
+        Mode::Normal,
+    ))
 }
 
 fn process_retries(
@@ -216,7 +241,15 @@ fn run() -> Result<i32> {
     ).get_matches();
     let benchmark_dir = PathBuf::from("collector/benchmarks");
     let filter = matches.value_of("filter");
-    let benchmarks = get_benchmarks(&benchmark_dir, filter)?;
+    let benchmarks = get_benchmarks(
+        &benchmark_dir,
+        filter,
+        if matches.subcommand().0 == "test_benchmarks" {
+            Some("servo")
+        } else {
+            None
+        },
+    )?;
     let use_remote = matches.is_present("sync_git");
     let out_repo = PathBuf::from(matches.value_of_os("output_repo").unwrap());
     let mut out_repo = outrepo::Repo::open(out_repo, use_remote)?;
@@ -225,14 +258,12 @@ fn run() -> Result<i32> {
 
     match matches.subcommand() {
         ("test_benchmarks", Some(_)) => {
-            let to_process =
-                out_repo.find_missing_commits(&commits, &benchmarks, "x86_64-unknown-linux-gnu")?;
-            // take 3 from the end -- this means that for each bors commit (which takes ~3 hours) we
-            // test 3, which should allow us to eventually test all commits, but also keep up with the
-            // latest rustc
-            if let Some(commit) = to_process.last() {
+            if let Some(commit) = commits.last() {
                 let sysroot = Sysroot::install(commit, "x86_64-unknown-linux-gnu", false, false)?;
-                bench_commit(commit, None, sysroot, &benchmarks, 1);
+                // filter out servo benchmarks as they simple take too long
+                bench_commit(commit, None, sysroot, &benchmarks, 1, Mode::Test);
+            } else {
+                panic!("no commits");
             }
             Ok(0)
         }
@@ -274,7 +305,7 @@ fn run() -> Result<i32> {
                 false,
                 false,
             )?;
-            let result = bench_commit(&commit, None, sysroot, &benchmarks, 3);
+            let result = bench_commit(&commit, None, sysroot, &benchmarks, 3, Mode::Normal);
             serde_json::to_writer(&mut stdout(), &result)?;
             Ok(0)
         }
