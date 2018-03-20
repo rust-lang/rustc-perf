@@ -340,7 +340,7 @@ impl Benchmark {
             let base_build = self.make_temp_dir(&self.path)?;
             let clean = self.cargo(sysroot, Incremental(false), opt)
                 .run(base_build.path(), Cargo::Build)?;
-            clean_stats.push(process_output(clean.stdout)?);
+            clean_stats.push(process_output(clean)?);
             self.cargo(sysroot, Incremental(false), opt)
                 .perf(false)
                 .run(base_build.path(), Cargo::Clean)?;
@@ -358,9 +358,9 @@ impl Benchmark {
                 let incr_clean = self.cargo(sysroot, Incremental(true), opt)
                     .run(tmp_dir.path(), Cargo::Build)?;
 
-                clean_stats.push(process_output(clean.stdout)?);
-                incr_stats.push(process_output(incr.stdout)?);
-                incr_clean_stats.push(process_output(incr_clean.stdout)?);
+                clean_stats.push(process_output(clean)?);
+                incr_stats.push(process_output(incr)?);
+                incr_clean_stats.push(process_output(incr_clean)?);
 
                 for patch in &self.patches {
                     debug!("applying patch {}", patch.name);
@@ -368,7 +368,7 @@ impl Benchmark {
                     touch_all(tmp_dir.path())?;
                     let out = self.cargo(sysroot, Incremental(true), opt)
                         .run(tmp_dir.path(), Cargo::Build)?;
-                    let out = process_output(out.stdout)?;
+                    let out = process_output(out)?;
                     if let Some(mut entry) = incr_patched_stats.iter_mut().find(|s| &s.0 == patch) {
                         entry.1.push(out);
                         continue;
@@ -404,8 +404,8 @@ impl Benchmark {
     }
 }
 
-fn process_output(output: Vec<u8>) -> Result<Vec<Stat>> {
-    let output = String::from_utf8(output)?;
+fn process_output(output: process::Output) -> Result<Vec<Stat>> {
+    let output = String::from_utf8(output.stdout)?;
     let mut stats = Vec::new();
 
     for line in output.lines() {
@@ -443,7 +443,7 @@ fn process_output(output: Vec<u8>) -> Result<Vec<Stat>> {
 
     assert!(
         stats.len() >= 1,
-        "at least one stat collected, stdout: {:?}",
+        "at least one stat collected, output: {:?}",
         output
     );
 
