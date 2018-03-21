@@ -1,7 +1,5 @@
 //! Write benchmark information to the output repository
 
-use errors::{Error, Result, ResultExt};
-
 use std::fs::{self, read_dir, File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
@@ -14,6 +12,7 @@ use collector::CommitData;
 use chrono::{Duration, Utc};
 use rust_sysroot::git::Commit as GitCommit;
 use execute::Benchmark;
+use failure::{Error, ResultExt};
 
 pub struct Repo {
     path: PathBuf,
@@ -22,14 +21,14 @@ pub struct Repo {
 }
 
 impl Repo {
-    fn git(&self, args: &[&str]) -> Result<()> {
+    fn git(&self, args: &[&str]) -> Result<(), Error> {
         let mut command = Command::new("git");
         command.current_dir(&self.path);
         info!("git {:?}", args);
         command.args(args);
         let status = command
             .status()
-            .chain_err(|| format!("could not spawn git {:?}", args))?;
+            .with_context(|_| format!("could not spawn git {:?}", args))?;
         if !status.success() {
             bail!(
                 "command `git {:?}` failed in `{}`",
@@ -40,7 +39,7 @@ impl Repo {
         Ok(())
     }
 
-    pub fn open(path: PathBuf, use_remote: bool) -> Result<Self> {
+    pub fn open(path: PathBuf, use_remote: bool) -> Result<Self, Error> {
         let mut result = Repo {
             path: path,
             use_remote,
@@ -57,13 +56,13 @@ impl Repo {
             result.git(&["reset", "--hard", "@{upstream}"])?;
         }
 
-        fs::create_dir_all(result.times()).chain_err(|| "can't create `times/`")?;
+        fs::create_dir_all(result.times()).context("can't create `times/`")?;
         result.load_retries()?;
 
         Ok(result)
     }
 
-    pub fn success(&self, data: &CommitData) -> Result<()> {
+    pub fn success(&self, data: &CommitData) -> Result<(), Error> {
         self.add_commit_data(data)?;
         self.commit_and_push(&format!("{} - success", data.commit.sha))?;
         Ok(())
@@ -74,7 +73,7 @@ impl Repo {
         commits: &'a [GitCommit],
         benchmarks: &[Benchmark],
         triple: &str,
-    ) -> Result<Vec<&'a GitCommit>> {
+    ) -> Result<Vec<&'a GitCommit>, Error> {
         let mut have = HashSet::new();
         let path = self.times();
         for entry in read_dir(path)? {
@@ -114,7 +113,7 @@ impl Repo {
         Ok(missing)
     }
 
-    fn commit_and_push(&self, message: &str) -> Result<()> {
+    fn commit_and_push(&self, message: &str) -> Result<(), Error> {
         self.write_retries()?;
         self.git(&["add", "retries", "times"])?;
 
@@ -130,7 +129,7 @@ impl Repo {
         Ok(())
     }
 
-    pub fn load_commit_data(&self, commit: &GitCommit, triple: &str) -> Result<CommitData> {
+    pub fn load_commit_data(&self, commit: &GitCommit, triple: &str) -> Result<CommitData, Error> {
         let filepath = self.times().join(format!(
             "{}-{}-{}.json",
             commit.date.to_rfc3339(),
@@ -142,11 +141,11 @@ impl Repo {
         let mut contents = String::new();
         file.read_to_string(&mut contents)?;
         let data = serde_json::from_str(&contents)
-            .chain_err(|| format!("failed to read JSON from {:?}", filepath))?;
+            .with_context(|_| format!("failed to read JSON from {:?}", filepath))?;
         Ok(data)
     }
 
-    pub fn add_commit_data(&self, data: &CommitData) -> Result<()> {
+    pub fn add_commit_data(&self, data: &CommitData) -> Result<(), Error> {
         let commit = &data.commit;
         let filepath = self.times().join(format!(
             "{}-{}-{}.json",
@@ -158,13 +157,13 @@ impl Repo {
         Ok(())
     }
 
-    fn load_retries(&mut self) -> Result<()> {
+    fn load_retries(&mut self) -> Result<(), Error> {
         let mut retries = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
             .open(self.retries_file())
-            .chain_err(|| format!("can't create `{}`", self.retries_file().display()))?;
+            .with_context(|_| format!("can't create `{}`", self.retries_file().display()))?;
         let mut retries_s = String::new();
         retries.read_to_string(&mut retries_s)?;
         self.retries = retries_s
@@ -178,32 +177,32 @@ impl Repo {
                     bail!("bad retry hash `{}`", line)
                 }
             })
-            .collect::<Result<_>>()?;
+            .collect::<Result<_, _>>()?;
         info!("loaded retries: {:?}", self.retries);
         Ok(())
     }
 
-    fn write_retries(&self) -> Result<()> {
+    fn write_retries(&self) -> Result<(), Error> {
         info!("writing retries");
         let mut retries = OpenOptions::new()
             .write(true)
             .truncate(true)
             .open(self.retries_file())
-            .chain_err(|| "can't create `retries`")?;
+            .context("can't create `retries`")?;
         for retry in self.retries.iter() {
             writeln!(retries, "{}", retry)?;
         }
         Ok(())
     }
 
-    pub fn write_broken_commit(&self, commit: &GitCommit, err: Error) -> Result<()> {
+    pub fn write_broken_commit(&self, commit: &GitCommit, err: Error) -> Result<(), Error> {
         info!("writing broken commit {:?}: {:?}", commit, err);
         let mut broken = OpenOptions::new()
             .write(true)
             .append(true)
             .create(true)
             .open(self.broken_commits_file())
-            .chain_err(|| "can't create `broken-commits-log`")?;
+            .context("can't create `broken-commits-log`")?;
         writeln!(broken, "{}: \"{:?}\"", commit.sha, err)?;
         Ok(())
     }

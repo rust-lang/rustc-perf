@@ -7,7 +7,7 @@ extern crate clap;
 extern crate collector;
 extern crate env_logger;
 #[macro_use]
-extern crate error_chain;
+extern crate failure;
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]
@@ -19,25 +19,10 @@ extern crate serde_derive;
 extern crate serde_json;
 extern crate tempdir;
 
-mod errors {
-    // Create the Error, ErrorKind, ResultExt, and Result types
-    error_chain! {
-        foreign_links {
-            RustSysroot(::rust_sysroot::errors::Error);
-            Serde(::serde_json::Error);
-            Chrono(::chrono::ParseError);
-            Io(::std::io::Error);
-            Metadata(::cargo_metadata::Error);
-            Utf8(::std::string::FromUtf8Error);
-        }
-    }
-}
-
-use errors::*;
-
-quick_main!(run);
+use failure::{Error, ResultExt, SyncFailure};
 
 use std::fs;
+use std::process;
 use std::str;
 use std::path::{Path, PathBuf};
 use std::io::{stderr, stdout, Write};
@@ -116,9 +101,9 @@ fn get_benchmarks(
     benchmark_dir: &Path,
     filter: Option<&str>,
     exclude: Option<&str>,
-) -> Result<Vec<Benchmark>> {
+) -> Result<Vec<Benchmark>, Error> {
     let mut benchmarks = Vec::new();
-    for entry in fs::read_dir(benchmark_dir).chain_err(|| "failed to list benchmarks")? {
+    for entry in fs::read_dir(benchmark_dir).context("failed to list benchmarks")? {
         let entry = entry?;
         let path = entry.path();
         let name = match entry.file_name().into_string() {
@@ -156,8 +141,9 @@ fn process_commit(
     repo: &outrepo::Repo,
     commit: &GitCommit,
     benchmarks: &[Benchmark],
-) -> Result<()> {
-    let sysroot = Sysroot::install(commit, "x86_64-unknown-linux-gnu", false, false)?;
+) -> Result<(), Error> {
+    let sysroot = Sysroot::install(commit, "x86_64-unknown-linux-gnu", false, false)
+        .map_err(SyncFailure::new)?;
     repo.success(&bench_commit(
         commit,
         Some(repo),
@@ -172,7 +158,7 @@ fn process_retries(
     commits: &[GitCommit],
     repo: &mut outrepo::Repo,
     benchmarks: &[Benchmark],
-) -> Result<()> {
+) -> Result<(), Error> {
     while let Some(retry) = repo.next_retry() {
         info!("retrying {}", retry);
         let commit = commits.iter().find(|commit| commit.sha == retry).unwrap();
@@ -185,7 +171,7 @@ fn process_commits(
     commits: &[GitCommit],
     repo: &outrepo::Repo,
     benchmarks: &[Benchmark],
-) -> Result<()> {
+) -> Result<(), Error> {
     println!("processing commits");
     if !commits.is_empty() {
         let to_process =
@@ -204,7 +190,11 @@ fn process_commits(
     Ok(())
 }
 
-fn run() -> Result<i32> {
+fn main() {
+    process::exit(run().unwrap())
+}
+
+fn run() -> Result<i32, Error> {
     env_logger::init();
     git::fetch_rust(Path::new("rust.git"))?;
 
@@ -254,12 +244,14 @@ fn run() -> Result<i32> {
     let out_repo = PathBuf::from(matches.value_of_os("output_repo").unwrap());
     let mut out_repo = outrepo::Repo::open(out_repo, use_remote)?;
 
-    let commits = rust_sysroot::get_commits(rust_sysroot::EPOCH_COMMIT, "master")?;
+    let commits =
+        rust_sysroot::get_commits(rust_sysroot::EPOCH_COMMIT, "master").map_err(SyncFailure::new)?;
 
     match matches.subcommand() {
         ("test_benchmarks", Some(_)) => {
             if let Some(commit) = commits.last() {
-                let sysroot = Sysroot::install(commit, "x86_64-unknown-linux-gnu", false, false)?;
+                let sysroot = Sysroot::install(commit, "x86_64-unknown-linux-gnu", false, false)
+                    .map_err(SyncFailure::new)?;
                 // filter out servo benchmarks as they simple take too long
                 bench_commit(commit, None, sysroot, &benchmarks, 1, Mode::Test);
             } else {
@@ -298,13 +290,9 @@ fn run() -> Result<i32> {
                 date: DateTime::parse_from_rfc3339(date)?.with_timezone(&Utc),
                 summary: String::new(),
             };
-            let sysroot = Sysroot::with_local_rustc(
-                &commit,
-                rustc,
-                "x86_64-unknown-linux-gnu",
-                false,
-                false,
-            )?;
+            let sysroot =
+                Sysroot::with_local_rustc(&commit, rustc, "x86_64-unknown-linux-gnu", false, false)
+                    .map_err(SyncFailure::new)?;
             let result = bench_commit(&commit, None, sysroot, &benchmarks, 3, Mode::Normal);
             serde_json::to_writer(&mut stdout(), &result)?;
             Ok(0)

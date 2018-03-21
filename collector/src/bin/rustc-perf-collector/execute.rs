@@ -13,13 +13,13 @@ use tempdir::TempDir;
 
 use collector::{Benchmark as CollectedBenchmark, BenchmarkState, Patch, Run, Stat};
 
-use errors::{Result, ResultExt};
+use failure::{err_msg, Error, ResultExt};
 use rust_sysroot::sysroot::Sysroot;
 use serde_json;
 
 use Mode;
 
-fn run(mut cmd: Command) -> Result<process::Output> {
+fn run(mut cmd: Command) -> Result<process::Output, Error> {
     trace!("running: {:?}", cmd);
     let output = cmd.output()?;
     if !output.status.success() {
@@ -33,7 +33,7 @@ fn run(mut cmd: Command) -> Result<process::Output> {
     Ok(output)
 }
 
-fn touch_all(path: &Path) -> Result<()> {
+fn touch_all(path: &Path) -> Result<(), Error> {
     let mut cmd = Command::new("bash");
     cmd.current_dir(path)
         .args(&["-c", "find . -name '*.rs' | xargs touch"]);
@@ -118,7 +118,7 @@ impl<'sysroot> CargoProcess<'sysroot> {
         self
     }
 
-    fn run(self, cwd: &Path, mut cargo: Cargo) -> Result<process::Output> {
+    fn run(self, cwd: &Path, mut cargo: Cargo) -> Result<process::Output, Error> {
         let mut cmd = self.base();
         cmd.current_dir(cwd);
         if self.options.check && cargo == Cargo::Build {
@@ -165,7 +165,7 @@ impl<'sysroot> CargoProcess<'sysroot> {
             cmd.arg("-Ztime-passes");
             cmd.args(&self.rustc_args);
         }
-        run(cmd)
+        Ok(run(cmd)?)
     }
 }
 
@@ -201,7 +201,7 @@ lazy_static! {
 }
 
 impl Benchmark {
-    pub fn new(name: String, path: PathBuf) -> Result<Self> {
+    pub fn new(name: String, path: PathBuf) -> Result<Self, Error> {
         let mut patches = vec![];
         for entry in fs::read_dir(&path)? {
             let entry = entry?;
@@ -219,8 +219,11 @@ impl Benchmark {
 
         let config_path = path.join("perf-config.json");
         let config: BenchmarkConfig = if config_path.exists() {
-            serde_json::from_reader(File::open(&config_path).chain_err(|| format!("failed to open {:?}", config_path))?)
-                .chain_err(|| format!("failed to parse {:?}", config_path))?
+            serde_json::from_reader(File::open(&config_path)
+                .with_context(|_| format!("failed to open {:?}", config_path))?)
+                .with_context(|_| {
+                format!("failed to parse {:?}", config_path)
+            })?
         } else {
             BenchmarkConfig::default()
         };
@@ -233,7 +236,7 @@ impl Benchmark {
         })
     }
 
-    fn make_temp_dir(&self, base: &Path) -> Result<TempDir> {
+    fn make_temp_dir(&self, base: &Path) -> Result<TempDir, Error> {
         let tmp_dir = TempDir::new(&format!("rustc-benchmark-{}", self.name))?;
         let mut cmd = Command::new("cp");
         cmd.arg("-r")
@@ -241,7 +244,7 @@ impl Benchmark {
             .arg("--")
             .arg(base)
             .arg(tmp_dir.path());
-        run(cmd).chain_err(|| format!("copying {} to tmp dir", self.name))?;
+        run(cmd).with_context(|_| format!("copying {} to tmp dir", self.name))?;
         Ok(tmp_dir)
     }
 
@@ -283,7 +286,7 @@ impl Benchmark {
         sysroot: &Sysroot,
         iterations: usize,
         mode: Mode,
-    ) -> Result<CollectedBenchmark> {
+    ) -> Result<CollectedBenchmark, Error> {
         let iterations = cmp::min(iterations, self.config.runs);
         if self.config.disabled {
             eprintln!("skipping {}: disabled", self.name);
@@ -364,7 +367,7 @@ impl Benchmark {
 
                 for patch in &self.patches {
                     debug!("applying patch {}", patch.name);
-                    patch.apply(tmp_dir.path())?;
+                    patch.apply(tmp_dir.path()).map_err(|s| err_msg(s))?;
                     touch_all(tmp_dir.path())?;
                     let out = self.cargo(sysroot, Incremental(true), opt)
                         .run(tmp_dir.path(), Cargo::Build)?;
@@ -404,7 +407,7 @@ impl Benchmark {
     }
 }
 
-fn process_output(output: process::Output) -> Result<Vec<Stat>> {
+fn process_output(output: process::Output) -> Result<Vec<Stat>, Error> {
     let output = String::from_utf8(output.stdout)?;
     let mut stats = Vec::new();
 
@@ -437,7 +440,9 @@ fn process_output(output: process::Output) -> Result<Vec<Stat>> {
         stats.push(Stat {
             name: name.to_string(),
             cnt: cnt.parse()
-                .chain_err(|| format!("failed to parse `{}` as an float", cnt))?,
+                .with_context(|_: &::std::num::ParseFloatError| {
+                    format!("failed to parse `{}` as an float", cnt)
+                })?,
         });
     }
 
