@@ -107,6 +107,7 @@ impl Patch {
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Deserialize, Serialize)]
 pub enum BenchmarkState {
     Clean,
+    Nll,
     IncrementalStart,
     IncrementalClean,
     IncrementalPatched(Patch),
@@ -132,6 +133,7 @@ impl BenchmarkState {
     pub fn name(&self) -> String {
         match *self {
             BenchmarkState::Clean => format!("clean"),
+            BenchmarkState::Nll => format!("nll"),
             BenchmarkState::IncrementalStart => format!("baseline incremental"),
             BenchmarkState::IncrementalClean => format!("clean incremental"),
             BenchmarkState::IncrementalPatched(ref patch) => {

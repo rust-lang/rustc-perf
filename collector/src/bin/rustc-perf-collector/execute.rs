@@ -88,6 +88,7 @@ pub struct Benchmark {
 struct CargoProcess<'sysroot> {
     sysroot: &'sysroot Sysroot,
     incremental: Incremental,
+    nll: bool,
     options: Options,
     perf: bool,
     manifest_path: String,
@@ -111,6 +112,11 @@ impl<'sysroot> CargoProcess<'sysroot> {
             )
             .env("USE_PERF", &format!("{}", self.perf as usize));
         cargo
+    }
+
+    fn nll(mut self, nll: bool) -> Self {
+        self.nll = nll;
+        self
     }
 
     fn perf(mut self, perf: bool) -> Self {
@@ -162,6 +168,9 @@ impl<'sysroot> CargoProcess<'sysroot> {
         if cargo.takes_args() {
             cmd.args(&self.cargo_args);
             cmd.arg("--");
+            if self.nll {
+                cmd.arg("-Znll");
+            }
             cmd.arg("-Ztime-passes");
             cmd.args(&self.rustc_args);
         }
@@ -281,6 +290,7 @@ impl Benchmark {
             incremental: incremental,
             options: options,
             perf: true,
+            nll: false,
             manifest_path: self.config
                 .cargo_toml
                 .clone()
@@ -353,6 +363,7 @@ impl Benchmark {
 
         for opt in opts {
             let mut clean_stats = Vec::new();
+            let mut nll_stats = Vec::new();
             let mut incr_stats = Vec::new();
             let mut incr_clean_stats = Vec::new();
             let mut incr_patched_stats: Vec<(Patch, Vec<Vec<Stat>>)> = Vec::new();
@@ -376,12 +387,16 @@ impl Benchmark {
 
                 let clean = self.cargo(sysroot, Incremental(false), opt)
                     .run(tmp_dir.path(), Cargo::Build)?;
+                let nll = self.cargo(sysroot, Incremental(false), opt)
+                    .nll(true)
+                    .run(base_build.path(), Cargo::Build)?;
                 let incr = self.cargo(sysroot, Incremental(true), opt)
                     .run(tmp_dir.path(), Cargo::Build)?;
                 let incr_clean = self.cargo(sysroot, Incremental(true), opt)
                     .run(tmp_dir.path(), Cargo::Build)?;
 
                 clean_stats.push(clean);
+                nll_stats.push(nll);
                 incr_stats.push(incr);
                 incr_clean_stats.push(incr_clean);
 
@@ -401,6 +416,8 @@ impl Benchmark {
 
             ret.runs
                 .push(process_stats(opt, BenchmarkState::Clean, clean_stats));
+            ret.runs
+                .push(process_stats(opt, BenchmarkState::Nll, nll_stats));
             ret.runs.push(process_stats(
                 opt,
                 BenchmarkState::IncrementalStart,
@@ -440,13 +457,15 @@ fn process_output(output: process::Output) -> Result<Vec<Stat>, DeserializeStatE
     for line in stdout.lines() {
         // github.com/torvalds/linux/blob/bc78d646e708/tools/perf/Documentation/perf-stat.txt#L281
         macro_rules! get {
-            ($e:expr) => (match $e {
-                Some(s) => s,
-                None => {
-                    warn!("unhandled line: {}", line);
-                    continue;
-                },
-            });
+            ($e: expr) => {
+                match $e {
+                    Some(s) => s,
+                    None => {
+                        warn!("unhandled line: {}", line);
+                        continue;
+                    }
+                }
+            };
         }
         let mut parts = line.split(';').map(|s| s.trim());
         let cnt = get!(parts.next());
