@@ -19,7 +19,7 @@ use serde_json;
 
 use Mode;
 
-fn run(mut cmd: Command) -> Result<process::Output, Error> {
+fn run(cmd: &mut Command) -> Result<process::Output, Error> {
     trace!("running: {:?}", cmd);
     let output = cmd.output()?;
     if !output.status.success() {
@@ -37,7 +37,7 @@ fn touch_all(path: &Path) -> Result<(), Error> {
     let mut cmd = Command::new("bash");
     cmd.current_dir(path)
         .args(&["-c", "find . -name '*.rs' | xargs touch"]);
-    run(cmd)?;
+    run(&mut cmd)?;
     Ok(())
 }
 
@@ -118,7 +118,7 @@ impl<'sysroot> CargoProcess<'sysroot> {
         self
     }
 
-    fn run(self, cwd: &Path, mut cargo: Cargo) -> Result<process::Output, Error> {
+    fn run(self, cwd: &Path, mut cargo: Cargo) -> Result<Vec<Stat>, Error> {
         let mut cmd = self.base();
         cmd.current_dir(cwd);
         if self.options.check && cargo == Cargo::Build {
@@ -144,7 +144,7 @@ impl<'sysroot> CargoProcess<'sysroot> {
                 .arg("pkgid")
                 .arg("--manifest-path")
                 .arg(&self.manifest_path);
-            let out = run(cargo)
+            let out = run(&mut cargo)
                 .unwrap_or_else(|e| {
                     panic!("failed to obtain pkgid in {:?}: {:?}", cwd, e);
                 })
@@ -165,7 +165,29 @@ impl<'sysroot> CargoProcess<'sysroot> {
             cmd.arg("-Ztime-passes");
             cmd.args(&self.rustc_args);
         }
-        Ok(run(cmd)?)
+
+        match cargo {
+            Cargo::Check | Cargo::Build => loop {
+                touch_all(&cwd)?;
+                let output = run(&mut cmd)?;
+                match process_output(output) {
+                    Ok(stats) => return Ok(stats),
+                    Err(DeserializeStatError::NoOutput(output)) => {
+                        warn!(
+                            "failed to deserialize stats, retrying; output: {:?}",
+                            output
+                        );
+                    }
+                    Err(e @ DeserializeStatError::ParseError { .. }) => {
+                        panic!("process_output failed: {:?}", e);
+                    }
+                }
+            },
+            Cargo::Clean => {
+                let _output = run(&mut cmd)?;
+                return Ok(Vec::new());
+            }
+        }
     }
 }
 
@@ -244,7 +266,7 @@ impl Benchmark {
             .arg("--")
             .arg(base)
             .arg(tmp_dir.path());
-        run(cmd).with_context(|_| format!("copying {} to tmp dir", self.name))?;
+        run(&mut cmd).with_context(|_| format!("copying {} to tmp dir", self.name))?;
         Ok(tmp_dir)
     }
 
@@ -343,7 +365,7 @@ impl Benchmark {
             let base_build = self.make_temp_dir(&self.path)?;
             let clean = self.cargo(sysroot, Incremental(false), opt)
                 .run(base_build.path(), Cargo::Build)?;
-            clean_stats.push(process_output(clean)?);
+            clean_stats.push(clean);
             self.cargo(sysroot, Incremental(false), opt)
                 .perf(false)
                 .run(base_build.path(), Cargo::Clean)?;
@@ -354,24 +376,20 @@ impl Benchmark {
 
                 let clean = self.cargo(sysroot, Incremental(false), opt)
                     .run(tmp_dir.path(), Cargo::Build)?;
-                touch_all(tmp_dir.path())?;
                 let incr = self.cargo(sysroot, Incremental(true), opt)
                     .run(tmp_dir.path(), Cargo::Build)?;
-                touch_all(tmp_dir.path())?;
                 let incr_clean = self.cargo(sysroot, Incremental(true), opt)
                     .run(tmp_dir.path(), Cargo::Build)?;
 
-                clean_stats.push(process_output(clean)?);
-                incr_stats.push(process_output(incr)?);
-                incr_clean_stats.push(process_output(incr_clean)?);
+                clean_stats.push(clean);
+                incr_stats.push(incr);
+                incr_clean_stats.push(incr_clean);
 
                 for patch in &self.patches {
                     debug!("applying patch {}", patch.name);
                     patch.apply(tmp_dir.path()).map_err(|s| err_msg(s))?;
-                    touch_all(tmp_dir.path())?;
                     let out = self.cargo(sysroot, Incremental(true), opt)
                         .run(tmp_dir.path(), Cargo::Build)?;
-                    let out = process_output(out)?;
                     if let Some(mut entry) = incr_patched_stats.iter_mut().find(|s| &s.0 == patch) {
                         entry.1.push(out);
                         continue;
@@ -407,11 +425,19 @@ impl Benchmark {
     }
 }
 
-fn process_output(output: process::Output) -> Result<Vec<Stat>, Error> {
-    let output = String::from_utf8(output.stdout)?;
+#[derive(Fail, PartialEq, Eq, Debug)]
+enum DeserializeStatError {
+    #[fail(display = "could not deserialize empty output to stats, output: {:?}", _0)]
+    NoOutput(process::Output),
+    #[fail(display = "could not parse `{}` as a float", _0)]
+    ParseError(String, #[fail(cause)] ::std::num::ParseFloatError),
+}
+
+fn process_output(output: process::Output) -> Result<Vec<Stat>, DeserializeStatError> {
+    let stdout = String::from_utf8(output.stdout.clone()).expect("utf8 output");
     let mut stats = Vec::new();
 
-    for line in output.lines() {
+    for line in stdout.lines() {
         // github.com/torvalds/linux/blob/bc78d646e708/tools/perf/Documentation/perf-stat.txt#L281
         macro_rules! get {
             ($e:expr) => (match $e {
@@ -440,17 +466,13 @@ fn process_output(output: process::Output) -> Result<Vec<Stat>, Error> {
         stats.push(Stat {
             name: name.to_string(),
             cnt: cnt.parse()
-                .with_context(|_: &::std::num::ParseFloatError| {
-                    format!("failed to parse `{}` as an float", cnt)
-                })?,
+                .map_err(|e| DeserializeStatError::ParseError(cnt.to_string(), e))?,
         });
     }
 
-    assert!(
-        stats.len() >= 1,
-        "at least one stat collected, output: {:?}",
-        output
-    );
+    if stats.is_empty() {
+        return Err(DeserializeStatError::NoOutput(output));
+    }
 
     Ok(stats)
 }
