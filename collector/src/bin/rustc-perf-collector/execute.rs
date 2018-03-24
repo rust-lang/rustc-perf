@@ -62,6 +62,8 @@ struct BenchmarkConfig {
     run_optimized: bool,
     #[serde(default = "default_true")]
     run_debug: bool,
+    #[serde(default = "default_true")]
+    nll: bool,
 }
 
 impl Default for BenchmarkConfig {
@@ -74,6 +76,7 @@ impl Default for BenchmarkConfig {
             runs: default_runs(),
             run_optimized: true,
             run_debug: true,
+            nll: true,
         }
     }
 }
@@ -387,16 +390,18 @@ impl Benchmark {
 
                 let clean = self.cargo(sysroot, Incremental(false), opt)
                     .run(tmp_dir.path(), Cargo::Build)?;
-                let nll = self.cargo(sysroot, Incremental(false), opt)
-                    .nll(true)
-                    .run(base_build.path(), Cargo::Build)?;
+                if self.config.nll {
+                    let nll = self.cargo(sysroot, Incremental(false), opt)
+                        .nll(true)
+                        .run(base_build.path(), Cargo::Build)?;
+                    nll_stats.push(nll);
+                }
                 let incr = self.cargo(sysroot, Incremental(true), opt)
                     .run(tmp_dir.path(), Cargo::Build)?;
                 let incr_clean = self.cargo(sysroot, Incremental(true), opt)
                     .run(tmp_dir.path(), Cargo::Build)?;
 
                 clean_stats.push(clean);
-                nll_stats.push(nll);
                 incr_stats.push(incr);
                 incr_clean_stats.push(incr_clean);
 
@@ -416,8 +421,10 @@ impl Benchmark {
 
             ret.runs
                 .push(process_stats(opt, BenchmarkState::Clean, clean_stats));
-            ret.runs
-                .push(process_stats(opt, BenchmarkState::Nll, nll_stats));
+            if self.config.nll {
+                ret.runs
+                    .push(process_stats(opt, BenchmarkState::Nll, nll_stats));
+            }
             ret.runs.push(process_stats(
                 opt,
                 BenchmarkState::IncrementalStart,
