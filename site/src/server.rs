@@ -294,13 +294,22 @@ struct Server {
     updating: Arc<AtomicBool>,
 }
 
+macro_rules! check_http_method {
+    ($lhs: expr, $rhs: expr) => {
+        if $lhs != $rhs {
+            let resp = Response::new().with_status(StatusCode::MethodNotAllowed);
+            return Box::new(futures::future::ok(resp));
+        }
+    };
+}
+
 impl Server {
     fn handle_get<F, S>(&self, req: &Request, handler: F) -> <Server as Service>::Future
     where
         F: FnOnce(&InputData) -> S,
         S: Serialize,
     {
-        assert_eq!(*req.method(), Get);
+        check_http_method!(*req.method(), Get);
         let data = self.data.clone();
         let data = data.read();
         let result = handler(&data);
@@ -315,7 +324,7 @@ impl Server {
         F: FnOnce(&Request, &InputData) -> S,
         S: Serialize,
     {
-        assert_eq!(*req.method(), Get);
+        check_http_method!(*req.method(), Get);
         let data = self.data.clone();
         let data = data.read();
         let result = handler(req, &data);
@@ -331,7 +340,7 @@ impl Server {
         D: DeserializeOwned,
         S: Serialize,
     {
-        assert_eq!(*req.method(), Post);
+        check_http_method!(*req.method(), Post);
         let length = req.headers()
             .get::<ContentLength>()
             .expect("content-length to exist")
