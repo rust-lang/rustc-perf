@@ -104,8 +104,8 @@ struct Incremental(bool);
 
 impl<'sysroot> CargoProcess<'sysroot> {
     fn base(&self) -> Command {
-        let mut cargo = self.sysroot.command("cargo");
-        cargo
+        let mut cmd = self.sysroot.command("cargo");
+        cmd
             .env("SHELL", env::var_os("SHELL").unwrap_or_default())
             .env("RUSTC", &*FAKE_RUSTC)
             .env("RUSTC_REAL", &self.sysroot.rustc)
@@ -114,7 +114,7 @@ impl<'sysroot> CargoProcess<'sysroot> {
                 &format!("{}", self.incremental.0 as usize),
             )
             .env("USE_PERF", &format!("{}", self.perf as usize));
-        cargo
+        cmd
     }
 
     fn nll(mut self, nll: bool) -> Self {
@@ -127,33 +127,33 @@ impl<'sysroot> CargoProcess<'sysroot> {
         self
     }
 
-    fn run(self, cwd: &Path, mut cargo: Cargo) -> Result<Vec<Stat>, Error> {
+    fn run(self, cwd: &Path, mut mode: CargoMode) -> Result<Vec<Stat>, Error> {
         let mut cmd = self.base();
         cmd.current_dir(cwd);
-        if self.options.check && cargo == Cargo::Build {
-            cargo = Cargo::Check;
+        if self.options.check && mode == CargoMode::Build {
+            mode = CargoMode::Check;
         }
         debug!(
             "running cargo {:?}{}",
-            cargo,
+            mode,
             if self.options.release {
                 " --release"
             } else {
                 ""
             }
         );
-        cmd.arg(match cargo {
-            Cargo::Check | Cargo::Build => "rustc",
-            Cargo::Clean => "clean",
+        cmd.arg(match mode {
+            CargoMode::Check | CargoMode::Build => "rustc",
+            CargoMode::Clean => "clean",
         });
         {
-            let mut cargo = self.base();
-            cargo
+            let mut pkgid_cmd = self.base();
+            pkgid_cmd
                 .current_dir(cwd)
                 .arg("pkgid")
                 .arg("--manifest-path")
                 .arg(&self.manifest_path);
-            let out = run(&mut cargo)
+            let out = run(&mut pkgid_cmd)
                 .unwrap_or_else(|e| {
                     panic!("failed to obtain pkgid in {:?}: {:?}", cwd, e);
                 })
@@ -161,14 +161,14 @@ impl<'sysroot> CargoProcess<'sysroot> {
             let package_id = str::from_utf8(&out).unwrap();
             cmd.arg("-p").arg(package_id.trim());
         }
-        if cargo == Cargo::Check {
+        if mode == CargoMode::Check {
             cmd.arg("--profile").arg("check");
         }
         if self.options.release {
             cmd.arg("--release");
         }
         cmd.arg("--manifest-path").arg(&self.manifest_path);
-        if cargo.takes_args() {
+        if mode.takes_args() {
             cmd.args(&self.cargo_args);
             cmd.arg("--");
             if self.nll {
@@ -178,8 +178,8 @@ impl<'sysroot> CargoProcess<'sysroot> {
             cmd.args(&self.rustc_args);
         }
 
-        match cargo {
-            Cargo::Check | Cargo::Build => loop {
+        match mode {
+            CargoMode::Check | CargoMode::Build => loop {
                 touch_all(&cwd)?;
                 let output = run(&mut cmd)?;
                 match process_output(output) {
@@ -195,7 +195,7 @@ impl<'sysroot> CargoProcess<'sysroot> {
                     }
                 }
             },
-            Cargo::Clean => {
+            CargoMode::Clean => {
                 let _output = run(&mut cmd)?;
                 return Ok(Vec::new());
             }
@@ -204,7 +204,7 @@ impl<'sysroot> CargoProcess<'sysroot> {
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
-enum Cargo {
+enum CargoMode {
     Build,
     Check,
     Clean,
@@ -216,11 +216,11 @@ struct Options {
     check: bool,
 }
 
-impl Cargo {
+impl CargoMode {
     fn takes_args(self) -> bool {
         match self {
-            Cargo::Build | Cargo::Check => true,
-            Cargo::Clean => false,
+            CargoMode::Build | CargoMode::Check => true,
+            CargoMode::Clean => false,
         }
     }
 }
@@ -282,7 +282,7 @@ impl Benchmark {
         Ok(tmp_dir)
     }
 
-    fn cargo<'a>(
+    fn mk_cargo_process<'a>(
         &self,
         sysroot: &'a Sysroot,
         incremental: Incremental,
@@ -377,29 +377,29 @@ impl Benchmark {
             );
 
             let base_build = self.make_temp_dir(&self.path)?;
-            let clean = self.cargo(sysroot, Incremental(false), opt)
-                .run(base_build.path(), Cargo::Build)?;
+            let clean = self.mk_cargo_process(sysroot, Incremental(false), opt)
+                .run(base_build.path(), CargoMode::Build)?;
             clean_stats.push(clean);
-            self.cargo(sysroot, Incremental(false), opt)
+            self.mk_cargo_process(sysroot, Incremental(false), opt)
                 .perf(false)
-                .run(base_build.path(), Cargo::Clean)?;
+                .run(base_build.path(), CargoMode::Clean)?;
 
             for i in 0..iterations {
                 debug!("Benchmark iteration {}/{}", i + 1, iterations);
                 let tmp_dir = self.make_temp_dir(base_build.path())?;
 
-                let clean = self.cargo(sysroot, Incremental(false), opt)
-                    .run(tmp_dir.path(), Cargo::Build)?;
+                let clean = self.mk_cargo_process(sysroot, Incremental(false), opt)
+                    .run(tmp_dir.path(), CargoMode::Build)?;
                 if self.config.nll {
-                    let nll = self.cargo(sysroot, Incremental(false), opt)
+                    let nll = self.mk_cargo_process(sysroot, Incremental(false), opt)
                         .nll(true)
-                        .run(base_build.path(), Cargo::Build)?;
+                        .run(base_build.path(), CargoMode::Build)?;
                     nll_stats.push(nll);
                 }
-                let incr = self.cargo(sysroot, Incremental(true), opt)
-                    .run(tmp_dir.path(), Cargo::Build)?;
-                let incr_clean = self.cargo(sysroot, Incremental(true), opt)
-                    .run(tmp_dir.path(), Cargo::Build)?;
+                let incr = self.mk_cargo_process(sysroot, Incremental(true), opt)
+                    .run(tmp_dir.path(), CargoMode::Build)?;
+                let incr_clean = self.mk_cargo_process(sysroot, Incremental(true), opt)
+                    .run(tmp_dir.path(), CargoMode::Build)?;
 
                 clean_stats.push(clean);
                 incr_stats.push(incr);
@@ -408,8 +408,8 @@ impl Benchmark {
                 for patch in &self.patches {
                     debug!("applying patch {}", patch.name);
                     patch.apply(tmp_dir.path()).map_err(|s| err_msg(s))?;
-                    let out = self.cargo(sysroot, Incremental(true), opt)
-                        .run(tmp_dir.path(), Cargo::Build)?;
+                    let out = self.mk_cargo_process(sysroot, Incremental(true), opt)
+                        .run(tmp_dir.path(), CargoMode::Build)?;
                     if let Some(mut entry) = incr_patched_stats.iter_mut().find(|s| &s.0 == patch) {
                         entry.1.push(out);
                         continue;
