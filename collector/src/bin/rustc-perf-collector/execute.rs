@@ -19,7 +19,7 @@ use serde_json;
 
 use Mode;
 
-fn run(cmd: &mut Command) -> Result<process::Output, Error> {
+fn command_output(cmd: &mut Command) -> Result<process::Output, Error> {
     trace!("running: {:?}", cmd);
     let output = cmd.output()?;
     if !output.status.success() {
@@ -37,7 +37,7 @@ fn touch_all(path: &Path) -> Result<(), Error> {
     let mut cmd = Command::new("bash");
     cmd.current_dir(path)
         .args(&["-c", "find . -name '*.rs' | xargs touch"]);
-    run(&mut cmd)?;
+    command_output(&mut cmd)?;
     Ok(())
 }
 
@@ -153,7 +153,7 @@ impl<'sysroot> CargoProcess<'sysroot> {
                 .arg("pkgid")
                 .arg("--manifest-path")
                 .arg(&self.manifest_path);
-            let out = run(&mut pkgid_cmd)
+            let out = command_output(&mut pkgid_cmd)
                 .unwrap_or_else(|e| {
                     panic!("failed to obtain pkgid in {:?}: {:?}", cwd, e);
                 })
@@ -181,7 +181,7 @@ impl<'sysroot> CargoProcess<'sysroot> {
         match mode {
             CargoMode::Check | CargoMode::Build => loop {
                 touch_all(&cwd)?;
-                let output = run(&mut cmd)?;
+                let output = command_output(&mut cmd)?;
                 match process_output(output) {
                     Ok(stats) => return Ok(stats),
                     Err(DeserializeStatError::NoOutput(output)) => {
@@ -196,7 +196,7 @@ impl<'sysroot> CargoProcess<'sysroot> {
                 }
             },
             CargoMode::Clean => {
-                let _output = run(&mut cmd)?;
+                let _output = command_output(&mut cmd)?;
                 return Ok(Vec::new());
             }
         }
@@ -278,7 +278,7 @@ impl Benchmark {
             .arg("--")
             .arg(base)
             .arg(tmp_dir.path());
-        run(&mut cmd).with_context(|_| format!("copying {} to tmp dir", self.name))?;
+        command_output(&mut cmd).with_context(|_| format!("copying {} to tmp dir", self.name))?;
         Ok(tmp_dir)
     }
 

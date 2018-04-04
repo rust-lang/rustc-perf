@@ -191,10 +191,10 @@ fn process_commits(
 }
 
 fn main() {
-    process::exit(run().unwrap())
+    process::exit(main_result().unwrap())
 }
 
-fn run() -> Result<i32, Error> {
+fn main_result() -> Result<i32, Error> {
     env_logger::init();
     git::fetch_rust(Path::new("rust.git"))?;
 
