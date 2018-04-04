@@ -165,7 +165,7 @@ impl<'sysroot> CargoProcess<'sysroot> {
             cmd.arg("--release");
         }
         cmd.arg("--manifest-path").arg(&self.manifest_path);
-        if mode.takes_args() {
+        if mode == CargoMode::Build {
             cmd.args(&self.cargo_args);
             cmd.arg("--");
             if self.nll {
@@ -210,15 +210,6 @@ enum CargoMode {
 struct Options {
     release: bool,
     check: bool,
-}
-
-impl CargoMode {
-    fn takes_args(self) -> bool {
-        match self {
-            CargoMode::Build => true,
-            CargoMode::Clean => false,
-        }
-    }
 }
 
 lazy_static! {
