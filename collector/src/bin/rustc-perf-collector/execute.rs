@@ -103,7 +103,7 @@ struct CargoProcess<'sysroot> {
 struct Incremental(bool);
 
 impl<'sysroot> CargoProcess<'sysroot> {
-    fn base(&self) -> Command {
+    fn base_command(&self, cwd: &Path, subcommand: &str) -> Command {
         let mut cmd = self.sysroot.command("cargo");
         cmd
             .env("SHELL", env::var_os("SHELL").unwrap_or_default())
@@ -113,7 +113,11 @@ impl<'sysroot> CargoProcess<'sysroot> {
                 "CARGO_INCREMENTAL",
                 &format!("{}", self.incremental.0 as usize),
             )
-            .env("USE_PERF", &format!("{}", self.perf as usize));
+            .env("USE_PERF", &format!("{}", self.perf as usize))
+            .current_dir(cwd)
+            .arg(subcommand)
+            .arg("--manifest-path")
+            .arg(&self.manifest_path);
         cmd
     }
 
@@ -128,19 +132,13 @@ impl<'sysroot> CargoProcess<'sysroot> {
     }
 
     fn run(self, cwd: &Path, mode: CargoMode) -> Result<Vec<Stat>, Error> {
-        let mut cmd = self.base();
-        cmd.current_dir(cwd);
-        cmd.arg(match mode {
+        let subcommand = match mode {
             CargoMode::Build => "rustc",
             CargoMode::Clean => "clean",
-        });
+        };
+        let mut cmd = self.base_command(cwd, subcommand);
         {
-            let mut pkgid_cmd = self.base();
-            pkgid_cmd
-                .current_dir(cwd)
-                .arg("pkgid")
-                .arg("--manifest-path")
-                .arg(&self.manifest_path);
+            let mut pkgid_cmd = self.base_command(cwd, "pkgid");
             let out = command_output(&mut pkgid_cmd)
                 .unwrap_or_else(|e| {
                     panic!("failed to obtain pkgid in {:?}: {:?}", cwd, e);
@@ -155,7 +153,6 @@ impl<'sysroot> CargoProcess<'sysroot> {
         if self.options.release {
             cmd.arg("--release");
         }
-        cmd.arg("--manifest-path").arg(&self.manifest_path);
         if mode == CargoMode::Build {
             cmd.args(&self.cargo_args);
             cmd.arg("--");
