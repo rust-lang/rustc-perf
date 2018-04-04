@@ -130,15 +130,6 @@ impl<'sysroot> CargoProcess<'sysroot> {
     fn run(self, cwd: &Path, mode: CargoMode) -> Result<Vec<Stat>, Error> {
         let mut cmd = self.base();
         cmd.current_dir(cwd);
-        debug!(
-            "running cargo {:?}{}",
-            mode,
-            if self.options.release {
-                " --release"
-            } else {
-                ""
-            }
-        );
         cmd.arg(match mode {
             CargoMode::Build => "rustc",
             CargoMode::Clean => "clean",
@@ -174,6 +165,8 @@ impl<'sysroot> CargoProcess<'sysroot> {
             cmd.arg("-Ztime-passes");
             cmd.args(&self.rustc_args);
         }
+
+        debug!("running cargo: {:?}", cmd);
 
         match mode {
             CargoMode::Build => loop {
