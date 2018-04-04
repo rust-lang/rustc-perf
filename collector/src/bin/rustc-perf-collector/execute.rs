@@ -131,22 +131,24 @@ impl<'sysroot> CargoProcess<'sysroot> {
         self
     }
 
+    fn get_pkgid(&self, cwd: &Path) -> String {
+        let mut pkgid_cmd = self.base_command(cwd, "pkgid");
+        let out = command_output(&mut pkgid_cmd)
+            .unwrap_or_else(|e| {
+                panic!("failed to obtain pkgid in {:?}: {:?}", cwd, e);
+            })
+            .stdout;
+        let package_id = str::from_utf8(&out).unwrap();
+        package_id.trim().to_string()
+    }
+
     fn run(self, cwd: &Path, mode: CargoMode) -> Result<Vec<Stat>, Error> {
         let subcommand = match mode {
             CargoMode::Build => "rustc",
             CargoMode::Clean => "clean",
         };
         let mut cmd = self.base_command(cwd, subcommand);
-        {
-            let mut pkgid_cmd = self.base_command(cwd, "pkgid");
-            let out = command_output(&mut pkgid_cmd)
-                .unwrap_or_else(|e| {
-                    panic!("failed to obtain pkgid in {:?}: {:?}", cwd, e);
-                })
-                .stdout;
-            let package_id = str::from_utf8(&out).unwrap();
-            cmd.arg("-p").arg(package_id.trim());
-        }
+        cmd.arg("-p").arg(self.get_pkgid(cwd));
         if mode == CargoMode::Build && self.options.check {
             cmd.arg("--profile").arg("check");
         }
