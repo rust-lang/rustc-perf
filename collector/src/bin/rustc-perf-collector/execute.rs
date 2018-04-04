@@ -127,12 +127,9 @@ impl<'sysroot> CargoProcess<'sysroot> {
         self
     }
 
-    fn run(self, cwd: &Path, mut mode: CargoMode) -> Result<Vec<Stat>, Error> {
+    fn run(self, cwd: &Path, mode: CargoMode) -> Result<Vec<Stat>, Error> {
         let mut cmd = self.base();
         cmd.current_dir(cwd);
-        if self.options.check && mode == CargoMode::Build {
-            mode = CargoMode::Check;
-        }
         debug!(
             "running cargo {:?}{}",
             mode,
@@ -143,7 +140,7 @@ impl<'sysroot> CargoProcess<'sysroot> {
             }
         );
         cmd.arg(match mode {
-            CargoMode::Check | CargoMode::Build => "rustc",
+            CargoMode::Build => "rustc",
             CargoMode::Clean => "clean",
         });
         {
@@ -161,7 +158,7 @@ impl<'sysroot> CargoProcess<'sysroot> {
             let package_id = str::from_utf8(&out).unwrap();
             cmd.arg("-p").arg(package_id.trim());
         }
-        if mode == CargoMode::Check {
+        if mode == CargoMode::Build && self.options.check {
             cmd.arg("--profile").arg("check");
         }
         if self.options.release {
@@ -179,7 +176,7 @@ impl<'sysroot> CargoProcess<'sysroot> {
         }
 
         match mode {
-            CargoMode::Check | CargoMode::Build => loop {
+            CargoMode::Build => loop {
                 touch_all(&cwd)?;
                 let output = command_output(&mut cmd)?;
                 match process_output(output) {
@@ -206,7 +203,6 @@ impl<'sysroot> CargoProcess<'sysroot> {
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum CargoMode {
     Build,
-    Check,
     Clean,
 }
 
@@ -219,7 +215,7 @@ struct Options {
 impl CargoMode {
     fn takes_args(self) -> bool {
         match self {
-            CargoMode::Build | CargoMode::Check => true,
+            CargoMode::Build => true,
             CargoMode::Clean => false,
         }
     }
