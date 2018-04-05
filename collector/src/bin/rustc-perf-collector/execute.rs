@@ -368,7 +368,7 @@ impl Benchmark {
                 if self.config.nll {
                     let nll = self.mk_cargo_process(sysroot, Incremental(false), opt)
                         .nll(true)
-                        .run_rustc(base_build.path())?;
+                        .run_rustc(tmp_dir.path())?;
                     nll_stats.push(nll);
                 }
                 let incr = self.mk_cargo_process(sysroot, Incremental(true), opt)
