@@ -34,7 +34,6 @@ use collector::{Commit, CommitData, Date};
 use rust_sysroot::git::Commit as GitCommit;
 use rust_sysroot::sysroot::Sysroot;
 
-mod git;
 mod execute;
 mod outrepo;
 
@@ -196,7 +195,6 @@ fn main() {
 
 fn main_result() -> Result<i32, Error> {
     env_logger::init();
-    git::fetch_rust(Path::new("rust.git"))?;
 
     let matches = clap_app!(rustc_perf_collector =>
        (version: "0.1")
