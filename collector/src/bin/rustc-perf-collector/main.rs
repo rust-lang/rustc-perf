@@ -244,12 +244,13 @@ fn main_result() -> Result<i32, Error> {
     let out_repo = PathBuf::from(matches.value_of_os("output_repo").unwrap());
     let mut out_repo = outrepo::Repo::open(out_repo, use_remote)?;
 
-    let commits =
-        rust_sysroot::get_commits(rust_sysroot::EPOCH_COMMIT, "master").map_err(SyncFailure::new)?;
+    let get_commits = || {
+        rust_sysroot::get_commits(rust_sysroot::EPOCH_COMMIT, "master").map_err(SyncFailure::new)
+    };
 
     match matches.subcommand() {
         ("test_benchmarks", Some(_)) => {
-            if let Some(commit) = commits.last() {
+            if let Some(commit) = get_commits()?.last() {
                 let sysroot = Sysroot::install(commit, "x86_64-unknown-linux-gnu", false, false)
                     .map_err(SyncFailure::new)?;
                 // filter out servo benchmarks as they simple take too long
@@ -260,13 +261,14 @@ fn main_result() -> Result<i32, Error> {
             Ok(0)
         }
         ("process", Some(_)) => {
+            let commits = get_commits()?;
             process_retries(&commits, &mut out_repo, &benchmarks)?;
             process_commits(&commits, &out_repo, &benchmarks)?;
             Ok(0)
         }
         ("bench_commit", Some(sub_m)) => {
             let commit = sub_m.value_of("COMMIT").unwrap();
-            let commit = commits
+            let commit = get_commits()?
                 .iter()
                 .find(|c| c.sha == commit)
                 .cloned()
@@ -298,7 +300,7 @@ fn main_result() -> Result<i32, Error> {
             Ok(0)
         }
         ("remove_errs", Some(_)) => {
-            for commit in &commits {
+            for commit in &get_commits()? {
                 if let Ok(mut data) = out_repo.load_commit_data(&commit, "x86_64-unknown-linux-gnu")
                 {
                     let benchmarks = data.benchmarks
@@ -313,7 +315,7 @@ fn main_result() -> Result<i32, Error> {
         }
         ("remove_benchmark", Some(sub_m)) => {
             let benchmark = sub_m.value_of("BENCHMARK").unwrap();
-            for commit in &commits {
+            for commit in &get_commits()? {
                 if let Ok(mut data) = out_repo.load_commit_data(&commit, "x86_64-unknown-linux-gnu")
                 {
                     if data.benchmarks.remove(&*benchmark).is_none() {
