@@ -19,7 +19,7 @@ use serde_json;
 
 use Mode;
 
-fn run(cmd: &mut Command) -> Result<process::Output, Error> {
+fn command_output(cmd: &mut Command) -> Result<process::Output, Error> {
     trace!("running: {:?}", cmd);
     let output = cmd.output()?;
     if !output.status.success() {
@@ -37,7 +37,7 @@ fn touch_all(path: &Path) -> Result<(), Error> {
     let mut cmd = Command::new("bash");
     cmd.current_dir(path)
         .args(&["-c", "find . -name '*.rs' | xargs touch"]);
-    run(&mut cmd)?;
+    command_output(&mut cmd)?;
     Ok(())
 }
 
@@ -103,9 +103,9 @@ struct CargoProcess<'sysroot> {
 struct Incremental(bool);
 
 impl<'sysroot> CargoProcess<'sysroot> {
-    fn base(&self) -> Command {
-        let mut cargo = self.sysroot.command("cargo");
-        cargo
+    fn base_command(&self, cwd: &Path, subcommand: &str) -> Command {
+        let mut cmd = self.sysroot.command("cargo");
+        cmd
             .env("SHELL", env::var_os("SHELL").unwrap_or_default())
             .env("RUSTC", &*FAKE_RUSTC)
             .env("RUSTC_REAL", &self.sysroot.rustc)
@@ -113,8 +113,12 @@ impl<'sysroot> CargoProcess<'sysroot> {
                 "CARGO_INCREMENTAL",
                 &format!("{}", self.incremental.0 as usize),
             )
-            .env("USE_PERF", &format!("{}", self.perf as usize));
-        cargo
+            .env("USE_PERF", &format!("{}", self.perf as usize))
+            .current_dir(cwd)
+            .arg(subcommand)
+            .arg("--manifest-path")
+            .arg(&self.manifest_path);
+        cmd
     }
 
     fn nll(mut self, nll: bool) -> Self {
@@ -127,102 +131,73 @@ impl<'sysroot> CargoProcess<'sysroot> {
         self
     }
 
-    fn run(self, cwd: &Path, mut cargo: Cargo) -> Result<Vec<Stat>, Error> {
-        let mut cmd = self.base();
-        cmd.current_dir(cwd);
-        if self.options.check && cargo == Cargo::Build {
-            cargo = Cargo::Check;
-        }
-        debug!(
-            "running cargo {:?}{}",
-            cargo,
-            if self.options.release {
-                " --release"
-            } else {
-                ""
-            }
-        );
-        cmd.arg(match cargo {
-            Cargo::Check | Cargo::Build => "rustc",
-            Cargo::Clean => "clean",
-        });
-        {
-            let mut cargo = self.base();
-            cargo
-                .current_dir(cwd)
-                .arg("pkgid")
-                .arg("--manifest-path")
-                .arg(&self.manifest_path);
-            let out = run(&mut cargo)
-                .unwrap_or_else(|e| {
-                    panic!("failed to obtain pkgid in {:?}: {:?}", cwd, e);
-                })
-                .stdout;
-            let package_id = str::from_utf8(&out).unwrap();
-            cmd.arg("-p").arg(package_id.trim());
-        }
-        if cargo == Cargo::Check {
-            cmd.arg("--profile").arg("check");
-        }
+    fn get_pkgid(&self, cwd: &Path) -> String {
+        let mut pkgid_cmd = self.base_command(cwd, "pkgid");
+        let out = command_output(&mut pkgid_cmd)
+            .unwrap_or_else(|e| {
+                panic!("failed to obtain pkgid in {:?}: {:?}", cwd, e);
+            })
+            .stdout;
+        let package_id = str::from_utf8(&out).unwrap();
+        package_id.trim().to_string()
+    }
+
+    fn run_base_command(&self, cwd: &Path, subcommand: &str) -> Command {
+        let mut cmd = self.base_command(cwd, subcommand);
+        cmd.arg("-p").arg(self.get_pkgid(cwd));
         if self.options.release {
             cmd.arg("--release");
         }
-        cmd.arg("--manifest-path").arg(&self.manifest_path);
-        if cargo.takes_args() {
-            cmd.args(&self.cargo_args);
-            cmd.arg("--");
-            if self.nll {
-                cmd.arg("-Znll");
-            }
-            cmd.arg("-Ztime-passes");
-            cmd.args(&self.rustc_args);
-        }
+        cmd
+    }
 
-        match cargo {
-            Cargo::Check | Cargo::Build => loop {
-                touch_all(&cwd)?;
-                let output = run(&mut cmd)?;
-                match process_output(output) {
-                    Ok(stats) => return Ok(stats),
-                    Err(DeserializeStatError::NoOutput(output)) => {
-                        warn!(
-                            "failed to deserialize stats, retrying; output: {:?}",
-                            output
-                        );
-                    }
-                    Err(e @ DeserializeStatError::ParseError { .. }) => {
-                        panic!("process_output failed: {:?}", e);
-                    }
+    fn run_rustc(self, cwd: &Path) -> Result<Vec<Stat>, Error> {
+        let mut cmd = self.run_base_command(cwd, "rustc");
+        if self.options.check {
+            cmd.arg("--profile").arg("check");
+        }
+        cmd.args(&self.cargo_args);
+        cmd.arg("--");
+        if self.nll {
+            cmd.arg("-Znll");
+        }
+        cmd.arg("-Ztime-passes");
+        cmd.args(&self.rustc_args);
+
+        debug!("run_rustc: {:?}", cmd);
+
+        loop {
+            touch_all(&cwd)?;
+            let output = command_output(&mut cmd)?;
+            match process_output(output) {
+                Ok(stats) => return Ok(stats),
+                Err(DeserializeStatError::NoOutput(output)) => {
+                    warn!(
+                        "failed to deserialize stats, retrying; output: {:?}",
+                        output
+                    );
                 }
-            },
-            Cargo::Clean => {
-                let _output = run(&mut cmd)?;
-                return Ok(Vec::new());
+                Err(e @ DeserializeStatError::ParseError { .. }) => {
+                    panic!("process_output failed: {:?}", e);
+                }
             }
         }
     }
-}
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-enum Cargo {
-    Build,
-    Check,
-    Clean,
+    fn run_clean(self, cwd: &Path) -> Result<(), Error> {
+        let mut cmd = self.run_base_command(cwd, "clean");
+
+        debug!("run_clean: {:?}", cmd);
+
+        let _output = command_output(&mut cmd)?;
+        return Ok(());
+    }
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 struct Options {
     release: bool,
     check: bool,
-}
-
-impl Cargo {
-    fn takes_args(self) -> bool {
-        match self {
-            Cargo::Build | Cargo::Check => true,
-            Cargo::Clean => false,
-        }
-    }
 }
 
 lazy_static! {
@@ -278,11 +253,11 @@ impl Benchmark {
             .arg("--")
             .arg(base)
             .arg(tmp_dir.path());
-        run(&mut cmd).with_context(|_| format!("copying {} to tmp dir", self.name))?;
+        command_output(&mut cmd).with_context(|_| format!("copying {} to tmp dir", self.name))?;
         Ok(tmp_dir)
     }
 
-    fn cargo<'a>(
+    fn mk_cargo_process<'a>(
         &self,
         sysroot: &'a Sysroot,
         incremental: Incremental,
@@ -377,29 +352,29 @@ impl Benchmark {
             );
 
             let base_build = self.make_temp_dir(&self.path)?;
-            let clean = self.cargo(sysroot, Incremental(false), opt)
-                .run(base_build.path(), Cargo::Build)?;
+            let clean = self.mk_cargo_process(sysroot, Incremental(false), opt)
+                .run_rustc(base_build.path())?;
             clean_stats.push(clean);
-            self.cargo(sysroot, Incremental(false), opt)
+            self.mk_cargo_process(sysroot, Incremental(false), opt)
                 .perf(false)
-                .run(base_build.path(), Cargo::Clean)?;
+                .run_clean(base_build.path())?;
 
             for i in 0..iterations {
                 debug!("Benchmark iteration {}/{}", i + 1, iterations);
                 let tmp_dir = self.make_temp_dir(base_build.path())?;
 
-                let clean = self.cargo(sysroot, Incremental(false), opt)
-                    .run(tmp_dir.path(), Cargo::Build)?;
+                let clean = self.mk_cargo_process(sysroot, Incremental(false), opt)
+                    .run_rustc(tmp_dir.path())?;
                 if self.config.nll {
-                    let nll = self.cargo(sysroot, Incremental(false), opt)
+                    let nll = self.mk_cargo_process(sysroot, Incremental(false), opt)
                         .nll(true)
-                        .run(base_build.path(), Cargo::Build)?;
+                        .run_rustc(base_build.path())?;
                     nll_stats.push(nll);
                 }
-                let incr = self.cargo(sysroot, Incremental(true), opt)
-                    .run(tmp_dir.path(), Cargo::Build)?;
-                let incr_clean = self.cargo(sysroot, Incremental(true), opt)
-                    .run(tmp_dir.path(), Cargo::Build)?;
+                let incr = self.mk_cargo_process(sysroot, Incremental(true), opt)
+                    .run_rustc(tmp_dir.path())?;
+                let incr_clean = self.mk_cargo_process(sysroot, Incremental(true), opt)
+                    .run_rustc(tmp_dir.path())?;
 
                 clean_stats.push(clean);
                 incr_stats.push(incr);
@@ -408,8 +383,8 @@ impl Benchmark {
                 for patch in &self.patches {
                     debug!("applying patch {}", patch.name);
                     patch.apply(tmp_dir.path()).map_err(|s| err_msg(s))?;
-                    let out = self.cargo(sysroot, Incremental(true), opt)
-                        .run(tmp_dir.path(), Cargo::Build)?;
+                    let out = self.mk_cargo_process(sysroot, Incremental(true), opt)
+                        .run_rustc(tmp_dir.path())?;
                     if let Some(mut entry) = incr_patched_stats.iter_mut().find(|s| &s.0 == patch) {
                         entry.1.push(out);
                         continue;
