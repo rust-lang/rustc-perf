@@ -49,6 +49,8 @@ fn default_true() -> bool {
     true
 }
 
+/// This is the internal representation of an individual benchmark's
+/// perf-config.json file.
 #[derive(Debug, Clone, Deserialize)]
 struct BenchmarkConfig {
     cargo_opts: Option<String>,
@@ -58,10 +60,6 @@ struct BenchmarkConfig {
     disabled: bool,
     #[serde(default = "default_runs")]
     runs: usize,
-    #[serde(default = "default_true")]
-    run_optimized: bool,
-    #[serde(default = "default_true")]
-    run_debug: bool,
     #[serde(default = "default_true")]
     nll: bool,
 }
@@ -74,8 +72,6 @@ impl Default for BenchmarkConfig {
             cargo_toml: None,
             disabled: false,
             runs: default_runs(),
-            run_optimized: true,
-            run_debug: true,
             nll: true,
         }
     }
@@ -314,22 +310,18 @@ impl Benchmark {
         let mut opts = Vec::with_capacity(3);
         match mode {
             Mode::Normal => {
-                if self.config.run_debug {
-                    opts.push(Options {
-                        check: true,
-                        release: false,
-                    });
-                    opts.push(Options {
-                        check: false,
-                        release: false,
-                    });
-                }
-                if self.config.run_optimized {
-                    opts.push(Options {
-                        check: false,
-                        release: true,
-                    });
-                }
+                opts.push(Options {
+                    check: true,
+                    release: false,
+                });
+                opts.push(Options {
+                    check: false,
+                    release: false,
+                });
+                opts.push(Options {
+                    check: false,
+                    release: true,
+                });
             }
             Mode::Test => {
                 opts.push(Options {
