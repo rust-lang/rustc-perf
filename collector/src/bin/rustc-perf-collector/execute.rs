@@ -161,7 +161,11 @@ impl<'sysroot> CargoProcess<'sysroot> {
         if self.nll {
             cmd.arg("-Znll");
         }
-        cmd.arg("-Ztime-passes");
+        // -is-final-crate is not a valid rustc arg. But rustc-fake recognizes
+        // it, uses it as an indicator that the final crate is being compiled
+        // -- because `cargo rustc` only passes arguments in this position in
+        // that case -- and then strips it out before invoking the real rustc.
+        cmd.arg("-is-final-crate");
         cmd.args(&self.rustc_args);
 
         debug!("run_rustc: {:?}", cmd);

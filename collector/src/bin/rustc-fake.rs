@@ -8,13 +8,15 @@ fn main() {
     let rustc = env::var_os("RUSTC_REAL").unwrap();
     let mut cmd = Command::new(&rustc);
 
-    // easiest way to differentiate last pass
-    let time_passes = args.iter().position(|arg| arg == "-Ztime-passes");
-    if let Some(pos) = time_passes {
+    // -is-final-crate is a special arg indicating that this is the final crate
+    // being compiled, i.e. we should measure it. We strip it out so the real
+    // rustc doesn't see it.
+    let is_final_crate = args.iter().position(|arg| arg == "-is-final-crate");
+    if let Some(pos) = is_final_crate {
         args.remove(pos);
     }
 
-    if env::var_os("USE_PERF").is_some() && time_passes.is_some() {
+    if env::var_os("USE_PERF").is_some() && is_final_crate.is_some() {
         cmd = Command::new("perf");
         cmd.arg("stat")
             .arg("-x;")
@@ -26,7 +28,7 @@ fn main() {
     }
     cmd.args(&args);
 
-    if time_passes.is_some() {
+    if is_final_crate.is_some() {
         raise_priority();
         let start = Instant::now();
         assert!(cmd.status().expect("failed to spawn").success());
@@ -41,7 +43,8 @@ fn main() {
 #[cfg(unix)]
 fn exec(cmd: &mut Command) -> ! {
     use std::os::unix::prelude::*;
-    panic!("failed to spawn: {}", cmd.exec());
+    let error = cmd.exec();
+    panic!("failed to exec: {}", error);
 }
 
 #[cfg(unix)]
