@@ -88,7 +88,7 @@ struct CargoProcess<'sysroot> {
     sysroot: &'sysroot Sysroot,
     incremental: Incremental,
     nll: bool,
-    options: Options,
+    build_kind: BuildKind,
     perf: bool,
     manifest_path: String,
     cargo_args: Vec<String>,
@@ -141,7 +141,7 @@ impl<'sysroot> CargoProcess<'sysroot> {
     fn run_base_command(&self, cwd: &Path, subcommand: &str) -> Command {
         let mut cmd = self.base_command(cwd, subcommand);
         cmd.arg("-p").arg(self.get_pkgid(cwd));
-        if self.options.release {
+        if self.build_kind == BuildKind::Opt {
             cmd.arg("--release");
         }
         cmd
@@ -149,7 +149,7 @@ impl<'sysroot> CargoProcess<'sysroot> {
 
     fn run_rustc(self, cwd: &Path) -> Result<Vec<Stat>, Error> {
         let mut cmd = self.run_base_command(cwd, "rustc");
-        if self.options.check {
+        if self.build_kind == BuildKind::Check {
             cmd.arg("--profile").arg("check");
         }
         cmd.args(&self.cargo_args);
@@ -191,9 +191,10 @@ impl<'sysroot> CargoProcess<'sysroot> {
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-struct Options {
-    release: bool,
-    check: bool,
+enum BuildKind {
+    Check,
+    Debug,
+    Opt
 }
 
 lazy_static! {
@@ -257,12 +258,12 @@ impl Benchmark {
         &self,
         sysroot: &'a Sysroot,
         incremental: Incremental,
-        options: Options,
+        build_kind: BuildKind,
     ) -> CargoProcess<'a> {
         CargoProcess {
             sysroot: sysroot,
             incremental: incremental,
-            options: options,
+            build_kind: build_kind,
             perf: true,
             nll: false,
             manifest_path: self.config
@@ -307,31 +308,12 @@ impl Benchmark {
             runs: Vec::new(),
         };
 
-        let mut opts = Vec::with_capacity(3);
-        match mode {
-            Mode::Normal => {
-                opts.push(Options {
-                    check: true,
-                    release: false,
-                });
-                opts.push(Options {
-                    check: false,
-                    release: false,
-                });
-                opts.push(Options {
-                    check: false,
-                    release: true,
-                });
-            }
-            Mode::Test => {
-                opts.push(Options {
-                    check: true,
-                    release: false,
-                });
-            }
-        }
+        let build_kinds = match mode {
+            Mode::Normal => vec![BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
+            Mode::Test => vec![BuildKind::Check],
+        };
 
-        for opt in opts {
+        for build_kind in build_kinds {
             let mut clean_stats = Vec::new();
             let mut nll_stats = Vec::new();
             let mut incr_stats = Vec::new();
@@ -339,15 +321,15 @@ impl Benchmark {
             let mut incr_patched_stats: Vec<(Patch, Vec<Vec<Stat>>)> = Vec::new();
 
             info!(
-                "Benchmarking {} with release: {}, check: {}, iterations: {}",
-                self.name, opt.release, opt.check, iterations
+                "Benchmarking {} with build kind: {:?}, iterations: {}",
+                self.name, build_kind, iterations
             );
 
             let base_build = self.make_temp_dir(&self.path)?;
-            let clean = self.mk_cargo_process(sysroot, Incremental(false), opt)
+            let clean = self.mk_cargo_process(sysroot, Incremental(false), build_kind)
                 .run_rustc(base_build.path())?;
             clean_stats.push(clean);
-            self.mk_cargo_process(sysroot, Incremental(false), opt)
+            self.mk_cargo_process(sysroot, Incremental(false), build_kind)
                 .perf(false)
                 .run_clean(base_build.path())?;
 
@@ -355,17 +337,17 @@ impl Benchmark {
                 debug!("Benchmark iteration {}/{}", i + 1, iterations);
                 let tmp_dir = self.make_temp_dir(base_build.path())?;
 
-                let clean = self.mk_cargo_process(sysroot, Incremental(false), opt)
+                let clean = self.mk_cargo_process(sysroot, Incremental(false), build_kind)
                     .run_rustc(tmp_dir.path())?;
                 if self.config.nll {
-                    let nll = self.mk_cargo_process(sysroot, Incremental(false), opt)
+                    let nll = self.mk_cargo_process(sysroot, Incremental(false), build_kind)
                         .nll(true)
                         .run_rustc(base_build.path())?;
                     nll_stats.push(nll);
                 }
-                let incr = self.mk_cargo_process(sysroot, Incremental(true), opt)
+                let incr = self.mk_cargo_process(sysroot, Incremental(true), build_kind)
                     .run_rustc(tmp_dir.path())?;
-                let incr_clean = self.mk_cargo_process(sysroot, Incremental(true), opt)
+                let incr_clean = self.mk_cargo_process(sysroot, Incremental(true), build_kind)
                     .run_rustc(tmp_dir.path())?;
 
                 clean_stats.push(clean);
@@ -375,7 +357,7 @@ impl Benchmark {
                 for patch in &self.patches {
                     debug!("applying patch {}", patch.name);
                     patch.apply(tmp_dir.path()).map_err(|s| err_msg(s))?;
-                    let out = self.mk_cargo_process(sysroot, Incremental(true), opt)
+                    let out = self.mk_cargo_process(sysroot, Incremental(true), build_kind)
                         .run_rustc(tmp_dir.path())?;
                     if let Some(mut entry) = incr_patched_stats.iter_mut().find(|s| &s.0 == patch) {
                         entry.1.push(out);
@@ -387,25 +369,25 @@ impl Benchmark {
             }
 
             ret.runs
-                .push(process_stats(opt, BenchmarkState::Clean, clean_stats));
+                .push(process_stats(build_kind, BenchmarkState::Clean, clean_stats));
             if self.config.nll {
                 ret.runs
-                    .push(process_stats(opt, BenchmarkState::Nll, nll_stats));
+                    .push(process_stats(build_kind, BenchmarkState::Nll, nll_stats));
             }
             ret.runs.push(process_stats(
-                opt,
+                build_kind,
                 BenchmarkState::IncrementalStart,
                 incr_stats,
             ));
             ret.runs.push(process_stats(
-                opt,
+                build_kind,
                 BenchmarkState::IncrementalClean,
                 incr_clean_stats,
             ));
 
             for (patch, results) in incr_patched_stats {
                 ret.runs.push(process_stats(
-                    opt,
+                    build_kind,
                     BenchmarkState::IncrementalPatched(patch),
                     results,
                 ));
@@ -470,7 +452,7 @@ fn process_output(output: process::Output) -> Result<Vec<Stat>, DeserializeStatE
     Ok(stats)
 }
 
-fn process_stats(options: Options, state: BenchmarkState, runs: Vec<Vec<Stat>>) -> Run {
+fn process_stats(build_kind: BuildKind, state: BenchmarkState, runs: Vec<Vec<Stat>>) -> Run {
     let mut stats: HashMap<String, Vec<f64>> = HashMap::new();
     for run in runs.clone() {
         for stat in run {
@@ -483,7 +465,7 @@ fn process_stats(options: Options, state: BenchmarkState, runs: Vec<Vec<Stat>>) 
     // all stats should be present in all runs
     let map = stats.values().map(|v| v.len()).collect::<HashSet<_>>();
     if map.len() != 1 {
-        eprintln!("options: {:?}", options);
+        eprintln!("build_kind: {:?}", build_kind);
         eprintln!("state: {:?}", state);
         eprintln!("lengths: {:?}", map);
         eprintln!("runs: {:?}", runs);
@@ -502,8 +484,8 @@ fn process_stats(options: Options, state: BenchmarkState, runs: Vec<Vec<Stat>>) 
 
     Run {
         stats,
-        check: options.check,
-        release: options.release,
+        check: build_kind == BuildKind::Check,
+        release: build_kind == BuildKind::Opt,
         state: state,
     }
 }
