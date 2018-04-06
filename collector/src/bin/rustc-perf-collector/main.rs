@@ -25,10 +25,10 @@ use std::fs;
 use std::process;
 use std::str;
 use std::path::{Path, PathBuf};
-use std::io::{stderr, stdout, Write};
+use std::io::{stderr, Write};
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Utc};
+use chrono::{Timelike, Utc};
 
 use collector::{Commit, CommitData, Date};
 use rust_sysroot::git::Commit as GitCommit;
@@ -46,19 +46,21 @@ pub enum Mode {
 }
 
 fn bench_commit(
-    commit: &GitCommit,
     repo: Option<&outrepo::Repo>,
-    sysroot: Sysroot,
+    commit: &GitCommit,
+    triple: &str,
+    rustc_path: &Path,
+    cargo_path: &Path,
     benchmarks: &[Benchmark],
     iterations: usize,
     mode: Mode,
 ) -> CommitData {
     info!(
         "benchmarking commit {} ({}) for triple {}",
-        commit.sha, commit.date, sysroot.triple
+        commit.sha, commit.date, triple
     );
 
-    let existing_data = repo.and_then(|r| r.load_commit_data(&commit, &sysroot.triple).ok());
+    let existing_data = repo.and_then(|r| r.load_commit_data(&commit, &triple).ok());
 
     let mut results = BTreeMap::new();
     if let Some(ref data) = existing_data {
@@ -73,7 +75,7 @@ fn bench_commit(
             continue;
         }
 
-        let result = benchmark.run(&sysroot, iterations, mode);
+        let result = benchmark.run(rustc_path, cargo_path, iterations, mode);
 
         if let Err(ref s) = result {
             info!("failure to benchmark {}, recorded: {}", benchmark.name, s);
@@ -91,7 +93,7 @@ fn bench_commit(
             sha: commit.sha.clone(),
             date: Date(commit.date),
         },
-        triple: sysroot.triple.clone(),
+        triple: triple.to_string(),
         benchmarks: results,
     }
 }
@@ -144,9 +146,11 @@ fn process_commit(
     let sysroot = Sysroot::install(commit, "x86_64-unknown-linux-gnu", false, false)
         .map_err(SyncFailure::new)?;
     repo.success(&bench_commit(
-        commit,
         Some(repo),
-        sysroot,
+        commit,
+        &sysroot.triple,
+        &sysroot.rustc,
+        &sysroot.cargo,
         benchmarks,
         3,
         Mode::Normal,
@@ -207,14 +211,14 @@ fn main_result() -> Result<i32, Error> {
            (about: "syncs to git and collects performance data for all versions")
        )
        (@subcommand bench_commit =>
-           (about: "benchmark a bors merge from AWS and output data to stdout")
+           (about: "benchmark a bors merge from AWS")
            (@arg COMMIT: +required +takes_value "Commit hash to bench")
        )
        (@subcommand bench_local =>
-           (about: "benchmark a bors merge from AWS and output data to stdout")
-           (@arg COMMIT: --commit +required +takes_value "Commit hash to associate benchmark results with")
-           (@arg DATE: --date +required +takes_value "Date to associate benchmark result with, in the RFC3339 \"YYYY-MM-DDTHH:MM:SS-HH:MM\" format.")
-           (@arg RUSTC: +required +takes_value "the path to the local rustc to benchmark")
+           (about: "benchmark a local rustc")
+           (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
+           (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
+           (@arg ID: +required +takes_value "Identifer to associate benchmark results with")
        )
        (@subcommand remove_errs =>
            (about: "remove errored data")
@@ -224,7 +228,7 @@ fn main_result() -> Result<i32, Error> {
            (@arg BENCHMARK: --benchmark +required +takes_value "benchmark name to remove data for")
        )
        (@subcommand test_benchmarks =>
-           (about: "test some set of benchmarks, controlled by --filter")
+           (about: "test benchmark the most recent commit")
        )
     ).get_matches();
     let benchmark_dir = PathBuf::from("collector/benchmarks");
@@ -239,8 +243,9 @@ fn main_result() -> Result<i32, Error> {
         },
     )?;
     let use_remote = matches.is_present("sync_git");
+    let allow_new_dir = matches.subcommand().0 == "bench_local";
     let out_repo = PathBuf::from(matches.value_of_os("output_repo").unwrap());
-    let mut out_repo = outrepo::Repo::open(out_repo, use_remote)?;
+    let mut out_repo = outrepo::Repo::open(out_repo, allow_new_dir, use_remote)?;
 
     let get_commits = || {
         rust_sysroot::get_commits(rust_sysroot::EPOCH_COMMIT, "master").map_err(SyncFailure::new)
@@ -252,7 +257,8 @@ fn main_result() -> Result<i32, Error> {
                 let sysroot = Sysroot::install(commit, "x86_64-unknown-linux-gnu", false, false)
                     .map_err(SyncFailure::new)?;
                 // filter out servo benchmarks as they simple take too long
-                bench_commit(commit, None, sysroot, &benchmarks, 1, Mode::Test);
+                bench_commit(None, commit, &sysroot.triple, &sysroot.rustc, &sysroot.cargo,
+                             &benchmarks, 1, Mode::Test);
             } else {
                 panic!("no commits");
             }
@@ -282,19 +288,29 @@ fn main_result() -> Result<i32, Error> {
             Ok(0)
         }
         ("bench_local", Some(sub_m)) => {
-            let commit = sub_m.value_of("COMMIT").unwrap();
-            let date = sub_m.value_of("DATE").unwrap();
+            let id = sub_m.value_of("ID").unwrap();
             let rustc = sub_m.value_of("RUSTC").unwrap();
+            let cargo = sub_m.value_of("CARGO").unwrap();
+
+            // This isn't a true representation of a commit, because `id` is an
+            // arbitrary identifier, not a commit SHA. But that's ok for local
+            // runs, because `commit` is only used when producing the output
+            // files, not for interacting with a repo.
             let commit = GitCommit {
-                sha: commit.to_string(),
-                date: DateTime::parse_from_rfc3339(date)?.with_timezone(&Utc),
+                sha: id.to_string(),
+                // Drop the nanoseconds; we don't want that level of precision.
+                date: Utc::now().with_nanosecond(0).unwrap(),
                 summary: String::new(),
             };
-            let sysroot =
-                Sysroot::with_local_rustc(&commit, rustc, "x86_64-unknown-linux-gnu", false, false)
-                    .map_err(SyncFailure::new)?;
-            let result = bench_commit(&commit, None, sysroot, &benchmarks, 3, Mode::Normal);
-            serde_json::to_writer(&mut stdout(), &result)?;
+            let rustc_path = PathBuf::from(rustc).canonicalize()?;
+            let cargo_path = PathBuf::from(cargo).canonicalize()?;
+            // We don't pass `out_repo` here. `commit` is unique because
+            // `commit.date` is unique, so there's no point even trying to load
+            // prior data.
+            let result =
+                bench_commit(None, &commit, "x86_64-unknown-linux-gnu", &rustc_path, &cargo_path,
+                             &benchmarks, 3, Mode::Normal);
+            out_repo.add_commit_data(&result)?;
             Ok(0)
         }
         ("remove_errs", Some(_)) => {

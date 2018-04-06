@@ -39,15 +39,15 @@ impl Repo {
         Ok(())
     }
 
-    pub fn open(path: PathBuf, use_remote: bool) -> Result<Self, Error> {
+    pub fn open(path: PathBuf, allow_new_dir: bool, use_remote: bool) -> Result<Self, Error> {
         let mut result = Repo {
             path: path,
             use_remote,
             retries: vec![],
         };
 
-        if !result.retries_file().exists() {
-            // try not to nuke random repositories.
+        // Don't nuke random repositories, unless specifically requested.
+        if !allow_new_dir && !result.retries_file().exists() {
             bail!("`{}` file not present", result.retries_file().display());
         }
 
