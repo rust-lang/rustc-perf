@@ -1,4 +1,4 @@
-//! Execute benchmarks in a sysroot.
+//! Execute benchmarks.
 
 use std::env;
 use std::path::{Path, PathBuf};
@@ -14,7 +14,6 @@ use tempdir::TempDir;
 use collector::{Benchmark as CollectedBenchmark, BenchmarkState, Patch, Run, Stat};
 
 use failure::{err_msg, Error, ResultExt};
-use rust_sysroot::sysroot::Sysroot;
 use serde_json;
 
 use Mode;
@@ -84,8 +83,9 @@ pub struct Benchmark {
     config: BenchmarkConfig,
 }
 
-struct CargoProcess<'sysroot> {
-    sysroot: &'sysroot Sysroot,
+struct CargoProcess<'a> {
+    rustc_path: &'a Path,
+    cargo_path: &'a Path,
     incremental: Incremental,
     nll: bool,
     build_kind: BuildKind,
@@ -98,13 +98,18 @@ struct CargoProcess<'sysroot> {
 #[derive(Copy, Clone, Debug)]
 struct Incremental(bool);
 
-impl<'sysroot> CargoProcess<'sysroot> {
+impl<'a> CargoProcess<'a> {
     fn base_command(&self, cwd: &Path, subcommand: &str) -> Command {
-        let mut cmd = self.sysroot.command("cargo");
+        let mut cmd = Command::new(Path::new("cargo"));
         cmd
-            .env("SHELL", env::var_os("SHELL").unwrap_or_default())
+            // Not all cargo invocations (e.g. `cargo clean`) need all of these
+            // env vars set, but it doesn't hurt to have them.
+            .env_clear()
+            // PATH is needed to find things like linkers used by rustc/Cargo.
+            .env("PATH", env::var("PATH").unwrap_or_default())
             .env("RUSTC", &*FAKE_RUSTC)
-            .env("RUSTC_REAL", &self.sysroot.rustc)
+            .env("RUSTC_REAL", &self.rustc_path)
+            .env("CARGO", &self.cargo_path)
             .env(
                 "CARGO_INCREMENTAL",
                 &format!("{}", self.incremental.0 as usize),
@@ -260,12 +265,14 @@ impl Benchmark {
 
     fn mk_cargo_process<'a>(
         &self,
-        sysroot: &'a Sysroot,
+        rustc_path: &'a Path,
+        cargo_path: &'a Path,
         incremental: Incremental,
         build_kind: BuildKind,
     ) -> CargoProcess<'a> {
         CargoProcess {
-            sysroot: sysroot,
+            rustc_path: rustc_path,
+            cargo_path: cargo_path,
             incremental: incremental,
             build_kind: build_kind,
             perf: true,
@@ -294,7 +301,8 @@ impl Benchmark {
     /// Run a specific benchmark on a specific commit
     pub fn run(
         &self,
-        sysroot: &Sysroot,
+        rustc_path: &Path,
+        cargo_path: &Path,
         iterations: usize,
         mode: Mode,
     ) -> Result<CollectedBenchmark, Error> {
@@ -330,10 +338,11 @@ impl Benchmark {
             );
 
             let base_build = self.make_temp_dir(&self.path)?;
-            let clean = self.mk_cargo_process(sysroot, Incremental(false), build_kind)
-                .run_rustc(base_build.path())?;
+            let clean =
+                self.mk_cargo_process(rustc_path, cargo_path, Incremental(false), build_kind)
+                    .run_rustc(base_build.path())?;
             clean_stats.push(clean);
-            self.mk_cargo_process(sysroot, Incremental(false), build_kind)
+            self.mk_cargo_process(rustc_path, cargo_path, Incremental(false), build_kind)
                 .perf(false)
                 .run_clean(base_build.path())?;
 
@@ -341,17 +350,21 @@ impl Benchmark {
                 debug!("Benchmark iteration {}/{}", i + 1, iterations);
                 let tmp_dir = self.make_temp_dir(base_build.path())?;
 
-                let clean = self.mk_cargo_process(sysroot, Incremental(false), build_kind)
+                let clean = self.mk_cargo_process(rustc_path, cargo_path, Incremental(false),
+                                                  build_kind)
                     .run_rustc(tmp_dir.path())?;
                 if self.config.nll {
-                    let nll = self.mk_cargo_process(sysroot, Incremental(false), build_kind)
+                    let nll = self.mk_cargo_process(rustc_path, cargo_path, Incremental(false),
+                                                    build_kind)
                         .nll(true)
                         .run_rustc(tmp_dir.path())?;
                     nll_stats.push(nll);
                 }
-                let incr = self.mk_cargo_process(sysroot, Incremental(true), build_kind)
+                let incr = self.mk_cargo_process(rustc_path, cargo_path, Incremental(true),
+                                                 build_kind)
                     .run_rustc(tmp_dir.path())?;
-                let incr_clean = self.mk_cargo_process(sysroot, Incremental(true), build_kind)
+                let incr_clean = self.mk_cargo_process(rustc_path, cargo_path, Incremental(true),
+                                                       build_kind)
                     .run_rustc(tmp_dir.path())?;
 
                 clean_stats.push(clean);
@@ -361,7 +374,8 @@ impl Benchmark {
                 for patch in &self.patches {
                     debug!("applying patch {}", patch.name);
                     patch.apply(tmp_dir.path()).map_err(|s| err_msg(s))?;
-                    let out = self.mk_cargo_process(sysroot, Incremental(true), build_kind)
+                    let out = self.mk_cargo_process(rustc_path, cargo_path, Incremental(true),
+                                                    build_kind)
                         .run_rustc(tmp_dir.path())?;
                     if let Some(mut entry) = incr_patched_stats.iter_mut().find(|s| &s.0 == patch) {
                         entry.1.push(out);

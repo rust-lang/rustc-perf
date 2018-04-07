@@ -1,39 +1,64 @@
 # Rust Compiler Performance Benchmarking
 
-Implements running benchmarks given a bors commit hash.
-
-## How to run
+## How to build
 
 ```
-# From repository root:
 cargo build -p collector --release
-./target/release/collector --benchmarks collector/benchmarks --output-repo $RUSTC_TIMING process
 ```
 
-$RUSTC_TIMING should point to a clone of the `https://github.com/rust-lang-nursery/rustc-timing`
-repository. Optionally, `--sync-git` can be passed to make the collector sync with the remote repo
+## Benchmarking committed builds
+
+To benchmark builds from a rustc repository:
+```
+./target/release/collector --output-repo $RUSTC_TIMING process
+```
+
+`$RUSTC_TIMING` is a path (relative or absolute) to a clone of the
+`https://github.com/rust-lang-nursery/rustc-timing` repository, in which the
+output data will be placed and committed.
+
+## Benchmarking local builds
+
+To benchmark local builds:
+```
+./target/release/collector --output-repo $OUTPUR_DIR bench_local \
+    --rustc $RUSTC --cargo $CARGO $ID
+```
+
+`$OUTPUT_DIR` is a path (relative or absolute) to a directory, in which the
+timing data will be placed.
+
+`$RUSTC` is a path (relative or absolute) to a rustc executable. For
+benchmarking purposes a stage 2 compiler is a bit better than a stage 1
+compiler, but not critical. Furthermore, some benchmarks use procedural macros,
+which require a stage 2 build.
+
+`$CARGO` is a path (relative or absolute) to a Cargo executable.
+
+`$ID` is an identifier, which will be used in the output file name and
+contents.
+
+## Benchmarking options
+
+`--sync-git` can be passed to make the collector sync with the remote repo
 before and after comitting.
 
-### Running locally
+`--filters` can be used to run a subset of the benchmarks.
 
-Follow the standard instructions above, but run like this:
+## Viewing results
 
+Once the benchmarks have been run, start the website:
 ```
-./target/release/collector --benchmarks collector/benchmarks --output-repo $RUSTC_TIMING \
-    bench_local $COMMIT_HASH $DATE $RUSTC
+./target/release/site $RUSTC_TIMING     # or $OUTPUT_DIR
 ```
+and navigate to localhost:2346 in a web browser.
 
-$RUSTC should point to the compiled rustc in stage1 or stage2, i.e.
-`./build/x86_64-unknown-linux-gnu/stage2/bin/rustc`. Stage 2 is likely a little better for
-benchmarking purposes, but not critical. The rustc binary has to be in a subdirectory of the
-`rustc-perf` root directory for the benchmark run to succeed.
+Note that all benchmark data processing happens when the website is started. If
+additional benchmark runs subsequently occur you must restart the website to
+see the data from those runs; reloading the website in the browser isn't
+enough.
 
-$DATE is a date specified in the [`RFC3339 format`](https://www.ietf.org/rfc/rfc3339.txt).
-
-Once this is done, you can run the site (`./target/release/site $RUSTC_TIMING`) and use the
-comparison page to compare the before/after runs.
-
-### @bors try builds
+## @bors try builds
 
 Alternatively, you can ping `simulacrum` on IRC to run the benchmarks on the server for a try build.
 This, today, consists of queueing `$COMMIT_HASH`, and will take around 45 minutes to a couple hours
@@ -43,7 +68,6 @@ commits to finish benchmarking.
 
 On the current benchmark server, the following command will benchmark and push results for a given
 commit (including a try auto commit).
-
 ```bash
 cd code/rustc-perf
 echo '$COMMIT_HASH' >> try
