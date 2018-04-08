@@ -86,19 +86,31 @@ pub struct Benchmark {
 struct CargoProcess<'a> {
     rustc_path: &'a Path,
     cargo_path: &'a Path,
-    incremental: Incremental,
-    nll: bool,
     build_kind: BuildKind,
+    incremental: bool,
+    nll: bool,
     perf: bool,
     manifest_path: String,
     cargo_args: Vec<String>,
     rustc_args: Vec<String>,
 }
 
-#[derive(Copy, Clone, Debug)]
-struct Incremental(bool);
-
 impl<'a> CargoProcess<'a> {
+    fn incremental(mut self, incremental: bool) -> Self {
+        self.incremental = incremental;
+        self
+    }
+
+    fn nll(mut self, nll: bool) -> Self {
+        self.nll = nll;
+        self
+    }
+
+    fn perf(mut self, perf: bool) -> Self {
+        self.perf = perf;
+        self
+    }
+
     fn base_command(&self, cwd: &Path, subcommand: &str) -> Command {
         let mut cmd = Command::new(Path::new("cargo"));
         cmd
@@ -112,7 +124,7 @@ impl<'a> CargoProcess<'a> {
             .env("CARGO", &self.cargo_path)
             .env(
                 "CARGO_INCREMENTAL",
-                &format!("{}", self.incremental.0 as usize),
+                &format!("{}", self.incremental as usize),
             )
             .env("USE_PERF", &format!("{}", self.perf as usize))
             .current_dir(cwd)
@@ -120,16 +132,6 @@ impl<'a> CargoProcess<'a> {
             .arg("--manifest-path")
             .arg(&self.manifest_path);
         cmd
-    }
-
-    fn nll(mut self, nll: bool) -> Self {
-        self.nll = nll;
-        self
-    }
-
-    fn perf(mut self, perf: bool) -> Self {
-        self.perf = perf;
-        self
     }
 
     fn get_pkgid(&self, cwd: &Path) -> String {
@@ -267,16 +269,15 @@ impl Benchmark {
         &self,
         rustc_path: &'a Path,
         cargo_path: &'a Path,
-        incremental: Incremental,
         build_kind: BuildKind,
     ) -> CargoProcess<'a> {
         CargoProcess {
             rustc_path: rustc_path,
             cargo_path: cargo_path,
-            incremental: incremental,
             build_kind: build_kind,
-            perf: true,
+            incremental: false,
             nll: false,
+            perf: true,
             manifest_path: self.config
                 .cargo_toml
                 .clone()
@@ -338,11 +339,10 @@ impl Benchmark {
             );
 
             let base_build = self.make_temp_dir(&self.path)?;
-            let clean =
-                self.mk_cargo_process(rustc_path, cargo_path, Incremental(false), build_kind)
-                    .run_rustc(base_build.path())?;
+            let clean = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
+                .run_rustc(base_build.path())?;
             clean_stats.push(clean);
-            self.mk_cargo_process(rustc_path, cargo_path, Incremental(false), build_kind)
+            self.mk_cargo_process(rustc_path, cargo_path, build_kind)
                 .perf(false)
                 .run_clean(base_build.path())?;
 
@@ -350,21 +350,19 @@ impl Benchmark {
                 debug!("Benchmark iteration {}/{}", i + 1, iterations);
                 let tmp_dir = self.make_temp_dir(base_build.path())?;
 
-                let clean = self.mk_cargo_process(rustc_path, cargo_path, Incremental(false),
-                                                  build_kind)
+                let clean = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
                     .run_rustc(tmp_dir.path())?;
                 if self.config.nll {
-                    let nll = self.mk_cargo_process(rustc_path, cargo_path, Incremental(false),
-                                                    build_kind)
+                    let nll = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
                         .nll(true)
                         .run_rustc(tmp_dir.path())?;
                     nll_stats.push(nll);
                 }
-                let incr = self.mk_cargo_process(rustc_path, cargo_path, Incremental(true),
-                                                 build_kind)
+                let incr = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
+                    .incremental(true)
                     .run_rustc(tmp_dir.path())?;
-                let incr_clean = self.mk_cargo_process(rustc_path, cargo_path, Incremental(true),
-                                                       build_kind)
+                let incr_clean = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
+                    .incremental(true)
                     .run_rustc(tmp_dir.path())?;
 
                 clean_stats.push(clean);
@@ -374,8 +372,8 @@ impl Benchmark {
                 for patch in &self.patches {
                     debug!("applying patch {}", patch.name);
                     patch.apply(tmp_dir.path()).map_err(|s| err_msg(s))?;
-                    let out = self.mk_cargo_process(rustc_path, cargo_path, Incremental(true),
-                                                    build_kind)
+                    let out = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
+                        .incremental(true)
                         .run_rustc(tmp_dir.path())?;
                     if let Some(mut entry) = incr_patched_stats.iter_mut().find(|s| &s.0 == patch) {
                         entry.1.push(out);
