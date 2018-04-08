@@ -13,7 +13,7 @@ before_install:
   - echo -1 | sudo tee /proc/sys/kernel/perf_event_paranoid
 
 env:
-  - CHECK='cargo fmt --all -- --write-mode=diff'
+  # - CHECK='cargo fmt --all -- --write-mode=diff'
   - CHECK='ci/check-benchmarks.sh'
   - CHECK='cargo check'
 
