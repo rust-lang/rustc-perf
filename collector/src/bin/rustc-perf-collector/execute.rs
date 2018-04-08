@@ -339,9 +339,9 @@ impl Benchmark {
             );
 
             let base_build = self.make_temp_dir(&self.path)?;
-            let clean = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
+            self.mk_cargo_process(rustc_path, cargo_path, build_kind)
+                .perf(false)
                 .run_rustc(base_build.path())?;
-            clean_stats.push(clean);
             self.mk_cargo_process(rustc_path, cargo_path, build_kind)
                 .perf(false)
                 .run_clean(base_build.path())?;
