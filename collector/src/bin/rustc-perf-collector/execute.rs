@@ -129,8 +129,7 @@ impl<'a> CargoProcess<'a> {
             .env("USE_PERF", &format!("{}", self.perf as usize))
             .current_dir(cwd)
             .arg(subcommand)
-            .arg("--manifest-path")
-            .arg(&self.manifest_path);
+            .arg("--manifest-path").arg(&self.manifest_path);
         cmd
     }
 
@@ -145,19 +144,13 @@ impl<'a> CargoProcess<'a> {
         package_id.trim().to_string()
     }
 
-    fn run_base_command(&self, cwd: &Path, subcommand: &str) -> Command {
-        let mut cmd = self.base_command(cwd, subcommand);
-        cmd.arg("-p").arg(self.get_pkgid(cwd));
-        if self.build_kind == BuildKind::Opt {
-            cmd.arg("--release");
-        }
-        cmd
-    }
-
     fn run_rustc(self, cwd: &Path) -> Result<Vec<Stat>, Error> {
-        let mut cmd = self.run_base_command(cwd, "rustc");
-        if self.build_kind == BuildKind::Check {
-            cmd.arg("--profile").arg("check");
+        let mut cmd = self.base_command(cwd, "rustc");
+        cmd.arg("-p").arg(self.get_pkgid(cwd));
+        match self.build_kind {
+            BuildKind::Check => { cmd.arg("--profile").arg("check"); }
+            BuildKind::Debug => {}
+            BuildKind::Opt => { cmd.arg("--release"); }
         }
         cmd.args(&self.cargo_args);
         cmd.arg("--");
@@ -189,15 +182,6 @@ impl<'a> CargoProcess<'a> {
                 }
             }
         }
-    }
-
-    fn run_clean(self, cwd: &Path) -> Result<(), Error> {
-        let mut cmd = self.run_base_command(cwd, "clean");
-
-        debug!("run_clean: {:?}", cmd);
-
-        let _output = command_output(&mut cmd)?;
-        return Ok(());
     }
 }
 
@@ -342,9 +326,6 @@ impl Benchmark {
             self.mk_cargo_process(rustc_path, cargo_path, build_kind)
                 .perf(false)
                 .run_rustc(base_build.path())?;
-            self.mk_cargo_process(rustc_path, cargo_path, build_kind)
-                .perf(false)
-                .run_clean(base_build.path())?;
 
             for i in 0..iterations {
                 debug!("Benchmark iteration {}/{}", i + 1, iterations);
