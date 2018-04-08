@@ -322,6 +322,10 @@ impl Benchmark {
                 self.name, build_kind, iterations
             );
 
+            // Build everything, including all dependent crates, in a temp dir.
+            // We do this before the iterations so that dependent crates aren't
+            // built on every iteration. A different temp dir is used for the
+            // timing builds.
             let base_build = self.make_temp_dir(&self.path)?;
             self.mk_cargo_process(rustc_path, cargo_path, build_kind)
                 .perf(false)
@@ -331,28 +335,36 @@ impl Benchmark {
                 debug!("Benchmark iteration {}/{}", i + 1, iterations);
                 let tmp_dir = self.make_temp_dir(base_build.path())?;
 
+                // A full non-incremental build.
                 let clean = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
                     .run_rustc(tmp_dir.path())?;
+                clean_stats.push(clean);
+
                 if self.config.nll {
+                    // A full non-incremental build with nll enabled.
                     let nll = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
                         .nll(true)
                         .run_rustc(tmp_dir.path())?;
                     nll_stats.push(nll);
                 }
+
+                // An incremental build running from scratch (slowest case).
                 let incr = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
                     .incremental(true)
                     .run_rustc(tmp_dir.path())?;
+                incr_stats.push(incr);
+
+                // An incremental build with no changes (fastest case).
                 let incr_clean = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
                     .incremental(true)
                     .run_rustc(tmp_dir.path())?;
-
-                clean_stats.push(clean);
-                incr_stats.push(incr);
                 incr_clean_stats.push(incr_clean);
 
                 for patch in &self.patches {
                     debug!("applying patch {}", patch.name);
                     patch.apply(tmp_dir.path()).map_err(|s| err_msg(s))?;
+
+                    // An incremental build with some changes (realistic case).
                     let out = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
                         .incremental(true)
                         .run_rustc(tmp_dir.path())?;
@@ -360,27 +372,17 @@ impl Benchmark {
                         entry.1.push(out);
                         continue;
                     }
-
                     incr_patched_stats.push((patch.clone(), vec![out]));
                 }
             }
 
-            ret.runs
-                .push(process_stats(build_kind, BenchmarkState::Clean, clean_stats));
+            ret.runs.push(process_stats(build_kind, BenchmarkState::Clean, clean_stats));
             if self.config.nll {
-                ret.runs
-                    .push(process_stats(build_kind, BenchmarkState::Nll, nll_stats));
+                ret.runs.push(process_stats(build_kind, BenchmarkState::Nll, nll_stats));
             }
-            ret.runs.push(process_stats(
-                build_kind,
-                BenchmarkState::IncrementalStart,
-                incr_stats,
-            ));
-            ret.runs.push(process_stats(
-                build_kind,
-                BenchmarkState::IncrementalClean,
-                incr_clean_stats,
-            ));
+            ret.runs.push(process_stats(build_kind, BenchmarkState::IncrementalStart, incr_stats));
+            ret.runs.push(process_stats(build_kind, BenchmarkState::IncrementalClean,
+                                        incr_clean_stats));
 
             for (patch, results) in incr_patched_stats {
                 ret.runs.push(process_stats(
