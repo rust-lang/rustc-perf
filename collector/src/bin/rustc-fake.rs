@@ -13,24 +13,77 @@ fn main() {
         let wrapper = args.remove(pos);
         let wrapper = wrapper.to_str().unwrap();
 
-        assert!(wrapper == "perf-stat");
-
-        let mut cmd = Command::new("perf");
-        cmd.arg("stat")
-            .arg("-x;")
-            .arg("-e")
-            .arg("instructions:u,cycles:u,task-clock,cpu-clock,faults")
-            .arg("--log-fd")
-            .arg("1")
-            .arg(&rustc)
-            .args(&args);
-
         raise_priority();
-        let start = Instant::now();
-        assert!(cmd.status().expect("failed to spawn").success());
-        let dur = start.elapsed();
-        print_memory();
-        print_time(dur);
+
+        match wrapper {
+            "perf-stat" => {
+                let mut cmd = Command::new("perf");
+                let has_perf = cmd.output().is_ok();
+                assert!(has_perf);
+                cmd.arg("stat")
+                    .arg("-x;")
+                    .arg("-e")
+                    .arg("instructions:u,cycles:u,task-clock,cpu-clock,faults")
+                    .arg("--log-fd")
+                    .arg("1")
+                    .arg(&rustc)
+                    .args(&args);
+
+                let start = Instant::now();
+                assert!(cmd.status().expect("failed to spawn").success());
+                let dur = start.elapsed();
+                print_memory();
+                print_time(dur);
+            }
+
+            "perf-record" => {
+                let mut cmd = Command::new("perf");
+                let has_perf = cmd.output().is_ok();
+                assert!(has_perf);
+                cmd.arg("record")
+                    .arg("--call-graph=dwarf")  // njn: best?
+                    .arg("--output=perf")
+                    .arg(&rustc)
+                    .args(&args);
+
+                assert!(cmd.status().expect("failed to spawn").success());
+            }
+
+            "cachegrind" => {
+                let mut cmd = Command::new("valgrind");
+                let has_valgrind = cmd.output().is_ok();
+                assert!(has_valgrind);
+
+                // With --cache-sim=no and --branch-sim=no, Cachegrind just
+                // collects instruction counts.
+                cmd.arg("--tool=cachegrind")
+                    .arg("--cache-sim=no")
+                    .arg("--branch-sim=no")
+                    .arg("--cachegrind-out-file=cgout")
+                    .arg(&rustc)
+                    .args(&args);
+
+                assert!(cmd.status().expect("failed to spawn").success());
+            }
+
+            "dhat" => {
+                let mut cmd = Command::new("valgrind");
+                let has_valgrind = cmd.output().is_ok();
+                assert!(has_valgrind);
+                cmd.arg("--tool=exp-dhat")
+                    .arg("--show-top-n=500")
+                    .arg("--num-callers=4")
+                    .arg("--sort-by=tot-blocks-allocd")
+                    .arg(&rustc)
+                    .args(&args);
+
+                assert!(cmd.status().expect("failed to spawn").success());
+            }
+
+            _ => {
+                panic!("unknown wrapper: {}", wrapper);
+            }
+        }
 
     } else {
         let mut cmd = Command::new(&rustc);
