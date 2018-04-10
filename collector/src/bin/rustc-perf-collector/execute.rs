@@ -126,7 +126,6 @@ impl<'a> CargoProcess<'a> {
                 "CARGO_INCREMENTAL",
                 &format!("{}", self.incremental as usize),
             )
-            .env("USE_PERF", &format!("{}", self.perf as usize))
             .current_dir(cwd)
             .arg(subcommand)
             .arg("--manifest-path").arg(&self.manifest_path);
@@ -157,18 +156,26 @@ impl<'a> CargoProcess<'a> {
         if self.nll {
             cmd.arg("-Znll");
         }
-        // -is-final-crate is not a valid rustc arg. But rustc-fake recognizes
-        // it, uses it as an indicator that the final crate is being compiled
-        // -- because `cargo rustc` only passes arguments in this position in
-        // that case -- and then strips it out before invoking the real rustc.
-        cmd.arg("-is-final-crate");
-        cmd.args(&self.rustc_args);
+        // --wrap-rustc-with is not a valid rustc flag. But rustc-fake
+        // recognizes it, strips it (and its argument) out, and uses it as an
+        // indicator that the rustc invocation should be profiled. This works
+        // out nicely because `cargo rustc` only passes arguments after '--'
+        // onto rustc for the final crate, which is exactly the crate for which
+        // we want to wrap rustc.
+        if self.perf {
+            cmd.arg("--wrap-rustc-with");
+            cmd.arg("perf-stat");
+            cmd.args(&self.rustc_args);
+        }
 
         debug!("run_rustc: {:?}", cmd);
 
         loop {
             touch_all(&cwd)?;
             let output = command_output(&mut cmd)?;
+            if !self.perf {
+                return Ok(vec![]);
+            }
             match process_output(output) {
                 Ok(stats) => return Ok(stats),
                 Err(DeserializeStatError::NoOutput(output)) => {
