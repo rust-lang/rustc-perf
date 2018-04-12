@@ -116,7 +116,7 @@ fn profile(
     for (i, benchmark) in benchmarks.iter().enumerate() {
         let result = benchmark.profile(profiler, out_dir, &rustc_path, &cargo_path, &id);
         if let Err(ref s) = result {
-            info!("failed to profile {} with {:?}, recorded: {}", benchmark.name, profiler, s);
+            info!("failed to profile {} with {:?}, recorded: {:?}", benchmark.name, profiler, s);
         }
         info!("{} benchmarks left", benchmarks.len() - i - 1);
     }
@@ -289,7 +289,9 @@ fn main_result() -> Result<i32, Error> {
     let use_remote = matches.is_present("sync_git");
 
     let get_out_dir = || {
-        PathBuf::from(matches.value_of_os("output_repo").unwrap())
+        let path = PathBuf::from(matches.value_of_os("output_repo").unwrap());
+        fs::create_dir_all(&path).unwrap();
+        path
     };
 
     let get_out_repo = |allow_new_dir| {
