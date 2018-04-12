@@ -4,38 +4,90 @@ use std::time::{Duration, Instant};
 
 fn main() {
     let mut args = env::args_os().skip(1).collect::<Vec<_>>();
-
     let rustc = env::var_os("RUSTC_REAL").unwrap();
-    let mut cmd = Command::new(&rustc);
 
-    // -is-final-crate is a special arg indicating that this is the final crate
-    // being compiled, i.e. we should measure it. We strip it out so the real
-    // rustc doesn't see it.
-    let is_final_crate = args.iter().position(|arg| arg == "-is-final-crate");
-    if let Some(pos) = is_final_crate {
+    if let Some(pos) = args.iter().position(|arg| arg == "--wrap-rustc-with") {
+        // Strip out the flag and its argument, and run rustc under the wrapper
+        // program named by the argument.
         args.remove(pos);
-    }
+        let wrapper = args.remove(pos);
+        let wrapper = wrapper.to_str().unwrap();
 
-    if env::var_os("USE_PERF").is_some() && is_final_crate.is_some() {
-        cmd = Command::new("perf");
-        cmd.arg("stat")
-            .arg("-x;")
-            .arg("-e")
-            .arg("instructions:u,cycles:u,task-clock,cpu-clock,faults")
-            .arg("--log-fd")
-            .arg("1")
-            .arg(&rustc);
-    }
-    cmd.args(&args);
-
-    if is_final_crate.is_some() {
         raise_priority();
-        let start = Instant::now();
-        assert!(cmd.status().expect("failed to spawn").success());
-        let dur = start.elapsed();
-        print_memory();
-        print_time(dur);
+
+        match wrapper {
+            "perf-stat" => {
+                let mut cmd = Command::new("perf");
+                let has_perf = cmd.output().is_ok();
+                assert!(has_perf);
+                cmd.arg("stat")
+                    .arg("-x;")
+                    .arg("-e")
+                    .arg("instructions:u,cycles:u,task-clock,cpu-clock,faults")
+                    .arg("--log-fd")
+                    .arg("1")
+                    .arg(&rustc)
+                    .args(&args);
+
+                let start = Instant::now();
+                assert!(cmd.status().expect("failed to spawn").success());
+                let dur = start.elapsed();
+                print_memory();
+                print_time(dur);
+            }
+
+            "perf-record" => {
+                let mut cmd = Command::new("perf");
+                let has_perf = cmd.output().is_ok();
+                assert!(has_perf);
+                cmd.arg("record")
+                    .arg("--call-graph=dwarf")  // njn: best?
+                    .arg("--output=perf")
+                    .arg(&rustc)
+                    .args(&args);
+
+                assert!(cmd.status().expect("failed to spawn").success());
+            }
+
+            "cachegrind" => {
+                let mut cmd = Command::new("valgrind");
+                let has_valgrind = cmd.output().is_ok();
+                assert!(has_valgrind);
+
+                // With --cache-sim=no and --branch-sim=no, Cachegrind just
+                // collects instruction counts.
+                cmd.arg("--tool=cachegrind")
+                    .arg("--cache-sim=no")
+                    .arg("--branch-sim=no")
+                    .arg("--cachegrind-out-file=cgout")
+                    .arg(&rustc)
+                    .args(&args);
+
+                assert!(cmd.status().expect("failed to spawn").success());
+            }
+
+            "dhat" => {
+                let mut cmd = Command::new("valgrind");
+                let has_valgrind = cmd.output().is_ok();
+                assert!(has_valgrind);
+                cmd.arg("--tool=exp-dhat")
+                    .arg("--show-top-n=500")
+                    .arg("--num-callers=4")
+                    .arg("--sort-by=tot-blocks-allocd")
+                    .arg(&rustc)
+                    .args(&args);
+
+                assert!(cmd.status().expect("failed to spawn").success());
+            }
+
+            _ => {
+                panic!("unknown wrapper: {}", wrapper);
+            }
+        }
+
     } else {
+        let mut cmd = Command::new(&rustc);
+        cmd.args(&args);
         exec(&mut cmd);
     }
 }

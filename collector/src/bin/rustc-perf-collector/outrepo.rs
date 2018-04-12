@@ -223,7 +223,7 @@ impl Repo {
         self.path.join("retries")
     }
 
-    pub fn times(&self) -> PathBuf {
+    fn times(&self) -> PathBuf {
         self.path.join("times")
     }
 }

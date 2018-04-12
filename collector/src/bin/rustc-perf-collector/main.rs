@@ -37,7 +37,7 @@ use rust_sysroot::sysroot::Sysroot;
 mod execute;
 mod outrepo;
 
-use execute::Benchmark;
+use execute::{Benchmark, Profiler};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Mode {
@@ -75,10 +75,10 @@ fn bench_commit(
             continue;
         }
 
-        let result = benchmark.run(rustc_path, cargo_path, iterations, mode);
+        let result = benchmark.measure(rustc_path, cargo_path, iterations, mode);
 
         if let Err(ref s) = result {
-            info!("failure to benchmark {}, recorded: {}", benchmark.name, s);
+            info!("failed to benchmark {}, recorded: {}", benchmark.name, s);
         }
 
         results.insert(
@@ -96,6 +96,31 @@ fn bench_commit(
         triple: triple.to_string(),
         benchmarks: results,
     }
+}
+
+fn profile(
+    profiler: Profiler,
+    matches: &clap::ArgMatches,
+    out_dir: &Path,
+    benchmarks: &[Benchmark],
+) -> Result<i32, Error> {
+    info!("Profile with {:?}", profiler);
+
+    let rustc = matches.value_of("RUSTC").unwrap();
+    let cargo = matches.value_of("CARGO").unwrap();
+    let id = matches.value_of("ID").unwrap();
+
+    let rustc_path = PathBuf::from(rustc).canonicalize()?;
+    let cargo_path = PathBuf::from(cargo).canonicalize()?;
+
+    for (i, benchmark) in benchmarks.iter().enumerate() {
+        let result = benchmark.profile(profiler, out_dir, &rustc_path, &cargo_path, &id);
+        if let Err(ref s) = result {
+            info!("failed to profile {} with {:?}, recorded: {}", benchmark.name, profiler, s);
+        }
+        info!("{} benchmarks left", benchmarks.len() - i - 1);
+    }
+    Ok(0)
 }
 
 fn get_benchmarks(
@@ -218,7 +243,25 @@ fn main_result() -> Result<i32, Error> {
            (about: "benchmark a local rustc")
            (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
            (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
-           (@arg ID: +required +takes_value "Identifer to associate benchmark results with")
+           (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
+       )
+       (@subcommand profile_perf_record =>
+           (about: "profile a local rustc with perf-record")
+           (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
+           (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
+           (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
+       )
+       (@subcommand profile_cachegrind =>
+           (about: "profile a local rustc with Cachegrind")
+           (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
+           (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
+           (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
+       )
+       (@subcommand profile_dhat =>
+           (about: "profile a local rustc with DHAT")
+           (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
+           (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
+           (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
        )
        (@subcommand remove_errs =>
            (about: "remove errored data")
@@ -231,6 +274,7 @@ fn main_result() -> Result<i32, Error> {
            (about: "test benchmark the most recent commit")
        )
     ).get_matches();
+
     let benchmark_dir = PathBuf::from("collector/benchmarks");
     let filter = matches.value_of("filter");
     let benchmarks = get_benchmarks(
@@ -243,9 +287,14 @@ fn main_result() -> Result<i32, Error> {
         },
     )?;
     let use_remote = matches.is_present("sync_git");
-    let allow_new_dir = matches.subcommand().0 == "bench_local";
-    let out_repo = PathBuf::from(matches.value_of_os("output_repo").unwrap());
-    let mut out_repo = outrepo::Repo::open(out_repo, allow_new_dir, use_remote)?;
+
+    let get_out_dir = || {
+        PathBuf::from(matches.value_of_os("output_repo").unwrap())
+    };
+
+    let get_out_repo = |allow_new_dir| {
+        outrepo::Repo::open(get_out_dir(), allow_new_dir, use_remote)
+    };
 
     let get_commits = || {
         rust_sysroot::get_commits(rust_sysroot::EPOCH_COMMIT, "master").map_err(SyncFailure::new)
@@ -266,6 +315,7 @@ fn main_result() -> Result<i32, Error> {
         }
         ("process", Some(_)) => {
             let commits = get_commits()?;
+            let mut out_repo = get_out_repo(false)?;
             process_retries(&commits, &mut out_repo, &benchmarks)?;
             process_commits(&commits, &out_repo, &benchmarks)?;
             Ok(0)
@@ -284,13 +334,13 @@ fn main_result() -> Result<i32, Error> {
                         summary: String::new(),
                     }
                 });
-            process_commit(&out_repo, &commit, &benchmarks)?;
+            process_commit(&get_out_repo(false)?, &commit, &benchmarks)?;
             Ok(0)
         }
         ("bench_local", Some(sub_m)) => {
-            let id = sub_m.value_of("ID").unwrap();
             let rustc = sub_m.value_of("RUSTC").unwrap();
             let cargo = sub_m.value_of("CARGO").unwrap();
+            let id = sub_m.value_of("ID").unwrap();
 
             // This isn't a true representation of a commit, because `id` is an
             // arbitrary identifier, not a commit SHA. But that's ok for local
@@ -310,11 +360,21 @@ fn main_result() -> Result<i32, Error> {
             let result =
                 bench_commit(None, &commit, "x86_64-unknown-linux-gnu", &rustc_path, &cargo_path,
                              &benchmarks, 3, Mode::Normal);
-            out_repo.add_commit_data(&result)?;
+            get_out_repo(true)?.add_commit_data(&result)?;
             Ok(0)
+        }
+        ("profile_perf_record", Some(sub_m)) => {
+            profile(Profiler::PerfRecord, sub_m, &get_out_dir(), &benchmarks)
+        }
+        ("profile_cachegrind", Some(sub_m)) => {
+            profile(Profiler::Cachegrind, sub_m, &get_out_dir(), &benchmarks)
+        }
+        ("profile_dhat", Some(sub_m)) => {
+            profile(Profiler::DHAT, sub_m, &get_out_dir(), &benchmarks)
         }
         ("remove_errs", Some(_)) => {
             for commit in &get_commits()? {
+                let out_repo = get_out_repo(false)?;
                 if let Ok(mut data) = out_repo.load_commit_data(&commit, "x86_64-unknown-linux-gnu")
                 {
                     let benchmarks = data.benchmarks
@@ -329,6 +389,7 @@ fn main_result() -> Result<i32, Error> {
         }
         ("remove_benchmark", Some(sub_m)) => {
             let benchmark = sub_m.value_of("BENCHMARK").unwrap();
+            let out_repo = get_out_repo(false)?;
             for commit in &get_commits()? {
                 if let Ok(mut data) = out_repo.load_commit_data(&commit, "x86_64-unknown-linux-gnu")
                 {

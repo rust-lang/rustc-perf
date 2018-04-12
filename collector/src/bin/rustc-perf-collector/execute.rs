@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::{self, Command};
 use std::str;
 use std::f64;
+use std::io::Write;
 use std::fs::{self, File};
 use std::collections::{HashMap, HashSet};
 use std::cmp;
@@ -83,19 +84,50 @@ pub struct Benchmark {
     config: BenchmarkConfig,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum BuildKind {
+    Check,
+    Debug,
+    Opt
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Profiler {
+    PerfStat,
+    PerfRecord,
+    Cachegrind,
+    DHAT,
+}
+
+impl Profiler {
+    fn name(&self) -> &'static str {
+        match self {
+            Profiler::PerfStat => "perf-stat",
+            Profiler::PerfRecord => "perf-record",
+            Profiler::Cachegrind => "cachegrind",
+            Profiler::DHAT => "dhat",
+        }
+    }
+}
+
 struct CargoProcess<'a> {
     rustc_path: &'a Path,
     cargo_path: &'a Path,
     build_kind: BuildKind,
+    profiler: Option<Profiler>,
     incremental: bool,
     nll: bool,
-    perf: bool,
     manifest_path: String,
     cargo_args: Vec<String>,
     rustc_args: Vec<String>,
 }
 
 impl<'a> CargoProcess<'a> {
+    fn profiler(mut self, profiler: Profiler) -> Self {
+        self.profiler = Some(profiler);
+        self
+    }
+
     fn incremental(mut self, incremental: bool) -> Self {
         self.incremental = incremental;
         self
@@ -103,11 +135,6 @@ impl<'a> CargoProcess<'a> {
 
     fn nll(mut self, nll: bool) -> Self {
         self.nll = nll;
-        self
-    }
-
-    fn perf(mut self, perf: bool) -> Self {
-        self.perf = perf;
         self
     }
 
@@ -126,7 +153,6 @@ impl<'a> CargoProcess<'a> {
                 "CARGO_INCREMENTAL",
                 &format!("{}", self.incremental as usize),
             )
-            .env("USE_PERF", &format!("{}", self.perf as usize))
             .current_dir(cwd)
             .arg(subcommand)
             .arg("--manifest-path").arg(&self.manifest_path);
@@ -144,7 +170,7 @@ impl<'a> CargoProcess<'a> {
         package_id.trim().to_string()
     }
 
-    fn run_rustc(self, cwd: &Path) -> Result<Vec<Stat>, Error> {
+    fn run_rustc(&self, cwd: &Path) -> Result<process::Output, Error> {
         let mut cmd = self.base_command(cwd, "rustc");
         cmd.arg("-p").arg(self.get_pkgid(cwd));
         match self.build_kind {
@@ -157,19 +183,30 @@ impl<'a> CargoProcess<'a> {
         if self.nll {
             cmd.arg("-Znll");
         }
-        // -is-final-crate is not a valid rustc arg. But rustc-fake recognizes
-        // it, uses it as an indicator that the final crate is being compiled
-        // -- because `cargo rustc` only passes arguments in this position in
-        // that case -- and then strips it out before invoking the real rustc.
-        cmd.arg("-is-final-crate");
-        cmd.args(&self.rustc_args);
+        // --wrap-rustc-with is not a valid rustc flag. But rustc-fake
+        // recognizes it, strips it (and its argument) out, and uses it as an
+        // indicator that the rustc invocation should be profiled. This works
+        // out nicely because `cargo rustc` only passes arguments after '--'
+        // onto rustc for the final crate, which is exactly the crate for which
+        // we want to wrap rustc.
+        if let Some(profiler) = self.profiler {
+            cmd.arg("--wrap-rustc-with");
+            cmd.arg(profiler.name());
+            cmd.args(&self.rustc_args);
+        }
 
-        debug!("run_rustc: {:?}", cmd);
+        debug!("{:?}", cmd);
+
+        touch_all(&cwd)?;
+        command_output(&mut cmd)
+    }
+
+    fn run_rustc_and_process_perf_stat_output(&self, cwd: &Path) -> Result<Vec<Stat>, Error> {
+        assert!(self.profiler == Some(Profiler::PerfStat));
 
         loop {
-            touch_all(&cwd)?;
-            let output = command_output(&mut cmd)?;
-            match process_output(output) {
+            let output = self.run_rustc(cwd)?;
+            match process_perf_stat_output(output) {
                 Ok(stats) => return Ok(stats),
                 Err(DeserializeStatError::NoOutput(output)) => {
                     warn!(
@@ -178,18 +215,11 @@ impl<'a> CargoProcess<'a> {
                     );
                 }
                 Err(e @ DeserializeStatError::ParseError { .. }) => {
-                    panic!("process_output failed: {:?}", e);
+                    panic!("process_perf_stat_output failed: {:?}", e);
                 }
             }
         }
     }
-}
-
-#[derive(Debug, PartialEq, Clone, Copy)]
-enum BuildKind {
-    Check,
-    Debug,
-    Opt
 }
 
 lazy_static! {
@@ -238,7 +268,7 @@ impl Benchmark {
     }
 
     fn make_temp_dir(&self, base: &Path) -> Result<TempDir, Error> {
-        let tmp_dir = TempDir::new(&format!("rustc-benchmark-{}", self.name))?;
+        let tmp_dir = TempDir::new(&format!("rustc-perf-{}", self.name))?;
         let mut cmd = Command::new("cp");
         cmd.arg("-r")
             .arg("-T")
@@ -259,9 +289,9 @@ impl Benchmark {
             rustc_path: rustc_path,
             cargo_path: cargo_path,
             build_kind: build_kind,
+            profiler: None,
             incremental: false,
             nll: false,
-            perf: true,
             manifest_path: self.config
                 .cargo_toml
                 .clone()
@@ -283,8 +313,8 @@ impl Benchmark {
         }
     }
 
-    /// Run a specific benchmark on a specific commit
-    pub fn run(
+    /// Run a specific benchmark under perf-stat.
+    pub fn measure(
         &self,
         rustc_path: &Path,
         cargo_path: &Path,
@@ -328,7 +358,6 @@ impl Benchmark {
             // timing builds.
             let prep_dir = self.make_temp_dir(&self.path)?;
             self.mk_cargo_process(rustc_path, cargo_path, build_kind)
-                .perf(false)
                 .run_rustc(prep_dir.path())?;
 
             for i in 0..iterations {
@@ -337,27 +366,31 @@ impl Benchmark {
 
                 // A full non-incremental build.
                 let clean = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
-                    .run_rustc(timing_dir.path())?;
+                    .profiler(Profiler::PerfStat)
+                    .run_rustc_and_process_perf_stat_output(timing_dir.path())?;
                 clean_stats.push(clean);
 
                 if self.config.nll {
                     // A full non-incremental build with nll enabled.
                     let nll = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
+                        .profiler(Profiler::PerfStat)
                         .nll(true)
-                        .run_rustc(timing_dir.path())?;
+                        .run_rustc_and_process_perf_stat_output(timing_dir.path())?;
                     nll_stats.push(nll);
                 }
 
                 // An incremental build running from scratch (slowest case).
                 let incr = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
+                    .profiler(Profiler::PerfStat)
                     .incremental(true)
-                    .run_rustc(timing_dir.path())?;
+                    .run_rustc_and_process_perf_stat_output(timing_dir.path())?;
                 incr_stats.push(incr);
 
                 // An incremental build with no changes (fastest case).
                 let incr_clean = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
+                    .profiler(Profiler::PerfStat)
                     .incremental(true)
-                    .run_rustc(timing_dir.path())?;
+                    .run_rustc_and_process_perf_stat_output(timing_dir.path())?;
                 incr_clean_stats.push(incr_clean);
 
                 for patch in &self.patches {
@@ -366,8 +399,9 @@ impl Benchmark {
 
                     // An incremental build with some changes (realistic case).
                     let out = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
+                        .profiler(Profiler::PerfStat)
                         .incremental(true)
-                        .run_rustc(timing_dir.path())?;
+                        .run_rustc_and_process_perf_stat_output(timing_dir.path())?;
                     if let Some(mut entry) = incr_patched_stats.iter_mut().find(|s| &s.0 == patch) {
                         entry.1.push(out);
                         continue;
@@ -395,6 +429,103 @@ impl Benchmark {
 
         Ok(ret)
     }
+
+    /// Run a specific benchmark under a profiler.
+    pub fn profile(
+        &self,
+        profiler: Profiler,
+        output_dir: &Path,
+        rustc_path: &Path,
+        cargo_path: &Path,
+        id: &str,
+    ) -> Result<(), Error> {
+        if self.config.disabled {
+            eprintln!("skipping {}: disabled", self.name);
+            bail!("disabled benchmark");
+        }
+
+        // XXX: Currently we profile a single "clean" (from scratch),
+        // non-incremental, Debug build. This may change in the future.
+
+        let build_kinds = vec![BuildKind::Debug];
+
+        for build_kind in build_kinds {
+            info!("Profiling {} with build kind: {:?}", self.name, build_kind);
+
+            // Build everything, including all dependent crates, in a temp dir.
+            let prep_dir = self.make_temp_dir(&self.path)?;
+            self.mk_cargo_process(rustc_path, cargo_path, build_kind)
+                .run_rustc(prep_dir.path())?;
+
+            let timing_dir = self.make_temp_dir(prep_dir.path())?;
+
+            // A full non-incremental build.
+            let output = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
+                .profiler(profiler)
+                .run_rustc(timing_dir.path())?;
+
+            // Produce a name of the form $PREFIX-$ID-$BENCHMARK.
+            let out_file = |prefix: &str| -> String {
+                format!("{}-{}-{}", prefix, id, &self.name)
+            };
+
+            // Combine a dir and a file.
+            let filepath = |dir: &Path, file: &str| {
+                let mut path = dir.to_path_buf();
+                path.push(file);
+                path
+            };
+
+            match profiler {
+                Profiler::PerfStat => {
+                    panic!("unexpected profiler");
+                }
+
+                // perf-record produces (via rustc-fake) a data file called
+                // 'perf'. We copy it from the temp dir to the output dir,
+                // giving it a new name in the process.
+                Profiler::PerfRecord => {
+                    let tmp_perf_file = filepath(timing_dir.as_ref(), "perf");
+                    let perf_file = filepath(output_dir, &out_file("perf"));
+
+                    fs::copy(&tmp_perf_file, &perf_file)?;
+                }
+
+                // Cachegrind produces (via rustc-fake) a data file called
+                // 'cgout'. We copy it from the temp dir to the output dir,
+                // giving it a new name in the process, and then post-process
+                // it to produce another data file in the output dir.
+                Profiler::Cachegrind => {
+                    let tmp_cgout_file = filepath(timing_dir.as_ref(), "cgout");
+                    let cgout_file = filepath(output_dir, &out_file("cgout"));
+                    let cgann_file = filepath(output_dir, &out_file("cgann"));
+
+                    fs::copy(&tmp_cgout_file, &cgout_file)?;
+
+                    let mut cg_annotate_cmd = Command::new("cg_annotate");
+                    cg_annotate_cmd
+                        .arg("--auto=yes")
+                        .arg(&cgout_file);
+                    let output = cg_annotate_cmd.output()?;
+
+                    let mut f = File::create(cgann_file)?;
+                    f.write_all(&output.stdout)?;
+                    f.flush()?;
+                }
+
+                // DHAT writes its output to stderr. We copy that output into a
+                // file in the output dir.
+                Profiler::DHAT => {
+                    let dhat_file = filepath(output_dir, &out_file("dhat"));
+
+                    let mut f = File::create(dhat_file)?;
+                    f.write_all(&output.stderr)?;
+                    f.flush()?;
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Fail, PartialEq, Eq, Debug)]
@@ -405,7 +536,7 @@ enum DeserializeStatError {
     ParseError(String, #[fail(cause)] ::std::num::ParseFloatError),
 }
 
-fn process_output(output: process::Output) -> Result<Vec<Stat>, DeserializeStatError> {
+fn process_perf_stat_output(output: process::Output) -> Result<Vec<Stat>, DeserializeStatError> {
     let stdout = String::from_utf8(output.stdout.clone()).expect("utf8 output");
     let mut stats = Vec::new();
 
