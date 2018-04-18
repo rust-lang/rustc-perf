@@ -43,7 +43,7 @@
     function add_datum_fields(datum) {
         let html = "";
         if (datum) {
-            html += "<td>" + datum.toFixed(2) + "</td>";
+            html += "<td>" + datum.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + "</td>";
         } else {
             html += "<td>-</td>";
         }
