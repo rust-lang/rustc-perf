@@ -245,6 +245,12 @@ fn main_result() -> Result<i32, Error> {
            (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
            (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
        )
+       (@subcommand profile_time_passes =>
+           (about: "profile a local rustc with -Ztime-passes")
+           (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
+           (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
+           (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
+       )
        (@subcommand profile_perf_record =>
            (about: "profile a local rustc with perf-record")
            (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
@@ -376,6 +382,9 @@ fn main_result() -> Result<i32, Error> {
                              &benchmarks, 1, Mode::Normal);
             get_out_repo(true)?.add_commit_data(&result)?;
             Ok(0)
+        }
+        ("profile_time_passes", Some(sub_m)) => {
+            profile(Profiler::TimePasses, sub_m, &get_out_dir(), &benchmarks)
         }
         ("profile_perf_record", Some(sub_m)) => {
             profile(Profiler::PerfRecord, sub_m, &get_out_dir(), &benchmarks)

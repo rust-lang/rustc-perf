@@ -36,6 +36,14 @@ fn main() {
                 print_time(dur);
             }
 
+            "time-passes" => {
+                let mut cmd = Command::new(&rustc);
+                cmd.arg("-Ztime-passes")
+                    .args(&args);
+
+                assert!(cmd.status().expect("failed to spawn").success());
+            }
+
             "perf-record" => {
                 let mut cmd = Command::new("perf");
                 let has_perf = cmd.output().is_ok();
