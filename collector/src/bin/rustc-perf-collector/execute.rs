@@ -144,8 +144,10 @@ impl<'a> CargoProcess<'a> {
             // Not all cargo invocations (e.g. `cargo clean`) need all of these
             // env vars set, but it doesn't hurt to have them.
             .env_clear()
+            // SHELL is needed for some benchmarks' build scripts.
+            .env("SHELL", env::var_os("SHELL").unwrap_or_default())
             // PATH is needed to find things like linkers used by rustc/Cargo.
-            .env("PATH", env::var("PATH").unwrap_or_default())
+            .env("PATH", env::var_os("PATH").unwrap_or_default())
             .env("RUSTC", &*FAKE_RUSTC)
             .env("RUSTC_REAL", &self.rustc_path)
             .env("CARGO", &self.cargo_path)
