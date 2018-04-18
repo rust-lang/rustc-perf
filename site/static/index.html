@@ -138,8 +138,9 @@
                         let commit = this.point.commit.substr(0, 10);
                         let y_axis = crate_name.startsWith("Summary") ? summaryYAxis : yAxis;
                         return "<b>" + date.toLocaleString() + " - " + commit + "</b>" +
-                            "<br>" + this.series.name + ": " + this.point.absolute.toFixed(2) + " " +
-                            y_axis.toLowerCase() + " (" +
+                            "<br>" + this.series.name + ": " +
+                            this.point.absolute.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) +
+                            " " + y_axis.toLowerCase() + " (" +
                             this.point.percent.toFixed(2) + "% from start)";
                     },
                 },
