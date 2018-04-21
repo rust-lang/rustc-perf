@@ -7,8 +7,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(proc_macro, iter_rfind, conservative_impl_trait)]
-
 extern crate antidote;
 extern crate chrono;
 extern crate collector;
