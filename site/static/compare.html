@@ -103,18 +103,26 @@
             let source = data.a.data[name] || data.b.data[name];
             let fields = [];
             if (source && source.length > 0) {
+                let offset_b = 0;
                 for (let i = 0; i < source.length; i++) {
                     let casename;
                     let datum_a;
                     let datum_b;
-                    if (data.a.data[name] !== undefined && data.b.data[name] !== undefined) {
+                    if (data.a.data[name] !== undefined && data.b.data[name] !== undefined &&
+                        data.a.data[name][i] !== undefined &&
+                        data.b.data[name][i + offset_b] !== undefined) {
                         let a = data.a.data[name][i];
-                        let b = data.b.data[name][i];
+                        let b = data.b.data[name][i + offset_b];
                         casename = a[0];
                         datum_a = a[2];
-                        datum_b = b[2];
+                        if (b[0] != casename) {
+                            offset_b -= 1;
+                            datum_b = null;
+                        } else {
+                            datum_b = b[2];
+                        }
                     } else if (data.a.data[name] === undefined) {
-                        let b = data.b.data[name][i];
+                        let b = data.b.data[name][i + offset_b];
                         casename = b[0];
                         datum_a = null;
                         datum_b = b[2];
