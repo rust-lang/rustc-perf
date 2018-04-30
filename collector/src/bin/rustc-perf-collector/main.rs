@@ -257,6 +257,12 @@ fn main_result() -> Result<i32, Error> {
            (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
            (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
        )
+       (@subcommand profile_callgrind =>
+           (about: "profile a local rustc with Callgrind")
+           (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
+           (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
+           (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
+       )
        (@subcommand profile_dhat =>
            (about: "profile a local rustc with DHAT")
            (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
@@ -370,6 +376,9 @@ fn main_result() -> Result<i32, Error> {
         }
         ("profile_cachegrind", Some(sub_m)) => {
             profile(Profiler::Cachegrind, sub_m, &get_out_dir(), &benchmarks)
+        }
+        ("profile_callgrind", Some(sub_m)) => {
+            profile(Profiler::Callgrind, sub_m, &get_out_dir(), &benchmarks)
         }
         ("profile_dhat", Some(sub_m)) => {
             profile(Profiler::DHAT, sub_m, &get_out_dir(), &benchmarks)
