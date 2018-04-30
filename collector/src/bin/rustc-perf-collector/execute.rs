@@ -96,6 +96,7 @@ pub enum Profiler {
     PerfStat,
     PerfRecord,
     Cachegrind,
+    Callgrind,
     DHAT,
 }
 
@@ -105,6 +106,7 @@ impl Profiler {
             Profiler::PerfStat => "perf-stat",
             Profiler::PerfRecord => "perf-record",
             Profiler::Cachegrind => "cachegrind",
+            Profiler::Callgrind => "callgrind",
             Profiler::DHAT => "dhat",
         }
     }
@@ -511,6 +513,28 @@ impl Benchmark {
                     let output = cg_annotate_cmd.output()?;
 
                     let mut f = File::create(cgann_file)?;
+                    f.write_all(&output.stdout)?;
+                    f.flush()?;
+                }
+
+                // Callgrind produces (via rustc-fake) a data file called
+                // 'clgout'. We copy it from the temp dir to the output dir,
+                // giving it a new name in the process, and then post-process
+                // it to produce another data file in the output dir.
+                Profiler::Callgrind => {
+                    let tmp_clgout_file = filepath(timing_dir.as_ref(), "clgout");
+                    let clgout_file = filepath(output_dir, &out_file("clgout"));
+                    let clgann_file = filepath(output_dir, &out_file("clgann"));
+
+                    fs::copy(&tmp_clgout_file, &clgout_file)?;
+
+                    let mut clg_annotate_cmd = Command::new("callgrind_annotate");
+                    clg_annotate_cmd
+                        .arg("--auto=yes")
+                        .arg(&clgout_file);
+                    let output = clg_annotate_cmd.output()?;
+
+                    let mut f = File::create(clgann_file)?;
                     f.write_all(&output.stdout)?;
                     f.flush()?;
                 }

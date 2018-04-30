@@ -66,6 +66,23 @@ fn main() {
                 assert!(cmd.status().expect("failed to spawn").success());
             }
 
+            "callgrind" => {
+                let mut cmd = Command::new("valgrind");
+                let has_valgrind = cmd.output().is_ok();
+                assert!(has_valgrind);
+
+                // With --cache-sim=no and --branch-sim=no, Callgrind just
+                // collects instruction counts.
+                cmd.arg("--tool=callgrind")
+                    .arg("--cache-sim=no")
+                    .arg("--branch-sim=no")
+                    .arg("--callgrind-out-file=clgout")
+                    .arg(&rustc)
+                    .args(&args);
+
+                assert!(cmd.status().expect("failed to spawn").success());
+            }
+
             "dhat" => {
                 let mut cmd = Command::new("valgrind");
                 let has_valgrind = cmd.output().is_ok();
