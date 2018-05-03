@@ -98,6 +98,7 @@ pub enum Profiler {
     Cachegrind,
     Callgrind,
     DHAT,
+    Massif,
 }
 
 impl Profiler {
@@ -108,6 +109,7 @@ impl Profiler {
             Profiler::Cachegrind => "cachegrind",
             Profiler::Callgrind => "callgrind",
             Profiler::DHAT => "dhat",
+            Profiler::Massif => "massif",
         }
     }
 }
@@ -548,6 +550,17 @@ impl Benchmark {
                     f.write_all(&output.stderr)?;
                     f.flush()?;
                 }
+
+                // Massif produces (via rustc-fake) a data file called 'msout'.
+                // We copy it from the temp dir to the output dir, giving it a
+                // new name in the process.
+                Profiler::Massif => {
+                    let tmp_msout_file = filepath(timing_dir.as_ref(), "msout");
+                    let msout_file = filepath(output_dir, &out_file("msout"));
+
+                    fs::copy(&tmp_msout_file, &msout_file)?;
+                }
+
             }
         }
         Ok(())
