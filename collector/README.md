@@ -21,7 +21,7 @@ output data will be placed and committed.
 
 To benchmark local builds:
 ```
-./target/release/collector --output-repo $OUTPUR_DIR bench_local \
+./target/release/collector --output-repo $OUTPUT_DIR bench_local \
     --rustc $RUSTC --cargo $CARGO $ID
 ```
 
@@ -41,7 +41,7 @@ contents.
 ## Benchmarking options
 
 `--sync-git` can be passed to make the collector sync with the remote repo
-before and after comitting.
+before and after committing.
 
 `--filters` can be used to run a subset of the benchmarks.
 
@@ -57,6 +57,34 @@ Note that all benchmark data processing happens when the website is started. If
 additional benchmark runs subsequently occur you must restart the website to
 see the data from those runs; reloading the website in the browser isn't
 enough.
+
+## Profiling local builds
+
+To profile local builds:
+```
+./target/release/collector --output-repo $OUTPUT_DIR $PROFILE_CMD \
+    --rustc $RUSTC --cargo $CARGO $ID
+```
+`$PROFILE_CMD` is one of the following.
+- `profile_perf_record`: Profile with `perf-record`. Output is written to
+  files with a `perf` prefix. Those files can be read with `perf-report` and
+  other similar `perf` commands.
+- `profile_cachegrind`: Profile with Cachegrind. Raw output is written to
+  files with a `cgout` prefix; human-readable output is written to files with a
+  `cgann` prefix.
+- `profile_callgrind`: Profile with Callgrind. Raw output is written to files
+  with a `clgout` prefix; human-readable output is written to files with a
+  `clgann` prefix.
+- `profile_dhat`: Profile with DHAT. This may require a rustc configured with
+  `use-jemalloc = false` to work well. Output is written to files with a `dhat`
+  prefix.
+- `profile_massif`: Profile with Massif. This may require a rustc configured
+  with `use-jemalloc = false` to work well. Raw output is written to files with
+  a `msout` prefix. Those files can be processed with `ms_print` or viewed with
+  `massif-visualizer`; the latter is recommended, though it sometimes fails to
+  read output files that `ms_print` can handle.
+
+The other parameters are the same as for the `bench_local` subcommand.
 
 ## @bors try builds
 
