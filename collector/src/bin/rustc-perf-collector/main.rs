@@ -269,6 +269,12 @@ fn main_result() -> Result<i32, Error> {
            (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
            (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
        )
+       (@subcommand profile_massif =>
+           (about: "profile a local rustc with Massif")
+           (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
+           (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
+           (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
+       )
        (@subcommand remove_errs =>
            (about: "remove errored data")
        )
@@ -382,6 +388,9 @@ fn main_result() -> Result<i32, Error> {
         }
         ("profile_dhat", Some(sub_m)) => {
             profile(Profiler::DHAT, sub_m, &get_out_dir(), &benchmarks)
+        }
+        ("profile_massif", Some(sub_m)) => {
+            profile(Profiler::Massif, sub_m, &get_out_dir(), &benchmarks)
         }
         ("remove_errs", Some(_)) => {
             for commit in &get_commits()? {

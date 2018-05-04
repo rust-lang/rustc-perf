@@ -97,6 +97,22 @@ fn main() {
                 assert!(cmd.status().expect("failed to spawn").success());
             }
 
+            "massif" => {
+                let mut cmd = Command::new("valgrind");
+                let has_valgrind = cmd.output().is_ok();
+                assert!(has_valgrind);
+                cmd.arg("--tool=massif")
+                    .arg("--heap-admin=0")
+                    .arg("--depth=15")
+                    .arg("--threshold=0.2")
+                    .arg("--massif-out-file=msout")
+                    .arg("--alloc-fn=__rdl_alloc")
+                    .arg(&rustc)
+                    .args(&args);
+
+                assert!(cmd.status().expect("failed to spawn").success());
+            }
+
             _ => {
                 panic!("unknown wrapper: {}", wrapper);
             }
