@@ -7,6 +7,8 @@ use std::process::Command;
 use std::str;
 use std::collections::HashSet;
 
+use std::thread;
+use std::time::{self, Instant};
 use serde_json;
 use collector::CommitData;
 use chrono::{Duration, Utc};
@@ -22,21 +24,41 @@ pub struct Repo {
 
 impl Repo {
     fn git(&self, args: &[&str]) -> Result<(), Error> {
-        let mut command = Command::new("git");
-        command.current_dir(&self.path);
-        info!("git {:?}", args);
-        command.args(args);
-        let status = command
-            .status()
-            .with_context(|_| format!("could not spawn git {:?}", args))?;
-        if !status.success() {
-            bail!(
-                "command `git {:?}` failed in `{}`",
-                args,
-                self.path.display()
-            );
+        for iteration in 0..5 {
+            let mut command = Command::new("git");
+            command.current_dir(&self.path);
+            info!("[{}/5]: git {:?}", iteration, args);
+            command.args(args);
+            let mut child = command
+                .spawn()
+                .with_context(|_| format!("could not spawn git {:?}", args))?;
+            let start_time = Instant::now();
+            loop {
+                if start_time.elapsed().as_secs() > 3 {
+                    warn!("killing git command -- timed out");
+                    child.kill()?;
+                    break;
+                }
+                match child.try_wait() {
+                    Ok(Some(status)) => {
+                        if status.success() {
+                            return Ok(());
+                        } else {
+                            bail!(
+                                "command `git {:?}` failed in `{}`",
+                                args,
+                                self.path.display()
+                            );
+                        }
+                    }
+                    Ok(None) => thread::sleep(time::Duration::from_millis(250)),
+                    Err(err) => bail!("command `git {:?}` failed to try_wait in {:?}: {:?}",
+                        args, self.path.display(), err),
+
+                }
+            }
         }
-        Ok(())
+        bail!("failed to run git command, timed out too many times")
     }
 
     pub fn open(path: PathBuf, allow_new_dir: bool, use_remote: bool) -> Result<Self, Error> {
