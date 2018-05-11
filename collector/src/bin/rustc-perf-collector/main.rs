@@ -373,7 +373,7 @@ fn main_result() -> Result<i32, Error> {
             // prior data.
             let result =
                 bench_commit(None, &commit, "x86_64-unknown-linux-gnu", &rustc_path, &cargo_path,
-                             &benchmarks, 3, Mode::Normal);
+                             &benchmarks, 1, Mode::Normal);
             get_out_repo(true)?.add_commit_data(&result)?;
             Ok(0)
         }
