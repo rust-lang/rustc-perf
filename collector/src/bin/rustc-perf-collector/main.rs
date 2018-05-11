@@ -231,7 +231,7 @@ fn main_result() -> Result<i32, Error> {
        (about: "Collects Rust performance data")
        (@arg filter: --filter +takes_value "Run only benchmarks that contain this")
        (@arg sync_git: --("sync-git") "Synchronize repository with remote")
-       (@arg output_repo: --("output-repo") +required +takes_value "Repository to output to")
+       (@arg output_repo: --("output-repo") +required +takes_value "Output repository/directory")
        (@subcommand process =>
            (about: "syncs to git and collects performance data for all versions")
        )
