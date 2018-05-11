@@ -21,19 +21,29 @@ output data will be placed and committed.
 
 To benchmark local builds:
 ```
-./target/release/collector --output-repo $OUTPUT_DIR bench_local \
-    --rustc $RUSTC --cargo $CARGO $ID
+RUST_LOG=info ./target/release/collector --output-repo $OUTPUT_DIR \
+    bench_local --rustc $RUSTC --cargo $CARGO $ID
 ```
 
+`RUST_LOG=info` defines an environment variable that enables `info`-level
+logging. This is optional but recommended, because without it there is no
+output and thus no indication of progress. `RUST_LOG=debug` is an alternative
+that enables more verbose logging, which is mostly useful for debugging
+rustc-perf itself.
+
 `$OUTPUT_DIR` is a path (relative or absolute) to a directory, in which the
-timing data will be placed.
+timing data will be placed. Unlike the `process` subcommand (and despite the
+`repo` in `--output-repo`) it need not be a clone of the `rustc-timing`
+repository; in fact, it will be created if it does not already exist.
 
-`$RUSTC` is a path (relative or absolute) to a rustc executable. For
-benchmarking purposes a stage 2 compiler is a bit better than a stage 1
-compiler, but not critical. Furthermore, some benchmarks use procedural macros,
-which require a stage 2 build.
+`$RUSTC` is a path (relative or absolute) to a rustc executable. Some
+benchmarks use procedural macros, which require a stage 2 compiler. Therefore,
+the value is likely to be something like
+`$RUSTC_REPO/build/x86_64-unknown-linux-gnu/stage2/bin/rustc`, where
+`$RUSTC_REPO` is a path (relative or absolute) to a rustc repository.
 
-`$CARGO` is a path (relative or absolute) to a Cargo executable.
+`$CARGO` is a path (relative or absolute) to a Cargo executable. Using an
+installed Cargo is fine, e.g. ``--cargo `which cargo` ``.
 
 `$ID` is an identifier, which will be used in the output file name and
 contents.
@@ -43,7 +53,8 @@ contents.
 `--sync-git` can be passed to make the collector sync with the remote repo
 before and after committing.
 
-`--filters` can be used to run a subset of the benchmarks.
+`--filter $STR` can be used to run a subset of the benchmarks. `$STR` is a
+substring of the name of the benchmark(s) you wish to run.
 
 ## Viewing results
 
@@ -62,9 +73,11 @@ enough.
 
 To profile local builds:
 ```
-./target/release/collector --output-repo $OUTPUT_DIR $PROFILE_CMD \
-    --rustc $RUSTC --cargo $CARGO $ID
+RUST_LOG=info ./target/release/collector --output-repo $OUTPUT_DIR \
+    $PROFILE_CMD --rustc $RUSTC --cargo $CARGO $ID
 ```
+
+All this is the same as for the `bench_local` subcommand, except that
 `$PROFILE_CMD` is one of the following.
 - `profile_perf_record`: Profile with `perf-record`. Output is written to
   files with a `perf` prefix. Those files can be read with `perf-report` and
@@ -83,8 +96,6 @@ To profile local builds:
   a `msout` prefix. Those files can be processed with `ms_print` or viewed with
   `massif-visualizer`; the latter is recommended, though it sometimes fails to
   read output files that `ms_print` can handle.
-
-The other parameters are the same as for the `bench_local` subcommand.
 
 ## @bors try builds
 
