@@ -51,7 +51,10 @@ impl Repo {
                             );
                         }
                     }
-                    Ok(None) => thread::sleep(time::Duration::from_millis(250)),
+                    Ok(None) => {
+                        debug!("waiting 250ms...");
+                        thread::sleep(time::Duration::from_millis(250));
+                    },
                     Err(err) => bail!("command `git {:?}` failed to try_wait in {:?}: {:?}",
                         args, self.path.display(), err),
 
