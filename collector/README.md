@@ -79,6 +79,8 @@ RUST_LOG=info ./target/release/collector --output-repo $OUTPUT_DIR \
 
 All this is the same as for the `bench_local` subcommand, except that
 `$PROFILE_CMD` is one of the following.
+- `profile_time_passes`: Profile with rustc's `-Ztime-passes`. Output is
+  written to files with a `Ztp` prefix.
 - `profile_perf_record`: Profile with `perf-record`. Output is written to
   files with a `perf` prefix. Those files can be read with `perf-report` and
   other similar `perf` commands.

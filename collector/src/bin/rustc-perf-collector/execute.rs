@@ -94,6 +94,7 @@ enum BuildKind {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Profiler {
     PerfStat,
+    TimePasses,
     PerfRecord,
     Cachegrind,
     Callgrind,
@@ -105,6 +106,7 @@ impl Profiler {
     fn name(&self) -> &'static str {
         match self {
             Profiler::PerfStat => "perf-stat",
+            Profiler::TimePasses => "time-passes",
             Profiler::PerfRecord => "perf-record",
             Profiler::Cachegrind => "cachegrind",
             Profiler::Callgrind => "callgrind",
@@ -485,6 +487,16 @@ impl Benchmark {
             match profiler {
                 Profiler::PerfStat => {
                     panic!("unexpected profiler");
+                }
+
+                // -Ztime-passes writes its output to stdout. We copy that
+                // output into a file in the output dir.
+                Profiler::TimePasses => {
+                    let ztp_file = filepath(output_dir, &out_file("Ztp"));
+
+                    let mut f = File::create(ztp_file)?;
+                    f.write_all(&output.stdout)?;
+                    f.flush()?;
                 }
 
                 // perf-record produces (via rustc-fake) a data file called
