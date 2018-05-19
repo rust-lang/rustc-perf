@@ -23,6 +23,7 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
+extern crate rmp_serde;
 extern crate url;
 
 mod errors {

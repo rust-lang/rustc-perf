@@ -19,6 +19,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json;
+use rmp_serde;
 use futures::{self, Future, Stream};
 use futures_cpupool::CpuPool;
 use hyper::{self, Get, Post, StatusCode};
@@ -378,15 +379,15 @@ impl Server {
                     match result {
                         Ok(result) => {
                             let mut response = Response::new()
-                                .with_header(ContentType::json())
+                                .with_header(ContentType::octet_stream())
                                 .with_header(CacheControl(vec![
                                     CacheDirective::NoCache,
                                     CacheDirective::NoStore,
                                 ]));
-                            let body = serde_json::to_string(&result).unwrap();
+                            let body = rmp_serde::to_vec_named(&result).unwrap();
                             if accepts_gzip {
                                 let mut encoder = GzEncoder::new(Vec::new(), Compression::best());
-                                encoder.write_all(body.as_bytes()).unwrap();
+                                encoder.write_all(&*body).unwrap();
                                 let body = encoder.finish().unwrap();
                                 response
                                     .with_header(ContentEncoding(vec![Encoding::Gzip]))
