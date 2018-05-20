@@ -227,7 +227,9 @@ function make_request(path, body) {
         body: JSON.stringify(body),
         mode: "cors"
     }).then(response => {
-        return response.clone().json().catch(() => {
+        return response.clone().arrayBuffer().then((arrayBuffer) => {
+            return msgpack.decode(new Uint8Array(arrayBuffer))
+        }).catch(() => {
             return response.text().then(data => alert(data));
         });
     }, err => {

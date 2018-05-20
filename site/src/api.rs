@@ -104,9 +104,9 @@ pub mod graph {
         pub benchmark: String,
         pub commit: String,
         pub prev_commit: Option<String>,
-        pub absolute: f64,
-        pub percent: f64,
-        pub y: f64,
+        pub absolute: f32,
+        pub percent: f32,
+        pub y: f32,
         pub x: u64,
     }
 
@@ -114,7 +114,7 @@ pub mod graph {
     pub struct Response {
         /// Crate -> Benchmark -> [GraphData]
         pub benchmarks: HashMap<String, HashMap<String, Vec<GraphData>>>,
-        pub max: HashMap<String, f64>,
+        pub max: HashMap<String, f32>,
     }
 }
 

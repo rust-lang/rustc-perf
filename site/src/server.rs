@@ -19,6 +19,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json;
+use rmp_serde;
 use futures::{self, Future, Stream};
 use futures_cpupool::CpuPool;
 use hyper::{self, Get, Post, StatusCode};
@@ -125,6 +126,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
             let mut base_compile = false;
             let mut trivial = false;
             for (name, run, value) in runs.clone() {
+                let value = value as f32;
                 if run.state.is_base_compile() {
                     base_compile = true;
                 } else if run.is_trivial() {
@@ -134,7 +136,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
                 let mut entry = entry
                     .entry(name)
                     .or_insert_with(|| Vec::<graph::GraphData>::with_capacity(elements));
-                let first = entry.first().map(|d| d.absolute);
+                let first = entry.first().map(|d| d.absolute as f32);
                 let percent = first.map_or(0.0, |f| (value - f) / f * 100.0);
                 entry.push(graph::GraphData {
                     benchmark: run.state.name(),
@@ -160,7 +162,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
             }
         }
         for (&(release, check, ref state), values) in &summary_points {
-            let value = values.iter().sum::<f64>() / (values.len() as f64);
+            let value = (values.iter().sum::<f64>() as f32) / (values.len() as f32);
             if !release && !check && state.is_base_compile() && initial_base_compile.is_none() {
                 initial_base_compile = Some(value);
             }
@@ -183,7 +185,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
                 .entry(String::from("Summary") + appendix)
                 .or_insert_with(HashMap::new);
             let entry = summary.entry(state.name()).or_insert_with(Vec::new);
-            let value = values.iter().sum::<f64>() / (values.len() as f64);
+            let value = (values.iter().sum::<f64>() as f32) / (values.len() as f32);
             let value = value / if release {
                 initial_release_base_compile.unwrap()
             } else if check {
@@ -191,7 +193,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
             } else {
                 initial_base_compile.unwrap()
             };
-            let first = entry.first().map(|d: &graph::GraphData| d.absolute);
+            let first = entry.first().map(|d: &graph::GraphData| d.absolute as f32);
             let percent = first.map_or(0.0, |f| (value - f) / f * 100.0);
             entry.push(graph::GraphData {
                 benchmark: state.name(),
@@ -209,13 +211,13 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
     let mut maxes = HashMap::with_capacity(result.len());
     for (ref crate_name, ref benchmarks) in &result {
         let name = crate_name.replace("-opt", "").replace("-check", "");
-        let mut max = 0.0f64;
+        let mut max = 0.0f32;
         for points in benchmarks.values() {
             for point in points {
                 max = max.max(point.y);
             }
         }
-        let max = maxes.get(&name).cloned().unwrap_or(0.0f64).max(max);
+        let max = maxes.get(&name).cloned().unwrap_or(0.0f32).max(max);
         maxes.insert(name, max);
     }
 
@@ -378,15 +380,15 @@ impl Server {
                     match result {
                         Ok(result) => {
                             let mut response = Response::new()
-                                .with_header(ContentType::json())
+                                .with_header(ContentType::octet_stream())
                                 .with_header(CacheControl(vec![
                                     CacheDirective::NoCache,
                                     CacheDirective::NoStore,
                                 ]));
-                            let body = serde_json::to_string(&result).unwrap();
+                            let body = rmp_serde::to_vec_named(&result).unwrap();
                             if accepts_gzip {
                                 let mut encoder = GzEncoder::new(Vec::new(), Compression::best());
-                                encoder.write_all(body.as_bytes()).unwrap();
+                                encoder.write_all(&*body).unwrap();
                                 let body = encoder.finish().unwrap();
                                 response
                                     .with_header(ContentEncoding(vec![Encoding::Gzip]))
