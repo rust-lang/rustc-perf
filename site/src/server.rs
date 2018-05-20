@@ -126,6 +126,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
             let mut base_compile = false;
             let mut trivial = false;
             for (name, run, value) in runs.clone() {
+                let value = value as f32;
                 if run.state.is_base_compile() {
                     base_compile = true;
                 } else if run.is_trivial() {
@@ -135,7 +136,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
                 let mut entry = entry
                     .entry(name)
                     .or_insert_with(|| Vec::<graph::GraphData>::with_capacity(elements));
-                let first = entry.first().map(|d| d.absolute);
+                let first = entry.first().map(|d| d.absolute as f32);
                 let percent = first.map_or(0.0, |f| (value - f) / f * 100.0);
                 entry.push(graph::GraphData {
                     benchmark: run.state.name(),
@@ -161,7 +162,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
             }
         }
         for (&(release, check, ref state), values) in &summary_points {
-            let value = values.iter().sum::<f64>() / (values.len() as f64);
+            let value = (values.iter().sum::<f64>() as f32) / (values.len() as f32);
             if !release && !check && state.is_base_compile() && initial_base_compile.is_none() {
                 initial_base_compile = Some(value);
             }
@@ -184,7 +185,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
                 .entry(String::from("Summary") + appendix)
                 .or_insert_with(HashMap::new);
             let entry = summary.entry(state.name()).or_insert_with(Vec::new);
-            let value = values.iter().sum::<f64>() / (values.len() as f64);
+            let value = (values.iter().sum::<f64>() as f32) / (values.len() as f32);
             let value = value / if release {
                 initial_release_base_compile.unwrap()
             } else if check {
@@ -192,7 +193,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
             } else {
                 initial_base_compile.unwrap()
             };
-            let first = entry.first().map(|d: &graph::GraphData| d.absolute);
+            let first = entry.first().map(|d: &graph::GraphData| d.absolute as f32);
             let percent = first.map_or(0.0, |f| (value - f) / f * 100.0);
             entry.push(graph::GraphData {
                 benchmark: state.name(),
@@ -210,13 +211,13 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
     let mut maxes = HashMap::with_capacity(result.len());
     for (ref crate_name, ref benchmarks) in &result {
         let name = crate_name.replace("-opt", "").replace("-check", "");
-        let mut max = 0.0f64;
+        let mut max = 0.0f32;
         for points in benchmarks.values() {
             for point in points {
                 max = max.max(point.y);
             }
         }
-        let max = maxes.get(&name).cloned().unwrap_or(0.0f64).max(max);
+        let max = maxes.get(&name).cloned().unwrap_or(0.0f32).max(max);
         maxes.insert(name, max);
     }
 
