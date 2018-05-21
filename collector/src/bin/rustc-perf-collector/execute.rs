@@ -100,6 +100,7 @@ pub enum Profiler {
     Callgrind,
     DHAT,
     Massif,
+    Eprintln,
 }
 
 impl Profiler {
@@ -112,6 +113,7 @@ impl Profiler {
             Profiler::Callgrind => "callgrind",
             Profiler::DHAT => "dhat",
             Profiler::Massif => "massif",
+            Profiler::Eprintln => "eprintln",
         }
     }
 }
@@ -573,6 +575,15 @@ impl Benchmark {
                     fs::copy(&tmp_msout_file, &msout_file)?;
                 }
 
+                // eprintln! statements writes their output to stderr. We copy
+                // that output into a file in the output dir.
+                Profiler::Eprintln => {
+                    let eprintln_file = filepath(output_dir, &out_file("eprintln"));
+
+                    let mut f = File::create(eprintln_file)?;
+                    f.write_all(&output.stderr)?;
+                    f.flush()?;
+                }
             }
         }
         Ok(())

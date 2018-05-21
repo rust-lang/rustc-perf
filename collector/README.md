@@ -98,6 +98,14 @@ All this is the same as for the `bench_local` subcommand, except that
   a `msout` prefix. Those files can be processed with `ms_print` or viewed with
   `massif-visualizer`; the latter is recommended, though it sometimes fails to
   read output files that `ms_print` can handle.
+- `profile_eprintln`: Profile with `eprintln!` statements. Sometimes it is
+  useful to do ad hoc profiling by inserting `eprintln!` statements into rustc,
+  e.g. to count how often particular paths are hit, or to see what values
+  particular expressions have each time they are executed. This subcommand is
+  for this use case. The output of these `eprintln!` statements (and everything
+  else written to `stderr`) is written to files with an `eprintln` prefix.
+  Those files can be post-processed in any appropriate fashion; `sort $FILE |
+  uniq -c` is one possibility.
 
 ## @bors try builds
 

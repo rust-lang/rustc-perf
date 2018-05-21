@@ -121,6 +121,13 @@ fn main() {
                 assert!(cmd.status().expect("failed to spawn").success());
             }
 
+            "eprintln" => {
+                let mut cmd = Command::new(&rustc);
+                cmd.args(&args);
+
+                assert!(cmd.status().expect("failed to spawn").success());
+            }
+
             _ => {
                 panic!("unknown wrapper: {}", wrapper);
             }
