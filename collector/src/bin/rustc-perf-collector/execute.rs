@@ -103,7 +103,32 @@ pub enum Profiler {
     Eprintln,
 }
 
+#[derive(Fail, PartialEq, Eq, Debug)]
+pub enum FromNameError {
+    #[fail(display = "'perf-stat' cannot be used as the profiler")]
+    PerfStat,
+    #[fail(display = "'{:?}' is not a known profiler", _0)]
+    UnknownProfiler(String),
+}
+
 impl Profiler {
+    pub fn from_name(name: &str) -> Result<Profiler, FromNameError> {
+        match name {
+            // Even though `PerfStat` is a valid `Profiler` value, "perf-stat"
+            // is rejected because it can't be used with the `profiler`
+            // subcommand. (It's used with `bench_local` instead.)
+            "perf-stat" => Err(FromNameError::PerfStat),
+            "time-passes" => Ok(Profiler::TimePasses),
+            "perf-record" => Ok(Profiler::PerfRecord),
+            "cachegrind" => Ok(Profiler::Cachegrind),
+            "callgrind" => Ok(Profiler::Callgrind),
+            "dhat" => Ok(Profiler::DHAT),
+            "massif" => Ok(Profiler::Massif),
+            "eprintln" => Ok(Profiler::Eprintln),
+            _ => Err(FromNameError::UnknownProfiler(name.to_string())),
+        }
+    }
+
     fn name(&self) -> &'static str {
         match self {
             Profiler::PerfStat => "perf-stat",

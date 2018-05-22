@@ -99,16 +99,16 @@ fn bench_commit(
 }
 
 fn profile(
-    profiler: Profiler,
     matches: &clap::ArgMatches,
     out_dir: &Path,
     benchmarks: &[Benchmark],
 ) -> Result<i32, Error> {
-    info!("Profile with {:?}", profiler);
-
     let rustc = matches.value_of("RUSTC").unwrap();
     let cargo = matches.value_of("CARGO").unwrap();
+    let profiler = Profiler::from_name(matches.value_of("PROFILER").unwrap())?;
     let id = matches.value_of("ID").unwrap();
+
+    info!("Profile with {:?}", profiler);
 
     let rustc_path = PathBuf::from(rustc).canonicalize()?;
     let cargo_path = PathBuf::from(cargo).canonicalize()?;
@@ -246,46 +246,13 @@ fn main_result() -> Result<i32, Error> {
            (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
            (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
        )
-       (@subcommand profile_time_passes =>
-           (about: "profile a local rustc with -Ztime-passes")
+       (@subcommand profile =>
+           (about: "profile a local rustc")
            (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
            (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
-           (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
-       )
-       (@subcommand profile_perf_record =>
-           (about: "profile a local rustc with perf-record")
-           (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
-           (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
-           (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
-       )
-       (@subcommand profile_cachegrind =>
-           (about: "profile a local rustc with Cachegrind")
-           (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
-           (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
-           (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
-       )
-       (@subcommand profile_callgrind =>
-           (about: "profile a local rustc with Callgrind")
-           (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
-           (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
-           (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
-       )
-       (@subcommand profile_dhat =>
-           (about: "profile a local rustc with DHAT")
-           (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
-           (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
-           (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
-       )
-       (@subcommand profile_massif =>
-           (about: "profile a local rustc with Massif")
-           (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
-           (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
-           (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
-       )
-       (@subcommand profile_eprintln =>
-           (about: "profile a local rustc augmented with eprintln! statements")
-           (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
-           (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
+           (@arg PROFILER: +required +takes_value
+            "One of: 'time-passes', 'perf-record', 'cachegrind',\n\
+            'callgrind', 'dhat', 'massif', 'eprintln'")
            (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
        )
        (@subcommand remove_errs =>
@@ -387,26 +354,8 @@ fn main_result() -> Result<i32, Error> {
             get_out_repo(true)?.add_commit_data(&result)?;
             Ok(0)
         }
-        ("profile_time_passes", Some(sub_m)) => {
-            profile(Profiler::TimePasses, sub_m, &get_out_dir(), &benchmarks)
-        }
-        ("profile_perf_record", Some(sub_m)) => {
-            profile(Profiler::PerfRecord, sub_m, &get_out_dir(), &benchmarks)
-        }
-        ("profile_cachegrind", Some(sub_m)) => {
-            profile(Profiler::Cachegrind, sub_m, &get_out_dir(), &benchmarks)
-        }
-        ("profile_callgrind", Some(sub_m)) => {
-            profile(Profiler::Callgrind, sub_m, &get_out_dir(), &benchmarks)
-        }
-        ("profile_dhat", Some(sub_m)) => {
-            profile(Profiler::DHAT, sub_m, &get_out_dir(), &benchmarks)
-        }
-        ("profile_massif", Some(sub_m)) => {
-            profile(Profiler::Massif, sub_m, &get_out_dir(), &benchmarks)
-        }
-        ("profile_eprintln", Some(sub_m)) => {
-            profile(Profiler::Eprintln, sub_m, &get_out_dir(), &benchmarks)
+        ("profile", Some(sub_m)) => {
+            profile(sub_m, &get_out_dir(), &benchmarks)
         }
         ("remove_errs", Some(_)) => {
             for commit in &get_commits()? {
