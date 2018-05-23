@@ -105,6 +105,16 @@ fn profile(
 ) -> Result<i32, Error> {
     let rustc = matches.value_of("RUSTC").unwrap();
     let cargo = matches.value_of("CARGO").unwrap();
+    let build_kinds = if let Some(kinds) = matches.value_of("BUILDS") {
+        Some(execute::build_kinds_from_arg(kinds)?)
+    } else {
+        None
+    };
+    let run_kinds = if let Some(runs) = matches.value_of("RUNS") {
+        Some(execute::run_kinds_from_arg(runs)?)
+    } else {
+        None
+    };
     let profiler = Profiler::from_name(matches.value_of("PROFILER").unwrap())?;
     let id = matches.value_of("ID").unwrap();
 
@@ -114,7 +124,8 @@ fn profile(
     let cargo_path = PathBuf::from(cargo).canonicalize()?;
 
     for (i, benchmark) in benchmarks.iter().enumerate() {
-        let result = benchmark.profile(profiler, out_dir, &rustc_path, &cargo_path, &id);
+        let result = benchmark.profile(profiler, &build_kinds, &run_kinds, out_dir, &rustc_path,
+                                       &cargo_path, &id);
         if let Err(ref s) = result {
             info!("failed to profile {} with {:?}, recorded: {:?}", benchmark.name, profiler, s);
         }
@@ -250,6 +261,12 @@ fn main_result() -> Result<i32, Error> {
            (about: "profile a local rustc")
            (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
            (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
+           (@arg BUILDS: --builds +takes_value
+            "One or more (comma-separated) of: 'Check', 'Debug',\n\
+            'Opt', 'All'")
+           (@arg RUNS: --runs +takes_value
+            "One or more (comma-separated) of: 'Clean', 'Nll',\n\
+            'BaseIncr', 'CleanIncr', 'PatchedIncrs', 'All'")
            (@arg PROFILER: +required +takes_value
             "One of: 'time-passes', 'perf-record', 'cachegrind',\n\
             'callgrind', 'dhat', 'massif', 'eprintln'")

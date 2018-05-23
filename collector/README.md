@@ -110,6 +110,18 @@ All this is the same as for the `bench_local` subcommand, except that
   be post-processed in any appropriate fashion; `sort $FILE | uniq -c` is one
   possibility.
 
+## Profiling options
+
+`--builds $BUILDS` can be used to select what kind of builds are profiled. The
+default is `Debug`. The possible choices are one or more (comma-separated) of
+`Check`, `Debug`, `Opt`, and `All`.
+
+`--runs $RUNS` can be used to select what profiling runs are done for each
+build. The default is `Clean`. The possible choices are one or more
+(comma-separated) of `Clean`, `Nll`, `BaseIncr`, `CleanIncr`, `PatchedIncrs`,
+and `All`. Note that `BaseIncr` is always run (even if not requested) if either
+of `CleanIncr` or `PatchedIncrs` are run.
+
 ## @bors try builds
 
 Alternatively, you can ping `simulacrum` on IRC to run the benchmarks on the server for a try build.
