@@ -144,14 +144,14 @@ fn get_benchmarks(
 
         if let Some(filter) = filter {
             if !name.contains(filter) {
-                debug!("benchmark {} - filtered", name);
+                debug!("benchmark {} - doesn't match --filter argument, skipping", name);
                 continue;
             }
         }
 
         if let Some(exclude) = exclude {
             if name.contains(exclude) {
-                debug!("benchmark {} - filtered", name);
+                debug!("benchmark {} - matches --exclude argument, skipping", name);
                 continue;
             }
         }
@@ -230,6 +230,7 @@ fn main_result() -> Result<i32, Error> {
        (author: "The Rust Compiler Team")
        (about: "Collects Rust performance data")
        (@arg filter: --filter +takes_value "Run only benchmarks that contain this")
+       (@arg exclude: --exclude +takes_value "Ignore all benchmarks that contain this")
        (@arg sync_git: --("sync-git") "Synchronize repository with remote")
        (@arg output_repo: --("output-repo") +required +takes_value "Output repository/directory")
        (@subcommand process =>
@@ -301,14 +302,11 @@ fn main_result() -> Result<i32, Error> {
 
     let benchmark_dir = PathBuf::from("collector/benchmarks");
     let filter = matches.value_of("filter");
+    let exclude = matches.value_of("exclude");
     let benchmarks = get_benchmarks(
         &benchmark_dir,
         filter,
-        if matches.subcommand().0 == "test_benchmarks" {
-            Some("servo")
-        } else {
-            None
-        },
+        exclude,
     )?;
     let use_remote = matches.is_present("sync_git");
 

@@ -56,6 +56,9 @@ before and after committing.
 `--filter $STR` can be used to run a subset of the benchmarks. `$STR` is a
 substring of the name of the benchmark(s) you wish to run.
 
+`--exclude $STR` is the inverse of --filter. `$STR` is a substring of the name
+of the benchmark(s) you wish to skip.
+
 ## Viewing results
 
 Once the benchmarks have been run, start the website:
