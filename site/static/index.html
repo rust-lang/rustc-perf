@@ -148,15 +148,10 @@
                     type: "datetime",
                 },
                 yAxis: absolute ? {
-                    title: crate_name.includes("-opt") ? { text: "" } : {
+                    title: (crate_name.includes("-opt") || crate_name.includes("-check")) ? { text: "" } : {
                         text: crate_name.startsWith("Summary") ? summaryYAxis : yAxis,
                     },
-                    labels: crate_name.includes("-opt") ? {
-                        enabled: false,
-                    } : {},
                     min: 0,
-                    max: max * 1.05,
-                    softMax: max * 1.05,
                     ceiling: max * 1.05,
                     floor: 0,
                 } : {
