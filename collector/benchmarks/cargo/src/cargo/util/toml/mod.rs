@@ -1,0 +1,1416 @@
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::fmt;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::rc::Rc;
+use std::str;
+
+use semver::{self, VersionReq};
+use serde::de::{self, Deserialize};
+use serde::ser;
+use serde_ignored;
+use toml;
+use url::Url;
+
+use core::dependency::{Kind, Platform};
+use core::manifest::{LibKind, ManifestMetadata};
+use core::profiles::Profiles;
+use core::{Dependency, Manifest, PackageId, Summary, Target};
+use core::{Edition, EitherManifest, Feature, Features, VirtualManifest};
+use core::{GitReference, PackageIdSpec, SourceId, WorkspaceConfig, WorkspaceRootConfig};
+use sources::CRATES_IO;
+use util::errors::{CargoError, CargoResult, CargoResultExt};
+use util::paths;
+use util::{self, Config, ToUrl};
+
+mod targets;
+use self::targets::targets;
+
+pub fn read_manifest(
+    path: &Path,
+    source_id: &SourceId,
+    config: &Config,
+) -> CargoResult<(EitherManifest, Vec<PathBuf>)> {
+    trace!(
+        "read_manifest; path={}; source-id={}",
+        path.display(),
+        source_id
+    );
+    let contents = paths::read(path)?;
+
+    let ret = do_read_manifest(&contents, path, source_id, config)
+        .chain_err(|| format!("failed to parse manifest at `{}`", path.display()))?;
+    Ok(ret)
+}
+
+fn do_read_manifest(
+    contents: &str,
+    manifest_file: &Path,
+    source_id: &SourceId,
+    config: &Config,
+) -> CargoResult<(EitherManifest, Vec<PathBuf>)> {
+    let package_root = manifest_file.parent().unwrap();
+
+    let toml = {
+        let pretty_filename =
+            util::without_prefix(manifest_file, config.cwd()).unwrap_or(manifest_file);
+        parse(contents, pretty_filename, config)?
+    };
+
+    let mut unused = BTreeSet::new();
+    let manifest: TomlManifest = serde_ignored::deserialize(toml, |path| {
+        let mut key = String::new();
+        stringify(&mut key, &path);
+        unused.insert(key);
+    })?;
+
+    let manifest = Rc::new(manifest);
+    return if manifest.project.is_some() || manifest.package.is_some() {
+        let (mut manifest, paths) =
+            TomlManifest::to_real_manifest(&manifest, source_id, package_root, config)?;
+        for key in unused {
+            manifest.add_warning(format!("unused manifest key: {}", key));
+        }
+        if !manifest.targets().iter().any(|t| !t.is_custom_build()) {
+            bail!(
+                "no targets specified in the manifest\n  \
+                 either src/lib.rs, src/main.rs, a [lib] section, or \
+                 [[bin]] section must be present"
+            )
+        }
+        Ok((EitherManifest::Real(manifest), paths))
+    } else {
+        let (m, paths) =
+            TomlManifest::to_virtual_manifest(&manifest, source_id, package_root, config)?;
+        Ok((EitherManifest::Virtual(m), paths))
+    };
+
+    fn stringify(dst: &mut String, path: &serde_ignored::Path) {
+        use serde_ignored::Path;
+
+        match *path {
+            Path::Root => {}
+            Path::Seq { parent, index } => {
+                stringify(dst, parent);
+                if !dst.is_empty() {
+                    dst.push('.');
+                }
+                dst.push_str(&index.to_string());
+            }
+            Path::Map { parent, ref key } => {
+                stringify(dst, parent);
+                if !dst.is_empty() {
+                    dst.push('.');
+                }
+                dst.push_str(key);
+            }
+            Path::Some { parent }
+            | Path::NewtypeVariant { parent }
+            | Path::NewtypeStruct { parent } => stringify(dst, parent),
+        }
+    }
+}
+
+pub fn parse(toml: &str, file: &Path, config: &Config) -> CargoResult<toml::Value> {
+    let first_error = match toml.parse() {
+        Ok(ret) => return Ok(ret),
+        Err(e) => e,
+    };
+
+    let mut second_parser = toml::de::Deserializer::new(toml);
+    second_parser.set_require_newline_after_table(false);
+    if let Ok(ret) = toml::Value::deserialize(&mut second_parser) {
+        let msg = format!(
+            "\
+TOML file found which contains invalid syntax and will soon not parse
+at `{}`.
+
+The TOML spec requires newlines after table definitions (e.g. `[a] b = 1` is
+invalid), but this file has a table header which does not have a newline after
+it. A newline needs to be added and this warning will soon become a hard error
+in the future.",
+            file.display()
+        );
+        config.shell().warn(&msg)?;
+        return Ok(ret);
+    }
+
+    let first_error = CargoError::from(first_error);
+    Err(first_error.context("could not parse input as TOML").into())
+}
+
+type TomlLibTarget = TomlTarget;
+type TomlBinTarget = TomlTarget;
+type TomlExampleTarget = TomlTarget;
+type TomlTestTarget = TomlTarget;
+type TomlBenchTarget = TomlTarget;
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+pub enum TomlDependency {
+    Simple(String),
+    Detailed(DetailedTomlDependency),
+}
+
+impl<'de> de::Deserialize<'de> for TomlDependency {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        struct TomlDependencyVisitor;
+
+        impl<'de> de::Visitor<'de> for TomlDependencyVisitor {
+            type Value = TomlDependency;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str(
+                    "a version string like \"0.9.8\" or a \
+                     detailed dependency like { version = \"0.9.8\" }",
+                )
+            }
+
+            fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(TomlDependency::Simple(s.to_owned()))
+            }
+
+            fn visit_map<V>(self, map: V) -> Result<Self::Value, V::Error>
+            where
+                V: de::MapAccess<'de>,
+            {
+                let mvd = de::value::MapAccessDeserializer::new(map);
+                DetailedTomlDependency::deserialize(mvd).map(TomlDependency::Detailed)
+            }
+        }
+
+        deserializer.deserialize_any(TomlDependencyVisitor)
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct DetailedTomlDependency {
+    version: Option<String>,
+    registry: Option<String>,
+    registry_index: Option<String>,
+    path: Option<String>,
+    git: Option<String>,
+    branch: Option<String>,
+    tag: Option<String>,
+    rev: Option<String>,
+    features: Option<Vec<String>>,
+    optional: Option<bool>,
+    default_features: Option<bool>,
+    #[serde(rename = "default_features")]
+    default_features2: Option<bool>,
+    package: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct TomlManifest {
+    cargo_features: Option<Vec<String>>,
+    package: Option<Box<TomlProject>>,
+    project: Option<Box<TomlProject>>,
+    profile: Option<TomlProfiles>,
+    lib: Option<TomlLibTarget>,
+    bin: Option<Vec<TomlBinTarget>>,
+    example: Option<Vec<TomlExampleTarget>>,
+    test: Option<Vec<TomlTestTarget>>,
+    bench: Option<Vec<TomlTestTarget>>,
+    dependencies: Option<BTreeMap<String, TomlDependency>>,
+    dev_dependencies: Option<BTreeMap<String, TomlDependency>>,
+    #[serde(rename = "dev_dependencies")]
+    dev_dependencies2: Option<BTreeMap<String, TomlDependency>>,
+    build_dependencies: Option<BTreeMap<String, TomlDependency>>,
+    #[serde(rename = "build_dependencies")]
+    build_dependencies2: Option<BTreeMap<String, TomlDependency>>,
+    features: Option<BTreeMap<String, Vec<String>>>,
+    target: Option<BTreeMap<String, TomlPlatform>>,
+    replace: Option<BTreeMap<String, TomlDependency>>,
+    patch: Option<BTreeMap<String, BTreeMap<String, TomlDependency>>>,
+    workspace: Option<TomlWorkspace>,
+    badges: Option<BTreeMap<String, BTreeMap<String, String>>>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+pub struct TomlProfiles {
+    test: Option<TomlProfile>,
+    doc: Option<TomlProfile>,
+    bench: Option<TomlProfile>,
+    dev: Option<TomlProfile>,
+    release: Option<TomlProfile>,
+}
+
+impl TomlProfiles {
+    fn validate(&self, features: &Features, warnings: &mut Vec<String>) -> CargoResult<()> {
+        if let Some(ref test) = self.test {
+            test.validate("test", features, warnings)?;
+        }
+        if let Some(ref doc) = self.doc {
+            doc.validate("doc", features, warnings)?;
+        }
+        if let Some(ref bench) = self.bench {
+            bench.validate("bench", features, warnings)?;
+        }
+        if let Some(ref dev) = self.dev {
+            dev.validate("dev", features, warnings)?;
+        }
+        if let Some(ref release) = self.release {
+            release.validate("release", features, warnings)?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct TomlOptLevel(pub String);
+
+impl<'de> de::Deserialize<'de> for TomlOptLevel {
+    fn deserialize<D>(d: D) -> Result<TomlOptLevel, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        struct Visitor;
+
+        impl<'de> de::Visitor<'de> for Visitor {
+            type Value = TomlOptLevel;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("an optimization level")
+            }
+
+            fn visit_i64<E>(self, value: i64) -> Result<TomlOptLevel, E>
+            where
+                E: de::Error,
+            {
+                Ok(TomlOptLevel(value.to_string()))
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<TomlOptLevel, E>
+            where
+                E: de::Error,
+            {
+                if value == "s" || value == "z" {
+                    Ok(TomlOptLevel(value.to_string()))
+                } else {
+                    Err(E::custom(format!(
+                        "must be an integer, `z`, or `s`, \
+                         but found: {}",
+                        value
+                    )))
+                }
+            }
+        }
+
+        d.deserialize_u32(Visitor)
+    }
+}
+
+impl ser::Serialize for TomlOptLevel {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: ser::Serializer,
+    {
+        match self.0.parse::<u32>() {
+            Ok(n) => n.serialize(serializer),
+            Err(_) => self.0.serialize(serializer),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(untagged)]
+pub enum U32OrBool {
+    U32(u32),
+    Bool(bool),
+}
+
+impl<'de> de::Deserialize<'de> for U32OrBool {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        struct Visitor;
+
+        impl<'de> de::Visitor<'de> for Visitor {
+            type Value = U32OrBool;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a boolean or an integer")
+            }
+
+            fn visit_bool<E>(self, b: bool) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(U32OrBool::Bool(b))
+            }
+
+            fn visit_i64<E>(self, u: i64) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(U32OrBool::U32(u as u32))
+            }
+
+            fn visit_u64<E>(self, u: u64) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(U32OrBool::U32(u as u32))
+            }
+        }
+
+        deserializer.deserialize_any(Visitor)
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct TomlProfile {
+    pub opt_level: Option<TomlOptLevel>,
+    pub lto: Option<StringOrBool>,
+    pub codegen_units: Option<u32>,
+    pub debug: Option<U32OrBool>,
+    pub debug_assertions: Option<bool>,
+    pub rpath: Option<bool>,
+    pub panic: Option<String>,
+    pub overflow_checks: Option<bool>,
+    pub incremental: Option<bool>,
+    pub overrides: Option<BTreeMap<ProfilePackageSpec, TomlProfile>>,
+    pub build_override: Option<Box<TomlProfile>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
+pub enum ProfilePackageSpec {
+    Spec(PackageIdSpec),
+    All,
+}
+
+impl ser::Serialize for ProfilePackageSpec {
+    fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error>
+    where
+        S: ser::Serializer,
+    {
+        match *self {
+            ProfilePackageSpec::Spec(ref spec) => spec.serialize(s),
+            ProfilePackageSpec::All => "*".serialize(s),
+        }
+    }
+}
+
+impl<'de> de::Deserialize<'de> for ProfilePackageSpec {
+    fn deserialize<D>(d: D) -> Result<ProfilePackageSpec, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        let string = String::deserialize(d)?;
+        if string == "*" {
+            Ok(ProfilePackageSpec::All)
+        } else {
+            PackageIdSpec::parse(&string)
+                .map_err(de::Error::custom)
+                .map(|s| ProfilePackageSpec::Spec(s))
+        }
+    }
+}
+
+impl TomlProfile {
+    fn validate(
+        &self,
+        name: &str,
+        features: &Features,
+        warnings: &mut Vec<String>,
+    ) -> CargoResult<()> {
+        if let Some(ref profile) = self.build_override {
+            features.require(Feature::profile_overrides())?;
+            profile.validate_override()?;
+        }
+        if let Some(ref override_map) = self.overrides {
+            features.require(Feature::profile_overrides())?;
+            for profile in override_map.values() {
+                profile.validate_override()?;
+            }
+        }
+
+        match name {
+            "dev" | "release" => {}
+            _ => {
+                if self.overrides.is_some() || self.build_override.is_some() {
+                    bail!(
+                        "Profile overrides may only be specified for \
+                         `dev` or `release` profile, not `{}`.",
+                        name
+                    );
+                }
+            }
+        }
+
+        match name {
+            "doc" => {
+                warnings.push("profile `doc` is deprecated and has no effect".to_string());
+            }
+            "test" | "bench" => {
+                if self.panic.is_some() {
+                    warnings.push(format!("`panic` setting is ignored for `{}` profile", name))
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn validate_override(&self) -> CargoResult<()> {
+        if self.overrides.is_some() || self.build_override.is_some() {
+            bail!("Profile overrides cannot be nested.");
+        }
+        if self.panic.is_some() {
+            bail!("`panic` may not be specified in a profile override.")
+        }
+        if self.lto.is_some() {
+            bail!("`lto` may not be specified in a profile override.")
+        }
+        if self.rpath.is_some() {
+            bail!("`rpath` may not be specified in a profile override.")
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(untagged)]
+pub enum StringOrBool {
+    String(String),
+    Bool(bool),
+}
+
+impl<'de> de::Deserialize<'de> for StringOrBool {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        struct Visitor;
+
+        impl<'de> de::Visitor<'de> for Visitor {
+            type Value = StringOrBool;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a boolean or a string")
+            }
+
+            fn visit_bool<E>(self, b: bool) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(StringOrBool::Bool(b))
+            }
+
+            fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(StringOrBool::String(s.to_string()))
+            }
+        }
+
+        deserializer.deserialize_any(Visitor)
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(untagged)]
+pub enum VecStringOrBool {
+    VecString(Vec<String>),
+    Bool(bool),
+}
+
+impl<'de> de::Deserialize<'de> for VecStringOrBool {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        struct Visitor;
+
+        impl<'de> de::Visitor<'de> for Visitor {
+            type Value = VecStringOrBool;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a boolean or vector of strings")
+            }
+
+            fn visit_seq<V>(self, v: V) -> Result<Self::Value, V::Error>
+            where
+                V: de::SeqAccess<'de>,
+            {
+                let seq = de::value::SeqAccessDeserializer::new(v);
+                Vec::deserialize(seq).map(VecStringOrBool::VecString)
+            }
+
+            fn visit_bool<E>(self, b: bool) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(VecStringOrBool::Bool(b))
+            }
+        }
+
+        deserializer.deserialize_any(Visitor)
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct TomlProject {
+    name: String,
+    version: semver::Version,
+    authors: Option<Vec<String>>,
+    build: Option<StringOrBool>,
+    links: Option<String>,
+    exclude: Option<Vec<String>>,
+    include: Option<Vec<String>>,
+    publish: Option<VecStringOrBool>,
+    #[serde(rename = "publish-lockfile")]
+    publish_lockfile: Option<bool>,
+    workspace: Option<String>,
+    #[serde(rename = "im-a-teapot")]
+    im_a_teapot: Option<bool>,
+    autobins: Option<bool>,
+    autoexamples: Option<bool>,
+    autotests: Option<bool>,
+    autobenches: Option<bool>,
+    #[serde(rename = "namespaced-features")]
+    namespaced_features: Option<bool>,
+
+    // package metadata
+    description: Option<String>,
+    homepage: Option<String>,
+    documentation: Option<String>,
+    readme: Option<String>,
+    keywords: Option<Vec<String>>,
+    categories: Option<Vec<String>>,
+    license: Option<String>,
+    #[serde(rename = "license-file")]
+    license_file: Option<String>,
+    repository: Option<String>,
+    metadata: Option<toml::Value>,
+    edition: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct TomlWorkspace {
+    members: Option<Vec<String>>,
+    #[serde(rename = "default-members")]
+    default_members: Option<Vec<String>>,
+    exclude: Option<Vec<String>>,
+}
+
+impl TomlProject {
+    pub fn to_package_id(&self, source_id: &SourceId) -> CargoResult<PackageId> {
+        PackageId::new(&self.name, self.version.clone(), source_id)
+    }
+}
+
+struct Context<'a, 'b> {
+    pkgid: Option<&'a PackageId>,
+    deps: &'a mut Vec<Dependency>,
+    source_id: &'a SourceId,
+    nested_paths: &'a mut Vec<PathBuf>,
+    config: &'b Config,
+    warnings: &'a mut Vec<String>,
+    platform: Option<Platform>,
+    root: &'a Path,
+    features: &'a Features,
+}
+
+impl TomlManifest {
+    pub fn prepare_for_publish(&self, config: &Config) -> CargoResult<TomlManifest> {
+        let mut package = self.package
+            .as_ref()
+            .or_else(|| self.project.as_ref())
+            .unwrap()
+            .clone();
+        package.workspace = None;
+        return Ok(TomlManifest {
+            package: Some(package),
+            project: None,
+            profile: self.profile.clone(),
+            lib: self.lib.clone(),
+            bin: self.bin.clone(),
+            example: self.example.clone(),
+            test: self.test.clone(),
+            bench: self.bench.clone(),
+            dependencies: map_deps(config, self.dependencies.as_ref())?,
+            dev_dependencies: map_deps(
+                config,
+                self.dev_dependencies
+                    .as_ref()
+                    .or_else(|| self.dev_dependencies2.as_ref()),
+            )?,
+            dev_dependencies2: None,
+            build_dependencies: map_deps(
+                config,
+                self.build_dependencies
+                    .as_ref()
+                    .or_else(|| self.build_dependencies2.as_ref()),
+            )?,
+            build_dependencies2: None,
+            features: self.features.clone(),
+            target: match self.target.as_ref().map(|target_map| {
+                target_map
+                    .iter()
+                    .map(|(k, v)| {
+                        Ok((
+                            k.clone(),
+                            TomlPlatform {
+                                dependencies: map_deps(config, v.dependencies.as_ref())?,
+                                dev_dependencies: map_deps(
+                                    config,
+                                    v.dev_dependencies
+                                        .as_ref()
+                                        .or_else(|| v.dev_dependencies2.as_ref()),
+                                )?,
+                                dev_dependencies2: None,
+                                build_dependencies: map_deps(
+                                    config,
+                                    v.build_dependencies
+                                        .as_ref()
+                                        .or_else(|| v.build_dependencies2.as_ref()),
+                                )?,
+                                build_dependencies2: None,
+                            },
+                        ))
+                    })
+                    .collect()
+            }) {
+                Some(Ok(v)) => Some(v),
+                Some(Err(e)) => return Err(e),
+                None => None,
+            },
+            replace: None,
+            patch: None,
+            workspace: None,
+            badges: self.badges.clone(),
+            cargo_features: self.cargo_features.clone(),
+        });
+
+        fn map_deps(
+            config: &Config,
+            deps: Option<&BTreeMap<String, TomlDependency>>,
+        ) -> CargoResult<Option<BTreeMap<String, TomlDependency>>> {
+            let deps = match deps {
+                Some(deps) => deps,
+                None => return Ok(None),
+            };
+            let deps = deps.iter()
+                .map(|(k, v)| Ok((k.clone(), map_dependency(config, v)?)))
+                .collect::<CargoResult<BTreeMap<_, _>>>()?;
+            Ok(Some(deps))
+        }
+
+        fn map_dependency(config: &Config, dep: &TomlDependency) -> CargoResult<TomlDependency> {
+            match *dep {
+                TomlDependency::Detailed(ref d) => {
+                    let mut d = d.clone();
+                    d.path.take(); // path dependencies become crates.io deps
+                                   // registry specifications are elaborated to the index URL
+                    if let Some(registry) = d.registry.take() {
+                        let src = SourceId::alt_registry(config, &registry)?;
+                        d.registry_index = Some(src.url().to_string());
+                    }
+                    Ok(TomlDependency::Detailed(d))
+                }
+                TomlDependency::Simple(ref s) => {
+                    Ok(TomlDependency::Detailed(DetailedTomlDependency {
+                        version: Some(s.clone()),
+                        ..Default::default()
+                    }))
+                }
+            }
+        }
+    }
+
+    fn to_real_manifest(
+        me: &Rc<TomlManifest>,
+        source_id: &SourceId,
+        package_root: &Path,
+        config: &Config,
+    ) -> CargoResult<(Manifest, Vec<PathBuf>)> {
+        let mut nested_paths = vec![];
+        let mut warnings = vec![];
+        let mut errors = vec![];
+
+        // Parse features first so they will be available when parsing other parts of the toml
+        let empty = Vec::new();
+        let cargo_features = me.cargo_features.as_ref().unwrap_or(&empty);
+        let features = Features::new(&cargo_features, &mut warnings)?;
+
+        let project = me.project.as_ref().or_else(|| me.package.as_ref());
+        let project = project.ok_or_else(|| format_err!("no `package` section found"))?;
+
+        let package_name = project.name.trim();
+        if package_name.is_empty() {
+            bail!("package name cannot be an empty string")
+        }
+
+        let pkgid = project.to_package_id(source_id)?;
+
+        let edition = if let Some(ref edition) = project.edition {
+            features
+                .require(Feature::edition())
+                .chain_err(|| "editions are unstable")?;
+            edition.parse()
+                .chain_err(|| "failed to parse the `edition` key")?
+        } else {
+            Edition::Edition2015
+        };
+
+        // If we have no lib at all, use the inferred lib if available
+        // If we have a lib with a path, we're done
+        // If we have a lib with no path, use the inferred lib or_else package name
+        let targets = targets(
+            me,
+            package_name,
+            package_root,
+            edition,
+            &project.build,
+            &mut warnings,
+            &mut errors,
+        )?;
+
+        if targets.is_empty() {
+            debug!("manifest has no build targets");
+        }
+
+        if let Err(e) = unique_build_targets(&targets, package_root) {
+            warnings.push(format!(
+                "file found to be present in multiple \
+                 build targets: {}",
+                e
+            ));
+        }
+
+        let mut deps = Vec::new();
+        let replace;
+        let patch;
+
+        {
+            let mut cx = Context {
+                pkgid: Some(&pkgid),
+                deps: &mut deps,
+                source_id,
+                nested_paths: &mut nested_paths,
+                config,
+                warnings: &mut warnings,
+                features: &features,
+                platform: None,
+                root: package_root,
+            };
+
+            fn process_dependencies(
+                cx: &mut Context,
+                new_deps: Option<&BTreeMap<String, TomlDependency>>,
+                kind: Option<Kind>,
+            ) -> CargoResult<()> {
+                let dependencies = match new_deps {
+                    Some(dependencies) => dependencies,
+                    None => return Ok(()),
+                };
+                for (n, v) in dependencies.iter() {
+                    let dep = v.to_dependency(n, cx, kind)?;
+                    cx.deps.push(dep);
+                }
+
+                Ok(())
+            }
+
+            // Collect the deps
+            process_dependencies(&mut cx, me.dependencies.as_ref(), None)?;
+            let dev_deps = me.dev_dependencies
+                .as_ref()
+                .or_else(|| me.dev_dependencies2.as_ref());
+            process_dependencies(&mut cx, dev_deps, Some(Kind::Development))?;
+            let build_deps = me.build_dependencies
+                .as_ref()
+                .or_else(|| me.build_dependencies2.as_ref());
+            process_dependencies(&mut cx, build_deps, Some(Kind::Build))?;
+
+            for (name, platform) in me.target.iter().flat_map(|t| t) {
+                cx.platform = Some(name.parse()?);
+                process_dependencies(&mut cx, platform.dependencies.as_ref(), None)?;
+                let build_deps = platform
+                    .build_dependencies
+                    .as_ref()
+                    .or_else(|| platform.build_dependencies2.as_ref());
+                process_dependencies(&mut cx, build_deps, Some(Kind::Build))?;
+                let dev_deps = platform
+                    .dev_dependencies
+                    .as_ref()
+                    .or_else(|| platform.dev_dependencies2.as_ref());
+                process_dependencies(&mut cx, dev_deps, Some(Kind::Development))?;
+            }
+
+            replace = me.replace(&mut cx)?;
+            patch = me.patch(&mut cx)?;
+        }
+
+        {
+            let mut names_sources = BTreeMap::new();
+            for dep in &deps {
+                let name = dep.rename().unwrap_or(dep.name().as_str());
+                let prev = names_sources.insert(name.to_string(), dep.source_id());
+                if prev.is_some() && prev != Some(dep.source_id()) {
+                    bail!(
+                        "Dependency '{}' has different source paths depending on the build \
+                         target. Each dependency must have a single canonical source path \
+                         irrespective of build target.",
+                        name
+                    );
+                }
+            }
+        }
+
+        let exclude = project.exclude.clone().unwrap_or_default();
+        let include = project.include.clone().unwrap_or_default();
+        if project.namespaced_features.is_some() {
+            features.require(Feature::namespaced_features())?;
+        }
+
+        let summary = Summary::new(
+            pkgid,
+            deps,
+            me.features.clone().unwrap_or_else(BTreeMap::new),
+            project.links.clone(),
+            project.namespaced_features.unwrap_or(false),
+        )?;
+        let metadata = ManifestMetadata {
+            description: project.description.clone(),
+            homepage: project.homepage.clone(),
+            documentation: project.documentation.clone(),
+            readme: project.readme.clone(),
+            authors: project.authors.clone().unwrap_or_default(),
+            license: project.license.clone(),
+            license_file: project.license_file.clone(),
+            repository: project.repository.clone(),
+            keywords: project.keywords.clone().unwrap_or_default(),
+            categories: project.categories.clone().unwrap_or_default(),
+            badges: me.badges.clone().unwrap_or_default(),
+            links: project.links.clone(),
+        };
+
+        let workspace_config = match (me.workspace.as_ref(), project.workspace.as_ref()) {
+            (Some(config), None) => WorkspaceConfig::Root(WorkspaceRootConfig::new(
+                &package_root,
+                &config.members,
+                &config.default_members,
+                &config.exclude,
+            )),
+            (None, root) => WorkspaceConfig::Member {
+                root: root.cloned(),
+            },
+            (Some(..), Some(..)) => bail!(
+                "cannot configure both `package.workspace` and \
+                 `[workspace]`, only one can be specified"
+            ),
+        };
+        if let Some(ref profiles) = me.profile {
+            profiles.validate(&features, &mut warnings)?;
+        }
+        let profiles = build_profiles(&me.profile);
+        let publish = match project.publish {
+            Some(VecStringOrBool::VecString(ref vecstring)) => {
+                features
+                    .require(Feature::alternative_registries())
+                    .chain_err(|| {
+                        "the `publish` manifest key is unstable for anything other than a value of true or false"
+                    })?;
+                Some(vecstring.clone())
+            }
+            Some(VecStringOrBool::Bool(false)) => Some(vec![]),
+            None | Some(VecStringOrBool::Bool(true)) => None,
+        };
+
+        let publish_lockfile = match project.publish_lockfile {
+            Some(b) => {
+                features.require(Feature::publish_lockfile())?;
+                b
+            }
+            None => false,
+        };
+
+        let custom_metadata = project.metadata.clone();
+        let mut manifest = Manifest::new(
+            summary,
+            targets,
+            exclude,
+            include,
+            project.links.clone(),
+            metadata,
+            custom_metadata,
+            profiles,
+            publish,
+            publish_lockfile,
+            replace,
+            patch,
+            workspace_config,
+            features,
+            edition,
+            project.im_a_teapot,
+            Rc::clone(me),
+        );
+        if project.license_file.is_some() && project.license.is_some() {
+            manifest.add_warning(
+                "only one of `license` or \
+                 `license-file` is necessary"
+                    .to_string(),
+            );
+        }
+        for warning in warnings {
+            manifest.add_warning(warning);
+        }
+        for error in errors {
+            manifest.add_critical_warning(error);
+        }
+
+        manifest.feature_gate()?;
+
+        Ok((manifest, nested_paths))
+    }
+
+    fn to_virtual_manifest(
+        me: &Rc<TomlManifest>,
+        source_id: &SourceId,
+        root: &Path,
+        config: &Config,
+    ) -> CargoResult<(VirtualManifest, Vec<PathBuf>)> {
+        if me.project.is_some() {
+            bail!("virtual manifests do not define [project]");
+        }
+        if me.package.is_some() {
+            bail!("virtual manifests do not define [package]");
+        }
+        if me.lib.is_some() {
+            bail!("virtual manifests do not specify [lib]");
+        }
+        if me.bin.is_some() {
+            bail!("virtual manifests do not specify [[bin]]");
+        }
+        if me.example.is_some() {
+            bail!("virtual manifests do not specify [[example]]");
+        }
+        if me.test.is_some() {
+            bail!("virtual manifests do not specify [[test]]");
+        }
+        if me.bench.is_some() {
+            bail!("virtual manifests do not specify [[bench]]");
+        }
+
+        let mut nested_paths = Vec::new();
+        let mut warnings = Vec::new();
+        let mut deps = Vec::new();
+        let empty = Vec::new();
+        let cargo_features = me.cargo_features.as_ref().unwrap_or(&empty);
+        let features = Features::new(&cargo_features, &mut warnings)?;
+
+        let (replace, patch) = {
+            let mut cx = Context {
+                pkgid: None,
+                deps: &mut deps,
+                source_id,
+                nested_paths: &mut nested_paths,
+                config,
+                warnings: &mut warnings,
+                platform: None,
+                features: &features,
+                root,
+            };
+            (me.replace(&mut cx)?, me.patch(&mut cx)?)
+        };
+        let profiles = build_profiles(&me.profile);
+        let workspace_config = match me.workspace {
+            Some(ref config) => WorkspaceConfig::Root(WorkspaceRootConfig::new(
+                &root,
+                &config.members,
+                &config.default_members,
+                &config.exclude,
+            )),
+            None => {
+                bail!("virtual manifests must be configured with [workspace]");
+            }
+        };
+        Ok((
+            VirtualManifest::new(replace, patch, workspace_config, profiles),
+            nested_paths,
+        ))
+    }
+
+    fn replace(&self, cx: &mut Context) -> CargoResult<Vec<(PackageIdSpec, Dependency)>> {
+        if self.patch.is_some() && self.replace.is_some() {
+            bail!("cannot specify both [replace] and [patch]");
+        }
+        let mut replace = Vec::new();
+        for (spec, replacement) in self.replace.iter().flat_map(|x| x) {
+            let mut spec = PackageIdSpec::parse(spec).chain_err(|| {
+                format!(
+                    "replacements must specify a valid semver \
+                     version to replace, but `{}` does not",
+                    spec
+                )
+            })?;
+            if spec.url().is_none() {
+                spec.set_url(CRATES_IO.parse().unwrap());
+            }
+
+            let version_specified = match *replacement {
+                TomlDependency::Detailed(ref d) => d.version.is_some(),
+                TomlDependency::Simple(..) => true,
+            };
+            if version_specified {
+                bail!(
+                    "replacements cannot specify a version \
+                     requirement, but found one for `{}`",
+                    spec
+                );
+            }
+
+            let mut dep = replacement.to_dependency(spec.name(), cx, None)?;
+            {
+                let version = spec.version().ok_or_else(|| {
+                    format_err!(
+                        "replacements must specify a version \
+                         to replace, but `{}` does not",
+                        spec
+                    )
+                })?;
+                dep.set_version_req(VersionReq::exact(version));
+            }
+            replace.push((spec, dep));
+        }
+        Ok(replace)
+    }
+
+    fn patch(&self, cx: &mut Context) -> CargoResult<HashMap<Url, Vec<Dependency>>> {
+        let mut patch = HashMap::new();
+        for (url, deps) in self.patch.iter().flat_map(|x| x) {
+            let url = match &url[..] {
+                "crates-io" => CRATES_IO.parse().unwrap(),
+                _ => url.to_url()?,
+            };
+            patch.insert(
+                url,
+                deps.iter()
+                    .map(|(name, dep)| dep.to_dependency(name, cx, None))
+                    .collect::<CargoResult<Vec<_>>>()?,
+            );
+        }
+        Ok(patch)
+    }
+
+    fn maybe_custom_build(
+        &self,
+        build: &Option<StringOrBool>,
+        package_root: &Path,
+    ) -> Option<PathBuf> {
+        let build_rs = package_root.join("build.rs");
+        match *build {
+            Some(StringOrBool::Bool(false)) => None, // explicitly no build script
+            Some(StringOrBool::Bool(true)) => Some(build_rs.into()),
+            Some(StringOrBool::String(ref s)) => Some(PathBuf::from(s)),
+            None => {
+                match fs::metadata(&build_rs) {
+                    // If there is a build.rs file next to the Cargo.toml, assume it is
+                    // a build script
+                    Ok(ref e) if e.is_file() => Some(build_rs.into()),
+                    Ok(_) | Err(_) => None,
+                }
+            }
+        }
+    }
+
+    pub fn has_profiles(&self) -> bool {
+        self.profile.is_some()
+    }
+}
+
+/// Will check a list of build targets, and make sure the target names are unique within a vector.
+/// If not, the name of the offending build target is returned.
+fn unique_build_targets(targets: &[Target], package_root: &Path) -> Result<(), String> {
+    let mut seen = HashSet::new();
+    for v in targets.iter().map(|e| package_root.join(e.src_path())) {
+        if !seen.insert(v.clone()) {
+            return Err(v.display().to_string());
+        }
+    }
+    Ok(())
+}
+
+impl TomlDependency {
+    fn to_dependency(
+        &self,
+        name: &str,
+        cx: &mut Context,
+        kind: Option<Kind>,
+    ) -> CargoResult<Dependency> {
+        match *self {
+            TomlDependency::Simple(ref version) => DetailedTomlDependency {
+                version: Some(version.clone()),
+                ..Default::default()
+            }.to_dependency(name, cx, kind),
+            TomlDependency::Detailed(ref details) => details.to_dependency(name, cx, kind),
+        }
+    }
+}
+
+impl DetailedTomlDependency {
+    fn to_dependency(
+        &self,
+        name: &str,
+        cx: &mut Context,
+        kind: Option<Kind>,
+    ) -> CargoResult<Dependency> {
+        if self.version.is_none() && self.path.is_none() && self.git.is_none() {
+            let msg = format!(
+                "dependency ({}) specified without \
+                 providing a local path, Git repository, or \
+                 version to use. This will be considered an \
+                 error in future versions",
+                name
+            );
+            cx.warnings.push(msg);
+        }
+
+        if self.git.is_none() {
+            let git_only_keys = [
+                (&self.branch, "branch"),
+                (&self.tag, "tag"),
+                (&self.rev, "rev"),
+            ];
+
+            for &(key, key_name) in &git_only_keys {
+                if key.is_some() {
+                    let msg = format!(
+                        "key `{}` is ignored for dependency ({}). \
+                         This will be considered an error in future versions",
+                        key_name, name
+                    );
+                    cx.warnings.push(msg)
+                }
+            }
+        }
+
+        let registry_id = match self.registry {
+            Some(ref registry) => {
+                cx.features.require(Feature::alternative_registries())?;
+                SourceId::alt_registry(cx.config, registry)?
+            }
+            None => SourceId::crates_io(cx.config)?,
+        };
+
+        let new_source_id = match (
+            self.git.as_ref(),
+            self.path.as_ref(),
+            self.registry.as_ref(),
+            self.registry_index.as_ref(),
+        ) {
+            (Some(_), _, Some(_), _) | (Some(_), _, _, Some(_)) => bail!(
+                "dependency ({}) specification is ambiguous. \
+                 Only one of `git` or `registry` is allowed.",
+                name
+            ),
+            (_, _, Some(_), Some(_)) => bail!(
+                "dependency ({}) specification is ambiguous. \
+                 Only one of `registry` or `registry-index` is allowed.",
+                name
+            ),
+            (Some(git), maybe_path, _, _) => {
+                if maybe_path.is_some() {
+                    let msg = format!(
+                        "dependency ({}) specification is ambiguous. \
+                         Only one of `git` or `path` is allowed. \
+                         This will be considered an error in future versions",
+                        name
+                    );
+                    cx.warnings.push(msg)
+                }
+
+                let n_details = [&self.branch, &self.tag, &self.rev]
+                    .iter()
+                    .filter(|d| d.is_some())
+                    .count();
+
+                if n_details > 1 {
+                    let msg = format!(
+                        "dependency ({}) specification is ambiguous. \
+                         Only one of `branch`, `tag` or `rev` is allowed. \
+                         This will be considered an error in future versions",
+                        name
+                    );
+                    cx.warnings.push(msg)
+                }
+
+                let reference = self.branch
+                    .clone()
+                    .map(GitReference::Branch)
+                    .or_else(|| self.tag.clone().map(GitReference::Tag))
+                    .or_else(|| self.rev.clone().map(GitReference::Rev))
+                    .unwrap_or_else(|| GitReference::Branch("master".to_string()));
+                let loc = git.to_url()?;
+                SourceId::for_git(&loc, reference)?
+            }
+            (None, Some(path), _, _) => {
+                cx.nested_paths.push(PathBuf::from(path));
+                // If the source id for the package we're parsing is a path
+                // source, then we normalize the path here to get rid of
+                // components like `..`.
+                //
+                // The purpose of this is to get a canonical id for the package
+                // that we're depending on to ensure that builds of this package
+                // always end up hashing to the same value no matter where it's
+                // built from.
+                if cx.source_id.is_path() {
+                    let path = cx.root.join(path);
+                    let path = util::normalize_path(&path);
+                    SourceId::for_path(&path)?
+                } else {
+                    cx.source_id.clone()
+                }
+            }
+            (None, None, Some(registry), None) => SourceId::alt_registry(cx.config, registry)?,
+            (None, None, None, Some(registry_index)) => {
+                let url = registry_index.to_url()?;
+                SourceId::for_registry(&url)?
+            }
+            (None, None, None, None) => SourceId::crates_io(cx.config)?,
+        };
+
+        let (pkg_name, rename) = match self.package {
+            Some(ref s) => (&s[..], Some(name)),
+            None => (name, None),
+        };
+
+        let version = self.version.as_ref().map(|v| &v[..]);
+        let mut dep = match cx.pkgid {
+            Some(id) => Dependency::parse(pkg_name, version, &new_source_id, id, cx.config)?,
+            None => Dependency::parse_no_deprecated(name, version, &new_source_id)?,
+        };
+        dep.set_features(self.features.clone().unwrap_or_default())
+            .set_default_features(
+                self.default_features
+                    .or(self.default_features2)
+                    .unwrap_or(true),
+            )
+            .set_optional(self.optional.unwrap_or(false))
+            .set_platform(cx.platform.clone())
+            .set_registry_id(&registry_id);
+        if let Some(kind) = kind {
+            dep.set_kind(kind);
+        }
+        if let Some(rename) = rename {
+            cx.features.require(Feature::rename_dependency())?;
+            dep.set_rename(rename);
+        }
+        Ok(dep)
+    }
+}
+
+#[derive(Default, Serialize, Deserialize, Debug, Clone)]
+struct TomlTarget {
+    name: Option<String>,
+
+    // The intention was to only accept `crate-type` here but historical
+    // versions of Cargo also accepted `crate_type`, so look for both.
+    #[serde(rename = "crate-type")]
+    crate_type: Option<Vec<String>>,
+    #[serde(rename = "crate_type")]
+    crate_type2: Option<Vec<String>>,
+
+    path: Option<PathValue>,
+    test: Option<bool>,
+    doctest: Option<bool>,
+    bench: Option<bool>,
+    doc: Option<bool>,
+    plugin: Option<bool>,
+    #[serde(rename = "proc-macro")]
+    proc_macro: Option<bool>,
+    #[serde(rename = "proc_macro")]
+    proc_macro2: Option<bool>,
+    harness: Option<bool>,
+    #[serde(rename = "required-features")]
+    required_features: Option<Vec<String>>,
+}
+
+#[derive(Clone)]
+struct PathValue(PathBuf);
+
+impl<'de> de::Deserialize<'de> for PathValue {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        Ok(PathValue(String::deserialize(deserializer)?.into()))
+    }
+}
+
+impl ser::Serialize for PathValue {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: ser::Serializer,
+    {
+        self.0.serialize(serializer)
+    }
+}
+
+/// Corresponds to a `target` entry, but `TomlTarget` is already used.
+#[derive(Serialize, Deserialize, Debug)]
+struct TomlPlatform {
+    dependencies: Option<BTreeMap<String, TomlDependency>>,
+    #[serde(rename = "build-dependencies")]
+    build_dependencies: Option<BTreeMap<String, TomlDependency>>,
+    #[serde(rename = "build_dependencies")]
+    build_dependencies2: Option<BTreeMap<String, TomlDependency>>,
+    #[serde(rename = "dev-dependencies")]
+    dev_dependencies: Option<BTreeMap<String, TomlDependency>>,
+    #[serde(rename = "dev_dependencies")]
+    dev_dependencies2: Option<BTreeMap<String, TomlDependency>>,
+}
+
+impl TomlTarget {
+    fn new() -> TomlTarget {
+        TomlTarget::default()
+    }
+
+    fn name(&self) -> String {
+        match self.name {
+            Some(ref name) => name.clone(),
+            None => panic!("target name is required"),
+        }
+    }
+
+    fn proc_macro(&self) -> Option<bool> {
+        self.proc_macro.or(self.proc_macro2)
+    }
+
+    fn crate_types(&self) -> Option<&Vec<String>> {
+        self.crate_type
+            .as_ref()
+            .or_else(|| self.crate_type2.as_ref())
+    }
+}
+
+impl fmt::Debug for PathValue {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+fn build_profiles(profiles: &Option<TomlProfiles>) -> Profiles {
+    let profiles = profiles.as_ref();
+    Profiles::new(
+        profiles.and_then(|p| p.dev.clone()),
+        profiles.and_then(|p| p.release.clone()),
+        profiles.and_then(|p| p.test.clone()),
+        profiles.and_then(|p| p.bench.clone()),
+        profiles.and_then(|p| p.doc.clone()),
+    )
+}
