@@ -1,0 +1,80 @@
+[package]
+name = "ripgrep"
+version = "0.8.1"  #:version
+authors = ["Andrew Gallant <jamslam@gmail.com>"]
+description = """
+ripgrep is a line-oriented search tool that recursively searches your current
+directory for a regex pattern while respecting your gitignore rules. ripgrep
+has first class support on Windows, macOS and Linux
+"""
+documentation = "https://github.com/BurntSushi/ripgrep"
+homepage = "https://github.com/BurntSushi/ripgrep"
+repository = "https://github.com/BurntSushi/ripgrep"
+readme = "README.md"
+keywords = ["regex", "grep", "egrep", "search", "pattern"]
+categories = ["command-line-utilities", "text-processing"]
+license = "Unlicense/MIT"
+exclude = ["HomebrewFormula"]
+build = "build.rs"
+
+[badges]
+travis-ci = { repository = "BurntSushi/ripgrep" }
+appveyor = { repository = "BurntSushi/ripgrep" }
+
+[[bin]]
+bench = false
+path = "src/main.rs"
+name = "rg"
+
+[[test]]
+name = "integration"
+path = "tests/tests.rs"
+
+[workspace]
+members = ["grep", "globset", "ignore", "termcolor", "wincolor"]
+
+[dependencies]
+atty = "0.2.9"
+bytecount = "0.3.1"
+encoding_rs = "0.7"
+globset = { version = "0.4.0", path = "globset" }
+grep = { version = "0.1.8", path = "grep" }
+ignore = { version = "0.4.0", path = "ignore" }
+lazy_static = "1"
+libc = "0.2"
+log = "0.4"
+memchr = "2"
+memmap = "0.6"
+num_cpus = "1"
+regex = "1"
+same-file = "1"
+termcolor = { version = "0.3.4", path = "termcolor" }
+
+[dependencies.clap]
+version = "2.29.4"
+default-features = false
+features = ["suggestions", "color"]
+
+[target.'cfg(windows)'.dependencies.winapi]
+version = "0.3"
+features = ["std", "winnt"]
+
+[build-dependencies]
+lazy_static = "1"
+
+[build-dependencies.clap]
+version = "2.29.4"
+default-features = false
+features = ["suggestions", "color"]
+
+[features]
+avx-accel = ["bytecount/avx-accel", "regex/unstable"]
+simd-accel = [
+  "bytecount/simd-accel",
+  "encoding_rs/simd-accel",
+  "regex/unstable",
+]
+unstable = ["regex/unstable"]
+
+[profile.release]
+debug = true
