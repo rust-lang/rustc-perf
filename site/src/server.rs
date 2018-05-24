@@ -398,6 +398,7 @@ impl Server {
                             }
                         }
                         Err(err) => Response::new()
+                            .with_status(StatusCode::InternalServerError)
                             .with_header(ContentType::plaintext())
                             .with_header(CacheControl(vec![
                                 CacheDirective::NoCache,
