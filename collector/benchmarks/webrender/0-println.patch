@@ -1,0 +1,301 @@
+diff --git a/0-println.patch b/0-println.patch
+index d145512..e69de29 100644
+--- a/0-println.patch
++++ b/0-println.patch
+@@ -1,284 +0,0 @@
+-diff --git a/0-println.patch b/0-println.patch
+-index 00d5e9b..e69de29 100644
+---- a/0-println.patch
+-+++ b/0-println.patch
+-@@ -1,186 +0,0 @@
+--diff --git a/webrender/src/scene.rs b/webrender/src/scene.rs
+--index baa8131..b1ffd68 100644
+----- a/webrender/src/scene.rs
+--+++ b/webrender/src/scene.rs
+--@@ -29,6 +29,7 @@ impl SceneProperties {
+-- 
+--     /// Set the current property list for this display list.
+--     pub fn set_properties(&mut self, properties: DynamicProperties) {
+--+        println!("setting properties");
+--         self.transform_properties.clear();
+--         self.float_properties.clear();
+--         self.add_properties(properties);
+--@@ -55,26 +56,17 @@ impl SceneProperties {
+--         match *property {
+--             PropertyBinding::Value(value) => value,
+--             PropertyBinding::Binding(ref key, v) => {
+---                self.transform_properties
+---                    .get(&key.id)
+---                    .cloned()
+---                    .unwrap_or(v)
+--+                self.transform_properties.get(&key.id).cloned().unwrap_or(v)
+--             }
+--         }
+--     }
+-- 
+--     /// Get the current value for a float property.
+---    pub fn resolve_float(
+---        &self,
+---        property: &PropertyBinding<f32>
+---    ) -> f32 {
+--+    pub fn resolve_float(&self, property: &PropertyBinding<f32>) -> f32 {
+--         match *property {
+--             PropertyBinding::Value(value) => value,
+--             PropertyBinding::Binding(ref key, v) => {
+---                self.float_properties
+---                    .get(&key.id)
+---                    .cloned()
+---                    .unwrap_or(v)
+--+                self.float_properties.get(&key.id).cloned().unwrap_or(v)
+--             }
+--         }
+--     }
+--@@ -160,19 +152,17 @@ pub trait FilterOpHelpers {
+-- impl FilterOpHelpers for FilterOp {
+--     fn is_visible(&self) -> bool {
+--         match *self {
+---            FilterOp::Blur(..) |
+---            FilterOp::Brightness(..) |
+---            FilterOp::Contrast(..) |
+---            FilterOp::Grayscale(..) |
+---            FilterOp::HueRotate(..) |
+---            FilterOp::Invert(..) |
+---            FilterOp::Saturate(..) |
+---            FilterOp::Sepia(..) |
+---            FilterOp::DropShadow(..) |
+---            FilterOp::ColorMatrix(..) => true,
+---            FilterOp::Opacity(_, amount) => {
+---                amount > OPACITY_EPSILON
+---            }
+--+            FilterOp::Blur(..)
+--+            | FilterOp::Brightness(..)
+--+            | FilterOp::Contrast(..)
+--+            | FilterOp::Grayscale(..)
+--+            | FilterOp::HueRotate(..)
+--+            | FilterOp::Invert(..)
+--+            | FilterOp::Saturate(..)
+--+            | FilterOp::Sepia(..)
+--+            | FilterOp::DropShadow(..)
+--+            | FilterOp::ColorMatrix(..) => true,
+--+            FilterOp::Opacity(_, amount) => amount > OPACITY_EPSILON,
+--         }
+--     }
+-- 
+--@@ -189,13 +179,13 @@ impl FilterOpHelpers for FilterOp {
+--             FilterOp::Sepia(amount) => amount == 0.0,
+--             FilterOp::DropShadow(offset, blur, _) => {
+--                 offset.x == 0.0 && offset.y == 0.0 && blur == 0.0
+---            },
+--+            }
+--             FilterOp::ColorMatrix(matrix) => {
+---                matrix == [1.0, 0.0, 0.0, 0.0,
+---                           0.0, 1.0, 0.0, 0.0,
+---                           0.0, 0.0, 1.0, 0.0,
+---                           0.0, 0.0, 0.0, 1.0,
+---                           0.0, 0.0, 0.0, 0.0]
+--+                matrix
+--+                    == [
+--+                        1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0,
+--+                        1.0, 0.0, 0.0, 0.0, 0.0,
+--+                    ]
+--             }
+--         }
+--     }
+--diff --git a/webrender/src/scene.rs b/webrender/src/scene.rs
+--index baa8131..9c40e22 100644
+----- a/webrender/src/scene.rs
+--+++ b/webrender/src/scene.rs
+--@@ -29,6 +29,7 @@ impl SceneProperties {
+-- 
+--     /// Set the current property list for this display list.
+--     pub fn set_properties(&mut self, properties: DynamicProperties) {
+--+        println!("testing");
+--         self.transform_properties.clear();
+--         self.float_properties.clear();
+--         self.add_properties(properties);
+--@@ -55,26 +56,17 @@ impl SceneProperties {
+--         match *property {
+--             PropertyBinding::Value(value) => value,
+--             PropertyBinding::Binding(ref key, v) => {
+---                self.transform_properties
+---                    .get(&key.id)
+---                    .cloned()
+---                    .unwrap_or(v)
+--+                self.transform_properties.get(&key.id).cloned().unwrap_or(v)
+--             }
+--         }
+--     }
+-- 
+--     /// Get the current value for a float property.
+---    pub fn resolve_float(
+---        &self,
+---        property: &PropertyBinding<f32>
+---    ) -> f32 {
+--+    pub fn resolve_float(&self, property: &PropertyBinding<f32>) -> f32 {
+--         match *property {
+--             PropertyBinding::Value(value) => value,
+--             PropertyBinding::Binding(ref key, v) => {
+---                self.float_properties
+---                    .get(&key.id)
+---                    .cloned()
+---                    .unwrap_or(v)
+--+                self.float_properties.get(&key.id).cloned().unwrap_or(v)
+--             }
+--         }
+--     }
+--@@ -160,19 +152,17 @@ pub trait FilterOpHelpers {
+-- impl FilterOpHelpers for FilterOp {
+--     fn is_visible(&self) -> bool {
+--         match *self {
+---            FilterOp::Blur(..) |
+---            FilterOp::Brightness(..) |
+---            FilterOp::Contrast(..) |
+---            FilterOp::Grayscale(..) |
+---            FilterOp::HueRotate(..) |
+---            FilterOp::Invert(..) |
+---            FilterOp::Saturate(..) |
+---            FilterOp::Sepia(..) |
+---            FilterOp::DropShadow(..) |
+---            FilterOp::ColorMatrix(..) => true,
+---            FilterOp::Opacity(_, amount) => {
+---                amount > OPACITY_EPSILON
+---            }
+--+            FilterOp::Blur(..)
+--+            | FilterOp::Brightness(..)
+--+            | FilterOp::Contrast(..)
+--+            | FilterOp::Grayscale(..)
+--+            | FilterOp::HueRotate(..)
+--+            | FilterOp::Invert(..)
+--+            | FilterOp::Saturate(..)
+--+            | FilterOp::Sepia(..)
+--+            | FilterOp::DropShadow(..)
+--+            | FilterOp::ColorMatrix(..) => true,
+--+            FilterOp::Opacity(_, amount) => amount > OPACITY_EPSILON,
+--         }
+--     }
+-- 
+--@@ -189,13 +179,13 @@ impl FilterOpHelpers for FilterOp {
+--             FilterOp::Sepia(amount) => amount == 0.0,
+--             FilterOp::DropShadow(offset, blur, _) => {
+--                 offset.x == 0.0 && offset.y == 0.0 && blur == 0.0
+---            },
+--+            }
+--             FilterOp::ColorMatrix(matrix) => {
+---                matrix == [1.0, 0.0, 0.0, 0.0,
+---                           0.0, 1.0, 0.0, 0.0,
+---                           0.0, 0.0, 1.0, 0.0,
+---                           0.0, 0.0, 0.0, 1.0,
+---                           0.0, 0.0, 0.0, 0.0]
+--+                matrix
+--+                    == [
+--+                        1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0,
+--+                        1.0, 0.0, 0.0, 0.0, 0.0,
+--+                    ]
+--             }
+--         }
+--     }
+-diff --git a/webrender/src/scene.rs b/webrender/src/scene.rs
+-index baa8131..9c40e22 100644
+---- a/webrender/src/scene.rs
+-+++ b/webrender/src/scene.rs
+-@@ -29,6 +29,7 @@ impl SceneProperties {
+- 
+-     /// Set the current property list for this display list.
+-     pub fn set_properties(&mut self, properties: DynamicProperties) {
+-+        println!("testing");
+-         self.transform_properties.clear();
+-         self.float_properties.clear();
+-         self.add_properties(properties);
+-@@ -55,26 +56,17 @@ impl SceneProperties {
+-         match *property {
+-             PropertyBinding::Value(value) => value,
+-             PropertyBinding::Binding(ref key, v) => {
+--                self.transform_properties
+--                    .get(&key.id)
+--                    .cloned()
+--                    .unwrap_or(v)
+-+                self.transform_properties.get(&key.id).cloned().unwrap_or(v)
+-             }
+-         }
+-     }
+- 
+-     /// Get the current value for a float property.
+--    pub fn resolve_float(
+--        &self,
+--        property: &PropertyBinding<f32>
+--    ) -> f32 {
+-+    pub fn resolve_float(&self, property: &PropertyBinding<f32>) -> f32 {
+-         match *property {
+-             PropertyBinding::Value(value) => value,
+-             PropertyBinding::Binding(ref key, v) => {
+--                self.float_properties
+--                    .get(&key.id)
+--                    .cloned()
+--                    .unwrap_or(v)
+-+                self.float_properties.get(&key.id).cloned().unwrap_or(v)
+-             }
+-         }
+-     }
+-@@ -160,19 +152,17 @@ pub trait FilterOpHelpers {
+- impl FilterOpHelpers for FilterOp {
+-     fn is_visible(&self) -> bool {
+-         match *self {
+--            FilterOp::Blur(..) |
+--            FilterOp::Brightness(..) |
+--            FilterOp::Contrast(..) |
+--            FilterOp::Grayscale(..) |
+--            FilterOp::HueRotate(..) |
+--            FilterOp::Invert(..) |
+--            FilterOp::Saturate(..) |
+--            FilterOp::Sepia(..) |
+--            FilterOp::DropShadow(..) |
+--            FilterOp::ColorMatrix(..) => true,
+--            FilterOp::Opacity(_, amount) => {
+--                amount > OPACITY_EPSILON
+--            }
+-+            FilterOp::Blur(..)
+-+            | FilterOp::Brightness(..)
+-+            | FilterOp::Contrast(..)
+-+            | FilterOp::Grayscale(..)
+-+            | FilterOp::HueRotate(..)
+-+            | FilterOp::Invert(..)
+-+            | FilterOp::Saturate(..)
+-+            | FilterOp::Sepia(..)
+-+            | FilterOp::DropShadow(..)
+-+            | FilterOp::ColorMatrix(..) => true,
+-+            FilterOp::Opacity(_, amount) => amount > OPACITY_EPSILON,
+-         }
+-     }
+- 
+-@@ -189,13 +179,13 @@ impl FilterOpHelpers for FilterOp {
+-             FilterOp::Sepia(amount) => amount == 0.0,
+-             FilterOp::DropShadow(offset, blur, _) => {
+-                 offset.x == 0.0 && offset.y == 0.0 && blur == 0.0
+--            },
+-+            }
+-             FilterOp::ColorMatrix(matrix) => {
+--                matrix == [1.0, 0.0, 0.0, 0.0,
+--                           0.0, 1.0, 0.0, 0.0,
+--                           0.0, 0.0, 1.0, 0.0,
+--                           0.0, 0.0, 0.0, 1.0,
+--                           0.0, 0.0, 0.0, 0.0]
+-+                matrix
+-+                    == [
+-+                        1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0,
+-+                        1.0, 0.0, 0.0, 0.0, 0.0,
+-+                    ]
+-             }
+-         }
+-     }
+diff --git a/webrender/src/scene.rs b/webrender/src/scene.rs
+index baa8131..1b3cbff 100644
+--- a/webrender/src/scene.rs
++++ b/webrender/src/scene.rs
+@@ -29,6 +29,7 @@ impl SceneProperties {
+ 
+     /// Set the current property list for this display list.
+     pub fn set_properties(&mut self, properties: DynamicProperties) {
++	println!("testing");
+         self.transform_properties.clear();
+         self.float_properties.clear();
+         self.add_properties(properties);

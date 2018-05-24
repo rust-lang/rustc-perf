@@ -1,0 +1,16 @@
+# at bb354abbf84602d3d8357c63c4f0b1139ec4deb1
+[workspace]
+license = "MPL-2.0"
+members = [
+    "direct-composition",
+    "webrender",
+    "webrender_api",
+    "wrench",
+]
+
+[profile.release]
+debug = true
+panic = "abort"
+
+[patch.crates-io]
+serde_derive = { git = "https://github.com/servo/serde", branch = "deserialize_from_enums6", feature="deserialize_in_place" }

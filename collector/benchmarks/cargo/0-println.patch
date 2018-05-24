@@ -1,0 +1,12 @@
+diff --git a/src/cargo/sources/path.rs b/src/cargo/sources/path.rs
+index c7a0fdf..e37f73a 100644
+--- a/src/cargo/sources/path.rs
++++ b/src/cargo/sources/path.rs
+@@ -55,6 +55,7 @@ impl<'cfg> PathSource<'cfg> {
+     }
+ 
+     pub fn preload_with(&mut self, pkg: Package) {
++        println!("testing");
+         assert!(!self.updated);
+         assert!(!self.recursive);
+         assert!(self.packages.is_empty());
