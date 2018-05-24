@@ -84,11 +84,79 @@ pub struct Benchmark {
     config: BenchmarkConfig,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum BuildKind {
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum BuildKind {
     Check,
     Debug,
     Opt
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum RunKind {
+    Clean,
+    Nll,
+    BaseIncr,
+    CleanIncr,
+    PatchedIncrs,
+}
+
+#[derive(Fail, PartialEq, Eq, Debug)]
+pub enum KindError {
+    #[fail(display = "'{:?}' is not a known {} kind", _1, _0)]
+    UnknownKind(&'static str, String),
+}
+
+// How the --builds arg maps to BuildKinds.
+const STRINGS_AND_BUILD_KINDS: &'static [(&'static str, BuildKind)] = &[
+    ("Check", BuildKind::Check),
+    ("Debug", BuildKind::Debug),
+    ("Opt", BuildKind::Opt),
+];
+
+// How the --runs arg maps to RunKinds.
+const STRINGS_AND_RUN_KINDS: &'static [(&'static str, RunKind)] = &[
+    ("Clean", RunKind::Clean),
+    ("Nll", RunKind::Nll),
+    ("BaseIncr", RunKind::BaseIncr),
+    ("CleanIncr", RunKind::CleanIncr),
+    ("PatchedIncrs", RunKind::PatchedIncrs),
+];
+
+pub fn build_kinds_from_arg(arg: &str) -> Result<Vec<BuildKind>, KindError> {
+    kinds_from_arg(STRINGS_AND_BUILD_KINDS, arg)
+}
+
+pub fn run_kinds_from_arg(arg: &str) -> Result<Vec<RunKind>, KindError> {
+    kinds_from_arg(STRINGS_AND_RUN_KINDS, arg)
+}
+
+// Converts a comma-separated list of kind names to a vector of kinds with no
+// duplicates.
+fn kinds_from_arg<K>(strings_and_kinds: &[(&str, K)], arg: &str)
+                     -> Result<Vec<K>, KindError>
+    where K: Copy + Eq + ::std::hash::Hash
+{
+    let mut kind_set = HashSet::new();
+
+    for s in arg.split(',') {
+        if let Some((_s, k)) = strings_and_kinds.iter().find(|(str, _k)| s == *str) {
+            kind_set.insert(k);
+        } else if s == "All" {
+            for (_, k) in strings_and_kinds.iter() {
+                kind_set.insert(k);
+            }
+        } else {
+            return Err(KindError::UnknownKind("build", s.to_string()))
+        }
+    }
+
+    let mut v = vec![];
+    for (_s, k) in strings_and_kinds.iter() {
+        if kind_set.contains(k) {
+            v.push(*k);
+        }
+    }
+    Ok(v)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -103,7 +171,32 @@ pub enum Profiler {
     Eprintln,
 }
 
+#[derive(Fail, PartialEq, Eq, Debug)]
+pub enum FromNameError {
+    #[fail(display = "'perf-stat' cannot be used as the profiler")]
+    PerfStat,
+    #[fail(display = "'{:?}' is not a known profiler", _0)]
+    UnknownProfiler(String),
+}
+
 impl Profiler {
+    pub fn from_name(name: &str) -> Result<Profiler, FromNameError> {
+        match name {
+            // Even though `PerfStat` is a valid `Profiler` value, "perf-stat"
+            // is rejected because it can't be used with the `profiler`
+            // subcommand. (It's used with `bench_local` instead.)
+            "perf-stat" => Err(FromNameError::PerfStat),
+            "time-passes" => Ok(Profiler::TimePasses),
+            "perf-record" => Ok(Profiler::PerfRecord),
+            "cachegrind" => Ok(Profiler::Cachegrind),
+            "callgrind" => Ok(Profiler::Callgrind),
+            "dhat" => Ok(Profiler::DHAT),
+            "massif" => Ok(Profiler::Massif),
+            "eprintln" => Ok(Profiler::Eprintln),
+            _ => Err(FromNameError::UnknownProfiler(name.to_string())),
+        }
+    }
+
     fn name(&self) -> &'static str {
         match self {
             Profiler::PerfStat => "perf-stat",
@@ -444,6 +537,8 @@ impl Benchmark {
     pub fn profile(
         &self,
         profiler: Profiler,
+        build_kinds: &Option<Vec<BuildKind>>,
+        run_kinds: &Option<Vec<RunKind>>,
         output_dir: &Path,
         rustc_path: &Path,
         cargo_path: &Path,
@@ -454,13 +549,12 @@ impl Benchmark {
             bail!("disabled benchmark");
         }
 
-        // XXX: Currently we profile a single "clean" (from scratch),
-        // non-incremental, Debug build. This may change in the future.
-
-        let build_kinds = vec![BuildKind::Debug];
+        // Fall back to defaults if the kinds weren't specified.
+        let build_kinds = build_kinds.clone().unwrap_or(vec![BuildKind::Debug]);
+        let run_kinds = run_kinds.clone().unwrap_or(vec![RunKind::Clean]);
 
         for build_kind in build_kinds {
-            info!("Profiling {} with build kind: {:?}", self.name, build_kind);
+            info!("Profiling {}: {:?} + {:?}", self.name, build_kind, run_kinds);
 
             // Build everything, including all dependent crates, in a temp dir.
             let prep_dir = self.make_temp_dir(&self.path)?;
@@ -469,120 +563,174 @@ impl Benchmark {
 
             let timing_dir = self.make_temp_dir(prep_dir.path())?;
 
+            let process_output = |output: process::Output, run_kind: &str| -> Result<(), Error> {
+                // Produce a name of the form $PREFIX-$ID-$BENCHMARK-$BUILDKIND-$RUNKIND.
+                let out_file = |prefix: &str| -> String {
+                    format!("{}-{}-{}-{:?}-{}", prefix, id, &self.name, build_kind, run_kind)
+                };
+
+                // Combine a dir and a file.
+                let filepath = |dir: &Path, file: &str| {
+                    let mut path = dir.to_path_buf();
+                    path.push(file);
+                    path
+                };
+
+                match profiler {
+                    Profiler::PerfStat => {
+                        panic!("unexpected profiler");
+                    }
+
+                    // -Ztime-passes writes its output to stdout. We copy that
+                    // output into a file in the output dir.
+                    Profiler::TimePasses => {
+                        let ztp_file = filepath(output_dir, &out_file("Ztp"));
+
+                        let mut f = File::create(ztp_file)?;
+                        f.write_all(&output.stdout)?;
+                        f.flush()?;
+                    }
+
+                    // perf-record produces (via rustc-fake) a data file called
+                    // 'perf'. We copy it from the temp dir to the output dir,
+                    // giving it a new name in the process.
+                    Profiler::PerfRecord => {
+                        let tmp_perf_file = filepath(timing_dir.as_ref(), "perf");
+                        let perf_file = filepath(output_dir, &out_file("perf"));
+
+                        fs::copy(&tmp_perf_file, &perf_file)?;
+                    }
+
+                    // Cachegrind produces (via rustc-fake) a data file called
+                    // 'cgout'. We copy it from the temp dir to the output dir,
+                    // giving it a new name in the process, and then
+                    // post-process it to produce another data file in the
+                    // output dir.
+                    Profiler::Cachegrind => {
+                        let tmp_cgout_file = filepath(timing_dir.as_ref(), "cgout");
+                        let cgout_file = filepath(output_dir, &out_file("cgout"));
+                        let cgann_file = filepath(output_dir, &out_file("cgann"));
+
+                        fs::copy(&tmp_cgout_file, &cgout_file)?;
+
+                        let mut cg_annotate_cmd = Command::new("cg_annotate");
+                        cg_annotate_cmd
+                            .arg("--auto=yes")
+                            .arg(&cgout_file);
+                        let output = cg_annotate_cmd.output()?;
+
+                        let mut f = File::create(cgann_file)?;
+                        f.write_all(&output.stdout)?;
+                        f.flush()?;
+                    }
+
+                    // Callgrind produces (via rustc-fake) a data file called
+                    // 'clgout'. We copy it from the temp dir to the output
+                    // dir, giving it a new name in the process, and then
+                    // post-process it to produce another data file in the
+                    // output dir.
+                    Profiler::Callgrind => {
+                        let tmp_clgout_file = filepath(timing_dir.as_ref(), "clgout");
+                        let clgout_file = filepath(output_dir, &out_file("clgout"));
+                        let clgann_file = filepath(output_dir, &out_file("clgann"));
+
+                        fs::copy(&tmp_clgout_file, &clgout_file)?;
+
+                        let mut clg_annotate_cmd = Command::new("callgrind_annotate");
+                        clg_annotate_cmd
+                            .arg("--auto=yes")
+                            .arg(&clgout_file);
+                        let output = clg_annotate_cmd.output()?;
+
+                        let mut f = File::create(clgann_file)?;
+                        f.write_all(&output.stdout)?;
+                        f.flush()?;
+                    }
+
+                    // DHAT writes its output to stderr. We copy that output
+                    // into a file in the output dir.
+                    Profiler::DHAT => {
+                        let dhat_file = filepath(output_dir, &out_file("dhat"));
+
+                        let mut f = File::create(dhat_file)?;
+                        f.write_all(&output.stderr)?;
+                        f.flush()?;
+                    }
+
+                    // Massif produces (via rustc-fake) a data file called
+                    // 'msout'. We copy it from the temp dir to the output dir,
+                    // giving it a new name in the process.
+                    Profiler::Massif => {
+                        let tmp_msout_file = filepath(timing_dir.as_ref(), "msout");
+                        let msout_file = filepath(output_dir, &out_file("msout"));
+
+                        fs::copy(&tmp_msout_file, &msout_file)?;
+                    }
+
+                    // eprintln! statements writes their output to stderr. We
+                    // copy that output into a file in the output dir.
+                    Profiler::Eprintln => {
+                        let eprintln_file = filepath(output_dir, &out_file("eprintln"));
+
+                        let mut f = File::create(eprintln_file)?;
+                        f.write_all(&output.stderr)?;
+                        f.flush()?;
+                    }
+                }
+                Ok(())
+            };
+
             // A full non-incremental build.
-            let output = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
-                .profiler(profiler)
-                .run_rustc(timing_dir.path())?;
+            if run_kinds.contains(&RunKind::Clean) {
+                let clean = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
+                    .profiler(profiler)
+                    .run_rustc(timing_dir.path())?;
+                process_output(clean, "Clean")?;
+            }
 
-            // Produce a name of the form $PREFIX-$ID-$BENCHMARK.
-            let out_file = |prefix: &str| -> String {
-                format!("{}-{}-{}", prefix, id, &self.name)
-            };
+            // A full non-incremental build with NLL enabled.
+            if run_kinds.contains(&RunKind::Nll) && self.config.nll {
+                let nll = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
+                    .profiler(profiler)
+                    .nll(true)
+                    .run_rustc(timing_dir.path())?;
+                process_output(nll, "Nll")?;
+            }
 
-            // Combine a dir and a file.
-            let filepath = |dir: &Path, file: &str| {
-                let mut path = dir.to_path_buf();
-                path.push(file);
-                path
-            };
+            // An incremental build from scratch (slowest incremental case).
+            // This is required for any subsequent incremental builds.
+            if run_kinds.contains(&RunKind::BaseIncr) ||
+               run_kinds.contains(&RunKind::CleanIncr) ||
+               run_kinds.contains(&RunKind::PatchedIncrs) {
+                let base_incr = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
+                    .profiler(profiler)
+                    .incremental(true)
+                    .run_rustc(timing_dir.path())?;
+                process_output(base_incr, "BaseIncr")?;
+            }
 
-            match profiler {
-                Profiler::PerfStat => {
-                    panic!("unexpected profiler");
-                }
+            // An incremental build with no changes (fastest incremental case).
+            if run_kinds.contains(&RunKind::CleanIncr) {
+                let clean_incr = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
+                    .profiler(profiler)
+                    .incremental(true)
+                    .run_rustc(timing_dir.path())?;
+                process_output(clean_incr, "CleanIncr")?;
+            }
 
-                // -Ztime-passes writes its output to stdout. We copy that
-                // output into a file in the output dir.
-                Profiler::TimePasses => {
-                    let ztp_file = filepath(output_dir, &out_file("Ztp"));
+            if run_kinds.contains(&RunKind::PatchedIncrs) {
+                for (i, patch) in self.patches.iter().enumerate() {
+                    debug!("applying patch {}", patch.name);
+                    patch.apply(timing_dir.path()).map_err(|s| err_msg(s))?;
 
-                    let mut f = File::create(ztp_file)?;
-                    f.write_all(&output.stdout)?;
-                    f.flush()?;
-                }
-
-                // perf-record produces (via rustc-fake) a data file called
-                // 'perf'. We copy it from the temp dir to the output dir,
-                // giving it a new name in the process.
-                Profiler::PerfRecord => {
-                    let tmp_perf_file = filepath(timing_dir.as_ref(), "perf");
-                    let perf_file = filepath(output_dir, &out_file("perf"));
-
-                    fs::copy(&tmp_perf_file, &perf_file)?;
-                }
-
-                // Cachegrind produces (via rustc-fake) a data file called
-                // 'cgout'. We copy it from the temp dir to the output dir,
-                // giving it a new name in the process, and then post-process
-                // it to produce another data file in the output dir.
-                Profiler::Cachegrind => {
-                    let tmp_cgout_file = filepath(timing_dir.as_ref(), "cgout");
-                    let cgout_file = filepath(output_dir, &out_file("cgout"));
-                    let cgann_file = filepath(output_dir, &out_file("cgann"));
-
-                    fs::copy(&tmp_cgout_file, &cgout_file)?;
-
-                    let mut cg_annotate_cmd = Command::new("cg_annotate");
-                    cg_annotate_cmd
-                        .arg("--auto=yes")
-                        .arg(&cgout_file);
-                    let output = cg_annotate_cmd.output()?;
-
-                    let mut f = File::create(cgann_file)?;
-                    f.write_all(&output.stdout)?;
-                    f.flush()?;
-                }
-
-                // Callgrind produces (via rustc-fake) a data file called
-                // 'clgout'. We copy it from the temp dir to the output dir,
-                // giving it a new name in the process, and then post-process
-                // it to produce another data file in the output dir.
-                Profiler::Callgrind => {
-                    let tmp_clgout_file = filepath(timing_dir.as_ref(), "clgout");
-                    let clgout_file = filepath(output_dir, &out_file("clgout"));
-                    let clgann_file = filepath(output_dir, &out_file("clgann"));
-
-                    fs::copy(&tmp_clgout_file, &clgout_file)?;
-
-                    let mut clg_annotate_cmd = Command::new("callgrind_annotate");
-                    clg_annotate_cmd
-                        .arg("--auto=yes")
-                        .arg(&clgout_file);
-                    let output = clg_annotate_cmd.output()?;
-
-                    let mut f = File::create(clgann_file)?;
-                    f.write_all(&output.stdout)?;
-                    f.flush()?;
-                }
-
-                // DHAT writes its output to stderr. We copy that output into a
-                // file in the output dir.
-                Profiler::DHAT => {
-                    let dhat_file = filepath(output_dir, &out_file("dhat"));
-
-                    let mut f = File::create(dhat_file)?;
-                    f.write_all(&output.stderr)?;
-                    f.flush()?;
-                }
-
-                // Massif produces (via rustc-fake) a data file called 'msout'.
-                // We copy it from the temp dir to the output dir, giving it a
-                // new name in the process.
-                Profiler::Massif => {
-                    let tmp_msout_file = filepath(timing_dir.as_ref(), "msout");
-                    let msout_file = filepath(output_dir, &out_file("msout"));
-
-                    fs::copy(&tmp_msout_file, &msout_file)?;
-                }
-
-                // eprintln! statements writes their output to stderr. We copy
-                // that output into a file in the output dir.
-                Profiler::Eprintln => {
-                    let eprintln_file = filepath(output_dir, &out_file("eprintln"));
-
-                    let mut f = File::create(eprintln_file)?;
-                    f.write_all(&output.stderr)?;
-                    f.flush()?;
+                    // An incremental build with some changes (realistic
+                    // incremental case).
+                    let patched_incr = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
+                        .profiler(profiler)
+                        .incremental(true)
+                        .run_rustc(timing_dir.path())?;
+                    let run_kind_str = format!("PatchedIncr{}", i);
+                    process_output(patched_incr, &run_kind_str)?;
                 }
             }
         }
