@@ -8,6 +8,11 @@
 <body class="container">
     <div>&gt; <a href="index.html">graphs</a>, <a href="compare.html">compare</a>.</div>
     <div id="content" style="display: none"></div>
+    <div style=''>
+        <p>Warning: although measurements known to have high variation are marked with
+           '?'/'??', this does not mean that unmarked measurements are guaranteed to have
+           low variation.</p>
+    </div>
     <div id="settings">
         <div id="commits" class="settings" style="text-align:left;">
             <h3>Commits</h3>
@@ -58,15 +63,21 @@
         }
     }
 
-    function add_percent(pct) {
+    function add_percent(pct, dodgy, dodgy_marker) {
         if (pct && pct != Infinity && pct != -Infinity) {
+            let klass = "";
             if (pct > 1) {
-                return `<span class="positive">${pct.toFixed(1)}%</span>`;
+                klass = 'span class="positive"';
             } else if (pct < -1) {
-                return `<span class="negative">${pct.toFixed(1)}%</span>`;
-            } else {
-                return `<span>${pct.toFixed(1)}%</span>`;
+                klass = 'span class="negative"';
             }
+            let title = "";
+            let marker = "";
+            if (dodgy) {
+                title = `title="${dodgy}"`;
+                marker = dodgy_marker;
+            }
+            return `<span ${klass} ${title}>${pct.toFixed(1)}%${marker}</span>`;
         } else {
             return "<span>-</span>"
         }
@@ -161,23 +172,52 @@
 
         let max_name_width = Math.max(...fields.map(f => f.max_casename_len));
 
+        function dodgy_name_title(name) {
+            if (name.startsWith("coercions") ||
+                name.startsWith("style-servo")
+            ) {
+                return "One or more of this benchmark's runs have high measurement variation. " +
+                       "Treat this value with caution. And see the warning at the bottom of " +
+                       "the table.";
+            }
+            return "";
+        }
+
+        function dodgy_casename_title(name, casename) {
+            let variation = 0;
+            if (name.startsWith("coercions") && casename.startsWith("patched incremental")) {
+                variation = 4;
+            }
+            if (name.startsWith("style-servo") && casename.startsWith("clean incremental")) {
+                variation = 20;
+            }
+            if (variation != 0) {
+                return `This measurement is known to vary by ±${variation}%. Do not trust it! ` +
+                       "And see the warning at the bottom of the table."
+            }
+            return "";
+        }
+
         for (let field of fields) {
+            let dodgy = dodgy_name_title(field.name);
             html += "<tr><td>&nbsp;</td></tr>";
             html += "<tr data-field-start=true>";
             html += `<th style="width: ${max_name_width/2}em;" data-js-name=${field.name}>` +
                 `<details class=toggle-table><summary>` +
                 truncate_name(field.name) + "</summary></details></th>";
-            html += "<td> avg: " + add_percent(field.avg_pct) + "</td>";
-            html += "<td text-align=center> min: " + add_percent(field.min_pct) + "</td>";
-            html += "<td> max: " + add_percent(field.max_pct) + "</td>";
+            html += "<td> avg: " + add_percent(field.avg_pct, dodgy, "?") + "</td>";
+            html += "<td text-align=center> min: " + add_percent(field.min_pct, dodgy, "?") +
+                    "</td>";
+            html += "<td> max: " + add_percent(field.max_pct, dodgy, "?") + "</td>";
             html += "</tr>";
             for (let i = 0; i < field.fields.length; i++) {
                 let entry = field.fields[i];
+                let dodgy = dodgy_casename_title(field.name, entry.casename);
                 html += "<tr>";
                 html += "<td>" + entry.casename + "</td>";
                 html += add_datum_fields(entry.datum_a);
                 html += add_datum_fields(entry.datum_b);
-                html += "<td>" + add_percent(entry.percent) + "</td>";
+                html += "<td>" + add_percent(entry.percent, dodgy, "??") + "</td>";
                 html += "</tr>";
             }
         }
