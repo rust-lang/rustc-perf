@@ -1,0 +1,12 @@
+diff --git a/src/main.rs b/src/main.rs
+index d0051aa..17a5fe7 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -144,6 +144,7 @@ fn main() {
+         channels: RefCell::new(HashMap::new()),
+         uaids: RefCell::new(HashMap::new()),
+     });
++    println!("testing");
+ 
+     let ws_srv = ws_listener.incoming().for_each(|(socket, addr)| {
+         // Perform the websocket handshake followed by the webpush handshake.
