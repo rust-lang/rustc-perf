@@ -14,7 +14,8 @@ use std::sync::Arc;
 use std::collections::HashMap;
 use std::path::Path;
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
+use std::cmp::Ordering;
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -30,10 +31,11 @@ use hyper::server::{Http, Request, Response, Service};
 use url::Url;
 use flate2::Compression;
 use flate2::write::GzEncoder;
+use semver::Version;
 
 use git;
 use util::{self, get_repo_path};
-pub use api::{self, data, days, graph, info, CommitResponse, ServerResult};
+pub use api::{self, dashboard, data, days, graph, info, CommitResponse, ServerResult};
 use collector::{Date, Run};
 use load::{CommitData, InputData};
 use antidote::RwLock;
@@ -96,6 +98,100 @@ pub fn handle_info(data: &InputData) -> info::Response {
         crates: data.crate_list.clone(),
         stats: data.stats_list.clone(),
         as_of: data.last_date,
+    }
+}
+
+fn average(v: &[f64]) -> f64 {
+    v.iter().sum::<f64>() / v.len() as f64
+}
+
+pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
+    let mut versions = data.artifact_data.keys().cloned().collect::<Vec<_>>();
+    versions.sort_by(|a, b| {
+        match (a.parse::<Version>().ok(), b.parse::<Version>().ok()) {
+            (Some(a), Some(b)) => a.cmp(&b),
+            (_, _) => {
+                if a == "beta" {
+                    Ordering::Greater
+                } else if b == "beta" {
+                    Ordering::Less
+                } else {
+                    panic!("unexpected version")
+                }
+            }
+        }
+    });
+
+    versions.push(format!("master: {}", &data.data.keys().last().unwrap().sha[0..8]));
+
+    let mut check_best_average = Vec::new();
+    let mut check_println_average = Vec::new();
+    let mut check_worst_average = Vec::new();
+    let mut build_best_average = Vec::new();
+    let mut build_println_average = Vec::new();
+    let mut build_worst_average = Vec::new();
+
+    let benchmark_names = data.artifact_data["beta"].benchmarks.keys().collect::<Vec<_>>();
+    for version in &versions {
+        let mut check_best_points = Vec::new();
+        let mut check_println_points = Vec::new();
+        let mut check_worst_points = Vec::new();
+        let mut build_best_points = Vec::new();
+        let mut build_println_points = Vec::new();
+        let mut build_worst_points = Vec::new();
+
+        let mut benches = if version.starts_with("master") {
+            let data = data.data.values().last().unwrap();
+            data.benchmarks.iter()
+                .filter(|(name, _)| benchmark_names.contains(name)).collect::<Vec<_>>()
+        } else {
+            data.artifact_data[version].benchmarks.iter().collect::<Vec<_>>()
+        };
+        for (_, bench) in benches {
+            let bench = match bench {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+
+            let run = bench.runs.iter().find(|r| r.is_best_case() && r.check);
+            check_best_points.extend(run.and_then(|r| r.get_stat("wall-time")));
+
+            let run = bench.runs.iter().find(|r| r.is_trivial() && r.check);
+            check_println_points.extend(run.and_then(|r| r.get_stat("wall-time")));
+
+            let run = bench.runs.iter().find(|r| r.is_worst_case() && r.check);
+            check_worst_points.extend(run.and_then(|r| r.get_stat("wall-time")));
+
+            let run = bench.runs.iter().find(|r| r.is_best_case() && !r.check && !r.release);
+            build_best_points.extend(run.and_then(|r| r.get_stat("wall-time")));
+
+            let run = bench.runs.iter().find(|r| r.is_trivial() && !r.check && !r.release);
+            build_println_points.extend(run.and_then(|r| r.get_stat("wall-time")));
+
+            let run = bench.runs.iter().find(|r| r.is_worst_case() && !r.check && !r.release);
+            build_worst_points.extend(run.and_then(|r| r.get_stat("wall-time")));
+        }
+
+        check_best_average.push(average(&check_best_points));
+        check_println_average.push(average(&check_println_points));
+        check_worst_average.push(average(&check_worst_points));
+        build_best_average.push(average(&build_best_points));
+        build_println_average.push(average(&build_println_points));
+        build_worst_average.push(average(&build_worst_points));
+    }
+
+    dashboard::Response {
+        versions,
+        check: dashboard::Cases {
+            small_averages: check_println_average,
+            best_averages: check_best_average,
+            worst_averages: check_worst_average,
+        },
+        build: dashboard::Cases {
+            small_averages: build_println_average,
+            best_averages: build_best_average,
+            worst_averages: build_worst_average,
+        },
     }
 }
 
@@ -413,7 +509,7 @@ impl Server {
     fn handle_push(&self, _req: Request) -> <Self as Service>::Future {
         // set to updating
         let was_updating = self.updating
-            .compare_and_swap(false, true, Ordering::AcqRel);
+            .compare_and_swap(false, true, AtomicOrdering::AcqRel);
 
         if was_updating {
             return Box::new(futures::future::ok(
@@ -447,7 +543,7 @@ impl Server {
             // Write the new data back into the request
             *data = new_data;
 
-            updating.store(false, Ordering::Release);
+            updating.store(false, AtomicOrdering::Release);
 
             Ok(serde_json::to_value(
                 "Successfully updated from filesystem",
@@ -459,7 +555,7 @@ impl Server {
             response
                 .map(|value| Response::new().with_body(serde_json::to_string(&value).unwrap()))
                 .or_else(move |err| {
-                    updating.store(false, Ordering::Release);
+                    updating.store(false, AtomicOrdering::Release);
                     futures::future::ok(
                         Response::new()
                             .with_body(format!("Internal Server Error: {:?}", err))
@@ -512,6 +608,7 @@ impl Service for Server {
 
         match req.path() {
             "/perf/info" => self.handle_get(&req, handle_info),
+            "/perf/dashboard" => self.handle_get(&req, handle_dashboard),
             "/perf/data" => self.handle_post(req, handle_data),
             "/perf/graph" => self.handle_post(req, handle_graph),
             "/perf/get" => self.handle_post(req, handle_days),

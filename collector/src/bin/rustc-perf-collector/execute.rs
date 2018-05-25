@@ -19,6 +19,18 @@ use serde_json;
 
 use Mode;
 
+#[derive(Debug, Copy, Clone)]
+pub struct RustcFeatures {
+    pub incremental: bool,
+    pub is_stable: bool,
+}
+
+impl Default for RustcFeatures {
+    fn default() -> RustcFeatures {
+        RustcFeatures { incremental: true, is_stable: false }
+    }
+}
+
 fn command_output(cmd: &mut Command) -> Result<process::Output, Error> {
     trace!("running: {:?}", cmd);
     let output = cmd.output()?;
@@ -62,6 +74,8 @@ struct BenchmarkConfig {
     runs: usize,
     #[serde(default = "default_true")]
     nll: bool,
+    #[serde(default)]
+    supports_stable: bool,
 }
 
 impl Default for BenchmarkConfig {
@@ -73,6 +87,7 @@ impl Default for BenchmarkConfig {
             disabled: false,
             runs: default_runs(),
             nll: true,
+            supports_stable: false,
         }
     }
 }
@@ -221,6 +236,7 @@ struct CargoProcess<'a> {
     manifest_path: String,
     cargo_args: Vec<String>,
     rustc_args: Vec<String>,
+    supports: RustcFeatures,
 }
 
 impl<'a> CargoProcess<'a> {
@@ -254,7 +270,7 @@ impl<'a> CargoProcess<'a> {
             .env("CARGO", &self.cargo_path)
             .env(
                 "CARGO_INCREMENTAL",
-                &format!("{}", self.incremental as usize),
+                &format!("{}", (self.supports.incremental && self.incremental) as usize),
             )
             .current_dir(cwd)
             .arg(subcommand)
@@ -284,6 +300,7 @@ impl<'a> CargoProcess<'a> {
         cmd.args(&self.cargo_args);
         cmd.arg("--");
         if self.nll {
+            assert!(!self.supports.is_stable);
             cmd.arg("-Zborrowck=mir");
         }
         // --wrap-rustc-with is not a valid rustc flag. But rustc-fake
@@ -387,6 +404,7 @@ impl Benchmark {
         rustc_path: &'a Path,
         cargo_path: &'a Path,
         build_kind: BuildKind,
+        supports: RustcFeatures,
     ) -> CargoProcess<'a> {
         CargoProcess {
             rustc_path: rustc_path,
@@ -395,6 +413,7 @@ impl Benchmark {
             profiler: None,
             incremental: false,
             nll: false,
+            supports: supports,
             manifest_path: self.config
                 .cargo_toml
                 .clone()
@@ -423,11 +442,16 @@ impl Benchmark {
         cargo_path: &Path,
         iterations: usize,
         mode: Mode,
+        supports: RustcFeatures,
     ) -> Result<CollectedBenchmark, Error> {
         let iterations = cmp::min(iterations, self.config.runs);
         if self.config.disabled {
             eprintln!("skipping {}: disabled", self.name);
             bail!("disabled benchmark");
+        }
+
+        if !self.config.supports_stable && supports.is_stable {
+            bail!("disabled -- does not support stable benchmarking");
         }
 
         let has_perf = Command::new("perf").output().is_ok();
@@ -439,6 +463,7 @@ impl Benchmark {
         };
 
         let build_kinds = match mode {
+            Mode::Normal if supports.is_stable => vec![BuildKind::Check, BuildKind::Debug],
             Mode::Normal => vec![BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
             Mode::Test => vec![BuildKind::Check],
         };
@@ -460,7 +485,7 @@ impl Benchmark {
             // built on every iteration. A different temp dir is used for the
             // timing builds.
             let prep_dir = self.make_temp_dir(&self.path)?;
-            self.mk_cargo_process(rustc_path, cargo_path, build_kind)
+            self.mk_cargo_process(rustc_path, cargo_path, build_kind, supports)
                 .run_rustc(prep_dir.path())?;
 
             for i in 0..iterations {
@@ -468,14 +493,14 @@ impl Benchmark {
                 let timing_dir = self.make_temp_dir(prep_dir.path())?;
 
                 // A full non-incremental build.
-                let clean = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
+                let clean = self.mk_cargo_process(rustc_path, cargo_path, build_kind, supports)
                     .profiler(Profiler::PerfStat)
                     .run_rustc_and_process_perf_stat_output(timing_dir.path())?;
                 clean_stats.push(clean);
 
-                if self.config.nll {
+                if !supports.is_stable && self.config.nll {
                     // A full non-incremental build with nll enabled.
-                    let nll = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
+                    let nll = self.mk_cargo_process(rustc_path, cargo_path, build_kind, supports)
                         .profiler(Profiler::PerfStat)
                         .nll(true)
                         .run_rustc_and_process_perf_stat_output(timing_dir.path())?;
@@ -483,50 +508,54 @@ impl Benchmark {
                 }
 
                 // An incremental build running from scratch (slowest case).
-                let incr = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
+                let incr = self.mk_cargo_process(rustc_path, cargo_path, build_kind, supports)
                     .profiler(Profiler::PerfStat)
                     .incremental(true)
                     .run_rustc_and_process_perf_stat_output(timing_dir.path())?;
                 incr_stats.push(incr);
 
                 // An incremental build with no changes (fastest case).
-                let incr_clean = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
+                let incr_clean = self.mk_cargo_process(rustc_path, cargo_path, build_kind, supports)
                     .profiler(Profiler::PerfStat)
                     .incremental(true)
                     .run_rustc_and_process_perf_stat_output(timing_dir.path())?;
                 incr_clean_stats.push(incr_clean);
 
-                for patch in &self.patches {
-                    debug!("applying patch {}", patch.name);
-                    patch.apply(timing_dir.path()).map_err(|s| err_msg(s))?;
+                if supports.incremental {
+                    for patch in &self.patches {
+                        debug!("applying patch {}", patch.name);
+                        patch.apply(timing_dir.path()).map_err(|s| err_msg(s))?;
 
-                    // An incremental build with some changes (realistic case).
-                    let out = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
-                        .profiler(Profiler::PerfStat)
-                        .incremental(true)
-                        .run_rustc_and_process_perf_stat_output(timing_dir.path())?;
-                    if let Some(mut entry) = incr_patched_stats.iter_mut().find(|s| &s.0 == patch) {
-                        entry.1.push(out);
-                        continue;
+                        // An incremental build with some changes (realistic case).
+                        let out = self.mk_cargo_process(rustc_path, cargo_path, build_kind, supports)
+                            .profiler(Profiler::PerfStat)
+                            .incremental(true)
+                            .run_rustc_and_process_perf_stat_output(timing_dir.path())?;
+                        if let Some(mut entry) = incr_patched_stats.iter_mut().find(|s| &s.0 == patch) {
+                            entry.1.push(out);
+                            continue;
+                        }
+                        incr_patched_stats.push((patch.clone(), vec![out]));
                     }
-                    incr_patched_stats.push((patch.clone(), vec![out]));
                 }
             }
 
             ret.runs.push(process_stats(build_kind, BenchmarkState::Clean, clean_stats));
-            if self.config.nll {
+            if !supports.is_stable && self.config.nll {
                 ret.runs.push(process_stats(build_kind, BenchmarkState::Nll, nll_stats));
             }
             ret.runs.push(process_stats(build_kind, BenchmarkState::IncrementalStart, incr_stats));
             ret.runs.push(process_stats(build_kind, BenchmarkState::IncrementalClean,
                                         incr_clean_stats));
 
-            for (patch, results) in incr_patched_stats {
-                ret.runs.push(process_stats(
-                    build_kind,
-                    BenchmarkState::IncrementalPatched(patch),
-                    results,
-                ));
+            if supports.incremental {
+                for (patch, results) in incr_patched_stats {
+                    ret.runs.push(process_stats(
+                        build_kind,
+                        BenchmarkState::IncrementalPatched(patch),
+                        results,
+                    ));
+                }
             }
         }
 
@@ -553,12 +582,14 @@ impl Benchmark {
         let build_kinds = build_kinds.clone().unwrap_or(vec![BuildKind::Debug]);
         let run_kinds = run_kinds.clone().unwrap_or(vec![RunKind::Clean]);
 
+        let supports = RustcFeatures { is_stable: false, incremental: true };
+
         for build_kind in build_kinds {
             info!("Profiling {}: {:?} + {:?}", self.name, build_kind, run_kinds);
 
             // Build everything, including all dependent crates, in a temp dir.
             let prep_dir = self.make_temp_dir(&self.path)?;
-            self.mk_cargo_process(rustc_path, cargo_path, build_kind)
+            self.mk_cargo_process(rustc_path, cargo_path, build_kind, supports)
                 .run_rustc(prep_dir.path())?;
 
             let timing_dir = self.make_temp_dir(prep_dir.path())?;
@@ -682,7 +713,7 @@ impl Benchmark {
 
             // A full non-incremental build.
             if run_kinds.contains(&RunKind::Clean) {
-                let clean = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
+                let clean = self.mk_cargo_process(rustc_path, cargo_path, build_kind, supports)
                     .profiler(profiler)
                     .run_rustc(timing_dir.path())?;
                 process_output(clean, "Clean")?;
@@ -690,7 +721,7 @@ impl Benchmark {
 
             // A full non-incremental build with NLL enabled.
             if run_kinds.contains(&RunKind::Nll) && self.config.nll {
-                let nll = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
+                let nll = self.mk_cargo_process(rustc_path, cargo_path, build_kind, supports)
                     .profiler(profiler)
                     .nll(true)
                     .run_rustc(timing_dir.path())?;
@@ -702,7 +733,7 @@ impl Benchmark {
             if run_kinds.contains(&RunKind::BaseIncr) ||
                run_kinds.contains(&RunKind::CleanIncr) ||
                run_kinds.contains(&RunKind::PatchedIncrs) {
-                let base_incr = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
+                let base_incr = self.mk_cargo_process(rustc_path, cargo_path, build_kind, supports)
                     .profiler(profiler)
                     .incremental(true)
                     .run_rustc(timing_dir.path())?;
@@ -711,7 +742,7 @@ impl Benchmark {
 
             // An incremental build with no changes (fastest incremental case).
             if run_kinds.contains(&RunKind::CleanIncr) {
-                let clean_incr = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
+                let clean_incr = self.mk_cargo_process(rustc_path, cargo_path, build_kind, supports)
                     .profiler(profiler)
                     .incremental(true)
                     .run_rustc(timing_dir.path())?;
@@ -725,7 +756,7 @@ impl Benchmark {
 
                     // An incremental build with some changes (realistic
                     // incremental case).
-                    let patched_incr = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
+                    let patched_incr = self.mk_cargo_process(rustc_path, cargo_path, build_kind, supports)
                         .profiler(profiler)
                         .incremental(true)
                         .run_rustc(timing_dir.path())?;

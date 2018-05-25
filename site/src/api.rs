@@ -64,6 +64,22 @@ pub mod info {
     }
 }
 
+pub mod dashboard {
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    pub struct Cases {
+        pub best_averages: Vec<f64>,
+        pub small_averages: Vec<f64>,
+        pub worst_averages: Vec<f64>,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    pub struct Response {
+        pub versions: Vec<String>,
+        pub check: Cases,
+        pub build: Cases,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CommitResponse {
     pub commit: Option<String>,

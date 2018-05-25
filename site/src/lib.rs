@@ -25,6 +25,7 @@ extern crate serde_derive;
 extern crate serde_json;
 extern crate rmp_serde;
 extern crate url;
+extern crate semver;
 
 mod errors {
     error_chain! {

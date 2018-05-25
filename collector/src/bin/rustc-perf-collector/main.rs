@@ -18,6 +18,8 @@ extern crate serde;
 extern crate serde_derive;
 extern crate serde_json;
 extern crate tempdir;
+extern crate rustup;
+extern crate semver;
 
 use failure::{Error, ResultExt, SyncFailure};
 
@@ -27,17 +29,18 @@ use std::str;
 use std::path::{Path, PathBuf};
 use std::io::{stderr, Write};
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use chrono::{Timelike, Utc};
 
-use collector::{Commit, CommitData, Date};
+use collector::{Commit, ArtifactData, CommitData, Date};
 use rust_sysroot::git::Commit as GitCommit;
 use rust_sysroot::sysroot::Sysroot;
 
 mod execute;
 mod outrepo;
 
-use execute::{Benchmark, Profiler};
+use execute::{Benchmark, RustcFeatures, Profiler};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Mode {
@@ -54,6 +57,7 @@ fn bench_commit(
     benchmarks: &[Benchmark],
     iterations: usize,
     mode: Mode,
+    supports: RustcFeatures,
 ) -> CommitData {
     info!(
         "benchmarking commit {} ({}) for triple {}",
@@ -70,12 +74,13 @@ fn bench_commit(
             }
         }
     }
+
     for benchmark in benchmarks {
         if results.contains_key(&benchmark.name) {
             continue;
         }
 
-        let result = benchmark.measure(rustc_path, cargo_path, iterations, mode);
+        let result = benchmark.measure(rustc_path, cargo_path, iterations, mode, supports);
 
         if let Err(ref s) = result {
             info!("failed to benchmark {}, recorded: {}", benchmark.name, s);
@@ -190,6 +195,7 @@ fn process_commit(
         benchmarks,
         3,
         Mode::Normal,
+        RustcFeatures::default(),
     ))
 }
 
@@ -233,6 +239,10 @@ fn main_result() -> Result<i32, Error> {
        (@arg output_repo: --("output-repo") +required +takes_value "Output repository/directory")
        (@subcommand process =>
            (about: "syncs to git and collects performance data for all versions")
+       )
+       (@subcommand bench_published =>
+           (about: "bench an artifact from static.r-l.o")
+           (@arg ID: +required +takes_value "id to install (e.g., stable, beta, 1.26.0)")
        )
        (@subcommand bench_commit =>
            (about: "benchmark a bors merge from AWS")
@@ -302,7 +312,7 @@ fn main_result() -> Result<i32, Error> {
                     .map_err(SyncFailure::new)?;
                 // filter out servo benchmarks as they simple take too long
                 bench_commit(None, commit, &sysroot.triple, &sysroot.rustc, &sysroot.cargo,
-                             &benchmarks, 1, Mode::Test);
+                             &benchmarks, 1, Mode::Test, RustcFeatures::default());
             } else {
                 panic!("no commits");
             }
@@ -331,6 +341,45 @@ fn main_result() -> Result<i32, Error> {
             process_commit(&get_out_repo(false)?, &commit, &benchmarks)?;
             Ok(0)
         }
+        ("bench_published", Some(sub_m)) => {
+            let id = sub_m.value_of("ID").unwrap();
+            let repo = get_out_repo(false)?;
+            let commit = rust_sysroot::git::Commit {
+                sha: String::from("<none>"),
+                date: Date::ymd_hms(2010, 01, 01, 0, 0, 0).0,
+                summary: String::new(),
+            };
+            let cfg = rustup::Cfg::from_env(Arc::new(|_| {}))
+                .map_err(SyncFailure::new)?;
+            let toolchain = rustup::Toolchain::from(&cfg, id)
+                .map_err(SyncFailure::new)
+                .with_context(|_| format!("creating toolchain for id: {}", id))?;
+            toolchain.install_from_dist_if_not_installed().map_err(SyncFailure::new)?;
+            let CommitData { benchmarks: benchmark_data, .. } = bench_commit(
+                None,
+                &commit,
+                "x86_64-unknown-linux-gnu",
+                &toolchain.binary_file("rustc"),
+                &toolchain.binary_file("cargo"),
+                &benchmarks,
+                3,
+                Mode::Normal,
+                RustcFeatures {
+                    is_stable: true,
+                    incremental: match id.parse::<semver::Version>().ok() {
+                        Some(version) => {
+                            version >= semver::Version::new(1, 24, 0)
+                        }
+                        None => {
+                            assert_eq!(id, "beta");
+                            true
+                        }
+                    }
+                },
+            );
+            repo.success_artifact(&ArtifactData { id: id.to_string(), benchmarks: benchmark_data })?;
+            Ok(0)
+        }
         ("bench_local", Some(sub_m)) => {
             let rustc = sub_m.value_of("RUSTC").unwrap();
             let cargo = sub_m.value_of("CARGO").unwrap();
@@ -353,7 +402,7 @@ fn main_result() -> Result<i32, Error> {
             // prior data.
             let result =
                 bench_commit(None, &commit, "x86_64-unknown-linux-gnu", &rustc_path, &cargo_path,
-                             &benchmarks, 1, Mode::Normal);
+                             &benchmarks, 1, Mode::Normal, RustcFeatures::default());
             get_out_repo(true)?.add_commit_data(&result)?;
             Ok(0)
         }

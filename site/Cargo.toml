@@ -18,6 +18,7 @@ antidote = "1.0"
 chrono = "0.4"
 flate2 = "1.0.1"
 rmp-serde = "0.13.7"
+semver = "0.9"
 
 [dependencies.collector]
 path = "../collector"

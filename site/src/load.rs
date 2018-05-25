@@ -20,7 +20,7 @@ use util;
 use git;
 use collector::Date;
 
-pub use collector::{Commit, CommitData, Patch, Run, Stat};
+pub use collector::{Commit, CommitData, ArtifactData, Patch, Run, Stat};
 
 #[derive(Debug)]
 pub struct InputData {
@@ -36,6 +36,8 @@ pub struct InputData {
     pub last_date: Date,
 
     pub data: BTreeMap<Commit, CommitData>,
+
+    pub artifact_data: BTreeMap<String, ArtifactData>,
 }
 
 impl InputData {
@@ -43,6 +45,7 @@ impl InputData {
     pub fn from_fs(repo_loc: &str) -> Result<InputData> {
         let repo_loc = PathBuf::from(repo_loc);
         let mut skipped = 0;
+        let mut artifact_data = BTreeMap::new();
         let mut data = BTreeMap::new();
 
         if !repo_loc.exists() {
@@ -81,31 +84,52 @@ impl InputData {
                 continue;
             }
 
-            let contents: CommitData = match serde_json::from_str(&file_contents) {
-                Ok(json) => json,
-                Err(err) => {
-                    error!("Failed to parse JSON for {}: {:?}", filename, err);
+            if filename.starts_with("artifact-") {
+                let contents: ArtifactData = match serde_json::from_str(&file_contents) {
+                    Ok(j) => j,
+                    Err(err) => {
+                        error!("Failed to parse JSON for {}: {:?}", filename, err);
+                        skipped += 1;
+                        continue;
+                    }
+                };
+                if contents.benchmarks.is_empty() {
+                    warn!("empty benchmarks hash for {}", filename);
                     skipped += 1;
                     continue;
                 }
-            };
-            if contents.benchmarks.is_empty() {
-                warn!("empty benchmarks hash for {}", filename);
-                skipped += 1;
-                continue;
-            }
 
-            data.insert(contents.commit.clone(), contents);
+                artifact_data.insert(contents.id.clone(), contents);
+            } else {
+                let contents: CommitData = match serde_json::from_str(&file_contents) {
+                    Ok(json) => json,
+                    Err(err) => {
+                        error!("Failed to parse JSON for {}: {:?}", filename, err);
+                        skipped += 1;
+                        continue;
+                    }
+                };
+                if contents.benchmarks.is_empty() {
+                    warn!("empty benchmarks hash for {}", filename);
+                    skipped += 1;
+                    continue;
+                }
+
+                data.insert(contents.commit.clone(), contents);
+            }
         }
 
         info!("{} total files", file_count);
         info!("{} skipped files", skipped);
         info!("{} measured", data.len());
 
-        InputData::new(data)
+        InputData::new(data, artifact_data)
     }
 
-    pub fn new(data: BTreeMap<Commit, CommitData>) -> Result<InputData> {
+    pub fn new(
+        data: BTreeMap<Commit, CommitData>,
+        artifact_data: BTreeMap<String, ArtifactData>
+    ) -> Result<InputData> {
         let mut last_date = None;
         let mut crate_list = BTreeSet::new();
         let mut stats_list = BTreeSet::new();
@@ -137,6 +161,7 @@ impl InputData {
             stats_list: stats_list,
             last_date: last_date,
             data: data,
+            artifact_data,
         })
     }
 }

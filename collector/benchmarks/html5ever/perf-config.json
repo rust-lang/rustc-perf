@@ -1,3 +1,4 @@
 {
-    "nll": false
+    "nll": false,
+    "supports_stable": true
 }

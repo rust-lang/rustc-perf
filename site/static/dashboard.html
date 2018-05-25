@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>rustc performance data</title>
+<link rel="stylesheet" type="text/css" href="perf.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highcharts/6.0.7/highcharts.js"></script>
+</head>
+<body class="container">
+    <div>&gt; <a href="index.html">graphs</a>, <a href="compare.html">compare</a>,
+        <a href="dashboard.html">dashboard</a>.</div>
+    <div id="check-average-times"></div>
+    <div id="build-average-times"></div>
+    <div id="as-of"></div>
+    <div style="text-align: center;">
+        <a href="https://github.com/rust-lang-nursery/rustc-perf">Contribute on GitHub</a>
+    </div>
+    <script src="shared.js"></script>
+    <script>
+
+    function render(element, name, data, versions) {
+        new Highcharts.chart(document.getElementById(element), {
+            chart: {
+                zoomType: "xy",
+                renderTo: document.getElementById(element),
+                type: "line",
+            },
+            title: {
+                text: `Average latency by workflow: ${name}`,
+            },
+            yAxis: {
+                title: { text: "Seconds" },
+            },
+            xAxis: {
+                categories: versions,
+                title: { text: "Version" },
+            },
+            series: [
+                {
+                    name: "best-case",
+                    animation: false,
+                    data: data.best_averages,
+                },
+                {
+                    name: "println-case",
+                    animation: false,
+                    data: data.small_averages,
+                },
+                {
+                    name: "worst-case",
+                    animation: false,
+                    data: data.worst_averages,
+                },
+            ],
+        });
+    }
+
+    function populate_data(data) {
+        render("check-average-times", "check", data.check, data.versions);
+        render("build-average-times", "build", data.build, data.versions);
+    }
+
+    function make_data() {
+        fetch(BASE_URL + "/dashboard", {}).then(function(response) {
+            response.json().then(data => populate_data(data));
+        });
+    }
+
+    make_data();
+    </script>
+</body>
+</html>

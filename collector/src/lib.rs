@@ -163,6 +163,14 @@ pub struct Run {
 }
 
 impl Run {
+    pub fn is_best_case(&self) -> bool {
+        self.state == BenchmarkState::IncrementalClean
+    }
+
+    pub fn is_worst_case(&self) -> bool {
+        self.state == BenchmarkState::IncrementalStart
+    }
+
     pub fn is_trivial(&self) -> bool {
         if let BenchmarkState::IncrementalPatched(ref patch) = self.state {
             return patch.name == "println";
@@ -184,6 +192,13 @@ impl Run {
     pub fn get_stat(&self, stat: &str) -> Option<f64> {
         self.stats.iter().find(|s| s.name == stat).map(|s| s.cnt)
     }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ArtifactData {
+    pub id: String,
+    // String in Result is the output of the command that failed
+    pub benchmarks: BTreeMap<String, Result<Benchmark, String>>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

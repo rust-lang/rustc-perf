@@ -16,6 +16,11 @@ libc = "0.2"
 chrono = "0.4"
 cargo_metadata = "0.5"
 lazy_static = "1"
+semver = "0.9"
+
+[dependencies.rustup]
+git = "https://github.com/rust-lang-nursery/rustup.rs.git"
+optional = false
 
 [dependencies.rust_sysroot]
 git = "https://github.com/Mark-Simulacrum/bisect-rust.git"

@@ -10,7 +10,7 @@ use std::collections::HashSet;
 use std::thread;
 use std::time::{self, Instant};
 use serde_json;
-use collector::CommitData;
+use collector::{ArtifactData, CommitData};
 use chrono::{Duration, Utc};
 use rust_sysroot::git::Commit as GitCommit;
 use execute::Benchmark;
@@ -90,6 +90,15 @@ impl Repo {
     pub fn success(&self, data: &CommitData) -> Result<(), Error> {
         self.add_commit_data(data)?;
         self.commit_and_push(&format!("{} - success", data.commit.sha))?;
+        Ok(())
+    }
+
+    pub fn success_artifact(&self, data: &ArtifactData) -> Result<(), Error> {
+        let filepath = self.times().join(format!("artifact-{}.json", data.id));
+        info!("creating file {}", filepath.display());
+        let mut file = File::create(&filepath)?;
+        serde_json::to_writer(&mut file, &data)?;
+        self.commit_and_push(&format!("{} - success", data.id))?;
         Ok(())
     }
 
