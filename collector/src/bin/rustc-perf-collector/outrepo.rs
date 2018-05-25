@@ -232,14 +232,6 @@ impl Repo {
         Ok(())
     }
 
-    pub fn next_retry(&mut self) -> Option<String> {
-        if self.retries.len() == 0 {
-            None
-        } else {
-            Some(self.retries.remove(0))
-        }
-    }
-
     fn broken_commits_file(&self) -> PathBuf {
         self.path.join("broken-commits-log")
     }

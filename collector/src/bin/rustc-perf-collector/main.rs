@@ -193,19 +193,6 @@ fn process_commit(
     ))
 }
 
-fn process_retries(
-    commits: &[GitCommit],
-    repo: &mut outrepo::Repo,
-    benchmarks: &[Benchmark],
-) -> Result<(), Error> {
-    while let Some(retry) = repo.next_retry() {
-        info!("retrying {}", retry);
-        let commit = commits.iter().find(|commit| commit.sha == retry).unwrap();
-        process_commit(repo, commit, benchmarks)?;
-    }
-    Ok(())
-}
-
 fn process_commits(
     commits: &[GitCommit],
     repo: &outrepo::Repo,
@@ -323,8 +310,7 @@ fn main_result() -> Result<i32, Error> {
         }
         ("process", Some(_)) => {
             let commits = get_commits()?;
-            let mut out_repo = get_out_repo(false)?;
-            process_retries(&commits, &mut out_repo, &benchmarks)?;
+            let out_repo = get_out_repo(false)?;
             process_commits(&commits, &out_repo, &benchmarks)?;
             Ok(0)
         }
