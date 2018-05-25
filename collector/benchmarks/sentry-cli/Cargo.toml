@@ -1,0 +1,73 @@
+# At a7786ea7d7443ccc2aab28160b4998484ac192ac, 1.21.0 tag
+[package]
+authors = ["Armin Ronacher <armin.ronacher@active-4.com>"]
+build = "build.rs"
+name = "sentry-cli"
+version = "1.21.0"
+
+[dependencies]
+app_dirs = "1.1.1"
+backtrace = "0.3"
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "2.22", default-features = false, features = ["suggestions", "wrap_help"] }
+console = "0.5"
+curl = "0.4.8"
+dotenv = "0.10"
+elementtree = "0.5"
+encoding = "0.2"
+error-chain = "0.10"
+git2 = { version = "0.6.4", default-features = false }
+glob = "0.2.11"
+humansize = "1.0"
+if_chain = "0.1.2"
+indicatif = "0.7"
+itertools = "0.6"
+java-properties = "1.0"
+lazy_static = "0.2.4"
+libc = "0.2.23"
+log = "0.3"
+mach_object = "0.1.5"
+memmap = "0.5"
+might-be-minified = "0.2.1"
+open = "1.2"
+plist = "0.2.2"
+prettytable-rs = "0.6"
+proguard = "0.3"
+regex = "0.2"
+runas = "0.1.4"
+rust-ini = "0.10"
+serde = "1.0"
+serde_derive = "1.0"
+serde_json = "1.0"
+sha1 = "0.2"
+sourcemap = "1.0.1"
+uchardet = "2.0"
+url = "1.4"
+uuid = { version = "0.5", features = ["v4", "serde"] }
+walkdir = "1.0"
+which = "1.0"
+zip = "0.2"
+
+[profile]
+
+[profile.dev]
+codegen-units = 2
+
+[replace]
+#"curl:0.4.7" = { git = "https://github.com/mitsuhiko/curl-rust", rev = "adb3d825d352b925fc2e35c576d46cb055a30489" }
+
+[target]
+
+[target."cfg(not(windows))"]
+
+[target."cfg(not(windows))".dependencies]
+chan = "0.1"
+chan-signal = "0.2"
+openssl-probe = "0.1.0"
+
+[target."cfg(target_os=\"macos\")"]
+
+[target."cfg(target_os=\"macos\")".dependencies]
+mac-process-info = "0.1.0"
+osascript = "0.3"
+unix-daemonize = "0.1"

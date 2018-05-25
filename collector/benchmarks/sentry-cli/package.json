@@ -1,0 +1,30 @@
+{
+  "name": "sentry-cli-binary",
+  "version": "1.20.0",
+  "description": "A command line utility to work with Sentry. https://docs.sentry.io/hosted/learn/cli/",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "install": "node ./bin/install-sentry-cli"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/getsentry/sentry-cli"
+  },
+  "keywords": [
+    "sentry",
+    "sentry-cli",
+    "cli"
+  ],
+  "bugs": {
+    "url": "https://github.com/getsentry/sentry-cli/issues"
+  },
+  "main": "index.js",
+  "bin": {
+    "sentry-cli": "bin/sentry-cli"
+  },
+  "dependencies": {
+    "progress": "2.0.0"
+  },
+  "homepage": "https://docs.sentry.io/hosted/learn/cli/",
+  "license": "BSD-3-Clause"
+}
