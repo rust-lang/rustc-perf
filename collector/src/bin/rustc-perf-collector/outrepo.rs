@@ -113,8 +113,14 @@ impl Repo {
         for entry in read_dir(path)? {
             let entry = entry?;
             let filename = entry.file_name().to_string_lossy().to_string();
-            let sha =
-                &filename[filename.find("00:00").unwrap() + 6..filename.find("-x86").unwrap()];
+            if filename.contains("artifact") {
+                continue;
+            }
+            let sha = if filename.contains("00:00") {
+                &filename[filename.find("00:00").unwrap() + 6..filename.find("-x86").unwrap()]
+            } else {
+                &filename["commit-".len()..filename.find("-x86").unwrap()]
+            };
             have.insert(sha.to_string());
         }
 
