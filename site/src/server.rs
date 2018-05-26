@@ -102,7 +102,7 @@ pub fn handle_info(data: &InputData) -> info::Response {
 }
 
 fn average(v: &[f64]) -> f64 {
-    v.iter().sum::<f64>() / v.len() as f64
+    (v.iter().sum::<f64>() / v.len() as f64 * 10.0).round() / 10.0
 }
 
 pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
