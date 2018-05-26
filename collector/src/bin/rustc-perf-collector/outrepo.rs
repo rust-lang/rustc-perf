@@ -2,7 +2,7 @@
 
 use std::fs::{self, read_dir, File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str;
 use std::collections::HashSet;
@@ -154,13 +154,7 @@ impl Repo {
         Ok(())
     }
 
-    pub fn load_commit_data(&self, commit: &GitCommit, triple: &str) -> Result<CommitData, Error> {
-        let filepath = self.times().join(format!(
-            "{}-{}-{}.json",
-            commit.date.to_rfc3339(),
-            commit.sha,
-            triple
-        ));
+    fn load_commit_data_file(&self, filepath: &Path) -> Result<CommitData, Error> {
         trace!("loading file {}", filepath.display());
         let mut file = File::open(&filepath)?;
         let mut contents = String::new();
@@ -170,11 +164,27 @@ impl Repo {
         Ok(data)
     }
 
+    pub fn load_commit_data(&self, commit: &GitCommit, triple: &str) -> Result<CommitData, Error> {
+        let filepath = self.times().join(format!(
+            "{}-{}-{}.json",
+            commit.date.to_rfc3339(),
+            commit.sha,
+            triple
+        ));
+        match self.load_commit_data_file(&filepath) {
+            Ok(v) => return Ok(v),
+            Err(_) => {
+                self.load_commit_data_file(
+                    &self.times().join(format!("commit-{}-{}.json", commit.sha, triple)))
+            }
+        }
+    }
+
     pub fn add_commit_data(&self, data: &CommitData) -> Result<(), Error> {
         let commit = &data.commit;
         let filepath = self.times().join(format!(
-            "{}-{}-{}.json",
-            commit.date, commit.sha, data.triple
+            "commit-{}-{}.json",
+            commit.sha, data.triple
         ));
         info!("creating file {}", filepath.display());
         let mut file = File::create(&filepath)?;
