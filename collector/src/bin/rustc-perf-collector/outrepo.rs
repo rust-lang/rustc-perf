@@ -118,15 +118,6 @@ impl Repo {
             have.insert(sha.to_string());
         }
 
-        if let Ok(file) = File::open(self.broken_commits_file()) {
-            let file = BufReader::new(file);
-            for line in file.lines() {
-                let line = line?;
-                let sha = &line[..line.find(":").unwrap()];
-                have.insert(sha.to_string());
-            }
-        }
-
         let missing = commits
             .iter()
             .filter(|c| Utc::now().signed_duration_since(c.date) < Duration::days(29))
