@@ -11,7 +11,7 @@ use std::env;
 
 use load::{Commit, CommitData, InputData};
 use collector::Bound;
-use errors::*;
+use failure::Error;
 
 use chrono::Duration;
 
@@ -19,7 +19,7 @@ pub fn find_commit<'a>(
     data: &'a InputData,
     idx: &Bound,
     left: bool,
-) -> ::std::result::Result<(&'a Commit, &'a CommitData), String> {
+) -> Result<(&'a Commit, &'a CommitData), String> {
     let last_month = data.last_date.0.naive_utc().date() - Duration::days(30);
     for (commit, cd) in &data.data {
         let found = match *idx {
@@ -64,7 +64,7 @@ pub fn data_range<'a>(
     data: &'a InputData,
     a: &Bound,
     b: &Bound,
-) -> ::std::result::Result<Vec<(&'a Commit, &'a CommitData)>, String> {
+) -> Result<Vec<(&'a Commit, &'a CommitData)>, String> {
     let mut ret = Vec::new();
     let mut in_range = false;
     let left_bound = find_commit(data, a, true)?.0;
@@ -85,10 +85,12 @@ pub fn data_range<'a>(
 }
 
 /// Reads the repository path from the arguments passed to main()
-pub fn get_repo_path() -> Result<String> {
-    env::args()
-        .nth(1)
-        .ok_or("No argument supplied, needs location of data repo.".into())
+pub fn get_repo_path() -> Result<String, Error> {
+    if let Some(p) = env::args().nth(1) {
+        Ok(p)
+    } else {
+        bail!("No argument supplied, needs location of data repo.")
+    }
 }
 
 pub use collector::{null_means_nan, round_float};

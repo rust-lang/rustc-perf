@@ -14,8 +14,8 @@ use std::io::Read;
 use std::env;
 
 use serde_json;
+use failure::Error;
 
-use errors::*;
 use util;
 use git;
 use collector::Date;
@@ -42,7 +42,7 @@ pub struct InputData {
 
 impl InputData {
     /// Initialize `InputData from the file system.
-    pub fn from_fs(repo_loc: &str) -> Result<InputData> {
+    pub fn from_fs(repo_loc: &str) -> Result<InputData, Error> {
         let repo_loc = PathBuf::from(repo_loc);
         let mut skipped = 0;
         let mut artifact_data = BTreeMap::new();
@@ -129,7 +129,7 @@ impl InputData {
     pub fn new(
         data: BTreeMap<Commit, CommitData>,
         artifact_data: BTreeMap<String, ArtifactData>
-    ) -> Result<InputData> {
+    ) -> Result<InputData, Error> {
         let mut last_date = None;
         let mut crate_list = BTreeSet::new();
         let mut stats_list = BTreeSet::new();

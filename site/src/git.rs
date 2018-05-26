@@ -10,21 +10,22 @@
 use std::path::Path;
 use std::process::Command;
 
-use errors::*;
+use failure::Error;
+use CommandFailed;
 
 const BRANCH: &'static str = "master";
 const GIT: &'static str = "git";
 const GIT_CHECKOUT: &'static str = "checkout";
 const GIT_PULL: &'static str = "pull";
 
-pub fn update_repo(repo_path: &str) -> Result<()> {
+pub fn update_repo(repo_path: &str) -> Result<(), Error> {
     let working_dir = Path::new(repo_path);
     checkout_master(working_dir)?;
     pull_updates(working_dir)?;
     Ok(())
 }
 
-pub fn execute_command(working_dir: &Path, args: &[&str]) -> Result<()> {
+pub fn execute_command(working_dir: &Path, args: &[&str]) -> Result<(), Error> {
     let status = Command::new(GIT)
         .current_dir(working_dir)
         .args(args)
@@ -32,14 +33,14 @@ pub fn execute_command(working_dir: &Path, args: &[&str]) -> Result<()> {
     if status.success() {
         Ok(())
     } else {
-        Err(ErrorKind::CommandFailed(format!("{} {:?}", GIT, args)).into())
+        Err(CommandFailed { command: format!("{} {:?}", GIT, args) })?
     }
 }
 
-fn checkout_master(working_dir: &Path) -> Result<()> {
+fn checkout_master(working_dir: &Path) -> Result<(), Error> {
     execute_command(working_dir, &[GIT_CHECKOUT, BRANCH])
 }
 
-fn pull_updates(working_dir: &Path) -> Result<()> {
+fn pull_updates(working_dir: &Path) -> Result<(), Error> {
     execute_command(working_dir, &[GIT_PULL])
 }

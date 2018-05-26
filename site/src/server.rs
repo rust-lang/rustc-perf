@@ -32,6 +32,7 @@ use url::Url;
 use flate2::Compression;
 use flate2::write::GzEncoder;
 use semver::Version;
+use failure::Error;
 
 use git;
 use util::{self, get_repo_path};
@@ -39,8 +40,6 @@ pub use api::{self, dashboard, data, days, graph, info, CommitResponse, ServerRe
 use collector::{Date, Run};
 use load::{CommitData, InputData};
 use antidote::RwLock;
-
-use errors::*;
 
 /// Data associated with a specific date
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -530,7 +529,7 @@ impl Server {
 
         let rwlock = self.data.clone();
         let updating = self.updating.clone();
-        let response = self.pool.spawn_fn(move || -> Result<serde_json::Value> {
+        let response = self.pool.spawn_fn(move || -> Result<serde_json::Value, Error> {
             let repo_path = get_repo_path()?;
 
             git::update_repo(&repo_path)?;

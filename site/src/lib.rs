@@ -10,8 +10,6 @@
 extern crate antidote;
 extern crate chrono;
 extern crate collector;
-#[macro_use]
-extern crate error_chain;
 extern crate flate2;
 extern crate futures;
 extern crate futures_cpupool;
@@ -26,22 +24,13 @@ extern crate serde_json;
 extern crate rmp_serde;
 extern crate url;
 extern crate semver;
+#[macro_use]
+extern crate failure;
 
-mod errors {
-    error_chain! {
-        foreign_links {
-            Io(::std::io::Error);
-            Json(::serde_json::Error);
-            Chrono(::chrono::ParseError);
-        }
-
-        errors {
-            CommandFailed(command: String) {
-                description("command failed; exit code non-zero")
-                display("command failed, non-zero exit code: {}", command)
-            }
-        }
-    }
+#[derive(Fail, Debug)]
+#[fail(display = "command failed: {}", command)]
+pub struct CommandFailed {
+    command: String,
 }
 
 mod git;

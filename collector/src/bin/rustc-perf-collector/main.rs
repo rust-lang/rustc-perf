@@ -17,7 +17,7 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
-extern crate tempdir;
+extern crate tempfile;
 extern crate rustup;
 extern crate semver;
 

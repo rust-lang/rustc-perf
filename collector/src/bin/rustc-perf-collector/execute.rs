@@ -10,7 +10,7 @@ use std::fs::{self, File};
 use std::collections::{HashMap, HashSet};
 use std::cmp;
 
-use tempdir::TempDir;
+use tempfile::TempDir;
 
 use collector::{Benchmark as CollectedBenchmark, BenchmarkState, Patch, Run, Stat};
 
@@ -388,7 +388,7 @@ impl Benchmark {
     }
 
     fn make_temp_dir(&self, base: &Path) -> Result<TempDir, Error> {
-        let tmp_dir = TempDir::new(&format!("rustc-perf-{}", self.name))?;
+        let tmp_dir = TempDir::new()?;
         let mut cmd = Command::new("cp");
         cmd.arg("-r")
             .arg("-T")
