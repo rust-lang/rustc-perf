@@ -1,7 +1,7 @@
 //! Write benchmark information to the output repository
 
 use std::fs::{self, read_dir, File, OpenOptions};
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str;
