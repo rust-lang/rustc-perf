@@ -131,7 +131,9 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
     let mut build_println_average = Vec::new();
     let mut build_worst_average = Vec::new();
 
-    let benchmark_names = data.artifact_data["beta"].benchmarks.keys().collect::<Vec<_>>();
+    let benchmark_names = data.artifact_data["beta"].benchmarks.keys()
+        .filter(|key| data.artifact_data["beta"].benchmarks[*key].is_ok())
+        .collect::<Vec<_>>();
     for version in &versions {
         let mut check_best_points = Vec::new();
         let mut check_println_points = Vec::new();
@@ -142,8 +144,10 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
 
         let mut benches = if version.starts_with("master") {
             let data = data.data.values().last().unwrap();
-            data.benchmarks.iter()
-                .filter(|(name, _)| benchmark_names.contains(name)).collect::<Vec<_>>()
+            let benches = data.benchmarks.iter()
+                .filter(|(name, _)| benchmark_names.contains(name)).collect::<Vec<_>>();
+            assert_eq!(benches.len(), benchmark_names.len());
+            benches
         } else {
             data.artifact_data[version].benchmarks.iter().collect::<Vec<_>>()
         };
@@ -153,23 +157,21 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
                 Err(_) => continue,
             };
 
-            let run = bench.runs.iter().find(|r| r.is_best_case() && r.check);
-            check_best_points.extend(run.and_then(|r| r.get_stat("wall-time")));
+            macro_rules! extend {
+                ($v:ident, $r: ident, $cond: expr) => {
+                    let run = bench.runs.iter().find(|$r| $cond);
+                    if let Some(stat) = run.and_then(|r| r.get_stat("wall-time")) {
+                        $v.push(stat);
+                    }
+                }
+            }
 
-            let run = bench.runs.iter().find(|r| r.is_trivial() && r.check);
-            check_println_points.extend(run.and_then(|r| r.get_stat("wall-time")));
-
-            let run = bench.runs.iter().find(|r| r.is_worst_case() && r.check);
-            check_worst_points.extend(run.and_then(|r| r.get_stat("wall-time")));
-
-            let run = bench.runs.iter().find(|r| r.is_best_case() && !r.check && !r.release);
-            build_best_points.extend(run.and_then(|r| r.get_stat("wall-time")));
-
-            let run = bench.runs.iter().find(|r| r.is_trivial() && !r.check && !r.release);
-            build_println_points.extend(run.and_then(|r| r.get_stat("wall-time")));
-
-            let run = bench.runs.iter().find(|r| r.is_worst_case() && !r.check && !r.release);
-            build_worst_points.extend(run.and_then(|r| r.get_stat("wall-time")));
+            extend!(check_best_points, r, r.is_best_case() && r.check);
+            extend!(check_println_points, r, r.is_trivial() && r.check);
+            extend!(check_worst_points, r, r.is_worst_case() && r.check);
+            extend!(build_best_points, r, r.is_best_case()   && !r.check && !r.release);
+            extend!(build_println_points, r, r.is_trivial()  && !r.check && !r.release);
+            extend!(build_worst_points, r, r.is_worst_case() && !r.check && !r.release);
         }
 
         check_best_average.push(average(&check_best_points));
