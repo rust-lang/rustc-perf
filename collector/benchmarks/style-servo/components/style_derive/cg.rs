@@ -5,8 +5,10 @@
 use darling::{FromDeriveInput, FromField, FromVariant};
 use quote::{ToTokens, Tokens};
 use std::borrow::Cow;
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::iter;
+use std::ops::Deref;
+use std::cmp::{PartialOrd, Ord, Ordering};
 use syn::{self, AngleBracketedParameterData, Body, DeriveInput, Field, Ident};
 use syn::{ImplGenerics, Path, PathParameters, PathSegment, PolyTraitRef};
 use syn::{QSelf, TraitBoundModifier, Ty, TyGenerics, TyParam, TyParamBound};
@@ -22,6 +24,30 @@ pub struct WhereClause<'input, 'path> {
     bounded_types: HashSet<Ty>,
 }
 
+#[derive(PartialEq, Eq)]
+pub struct OrdIdent(Ident);
+
+impl Deref for OrdIdent {
+    type Target = Ident;
+    fn deref(&self) -> &Ident {
+        &self.0
+    }
+}
+
+impl PartialOrd for OrdIdent {
+    fn partial_cmp(&self, o: &Self) -> Option<Ordering> {
+        Some(self.cmp(o))
+    }
+}
+
+impl Ord for OrdIdent {
+    fn cmp(&self, o: &Self) -> Ordering {
+        let a: &str = self.as_ref();
+        let b: &str = o.as_ref();
+        a.cmp(b)
+    }
+}
+
 impl<'input, 'path> ToTokens for WhereClause<'input, 'path> {
     fn to_tokens(&self, tokens: &mut Tokens) {
         self.inner.to_tokens(tokens);
@@ -32,7 +58,7 @@ impl<'input, 'path> WhereClause<'input, 'path> {
     pub fn add_trait_bound(&mut self, ty: &Ty) {
         let trait_path = self.trait_path;
         let params = self.params;
-        let mut found = self.trait_output.map(|_| HashSet::new());
+        let mut found = self.trait_output.map(|_| BTreeSet::new());
         if self.bounded_types.contains(&ty) {
             return;
         }
@@ -69,7 +95,7 @@ impl<'input, 'path> WhereClause<'input, 'path> {
         self.inner.predicates.push(pred);
 
         if let Some(found) = found {
-            for ident in found {
+            for OrdIdent(ident) in found {
                 let ty = Ty::Path(None, ident.into());
                 if !self.bounded_types.contains(&ty) {
                     self.bounded_types.insert(ty.clone());
@@ -145,12 +171,12 @@ pub fn fmap_trait_parts<'input, 'path>(
 pub fn is_parameterized(
     ty: &Ty,
     params: &[TyParam],
-    found: Option<&mut HashSet<Ident>>,
+    found: Option<&mut BTreeSet<OrdIdent>>,
 ) -> bool {
     struct IsParameterized<'a, 'b> {
         params: &'a [TyParam],
         has_free: bool,
-        found: Option<&'b mut HashSet<Ident>>,
+        found: Option<&'b mut BTreeSet<OrdIdent>>,
     }
 
     impl<'a, 'b> Visitor for IsParameterized<'a, 'b> {
@@ -159,7 +185,7 @@ pub fn is_parameterized(
                 if self.params.iter().any(|param| param.ident == ident) {
                     self.has_free = true;
                     if let Some(ref mut found) = self.found {
-                        found.insert(ident.clone());
+                        found.insert(OrdIdent(ident.clone()));
                     }
                 }
             }
