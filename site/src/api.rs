@@ -152,3 +152,36 @@ pub mod days {
         pub b: DateData,
     }
 }
+
+pub mod nll_dashboard {
+    use collector::Bound;
+
+    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+    pub struct Request {
+        pub commit: Bound,
+        pub stat: String,
+    }
+
+    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+    pub struct Point {
+        pub case: String,
+        pub clean: Option<f32>,
+        pub nll: Option<f32>,
+    }
+
+    impl Point {
+        pub fn pct(&self) -> Option<u64> {
+            if let (Some(clean), Some(nll)) = (self.clean, self.nll) {
+                Some((100.0 * nll / clean) as u64)
+            } else {
+                None
+            }
+        }
+    }
+
+    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+    pub struct Response {
+        pub commit: String,
+        pub points: Vec<Point>,
+    }
+}

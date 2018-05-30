@@ -178,6 +178,14 @@ impl Run {
         false
     }
 
+    pub fn is_non_incremental_clean(&self) -> bool {
+        self.state == BenchmarkState::Clean
+    }
+
+    pub fn is_nll(&self) -> bool {
+        self.state == BenchmarkState::Nll
+    }
+
     pub fn name(&self) -> String {
         let opt = if self.release {
             "-opt"

@@ -36,7 +36,7 @@ use failure::Error;
 
 use git;
 use util::{self, get_repo_path};
-pub use api::{self, dashboard, data, days, graph, info, CommitResponse, ServerResult};
+pub use api::{self, nll_dashboard, dashboard, data, days, graph, info, CommitResponse, ServerResult};
 use collector::{Date, Run};
 use load::{CommitData, InputData};
 use antidote::RwLock;
@@ -92,6 +92,35 @@ impl DateData {
     }
 }
 
+pub fn handle_nll_dashboard(
+    body: nll_dashboard::Request,
+    data: &InputData
+) -> ServerResult<nll_dashboard::Response> {
+    let commit = util::find_commit(data, &body.commit, false)?.1;
+    let mut points = commit.benchmarks.iter()
+        .filter_map(|b| b.1.as_ref().ok())
+        .map(|bench| {
+            let nll = bench.runs.iter().find(|r| r.check && r.is_nll())
+                .and_then(|r| r.get_stat(&body.stat));
+            let clean = bench.runs.iter().find(|r| r.check && r.is_non_incremental_clean())
+                .and_then(|r| r.get_stat(&body.stat));
+
+            nll_dashboard::Point {
+                case: bench.name.clone(),
+                clean: clean.map(|clean| round(clean) as f32),
+                nll: nll.map(|nll| round(nll) as f32),
+            }
+        }).collect::<Vec<_>>();
+    points.sort_by(|a, b| {
+        match (a.pct(), b.pct()) {
+            (Some(a), Some(b)) => a.cmp(&b).reverse(),
+            (Some(_), None) => Ordering::Less,
+            _ => a.case.cmp(&b.case),
+        }
+    });
+    Ok(nll_dashboard::Response { commit: commit.commit.sha.clone(), points })
+}
+
 pub fn handle_info(data: &InputData) -> info::Response {
     info::Response {
         crates: data.crate_list.clone(),
@@ -102,6 +131,10 @@ pub fn handle_info(data: &InputData) -> info::Response {
 
 fn average(v: &[f64]) -> f64 {
     (v.iter().sum::<f64>() / v.len() as f64 * 10.0).round() / 10.0
+}
+
+fn round(v: f64) -> f64 {
+    (v * 10.0).round() / 10.0
 }
 
 pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
@@ -613,6 +646,7 @@ impl Service for Server {
             "/perf/data" => self.handle_post(req, handle_data),
             "/perf/graph" => self.handle_post(req, handle_graph),
             "/perf/get" => self.handle_post(req, handle_days),
+            "/perf/nll_dashboard" => self.handle_post(req, handle_nll_dashboard),
             "/perf/pr_commit" => self.handle_get_req(&req, |req, _data| {
                 let res = req.query()
                     .unwrap_or_default()
