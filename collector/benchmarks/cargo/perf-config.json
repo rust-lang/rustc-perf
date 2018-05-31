@@ -1,3 +1,4 @@
 {
-    "cargo_opts": "--lib"
+    "cargo_opts": "--lib",
+    "runs": 1
 }

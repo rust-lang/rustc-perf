@@ -1,3 +1,4 @@
 {
-    "cargo_toml": "webrender/Cargo.toml"
+    "cargo_toml": "webrender/Cargo.toml",
+    "runs": 1
 }
