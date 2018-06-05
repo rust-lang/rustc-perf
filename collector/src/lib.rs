@@ -139,6 +139,19 @@ impl BenchmarkState {
             }
         }
     }
+
+    // Otherwise we end up with "equivalent benchmarks" looking different,
+    // e.g. 8-println.patch vs. 0-println.patch
+    pub fn erase_path(mut self) -> Self {
+        match &mut self {
+            BenchmarkState::IncrementalPatched(patch) => {
+                patch.index = 0;
+                patch.path = PathBuf::new();
+            }
+            _ => {}
+        }
+        self
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

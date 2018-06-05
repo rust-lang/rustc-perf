@@ -285,7 +285,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
                         continue;
                     }
                     summary_points
-                        .entry((run.release, run.check, run.state))
+                        .entry((run.release, run.check, run.state.erase_path()))
                         .or_insert_with(Vec::new)
                         .push(value);
                 }
