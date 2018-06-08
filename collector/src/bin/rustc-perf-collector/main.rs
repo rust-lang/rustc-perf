@@ -52,6 +52,8 @@ fn bench_commit(
     repo: Option<&outrepo::Repo>,
     commit: &GitCommit,
     triple: &str,
+    build_kinds: &Option<Vec<execute::BuildKind>>,
+    run_kinds: &Option<Vec<execute::RunKind>>,
     rustc_path: &Path,
     cargo_path: &Path,
     benchmarks: &[Benchmark],
@@ -80,7 +82,8 @@ fn bench_commit(
             continue;
         }
 
-        let result = benchmark.measure(rustc_path, cargo_path, iterations, mode, supports);
+        let result = benchmark.measure(build_kinds, run_kinds, rustc_path, cargo_path, iterations,
+                                       mode, supports);
 
         if let Err(ref s) = result {
             info!("failed to benchmark {}, recorded: {}", benchmark.name, s);
@@ -190,6 +193,8 @@ fn process_commit(
         Some(repo),
         commit,
         &sysroot.triple,
+        &None,
+        &None,
         &sysroot.rustc,
         &sysroot.cargo,
         benchmarks,
@@ -252,6 +257,12 @@ fn main_result() -> Result<i32, Error> {
            (about: "benchmark a local rustc")
            (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
            (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
+           (@arg BUILDS: --builds +takes_value
+            "One or more (comma-separated) of: 'Check', 'Debug',\n\
+            'Opt', 'All'")
+           (@arg RUNS: --runs +takes_value
+            "One or more (comma-separated) of: 'Clean', 'Nll',\n\
+            'BaseIncr', 'CleanIncr', 'PatchedIncrs', 'All'")
            (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
        )
        (@subcommand profile =>
@@ -310,9 +321,9 @@ fn main_result() -> Result<i32, Error> {
             if let Some(commit) = get_commits()?.last() {
                 let sysroot = Sysroot::install(commit, "x86_64-unknown-linux-gnu", false, false)
                     .map_err(SyncFailure::new)?;
-                // filter out servo benchmarks as they simple take too long
-                bench_commit(None, commit, &sysroot.triple, &sysroot.rustc, &sysroot.cargo,
-                             &benchmarks, 1, Mode::Test, RustcFeatures::default());
+                // filter out servo benchmarks as they simply take too long
+                bench_commit(None, commit, &sysroot.triple, &None, &None, &sysroot.rustc,
+                             &sysroot.cargo, &benchmarks, 1, Mode::Test, RustcFeatures::default());
             } else {
                 panic!("no commits");
             }
@@ -359,6 +370,8 @@ fn main_result() -> Result<i32, Error> {
                 None,
                 &commit,
                 "x86_64-unknown-linux-gnu",
+                &None,
+                &None,
                 &toolchain.binary_file("rustc"),
                 &toolchain.binary_file("cargo"),
                 &benchmarks,
@@ -383,6 +396,16 @@ fn main_result() -> Result<i32, Error> {
         ("bench_local", Some(sub_m)) => {
             let rustc = sub_m.value_of("RUSTC").unwrap();
             let cargo = sub_m.value_of("CARGO").unwrap();
+            let build_kinds = if let Some(kinds) = sub_m.value_of("BUILDS") {
+                Some(execute::build_kinds_from_arg(kinds)?)
+            } else {
+                None
+            };
+            let run_kinds = if let Some(runs) = sub_m.value_of("RUNS") {
+                Some(execute::run_kinds_from_arg(runs)?)
+            } else {
+                None
+            };
             let id = sub_m.value_of("ID").unwrap();
 
             // This isn't a true representation of a commit, because `id` is an
@@ -401,8 +424,9 @@ fn main_result() -> Result<i32, Error> {
             // `commit.date` is unique, so there's no point even trying to load
             // prior data.
             let result =
-                bench_commit(None, &commit, "x86_64-unknown-linux-gnu", &rustc_path, &cargo_path,
-                             &benchmarks, 1, Mode::Normal, RustcFeatures::default());
+                bench_commit(None, &commit, "x86_64-unknown-linux-gnu", &build_kinds, &run_kinds,
+                             &rustc_path, &cargo_path, &benchmarks, 1, Mode::Normal,
+                             RustcFeatures::default());
             get_out_repo(true)?.add_commit_data(&result)?;
             Ok(0)
         }
