@@ -438,12 +438,17 @@ impl Benchmark {
     /// Run a specific benchmark under perf-stat.
     pub fn measure(
         &self,
+        build_kinds: &Option<Vec<BuildKind>>,
+        run_kinds: &Option<Vec<RunKind>>,
         rustc_path: &Path,
         cargo_path: &Path,
         iterations: usize,
         mode: Mode,
         supports: RustcFeatures,
     ) -> Result<CollectedBenchmark, Error> {
+        // XXX: measure() and profile() contain a lot of duplicated code and
+        // should be combined.
+
         let iterations = cmp::min(iterations, self.config.runs);
         if self.config.disabled {
             eprintln!("skipping {}: disabled", self.name);
@@ -462,23 +467,26 @@ impl Benchmark {
             runs: Vec::new(),
         };
 
-        let build_kinds = match mode {
-            Mode::Normal if supports.is_stable => vec![BuildKind::Check, BuildKind::Debug],
-            Mode::Normal => vec![BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
-            Mode::Test => vec![BuildKind::Check],
-        };
+        let build_kinds = build_kinds.clone().unwrap_or_else(|| {
+            match mode {
+                Mode::Normal if supports.is_stable => vec![BuildKind::Check, BuildKind::Debug],
+                Mode::Normal => vec![BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
+                Mode::Test => vec![BuildKind::Check],
+            }
+        });
+        let run_kinds = run_kinds.clone().unwrap_or_else(|| {
+            vec![RunKind::Clean, RunKind::Nll, RunKind::BaseIncr, RunKind::CleanIncr,
+                 RunKind::PatchedIncrs]
+        });
 
         for build_kind in build_kinds {
+            info!("Benchmarking {}: {:?} + {:?}", self.name, build_kind, run_kinds);
+
             let mut clean_stats = Vec::new();
             let mut nll_stats = Vec::new();
-            let mut incr_stats = Vec::new();
-            let mut incr_clean_stats = Vec::new();
-            let mut incr_patched_stats: Vec<(Patch, Vec<Vec<Stat>>)> = Vec::new();
-
-            info!(
-                "Benchmarking {} with build kind: {:?}, iterations: {}",
-                self.name, build_kind, iterations
-            );
+            let mut base_incr_stats = Vec::new();
+            let mut clean_incr_stats = Vec::new();
+            let mut patched_incr_stats: Vec<(Patch, Vec<Vec<Stat>>)> = Vec::new();
 
             // Build everything, including all dependent crates, in a temp dir.
             // We do this before the iterations so that dependent crates aren't
@@ -493,12 +501,14 @@ impl Benchmark {
                 let timing_dir = self.make_temp_dir(prep_dir.path())?;
 
                 // A full non-incremental build.
-                let clean = self.mk_cargo_process(rustc_path, cargo_path, build_kind, supports)
-                    .profiler(Profiler::PerfStat)
-                    .run_rustc_and_process_perf_stat_output(timing_dir.path())?;
-                clean_stats.push(clean);
+                if run_kinds.contains(&RunKind::Clean) {
+                    let clean = self.mk_cargo_process(rustc_path, cargo_path, build_kind, supports)
+                        .profiler(Profiler::PerfStat)
+                        .run_rustc_and_process_perf_stat_output(timing_dir.path())?;
+                    clean_stats.push(clean);
+                }
 
-                if !supports.is_stable && self.config.nll {
+                if run_kinds.contains(&RunKind::Nll) && !supports.is_stable && self.config.nll {
                     // A full non-incremental build with nll enabled.
                     let nll = self.mk_cargo_process(rustc_path, cargo_path, build_kind, supports)
                         .profiler(Profiler::PerfStat)
@@ -508,48 +518,68 @@ impl Benchmark {
                 }
 
                 // An incremental build running from scratch (slowest case).
-                let incr = self.mk_cargo_process(rustc_path, cargo_path, build_kind, supports)
-                    .profiler(Profiler::PerfStat)
-                    .incremental(true)
-                    .run_rustc_and_process_perf_stat_output(timing_dir.path())?;
-                incr_stats.push(incr);
+                // This is required for any subsequent incremental builds.
+                if run_kinds.contains(&RunKind::BaseIncr) ||
+                   run_kinds.contains(&RunKind::CleanIncr) ||
+                   run_kinds.contains(&RunKind::PatchedIncrs) {
+                    let base_incr =
+                        self.mk_cargo_process(rustc_path, cargo_path, build_kind, supports)
+                            .profiler(Profiler::PerfStat)
+                            .incremental(true)
+                            .run_rustc_and_process_perf_stat_output(timing_dir.path())?;
+                    base_incr_stats.push(base_incr);
+                }
 
-                // An incremental build with no changes (fastest case).
-                let incr_clean = self.mk_cargo_process(rustc_path, cargo_path, build_kind, supports)
-                    .profiler(Profiler::PerfStat)
-                    .incremental(true)
-                    .run_rustc_and_process_perf_stat_output(timing_dir.path())?;
-                incr_clean_stats.push(incr_clean);
+                // An incremental build with no changes (fastest incremental case).
+                if run_kinds.contains(&RunKind::CleanIncr) {
+                    let clean_incr =
+                        self.mk_cargo_process(rustc_path, cargo_path, build_kind, supports)
+                            .profiler(Profiler::PerfStat)
+                            .incremental(true)
+                            .run_rustc_and_process_perf_stat_output(timing_dir.path())?;
+                    clean_incr_stats.push(clean_incr);
+                }
 
-                if supports.incremental {
+                if run_kinds.contains(&RunKind::PatchedIncrs) && supports.incremental {
                     for patch in &self.patches {
                         debug!("applying patch {}", patch.name);
                         patch.apply(timing_dir.path()).map_err(|s| err_msg(s))?;
 
-                        // An incremental build with some changes (realistic case).
-                        let out = self.mk_cargo_process(rustc_path, cargo_path, build_kind, supports)
-                            .profiler(Profiler::PerfStat)
-                            .incremental(true)
-                            .run_rustc_and_process_perf_stat_output(timing_dir.path())?;
-                        if let Some(mut entry) = incr_patched_stats.iter_mut().find(|s| &s.0 == patch) {
+                        // An incremental build with some changes (realistic
+                        // incremental case).
+                        let out =
+                            self.mk_cargo_process(rustc_path, cargo_path, build_kind, supports)
+                                .profiler(Profiler::PerfStat)
+                                .incremental(true)
+                                .run_rustc_and_process_perf_stat_output(timing_dir.path())?;
+                        if let Some(mut entry) = patched_incr_stats.iter_mut()
+                                                                   .find(|s| &s.0 == patch) {
                             entry.1.push(out);
                             continue;
                         }
-                        incr_patched_stats.push((patch.clone(), vec![out]));
+                        patched_incr_stats.push((patch.clone(), vec![out]));
                     }
                 }
             }
 
-            ret.runs.push(process_stats(build_kind, BenchmarkState::Clean, clean_stats));
-            if !supports.is_stable && self.config.nll {
+            if run_kinds.contains(&RunKind::Clean) {
+                ret.runs.push(process_stats(build_kind, BenchmarkState::Clean, clean_stats));
+            }
+            if run_kinds.contains(&RunKind::Nll) && !supports.is_stable && self.config.nll {
                 ret.runs.push(process_stats(build_kind, BenchmarkState::Nll, nll_stats));
             }
-            ret.runs.push(process_stats(build_kind, BenchmarkState::IncrementalStart, incr_stats));
-            ret.runs.push(process_stats(build_kind, BenchmarkState::IncrementalClean,
-                                        incr_clean_stats));
-
-            if supports.incremental {
-                for (patch, results) in incr_patched_stats {
+            if run_kinds.contains(&RunKind::BaseIncr) ||
+               run_kinds.contains(&RunKind::CleanIncr) ||
+               run_kinds.contains(&RunKind::PatchedIncrs) {
+                ret.runs.push(process_stats(build_kind, BenchmarkState::IncrementalStart,
+                                            base_incr_stats));
+            }
+            if run_kinds.contains(&RunKind::CleanIncr) {
+                ret.runs.push(process_stats(build_kind, BenchmarkState::IncrementalClean,
+                                            clean_incr_stats));
+            }
+            if run_kinds.contains(&RunKind::PatchedIncrs) && supports.incremental {
+                for (patch, results) in patched_incr_stats {
                     ret.runs.push(process_stats(
                         build_kind,
                         BenchmarkState::IncrementalPatched(patch),
@@ -573,14 +603,17 @@ impl Benchmark {
         cargo_path: &Path,
         id: &str,
     ) -> Result<(), Error> {
+        // XXX: measure() and profile() contain a lot of duplicated code and
+        // should be combined.
+
         if self.config.disabled {
             eprintln!("skipping {}: disabled", self.name);
             bail!("disabled benchmark");
         }
 
         // Fall back to defaults if the kinds weren't specified.
-        let build_kinds = build_kinds.clone().unwrap_or(vec![BuildKind::Debug]);
-        let run_kinds = run_kinds.clone().unwrap_or(vec![RunKind::Clean]);
+        let build_kinds = build_kinds.clone().unwrap_or_else(|| vec![BuildKind::Debug]);
+        let run_kinds = run_kinds.clone().unwrap_or_else(|| vec![RunKind::Clean]);
 
         let supports = RustcFeatures { is_stable: false, incremental: true };
 
@@ -720,7 +753,7 @@ impl Benchmark {
             }
 
             // A full non-incremental build with NLL enabled.
-            if run_kinds.contains(&RunKind::Nll) && self.config.nll {
+            if run_kinds.contains(&RunKind::Nll) && !supports.is_stable && self.config.nll {
                 let nll = self.mk_cargo_process(rustc_path, cargo_path, build_kind, supports)
                     .profiler(profiler)
                     .nll(true)
@@ -749,17 +782,18 @@ impl Benchmark {
                 process_output(clean_incr, "CleanIncr")?;
             }
 
-            if run_kinds.contains(&RunKind::PatchedIncrs) {
+            if run_kinds.contains(&RunKind::PatchedIncrs) && supports.incremental {
                 for (i, patch) in self.patches.iter().enumerate() {
                     debug!("applying patch {}", patch.name);
                     patch.apply(timing_dir.path()).map_err(|s| err_msg(s))?;
 
                     // An incremental build with some changes (realistic
                     // incremental case).
-                    let patched_incr = self.mk_cargo_process(rustc_path, cargo_path, build_kind, supports)
-                        .profiler(profiler)
-                        .incremental(true)
-                        .run_rustc(timing_dir.path())?;
+                    let patched_incr =
+                        self.mk_cargo_process(rustc_path, cargo_path, build_kind, supports)
+                            .profiler(profiler)
+                            .incremental(true)
+                            .run_rustc(timing_dir.path())?;
                     let run_kind_str = format!("PatchedIncr{}", i);
                     process_output(patched_incr, &run_kind_str)?;
                 }
