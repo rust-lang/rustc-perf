@@ -106,42 +106,6 @@ fn bench_commit(
     }
 }
 
-fn profile(
-    matches: &clap::ArgMatches,
-    out_dir: &Path,
-    benchmarks: &[Benchmark],
-) -> Result<i32, Error> {
-    let rustc = matches.value_of("RUSTC").unwrap();
-    let cargo = matches.value_of("CARGO").unwrap();
-    let build_kinds = if let Some(kinds) = matches.value_of("BUILDS") {
-        Some(execute::build_kinds_from_arg(kinds)?)
-    } else {
-        None
-    };
-    let run_kinds = if let Some(runs) = matches.value_of("RUNS") {
-        Some(execute::run_kinds_from_arg(runs)?)
-    } else {
-        None
-    };
-    let profiler = Profiler::from_name(matches.value_of("PROFILER").unwrap())?;
-    let id = matches.value_of("ID").unwrap();
-
-    info!("Profile with {:?}", profiler);
-
-    let rustc_path = PathBuf::from(rustc).canonicalize()?;
-    let cargo_path = PathBuf::from(cargo).canonicalize()?;
-
-    for (i, benchmark) in benchmarks.iter().enumerate() {
-        let result = benchmark.profile(profiler, &build_kinds, &run_kinds, out_dir, &rustc_path,
-                                       &cargo_path, &id);
-        if let Err(ref s) = result {
-            info!("failed to profile {} with {:?}, recorded: {:?}", benchmark.name, profiler, s);
-        }
-        info!("{} benchmarks left", benchmarks.len() - i - 1);
-    }
-    Ok(0)
-}
-
 fn get_benchmarks(
     benchmark_dir: &Path,
     filter: Option<&str>,
@@ -425,7 +389,36 @@ fn main_result() -> Result<i32, Error> {
         }
 
         ("profile", Some(sub_m)) => {
-            profile(sub_m, &get_out_dir(), &benchmarks)
+            let rustc = sub_m.value_of("RUSTC").unwrap();
+            let cargo = sub_m.value_of("CARGO").unwrap();
+            let build_kinds = if let Some(kinds) = sub_m.value_of("BUILDS") {
+                Some(execute::build_kinds_from_arg(kinds)?)
+            } else {
+                None
+            };
+            let run_kinds = if let Some(runs) = sub_m.value_of("RUNS") {
+                Some(execute::run_kinds_from_arg(runs)?)
+            } else {
+                None
+            };
+            let profiler = Profiler::from_name(sub_m.value_of("PROFILER").unwrap())?;
+            let id = sub_m.value_of("ID").unwrap();
+
+            info!("Profile with {:?}", profiler);
+
+            let rustc_path = PathBuf::from(rustc).canonicalize()?;
+            let cargo_path = PathBuf::from(cargo).canonicalize()?;
+
+            for (i, benchmark) in benchmarks.iter().enumerate() {
+                let result = benchmark.profile(profiler, &build_kinds, &run_kinds, &get_out_dir(),
+                                               &rustc_path, &cargo_path, &id);
+                if let Err(ref s) = result {
+                    info!("failed to profile {} with {:?}, recorded: {:?}",
+                          benchmark.name, profiler, s);
+                }
+                info!("{} benchmarks left", benchmarks.len() - i - 1);
+            }
+            Ok(0)
         }
 
         ("remove_benchmark", Some(sub_m)) => {
