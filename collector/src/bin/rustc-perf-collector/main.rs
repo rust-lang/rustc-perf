@@ -168,29 +168,6 @@ fn process_commit(
     ))
 }
 
-fn process_commits(
-    commits: &[GitCommit],
-    repo: &outrepo::Repo,
-    benchmarks: &[Benchmark],
-) -> Result<(), Error> {
-    println!("processing commits");
-    if !commits.is_empty() {
-        let to_process =
-            repo.find_missing_commits(commits, benchmarks, "x86_64-unknown-linux-gnu")?;
-        // take 3 from the end -- this means that for each bors commit (which takes ~3 hours) we
-        // test 3, which should allow us to eventually test all commits, but also keep up with the
-        // latest rustc
-        for commit in to_process.iter().rev().take(3) {
-            if let Err(err) = process_commit(repo, &commit, &benchmarks) {
-                repo.write_broken_commit(commit, err)?;
-            }
-        }
-    } else {
-        info!("Nothing to do; no commits.");
-    }
-    Ok(())
-}
-
 fn main() {
     process::exit(main_result().unwrap())
 }
@@ -384,7 +361,22 @@ fn main_result() -> Result<i32, Error> {
         ("process", Some(_)) => {
             let commits = get_commits()?;
             let out_repo = get_out_repo(false)?;
-            process_commits(&commits, &out_repo, &benchmarks)?;
+            println!("processing commits");
+            if !commits.is_empty() {
+                let to_process = out_repo.find_missing_commits(&commits, &benchmarks,
+                                                               "x86_64-unknown-linux-gnu")?;
+                // Take 3 from the end -- this means that for each bors commit
+                // (which takes ~3 hours) we test 3, which should allow us to
+                // eventually test all commits, but also keep up with the
+                // latest rustc.
+                for commit in to_process.iter().rev().take(3) {
+                    if let Err(err) = process_commit(&out_repo, &commit, &benchmarks) {
+                        out_repo.write_broken_commit(commit, err)?;
+                    }
+                }
+            } else {
+                info!("Nothing to do; no commits.");
+            }
             Ok(0)
         }
 
