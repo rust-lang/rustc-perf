@@ -60,14 +60,14 @@ substring of the name of the benchmark(s) you wish to run.
 of the benchmark(s) you wish to skip.
 
 `--builds $BUILDS` can be used to select what kind of builds are profiled. The
-default is `Debug`. The possible choices are one or more (comma-separated) of
-`Check`, `Debug`, `Opt`, and `All`.
+possible choices are one or more (comma-separated) of `Check`, `Debug`, `Opt`,
+and `All` (the default).
 
 `--runs $RUNS` can be used to select what profiling runs are done for each
-build. The default is `Clean`. The possible choices are one or more
-(comma-separated) of `Clean`, `Nll`, `BaseIncr`, `CleanIncr`, `PatchedIncrs`,
-and `All`. Note that `BaseIncr` is always run (even if not requested) if either
-of `CleanIncr` or `PatchedIncrs` are run.
+build. The possible choices are one or more (comma-separated) of `Clean`,
+`Nll`, `BaseIncr`, `CleanIncr`, `PatchedIncrs`, and `All` (the default). Note
+that `BaseIncr` is always run (even if not requested) if either of `CleanIncr`
+or `PatchedIncrs` are run.
 
 ## Viewing results
 

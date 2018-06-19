@@ -17,7 +17,7 @@ use collector::{Benchmark as CollectedBenchmark, BenchmarkState, Patch, Run, Sta
 use failure::{err_msg, Error, ResultExt};
 use serde_json;
 
-use Mode;
+use {BuildKind, RunKind};
 
 #[derive(Debug, Copy, Clone)]
 pub struct RustcFeatures {
@@ -97,81 +97,6 @@ pub struct Benchmark {
     pub path: PathBuf,
     patches: Vec<Patch>,
     config: BenchmarkConfig,
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum BuildKind {
-    Check,
-    Debug,
-    Opt
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum RunKind {
-    Clean,
-    Nll,
-    BaseIncr,
-    CleanIncr,
-    PatchedIncrs,
-}
-
-#[derive(Fail, PartialEq, Eq, Debug)]
-pub enum KindError {
-    #[fail(display = "'{:?}' is not a known {} kind", _1, _0)]
-    UnknownKind(&'static str, String),
-}
-
-// How the --builds arg maps to BuildKinds.
-const STRINGS_AND_BUILD_KINDS: &'static [(&'static str, BuildKind)] = &[
-    ("Check", BuildKind::Check),
-    ("Debug", BuildKind::Debug),
-    ("Opt", BuildKind::Opt),
-];
-
-// How the --runs arg maps to RunKinds.
-const STRINGS_AND_RUN_KINDS: &'static [(&'static str, RunKind)] = &[
-    ("Clean", RunKind::Clean),
-    ("Nll", RunKind::Nll),
-    ("BaseIncr", RunKind::BaseIncr),
-    ("CleanIncr", RunKind::CleanIncr),
-    ("PatchedIncrs", RunKind::PatchedIncrs),
-];
-
-pub fn build_kinds_from_arg(arg: &str) -> Result<Vec<BuildKind>, KindError> {
-    kinds_from_arg(STRINGS_AND_BUILD_KINDS, arg)
-}
-
-pub fn run_kinds_from_arg(arg: &str) -> Result<Vec<RunKind>, KindError> {
-    kinds_from_arg(STRINGS_AND_RUN_KINDS, arg)
-}
-
-// Converts a comma-separated list of kind names to a vector of kinds with no
-// duplicates.
-fn kinds_from_arg<K>(strings_and_kinds: &[(&str, K)], arg: &str)
-                     -> Result<Vec<K>, KindError>
-    where K: Copy + Eq + ::std::hash::Hash
-{
-    let mut kind_set = HashSet::new();
-
-    for s in arg.split(',') {
-        if let Some((_s, k)) = strings_and_kinds.iter().find(|(str, _k)| s == *str) {
-            kind_set.insert(k);
-        } else if s == "All" {
-            for (_, k) in strings_and_kinds.iter() {
-                kind_set.insert(k);
-            }
-        } else {
-            return Err(KindError::UnknownKind("build", s.to_string()))
-        }
-    }
-
-    let mut v = vec![];
-    for (_s, k) in strings_and_kinds.iter() {
-        if kind_set.contains(k) {
-            v.push(*k);
-        }
-    }
-    Ok(v)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -438,12 +363,11 @@ impl Benchmark {
     /// Run a specific benchmark under perf-stat.
     pub fn measure(
         &self,
-        build_kinds: &Option<Vec<BuildKind>>,
-        run_kinds: &Option<Vec<RunKind>>,
+        build_kinds: &[BuildKind],
+        run_kinds: &[RunKind],
         rustc_path: &Path,
         cargo_path: &Path,
         iterations: usize,
-        mode: Mode,
         supports: RustcFeatures,
     ) -> Result<CollectedBenchmark, Error> {
         // XXX: measure() and profile() contain a lot of duplicated code and
@@ -467,19 +391,7 @@ impl Benchmark {
             runs: Vec::new(),
         };
 
-        let build_kinds = build_kinds.clone().unwrap_or_else(|| {
-            match mode {
-                Mode::Normal if supports.is_stable => vec![BuildKind::Check, BuildKind::Debug],
-                Mode::Normal => vec![BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
-                Mode::Test => vec![BuildKind::Check],
-            }
-        });
-        let run_kinds = run_kinds.clone().unwrap_or_else(|| {
-            vec![RunKind::Clean, RunKind::Nll, RunKind::BaseIncr, RunKind::CleanIncr,
-                 RunKind::PatchedIncrs]
-        });
-
-        for build_kind in build_kinds {
+        for &build_kind in build_kinds {
             info!("Benchmarking {}: {:?} + {:?}", self.name, build_kind, run_kinds);
 
             let mut clean_stats = Vec::new();
@@ -596,8 +508,8 @@ impl Benchmark {
     pub fn profile(
         &self,
         profiler: Profiler,
-        build_kinds: &Option<Vec<BuildKind>>,
-        run_kinds: &Option<Vec<RunKind>>,
+        build_kinds: &[BuildKind],
+        run_kinds: &[RunKind],
         output_dir: &Path,
         rustc_path: &Path,
         cargo_path: &Path,
@@ -611,13 +523,9 @@ impl Benchmark {
             bail!("disabled benchmark");
         }
 
-        // Fall back to defaults if the kinds weren't specified.
-        let build_kinds = build_kinds.clone().unwrap_or_else(|| vec![BuildKind::Debug]);
-        let run_kinds = run_kinds.clone().unwrap_or_else(|| vec![RunKind::Clean]);
-
         let supports = RustcFeatures { is_stable: false, incremental: true };
 
-        for build_kind in build_kinds {
+        for &build_kind in build_kinds {
             info!("Profiling {}: {:?} + {:?}", self.name, build_kind, run_kinds);
 
             // Build everything, including all dependent crates, in a temp dir.

@@ -23,6 +23,7 @@ extern crate semver;
 
 use failure::{Error, ResultExt, SyncFailure};
 
+use std::collections::HashSet;
 use std::fs;
 use std::process;
 use std::str;
@@ -40,25 +41,109 @@ use rust_sysroot::sysroot::Sysroot;
 mod execute;
 mod outrepo;
 
-use execute::{Benchmark, RustcFeatures, Profiler};
+use execute::{Benchmark, Profiler, RustcFeatures};
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Mode {
-    Test,
-    Normal,
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum BuildKind {
+    Check,
+    Debug,
+    Opt
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum RunKind {
+    Clean,
+    Nll,
+    BaseIncr,
+    CleanIncr,
+    PatchedIncrs,
+}
+
+impl RunKind {
+    fn all() -> Vec<RunKind> {
+        vec![RunKind::Clean, RunKind::Nll, RunKind::BaseIncr, RunKind::CleanIncr,
+             RunKind::PatchedIncrs]
+    }
+}
+
+#[derive(Fail, PartialEq, Eq, Debug)]
+pub enum KindError {
+    #[fail(display = "'{:?}' is not a known {} kind", _1, _0)]
+    UnknownKind(&'static str, String),
+}
+
+// How the --builds arg maps to BuildKinds.
+const STRINGS_AND_BUILD_KINDS: &[(&str, BuildKind)] = &[
+    ("Check", BuildKind::Check),
+    ("Debug", BuildKind::Debug),
+    ("Opt", BuildKind::Opt),
+];
+
+// How the --runs arg maps to RunKinds.
+const STRINGS_AND_RUN_KINDS: &[(&str, RunKind)] = &[
+    ("Clean", RunKind::Clean),
+    ("Nll", RunKind::Nll),
+    ("BaseIncr", RunKind::BaseIncr),
+    ("CleanIncr", RunKind::CleanIncr),
+    ("PatchedIncrs", RunKind::PatchedIncrs),
+];
+
+pub fn build_kinds_from_arg(arg: &Option<&str>) -> Result<Vec<BuildKind>, KindError> {
+    if let Some(arg) = arg {
+        kinds_from_arg(STRINGS_AND_BUILD_KINDS, arg)
+    } else {
+        Ok(vec![BuildKind::Check, BuildKind::Debug, BuildKind::Opt])
+    }
+}
+
+pub fn run_kinds_from_arg(arg: &Option<&str>) -> Result<Vec<RunKind>, KindError> {
+    if let Some(arg) = arg {
+        kinds_from_arg(STRINGS_AND_RUN_KINDS, arg)
+    } else {
+        Ok(RunKind::all())
+    }
+}
+
+// Converts a comma-separated list of kind names to a vector of kinds with no
+// duplicates.
+fn kinds_from_arg<K>(strings_and_kinds: &[(&str, K)], arg: &str)
+                     -> Result<Vec<K>, KindError>
+    where K: Copy + Eq + ::std::hash::Hash
+{
+    let mut kind_set = HashSet::new();
+
+    for s in arg.split(',') {
+        if let Some((_s, k)) = strings_and_kinds.iter().find(|(str, _k)| s == *str) {
+            kind_set.insert(k);
+        } else if s == "All" {
+            for (_, k) in strings_and_kinds.iter() {
+                kind_set.insert(k);
+            }
+        } else {
+            return Err(KindError::UnknownKind("build", s.to_string()))
+        }
+    }
+
+    // Nb: the element order of `v` must match that of `strings_and_kinds`.
+    let mut v = vec![];
+    for (_s, k) in strings_and_kinds.iter() {
+        if kind_set.contains(k) {
+            v.push(*k);
+        }
+    }
+    Ok(v)
 }
 
 fn bench_commit(
     repo: Option<&outrepo::Repo>,
     commit: &GitCommit,
     triple: &str,
-    build_kinds: &Option<Vec<execute::BuildKind>>,
-    run_kinds: &Option<Vec<execute::RunKind>>,
+    build_kinds: &[BuildKind],
+    run_kinds: &[RunKind],
     rustc_path: &Path,
     cargo_path: &Path,
     benchmarks: &[Benchmark],
     iterations: usize,
-    mode: Mode,
     supports: RustcFeatures,
 ) -> CommitData {
     info!(
@@ -83,7 +168,7 @@ fn bench_commit(
         }
 
         let result = benchmark.measure(build_kinds, run_kinds, rustc_path, cargo_path, iterations,
-                                       mode, supports);
+                                       supports);
 
         if let Err(ref s) = result {
             info!("failed to benchmark {}, recorded: {}", benchmark.name, s);
@@ -255,17 +340,18 @@ fn main_result() -> Result<i32, Error> {
             let out_repo = get_out_repo(false)?;
             let sysroot = Sysroot::install(&commit, "x86_64-unknown-linux-gnu", false, false)
                 .map_err(SyncFailure::new)?;
+            let build_kinds = &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt];
+            let run_kinds = RunKind::all();
             out_repo.success(&bench_commit(
                 Some(&out_repo),
                 &commit,
                 &sysroot.triple,
-                &None,
-                &None,
+                build_kinds,
+                &run_kinds,
                 &sysroot.rustc,
                 &sysroot.cargo,
                 &benchmarks,
                 3,
-                Mode::Normal,
                 RustcFeatures::default(),
             ))?;
             Ok(0)
@@ -274,16 +360,8 @@ fn main_result() -> Result<i32, Error> {
         ("bench_local", Some(sub_m)) => {
             let rustc = sub_m.value_of("RUSTC").unwrap();
             let cargo = sub_m.value_of("CARGO").unwrap();
-            let build_kinds = if let Some(kinds) = sub_m.value_of("BUILDS") {
-                Some(execute::build_kinds_from_arg(kinds)?)
-            } else {
-                None
-            };
-            let run_kinds = if let Some(runs) = sub_m.value_of("RUNS") {
-                Some(execute::run_kinds_from_arg(runs)?)
-            } else {
-                None
-            };
+            let build_kinds = build_kinds_from_arg(&sub_m.value_of("BUILDS"))?;
+            let run_kinds = run_kinds_from_arg(&sub_m.value_of("RUNS"))?;
             let id = sub_m.value_of("ID").unwrap();
 
             // This isn't a true representation of a commit, because `id` is an
@@ -311,7 +389,6 @@ fn main_result() -> Result<i32, Error> {
                 &cargo_path,
                 &benchmarks,
                 1,
-                Mode::Normal,
                 RustcFeatures::default()
             );
             get_out_repo(true)?.add_commit_data(&result)?;
@@ -336,13 +413,12 @@ fn main_result() -> Result<i32, Error> {
                 None,
                 &commit,
                 "x86_64-unknown-linux-gnu",
-                &None,
-                &None,
+                &[BuildKind::Check, BuildKind::Debug], // no Opt builds
+                &RunKind::all(),
                 &toolchain.binary_file("rustc"),
                 &toolchain.binary_file("cargo"),
                 &benchmarks,
                 3,
-                Mode::Normal,
                 RustcFeatures {
                     is_stable: true,
                     incremental: match id.parse::<semver::Version>().ok() {
@@ -378,13 +454,12 @@ fn main_result() -> Result<i32, Error> {
                         Some(&out_repo),
                         &commit,
                         &sysroot.triple,
-                        &None,
-                        &None,
+                        &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
+                        &RunKind::all(),
                         &sysroot.rustc,
                         &sysroot.cargo,
                         &benchmarks,
                         3,
-                        Mode::Normal,
                         RustcFeatures::default(),
                     ));
                     if let Err(err) = result {
@@ -400,16 +475,8 @@ fn main_result() -> Result<i32, Error> {
         ("profile", Some(sub_m)) => {
             let rustc = sub_m.value_of("RUSTC").unwrap();
             let cargo = sub_m.value_of("CARGO").unwrap();
-            let build_kinds = if let Some(kinds) = sub_m.value_of("BUILDS") {
-                Some(execute::build_kinds_from_arg(kinds)?)
-            } else {
-                None
-            };
-            let run_kinds = if let Some(runs) = sub_m.value_of("RUNS") {
-                Some(execute::run_kinds_from_arg(runs)?)
-            } else {
-                None
-            };
+            let build_kinds = build_kinds_from_arg(&sub_m.value_of("BUILDS"))?;
+            let run_kinds = run_kinds_from_arg(&sub_m.value_of("RUNS"))?;
             let profiler = Profiler::from_name(sub_m.value_of("PROFILER").unwrap())?;
             let id = sub_m.value_of("ID").unwrap();
 
@@ -470,13 +537,12 @@ fn main_result() -> Result<i32, Error> {
                     None,
                     commit,
                     &sysroot.triple,
-                    &None,
-                    &None,
+                    &[BuildKind::Check], // no Debug or Opt builds
+                    &RunKind::all(),
                     &sysroot.rustc,
                     &sysroot.cargo,
                     &benchmarks,
                     1,
-                    Mode::Test,
                     RustcFeatures::default()
                 );
             } else {
