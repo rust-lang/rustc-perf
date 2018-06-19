@@ -301,10 +301,19 @@ fn main_result() -> Result<i32, Error> {
             // We don't pass `out_repo` here. `commit` is unique because
             // `commit.date` is unique, so there's no point even trying to load
             // prior data.
-            let result =
-                bench_commit(None, &commit, "x86_64-unknown-linux-gnu", &build_kinds, &run_kinds,
-                             &rustc_path, &cargo_path, &benchmarks, 1, Mode::Normal,
-                             RustcFeatures::default());
+            let result = bench_commit(
+                None,
+                &commit,
+                "x86_64-unknown-linux-gnu",
+                &build_kinds,
+                &run_kinds,
+                &rustc_path,
+                &cargo_path,
+                &benchmarks,
+                1,
+                Mode::Normal,
+                RustcFeatures::default()
+            );
             get_out_repo(true)?.add_commit_data(&result)?;
             Ok(0)
         }
@@ -457,8 +466,19 @@ fn main_result() -> Result<i32, Error> {
                 let sysroot = Sysroot::install(commit, "x86_64-unknown-linux-gnu", false, false)
                     .map_err(SyncFailure::new)?;
                 // filter out servo benchmarks as they simply take too long
-                bench_commit(None, commit, &sysroot.triple, &None, &None, &sysroot.rustc,
-                             &sysroot.cargo, &benchmarks, 1, Mode::Test, RustcFeatures::default());
+                bench_commit(
+                    None,
+                    commit,
+                    &sysroot.triple,
+                    &None,
+                    &None,
+                    &sysroot.rustc,
+                    &sysroot.cargo,
+                    &benchmarks,
+                    1,
+                    Mode::Test,
+                    RustcFeatures::default()
+                );
             } else {
                 panic!("no commits");
             }
