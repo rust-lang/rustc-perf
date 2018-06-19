@@ -21,13 +21,12 @@ use {BuildKind, RunKind};
 
 #[derive(Debug, Copy, Clone)]
 pub struct RustcFeatures {
-    pub incremental: bool,
     pub is_stable: bool,
 }
 
 impl Default for RustcFeatures {
     fn default() -> RustcFeatures {
-        RustcFeatures { incremental: true, is_stable: false }
+        RustcFeatures { is_stable: false }
     }
 }
 
@@ -195,7 +194,7 @@ impl<'a> CargoProcess<'a> {
             .env("CARGO", &self.cargo_path)
             .env(
                 "CARGO_INCREMENTAL",
-                &format!("{}", (self.supports.incremental && self.incremental) as usize),
+                &format!("{}", self.incremental as usize),
             )
             .current_dir(cwd)
             .arg(subcommand)
@@ -452,7 +451,7 @@ impl Benchmark {
                     clean_incr_stats.push(clean_incr);
                 }
 
-                if run_kinds.contains(&RunKind::PatchedIncrs) && supports.incremental {
+                if run_kinds.contains(&RunKind::PatchedIncrs) {
                     for patch in &self.patches {
                         debug!("applying patch {}", patch.name);
                         patch.apply(timing_dir.path()).map_err(|s| err_msg(s))?;
@@ -490,7 +489,7 @@ impl Benchmark {
                 ret.runs.push(process_stats(build_kind, BenchmarkState::IncrementalClean,
                                             clean_incr_stats));
             }
-            if run_kinds.contains(&RunKind::PatchedIncrs) && supports.incremental {
+            if run_kinds.contains(&RunKind::PatchedIncrs) {
                 for (patch, results) in patched_incr_stats {
                     ret.runs.push(process_stats(
                         build_kind,
@@ -523,7 +522,7 @@ impl Benchmark {
             bail!("disabled benchmark");
         }
 
-        let supports = RustcFeatures { is_stable: false, incremental: true };
+        let supports = RustcFeatures { is_stable: false };
 
         for &build_kind in build_kinds {
             info!("Profiling {}: {:?} + {:?}", self.name, build_kind, run_kinds);
@@ -690,7 +689,7 @@ impl Benchmark {
                 process_output(clean_incr, "CleanIncr")?;
             }
 
-            if run_kinds.contains(&RunKind::PatchedIncrs) && supports.incremental {
+            if run_kinds.contains(&RunKind::PatchedIncrs) {
                 for (i, patch) in self.patches.iter().enumerate() {
                     debug!("applying patch {}", patch.name);
                     patch.apply(timing_dir.path()).map_err(|s| err_msg(s))?;

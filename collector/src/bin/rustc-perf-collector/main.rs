@@ -64,6 +64,10 @@ impl RunKind {
         vec![RunKind::Clean, RunKind::Nll, RunKind::BaseIncr, RunKind::CleanIncr,
              RunKind::PatchedIncrs]
     }
+
+    fn all_non_incr() -> Vec<RunKind> {
+        vec![RunKind::Clean, RunKind::Nll]
+    }
 }
 
 #[derive(Fail, PartialEq, Eq, Debug)]
@@ -409,28 +413,28 @@ fn main_result() -> Result<i32, Error> {
                 .map_err(SyncFailure::new)
                 .with_context(|_| format!("creating toolchain for id: {}", id))?;
             toolchain.install_from_dist_if_not_installed().map_err(SyncFailure::new)?;
+            let supports_incremental = if let Some(version) = id.parse::<semver::Version>().ok() {
+                version >= semver::Version::new(1, 24, 0)
+            } else {
+                assert_eq!(id, "beta");
+                true
+            };
+            let run_kinds = if supports_incremental {
+                RunKind::all()
+            } else {
+                RunKind::all_non_incr()
+            };
             let CommitData { benchmarks: benchmark_data, .. } = bench_commit(
                 None,
                 &commit,
                 "x86_64-unknown-linux-gnu",
                 &[BuildKind::Check, BuildKind::Debug], // no Opt builds
-                &RunKind::all(),
+                &run_kinds,
                 &toolchain.binary_file("rustc"),
                 &toolchain.binary_file("cargo"),
                 &benchmarks,
                 3,
-                RustcFeatures {
-                    is_stable: true,
-                    incremental: match id.parse::<semver::Version>().ok() {
-                        Some(version) => {
-                            version >= semver::Version::new(1, 24, 0)
-                        }
-                        None => {
-                            assert_eq!(id, "beta");
-                            true
-                        }
-                    }
-                },
+                RustcFeatures { is_stable: true },
             );
             repo.success_artifact(&ArtifactData { id: id.to_string(), benchmarks: benchmark_data })?;
             Ok(0)
