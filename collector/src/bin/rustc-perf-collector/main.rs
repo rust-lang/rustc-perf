@@ -65,8 +65,12 @@ impl RunKind {
              RunKind::PatchedIncrs]
     }
 
-    fn all_non_incr() -> Vec<RunKind> {
-        vec![RunKind::Clean, RunKind::Nll]
+    fn all_except_nll() -> Vec<RunKind> {
+        vec![RunKind::Clean, RunKind::BaseIncr, RunKind::CleanIncr, RunKind::PatchedIncrs]
+    }
+
+    fn all_non_incr_except_nll() -> Vec<RunKind> {
+        vec![RunKind::Clean]
     }
 }
 
@@ -419,10 +423,11 @@ fn main_result() -> Result<i32, Error> {
                 assert_eq!(id, "beta");
                 true
             };
+            // No NLL runs when testing stable builds.
             let run_kinds = if supports_incremental {
-                RunKind::all()
+                RunKind::all_except_nll()
             } else {
-                RunKind::all_non_incr()
+                RunKind::all_non_incr_except_nll()
             };
             let CommitData { benchmarks: benchmark_data, .. } = bench_commit(
                 None,
