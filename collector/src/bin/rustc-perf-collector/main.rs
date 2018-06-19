@@ -238,17 +238,12 @@ fn main_result() -> Result<i32, Error> {
        (version: "0.1")
        (author: "The Rust Compiler Team")
        (about: "Collects Rust performance data")
+
        (@arg filter: --filter +takes_value "Run only benchmarks that contain this")
        (@arg exclude: --exclude +takes_value "Ignore all benchmarks that contain this")
        (@arg sync_git: --("sync-git") "Synchronize repository with remote")
        (@arg output_repo: --("output-repo") +required +takes_value "Output repository/directory")
-       (@subcommand process =>
-           (about: "syncs to git and collects performance data for all versions")
-       )
-       (@subcommand bench_published =>
-           (about: "bench an artifact from static.r-l.o")
-           (@arg ID: +required +takes_value "id to install (e.g., stable, beta, 1.26.0)")
-       )
+
        (@subcommand bench_commit =>
            (about: "benchmark a bors merge from AWS")
            (@arg COMMIT: +required +takes_value "Commit hash to bench")
@@ -265,6 +260,13 @@ fn main_result() -> Result<i32, Error> {
             'BaseIncr', 'CleanIncr', 'PatchedIncrs', 'All'")
            (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
        )
+       (@subcommand bench_published =>
+           (about: "bench an artifact from static.r-l.o")
+           (@arg ID: +required +takes_value "id to install (e.g., stable, beta, 1.26.0)")
+       )
+       (@subcommand process =>
+           (about: "syncs to git and collects performance data for all versions")
+       )
        (@subcommand profile =>
            (about: "profile a local rustc")
            (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
@@ -280,12 +282,12 @@ fn main_result() -> Result<i32, Error> {
             'callgrind', 'dhat', 'massif', 'eprintln'")
            (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
        )
-       (@subcommand remove_errs =>
-           (about: "remove errored data")
-       )
        (@subcommand remove_benchmark =>
            (about: "remove data for a benchmark")
            (@arg BENCHMARK: --benchmark +required +takes_value "benchmark name to remove data for")
+       )
+       (@subcommand remove_errs =>
+           (about: "remove errored data")
        )
        (@subcommand test_benchmarks =>
            (about: "test benchmark the most recent commit")
@@ -317,24 +319,6 @@ fn main_result() -> Result<i32, Error> {
     };
 
     match matches.subcommand() {
-        ("test_benchmarks", Some(_)) => {
-            if let Some(commit) = get_commits()?.last() {
-                let sysroot = Sysroot::install(commit, "x86_64-unknown-linux-gnu", false, false)
-                    .map_err(SyncFailure::new)?;
-                // filter out servo benchmarks as they simply take too long
-                bench_commit(None, commit, &sysroot.triple, &None, &None, &sysroot.rustc,
-                             &sysroot.cargo, &benchmarks, 1, Mode::Test, RustcFeatures::default());
-            } else {
-                panic!("no commits");
-            }
-            Ok(0)
-        }
-        ("process", Some(_)) => {
-            let commits = get_commits()?;
-            let out_repo = get_out_repo(false)?;
-            process_commits(&commits, &out_repo, &benchmarks)?;
-            Ok(0)
-        }
         ("bench_commit", Some(sub_m)) => {
             let commit = sub_m.value_of("COMMIT").unwrap();
             let commit = get_commits()?
@@ -352,6 +336,45 @@ fn main_result() -> Result<i32, Error> {
             process_commit(&get_out_repo(false)?, &commit, &benchmarks)?;
             Ok(0)
         }
+
+        ("bench_local", Some(sub_m)) => {
+            let rustc = sub_m.value_of("RUSTC").unwrap();
+            let cargo = sub_m.value_of("CARGO").unwrap();
+            let build_kinds = if let Some(kinds) = sub_m.value_of("BUILDS") {
+                Some(execute::build_kinds_from_arg(kinds)?)
+            } else {
+                None
+            };
+            let run_kinds = if let Some(runs) = sub_m.value_of("RUNS") {
+                Some(execute::run_kinds_from_arg(runs)?)
+            } else {
+                None
+            };
+            let id = sub_m.value_of("ID").unwrap();
+
+            // This isn't a true representation of a commit, because `id` is an
+            // arbitrary identifier, not a commit SHA. But that's ok for local
+            // runs, because `commit` is only used when producing the output
+            // files, not for interacting with a repo.
+            let commit = GitCommit {
+                sha: id.to_string(),
+                // Drop the nanoseconds; we don't want that level of precision.
+                date: Utc::now().with_nanosecond(0).unwrap(),
+                summary: String::new(),
+            };
+            let rustc_path = PathBuf::from(rustc).canonicalize()?;
+            let cargo_path = PathBuf::from(cargo).canonicalize()?;
+            // We don't pass `out_repo` here. `commit` is unique because
+            // `commit.date` is unique, so there's no point even trying to load
+            // prior data.
+            let result =
+                bench_commit(None, &commit, "x86_64-unknown-linux-gnu", &build_kinds, &run_kinds,
+                             &rustc_path, &cargo_path, &benchmarks, 1, Mode::Normal,
+                             RustcFeatures::default());
+            get_out_repo(true)?.add_commit_data(&result)?;
+            Ok(0)
+        }
+
         ("bench_published", Some(sub_m)) => {
             let id = sub_m.value_of("ID").unwrap();
             let repo = get_out_repo(false)?;
@@ -393,46 +416,33 @@ fn main_result() -> Result<i32, Error> {
             repo.success_artifact(&ArtifactData { id: id.to_string(), benchmarks: benchmark_data })?;
             Ok(0)
         }
-        ("bench_local", Some(sub_m)) => {
-            let rustc = sub_m.value_of("RUSTC").unwrap();
-            let cargo = sub_m.value_of("CARGO").unwrap();
-            let build_kinds = if let Some(kinds) = sub_m.value_of("BUILDS") {
-                Some(execute::build_kinds_from_arg(kinds)?)
-            } else {
-                None
-            };
-            let run_kinds = if let Some(runs) = sub_m.value_of("RUNS") {
-                Some(execute::run_kinds_from_arg(runs)?)
-            } else {
-                None
-            };
-            let id = sub_m.value_of("ID").unwrap();
 
-            // This isn't a true representation of a commit, because `id` is an
-            // arbitrary identifier, not a commit SHA. But that's ok for local
-            // runs, because `commit` is only used when producing the output
-            // files, not for interacting with a repo.
-            let commit = GitCommit {
-                sha: id.to_string(),
-                // Drop the nanoseconds; we don't want that level of precision.
-                date: Utc::now().with_nanosecond(0).unwrap(),
-                summary: String::new(),
-            };
-            let rustc_path = PathBuf::from(rustc).canonicalize()?;
-            let cargo_path = PathBuf::from(cargo).canonicalize()?;
-            // We don't pass `out_repo` here. `commit` is unique because
-            // `commit.date` is unique, so there's no point even trying to load
-            // prior data.
-            let result =
-                bench_commit(None, &commit, "x86_64-unknown-linux-gnu", &build_kinds, &run_kinds,
-                             &rustc_path, &cargo_path, &benchmarks, 1, Mode::Normal,
-                             RustcFeatures::default());
-            get_out_repo(true)?.add_commit_data(&result)?;
+        ("process", Some(_)) => {
+            let commits = get_commits()?;
+            let out_repo = get_out_repo(false)?;
+            process_commits(&commits, &out_repo, &benchmarks)?;
             Ok(0)
         }
+
         ("profile", Some(sub_m)) => {
             profile(sub_m, &get_out_dir(), &benchmarks)
         }
+
+        ("remove_benchmark", Some(sub_m)) => {
+            let benchmark = sub_m.value_of("BENCHMARK").unwrap();
+            let out_repo = get_out_repo(false)?;
+            for commit in &get_commits()? {
+                if let Ok(mut data) = out_repo.load_commit_data(&commit, "x86_64-unknown-linux-gnu")
+                {
+                    if data.benchmarks.remove(&*benchmark).is_none() {
+                        warn!("could not remove {} from {}", benchmark, commit.sha);
+                    }
+                    out_repo.add_commit_data(&data)?;
+                }
+            }
+            Ok(0)
+        }
+
         ("remove_errs", Some(_)) => {
             for commit in &get_commits()? {
                 let out_repo = get_out_repo(false)?;
@@ -448,20 +458,20 @@ fn main_result() -> Result<i32, Error> {
             }
             Ok(0)
         }
-        ("remove_benchmark", Some(sub_m)) => {
-            let benchmark = sub_m.value_of("BENCHMARK").unwrap();
-            let out_repo = get_out_repo(false)?;
-            for commit in &get_commits()? {
-                if let Ok(mut data) = out_repo.load_commit_data(&commit, "x86_64-unknown-linux-gnu")
-                {
-                    if data.benchmarks.remove(&*benchmark).is_none() {
-                        warn!("could not remove {} from {}", benchmark, commit.sha);
-                    }
-                    out_repo.add_commit_data(&data)?;
-                }
+
+        ("test_benchmarks", Some(_)) => {
+            if let Some(commit) = get_commits()?.last() {
+                let sysroot = Sysroot::install(commit, "x86_64-unknown-linux-gnu", false, false)
+                    .map_err(SyncFailure::new)?;
+                // filter out servo benchmarks as they simply take too long
+                bench_commit(None, commit, &sysroot.triple, &None, &None, &sysroot.rustc,
+                             &sysroot.cargo, &benchmarks, 1, Mode::Test, RustcFeatures::default());
+            } else {
+                panic!("no commits");
             }
             Ok(0)
         }
+
         _ => {
             let _ = writeln!(stderr(), "{}", matches.usage());
             Ok(2)
