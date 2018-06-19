@@ -146,28 +146,6 @@ fn get_benchmarks(
     Ok(benchmarks)
 }
 
-fn process_commit(
-    repo: &outrepo::Repo,
-    commit: &GitCommit,
-    benchmarks: &[Benchmark],
-) -> Result<(), Error> {
-    let sysroot = Sysroot::install(commit, "x86_64-unknown-linux-gnu", false, false)
-        .map_err(SyncFailure::new)?;
-    repo.success(&bench_commit(
-        Some(repo),
-        commit,
-        &sysroot.triple,
-        &None,
-        &None,
-        &sysroot.rustc,
-        &sysroot.cargo,
-        benchmarks,
-        3,
-        Mode::Normal,
-        RustcFeatures::default(),
-    ))
-}
-
 fn main() {
     process::exit(main_result().unwrap())
 }
@@ -274,7 +252,22 @@ fn main_result() -> Result<i32, Error> {
                         summary: String::new(),
                     }
                 });
-            process_commit(&get_out_repo(false)?, &commit, &benchmarks)?;
+            let out_repo = get_out_repo(false)?;
+            let sysroot = Sysroot::install(&commit, "x86_64-unknown-linux-gnu", false, false)
+                .map_err(SyncFailure::new)?;
+            out_repo.success(&bench_commit(
+                Some(&out_repo),
+                &commit,
+                &sysroot.triple,
+                &None,
+                &None,
+                &sysroot.rustc,
+                &sysroot.cargo,
+                &benchmarks,
+                3,
+                Mode::Normal,
+                RustcFeatures::default(),
+            ))?;
             Ok(0)
         }
 
@@ -370,7 +363,22 @@ fn main_result() -> Result<i32, Error> {
                 // eventually test all commits, but also keep up with the
                 // latest rustc.
                 for commit in to_process.iter().rev().take(3) {
-                    if let Err(err) = process_commit(&out_repo, &commit, &benchmarks) {
+                    let sysroot = Sysroot::install(commit, "x86_64-unknown-linux-gnu", false, false)
+                        .map_err(SyncFailure::new)?;
+                    let result = out_repo.success(&bench_commit(
+                        Some(&out_repo),
+                        &commit,
+                        &sysroot.triple,
+                        &None,
+                        &None,
+                        &sysroot.rustc,
+                        &sysroot.cargo,
+                        &benchmarks,
+                        3,
+                        Mode::Normal,
+                        RustcFeatures::default(),
+                    ));
+                    if let Err(err) = result {
                         out_repo.write_broken_commit(commit, err)?;
                     }
                 }
