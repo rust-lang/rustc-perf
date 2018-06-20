@@ -19,17 +19,6 @@ use serde_json;
 
 use {BuildKind, RunKind};
 
-#[derive(Debug, Copy, Clone)]
-pub struct RustcFeatures {
-    pub is_stable: bool,
-}
-
-impl Default for RustcFeatures {
-    fn default() -> RustcFeatures {
-        RustcFeatures { is_stable: false }
-    }
-}
-
 fn command_output(cmd: &mut Command) -> Result<process::Output, Error> {
     trace!("running: {:?}", cmd);
     let output = cmd.output()?;
@@ -309,6 +298,10 @@ impl Benchmark {
         })
     }
 
+    pub fn supports_stable(&self) -> bool {
+        self.config.supports_stable
+    }
+
     fn make_temp_dir(&self, base: &Path) -> Result<TempDir, Error> {
         let tmp_dir = TempDir::new()?;
         let mut cmd = Command::new("cp");
@@ -363,7 +356,6 @@ impl Benchmark {
         rustc_path: &Path,
         cargo_path: &Path,
         iterations: usize,
-        supports: RustcFeatures,
     ) -> Result<CollectedBenchmark, Error> {
         // XXX: measure() and profile() contain a lot of duplicated code and
         // should be combined.
@@ -372,10 +364,6 @@ impl Benchmark {
         if self.config.disabled {
             eprintln!("skipping {}: disabled", self.name);
             bail!("disabled benchmark");
-        }
-
-        if !self.config.supports_stable && supports.is_stable {
-            bail!("disabled -- does not support stable benchmarking");
         }
 
         let has_perf = Command::new("perf").output().is_ok();

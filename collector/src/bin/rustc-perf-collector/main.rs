@@ -41,7 +41,7 @@ use rust_sysroot::sysroot::Sysroot;
 mod execute;
 mod outrepo;
 
-use execute::{Benchmark, Profiler, RustcFeatures};
+use execute::{Benchmark, Profiler};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum BuildKind {
@@ -152,7 +152,6 @@ fn bench_commit(
     cargo_path: &Path,
     benchmarks: &[Benchmark],
     iterations: usize,
-    supports: RustcFeatures,
 ) -> CommitData {
     info!(
         "benchmarking commit {} ({}) for triple {}",
@@ -175,8 +174,7 @@ fn bench_commit(
             continue;
         }
 
-        let result = benchmark.measure(build_kinds, run_kinds, rustc_path, cargo_path, iterations,
-                                       supports);
+        let result = benchmark.measure(build_kinds, run_kinds, rustc_path, cargo_path, iterations);
 
         if let Err(ref s) = result {
             info!("failed to benchmark {}, recorded: {}", benchmark.name, s);
@@ -309,7 +307,7 @@ fn main_result() -> Result<i32, Error> {
     let benchmark_dir = PathBuf::from("collector/benchmarks");
     let filter = matches.value_of("filter");
     let exclude = matches.value_of("exclude");
-    let benchmarks = get_benchmarks(
+    let mut benchmarks = get_benchmarks(
         &benchmark_dir,
         filter,
         exclude,
@@ -360,7 +358,6 @@ fn main_result() -> Result<i32, Error> {
                 &sysroot.cargo,
                 &benchmarks,
                 3,
-                RustcFeatures::default(),
             ))?;
             Ok(0)
         }
@@ -397,7 +394,6 @@ fn main_result() -> Result<i32, Error> {
                 &cargo_path,
                 &benchmarks,
                 1,
-                RustcFeatures::default()
             );
             get_out_repo(true)?.add_commit_data(&result)?;
             Ok(0)
@@ -417,6 +413,10 @@ fn main_result() -> Result<i32, Error> {
                 .map_err(SyncFailure::new)
                 .with_context(|_| format!("creating toolchain for id: {}", id))?;
             toolchain.install_from_dist_if_not_installed().map_err(SyncFailure::new)?;
+
+            // Remove benchmarks that don't work with a stable compiler.
+            benchmarks.retain(|b| b.supports_stable());
+
             let supports_incremental = if let Some(version) = id.parse::<semver::Version>().ok() {
                 version >= semver::Version::new(1, 24, 0)
             } else {
@@ -439,7 +439,6 @@ fn main_result() -> Result<i32, Error> {
                 &toolchain.binary_file("cargo"),
                 &benchmarks,
                 3,
-                RustcFeatures { is_stable: true },
             );
             repo.success_artifact(&ArtifactData { id: id.to_string(), benchmarks: benchmark_data })?;
             Ok(0)
@@ -469,7 +468,6 @@ fn main_result() -> Result<i32, Error> {
                         &sysroot.cargo,
                         &benchmarks,
                         3,
-                        RustcFeatures::default(),
                     ));
                     if let Err(err) = result {
                         out_repo.write_broken_commit(commit, err)?;
@@ -552,7 +550,6 @@ fn main_result() -> Result<i32, Error> {
                     &sysroot.cargo,
                     &benchmarks,
                     1,
-                    RustcFeatures::default()
                 );
             } else {
                 panic!("no commits");
