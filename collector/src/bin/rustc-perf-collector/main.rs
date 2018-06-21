@@ -456,21 +456,23 @@ fn main_result() -> Result<i32, Error> {
                 // eventually test all commits, but also keep up with the
                 // latest rustc.
                 for commit in to_process.iter().rev().take(3) {
-                    let sysroot = Sysroot::install(commit, "x86_64-unknown-linux-gnu", false, false)
-                        .map_err(SyncFailure::new)?;
-                    let result = out_repo.success(&bench_commit(
-                        Some(&out_repo),
-                        &commit,
-                        &sysroot.triple,
-                        &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
-                        &RunKind::all(),
-                        &sysroot.rustc,
-                        &sysroot.cargo,
-                        &benchmarks,
-                        3,
-                    ));
-                    if let Err(err) = result {
-                        out_repo.write_broken_commit(commit, err)?;
+                    if let Ok(sysroot) = Sysroot::install(commit, "x86_64-unknown-linux-gnu", false, false) {
+                        let result = out_repo.success(&bench_commit(
+                            Some(&out_repo),
+                            &commit,
+                            &sysroot.triple,
+                            &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
+                            &RunKind::all(),
+                            &sysroot.rustc,
+                            &sysroot.cargo,
+                            &benchmarks,
+                            3,
+                        ));
+                        if let Err(err) = result {
+                            out_repo.write_broken_commit(commit, err)?;
+                        }
+                    } else {
+                        error!("failed to install sysroot for {:?}", commit);
                     }
                 }
             } else {
