@@ -174,16 +174,18 @@ fn bench_commit(
             continue;
         }
 
-        let result = benchmark.measure(build_kinds, run_kinds, rustc_path, cargo_path, iterations);
+        let mut processor = execute::MeasureProcessor::new(&benchmark.name);
+        let result = benchmark.measure(&mut processor, build_kinds, run_kinds, rustc_path,
+                                       cargo_path, iterations);
+        let result = match result {
+            Ok(()) => Ok(processor.collected),
+            Err(ref s) => {
+                info!("failed to benchmark {}, recorded: {}", benchmark.name, s);
+                Err(format!("{:?}", s))
+            }
+        };
 
-        if let Err(ref s) = result {
-            info!("failed to benchmark {}, recorded: {}", benchmark.name, s);
-        }
-
-        results.insert(
-            benchmark.name.clone(),
-            result.map_err(|e| format!("{:?}", e)),
-        );
+        results.insert(benchmark.name.clone(), result);
         info!("{} benchmarks left", benchmarks.len() - results.len());
     }
 
@@ -493,8 +495,10 @@ fn main_result() -> Result<i32, Error> {
             let cargo_path = PathBuf::from(cargo).canonicalize()?;
 
             for (i, benchmark) in benchmarks.iter().enumerate() {
-                let result = benchmark.profile(profiler, &build_kinds, &run_kinds, &get_out_dir(),
-                                               &rustc_path, &cargo_path, &id);
+                let out_dir = get_out_dir();
+                let mut processor = execute::ProfileProcessor::new(profiler, &out_dir, &id);
+                let result = benchmark.measure(&mut processor, &build_kinds, &run_kinds,
+                                               &rustc_path, &cargo_path, 1);
                 if let Err(ref s) = result {
                     info!("failed to profile {} with {:?}, recorded: {:?}",
                           benchmark.name, profiler, s);
