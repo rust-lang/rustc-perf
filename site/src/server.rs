@@ -56,14 +56,14 @@ impl DateData {
         for benchmark in benchmarks {
             let mut runs_check = Vec::with_capacity(benchmark.runs.len() / 3);
             let mut runs_opt = Vec::with_capacity(benchmark.runs.len() / 3);
-            let mut runs = Vec::with_capacity(benchmark.runs.len() / 3);
+            let mut runs_debug = Vec::with_capacity(benchmark.runs.len() / 3);
             for run in &benchmark.runs {
                 let v = if run.release {
                     &mut runs_opt
                 } else if run.check {
                     &mut runs_check
                 } else {
-                    &mut runs
+                    &mut runs_debug
                 };
                 if let Some(mut value) = run.get_stat(stat) {
                     if stat == "cpu-clock" {
@@ -79,8 +79,8 @@ impl DateData {
             if !runs_check.is_empty() {
                 out.insert(benchmark.name.clone() + "-check", runs_check);
             }
-            if !runs.is_empty() {
-                out.insert(benchmark.name.clone(), runs);
+            if !runs_debug.is_empty() {
+                out.insert(benchmark.name.clone() + "-debug", runs_debug);
             }
         }
 
@@ -239,11 +239,11 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
         data,
     )?.0;
 
-    // crate list * 3 because we have normal, opt, and check variants.
+    // crate list * 3 because we have check, debug, and opt variants.
     let mut result = HashMap::with_capacity(data.crate_list.len() * 3);
     let elements = out.len();
     let mut last_commit = None;
-    let mut initial_base_compile = None;
+    let mut initial_debug_base_compile = None;
     let mut initial_check_base_compile = None;
     let mut initial_release_base_compile = None;
     for date_data in out {
@@ -293,8 +293,9 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
         }
         for (&(release, check, ref state), values) in &summary_points {
             let value = (values.iter().sum::<f64>() as f32) / (values.len() as f32);
-            if !release && !check && state.is_base_compile() && initial_base_compile.is_none() {
-                initial_base_compile = Some(value);
+            if !release && !check && state.is_base_compile() &&
+                initial_debug_base_compile.is_none() {
+                initial_debug_base_compile = Some(value);
             }
             if check && state.is_base_compile() && initial_check_base_compile.is_none() {
                 initial_check_base_compile = Some(value);
@@ -309,7 +310,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
             } else if check {
                 "-check"
             } else {
-                ""
+                "-debug"
             };
             let summary = result
                 .entry(String::from("Summary") + appendix)
@@ -321,7 +322,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
             } else if check {
                 initial_check_base_compile.unwrap()
             } else {
-                initial_base_compile.unwrap()
+                initial_debug_base_compile.unwrap()
             };
             let first = entry.first().map(|d: &graph::GraphData| d.absolute as f32);
             let percent = first.map_or(0.0, |f| (value - f) / f * 100.0);
@@ -340,7 +341,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
 
     let mut maxes = HashMap::with_capacity(result.len());
     for (ref crate_name, ref benchmarks) in &result {
-        let name = crate_name.replace("-opt", "").replace("-check", "");
+        let name = crate_name.replace("-check", "").replace("-debug", "").replace("-opt", "");
         let mut max = 0.0f32;
         for points in benchmarks.values() {
             for point in points {

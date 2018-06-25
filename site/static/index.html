@@ -69,7 +69,7 @@
 
         let by_crate = {};
         for (let crate_name of sorted_names) {
-            let key = crate_name.replace("-opt", "").replace("-check", "");
+            let key = crate_name.replace("-check", "").replace("-debug", "").replace("-opt", "");
             if (!by_crate[key]) by_crate[key] = [];
             by_crate[key].push(crate_name);
         }
@@ -103,7 +103,7 @@
             let benchmark_names = Object.keys(response.benchmarks[crate_name]);
             benchmark_names.sort();
             let datasets = [];
-            let max = response.max[crate_name.replace("-opt", "").replace("-check", "")];
+            let max = response.max[crate_name.replace("-check", "").replace("-debug", "").replace("-opt", "")];
             for (let name of benchmark_names) {
                 let data = response.benchmarks[crate_name][name];
                 datasets.push({
@@ -149,9 +149,10 @@
                     type: "datetime",
                 },
                 yAxis: absolute ? {
-                    title: (crate_name.includes("-opt") || crate_name.includes("-check")) ? { text: "" } : {
-                        text: crate_name.startsWith("Summary") ? summaryYAxis : yAxis,
-                    },
+                    // Only the leftmost one ("-check") has its y-axis titled.
+                    title: (crate_name.includes("-opt") || crate_name.includes("-debug")) ?
+                           { text: "" } :
+                           { text: crate_name.startsWith("Summary") ? summaryYAxis : yAxis },
                     min: 0,
                     ceiling: max * 1.05,
                     floor: 0,
