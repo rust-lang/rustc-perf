@@ -142,21 +142,17 @@ impl Profiler {
 struct CargoProcess<'a> {
     rustc_path: &'a Path,
     cargo_path: &'a Path,
+    cwd: &'a Path,
     build_kind: BuildKind,
-    profiler: Option<Profiler>,
     incremental: bool,
     nll: bool,
+    processor_etc: Option<(&'a mut dyn Processor, &'a str, RunKind, &'a str, Option<&'a Patch>)>,
     manifest_path: String,
     cargo_args: Vec<String>,
     rustc_args: Vec<String>,
 }
 
 impl<'a> CargoProcess<'a> {
-    fn profiler(mut self, profiler: Profiler) -> Self {
-        self.profiler = Some(profiler);
-        self
-    }
-
     fn incremental(mut self, incremental: bool) -> Self {
         self.incremental = incremental;
         self
@@ -164,6 +160,12 @@ impl<'a> CargoProcess<'a> {
 
     fn nll(mut self, nll: bool) -> Self {
         self.nll = nll;
+        self
+    }
+
+    fn processor(mut self, processor: &'a mut dyn Processor, name: &'a str,
+                 run_kind: RunKind, run_kind_str: &'a str, patch: Option<&'a Patch>) -> Self {
+        self.processor_etc = Some((processor, name, run_kind, run_kind_str, patch));
         self
     }
 
@@ -201,53 +203,54 @@ impl<'a> CargoProcess<'a> {
         package_id.trim().to_string()
     }
 
-    fn run_rustc(&self, cwd: &Path) -> Result<process::Output, Error> {
-        let mut cmd = self.base_command(cwd, "rustc");
-        cmd.arg("-p").arg(self.get_pkgid(cwd));
-        match self.build_kind {
-            BuildKind::Check => { cmd.arg("--profile").arg("check"); }
-            BuildKind::Debug => {}
-            BuildKind::Opt => { cmd.arg("--release"); }
-        }
-        cmd.args(&self.cargo_args);
-        cmd.arg("--");
-        if self.nll {
-            cmd.arg("-Zborrowck=mir");
-        }
-        // --wrap-rustc-with is not a valid rustc flag. But rustc-fake
-        // recognizes it, strips it (and its argument) out, and uses it as an
-        // indicator that the rustc invocation should be profiled. This works
-        // out nicely because `cargo rustc` only passes arguments after '--'
-        // onto rustc for the final crate, which is exactly the crate for which
-        // we want to wrap rustc.
-        if let Some(profiler) = self.profiler {
-            cmd.arg("--wrap-rustc-with");
-            cmd.arg(profiler.name());
-            cmd.args(&self.rustc_args);
-        }
-
-        debug!("{:?}", cmd);
-
-        touch_all(&cwd)?;
-        command_output(&mut cmd)
-    }
-
-    fn run_rustc_and_process_perf_stat_output(&self, cwd: &Path) -> Result<Vec<Stat>, Error> {
-        assert!(self.profiler == Some(Profiler::PerfStat));
-
+    fn run_rustc(&mut self) -> Result<(), Error> {
         loop {
-            let output = self.run_rustc(cwd)?;
-            match process_perf_stat_output(output) {
-                Ok(stats) => return Ok(stats),
-                Err(DeserializeStatError::NoOutput(output)) => {
-                    warn!(
-                        "failed to deserialize stats, retrying; output: {:?}",
-                        output
-                    );
+            let mut cmd = self.base_command(self.cwd, "rustc");
+            cmd.arg("-p").arg(self.get_pkgid(self.cwd));
+            match self.build_kind {
+                BuildKind::Check => { cmd.arg("--profile").arg("check"); }
+                BuildKind::Debug => {}
+                BuildKind::Opt => { cmd.arg("--release"); }
+            }
+            cmd.args(&self.cargo_args);
+            cmd.arg("--");
+            if self.nll {
+                cmd.arg("-Zborrowck=mir");
+            }
+            // --wrap-rustc-with is not a valid rustc flag. But rustc-fake
+            // recognizes it, strips it (and its argument) out, and uses it as an
+            // indicator that the rustc invocation should be profiled. This works
+            // out nicely because `cargo rustc` only passes arguments after '--'
+            // onto rustc for the final crate, which is exactly the crate for which
+            // we want to wrap rustc.
+            if let Some((ref mut processor, ..)) = self.processor_etc {
+                cmd.arg("--wrap-rustc-with");
+                cmd.arg(processor.profiler().name());
+                cmd.args(&self.rustc_args);
+            }
+
+            debug!("{:?}", cmd);
+
+            touch_all(&self.cwd)?;
+
+            let output = command_output(&mut cmd)?;
+            if let Some((ref mut processor, name, run_kind, run_kind_str, patch)) =
+                    self.processor_etc {
+                let data = ProcessOutputData {
+                    name,
+                    cwd: self.cwd,
+                    build_kind: self.build_kind,
+                    run_kind,
+                    run_kind_str,
+                    patch,
+                };
+                match processor.process_output(&data, output) {
+                    Ok(Retry::No) => return Ok(()),
+                    Ok(Retry::Yes) => {},
+                    Err(e) => return Err(e),
                 }
-                Err(e @ DeserializeStatError::ParseError { .. }) => {
-                    panic!("process_perf_stat_output failed: {:?}", e);
-                }
+            } else {
+                return Ok(())
             }
         }
     }
@@ -260,6 +263,283 @@ lazy_static! {
         fake_rustc.push("rustc-fake");
         fake_rustc
     };
+}
+
+/// Used to indicate if we need to retry a run.
+pub enum Retry {
+    No,
+    Yes,
+}
+
+pub struct ProcessOutputData<'a> {
+    name: &'a str,
+    cwd: &'a Path,
+    build_kind: BuildKind,
+    run_kind: RunKind,
+    run_kind_str: &'a str,
+    patch: Option<&'a Patch>,
+}
+
+/// Trait used by `Benchmark::measure()` to provide different kinds of
+/// processing.
+pub trait Processor {
+    /// The `Profiler` being used.
+    fn profiler(&self) -> Profiler;
+
+    /// Process the output produced by the particular `Profiler` being used.
+    fn process_output(&mut self, data: &ProcessOutputData, output: process::Output)
+                      -> Result<Retry, Error>;
+
+    /// Called when all the runs of a benchmark for a particular `BuildKind`
+    /// have been completed. Can be used to process/reset accumulated state.
+    fn finish_build_kind(&mut self, _build_kind: BuildKind) {}
+}
+
+pub struct MeasureProcessor {
+    clean_stats: Vec<Vec<Stat>>,
+    nll_stats: Vec<Vec<Stat>>,
+    base_incr_stats: Vec<Vec<Stat>>,
+    clean_incr_stats: Vec<Vec<Stat>>,
+    patched_incr_stats: Vec<(Patch, Vec<Vec<Stat>>)>,
+
+    pub collected: CollectedBenchmark,
+}
+
+impl MeasureProcessor {
+    pub fn new(name: &str) -> Self {
+        // Check we have `perf` available.
+        let has_perf = Command::new("perf").output().is_ok();
+        assert!(has_perf);
+
+        MeasureProcessor {
+            clean_stats: Vec::new(),
+            nll_stats: Vec::new(),
+            base_incr_stats: Vec::new(),
+            clean_incr_stats: Vec::new(),
+            patched_incr_stats: Vec::new(),
+
+            collected: CollectedBenchmark {
+                name: name.to_string(),
+                runs: Vec::new(),
+            },
+        }
+    }
+}
+
+impl Processor for MeasureProcessor {
+    fn profiler(&self) -> Profiler {
+        Profiler::PerfStat
+    }
+
+    fn process_output(&mut self, data: &ProcessOutputData, output: process::Output)
+                      -> Result<Retry, Error> {
+        match process_perf_stat_output(output) {
+            Ok(stats) => {
+                match data.run_kind {
+                    RunKind::Clean => { self.clean_stats.push(stats); }
+                    RunKind::Nll => { self.nll_stats.push(stats); }
+                    RunKind::BaseIncr => { self.base_incr_stats.push(stats); }
+                    RunKind::CleanIncr => { self.clean_incr_stats.push(stats); }
+                    RunKind::PatchedIncrs => {
+                        let patch = data.patch.unwrap();
+                        if let Some(mut entry) =
+                            self.patched_incr_stats.iter_mut().find(|s| &s.0 == patch)
+                        {
+                            entry.1.push(stats);
+                            return Ok(Retry::No);
+                        }
+                        self.patched_incr_stats.push((patch.clone(), vec![stats]));
+                    }
+                }
+                Ok(Retry::No)
+            }
+	    Err(DeserializeStatError::NoOutput(output)) => {
+		warn!(
+		    "failed to deserialize stats, retrying; output: {:?}",
+		    output
+		);
+                Ok(Retry::Yes)
+	    }
+	    Err(e @ DeserializeStatError::ParseError { .. }) => {
+		panic!("process_perf_stat_output failed: {:?}", e);
+	    }
+        }
+    }
+
+    fn finish_build_kind(&mut self, build_kind: BuildKind) {
+        if !self.clean_stats.is_empty() {
+            self.collected.runs.push(
+                process_stats(build_kind, BenchmarkState::Clean, &self.clean_stats));
+        }
+        if !self.nll_stats.is_empty() {
+            self.collected.runs.push(
+                process_stats(build_kind, BenchmarkState::Nll, &self.nll_stats));
+        }
+        if !self.base_incr_stats.is_empty() {
+            self.collected.runs.push(
+                process_stats(build_kind, BenchmarkState::IncrementalStart, &self.base_incr_stats));
+        }
+        if !self.clean_incr_stats.is_empty() {
+            self.collected.runs.push(
+                process_stats(build_kind, BenchmarkState::IncrementalClean,
+                              &self.clean_incr_stats));
+        }
+        if !self.patched_incr_stats.is_empty() {
+            for (patch, results) in self.patched_incr_stats.iter() {
+                self.collected.runs.push(process_stats(
+                    build_kind,
+                    BenchmarkState::IncrementalPatched(patch.clone()),
+                    &results,
+                ));
+            }
+        }
+
+        // Empty all the vectors.
+        self.clean_stats.clear();
+        self.nll_stats.clear();
+        self.base_incr_stats.clear();
+        self.clean_incr_stats.clear();
+        self.patched_incr_stats.clear();
+    }
+}
+
+pub struct ProfileProcessor<'a> {
+    profiler: Profiler,
+    output_dir: &'a Path,
+    id: &'a str,
+}
+
+impl<'a> ProfileProcessor<'a> {
+    pub fn new(profiler: Profiler, output_dir: &'a Path, id: &'a str) -> Self {
+        ProfileProcessor {
+            profiler,
+            output_dir,
+            id,
+        }
+    }
+}
+
+impl<'a> Processor for ProfileProcessor<'a> {
+    fn profiler(&self) -> Profiler {
+        self.profiler
+    }
+
+    fn process_output(&mut self, data: &ProcessOutputData, output: process::Output)
+                      -> Result<Retry, Error> {
+        // Produce a name of the form $PREFIX-$ID-$BENCHMARK-$BUILDKIND-$RUNKIND.
+        let out_file = |prefix: &str| -> String {
+            format!("{}-{}-{}-{:?}-{}",
+                    prefix, self.id, data.name, data.build_kind, data.run_kind_str)
+        };
+
+        // Combine a dir and a file.
+        let filepath = |dir: &Path, file: &str| {
+            let mut path = dir.to_path_buf();
+            path.push(file);
+            path
+        };
+
+        match self.profiler {
+            Profiler::PerfStat => {
+                panic!("unexpected profiler");
+            }
+
+            // -Ztime-passes writes its output to stdout. We copy that output
+            // into a file in the output dir.
+            Profiler::TimePasses => {
+                let ztp_file = filepath(self.output_dir, &out_file("Ztp"));
+
+                let mut f = File::create(ztp_file)?;
+                f.write_all(&output.stdout)?;
+                f.flush()?;
+            }
+
+            // perf-record produces (via rustc-fake) a data file called 'perf'.
+            // We copy it from the temp dir to the output dir, giving it a new
+            // name in the process.
+            Profiler::PerfRecord => {
+                let tmp_perf_file = filepath(data.cwd.as_ref(), "perf");
+                let perf_file = filepath(self.output_dir, &out_file("perf"));
+
+                fs::copy(&tmp_perf_file, &perf_file)?;
+            }
+
+            // Cachegrind produces (via rustc-fake) a data file called 'cgout'.
+            // We copy it from the temp dir to the output dir, giving it a new
+            // name in the process, and then post-process it to produce another
+            // data file in the output dir.
+            Profiler::Cachegrind => {
+                let tmp_cgout_file = filepath(data.cwd.as_ref(), "cgout");
+                let cgout_file = filepath(self.output_dir, &out_file("cgout"));
+                let cgann_file = filepath(self.output_dir, &out_file("cgann"));
+
+                fs::copy(&tmp_cgout_file, &cgout_file)?;
+
+                let mut cg_annotate_cmd = Command::new("cg_annotate");
+                cg_annotate_cmd
+                    .arg("--auto=yes")
+                    .arg(&cgout_file);
+                let output = cg_annotate_cmd.output()?;
+
+                let mut f = File::create(cgann_file)?;
+                f.write_all(&output.stdout)?;
+                f.flush()?;
+            }
+
+            // Callgrind produces (via rustc-fake) a data file called 'clgout'.
+            // We copy it from the temp dir to the output dir, giving it a new
+            // name in the process, and then post-process it to produce another
+            // data file in the output dir.
+            Profiler::Callgrind => {
+                let tmp_clgout_file = filepath(data.cwd.as_ref(), "clgout");
+                let clgout_file = filepath(self.output_dir, &out_file("clgout"));
+                let clgann_file = filepath(self.output_dir, &out_file("clgann"));
+
+                fs::copy(&tmp_clgout_file, &clgout_file)?;
+
+                let mut clg_annotate_cmd = Command::new("callgrind_annotate");
+                clg_annotate_cmd
+                    .arg("--auto=yes")
+                    .arg(&clgout_file);
+                let output = clg_annotate_cmd.output()?;
+
+                let mut f = File::create(clgann_file)?;
+                f.write_all(&output.stdout)?;
+                f.flush()?;
+            }
+
+            // DHAT writes its output to stderr. We copy that output into a
+            // file in the output dir.
+            Profiler::DHAT => {
+                let dhat_file = filepath(self.output_dir, &out_file("dhat"));
+
+                let mut f = File::create(dhat_file)?;
+                f.write_all(&output.stderr)?;
+                f.flush()?;
+            }
+
+            // Massif produces (via rustc-fake) a data file called 'msout'. We
+            // copy it from the temp dir to the output dir, giving it a new
+            // name in the process.
+            Profiler::Massif => {
+                let tmp_msout_file = filepath(data.cwd.as_ref(), "msout");
+                let msout_file = filepath(self.output_dir, &out_file("msout"));
+
+                fs::copy(&tmp_msout_file, &msout_file)?;
+            }
+
+            // eprintln! statements writes their output to stderr. We copy that
+            // output into a file in the output dir.
+            Profiler::Eprintln => {
+                let eprintln_file = filepath(self.output_dir, &out_file("eprintln"));
+
+                let mut f = File::create(eprintln_file)?;
+                f.write_all(&output.stderr)?;
+                f.flush()?;
+            }
+        }
+        Ok(Retry::No)
+    }
 }
 
 impl Benchmark {
@@ -318,15 +598,17 @@ impl Benchmark {
         &self,
         rustc_path: &'a Path,
         cargo_path: &'a Path,
+        cwd: &'a Path,
         build_kind: BuildKind,
     ) -> CargoProcess<'a> {
         CargoProcess {
             rustc_path: rustc_path,
             cargo_path: cargo_path,
+            cwd: cwd,
             build_kind: build_kind,
-            profiler: None,
             incremental: false,
             nll: false,
+            processor_etc: None,
             manifest_path: self.config
                 .cargo_toml
                 .clone()
@@ -348,346 +630,94 @@ impl Benchmark {
         }
     }
 
-    /// Run a specific benchmark under perf-stat.
+    /// Run a specific benchmark under a processor + profiler combination.
     pub fn measure(
         &self,
+        processor: &mut dyn Processor,
         build_kinds: &[BuildKind],
         run_kinds: &[RunKind],
         rustc_path: &Path,
         cargo_path: &Path,
         iterations: usize,
-    ) -> Result<CollectedBenchmark, Error> {
-        // XXX: measure() and profile() contain a lot of duplicated code and
-        // should be combined.
+    ) -> Result<(), Error> {
 
         let iterations = cmp::min(iterations, self.config.runs);
+
         if self.config.disabled {
             eprintln!("skipping {}: disabled", self.name);
             bail!("disabled benchmark");
         }
 
-        let has_perf = Command::new("perf").output().is_ok();
-        assert!(has_perf);
-
-        let mut ret = CollectedBenchmark {
-            name: self.name.clone(),
-            runs: Vec::new(),
-        };
-
         for &build_kind in build_kinds {
-            info!("Benchmarking {}: {:?} + {:?}", self.name, build_kind, run_kinds);
-
-            let mut clean_stats = Vec::new();
-            let mut nll_stats = Vec::new();
-            let mut base_incr_stats = Vec::new();
-            let mut clean_incr_stats = Vec::new();
-            let mut patched_incr_stats: Vec<(Patch, Vec<Vec<Stat>>)> = Vec::new();
+            info!("Running {}: {:?} + {:?}", self.name, build_kind, run_kinds);
 
             // Build everything, including all dependent crates, in a temp dir.
             // We do this before the iterations so that dependent crates aren't
             // built on every iteration. A different temp dir is used for the
             // timing builds.
             let prep_dir = self.make_temp_dir(&self.path)?;
-            self.mk_cargo_process(rustc_path, cargo_path, build_kind)
-                .run_rustc(prep_dir.path())?;
+            self.mk_cargo_process(rustc_path, cargo_path, prep_dir.path(), build_kind)
+                .run_rustc()?;
 
             for i in 0..iterations {
                 debug!("Benchmark iteration {}/{}", i + 1, iterations);
                 let timing_dir = self.make_temp_dir(prep_dir.path())?;
+                let cwd = timing_dir.path();
 
                 // A full non-incremental build.
                 if run_kinds.contains(&RunKind::Clean) {
-                    let clean = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
-                        .profiler(Profiler::PerfStat)
-                        .run_rustc_and_process_perf_stat_output(timing_dir.path())?;
-                    clean_stats.push(clean);
+                    self.mk_cargo_process(rustc_path, cargo_path, cwd, build_kind)
+                        .processor(processor, &self.name, RunKind::Clean, "Clean", None)
+                        .run_rustc()?;
                 }
 
+                // A full non-incremental build with NLL enabled.
                 if run_kinds.contains(&RunKind::Nll) && self.config.nll {
-                    // A full non-incremental build with nll enabled.
-                    let nll = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
-                        .profiler(Profiler::PerfStat)
+                    self.mk_cargo_process(rustc_path, cargo_path, cwd, build_kind)
                         .nll(true)
-                        .run_rustc_and_process_perf_stat_output(timing_dir.path())?;
-                    nll_stats.push(nll);
+                        .processor(processor, &self.name, RunKind::Nll, "Nll", None)
+                        .run_rustc()?;
                 }
 
-                // An incremental build running from scratch (slowest case).
+                // An incremental build from scratch (slowest incremental case).
                 // This is required for any subsequent incremental builds.
                 if run_kinds.contains(&RunKind::BaseIncr) ||
                    run_kinds.contains(&RunKind::CleanIncr) ||
                    run_kinds.contains(&RunKind::PatchedIncrs) {
-                    let base_incr =
-                        self.mk_cargo_process(rustc_path, cargo_path, build_kind)
-                            .profiler(Profiler::PerfStat)
-                            .incremental(true)
-                            .run_rustc_and_process_perf_stat_output(timing_dir.path())?;
-                    base_incr_stats.push(base_incr);
+                    self.mk_cargo_process(rustc_path, cargo_path, cwd, build_kind)
+                        .incremental(true)
+                        .processor(processor, &self.name, RunKind::BaseIncr, "BaseIncr", None)
+                        .run_rustc()?;
                 }
 
                 // An incremental build with no changes (fastest incremental case).
                 if run_kinds.contains(&RunKind::CleanIncr) {
-                    let clean_incr =
-                        self.mk_cargo_process(rustc_path, cargo_path, build_kind)
-                            .profiler(Profiler::PerfStat)
-                            .incremental(true)
-                            .run_rustc_and_process_perf_stat_output(timing_dir.path())?;
-                    clean_incr_stats.push(clean_incr);
+                    self.mk_cargo_process(rustc_path, cargo_path, cwd, build_kind)
+                        .incremental(true)
+                        .processor(processor, &self.name, RunKind::CleanIncr, "CleanIncr", None)
+                        .run_rustc()?;
                 }
 
                 if run_kinds.contains(&RunKind::PatchedIncrs) {
-                    for patch in &self.patches {
+                    for (i, patch) in self.patches.iter().enumerate() {
                         debug!("applying patch {}", patch.name);
-                        patch.apply(timing_dir.path()).map_err(|s| err_msg(s))?;
+                        patch.apply(cwd).map_err(|s| err_msg(s))?;
 
                         // An incremental build with some changes (realistic
                         // incremental case).
-                        let out =
-                            self.mk_cargo_process(rustc_path, cargo_path, build_kind)
-                                .profiler(Profiler::PerfStat)
-                                .incremental(true)
-                                .run_rustc_and_process_perf_stat_output(timing_dir.path())?;
-                        if let Some(mut entry) = patched_incr_stats.iter_mut()
-                                                                   .find(|s| &s.0 == patch) {
-                            entry.1.push(out);
-                            continue;
-                        }
-                        patched_incr_stats.push((patch.clone(), vec![out]));
-                    }
-                }
-            }
-
-            if run_kinds.contains(&RunKind::Clean) {
-                ret.runs.push(process_stats(build_kind, BenchmarkState::Clean, clean_stats));
-            }
-            if run_kinds.contains(&RunKind::Nll) && self.config.nll {
-                ret.runs.push(process_stats(build_kind, BenchmarkState::Nll, nll_stats));
-            }
-            if run_kinds.contains(&RunKind::BaseIncr) ||
-               run_kinds.contains(&RunKind::CleanIncr) ||
-               run_kinds.contains(&RunKind::PatchedIncrs) {
-                ret.runs.push(process_stats(build_kind, BenchmarkState::IncrementalStart,
-                                            base_incr_stats));
-            }
-            if run_kinds.contains(&RunKind::CleanIncr) {
-                ret.runs.push(process_stats(build_kind, BenchmarkState::IncrementalClean,
-                                            clean_incr_stats));
-            }
-            if run_kinds.contains(&RunKind::PatchedIncrs) {
-                for (patch, results) in patched_incr_stats {
-                    ret.runs.push(process_stats(
-                        build_kind,
-                        BenchmarkState::IncrementalPatched(patch),
-                        results,
-                    ));
-                }
-            }
-        }
-
-        Ok(ret)
-    }
-
-    /// Run a specific benchmark under a profiler.
-    pub fn profile(
-        &self,
-        profiler: Profiler,
-        build_kinds: &[BuildKind],
-        run_kinds: &[RunKind],
-        output_dir: &Path,
-        rustc_path: &Path,
-        cargo_path: &Path,
-        id: &str,
-    ) -> Result<(), Error> {
-        // XXX: measure() and profile() contain a lot of duplicated code and
-        // should be combined.
-
-        if self.config.disabled {
-            eprintln!("skipping {}: disabled", self.name);
-            bail!("disabled benchmark");
-        }
-
-        for &build_kind in build_kinds {
-            info!("Profiling {}: {:?} + {:?}", self.name, build_kind, run_kinds);
-
-            // Build everything, including all dependent crates, in a temp dir.
-            let prep_dir = self.make_temp_dir(&self.path)?;
-            self.mk_cargo_process(rustc_path, cargo_path, build_kind)
-                .run_rustc(prep_dir.path())?;
-
-            let timing_dir = self.make_temp_dir(prep_dir.path())?;
-
-            let process_output = |output: process::Output, run_kind: &str| -> Result<(), Error> {
-                // Produce a name of the form $PREFIX-$ID-$BENCHMARK-$BUILDKIND-$RUNKIND.
-                let out_file = |prefix: &str| -> String {
-                    format!("{}-{}-{}-{:?}-{}", prefix, id, &self.name, build_kind, run_kind)
-                };
-
-                // Combine a dir and a file.
-                let filepath = |dir: &Path, file: &str| {
-                    let mut path = dir.to_path_buf();
-                    path.push(file);
-                    path
-                };
-
-                match profiler {
-                    Profiler::PerfStat => {
-                        panic!("unexpected profiler");
-                    }
-
-                    // -Ztime-passes writes its output to stdout. We copy that
-                    // output into a file in the output dir.
-                    Profiler::TimePasses => {
-                        let ztp_file = filepath(output_dir, &out_file("Ztp"));
-
-                        let mut f = File::create(ztp_file)?;
-                        f.write_all(&output.stdout)?;
-                        f.flush()?;
-                    }
-
-                    // perf-record produces (via rustc-fake) a data file called
-                    // 'perf'. We copy it from the temp dir to the output dir,
-                    // giving it a new name in the process.
-                    Profiler::PerfRecord => {
-                        let tmp_perf_file = filepath(timing_dir.as_ref(), "perf");
-                        let perf_file = filepath(output_dir, &out_file("perf"));
-
-                        fs::copy(&tmp_perf_file, &perf_file)?;
-                    }
-
-                    // Cachegrind produces (via rustc-fake) a data file called
-                    // 'cgout'. We copy it from the temp dir to the output dir,
-                    // giving it a new name in the process, and then
-                    // post-process it to produce another data file in the
-                    // output dir.
-                    Profiler::Cachegrind => {
-                        let tmp_cgout_file = filepath(timing_dir.as_ref(), "cgout");
-                        let cgout_file = filepath(output_dir, &out_file("cgout"));
-                        let cgann_file = filepath(output_dir, &out_file("cgann"));
-
-                        fs::copy(&tmp_cgout_file, &cgout_file)?;
-
-                        let mut cg_annotate_cmd = Command::new("cg_annotate");
-                        cg_annotate_cmd
-                            .arg("--auto=yes")
-                            .arg(&cgout_file);
-                        let output = cg_annotate_cmd.output()?;
-
-                        let mut f = File::create(cgann_file)?;
-                        f.write_all(&output.stdout)?;
-                        f.flush()?;
-                    }
-
-                    // Callgrind produces (via rustc-fake) a data file called
-                    // 'clgout'. We copy it from the temp dir to the output
-                    // dir, giving it a new name in the process, and then
-                    // post-process it to produce another data file in the
-                    // output dir.
-                    Profiler::Callgrind => {
-                        let tmp_clgout_file = filepath(timing_dir.as_ref(), "clgout");
-                        let clgout_file = filepath(output_dir, &out_file("clgout"));
-                        let clgann_file = filepath(output_dir, &out_file("clgann"));
-
-                        fs::copy(&tmp_clgout_file, &clgout_file)?;
-
-                        let mut clg_annotate_cmd = Command::new("callgrind_annotate");
-                        clg_annotate_cmd
-                            .arg("--auto=yes")
-                            .arg(&clgout_file);
-                        let output = clg_annotate_cmd.output()?;
-
-                        let mut f = File::create(clgann_file)?;
-                        f.write_all(&output.stdout)?;
-                        f.flush()?;
-                    }
-
-                    // DHAT writes its output to stderr. We copy that output
-                    // into a file in the output dir.
-                    Profiler::DHAT => {
-                        let dhat_file = filepath(output_dir, &out_file("dhat"));
-
-                        let mut f = File::create(dhat_file)?;
-                        f.write_all(&output.stderr)?;
-                        f.flush()?;
-                    }
-
-                    // Massif produces (via rustc-fake) a data file called
-                    // 'msout'. We copy it from the temp dir to the output dir,
-                    // giving it a new name in the process.
-                    Profiler::Massif => {
-                        let tmp_msout_file = filepath(timing_dir.as_ref(), "msout");
-                        let msout_file = filepath(output_dir, &out_file("msout"));
-
-                        fs::copy(&tmp_msout_file, &msout_file)?;
-                    }
-
-                    // eprintln! statements writes their output to stderr. We
-                    // copy that output into a file in the output dir.
-                    Profiler::Eprintln => {
-                        let eprintln_file = filepath(output_dir, &out_file("eprintln"));
-
-                        let mut f = File::create(eprintln_file)?;
-                        f.write_all(&output.stderr)?;
-                        f.flush()?;
-                    }
-                }
-                Ok(())
-            };
-
-            // A full non-incremental build.
-            if run_kinds.contains(&RunKind::Clean) {
-                let clean = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
-                    .profiler(profiler)
-                    .run_rustc(timing_dir.path())?;
-                process_output(clean, "Clean")?;
-            }
-
-            // A full non-incremental build with NLL enabled.
-            if run_kinds.contains(&RunKind::Nll) && self.config.nll {
-                let nll = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
-                    .profiler(profiler)
-                    .nll(true)
-                    .run_rustc(timing_dir.path())?;
-                process_output(nll, "Nll")?;
-            }
-
-            // An incremental build from scratch (slowest incremental case).
-            // This is required for any subsequent incremental builds.
-            if run_kinds.contains(&RunKind::BaseIncr) ||
-               run_kinds.contains(&RunKind::CleanIncr) ||
-               run_kinds.contains(&RunKind::PatchedIncrs) {
-                let base_incr = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
-                    .profiler(profiler)
-                    .incremental(true)
-                    .run_rustc(timing_dir.path())?;
-                process_output(base_incr, "BaseIncr")?;
-            }
-
-            // An incremental build with no changes (fastest incremental case).
-            if run_kinds.contains(&RunKind::CleanIncr) {
-                let clean_incr = self.mk_cargo_process(rustc_path, cargo_path, build_kind)
-                    .profiler(profiler)
-                    .incremental(true)
-                    .run_rustc(timing_dir.path())?;
-                process_output(clean_incr, "CleanIncr")?;
-            }
-
-            if run_kinds.contains(&RunKind::PatchedIncrs) {
-                for (i, patch) in self.patches.iter().enumerate() {
-                    debug!("applying patch {}", patch.name);
-                    patch.apply(timing_dir.path()).map_err(|s| err_msg(s))?;
-
-                    // An incremental build with some changes (realistic
-                    // incremental case).
-                    let patched_incr =
-                        self.mk_cargo_process(rustc_path, cargo_path, build_kind)
-                            .profiler(profiler)
+                        let run_kind_str = format!("PatchedIncr{}", i);
+                        self.mk_cargo_process(rustc_path, cargo_path, cwd, build_kind)
                             .incremental(true)
-                            .run_rustc(timing_dir.path())?;
-                    let run_kind_str = format!("PatchedIncr{}", i);
-                    process_output(patched_incr, &run_kind_str)?;
+                            .processor(processor, &self.name, RunKind::PatchedIncrs, &run_kind_str,
+                                       Some(&patch))
+                            .run_rustc()?;
+                    }
                 }
             }
+
+            processor.finish_build_kind(build_kind);
         }
+
         Ok(())
     }
 }
@@ -746,7 +776,7 @@ fn process_perf_stat_output(output: process::Output) -> Result<Vec<Stat>, Deseri
     Ok(stats)
 }
 
-fn process_stats(build_kind: BuildKind, state: BenchmarkState, runs: Vec<Vec<Stat>>) -> Run {
+fn process_stats(build_kind: BuildKind, state: BenchmarkState, runs: &[Vec<Stat>]) -> Run {
     let mut stats: HashMap<String, Vec<f64>> = HashMap::new();
     for run in runs.clone() {
         for stat in run {
