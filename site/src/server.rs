@@ -159,9 +159,9 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
     let mut check_best_average = Vec::new();
     let mut check_println_average = Vec::new();
     let mut check_worst_average = Vec::new();
-    let mut build_best_average = Vec::new();
-    let mut build_println_average = Vec::new();
-    let mut build_worst_average = Vec::new();
+    let mut debug_best_average = Vec::new();
+    let mut debug_println_average = Vec::new();
+    let mut debug_worst_average = Vec::new();
 
     let benchmark_names = data.artifact_data["beta"].benchmarks.keys()
         .filter(|key| data.artifact_data["beta"].benchmarks[*key].is_ok())
@@ -170,9 +170,9 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
         let mut check_best_points = Vec::new();
         let mut check_println_points = Vec::new();
         let mut check_worst_points = Vec::new();
-        let mut build_best_points = Vec::new();
-        let mut build_println_points = Vec::new();
-        let mut build_worst_points = Vec::new();
+        let mut debug_best_points = Vec::new();
+        let mut debug_println_points = Vec::new();
+        let mut debug_worst_points = Vec::new();
 
         let mut benches = if version.starts_with("master") {
             let data = data.data.values().last().unwrap();
@@ -201,17 +201,17 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
             extend!(check_best_points, r, r.is_best_case() && r.check);
             extend!(check_println_points, r, r.is_trivial() && r.check);
             extend!(check_worst_points, r, r.is_worst_case() && r.check);
-            extend!(build_best_points, r, r.is_best_case()   && !r.check && !r.release);
-            extend!(build_println_points, r, r.is_trivial()  && !r.check && !r.release);
-            extend!(build_worst_points, r, r.is_worst_case() && !r.check && !r.release);
+            extend!(debug_best_points, r, r.is_best_case()   && !r.check && !r.release);
+            extend!(debug_println_points, r, r.is_trivial()  && !r.check && !r.release);
+            extend!(debug_worst_points, r, r.is_worst_case() && !r.check && !r.release);
         }
 
         check_best_average.push(average(&check_best_points));
         check_println_average.push(average(&check_println_points));
         check_worst_average.push(average(&check_worst_points));
-        build_best_average.push(average(&build_best_points));
-        build_println_average.push(average(&build_println_points));
-        build_worst_average.push(average(&build_worst_points));
+        debug_best_average.push(average(&debug_best_points));
+        debug_println_average.push(average(&debug_println_points));
+        debug_worst_average.push(average(&debug_worst_points));
     }
 
     dashboard::Response {
@@ -221,10 +221,10 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
             best_averages: check_best_average,
             worst_averages: check_worst_average,
         },
-        build: dashboard::Cases {
-            small_averages: build_println_average,
-            best_averages: build_best_average,
-            worst_averages: build_worst_average,
+        debug: dashboard::Cases {
+            small_averages: debug_println_average,
+            best_averages: debug_best_average,
+            worst_averages: debug_worst_average,
         },
     }
 }
