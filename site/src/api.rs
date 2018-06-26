@@ -76,7 +76,7 @@ pub mod dashboard {
     pub struct Response {
         pub versions: Vec<String>,
         pub check: Cases,
-        pub build: Cases,
+        pub debug: Cases,
     }
 }
 

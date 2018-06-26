@@ -11,7 +11,7 @@
         <a href="dashboard.html">dashboard</a>,
         <a href="nll-dashboard.html">NLL dashboard</a>.</div>
     <div id="check-average-times"></div>
-    <div id="build-average-times"></div>
+    <div id="debug-average-times"></div>
     <div id="as-of"></div>
     <div style="text-align: center;">
         <a href="https://github.com/rust-lang-nursery/rustc-perf">Contribute on GitHub</a>
@@ -59,7 +59,7 @@
 
     function populate_data(data) {
         render("check-average-times", "check", data.check, data.versions);
-        render("build-average-times", "build", data.build, data.versions);
+        render("debug-average-times", "debug", data.debug, data.versions);
     }
 
     function make_data() {
