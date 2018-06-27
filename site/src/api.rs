@@ -67,9 +67,10 @@ pub mod info {
 pub mod dashboard {
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct Cases {
-        pub best_averages: Vec<f64>,
-        pub small_averages: Vec<f64>,
-        pub worst_averages: Vec<f64>,
+        pub clean_averages: Vec<f64>,
+        pub base_incr_averages: Vec<f64>,
+        pub clean_incr_averages: Vec<f64>,
+        pub println_incr_averages: Vec<f64>,
     }
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

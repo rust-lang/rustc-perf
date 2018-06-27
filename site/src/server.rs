@@ -102,7 +102,7 @@ pub fn handle_nll_dashboard(
         .map(|bench| {
             let nll = bench.runs.iter().find(|r| r.check && r.is_nll())
                 .and_then(|r| r.get_stat(&body.stat));
-            let clean = bench.runs.iter().find(|r| r.check && r.is_non_incremental_clean())
+            let clean = bench.runs.iter().find(|r| r.check && r.is_clean())
                 .and_then(|r| r.get_stat(&body.stat));
 
             nll_dashboard::Point {
@@ -156,23 +156,27 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
 
     versions.push(format!("master: {}", &data.data.keys().last().unwrap().sha[0..8]));
 
-    let mut check_best_average = Vec::new();
-    let mut check_println_average = Vec::new();
-    let mut check_worst_average = Vec::new();
-    let mut debug_best_average = Vec::new();
-    let mut debug_println_average = Vec::new();
-    let mut debug_worst_average = Vec::new();
+    let mut check_clean_average = Vec::new();
+    let mut check_base_incr_average = Vec::new();
+    let mut check_clean_incr_average = Vec::new();
+    let mut check_println_incr_average = Vec::new();
+    let mut debug_clean_average = Vec::new();
+    let mut debug_base_incr_average = Vec::new();
+    let mut debug_clean_incr_average = Vec::new();
+    let mut debug_println_incr_average = Vec::new();
 
     let benchmark_names = data.artifact_data["beta"].benchmarks.keys()
         .filter(|key| data.artifact_data["beta"].benchmarks[*key].is_ok())
         .collect::<Vec<_>>();
     for version in &versions {
-        let mut check_best_points = Vec::new();
-        let mut check_println_points = Vec::new();
-        let mut check_worst_points = Vec::new();
-        let mut debug_best_points = Vec::new();
-        let mut debug_println_points = Vec::new();
-        let mut debug_worst_points = Vec::new();
+        let mut check_clean_points = Vec::new();
+        let mut check_base_incr_points = Vec::new();
+        let mut check_clean_incr_points = Vec::new();
+        let mut check_println_incr_points = Vec::new();
+        let mut debug_clean_points = Vec::new();
+        let mut debug_base_incr_points = Vec::new();
+        let mut debug_clean_incr_points = Vec::new();
+        let mut debug_println_incr_points = Vec::new();
 
         let mut benches = if version.starts_with("master") {
             let data = data.data.values().last().unwrap();
@@ -198,33 +202,39 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
                 }
             }
 
-            extend!(check_best_points, r, r.is_best_case() && r.check);
-            extend!(check_println_points, r, r.is_trivial() && r.check);
-            extend!(check_worst_points, r, r.is_worst_case() && r.check);
-            extend!(debug_best_points, r, r.is_best_case()   && !r.check && !r.release);
-            extend!(debug_println_points, r, r.is_trivial()  && !r.check && !r.release);
-            extend!(debug_worst_points, r, r.is_worst_case() && !r.check && !r.release);
+            extend!(check_clean_points, r, r.is_clean() && r.check);
+            extend!(check_base_incr_points, r, r.is_base_incr() && r.check);
+            extend!(check_clean_incr_points, r, r.is_clean_incr() && r.check);
+            extend!(check_println_incr_points, r, r.is_println_incr() && r.check);
+            extend!(debug_clean_points, r, r.is_clean() && !r.check && !r.release);
+            extend!(debug_base_incr_points, r, r.is_base_incr() && !r.check && !r.release);
+            extend!(debug_clean_incr_points, r, r.is_clean_incr() && !r.check && !r.release);
+            extend!(debug_println_incr_points, r, r.is_println_incr() && !r.check && !r.release);
         }
 
-        check_best_average.push(average(&check_best_points));
-        check_println_average.push(average(&check_println_points));
-        check_worst_average.push(average(&check_worst_points));
-        debug_best_average.push(average(&debug_best_points));
-        debug_println_average.push(average(&debug_println_points));
-        debug_worst_average.push(average(&debug_worst_points));
+        check_clean_average.push(average(&check_clean_points));
+        check_base_incr_average.push(average(&check_base_incr_points));
+        check_clean_incr_average.push(average(&check_clean_incr_points));
+        check_println_incr_average.push(average(&check_println_incr_points));
+        debug_clean_average.push(average(&debug_clean_points));
+        debug_base_incr_average.push(average(&debug_base_incr_points));
+        debug_clean_incr_average.push(average(&debug_clean_incr_points));
+        debug_println_incr_average.push(average(&debug_println_incr_points));
     }
 
     dashboard::Response {
         versions,
         check: dashboard::Cases {
-            small_averages: check_println_average,
-            best_averages: check_best_average,
-            worst_averages: check_worst_average,
+            clean_averages: check_clean_average,
+            base_incr_averages: check_base_incr_average,
+            clean_incr_averages: check_clean_incr_average,
+            println_incr_averages: check_println_incr_average,
         },
         debug: dashboard::Cases {
-            small_averages: debug_println_average,
-            best_averages: debug_best_average,
-            worst_averages: debug_worst_average,
+            clean_averages: debug_clean_average,
+            base_incr_averages: debug_base_incr_average,
+            clean_incr_averages: debug_clean_incr_average,
+            println_incr_averages: debug_println_incr_average,
         },
     }
 }
@@ -254,13 +264,13 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
                 .entry(name.clone())
                 .or_insert_with(|| HashMap::with_capacity(runs.len()));
             let mut base_compile = false;
-            let mut trivial = false;
+            let mut is_println_incr = false;
             for (name, run, value) in runs.clone() {
                 let value = value as f32;
                 if run.state.is_base_compile() {
                     base_compile = true;
-                } else if run.is_trivial() {
-                    trivial = true;
+                } else if run.is_println_incr() {
+                    is_println_incr = true;
                 }
 
                 let mut entry = entry
@@ -278,10 +288,10 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
                     x: date_data.date.0.timestamp() as u64 * 1000, // all dates are since 1970
                 });
             }
-            if base_compile && trivial {
+            if base_compile && is_println_incr {
                 for (_, run, value) in runs {
                     // TODO: Come up with a way to summarize non-standard patches
-                    if run.state.is_patch() && !run.is_trivial() {
+                    if run.state.is_patch() && !run.is_println_incr() {
                         continue;
                     }
                     summary_points

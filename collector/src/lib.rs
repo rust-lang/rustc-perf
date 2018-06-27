@@ -176,27 +176,27 @@ pub struct Run {
 }
 
 impl Run {
-    pub fn is_best_case(&self) -> bool {
-        self.state == BenchmarkState::IncrementalClean
-    }
-
-    pub fn is_worst_case(&self) -> bool {
-        self.state == BenchmarkState::IncrementalStart
-    }
-
-    pub fn is_trivial(&self) -> bool {
-        if let BenchmarkState::IncrementalPatched(ref patch) = self.state {
-            return patch.name == "println";
-        }
-        false
-    }
-
-    pub fn is_non_incremental_clean(&self) -> bool {
+    pub fn is_clean(&self) -> bool {
         self.state == BenchmarkState::Clean
     }
 
     pub fn is_nll(&self) -> bool {
         self.state == BenchmarkState::Nll
+    }
+
+    pub fn is_base_incr(&self) -> bool {
+        self.state == BenchmarkState::IncrementalStart
+    }
+
+    pub fn is_clean_incr(&self) -> bool {
+        self.state == BenchmarkState::IncrementalClean
+    }
+
+    pub fn is_println_incr(&self) -> bool {
+        if let BenchmarkState::IncrementalPatched(ref patch) = self.state {
+            return patch.name == "println";
+        }
+        false
     }
 
     pub fn name(&self) -> String {
