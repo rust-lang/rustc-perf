@@ -1,6 +1,7 @@
 extern crate chrono;
 #[macro_use]
 extern crate log;
+extern crate semver;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
@@ -421,6 +422,15 @@ where
     D: serde::de::Deserializer<'de>,
 {
     Ok(Option::deserialize(deserializer)?.unwrap_or(0.0))
+}
+
+pub fn version_supports_incremental(version_str: &str) -> bool {
+    if let Some(version) = version_str.parse::<semver::Version>().ok() {
+        version >= semver::Version::new(1, 24, 0)
+    } else {
+        assert!(version_str == "beta" || version_str.starts_with("master"));
+        true
+    }
 }
 
 /// Rounds serialized and deserialized floats to 2 decimal places.

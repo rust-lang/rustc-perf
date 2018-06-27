@@ -37,7 +37,7 @@ use failure::Error;
 use git;
 use util::{self, get_repo_path};
 pub use api::{self, nll_dashboard, dashboard, data, days, graph, info, CommitResponse, ServerResult};
-use collector::{Date, Run};
+use collector::{Date, Run, version_supports_incremental};
 use load::{CommitData, InputData};
 use antidote::RwLock;
 
@@ -203,13 +203,15 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
             }
 
             extend!(check_clean_points, r, r.is_clean() && r.check);
-            extend!(check_base_incr_points, r, r.is_base_incr() && r.check);
-            extend!(check_clean_incr_points, r, r.is_clean_incr() && r.check);
-            extend!(check_println_incr_points, r, r.is_println_incr() && r.check);
             extend!(debug_clean_points, r, r.is_clean() && !r.check && !r.release);
-            extend!(debug_base_incr_points, r, r.is_base_incr() && !r.check && !r.release);
-            extend!(debug_clean_incr_points, r, r.is_clean_incr() && !r.check && !r.release);
-            extend!(debug_println_incr_points, r, r.is_println_incr() && !r.check && !r.release);
+            if version_supports_incremental(version) {
+                extend!(check_base_incr_points, r, r.is_base_incr() && r.check);
+                extend!(check_clean_incr_points, r, r.is_clean_incr() && r.check);
+                extend!(check_println_incr_points, r, r.is_println_incr() && r.check);
+                extend!(debug_base_incr_points, r, r.is_base_incr() && !r.check && !r.release);
+                extend!(debug_clean_incr_points, r, r.is_clean_incr() && !r.check && !r.release);
+                extend!(debug_println_incr_points, r, r.is_println_incr() && !r.check && !r.release);
+            }
         }
 
         check_clean_average.push(average(&check_clean_points));
