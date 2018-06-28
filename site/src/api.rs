@@ -78,6 +78,7 @@ pub mod dashboard {
         pub versions: Vec<String>,
         pub check: Cases,
         pub debug: Cases,
+        pub opt: Cases,
     }
 }
 
