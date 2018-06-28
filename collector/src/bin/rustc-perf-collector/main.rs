@@ -419,14 +419,8 @@ fn main_result() -> Result<i32, Error> {
             // Remove benchmarks that don't work with a stable compiler.
             benchmarks.retain(|b| b.supports_stable());
 
-            let supports_incremental = if let Some(version) = id.parse::<semver::Version>().ok() {
-                version >= semver::Version::new(1, 24, 0)
-            } else {
-                assert_eq!(id, "beta");
-                true
-            };
             // No NLL runs when testing stable builds.
-            let run_kinds = if supports_incremental {
+            let run_kinds = if collector::version_supports_incremental(id) {
                 RunKind::all_except_nll()
             } else {
                 RunKind::all_non_incr_except_nll()

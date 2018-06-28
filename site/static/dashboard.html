@@ -39,19 +39,24 @@
             },
             series: [
                 {
-                    name: "best-case",
+                    name: "clean",
                     animation: false,
-                    data: data.best_averages,
+                    data: data.clean_averages,
                 },
                 {
-                    name: "println-case",
+                    name: "baseline incremental",
                     animation: false,
-                    data: data.small_averages,
+                    data: data.base_incr_averages,
                 },
                 {
-                    name: "worst-case",
+                    name: "clean incremental",
                     animation: false,
-                    data: data.worst_averages,
+                    data: data.clean_incr_averages,
+                },
+                {
+                    name: "patched incremental: println",
+                    animation: false,
+                    data: data.println_incr_averages,
                 },
             ],
         });
