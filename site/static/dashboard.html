@@ -12,6 +12,7 @@
         <a href="nll-dashboard.html">NLL dashboard</a>.</div>
     <div id="check-average-times"></div>
     <div id="debug-average-times"></div>
+    <div id="opt-average-times"></div>
     <div id="as-of"></div>
     <div style="text-align: center;">
         <a href="https://github.com/rust-lang-nursery/rustc-perf">Contribute on GitHub</a>
@@ -20,6 +21,7 @@
     <script>
 
     function render(element, name, data, versions) {
+        let articles = { "check": "a", "debug": "a", "opt": "an" };
         new Highcharts.chart(document.getElementById(element), {
             chart: {
                 zoomType: "xy",
@@ -27,7 +29,7 @@
                 type: "line",
             },
             title: {
-                text: `Average time for a ${name} build`,
+                text: `Average time for ${articles[name]} ${name} build`,
             },
             yAxis: {
                 title: { text: "Seconds" },
@@ -65,6 +67,7 @@
     function populate_data(data) {
         render("check-average-times", "check", data.check, data.versions);
         render("debug-average-times", "debug", data.debug, data.versions);
+        render("opt-average-times", "opt", data.opt, data.versions);
     }
 
     function make_data() {

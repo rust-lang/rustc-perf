@@ -164,6 +164,10 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
     let mut debug_base_incr_average = Vec::new();
     let mut debug_clean_incr_average = Vec::new();
     let mut debug_println_incr_average = Vec::new();
+    let mut opt_clean_average = Vec::new();
+    let mut opt_base_incr_average = Vec::new();
+    let mut opt_clean_incr_average = Vec::new();
+    let mut opt_println_incr_average = Vec::new();
 
     let benchmark_names = data.artifact_data["beta"].benchmarks.keys()
         .filter(|key| data.artifact_data["beta"].benchmarks[*key].is_ok())
@@ -177,6 +181,10 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
         let mut debug_base_incr_points = Vec::new();
         let mut debug_clean_incr_points = Vec::new();
         let mut debug_println_incr_points = Vec::new();
+        let mut opt_clean_points = Vec::new();
+        let mut opt_base_incr_points = Vec::new();
+        let mut opt_clean_incr_points = Vec::new();
+        let mut opt_println_incr_points = Vec::new();
 
         let mut benches = if version.starts_with("master") {
             let data = data.data.values().last().unwrap();
@@ -204,6 +212,7 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
 
             extend!(check_clean_points, r, r.is_clean() && r.check);
             extend!(debug_clean_points, r, r.is_clean() && !r.check && !r.release);
+            extend!(opt_clean_points, r, r.is_clean() && r.release);
             if version_supports_incremental(version) {
                 extend!(check_base_incr_points, r, r.is_base_incr() && r.check);
                 extend!(check_clean_incr_points, r, r.is_clean_incr() && r.check);
@@ -211,6 +220,9 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
                 extend!(debug_base_incr_points, r, r.is_base_incr() && !r.check && !r.release);
                 extend!(debug_clean_incr_points, r, r.is_clean_incr() && !r.check && !r.release);
                 extend!(debug_println_incr_points, r, r.is_println_incr() && !r.check && !r.release);
+                extend!(opt_base_incr_points, r, r.is_base_incr() && r.release);
+                extend!(opt_clean_incr_points, r, r.is_clean_incr() && r.release);
+                extend!(opt_println_incr_points, r, r.is_println_incr() && r.release);
             }
         }
 
@@ -222,6 +234,10 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
         debug_base_incr_average.push(average(&debug_base_incr_points));
         debug_clean_incr_average.push(average(&debug_clean_incr_points));
         debug_println_incr_average.push(average(&debug_println_incr_points));
+        opt_clean_average.push(average(&opt_clean_points));
+        opt_base_incr_average.push(average(&opt_base_incr_points));
+        opt_clean_incr_average.push(average(&opt_clean_incr_points));
+        opt_println_incr_average.push(average(&opt_println_incr_points));
     }
 
     dashboard::Response {
@@ -237,6 +253,12 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
             base_incr_averages: debug_base_incr_average,
             clean_incr_averages: debug_clean_incr_average,
             println_incr_averages: debug_println_incr_average,
+        },
+        opt: dashboard::Cases {
+            clean_averages: opt_clean_average,
+            base_incr_averages: opt_base_incr_average,
+            clean_incr_averages: opt_clean_incr_average,
+            println_incr_averages: opt_println_incr_average,
         },
     }
 }
