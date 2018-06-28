@@ -36,7 +36,7 @@ use failure::Error;
 
 use git;
 use util::{self, get_repo_path};
-pub use api::{self, nll_dashboard, dashboard, data, days, graph, info, CommitResponse, ServerResult};
+pub use api::{self, status, nll_dashboard, dashboard, data, days, graph, info, CommitResponse, ServerResult};
 use collector::{Date, Run, version_supports_incremental};
 use load::{CommitData, InputData};
 use antidote::RwLock;
@@ -260,6 +260,38 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
             clean_incr_averages: opt_clean_incr_average,
             println_incr_averages: opt_println_incr_average,
         },
+    }
+}
+
+pub fn handle_status_page(data: &InputData) -> status::Response {
+    let last_commit = data.data.iter().last().unwrap();
+
+    let mut benchmark_state = last_commit.1.benchmarks.iter()
+        .map(|(name, res)| {
+            let error = res.as_ref().err().cloned();
+            let mut msg = String::new();
+            if let Some(error) = error.as_ref() {
+                let mut lines = error.lines();
+                let first = lines.next().unwrap();
+                let log = &first[first.find('"').unwrap() + 1..];
+                let log = &log[..log.find("\" }").unwrap()];
+                let log = log.replace("\\n", "\n");
+
+                msg.push_str(&log);
+            }
+            status::BenchmarkStatus {
+                name: name.clone(),
+                success: res.is_ok(),
+                error: error.as_ref().map(|_| msg),
+            }
+        }).collect::<Vec<_>>();
+
+    benchmark_state.sort_by_key(|s| s.error.is_some());
+    benchmark_state.reverse();
+
+    status::Response {
+        last_commit: last_commit.0.clone(),
+        benchmarks: benchmark_state,
     }
 }
 
@@ -682,6 +714,7 @@ impl Service for Server {
             "/perf/graph" => self.handle_post(req, handle_graph),
             "/perf/get" => self.handle_post(req, handle_days),
             "/perf/nll_dashboard" => self.handle_post(req, handle_nll_dashboard),
+            "/perf/status_page" => self.handle_get(&req, handle_status_page),
             "/perf/pr_commit" => self.handle_get_req(&req, |req, _data| {
                 let res = req.query()
                     .unwrap_or_default()

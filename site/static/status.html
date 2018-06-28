@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>rustc performance data</title>
+<link rel="stylesheet" type="text/css" href="perf.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highcharts/6.0.7/highcharts.js"></script>
+</head>
+<body class="container">
+    <div>&gt; <a href="index.html">graphs</a>, <a href="compare.html">compare</a>,
+        <a href="dashboard.html">dashboard</a>,
+        <a href="nll-dashboard.html">NLL dashboard</a>, <a href="status.html">status</a>.</div>
+    <div id="data">
+        Benchmarks for last commit:
+        <div id="benchmark-state"></div>
+    </div>
+    <div id="as-of"></div>
+    <div style="text-align: center;">
+        <a href="https://github.com/rust-lang-nursery/rustc-perf">Contribute on GitHub</a>
+    </div>
+    <script src="shared.js"></script>
+    <script>
+
+    function populate_data(data) {
+        let state_div = document.querySelector("#benchmark-state");
+        {
+            let element = document.createElement("p");
+            element.innerHTML = `SHA: ${data.last_commit.sha}, date: ${data.last_commit.date}`;
+            state_div.appendChild(element);
+        }
+        for (let benchmark of data.benchmarks) {
+            let element = document.createElement("div");
+            if (benchmark.error) {
+                element.innerHTML = `<details open>
+                    <summary>${benchmark.name} - error</summary>
+                    <pre>${benchmark.error}</pre>
+                </details>`;
+            } else {
+                element.innerHTML = `
+                    <p style="margin:0.1em;">${benchmark.name} - successful</p>
+                `;
+            }
+            state_div.appendChild(element);
+        }
+    }
+
+    function make_data() {
+        fetch(BASE_URL + "/status_page", {}).then(function(response) {
+            response.json().then(data => populate_data(data));
+        });
+    }
+
+    make_data();
+    </script>
+</body>
+</html>

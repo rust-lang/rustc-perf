@@ -187,3 +187,20 @@ pub mod nll_dashboard {
         pub points: Vec<Point>,
     }
 }
+
+pub mod status {
+    use collector::Commit;
+
+    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+    pub struct BenchmarkStatus {
+        pub name: String,
+        pub success: bool,
+        pub error: Option<String>,
+    }
+
+    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+    pub struct Response {
+        pub last_commit: Commit,
+        pub benchmarks: Vec<BenchmarkStatus>,
+    }
+}
