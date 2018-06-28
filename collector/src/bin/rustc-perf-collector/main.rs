@@ -429,7 +429,7 @@ fn main_result() -> Result<i32, Error> {
                 None,
                 &commit,
                 "x86_64-unknown-linux-gnu",
-                &[BuildKind::Check, BuildKind::Debug], // no Opt builds
+                &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
                 &run_kinds,
                 &toolchain.binary_file("rustc"),
                 &toolchain.binary_file("cargo"),
