@@ -276,21 +276,55 @@ impl InputData {
         let data_real = data.clone();
 
         let mut interpolated = BTreeMap::new();
-        let mut data_next = BTreeMap::new();
-        for (commit, cd) in data {
+        let mut data_next = data.clone();
+        // The data holds this tree:
+        //  [commit] -> [benchmark] -> [run] -> [stat]
+        // Ideally, interpolation/extrapolation wants to work on the
+        // leaf nodes (stats), as that gives it the ability to fill in
+        // all data, not just some holes.
+        //
+        // However, interpolating on stats directly is somewhat
+        // problematic, since it is unclear whether pulling from
+        // different commits for different stats will lead to confusion.
+        //
+        // Solving this problem by only looking for fully populated data
+        // for extrapolation is also not a good solution. If a
+        // benchmark gains a println benchmark today, we would prefer to
+        // avoid back-propagating with today's data for previous holes.
+        // Doing so would mean that a commit some days ago that slowed
+        // down rustc across all benchmarks would be "fast" on the
+        // println case given that we've fixed the problem since then.
+        //
+        // Someone looking at perf may then not see any change over time
+        // -- despite rustc being slow in some commits. This would solve
+        // itself as we back-collected the new benchmark, but that isn't
+        // an ideal state to have.
+        //
+        // An alternative solution is to pull in the closest available
+        // data for the given benchmark/run/stat triple. This largely
+        // leads to the same problem, just less so: we'd see the same
+        // problem where all past summaries for that run and/or stat are
+        // "downscaled" because of today's fast rustc.
+        //
+        // The current code only attempts to interpolate benchmarks
+        // themselves. This limits the scope of the problem to adding
+        // new benchmarks, not runs or stats. Unfortunately, it does not
+        // solve the problem entirely.
+        for (commit, cd) in &mut data_next {
             let commit_idx = commit_map[&commit];
 
-            let benchmarks = cd.benchmarks.into_iter()
+            // We do not interpolate try commits today
+            // because we don't track their parents so it's
+            // difficult to add that data in.
+            if commit.is_try() {
+                continue;
+            }
+
+            cd.benchmarks = cd.benchmarks.clone().into_iter()
                 .map(|(name, res)| {
                     let benchmark = if let Ok(b) = res {
                         b
                     } else {
-                        // We do not interpolate try commits today
-                        // because we don't track their parents so it's
-                        // difficult to add that data in.
-                        if commit.date.0.year() == 2000 {
-                            return (name, res);
-                        }
                         let mut interpolation_entry =
                             interpolated.entry(commit.clone()).or_insert_with(Vec::new);
 
@@ -343,28 +377,16 @@ impl InputData {
 
                                 let mut interpolated_runs = Vec::with_capacity(run_pairs.len());
                                 for (srun, erun) in run_pairs {
-                                    let mut stat_pairs = Vec::with_capacity(srun.stats.len());
+                                    let mut interpolated_stats = Vec::with_capacity(srun.stats.len());
                                     for sstat in &srun.stats {
-                                        for estat in &erun.stats {
-                                            if sstat.name == estat.name {
-                                                stat_pairs.push((sstat.clone(), estat.clone()));
-                                            }
+                                        if let Some(estat) = erun.get_stat(&sstat.name) {
+                                            let slope = (estat - sstat.cnt) / (distance as f64);
+                                            let interpolated = slope * (from_start as f64) + sstat.cnt;
+                                            interpolated_stats.push(collector::Stat {
+                                                name: sstat.name.clone(),
+                                                cnt: interpolated,
+                                            });
                                         }
-                                    }
-                                    let mut interpolated_stats = Vec::with_capacity(stat_pairs.len());
-                                    for (sstat, estat) in stat_pairs {
-                                        let slope = (estat.cnt - sstat.cnt) / (distance as f64);
-                                        let interpolated = slope * (from_start as f64) + sstat.cnt;
-                                        trace!("
-                                            stat {} went from {} to {} over {},
-                                            slope = {},
-                                            interpolated = {}; from_start = {}",
-                                            sstat.name, sstat.cnt, estat.cnt,
-                                            distance, slope, interpolated, from_start);
-                                        interpolated_stats.push(collector::Stat {
-                                            name: sstat.name.clone(),
-                                            cnt: interpolated,
-                                        });
                                     }
                                     let mut interpolated_run = srun.clone();
                                     interpolated_run.stats = interpolated_stats;
@@ -410,7 +432,7 @@ impl InputData {
                             // benchmark. Bail out and return the
                             // original (missing) data.
                             (None, None) => {
-                                trace!("giving up on finding {} data for commit {:?}",
+                                warn!("giving up on finding {} data for commit {:?}",
                                     name, commit);
                                 return (name, res);
                             }
@@ -421,11 +443,6 @@ impl InputData {
 
                     (name, Ok(benchmark))
                 }).collect::<BTreeMap<String, Result<Benchmark, String>>>();
-            data_next.insert(commit, CommitData {
-                commit: cd.commit.clone(),
-                triple: cd.triple.clone(),
-                benchmarks: benchmarks,
-            });
         }
 
         let interpolated = interpolated.into_iter()

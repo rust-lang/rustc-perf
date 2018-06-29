@@ -373,6 +373,9 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
                         .or_insert_with(Vec::new)
                         .push(value);
                 }
+            } else {
+                warn!("skipping summary for {:40} - {}: base compile = {}, println_incr = {}",
+                    name, commit, base_compile, is_println_incr);
             }
         }
         for (&(release, check, ref state), values) in &summary_points {
