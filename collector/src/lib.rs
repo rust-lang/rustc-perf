@@ -243,7 +243,7 @@ pub struct CommitData {
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct DeltaTime(#[serde(with = "round_float")] pub f64);
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Hash, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Date(pub DateTime<Utc>);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
