@@ -113,45 +113,56 @@
 
         function to_fields(name) {
             let source = data.a.data[name] || data.b.data[name];
-            let fields = [];
-            if (source && source.length > 0) {
-                let offset_b = 0;
-                for (let i = 0; i < source.length; i++) {
-                    let casename;
-                    let datum_a;
-                    let datum_b;
-                    if (data.a.data[name] !== undefined && data.b.data[name] !== undefined &&
-                        data.a.data[name][i] !== undefined &&
-                        data.b.data[name][i + offset_b] !== undefined) {
-                        let a = data.a.data[name][i];
-                        let b = data.b.data[name][i + offset_b];
-                        casename = a[0];
-                        datum_a = a[2];
-                        if (b[0] != casename) {
-                            offset_b -= 1;
-                            datum_b = null;
-                        } else {
-                            datum_b = b[2];
-                        }
-                    } else if (data.a.data[name] === undefined) {
-                        let b = data.b.data[name][i + offset_b];
-                        casename = b[0];
-                        datum_a = null;
-                        datum_b = b[2];
-                    } else {
-                        let a = data.a.data[name][i];
-                        casename = a[0];
-                        datum_a = a[2];
-                        datum_b = null;
+            let max_length = 0;
+            if (data.a.data[name]) {
+                max_length = data.a.data[name].length;
+            }
+            if (data.b.data[name] && data.b.data[name].length > max_length) {
+                max_length = data.b.data[name].length;
+            }
+
+            let keys = {};
+            if (data.a.data[name]) {
+                for (let i = 0; i < data.a.data[name].length; i++) {
+                    if (!keys[data.a.data[name][i][0]]) {
+                        keys[data.a.data[name][i][0]] = {};
                     }
-                    fields.push({
-                        casename,
-                        datum_a,
-                        datum_b,
-                        percent: percent_chg(datum_a, datum_b),
-                    });
+                    keys[data.a.data[name][i][0]].a_idx = i;
                 }
             }
+            if (data.b.data[name]) {
+                for (let i = 0; i < data.b.data[name].length; i++) {
+                    if (!keys[data.b.data[name][i][0]]) {
+                        keys[data.b.data[name][i][0]] = {};
+                    }
+                    keys[data.b.data[name][i][0]].b_idx = i;
+                }
+            }
+
+            let fields = [];
+            for (let key in keys) {
+                let a_idx = keys[key].a_idx;
+                let b_idx = keys[key].b_idx;
+                let datum_a = null;
+                let datum_b = null;
+                if (a_idx != undefined && b_idx != undefined) {
+                    datum_a = data.a.data[name][a_idx][2];
+                    datum_b = data.b.data[name][b_idx][2];
+                } else if (a_idx != undefined) {
+                    datum_a = data.a.data[name][a_idx][2];
+                } else if (b_idx != undefined) {
+                    datum_b = data.b.data[name][b_idx][2];
+                } else {
+                    // should be unreachable
+                }
+                fields.push({
+                    casename: key,
+                    datum_a,
+                    datum_b,
+                    percent: percent_chg(datum_a, datum_b),
+                });
+            }
+
             return fields;
         }
 
