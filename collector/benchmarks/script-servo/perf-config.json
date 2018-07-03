@@ -1,6 +1,5 @@
 {
     "cargo_opts": "--no-default-features",
     "cargo_toml": "components/script/Cargo.toml",
-    "runs": 1,
-    "nll": false
+    "runs": 1
 }
