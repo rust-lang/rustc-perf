@@ -50,6 +50,7 @@ pub enum InterpolationSource {
 #[derive(Debug)]
 pub struct Interpolation {
     pub benchmark: String,
+    pub run: Option<String>,
     pub from: InterpolationSource,
 }
 
@@ -121,7 +122,7 @@ pub struct InputData {
     /// The benchmarks we interpolated for a given commit.
     ///
     /// Not all commits are in this map.
-    pub interpolated: BTreeMap<Commit, Vec<Interpolation>>,
+    pub interpolated: HashMap<String, Vec<Interpolation>>,
 
     /// The list of commits in the `data` map.
     pub commits: Vec<Commit>,
@@ -275,179 +276,86 @@ impl InputData {
 
         let data_real = data.clone();
 
-        let mut interpolated = BTreeMap::new();
+        let mut known_runs: HashMap<String, HashSet<String>> = HashMap::new();
+        for (_, cd) in &data_real {
+            for (name, benchmark) in &cd.benchmarks {
+                if let Ok(benchmark) = benchmark {
+                    for run in &benchmark.runs {
+                        known_runs.entry(name.clone())
+                            .or_insert_with(HashSet::new)
+                            .insert(run.name());
+                    }
+                }
+            }
+        }
+
+        let mut interpolated = HashMap::new();
         let mut data_next = data.clone();
         // The data holds this tree:
         //  [commit] -> [benchmark] -> [run] -> [stat]
-        // Ideally, interpolation/extrapolation wants to work on the
-        // leaf nodes (stats), as that gives it the ability to fill in
-        // all data, not just some holes.
-        //
-        // However, interpolating on stats directly is somewhat
-        // problematic, since it is unclear whether pulling from
-        // different commits for different stats will lead to confusion.
-        //
-        // Solving this problem by only looking for fully populated data
-        // for extrapolation is also not a good solution. If a
-        // benchmark gains a println benchmark today, we would prefer to
-        // avoid back-propagating with today's data for previous holes.
-        // Doing so would mean that a commit some days ago that slowed
-        // down rustc across all benchmarks would be "fast" on the
-        // println case given that we've fixed the problem since then.
-        //
-        // Someone looking at perf may then not see any change over time
-        // -- despite rustc being slow in some commits. This would solve
-        // itself as we back-collected the new benchmark, but that isn't
-        // an ideal state to have.
-        //
-        // An alternative solution is to pull in the closest available
-        // data for the given benchmark/run/stat triple. This largely
-        // leads to the same problem, just less so: we'd see the same
-        // problem where all past summaries for that run and/or stat are
-        // "downscaled" because of today's fast rustc.
-        //
-        // The current code only attempts to interpolate benchmarks
-        // themselves. This limits the scope of the problem to adding
-        // new benchmarks, not runs or stats. Unfortunately, it does not
-        // solve the problem entirely.
-        for (commit, cd) in &mut data_next {
-            let commit_idx = commit_map[&commit];
 
-            // We do not interpolate try commits today
-            // because we don't track their parents so it's
-            // difficult to add that data in.
-            if commit.is_try() {
-                continue;
+        let current_benchmarks = data.iter().rev().take(20)
+            .flat_map(|(_, cd)| {
+                cd.benchmarks.keys().cloned()
+            }).collect::<HashSet<_>>();
+
+        for benchmark_name in current_benchmarks {
+            for (commit, cd) in &mut data_next {
+                // We do not interpolate try commits today
+                // because we don't track their parents so it's
+                // difficult to add that data in.
+                if commit.is_try() {
+                    continue;
+                }
+
+                let mut assoc = AssociatedData {
+                    commit: &commit,
+                    data: &data_real,
+                    commits: &commits,
+                    commit_map: &commit_map,
+                    interpolated: &mut interpolated,
+                };
+
+                loop {
+                    let entry = cd.benchmarks.entry(benchmark_name.to_owned())
+                        .or_insert_with(|| Err(String::from("dummy bench")));
+
+                    match entry {
+                        // benchmark exists, but might have runs missing
+                        Ok(benchmark) => {
+                            let missing_runs = known_runs[&benchmark_name]
+                                .iter()
+                                .filter(|rname| !benchmark.runs.iter().any(|r| r.name() == **rname))
+                                .collect::<Vec<_>>();
+                            if missing_runs.is_empty() {
+                                // we're done with this benchmark
+                                break;
+                            }
+
+                            let before = benchmark.runs.len();
+                            fill_benchmark_runs(benchmark, missing_runs, &mut assoc);
+                            assert_ne!(before, benchmark.runs.len(), "made progress");
+                        }
+                        // benchmark did not run successfully at this commit
+                        // or benchmark did not attempt to run at this commit
+                        benchmark @ Err(_) => {
+                            let runs = fill_benchmark_data(&benchmark_name, &mut assoc);
+                            // If we couldn't do this then do nothing
+                            if let Some(runs) = runs {
+                                *benchmark = Ok(Benchmark {
+                                    name: benchmark_name.to_owned(),
+                                    runs: runs,
+                                });
+                            }
+                        }
+                    }
+                }
             }
-
-            cd.benchmarks = cd.benchmarks.clone().into_iter()
-                .map(|(name, res)| {
-                    let benchmark = if let Ok(b) = res {
-                        b
-                    } else {
-                        let mut interpolation_entry =
-                            interpolated.entry(commit.clone()).or_insert_with(Vec::new);
-
-                        let mut start = None;
-                        let mut end = None;
-                        for needle_commit in commits[..commit_idx].iter().rev() {
-                            let bench = data_real[needle_commit].benchmarks.get(&name).cloned();
-                            if let Some(Ok(bench)) = bench {
-                                start = Some((needle_commit.clone(), bench));
-                                break;
-                            }
-                        }
-                        for needle_commit in commits[commit_idx + 1..].iter() {
-                            let bench = data_real[needle_commit].benchmarks.get(&name).cloned();
-                            if let Some(Ok(bench)) = bench {
-                                end = Some((needle_commit.clone(), bench));
-                                break;
-                            }
-                        }
-
-                        match (start, end) {
-                            // This hole is bounded on both left and
-                            // right, so we want to linearly interpolate
-                            // each run between these two data points.
-                            //
-                            // This code handles the case where a run is
-                            // absent in start or end by
-                            // flat-interpolating that run through this
-                            // region.
-                            //
-                            // Essentially, we apply the same algorithm
-                            // again, but instead of applying it to
-                            // benchmark names we apply it to run names.
-                            (Some(start), Some(end)) => {
-                                let distance = commit_map[&end.0] - commit_map[&start.0];
-                                let from_start = commit_idx - commit_map[&start.0];
-                                let start_runs = &start.1.runs;
-                                let end_runs = &end.1.runs;
-
-                                let mut run_pairs = Vec::with_capacity(start_runs.len());
-
-                                for srun in start_runs {
-                                    for erun in end_runs {
-                                        // Found pair
-                                        if srun.name() == erun.name() {
-                                            run_pairs.push((srun.clone(), erun.clone()));
-                                        }
-                                    }
-                                }
-
-                                let mut interpolated_runs = Vec::with_capacity(run_pairs.len());
-                                for (srun, erun) in run_pairs {
-                                    let mut interpolated_stats = Vec::with_capacity(srun.stats.len());
-                                    for sstat in &srun.stats {
-                                        if let Some(estat) = erun.get_stat(&sstat.name) {
-                                            let slope = (estat - sstat.cnt) / (distance as f64);
-                                            let interpolated = slope * (from_start as f64) + sstat.cnt;
-                                            interpolated_stats.push(collector::Stat {
-                                                name: sstat.name.clone(),
-                                                cnt: interpolated,
-                                            });
-                                        }
-                                    }
-                                    let mut interpolated_run = srun.clone();
-                                    interpolated_run.stats = interpolated_stats;
-                                    interpolated_runs.push(interpolated_run);
-                                }
-                                interpolation_entry.push(
-                                    Interpolation {
-                                        benchmark: name.clone(),
-                                        from: InterpolationSource::Middle(start.0.clone(), end.0.clone()),
-                                    });
-                                return (start.1.name.clone(), Ok(Benchmark {
-                                    runs: interpolated_runs,
-                                    name: start.1.name.clone(),
-                                }));
-                            }
-
-                            // This hole is unbounded to the right, so
-                            // fill in directly with data from the
-                            // left.
-                            (Some(start), None) => {
-                                interpolation_entry.push(
-                                    Interpolation {
-                                        benchmark: name.clone(),
-                                        from: InterpolationSource::Last(start.0),
-                                    });
-                                return (name, Ok(start.1));
-                            }
-
-                            // This hole is unbounded to the left, so
-                            // fill in directly with data from the
-                            // right.
-                            (None, Some(end)) => {
-                                interpolation_entry.push(
-                                    Interpolation {
-                                        benchmark: name.clone(),
-                                        from: InterpolationSource::First(end.0),
-                                    });
-                                return (name, Ok(end.1));
-                            }
-
-                            // No data for this benchmark was found to
-                            // either side. No data exists for this
-                            // benchmark. Bail out and return the
-                            // original (missing) data.
-                            (None, None) => {
-                                warn!("giving up on finding {} data for commit {:?}",
-                                    name, commit);
-                                return (name, res);
-                            }
-                        }
-
-                        // we never reach here
-                    };
-
-                    (name, Ok(benchmark))
-                }).collect::<BTreeMap<String, Result<Benchmark, String>>>();
         }
 
         let interpolated = interpolated.into_iter()
             .filter(|(_, v)| !v.is_empty())
-            .collect::<BTreeMap<_, _>>();
+            .collect::<HashMap<_, _>>();
 
         info!("interpolated {} commits", interpolated.len());
         let data = data_next;
@@ -503,3 +411,198 @@ impl InputData {
 /// One decimal place rounded percent
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Percent(#[serde(with = "util::round_float")] pub f64);
+
+struct AssociatedData<'a> {
+    commit: &'a Commit,
+    data: &'a BTreeMap<Commit, CommitData>,
+    commits: &'a [Commit],
+    commit_map: &'a HashMap<Commit, usize>,
+    interpolated: &'a mut HashMap<String, Vec<Interpolation>>,
+}
+
+// This function can assume that the benchmark exists and is restricted to filling in runs within
+// the benchmark.
+fn fill_benchmark_runs(benchmark: &mut Benchmark, missing_runs: Vec<&String>, data: &mut AssociatedData) {
+    fn find_run<'a, I>(benchmark: &str, needle_run: &str, commits: I, data: &AssociatedData) -> Option<(usize, Run)>
+        where I: Iterator<Item=&'a Commit>,
+    {
+        for (idx, needle) in commits.enumerate() {
+            let bench = data.data[needle].benchmarks.get(benchmark);
+            if let Some(Ok(bench)) = bench {
+                if let Some(run) = bench.runs.iter().find(|run| run.name() == needle_run) {
+                    return Some((idx, run.clone()));
+                }
+            }
+        }
+        None
+    }
+
+    let commit_idx = data.commit_map[data.commit];
+    for missing_run in missing_runs {
+        let start = find_run(&benchmark.name, &missing_run, data.commits[..commit_idx].iter().rev(), &*data);
+        let end = find_run(&benchmark.name, &missing_run, data.commits[commit_idx + 1..].iter(), &*data);
+        let start_commit = start.as_ref().map(|(idx, _)| data.commits[commit_idx - idx].clone());
+        let end_commit = end.as_ref().map(|(idx, _)| data.commits[commit_idx + 1 + idx].clone());
+        let mut interpolations = data.interpolated.entry(data.commit.sha.clone()).or_insert_with(Vec::new);
+        let run = match (start, end) {
+            (Some(srun), Some(erun)) => {
+                let distance = srun.0 + erun.0;
+                let from_start = srun.0;
+                let interpolated_stats = interpolate_stats(&srun.1, &erun.1, distance, from_start);
+                let mut interpolated_run = srun.1.clone();
+                interpolated_run.stats = interpolated_stats;
+                interpolations.push(Interpolation {
+                    benchmark: benchmark.name.clone(),
+                    run: Some(missing_run.clone()),
+                    from: InterpolationSource::Middle(
+                        start_commit.unwrap(),
+                        end_commit.unwrap(),
+                    ),
+                });
+                interpolated_run
+            }
+            (Some(srun), None) => {
+                interpolations.push(Interpolation {
+                    benchmark: benchmark.name.clone(),
+                    run: Some(missing_run.clone()),
+                    from: InterpolationSource::First(
+                        start_commit.unwrap(),
+                    ),
+                });
+                srun.1
+            }
+            (None, Some(erun)) => {
+                interpolations.push(Interpolation {
+                    benchmark: benchmark.name.clone(),
+                    run: Some(missing_run.clone()),
+                    from: InterpolationSource::Last(
+                        end_commit.unwrap(),
+                    ),
+                });
+                erun.1
+            }
+            (None, None) => {
+                unreachable!("{} run in benchmark {} has no entries, but it's missing!",
+                    missing_run, benchmark.name)
+            }
+        };
+        benchmark.runs.push(run);
+    }
+}
+
+fn fill_benchmark_data(benchmark_name: &str, data: &mut AssociatedData) -> Option<Vec<Run>> {
+    let commit_idx = data.commit_map[data.commit];
+    let interpolation_entry =
+        data.interpolated.entry(data.commit.sha.clone()).or_insert_with(Vec::new);
+
+    let mut start = None;
+    let mut end = None;
+    for needle_commit in data.commits[..commit_idx].iter().rev() {
+        let bench = data.data[needle_commit].benchmarks.get(benchmark_name).cloned();
+        if let Some(Ok(bench)) = bench {
+            start = Some((needle_commit.clone(), bench));
+            break;
+        }
+    }
+    for needle_commit in data.commits[commit_idx + 1..].iter() {
+        let bench = data.data[needle_commit].benchmarks.get(benchmark_name).cloned();
+        if let Some(Ok(bench)) = bench {
+            end = Some((needle_commit.clone(), bench));
+            break;
+        }
+    }
+
+    match (start, end) {
+        // This hole is bounded on both left and
+        // right, so we want to linearly interpolate
+        // each run between these two data points.
+        //
+        // This code ignores the case where a run is
+        // absent in start or end. This is handled later.
+        (Some(start), Some(end)) => {
+            let distance = data.commit_map[&end.0] - data.commit_map[&start.0];
+            let from_start = commit_idx - data.commit_map[&start.0];
+            let start_runs = &start.1.runs;
+            let end_runs = &end.1.runs;
+
+            let mut run_pairs = Vec::with_capacity(start_runs.len());
+
+            for srun in start_runs {
+                for erun in end_runs {
+                    // Found pair
+                    if srun.name() == erun.name() {
+                        run_pairs.push((srun.clone(), erun.clone()));
+                    }
+                }
+            }
+
+            let mut interpolated_runs = Vec::with_capacity(run_pairs.len());
+            for (srun, erun) in run_pairs {
+                let interpolated_stats = interpolate_stats(&srun, &erun, distance, from_start);
+                let mut interpolated_run = srun.clone();
+                interpolated_run.stats = interpolated_stats;
+                interpolated_runs.push(interpolated_run);
+            }
+            interpolation_entry.push(
+                Interpolation {
+                    benchmark: benchmark_name.to_owned(),
+                    run: None,
+                    from: InterpolationSource::Middle(start.0.clone(), end.0.clone()),
+                });
+            return Some(interpolated_runs);
+        }
+
+        // This hole is unbounded to the right, so
+        // fill in directly with data from the
+        // left.
+        (Some(start), None) => {
+            interpolation_entry.push(
+                Interpolation {
+                    benchmark: benchmark_name.to_owned(),
+                    run: None,
+                    from: InterpolationSource::Last(start.0),
+                });
+            return Some(start.1.runs.clone());
+        }
+
+        // This hole is unbounded to the left, so
+        // fill in directly with data from the
+        // right.
+        (None, Some(end)) => {
+            interpolation_entry.push(
+                Interpolation {
+                    benchmark: benchmark_name.to_owned(),
+                    run: None,
+                    from: InterpolationSource::First(end.0),
+                });
+            return Some(end.1.runs.clone());
+        }
+
+        // No data for this benchmark was found to
+        // either side. No data exists for this
+        // benchmark. Bail out and return the
+        // original (missing) data.
+        (None, None) => {
+            warn!("giving up on finding {} data for commit {:?}",
+                benchmark_name, data.commit);
+            return None;
+        }
+    }
+
+    // we never reach here
+}
+
+fn interpolate_stats(srun: &Run, erun: &Run, distance: usize, from_start: usize) -> Vec<Stat> {
+    let mut interpolated_stats = Vec::with_capacity(srun.stats.len());
+    for sstat in &srun.stats {
+        if let Some(estat) = erun.get_stat(&sstat.name) {
+            let slope = (estat - sstat.cnt) / (distance as f64);
+            let interpolated = slope * (from_start as f64) + sstat.cnt;
+            interpolated_stats.push(collector::Stat {
+                name: sstat.name.clone(),
+                cnt: interpolated,
+            });
+        }
+    }
+    interpolated_stats
+}

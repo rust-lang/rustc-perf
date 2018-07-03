@@ -334,6 +334,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
         let commit = date_data.commit;
         let mut summary_points = HashMap::new();
         for (name, runs) in date_data.data {
+            let bench_name = name.clone();
             let mut entry = result
                 .entry(name.clone())
                 .or_insert_with(|| HashMap::with_capacity(runs.len()));
@@ -348,7 +349,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
                 }
 
                 let mut entry = entry
-                    .entry(name)
+                    .entry(name.clone())
                     .or_insert_with(|| Vec::<graph::GraphData>::with_capacity(elements));
                 let first = entry.first().map(|d| d.absolute as f32);
                 let percent = first.map_or(0.0, |f| (value - f) / f * 100.0);
@@ -360,6 +361,21 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
                     percent: percent,
                     y: if body.absolute { value } else { percent },
                     x: date_data.date.0.timestamp() as u64 * 1000, // all dates are since 1970
+                    color: {
+                        data.interpolated.get(&commit)
+                            .map(|c| c.iter().any(|interpolation| {
+                                if !bench_name.starts_with(&interpolation.benchmark) {
+                                    return false;
+                                }
+                                if let Some(run_name) = &interpolation.run {
+                                    *run_name == run.name()
+                                } else {
+                                    true
+                                }
+                            }))
+                            .map(|b| if b { String::from("#f0f") } else { String::new() })
+                            .unwrap_or(String::new())
+                    }
                 });
             }
             if base_compile && is_println_incr {
@@ -373,9 +389,6 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
                         .or_insert_with(Vec::new)
                         .push(value);
                 }
-            } else {
-                warn!("skipping summary for {:40} - {}: base compile = {}, println_incr = {}",
-                    name, commit, base_compile, is_println_incr);
             }
         }
         for (&(release, check, ref state), values) in &summary_points {
@@ -421,6 +434,18 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
                 percent: percent,
                 y: if body.absolute { value } else { percent },
                 x: date_data.date.0.timestamp() as u64 * 1000, // all dates are since 1970
+                color: {
+                    data.interpolated.get(&commit)
+                        .map(|c| c.iter().any(|interpolation| {
+                            if let Some(run) = &interpolation.run {
+                                *run == (state.name() + appendix)
+                            } else {
+                                true
+                            }
+                        }))
+                        .map(|b| if b { String::from("#f0f") } else { String::new() })
+                        .unwrap_or(String::new())
+                }
             });
         }
         last_commit = Some(commit);
