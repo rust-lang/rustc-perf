@@ -441,8 +441,12 @@ fn fill_benchmark_runs(benchmark: &mut Benchmark, missing_runs: Vec<&String>, da
     for missing_run in missing_runs {
         let start = find_run(&benchmark.name, &missing_run, data.commits[..commit_idx].iter().rev(), &*data);
         let end = find_run(&benchmark.name, &missing_run, data.commits[commit_idx + 1..].iter(), &*data);
-        let start_commit = start.as_ref().map(|(idx, _)| data.commits[commit_idx - idx].clone());
+        let start_commit = start.as_ref().map(|(idx, _)| data.commits[commit_idx - 1 - idx].clone());
         let end_commit = end.as_ref().map(|(idx, _)| data.commits[commit_idx + 1 + idx].clone());
+
+        assert_ne!(start_commit.as_ref(), Some(data.commit));
+        assert_ne!(end_commit.as_ref(), Some(data.commit));
+
         let mut interpolations = data.interpolated.entry(data.commit.sha.clone()).or_insert_with(Vec::new);
         let run = match (start, end) {
             (Some(srun), Some(erun)) => {
