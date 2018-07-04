@@ -24,5 +24,7 @@ fn main() {
         .unwrap_or(2346);
     println!("Starting server with port={:?}", port);
 
-    server::start(data, port);
+    let key = env::var("PERF_SECRET_KEY").unwrap_or(String::from("QuiteSecret"));
+
+    server::start(data, port, key);
 }

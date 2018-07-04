@@ -21,6 +21,9 @@ extern crate tempfile;
 extern crate rustup;
 extern crate semver;
 extern crate reqwest;
+extern crate futures;
+
+use reqwest::header::{Authorization, Bearer};
 
 use failure::{Error, ResultExt, SyncFailure};
 
@@ -33,10 +36,14 @@ use std::path::{Path, PathBuf};
 use std::io::{stderr, Write};
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use std::thread::{self, JoinHandle};
 
 use chrono::{Timelike, Utc};
+use futures::sync::mpsc::{unbounded as unbounded_channel, UnboundedSender, UnboundedReceiver};
+use futures::stream::Stream;
 
 use collector::{Commit, ArtifactData, CommitData, Date};
+use collector::api::collected;
 use rust_sysroot::git::Commit as GitCommit;
 use rust_sysroot::sysroot::Sysroot;
 
@@ -144,6 +151,52 @@ fn kinds_from_arg<K>(strings_and_kinds: &[(&str, K)], arg: &str)
     Ok(v)
 }
 
+lazy_static! {
+    static ref BG_THREAD: Arc<(UnboundedSender<Option<collected::Request>>, JoinHandle<()>)> = start_bg_thread();
+}
+
+fn start_bg_thread() -> Arc<(UnboundedSender<Option<collected::Request>>, JoinHandle<()>)> {
+    let (sender, receiver): (_, UnboundedReceiver<Option<collected::Request>>) = unbounded_channel();
+    let sender_thread = sender.clone();
+    let handle = thread::spawn(move || {
+        for request in receiver.wait() {
+            let request = request.expect("result is Ok");
+            if request.is_none() {
+                // termination requested
+                break;
+            }
+            let request = request.unwrap();
+            let ret = (|| {
+                let client = reqwest::ClientBuilder::new().build()?;
+                let resp = client.post(&format!(
+                        "{}/perf/collected",
+                        env::var("SITE_URL").expect("SITE_URL defined")
+                    ))
+                    .header(Authorization(Bearer { token: env::var("PERF_SECRET_KEY").unwrap() }))
+                    .json(&request)
+                    .send()?;
+                if !resp.status().is_success() {
+                    bail!("ping home failed: {:?}", resp);
+                }
+                Ok(())
+            })();
+            match ret {
+                Ok(()) => {},
+                Err(err) => {
+                    warn!("call home failed: {:?}", err);
+                    thread::sleep(std::time::Duration::from_secs(10));
+                    sender_thread.unbounded_send(Some(request)).expect("can send on thread channel");
+                }
+            }
+        }
+    });
+    Arc::new((sender, handle))
+}
+
+fn send_home(d: &collected::Request) {
+    BG_THREAD.0.unbounded_send(Some(d.clone())).unwrap();
+}
+
 fn bench_commit(
     repo: Option<&outrepo::Repo>,
     commit: &GitCommit,
@@ -154,18 +207,37 @@ fn bench_commit(
     cargo_path: &Path,
     benchmarks: &[Benchmark],
     iterations: usize,
+    call_home: bool,
 ) -> CommitData {
     info!(
         "benchmarking commit {} ({}) for triple {}",
         commit.sha, commit.date, triple
     );
 
+    if call_home {
+        send_home(&collected::Request::BenchmarkCommit {
+            commit: Commit {
+                sha: commit.sha.clone(),
+                date: Date(commit.date),
+            },
+            benchmarks: benchmarks.iter().map(|b| b.name.clone()).collect(),
+        });
+    }
     let existing_data = repo.and_then(|r| r.load_commit_data(&commit, &triple).ok());
 
     let mut results = BTreeMap::new();
     if let Some(ref data) = existing_data {
         for benchmark in benchmarks {
             if let Some(result) = data.benchmarks.get(&benchmark.name) {
+                if call_home {
+                    send_home(&collected::Request::BenchmarkDone {
+                        benchmark: benchmark.name.clone(),
+                        commit: Commit {
+                            sha: commit.sha.clone(),
+                            date: Date(commit.date),
+                        },
+                    });
+                }
                 results.insert(benchmark.name.clone(), result.clone());
             }
         }
@@ -186,6 +258,16 @@ fn bench_commit(
                 Err(format!("{:?}", s))
             }
         };
+
+        if call_home {
+            send_home(&collected::Request::BenchmarkDone {
+                benchmark: benchmark.name.clone(),
+                commit: Commit {
+                    sha: commit.sha.clone(),
+                    date: Date(commit.date),
+                },
+            });
+        }
 
         results.insert(benchmark.name.clone(), result);
         info!("{} benchmarks left", benchmarks.len() - results.len());
@@ -332,7 +414,7 @@ fn main_result() -> Result<i32, Error> {
         rust_sysroot::get_commits(rust_sysroot::EPOCH_COMMIT, "master").map_err(SyncFailure::new)
     };
 
-    match matches.subcommand() {
+    let ret = match matches.subcommand() {
         ("bench_commit", Some(sub_m)) => {
             let commit = sub_m.value_of("COMMIT").unwrap();
             let commit = get_commits()?
@@ -362,6 +444,7 @@ fn main_result() -> Result<i32, Error> {
                 &sysroot.cargo,
                 &benchmarks,
                 3,
+                false,
             ))?;
             Ok(0)
         }
@@ -398,6 +481,7 @@ fn main_result() -> Result<i32, Error> {
                 &cargo_path,
                 &benchmarks,
                 1,
+                false,
             );
             get_out_repo(true)?.add_commit_data(&result)?;
             Ok(0)
@@ -437,6 +521,7 @@ fn main_result() -> Result<i32, Error> {
                 &toolchain.binary_file("cargo"),
                 &benchmarks,
                 3,
+                false,
             );
             repo.success_artifact(&ArtifactData { id: id.to_string(), benchmarks: benchmark_data })?;
             Ok(0)
@@ -473,6 +558,7 @@ fn main_result() -> Result<i32, Error> {
                     &sysroot.cargo,
                     &benchmarks,
                     3,
+                    true,
                 ));
                 if let Err(err) = result {
                     out_repo.write_broken_commit(&commit, err)?;
@@ -556,6 +642,7 @@ fn main_result() -> Result<i32, Error> {
                     &sysroot.cargo,
                     &benchmarks,
                     1,
+                    false,
                 );
             } else {
                 panic!("no commits");
@@ -567,5 +654,8 @@ fn main_result() -> Result<i32, Error> {
             let _ = writeln!(stderr(), "{}", matches.usage());
             Ok(2)
         }
-    }
+    };
+    BG_THREAD.0.unbounded_send(None).unwrap();
+    thread::sleep(std::time::Duration::from_secs(1));
+    ret
 }

@@ -25,7 +25,7 @@ use futures::{self, Future, Stream};
 use futures_cpupool::CpuPool;
 use hyper::{self, Get, Post, StatusCode};
 use hyper::header::{AcceptEncoding, CacheControl, CacheDirective, Encoding};
-use hyper::header::{ContentEncoding, ContentLength, ContentType};
+use hyper::header::{ContentEncoding, ContentLength, ContentType, Authorization, Bearer};
 use hyper::mime;
 use hyper::server::{Http, Request, Response, Service};
 use url::Url;
@@ -38,8 +38,10 @@ use git;
 use util::{self, get_repo_path};
 pub use api::{self, status, nll_dashboard, dashboard, data, days, graph, info, CommitResponse, ServerResult};
 use collector::{Date, Run, version_supports_incremental};
+use collector::api::collected;
 use load::{CommitData, InputData};
 use antidote::RwLock;
+use load::CurrentState;
 
 /// Data associated with a specific date
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -289,10 +291,14 @@ pub fn handle_status_page(data: &InputData) -> status::Response {
     benchmark_state.sort_by_key(|s| s.error.is_some());
     benchmark_state.reverse();
 
+    let missing = data.missing_commits().unwrap();
+    let current = data.persistent.lock().current.clone();
+
     status::Response {
         last_commit: last_commit.0.clone(),
         benchmarks: benchmark_state,
-        missing: data.missing_commits().unwrap(),
+        missing,
+        current: current,
     }
 }
 
@@ -492,10 +498,49 @@ pub fn handle_pr_commit(pr: u64) -> CommitResponse {
     }
 }
 
+pub fn handle_collected(body: collected::Request, data: &InputData) -> ServerResult<collected::Response> {
+    let mut persistent = data.persistent.lock();
+    {
+        let current = &mut persistent.current;
+        match body {
+            collected::Request::BenchmarkCommit {
+                commit,
+                benchmarks,
+            } => {
+                *current = Some(CurrentState {
+                    commit,
+                    benchmarks,
+                });
+            }
+            collected::Request::BenchmarkDone {
+                commit,
+                benchmark,
+            } => {
+                // If something went wrong, then just clear current commit.
+                if current.as_ref().map_or(false, |c| c.commit != commit) {
+                    *current = None;
+                }
+                if let Some(ref mut current) = current {
+                    // If the request was received twice (e.g., we stopped after we wrote DB but before
+                    // responding) then we don't want to loop the collector.
+                    if let Some(pos) = current.benchmarks.iter().position(|b| *b == benchmark) {
+                        current.benchmarks.remove(pos);
+                    }
+                }
+            }
+        }
+    }
+
+    persistent.write().unwrap();
+
+    Ok(collected::Response { })
+}
+
 struct Server {
     data: Arc<RwLock<InputData>>,
     pool: CpuPool,
     updating: Arc<AtomicBool>,
+    key: String,
 }
 
 macro_rules! check_http_method {
@@ -536,6 +581,33 @@ impl Server {
             .with_header(ContentType::json())
             .with_body(serde_json::to_string(&result).unwrap());
         Box::new(futures::future::ok(response))
+    }
+
+    fn check_auth(&self, req: &Request) -> bool {
+        if let Some(auth) = req.headers().get::<Authorization<Bearer>>() {
+            if auth.0.token == self.key {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    fn handle_auth_post<'de, F, D, S>(
+        &self,
+        req: Request,
+        handler: F,
+    ) -> <Server as Service>::Future
+    where
+        F: FnOnce(D, &InputData) -> ServerResult<S> + Send + 'static,
+        D: DeserializeOwned,
+        S: Serialize,
+    {
+        if !self.check_auth(&req) {
+            let resp = Response::new().with_status(StatusCode::Unauthorized);
+            return Box::new(futures::future::ok(resp));
+        }
+        self.handle_post(req, handler)
     }
 
     fn handle_post<'de, F, D, S>(&self, req: Request, handler: F) -> <Server as Service>::Future
@@ -741,6 +813,7 @@ impl Service for Server {
                 handle_date_commit(date.unwrap().1.parse().unwrap())
             }),
             "/perf/onpush" => self.handle_push(req),
+            "/perf/collected" => self.handle_auth_post(req, handle_collected),
             _ => Box::new(futures::future::ok(
                 Response::new()
                     .with_header(ContentType::html())
@@ -750,11 +823,12 @@ impl Service for Server {
     }
 }
 
-pub fn start(data: InputData, port: u16) {
+pub fn start(data: InputData, port: u16, key: String) {
     let server = Arc::new(Server {
         data: Arc::new(RwLock::new(data)),
         pool: CpuPool::new_num_cpus(),
         updating: Arc::new(AtomicBool::new(false)),
+        key,
     });
     let mut server_address: SocketAddr = "0.0.0.0:2346".parse().unwrap();
     server_address.set_port(port);

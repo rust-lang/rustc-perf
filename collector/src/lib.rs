@@ -19,6 +19,8 @@ use chrono::{DateTime, Datelike, Duration, TimeZone, Utc};
 use chrono::naive::NaiveDate;
 use serde::{Deserialize, Serialize};
 
+pub mod api;
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Commit {
     pub sha: String,

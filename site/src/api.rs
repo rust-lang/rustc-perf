@@ -190,6 +190,7 @@ pub mod nll_dashboard {
 
 pub mod status {
     use collector::Commit;
+    use load::CurrentState;
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct BenchmarkStatus {
@@ -198,10 +199,12 @@ pub mod status {
         pub error: Option<String>,
     }
 
-    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct Response {
         pub last_commit: Commit,
         pub benchmarks: Vec<BenchmarkStatus>,
         pub missing: Vec<Commit>,
+        pub current: Option<CurrentState>,
     }
 }
+

@@ -14,7 +14,8 @@ use std::io::Read;
 use std::env;
 
 use serde_json;
-use failure::Error;
+use antidote::Mutex;
+use failure::{ResultExt, Error};
 use failure::SyncFailure;
 use rust_sysroot;
 use rust_sysroot::git::Commit as GitCommit;
@@ -25,6 +26,40 @@ use git;
 use collector::Date;
 
 pub use collector::{Commit, CommitData, ArtifactData, Patch, Run, Stat};
+
+#[derive(Clone, Deserialize, Serialize, Debug)]
+pub struct CurrentState {
+    pub commit: Commit,
+    pub benchmarks: Vec<String>,
+}
+
+#[derive(Clone, Deserialize, Serialize, Debug)]
+pub struct Persistent {
+    pub try_commits: Vec<String>,
+    pub current: Option<CurrentState>,
+}
+
+impl Persistent {
+    pub fn write(&self) -> Result<(), Error> {
+        let s = serde_json::to_string(self)?;
+        fs::write("persistent.json", &s).with_context(|_| format!("failed to write persistent DB"))?;
+        Ok(())
+    }
+
+    fn load() -> Persistent {
+        Persistent::load_().unwrap_or_else(|| Persistent {
+            try_commits: Vec::new(),
+            current: None,
+        })
+    }
+
+    fn load_() -> Option<Persistent> {
+        let s = fs::read_to_string("persistent.json").ok()?;
+        let persistent: Persistent = serde_json::from_str(&s).ok()?;
+
+        Some(persistent)
+    }
+}
 
 #[derive(Debug)]
 pub struct InputData {
@@ -43,9 +78,9 @@ pub struct InputData {
 
     pub artifact_data: BTreeMap<String, ArtifactData>,
 
-    pub try_commits: Vec<String>,
-
     pub commits: Vec<GitCommit>,
+
+    pub persistent: Mutex<Persistent>,
 }
 
 impl InputData {
@@ -55,10 +90,6 @@ impl InputData {
         let mut skipped = 0;
         let mut artifact_data = BTreeMap::new();
         let mut data = BTreeMap::new();
-
-        let try_commits = fs::read_to_string("try-commit-queue")
-            .expect("could not open try-commit-queue file")
-            .lines().map(|s| s.to_owned()).collect::<Vec<_>>();
 
         if !repo_loc.exists() {
             // If the repository doesn't yet exist, simplify clone it to the given location.
@@ -135,13 +166,12 @@ impl InputData {
         info!("{} skipped files", skipped);
         info!("{} measured", data.len());
 
-        InputData::new(data, artifact_data, try_commits)
+        InputData::new(data, artifact_data)
     }
 
     pub fn new(
         data: BTreeMap<Commit, CommitData>,
         artifact_data: BTreeMap<String, ArtifactData>,
-        try_commits: Vec<String>,
     ) -> Result<InputData, Error> {
         let mut last_date = None;
         let mut crate_list = BTreeSet::new();
@@ -177,7 +207,7 @@ impl InputData {
             data: data,
             artifact_data,
             commits,
-            try_commits,
+            persistent: Mutex::new(Persistent::load()),
         })
     }
 
@@ -205,8 +235,9 @@ impl InputData {
             })
             .collect::<Vec<_>>();
         missing.reverse();
-        Ok(self.try_commits.iter()
+        Ok(self.persistent.lock().try_commits.iter()
             .map(|sha| Commit { sha: sha.clone(), date: Date::ymd_hms(2001, 01, 01, 0, 0, 0) })
+            .filter(|c| !have.contains_key(&c.sha)) // we may have not updated the try-commits file
             .chain(missing)
             .collect())
     }

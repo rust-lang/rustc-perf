@@ -53,6 +53,16 @@
             state_div.appendChild(element);
         }
         let missing_div = document.querySelector("#missing-commits");
+        if (data.current !== null) {
+            let element = document.createElement("p");
+            element.innerHTML = `Currently benchmarking: ${commit_url(data.current.commit)}; benchmarks \
+            left: ${data.current.benchmarks.join(", ")}.`;
+            missing_div.appendChild(element);
+        } else {
+            let element = document.createElement("p");
+            element.innerHTML = `Not currently working, or, errored and waiting for next commit to start.`;
+            missing_div.appendChild(element);
+        }
         {
             let element = document.createElement("p");
             element.innerHTML = `Queue (${data.missing.length} total):<br> Times are local.`;
@@ -79,15 +89,16 @@
             }
             {
                 let element = document.createElement("td");
-                element.innerHTML = `
-                <a href="https://github.com/rust-lang/rust/commit/${commit.sha}">
-                    ${commit.sha.substr(0, 13)}
-                </a>`;
+                element.innerHTML = commit_url(commit);
                 row.appendChild(element);
             }
             table.appendChild(row);
         }
         missing_div.appendChild(table);
+    }
+
+    function commit_url(commit) {
+        return `<a href="https://github.com/rust-lang/rust/commit/${commit.sha}">${commit.sha.substr(0, 13)}</a>`;
     }
 
     function addHours(date, hours) {
