@@ -47,10 +47,12 @@ impl Persistent {
     }
 
     fn load() -> Persistent {
-        Persistent::load_().unwrap_or_else(|| Persistent {
+        let p = Persistent::load_().unwrap_or_else(|| Persistent {
             try_commits: Vec::new(),
             current: None,
-        })
+        });
+        p.write().unwrap();
+        p
     }
 
     fn load_() -> Option<Persistent> {
