@@ -20,11 +20,13 @@ extern crate serde_json;
 extern crate tempfile;
 extern crate rustup;
 extern crate semver;
+extern crate reqwest;
 
 use failure::{Error, ResultExt, SyncFailure};
 
 use std::collections::HashSet;
 use std::fs;
+use std::env;
 use std::process;
 use std::str;
 use std::path::{Path, PathBuf};
@@ -441,38 +443,42 @@ fn main_result() -> Result<i32, Error> {
         }
 
         ("process", Some(_)) => {
-            let commits = get_commits()?;
             let out_repo = get_out_repo(false)?;
             println!("processing commits");
-            if !commits.is_empty() {
-                let to_process = out_repo.find_missing_commits(&commits, &benchmarks,
-                                                               "x86_64-unknown-linux-gnu")?;
-                // Take 3 from the end -- this means that for each bors commit
-                // (which takes ~3 hours) we test 3, which should allow us to
-                // eventually test all commits, but also keep up with the
-                // latest rustc.
-                for commit in to_process.iter().rev().take(3) {
-                    if let Ok(sysroot) = Sysroot::install(commit, "x86_64-unknown-linux-gnu", false, false) {
-                        let result = out_repo.success(&bench_commit(
-                            Some(&out_repo),
-                            &commit,
-                            &sysroot.triple,
-                            &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
-                            &RunKind::all(),
-                            &sysroot.rustc,
-                            &sysroot.cargo,
-                            &benchmarks,
-                            3,
-                        ));
-                        if let Err(err) = result {
-                            out_repo.write_broken_commit(commit, err)?;
-                        }
-                    } else {
-                        error!("failed to install sysroot for {:?}", commit);
+            let commits = get_commits()?;
+            let client = reqwest::Client::new();
+            let commit: String = client.get(&format!(
+                "{}/perf/next_commit",
+                env::var("SITE_URL").expect("SITE_URL defined")
+            )).send()?.json()?;
+            let commit = commits.iter()
+                .find(|c| c.sha == commit)
+                .cloned()
+                .unwrap_or_else(|| {
+                    warn!("utilizing fake commit!");
+                    rust_sysroot::git::Commit {
+                        sha: commit.to_string(),
+                        date: Date::ymd_hms(2000, 01, 01, 0, 0, 0).0,
+                        summary: String::new(),
                     }
+                });
+            if let Ok(sysroot) = Sysroot::install(&commit, "x86_64-unknown-linux-gnu", false, false) {
+                let result = out_repo.success(&bench_commit(
+                    Some(&out_repo),
+                    &commit,
+                    &sysroot.triple,
+                    &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
+                    &RunKind::all(),
+                    &sysroot.rustc,
+                    &sysroot.cargo,
+                    &benchmarks,
+                    3,
+                ));
+                if let Err(err) = result {
+                    out_repo.write_broken_commit(&commit, err)?;
                 }
             } else {
-                info!("Nothing to do; no commits.");
+                error!("failed to install sysroot for {:?}", commit);
             }
             Ok(0)
         }

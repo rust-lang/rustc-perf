@@ -292,7 +292,12 @@ pub fn handle_status_page(data: &InputData) -> status::Response {
     status::Response {
         last_commit: last_commit.0.clone(),
         benchmarks: benchmark_state,
+        missing: data.missing_commits().unwrap(),
     }
+}
+
+pub fn handle_next_commit(data: &InputData) -> String {
+    data.missing_commits().unwrap().into_iter().next().unwrap().sha
 }
 
 pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<graph::Response> {
@@ -715,6 +720,7 @@ impl Service for Server {
             "/perf/get" => self.handle_post(req, handle_days),
             "/perf/nll_dashboard" => self.handle_post(req, handle_nll_dashboard),
             "/perf/status_page" => self.handle_get(&req, handle_status_page),
+            "/perf/next_commit" => self.handle_get(&req, handle_next_commit),
             "/perf/pr_commit" => self.handle_get_req(&req, |req, _data| {
                 let res = req.query()
                     .unwrap_or_default()

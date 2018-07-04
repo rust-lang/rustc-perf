@@ -202,5 +202,6 @@ pub mod status {
     pub struct Response {
         pub last_commit: Commit,
         pub benchmarks: Vec<BenchmarkStatus>,
+        pub missing: Vec<Commit>,
     }
 }

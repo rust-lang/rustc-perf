@@ -1,19 +1,16 @@
 //! Write benchmark information to the output repository
 
-use std::fs::{self, read_dir, File, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str;
-use std::collections::HashSet;
 
 use std::thread;
 use std::time::{self, Instant};
 use serde_json;
 use collector::{ArtifactData, CommitData};
-use chrono::{Duration, Utc};
 use rust_sysroot::git::Commit as GitCommit;
-use execute::Benchmark;
 use failure::{Error, ResultExt};
 
 pub struct Repo {
@@ -100,48 +97,6 @@ impl Repo {
         serde_json::to_writer(&mut file, &data)?;
         self.commit_and_push(&format!("{} - success", data.id))?;
         Ok(())
-    }
-
-    pub fn find_missing_commits<'a>(
-        &self,
-        commits: &'a [GitCommit],
-        benchmarks: &[Benchmark],
-        triple: &str,
-    ) -> Result<Vec<&'a GitCommit>, Error> {
-        let mut have = HashSet::new();
-        let path = self.times();
-        for entry in read_dir(path)? {
-            let entry = entry?;
-            let filename = entry.file_name().to_string_lossy().to_string();
-            if filename.contains("artifact") {
-                continue;
-            }
-            let sha = if filename.contains("00:00") {
-                &filename[filename.find("00:00").unwrap() + 6..filename.find("-x86").unwrap()]
-            } else {
-                &filename["commit-".len()..filename.find("-x86").unwrap()]
-            };
-            have.insert(sha.to_string());
-        }
-
-        let missing = commits
-            .iter()
-            .filter(|c| Utc::now().signed_duration_since(c.date) < Duration::days(29))
-            .filter(|c| {
-                !have.contains(&c.sha) || {
-                    self.load_commit_data(c, triple)
-                        .ok()
-                        .map(|data| {
-                            benchmarks
-                                .iter()
-                                .any(|b| data.benchmarks.keys().find(|k| **k == b.name).is_none())
-                        })
-                        .unwrap_or(true)
-                }
-            })
-            .collect::<Vec<_>>();
-
-        Ok(missing)
     }
 
     fn commit_and_push(&self, message: &str) -> Result<(), Error> {

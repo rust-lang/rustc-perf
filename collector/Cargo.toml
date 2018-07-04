@@ -17,6 +17,7 @@ chrono = "0.4"
 cargo_metadata = "0.5"
 lazy_static = "1"
 semver = "0.9"
+reqwest = "0.8.6"
 
 [dependencies.rustup]
 git = "https://github.com/rust-lang-nursery/rustup.rs.git"

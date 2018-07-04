@@ -10,6 +10,7 @@ use std::cmp::{Ord, Ordering, PartialOrd};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::ops::{Add, Sub};
+use std::hash;
 use std::str::FromStr;
 use std::path::{Path, PathBuf};
 use std::process::{self, Stdio};
@@ -27,6 +28,12 @@ pub struct Commit {
 impl Commit {
     pub fn is_try(&self) -> bool {
         self.date.0.naive_utc().date() == NaiveDate::from_ymd(2000, 1, 1)
+    }
+}
+
+impl hash::Hash for Commit {
+    fn hash<H: hash::Hasher>(&self, hasher: &mut H) {
+        self.sha.hash(hasher);
     }
 }
 

@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::{self, File};
 use std::path::PathBuf;
 use std::io::Read;
@@ -15,6 +15,10 @@ use std::env;
 
 use serde_json;
 use failure::Error;
+use failure::SyncFailure;
+use rust_sysroot;
+use rust_sysroot::git::Commit as GitCommit;
+use chrono::{Duration, Utc};
 
 use util;
 use git;
@@ -38,6 +42,10 @@ pub struct InputData {
     pub data: BTreeMap<Commit, CommitData>,
 
     pub artifact_data: BTreeMap<String, ArtifactData>,
+
+    pub try_commits: Vec<String>,
+
+    pub commits: Vec<GitCommit>,
 }
 
 impl InputData {
@@ -47,6 +55,10 @@ impl InputData {
         let mut skipped = 0;
         let mut artifact_data = BTreeMap::new();
         let mut data = BTreeMap::new();
+
+        let try_commits = fs::read_to_string("try-commit-queue")
+            .expect("could not open try-commit-queue file")
+            .lines().map(|s| s.to_owned()).collect::<Vec<_>>();
 
         if !repo_loc.exists() {
             // If the repository doesn't yet exist, simplify clone it to the given location.
@@ -123,12 +135,13 @@ impl InputData {
         info!("{} skipped files", skipped);
         info!("{} measured", data.len());
 
-        InputData::new(data, artifact_data)
+        InputData::new(data, artifact_data, try_commits)
     }
 
     pub fn new(
         data: BTreeMap<Commit, CommitData>,
-        artifact_data: BTreeMap<String, ArtifactData>
+        artifact_data: BTreeMap<String, ArtifactData>,
+        try_commits: Vec<String>,
     ) -> Result<InputData, Error> {
         let mut last_date = None;
         let mut crate_list = BTreeSet::new();
@@ -155,6 +168,7 @@ impl InputData {
         }
 
         let last_date = last_date.expect("No dates found");
+        let commits = rust_sysroot::get_commits(rust_sysroot::EPOCH_COMMIT, "master").map_err(SyncFailure::new)?;
 
         Ok(InputData {
             crate_list: crate_list,
@@ -162,7 +176,39 @@ impl InputData {
             last_date: last_date,
             data: data,
             artifact_data,
+            commits,
+            try_commits,
         })
+    }
+
+    pub fn missing_commits(&self) -> Result<Vec<Commit>, Error> {
+        let known_benchmarks = self.data.values()
+            .rev()
+            .take(10)
+            .flat_map(|v| v.benchmarks.keys())
+            .collect::<HashSet<_>>();
+        let have = self.data.iter().map(|(key, value)| (key.sha.clone(), value))
+            .collect::<HashMap<_, _>>();
+        let mut missing = self.commits
+            .iter()
+            .map(|commit| Commit { sha: commit.sha.clone(), date: Date(commit.date.clone()) })
+            .filter(|c| Utc::now().signed_duration_since(c.date.0) < Duration::days(29))
+            .filter(|c| {
+                if let Some(cd) = have.get(&c.sha) {
+                    // If we've missed any benchmark, we also want this commit
+                    known_benchmarks
+                        .iter()
+                        .any(|b| !cd.benchmarks.contains_key(&**b))
+                } else {
+                    true
+                }
+            })
+            .collect::<Vec<_>>();
+        missing.reverse();
+        Ok(self.try_commits.iter()
+            .map(|sha| Commit { sha: sha.clone(), date: Date::ymd_hms(2001, 01, 01, 0, 0, 0) })
+            .chain(missing)
+            .collect())
     }
 }
 

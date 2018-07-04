@@ -4,6 +4,15 @@
 <meta charset="utf-8">
 <title>rustc performance data</title>
 <link rel="stylesheet" type="text/css" href="perf.css">
+<style>
+  #missing-commits th {
+      text-align: center;
+  }
+  #missing-commits td {
+      text-align: left;
+      padding: 0 0.5em;
+  }
+</style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highcharts/6.0.7/highcharts.js"></script>
 </head>
 <body class="container">
@@ -13,6 +22,7 @@
     <div id="data">
         Benchmarks for last commit:
         <div id="benchmark-state"></div>
+        <div id="missing-commits"></div>
     </div>
     <div id="as-of"></div>
     <div style="text-align: center;">
@@ -42,6 +52,48 @@
             }
             state_div.appendChild(element);
         }
+        let missing_div = document.querySelector("#missing-commits");
+        {
+            let element = document.createElement("p");
+            element.innerHTML = `Queue (${data.missing.length} total):<br> Times are local.`;
+            missing_div.appendChild(element);
+        }
+        let table = document.createElement("table");
+        {
+            let row = document.createElement("tr");
+            row.innerHTML = `<th>Commit Date</th><th>SHA</th>`;
+            table.appendChild(row);
+        }
+        for (let commit of data.missing) {
+            let row = document.createElement("tr");
+            {
+                let date = new Date(commit.date);
+                let element = document.createElement("td");
+                if (date.getUTCFullYear() == 2001) {
+                    element.innerHTML = "try commit";
+                    element.style.textAlign = "center";
+                } else {
+                    element.innerHTML = new Date(commit.date).toLocaleString();
+                }
+                row.appendChild(element);
+            }
+            {
+                let element = document.createElement("td");
+                element.innerHTML = `
+                <a href="https://github.com/rust-lang/rust/commit/${commit.sha}">
+                    ${commit.sha.substr(0, 13)}
+                </a>`;
+                row.appendChild(element);
+            }
+            table.appendChild(row);
+        }
+        missing_div.appendChild(table);
+    }
+
+    function addHours(date, hours) {
+        let ret = new Date(date);
+        ret.setTime(ret.getTime() + (hours*60*60*1000));
+        return ret;
     }
 
     function make_data() {
