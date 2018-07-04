@@ -216,6 +216,7 @@ impl<'a> CargoProcess<'a> {
             cmd.arg("--");
             if self.nll {
                 cmd.arg("-Zborrowck=mir");
+                cmd.arg("-Ztwo-phase-borrows");
             }
             // --wrap-rustc-with is not a valid rustc flag. But rustc-fake
             // recognizes it, strips it (and its argument) out, and uses it as an
