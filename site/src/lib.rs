@@ -13,6 +13,7 @@ extern crate collector;
 extern crate flate2;
 extern crate futures;
 extern crate futures_cpupool;
+#[macro_use]
 extern crate hyper;
 #[macro_use]
 extern crate log;
@@ -26,6 +27,12 @@ extern crate url;
 extern crate semver;
 #[macro_use]
 extern crate failure;
+extern crate ring;
+extern crate hex;
+extern crate regex;
+#[macro_use]
+extern crate lazy_static;
+extern crate reqwest;
 
 #[derive(Fail, Debug)]
 #[fail(display = "command failed: {}", command)]

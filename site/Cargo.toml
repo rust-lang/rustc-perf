@@ -19,6 +19,11 @@ chrono = "0.4"
 flate2 = "1.0.1"
 rmp-serde = "0.13.7"
 semver = "0.9"
+ring = "0.13.0-alpha5"
+hex = "0.3.2"
+regex = "1"
+lazy_static = "1"
+reqwest = "0.8"
 
 [dependencies.collector]
 path = "../collector"

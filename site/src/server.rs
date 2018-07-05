@@ -16,6 +16,7 @@ use std::path::Path;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::cmp::Ordering;
+use std::env;
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -26,6 +27,7 @@ use futures_cpupool::CpuPool;
 use hyper::{self, Get, Post, StatusCode};
 use hyper::header::{AcceptEncoding, CacheControl, CacheDirective, Encoding};
 use hyper::header::{ContentEncoding, ContentLength, ContentType, Authorization, Bearer};
+use hyper::header::{UserAgent};
 use hyper::mime;
 use hyper::server::{Http, Request, Response, Service};
 use url::Url;
@@ -33,15 +35,21 @@ use flate2::Compression;
 use flate2::write::GzEncoder;
 use semver::Version;
 use failure::Error;
+use ring::{hmac, digest};
+use hex;
+use regex::Regex;
+use reqwest;
 
 use git;
 use util::{self, get_repo_path};
-pub use api::{self, status, nll_dashboard, dashboard, data, days, graph, info, CommitResponse, ServerResult};
+pub use api::{self, github, status, nll_dashboard, dashboard, data, days, graph, info, CommitResponse, ServerResult};
 use collector::{Date, Run, version_supports_incremental};
 use collector::api::collected;
 use load::{CommitData, InputData};
 use antidote::RwLock;
 use load::CurrentState;
+
+header! { (HubSignature, "X-Hub-Signature") => [String] }
 
 /// Data associated with a specific date
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -498,6 +506,80 @@ pub fn handle_pr_commit(pr: u64) -> CommitResponse {
     }
 }
 
+lazy_static! {
+    static ref BODY_TRY_COMMIT: Regex = Regex::new(r#"(?:\b|^)@rust-timer\s+build\s+(\w+)(?:\b|$)"#).unwrap();
+}
+
+pub fn post_comment(request: &github::Request, body: &str) -> ServerResult<()> {
+    println!("post comment: {}", body);
+    let client = reqwest::Client::new();
+    let mut req = client.post(&request.issue.comments_url);
+    req
+        .json(&github::PostComment {
+            body: body.to_owned(),
+        })
+        .header(UserAgent::new("perf-rust-lang-org-server"))
+        .basic_auth("rust-timer", Some(env::var("RUST_TIMER_GH_TOKEN").unwrap()));
+    let res = req.send();
+    match res {
+        Ok(_) => { }
+        Err(err) => {
+            eprintln!("failed to post comment: {:?}", err);
+        }
+    }
+    Ok(())
+}
+
+pub fn handle_github(request: github::Request, data: &InputData) -> ServerResult<github::Response> {
+    println!("handle_github({:?})", request);
+    if !request.comment.body.contains("@rust-timer ") {
+        return Ok(github::Response);
+    }
+
+    // FIXME: Better auth / config
+    if request.comment.author_association != github::Association::Owner {
+        post_comment(&request,
+            "Only owners of the repository are permitted to issue commands to rust-timer.")?;
+        return Ok(github::Response);
+    }
+
+    let body = &request.comment.body;
+
+    if let Some(captures) = BODY_TRY_COMMIT.captures(&body) {
+        if let Some(commit) = captures.get(1).map(|c| c.as_str()) {
+            if commit.len() != 40 {
+                post_comment(&request, "Please provide the full 40 character commit hash.")?;
+                return Ok(github::Response);
+            }
+            let client = reqwest::Client::new();
+            let commit_response: github::Commit =
+            client.get(&format!("{}/commits/{}", request.issue.repository_url, commit))
+                .send().map_err(|_| String::from("cannot get commit"))?
+                .json().map_err(|_| String::from("cannot deserialize commit"))?;
+            if commit_response.parents.len() != 1 {
+                post_comment(&request,
+                    &format!("Bors try commit {} unexpectedly has {} parents.",
+                        commit_response.sha, commit_response.parents.len()))?;
+                return Ok(github::Response);
+            }
+            {
+                let mut persistent = data.persistent.lock();
+                if !persistent.try_commits.contains(&commit_response.sha) {
+                    persistent.try_commits.push(commit_response.sha.clone());
+                }
+                persistent.write().expect("successful encode");
+            }
+            post_comment(&request,
+                &format!("Success: Queued {} with parent {}, [comparison URL]({}).",
+                    commit_response.sha, commit_response.parents[0].sha,
+                    format!("https://perf.rust-lang.org/compare.html?start={}&end={}",
+                        commit_response.parents[0].sha, commit_response.sha)))?;
+        }
+    }
+
+    Ok(github::Response)
+}
+
 pub fn handle_collected(body: collected::Request, data: &InputData) -> ServerResult<collected::Response> {
     let mut persistent = data.persistent.lock();
     {
@@ -593,6 +675,19 @@ impl Server {
         false
     }
 
+    fn handle_github_auth_post<'de, F, D, S>(
+        &self,
+        req: Request,
+        handler: F,
+    ) -> <Server as Service>::Future
+    where
+        F: FnOnce(D, &InputData) -> ServerResult<S> + Send + 'static,
+        D: DeserializeOwned,
+        S: Serialize,
+    {
+        self.handle_post_(req, handler, true)
+    }
+
     fn handle_auth_post<'de, F, D, S>(
         &self,
         req: Request,
@@ -616,19 +711,29 @@ impl Server {
         D: DeserializeOwned,
         S: Serialize,
     {
+        self.handle_post_(req, handler, false)
+    }
+
+    fn handle_post_<'de, F, D, S>(&self, req: Request, handler: F, gh: bool) -> <Server as Service>::Future
+    where
+        F: FnOnce(D, &InputData) -> ServerResult<S> + Send + 'static,
+        D: DeserializeOwned,
+        S: Serialize,
+    {
         check_http_method!(*req.method(), Post);
         let length = req.headers()
             .get::<ContentLength>()
             .expect("content-length to exist")
             .0;
-        if length > 10_000 {
-            // 10 kB
+        // 25 kB
+        if length > 25_000 {
             return Box::new(futures::future::err(hyper::Error::TooLarge));
         }
         let accepts_gzip = req.headers()
             .get::<AcceptEncoding>()
             .map_or(false, |e| e.iter().any(|e| e.item == Encoding::Gzip));
         let data = self.data.clone();
+        let gh_header = req.headers().get::<HubSignature>().cloned();
         Box::new(self.pool.spawn_fn(move || {
             req.body()
                 .fold(Vec::new(), |mut acc, chunk| {
@@ -636,15 +741,20 @@ impl Server {
                     futures::future::ok::<_, <Self as Service>::Error>(acc)
                 })
                 .map(move |body| {
+                    if gh && !verify_gh_sig(gh_header.unwrap(), &body).unwrap_or(false) {
+                        return Response::new().with_status(StatusCode::Unauthorized);
+                    }
                     let data = data.read();
                     let body: D = match serde_json::from_slice(&body) {
                         Ok(d) => d,
                         Err(err) => {
-                            error!(
-                                "failed to deserialize request {}: {:?}",
-                                String::from_utf8_lossy(&body),
-                                err
-                            );
+                            if !gh {
+                                error!(
+                                    "failed to deserialize request {}: {:?}",
+                                    String::from_utf8_lossy(&body),
+                                    err
+                                );
+                            }
                             return Response::new()
                                 .with_header(ContentType::plaintext())
                                 .with_body(format!("Failed to deserialize request; {:?}", err));
@@ -814,6 +924,7 @@ impl Service for Server {
             }),
             "/perf/onpush" => self.handle_push(req),
             "/perf/collected" => self.handle_auth_post(req, handle_collected),
+            "/perf/github-hook" => self.handle_github_auth_post(req, handle_github),
             _ => Box::new(futures::future::ok(
                 Response::new()
                     .with_header(ContentType::html())
@@ -821,6 +932,20 @@ impl Service for Server {
             )),
         }
     }
+}
+
+fn verify_gh_sig(header: HubSignature, body: &[u8]) -> Option<bool> {
+    let key = hmac::VerificationKey::new(
+        &digest::SHA1,
+        env::var("PERF_SECRET_KEY").unwrap().as_bytes(),
+    );
+    let sha = header.0.get(5..)?; // strip sha1=
+    let sha = hex::decode(sha).ok()?;
+    if let Ok(()) = hmac::verify(&key, body, &sha) {
+        return Some(true);
+    }
+
+    Some(false)
 }
 
 pub fn start(data: InputData, port: u16, key: String) {

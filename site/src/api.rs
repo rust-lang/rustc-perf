@@ -208,3 +208,60 @@ pub mod status {
     }
 }
 
+pub mod github {
+    #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+    #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+    pub enum Association {
+        Owner,
+        Member,
+        Contributor,
+        Collaborator,
+        FirstTimer,
+        FirstTimeContributor,
+        None,
+    }
+
+    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+    pub struct User {
+        pub login: String,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct Comment {
+        pub html_url: String,
+        pub author_association: Association,
+        pub user: User,
+        pub body: String,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct Issue {
+        pub comments_url: String,
+        pub repository_url: String,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct Request {
+        pub issue: Issue,
+        pub comment: Comment,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct Response;
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct CommitParent {
+        pub sha: String,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct Commit {
+        pub sha: String,
+        pub parents: Vec<CommitParent>,
+    }
+
+    #[derive(Debug, Clone, Serialize)]
+    pub struct PostComment {
+        pub body: String,
+    }
+}
