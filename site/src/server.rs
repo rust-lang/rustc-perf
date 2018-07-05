@@ -535,8 +535,8 @@ pub fn handle_github(request: github::Request, data: &InputData) -> ServerResult
         return Ok(github::Response);
     }
 
-    if request.comment.author_association != github::Association::Owner ||
-        data.config.users.contains(&request.comment.user.login) {
+    if request.comment.author_association != github::Association::Owner &&
+        !data.config.users.contains(&request.comment.user.login) {
         post_comment(&data.config, &request,
             "Insufficient permissions to issue commands to rust-timer.")?;
         return Ok(github::Response);
@@ -555,7 +555,7 @@ pub fn handle_github(request: github::Request, data: &InputData) -> ServerResult
             client.get(&format!("{}/commits/{}", request.issue.repository_url, commit))
                 .send().map_err(|_| String::from("cannot get commit"))?
                 .json().map_err(|_| String::from("cannot deserialize commit"))?;
-            if commit_response.parents.len() != 1 {
+            if commit_response.parents.len() != 2 {
                 post_comment(&data.config, &request,
                     &format!("Bors try commit {} unexpectedly has {} parents.",
                         commit_response.sha, commit_response.parents.len()))?;
