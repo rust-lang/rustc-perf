@@ -16,7 +16,6 @@ use std::path::Path;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::cmp::Ordering;
-use std::env;
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -45,7 +44,7 @@ use util::{self, get_repo_path};
 pub use api::{self, github, status, nll_dashboard, dashboard, data, days, graph, info, CommitResponse, ServerResult};
 use collector::{Date, Run, version_supports_incremental};
 use collector::api::collected;
-use load::{CommitData, InputData};
+use load::{Config, CommitData, InputData};
 use antidote::RwLock;
 use load::CurrentState;
 
@@ -510,8 +509,8 @@ lazy_static! {
     static ref BODY_TRY_COMMIT: Regex = Regex::new(r#"(?:\b|^)@rust-timer\s+build\s+(\w+)(?:\b|$)"#).unwrap();
 }
 
-pub fn post_comment(request: &github::Request, body: &str) -> ServerResult<()> {
-    println!("post comment: {}", body);
+pub fn post_comment(cfg: &Config, request: &github::Request, body: &str) -> ServerResult<()> {
+    let timer_token = cfg.keys.github.clone().expect("needs rust-timer token");
     let client = reqwest::Client::new();
     let mut req = client.post(&request.issue.comments_url);
     req
@@ -519,7 +518,8 @@ pub fn post_comment(request: &github::Request, body: &str) -> ServerResult<()> {
             body: body.to_owned(),
         })
         .header(UserAgent::new("perf-rust-lang-org-server"))
-        .basic_auth("rust-timer", Some(env::var("RUST_TIMER_GH_TOKEN").unwrap()));
+        .basic_auth("rust-timer", Some(timer_token));
+
     let res = req.send();
     match res {
         Ok(_) => { }
@@ -531,15 +531,14 @@ pub fn post_comment(request: &github::Request, body: &str) -> ServerResult<()> {
 }
 
 pub fn handle_github(request: github::Request, data: &InputData) -> ServerResult<github::Response> {
-    println!("handle_github({:?})", request);
     if !request.comment.body.contains("@rust-timer ") {
         return Ok(github::Response);
     }
 
-    // FIXME: Better auth / config
-    if request.comment.author_association != github::Association::Owner {
-        post_comment(&request,
-            "Only owners of the repository are permitted to issue commands to rust-timer.")?;
+    if request.comment.author_association != github::Association::Owner ||
+        data.config.users.contains(&request.comment.user.login) {
+        post_comment(&data.config, &request,
+            "Insufficient permissions to issue commands to rust-timer.")?;
         return Ok(github::Response);
     }
 
@@ -548,7 +547,7 @@ pub fn handle_github(request: github::Request, data: &InputData) -> ServerResult
     if let Some(captures) = BODY_TRY_COMMIT.captures(&body) {
         if let Some(commit) = captures.get(1).map(|c| c.as_str()) {
             if commit.len() != 40 {
-                post_comment(&request, "Please provide the full 40 character commit hash.")?;
+                post_comment(&data.config, &request, "Please provide the full 40 character commit hash.")?;
                 return Ok(github::Response);
             }
             let client = reqwest::Client::new();
@@ -557,7 +556,7 @@ pub fn handle_github(request: github::Request, data: &InputData) -> ServerResult
                 .send().map_err(|_| String::from("cannot get commit"))?
                 .json().map_err(|_| String::from("cannot deserialize commit"))?;
             if commit_response.parents.len() != 1 {
-                post_comment(&request,
+                post_comment(&data.config, &request,
                     &format!("Bors try commit {} unexpectedly has {} parents.",
                         commit_response.sha, commit_response.parents.len()))?;
                 return Ok(github::Response);
@@ -569,7 +568,7 @@ pub fn handle_github(request: github::Request, data: &InputData) -> ServerResult
                 }
                 persistent.write().expect("successful encode");
             }
-            post_comment(&request,
+            post_comment(&data.config, &request,
                 &format!("Success: Queued {} with parent {}, [comparison URL]({}).",
                     commit_response.sha, commit_response.parents[0].sha,
                     format!("https://perf.rust-lang.org/compare.html?start={}&end={}",
@@ -622,7 +621,6 @@ struct Server {
     data: Arc<RwLock<InputData>>,
     pool: CpuPool,
     updating: Arc<AtomicBool>,
-    key: String,
 }
 
 macro_rules! check_http_method {
@@ -667,7 +665,8 @@ impl Server {
 
     fn check_auth(&self, req: &Request) -> bool {
         if let Some(auth) = req.headers().get::<Authorization<Bearer>>() {
-            if auth.0.token == self.key {
+            let data = self.data.read();
+            if auth.0.token == *data.config.keys.secret.as_ref().unwrap() {
                 return true;
             }
         }
@@ -741,10 +740,10 @@ impl Server {
                     futures::future::ok::<_, <Self as Service>::Error>(acc)
                 })
                 .map(move |body| {
-                    if gh && !verify_gh_sig(gh_header.unwrap(), &body).unwrap_or(false) {
+                    let data = data.read();
+                    if gh && !verify_gh_sig(&data.config, gh_header.unwrap(), &body).unwrap_or(false) {
                         return Response::new().with_status(StatusCode::Unauthorized);
                     }
-                    let data = data.read();
                     let body: D = match serde_json::from_slice(&body) {
                         Ok(d) => d,
                         Err(err) => {
@@ -934,10 +933,10 @@ impl Service for Server {
     }
 }
 
-fn verify_gh_sig(header: HubSignature, body: &[u8]) -> Option<bool> {
+fn verify_gh_sig(cfg: &Config, header: HubSignature, body: &[u8]) -> Option<bool> {
     let key = hmac::VerificationKey::new(
         &digest::SHA1,
-        env::var("PERF_SECRET_KEY").unwrap().as_bytes(),
+        cfg.keys.secret.as_ref().unwrap().as_bytes(),
     );
     let sha = header.0.get(5..)?; // strip sha1=
     let sha = hex::decode(sha).ok()?;
@@ -948,12 +947,11 @@ fn verify_gh_sig(header: HubSignature, body: &[u8]) -> Option<bool> {
     Some(false)
 }
 
-pub fn start(data: InputData, port: u16, key: String) {
+pub fn start(data: InputData, port: u16) {
     let server = Arc::new(Server {
         data: Arc::new(RwLock::new(data)),
         pool: CpuPool::new_num_cpus(),
         updating: Arc::new(AtomicBool::new(false)),
-        key,
     });
     let mut server_address: SocketAddr = "0.0.0.0:2346".parse().unwrap();
     server_address.set_port(port);

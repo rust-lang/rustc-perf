@@ -20,6 +20,7 @@ use failure::SyncFailure;
 use rust_sysroot;
 use rust_sysroot::git::Commit as GitCommit;
 use chrono::{Duration, Utc};
+use toml;
 
 use util;
 use git;
@@ -63,6 +64,18 @@ impl Persistent {
     }
 }
 
+#[derive(Debug, Default, Deserialize)]
+pub struct Keys {
+    pub github: Option<String>,
+    pub secret: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Config {
+    pub users: Vec<String>,
+    pub keys: Keys,
+}
+
 #[derive(Debug)]
 pub struct InputData {
     /// A set containing all crate names of the bootstrap kind.
@@ -83,6 +96,8 @@ pub struct InputData {
     pub commits: Vec<GitCommit>,
 
     pub persistent: Mutex<Persistent>,
+
+    pub config: Config,
 }
 
 impl InputData {
@@ -168,12 +183,22 @@ impl InputData {
         info!("{} skipped files", skipped);
         info!("{} measured", data.len());
 
-        InputData::new(data, artifact_data)
+        let config = if let Ok(s) = fs::read_to_string("site-config.toml") {
+            toml::from_str(&s)?
+        } else {
+            Config {
+                users: Vec::new(),
+                keys: Keys::default(),
+            }
+        };
+
+        InputData::new(data, artifact_data, config)
     }
 
     pub fn new(
         data: BTreeMap<Commit, CommitData>,
         artifact_data: BTreeMap<String, ArtifactData>,
+        config: Config,
     ) -> Result<InputData, Error> {
         let mut last_date = None;
         let mut crate_list = BTreeSet::new();
@@ -210,6 +235,7 @@ impl InputData {
             artifact_data,
             commits,
             persistent: Mutex::new(Persistent::load()),
+            config,
         })
     }
 

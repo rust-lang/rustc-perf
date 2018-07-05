@@ -33,6 +33,7 @@ extern crate regex;
 #[macro_use]
 extern crate lazy_static;
 extern crate reqwest;
+extern crate toml;
 
 #[derive(Fail, Debug)]
 #[fail(display = "command failed: {}", command)]

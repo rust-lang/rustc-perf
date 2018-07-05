@@ -24,6 +24,7 @@ hex = "0.3.2"
 regex = "1"
 lazy_static = "1"
 reqwest = "0.8"
+toml = "0.4"
 
 [dependencies.collector]
 path = "../collector"
