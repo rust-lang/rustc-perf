@@ -673,7 +673,12 @@ impl Benchmark {
                 }
 
                 // A full non-incremental build with NLL enabled.
-                if run_kinds.contains(&RunKind::Nll) && self.config.nll {
+                // These are only collected on check builds to save time.
+                let has_check = build_kinds.contains(&BuildKind::Check);
+                let is_check = build_kind == BuildKind::Check;
+                if run_kinds.contains(&RunKind::Nll) && self.config.nll &&
+                    ((has_check && is_check) || !has_check)
+                {
                     self.mk_cargo_process(rustc_path, cargo_path, cwd, build_kind)
                         .nll(true)
                         .processor(processor, &self.name, RunKind::Nll, "Nll", None)
