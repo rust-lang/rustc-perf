@@ -1,4 +1,4 @@
 {
     "supports_stable": true,
-    "nll": false
+    "runs": 1
 }
