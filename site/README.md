@@ -43,3 +43,8 @@ It can be run with the following command:
 ```
 cargo run --release data
 ```
+
+The first time you do this the Rust repo is cloned, so it will take a minute or
+two (or more if you have a slow internet connection) before the web server
+starts up.
+

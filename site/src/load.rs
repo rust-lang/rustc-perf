@@ -225,7 +225,9 @@ impl InputData {
         }
 
         let last_date = last_date.expect("No dates found");
+        println!("Updating rust.git clone...");
         let commits = rust_sysroot::get_commits(rust_sysroot::EPOCH_COMMIT, "master").map_err(SyncFailure::new)?;
+        println!("Update of rust.git complete");
 
         Ok(InputData {
             crate_list: crate_list,
