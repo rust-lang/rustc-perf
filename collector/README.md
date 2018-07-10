@@ -75,7 +75,9 @@ Once the benchmarks have been run, start the website:
 ```
 ./target/release/site $RUSTC_TIMING     # or $OUTPUT_DIR
 ```
-and navigate to localhost:2346 in a web browser.
+and navigate to localhost:2346 in a web browser. The first time you do this the
+Rust repo is cloned, so it will take a minute or two (or more if you have a
+slow internet connection) before the web server starts up.
 
 Note that all benchmark data processing happens when the website is started. If
 additional benchmark runs subsequently occur you must restart the website to
