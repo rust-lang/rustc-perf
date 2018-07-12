@@ -45,10 +45,6 @@ fn default_runs() -> usize {
     3
 }
 
-fn default_true() -> bool {
-    true
-}
-
 /// This is the internal representation of an individual benchmark's
 /// perf-config.json file.
 #[derive(Debug, Clone, Deserialize)]
@@ -60,8 +56,6 @@ struct BenchmarkConfig {
     disabled: bool,
     #[serde(default = "default_runs")]
     runs: usize,
-    #[serde(default = "default_true")]
-    nll: bool,
     #[serde(default)]
     supports_stable: bool,
 }
@@ -74,7 +68,6 @@ impl Default for BenchmarkConfig {
             cargo_toml: None,
             disabled: false,
             runs: default_runs(),
-            nll: true,
             supports_stable: false,
         }
     }
@@ -676,8 +669,7 @@ impl Benchmark {
                 // These are only collected on check builds to save time.
                 let has_check = build_kinds.contains(&BuildKind::Check);
                 let is_check = build_kind == BuildKind::Check;
-                if run_kinds.contains(&RunKind::Nll) && self.config.nll &&
-                    ((has_check && is_check) || !has_check)
+                if run_kinds.contains(&RunKind::Nll) && ((has_check && is_check) || !has_check)
                 {
                     self.mk_cargo_process(rustc_path, cargo_path, cwd, build_kind)
                         .nll(true)
