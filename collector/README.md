@@ -94,33 +94,98 @@ RUST_LOG=info ./target/release/collector --output-repo $OUTPUT_DIR \
 
 All this is the same as for the `bench_local` subcommand, except that
 `$PROFILER` is one of the following.
-- `time-passes`: Profile with rustc's `-Ztime-passes`. Output is written to
-  files with a `Ztp` prefix.
-- `perf-record`: Profile with `perf-record`. Output is written to files with a
-  `perf` prefix. Those files can be read with `perf-report` and other similar
-  `perf` commands.
-- `cachegrind`: Profile with Cachegrind. Raw output is written to files with a
-  `cgout` prefix; human-readable output is written to files with a `cgann`
-  prefix.
-- `callgrind`: Profile with Callgrind. Raw output is written to files with a
-  `clgout` prefix; human-readable output is written to files with a `clgann`
-  prefix.
-- `dhat`: Profile with DHAT. This may require a rustc configured with
-  `use-jemalloc = false` to work well. Output is written to files with a `dhat`
-  prefix.
-- `massif`: Profile with Massif. This may require a rustc configured with
-  `use-jemalloc = false` to work well. Raw output is written to files with a
-  `msout` prefix. Those files can be processed with `ms_print` or viewed with
-  `massif-visualizer`; the latter is recommended, though it sometimes fails to
-  read output files that `ms_print` can handle.
-- `eprintln`: Profile with `eprintln!` statements. Sometimes it is useful to do
-  ad hoc profiling by inserting `eprintln!` statements into rustc, e.g. to
-  count how often particular paths are hit, or to see what values particular
-  expressions have each time they are executed. This subcommand is for this use
-  case. The output of these `eprintln!` statements (and everything else written
-  to `stderr`) is written to files with an `eprintln` prefix. Those files can
-  be post-processed in any appropriate fashion; `sort $FILE | uniq -c` is one
-  possibility.
+- `time-passes`: Profile with rustc's `-Ztime-passes`. 
+  - **Purpose**. This gives a high-level indication of compiler performance by
+    showing how long each compilation pass takes.
+  - **Slowdown**. None.
+  - **Output**. Human-readable text output is written to files with a `Ztp`
+    prefix. Note that the parents of indented sub-passes are shown below those
+    passes, rather than above. Note also that the LLVM passes run in parallel,
+    which can make the output confusing.
+- `perf-record`: Profile with
+    [`perf-record`](https://perf.wiki.kernel.org/index.php/Main_Page), a
+    sampling profiler.
+  - **Purpose**. `perf-record` is a general-purpose profiler, good for seeing
+    where execution time is spent and finding hot functions.
+  - **Slowdown**. Negligible.
+  - **Output**. Binary output is written to files with a `perf` prefix. Those
+    files can be read with `perf-report` and other similar `perf` commands.
+- `cachegrind`: Profile with
+  [Cachegrind](http://valgrind.org/docs/manual/cg-manual.html), a tracing
+  profiler.
+  - **Purpose**. Cachegrind provides global, per-function, and per-source-line
+    instruction counts. This fine-grained information can be extremely useful.
+    Cachegrind's results are almost deterministic, which eases comparisons
+    across multiple runs.
+  - **Slowdown**. Roughly 3--10x.
+  - **Configuration**. Within `bench_local`, Cachegrind is configured to not
+    simulate caches and the branch predictor, even though it can, because the
+    simulation slows it down and 99% of the time instruction counts are all you
+    need.
+  - **Output**. Raw output is written to files with a `cgout` prefix.
+    Human-readable text output is written to files with a `cgann` prefix.
+  - **Diffs**. The `cg_diff` command can be used to diff two different raw
+    output files, which is very useful for comparing profiles produce by two
+    different versions of rustc. If those two versions are in different
+    directories (such as `rust0` and `rust`), use a flag like
+    `--mod-filename='s/rust[01]/rustN/g'` to eliminate path differences.
+- `callgrind`: Profile with
+    [Callgrind](http://valgrind.org/docs/manual/cl-manual.html), a tracing
+    profiler.
+  - **Purpose**. Callgrind collects the same information as Cachegrind, plus
+    function call information. So it can be used like either Cachegrind or
+    `perf-record`. However, it cannot perform diffs between profiles.
+  - **Slowdown**. Roughly 5--20x.
+  - **Configuration**. Like Cachegrind, within `bench_local` Callgrind is
+    configured to not simulate caches and the branch predictor.
+  - **Output**. Raw output is written to files with a `clgout` prefix; those
+    files can be viewed with the graphical
+    [KCachegrind](http://kcachegrind.github.io) tool. Human-readable
+    text output is also written to files with a `clgann` prefix; this output is
+    much the same as the `cgann`-prefixed files produced by Cachegrind, but
+    with extra annotations showing function call counts.
+- `dhat`: Profile with [DHAT](http://valgrind.org/docs/manual/dh-manual.html),
+  a heap profiler.
+  - **Purpose**. DHAT is good for finding which parts of the code are causing a
+    lot of allocations. This is relevant if another profiler such as
+    `perf-record` or Cachegrind tell you that `malloc` and `free` are hot
+    functions (as they often are).
+  - **Slowdown**. Roughly 5--20x.
+  - **Prerequisites**. DHAT may require a rustc configured with `use-jemalloc =
+    false` to work well.
+  - **Configuration**. DHAT is configured within `bench_local` to run with the
+    non-default `--tot-blocks-allocd` option, so that it sorts its
+    output by the number of blocks allocated rather than the number of bytes
+    allocated. This is because the number of allocations typically has a
+    greater effect on speed than the size of those allocations; many small
+    allocations will typically be slower than a few large allocations.
+  - **Output**. Human-readable text output is written to files with a `dhat`
+    prefix. This file includes summary statistics followed by numerous records,
+    each of which aggregates data about all the allocations associated with a
+    particular stack trace: the number of allocations, their average size, and
+    how often they are read from and written to.
+- `massif`: Profile with
+  [Massif](http://valgrind.org/docs/manual/ms-manual.html), a heap profiler.
+  - **Purpose**. Massif is designed to give insight into a program's peak
+    memory usage.
+  - **Slowdown**. Roughly 3--10x.
+  - **Prerequisites**. Massif may require a rustc configured with `use-jemalloc
+    = false` to work well.
+  - **Output**. Raw output is written to files with a `msout` prefix. Those
+    files can be post-processed with `ms_print` or viewed with the graphical
+    [`massif-visualizer`](https://github.com/KDE/massif-visualizer); the latter
+    is recommended, though it sometimes fails to read output files that
+    `ms_print` can handle.
+- `eprintln`: Profile with `eprintln!` statements.
+  - **Purpose**. Sometimes it is useful to do ad hoc profiling by inserting
+    `eprintln!` statements into rustc, e.g. to count how often particular paths
+    are hit, or to see what values particular expressions have each time they
+    are executed.
+  - **Slowdown**. Depends where the `eprintln!` statements are inserted.
+  - **Output**. The output of these `eprintln!` statements (and everything else
+    written to `stderr`) is written to files with an `eprintln` prefix. Those
+    files can be post-processed in any appropriate fashion; `sort $FILE | uniq
+    -c` is one possibility.
 
 ## @bors try builds
 
