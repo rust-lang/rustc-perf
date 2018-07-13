@@ -51,6 +51,8 @@ use load::CurrentState;
 
 header! { (HubSignature, "X-Hub-Signature") => [String] }
 
+static INTERPOLATED_COLOR: &str = "#fcb0f1";
+
 /// Data associated with a specific date
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DateData {
@@ -374,7 +376,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
                                     true
                                 }
                             }))
-                            .map(|b| if b { String::from("#f0f") } else { String::new() })
+                            .map(|b| if b { String::from(INTERPOLATED_COLOR) } else { String::new() })
                             .unwrap_or(String::new())
                     }
                 });
@@ -444,7 +446,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
                                 true
                             }
                         }))
-                        .map(|b| if b { String::from("#f0f") } else { String::new() })
+                        .map(|b| if b { String::from(INTERPOLATED_COLOR) } else { String::new() })
                         .unwrap_or(String::new())
                 }
             });
