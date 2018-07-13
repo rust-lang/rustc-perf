@@ -15,13 +15,20 @@ use failure::Error;
 
 use chrono::Duration;
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Interpolate {
+    Yes,
+    No,
+}
+
 pub fn find_commit<'a>(
     data: &'a InputData,
     idx: &Bound,
     left: bool,
+    interpolate: Interpolate,
 ) -> Result<(&'a Commit, &'a CommitData), String> {
     let last_month = data.last_date.0.naive_utc().date() - Duration::days(30);
-    for (commit, cd) in &data.data {
+    for (commit, cd) in data.data(interpolate) {
         let found = match *idx {
             Bound::Commit(ref sha) => commit.sha == *sha,
             Bound::Date(ref date) => {
@@ -48,7 +55,7 @@ pub fn find_commit<'a>(
     }
 
     if !left && *idx == Bound::None {
-        return data.data
+        return data.data(interpolate)
             .iter()
             .last()
             .ok_or_else(|| format!("at least one commit"));
@@ -64,12 +71,13 @@ pub fn data_range<'a>(
     data: &'a InputData,
     a: &Bound,
     b: &Bound,
+    interpolate: Interpolate,
 ) -> Result<Vec<(&'a Commit, &'a CommitData)>, String> {
     let mut ret = Vec::new();
     let mut in_range = false;
-    let left_bound = find_commit(data, a, true)?.0;
-    let right_bound = find_commit(data, b, false)?.0;
-    for (commit, cd) in &data.data {
+    let left_bound = find_commit(data, a, true, interpolate)?.0;
+    let right_bound = find_commit(data, b, false, interpolate)?.0;
+    for (commit, cd) in data.data(interpolate) {
         if commit.sha == left_bound.sha {
             in_range = true;
         }

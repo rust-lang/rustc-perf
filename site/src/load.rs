@@ -23,6 +23,7 @@ use chrono::{Duration, Utc};
 use toml;
 
 use util;
+use util::Interpolate;
 use git;
 use collector::Date;
 
@@ -115,9 +116,9 @@ pub struct InputData {
     /// timezone is not important, it isn't stored, hence the Naive variant.
     pub last_date: Date,
 
-    /// `data_real` has holes, `data` does not.
-    pub data_real: BTreeMap<Commit, CommitData>,
-    pub data: BTreeMap<Commit, CommitData>,
+    /// `data_real` is as-is, `data` has been interpolated.
+    data_real: BTreeMap<Commit, CommitData>,
+    data: BTreeMap<Commit, CommitData>,
 
     /// The benchmarks we interpolated for a given commit.
     ///
@@ -125,7 +126,7 @@ pub struct InputData {
     pub interpolated: HashMap<String, Vec<Interpolation>>,
 
     /// The list of commits in the `data` map.
-    pub commits: Vec<Commit>,
+    pub data_commits: Vec<Commit>,
     /// A map from commit to index in the `commits` vector.
     pub commit_map: HashMap<Commit, usize>,
 
@@ -139,6 +140,13 @@ pub struct InputData {
 }
 
 impl InputData {
+    pub fn data(&self, interpolate: Interpolate) -> &BTreeMap<Commit, CommitData> {
+        match interpolate {
+            Interpolate::Yes => &self.data,
+            Interpolate::No => &self.data_real,
+        }
+    }
+
     /// Initialize `InputData from the file system.
     pub fn from_fs(repo_loc: &str) -> Result<InputData, Error> {
         let repo_loc = PathBuf::from(repo_loc);
@@ -267,10 +275,10 @@ impl InputData {
         let commits = rust_sysroot::get_commits(rust_sysroot::EPOCH_COMMIT, "master").map_err(SyncFailure::new)?;
         println!("Update of rust.git complete");
 
-        let commits = data.keys().cloned().collect::<Vec<_>>();
+        let data_commits = data.keys().cloned().collect::<Vec<_>>();
 
-        let mut commit_map = HashMap::with_capacity(commits.len());
-        for (idx, commit) in commits.iter().enumerate() {
+        let mut commit_map = HashMap::with_capacity(data_commits.len());
+        for (idx, commit) in data_commits.iter().enumerate() {
             commit_map.insert(commit.clone(), idx);
         }
 
@@ -311,7 +319,7 @@ impl InputData {
                 let mut assoc = AssociatedData {
                     commit: &commit,
                     data: &data_real,
-                    commits: &commits,
+                    commits: &data_commits,
                     commit_map: &commit_map,
                     interpolated: &mut interpolated,
                 };
@@ -363,7 +371,7 @@ impl InputData {
         Ok(InputData {
             crate_list: crate_list,
             stats_list: stats_list,
-            commits: commits,
+            data_commits: data_commits,
             commit_map: commit_map,
             interpolated,
             last_date: last_date,

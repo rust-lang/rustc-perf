@@ -40,7 +40,7 @@ use regex::Regex;
 use reqwest;
 
 use git;
-use util::{self, get_repo_path};
+use util::{self, get_repo_path, Interpolate};
 pub use api::{self, github, status, nll_dashboard, dashboard, data, days, graph, info, CommitResponse, ServerResult};
 use collector::{Date, Run, version_supports_incremental};
 use collector::api::collected;
@@ -105,7 +105,7 @@ pub fn handle_nll_dashboard(
     body: nll_dashboard::Request,
     data: &InputData
 ) -> ServerResult<nll_dashboard::Response> {
-    let commit = util::find_commit(data, &body.commit, false)?.1;
+    let commit = util::find_commit(data, &body.commit, false, Interpolate::No)?.1;
     let mut points = commit.benchmarks.iter()
         .filter_map(|b| b.1.as_ref().ok())
         .map(|bench| {
@@ -163,7 +163,7 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
         }
     });
 
-    versions.push(format!("master: {}", &data.data.keys().last().unwrap().sha[0..8]));
+    versions.push(format!("master: {}", &data.data(Interpolate::Yes).keys().last().unwrap().sha[0..8]));
 
     let mut check_clean_average = Vec::new();
     let mut check_base_incr_average = Vec::new();
@@ -196,7 +196,7 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
         let mut opt_println_incr_points = Vec::new();
 
         let mut benches = if version.starts_with("master") {
-            let data = data.data.values().last().unwrap();
+            let data = data.data(Interpolate::Yes).values().last().unwrap();
             let benches = data.benchmarks.iter()
                 .filter(|(name, _)| benchmark_names.contains(name)).collect::<Vec<_>>();
             assert_eq!(benches.len(), benchmark_names.len());
@@ -273,7 +273,7 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
 }
 
 pub fn handle_status_page(data: &InputData) -> status::Response {
-    let last_commit = data.data.iter().last().unwrap();
+    let last_commit = data.data(Interpolate::No).iter().last().unwrap();
 
     let mut benchmark_state = last_commit.1.benchmarks.iter()
         .map(|(name, res)| {
@@ -470,12 +470,12 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
     })
 }
 
-pub fn handle_data(body: data::Request, data: &InputData) -> ServerResult<data::Response> {
+fn handle_data(body: data::Request, data: &InputData) -> ServerResult<data::Response> {
     debug!(
         "handle_data: start = {:?}, end = {:?}",
         body.start, body.end
     );
-    let range = util::data_range(&data, &body.start, &body.end)?;
+    let range = util::data_range(&data, &body.start, &body.end, Interpolate::Yes)?;
     let mut result = range
         .into_iter()
         .map(|(_, day)| day)
@@ -504,8 +504,8 @@ pub fn handle_data(body: data::Request, data: &InputData) -> ServerResult<data::
 }
 
 pub fn handle_days(body: days::Request, data: &InputData) -> ServerResult<days::Response> {
-    let a = util::find_commit(data, &body.start, true)?;
-    let b = util::find_commit(data, &body.end, false)?;
+    let a = util::find_commit(data, &body.start, true, Interpolate::No)?;
+    let b = util::find_commit(data, &body.end, false, Interpolate::No)?;
     Ok(days::Response {
         a: DateData::for_day(a.1, &body.stat),
         b: DateData::for_day(b.1, &body.stat),
@@ -924,7 +924,6 @@ impl Service for Server {
         match req.path() {
             "/perf/info" => self.handle_get(&req, handle_info),
             "/perf/dashboard" => self.handle_get(&req, handle_dashboard),
-            "/perf/data" => self.handle_post(req, handle_data),
             "/perf/graph" => self.handle_post(req, handle_graph),
             "/perf/get" => self.handle_post(req, handle_days),
             "/perf/nll_dashboard" => self.handle_post(req, handle_nll_dashboard),
