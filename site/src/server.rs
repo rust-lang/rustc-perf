@@ -16,6 +16,7 @@ use std::path::Path;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::cmp::Ordering;
+use std::borrow::Cow;
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -51,7 +52,7 @@ use load::CurrentState;
 header! { (HubSignature, "X-Hub-Signature") => [String] }
 
 /// Data associated with a specific date
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DateData {
     pub date: Date,
     pub commit: String,
@@ -324,7 +325,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
     )?.0;
 
     // crate list * 3 because we have check, debug, and opt variants.
-    let mut result = HashMap::with_capacity(data.crate_list.len() * 3);
+    let mut result: HashMap<_, HashMap<Cow<str>, _>> = HashMap::with_capacity(data.crate_list.len() * 3);
     let elements = out.len();
     let mut last_commit = None;
     let mut initial_debug_base_compile = None;
@@ -349,12 +350,12 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
                 }
 
                 let mut entry = entry
-                    .entry(name.clone())
+                    .entry(name.into())
                     .or_insert_with(|| Vec::<graph::GraphData>::with_capacity(elements));
                 let first = entry.first().map(|d| d.absolute as f32);
                 let percent = first.map_or(0.0, |f| (value - f) / f * 100.0);
                 entry.push(graph::GraphData {
-                    benchmark: run.state.name(),
+                    benchmark: run.state.name().into(),
                     commit: commit.clone(),
                     prev_commit: last_commit.clone(),
                     absolute: value,
@@ -368,7 +369,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
                                     return false;
                                 }
                                 if let Some(run_name) = &interpolation.run {
-                                    *run_name == run.name()
+                                    run == *run_name
                                 } else {
                                     true
                                 }
@@ -412,8 +413,8 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
             } else {
                 "-debug"
             };
-            let summary = result
-                .entry(String::from("Summary") + appendix)
+            let summary: &mut HashMap<Cow<str>, _> = result
+                .entry((String::from("Summary") + appendix).into())
                 .or_insert_with(HashMap::new);
             let entry = summary.entry(state.name()).or_insert_with(Vec::new);
             let value = (values.iter().sum::<f64>() as f32) / (values.len() as f32);
@@ -427,7 +428,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
             let first = entry.first().map(|d: &graph::GraphData| d.absolute as f32);
             let percent = first.map_or(0.0, |f| (value - f) / f * 100.0);
             entry.push(graph::GraphData {
-                benchmark: state.name(),
+                benchmark: state.name().into(),
                 commit: commit.clone(),
                 prev_commit: last_commit.clone(),
                 absolute: value,
@@ -438,7 +439,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
                     data.interpolated.get(&commit)
                         .map(|c| c.iter().any(|interpolation| {
                             if let Some(run) = &interpolation.run {
-                                *run == (state.name() + appendix)
+                                *run.name() == (state.name() + appendix)
                             } else {
                                 true
                             }
@@ -466,7 +467,11 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
 
     Ok(graph::Response {
         max: maxes,
-        benchmarks: result,
+        benchmarks: result.into_iter()
+            .map(|(k, v)| {
+                (k, v.into_iter().map(|(k, v)| (k.into_owned(), v)).collect())
+            })
+            .collect()
     })
 }
 
