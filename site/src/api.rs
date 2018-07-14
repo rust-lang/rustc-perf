@@ -91,7 +91,7 @@ pub mod data {
     use server::DateData;
     use collector::Bound;
 
-    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct Request {
         pub start: Bound,
         pub end: Bound,
@@ -101,7 +101,7 @@ pub mod data {
     }
 
     /// List of DateData's from oldest to newest
-    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct Response(pub Vec<DateData>);
 }
 
@@ -126,6 +126,7 @@ pub mod graph {
         pub percent: f32,
         pub y: f32,
         pub x: u64,
+        pub color: String,
     }
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
@@ -148,7 +149,7 @@ pub mod days {
         pub stat: String,
     }
 
-    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct Response {
         pub a: DateData,
         pub b: DateData,

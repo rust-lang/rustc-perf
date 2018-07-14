@@ -14,6 +14,7 @@ use std::hash;
 use std::str::FromStr;
 use std::path::{Path, PathBuf};
 use std::process::{self, Stdio};
+use std::borrow::Cow;
 
 use chrono::{DateTime, Datelike, Duration, TimeZone, Utc};
 use chrono::naive::NaiveDate;
@@ -61,11 +62,25 @@ impl Ord for Commit {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Patch {
     index: usize,
     pub name: String,
     path: PathBuf,
+}
+
+impl PartialEq for Patch {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+impl Eq for Patch {}
+
+impl hash::Hash for Patch {
+    fn hash<H: hash::Hasher>(&self, h: &mut H) {
+        self.name.hash(h);
+    }
 }
 
 impl Patch {
@@ -138,14 +153,14 @@ impl BenchmarkState {
         }
     }
 
-    pub fn name(&self) -> String {
+    pub fn name(&self) -> Cow<'static, str> {
         match *self {
-            BenchmarkState::Clean => format!("clean"),
-            BenchmarkState::Nll => format!("nll"),
-            BenchmarkState::IncrementalStart => format!("baseline incremental"),
-            BenchmarkState::IncrementalClean => format!("clean incremental"),
+            BenchmarkState::Clean => "clean".into(),
+            BenchmarkState::Nll => "nll".into(),
+            BenchmarkState::IncrementalStart => "baseline incremental".into(),
+            BenchmarkState::IncrementalClean => "clean incremental".into(),
             BenchmarkState::IncrementalPatched(ref patch) => {
-                format!("patched incremental: {}", patch.name)
+                format!("patched incremental: {}", patch.name).into()
             }
         }
     }
@@ -176,13 +191,55 @@ pub struct Stat {
     pub cnt: f64,
 }
 
-#[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Run {
     pub stats: Vec<Stat>,
     #[serde(default)]
     pub check: bool,
     pub release: bool,
     pub state: BenchmarkState,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct RunId {
+    check: bool,
+    release: bool,
+    state: BenchmarkState,
+}
+
+impl RunId {
+    pub fn name(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl fmt::Display for RunId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let opt = if self.release {
+            "-opt"
+        } else if self.check {
+            "-check"
+        } else {
+            ""
+        };
+        write!(f, "{}{}", self.state.name(), opt)
+    }
+}
+
+impl PartialEq for Run {
+    fn eq(&self, other: &Self) -> bool {
+        self.release == other.release &&
+        self.check == other.check &&
+        self.state == other.state
+    }
+}
+
+impl PartialEq<RunId> for Run {
+    fn eq(&self, other: &RunId) -> bool {
+        self.release == other.release &&
+        self.check == other.check &&
+        self.state == other.state
+    }
 }
 
 impl Run {
@@ -209,15 +266,18 @@ impl Run {
         false
     }
 
+    pub fn id(&self) -> RunId {
+        let state = self.state.clone();
+        let state = state.erase_path();
+        RunId {
+            check: self.check,
+            release: self.release,
+            state: state,
+        }
+    }
+
     pub fn name(&self) -> String {
-        let opt = if self.release {
-            "-opt"
-        } else if self.check {
-            "-check"
-        } else {
-            ""
-        };
-        self.state.name() + opt
+        self.id().name()
     }
 
     pub fn get_stat(&self, stat: &str) -> Option<f64> {
@@ -243,7 +303,7 @@ pub struct CommitData {
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct DeltaTime(#[serde(with = "round_float")] pub f64);
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Hash, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Date(pub DateTime<Utc>);
 
 #[derive(Debug, Clone, PartialEq, Eq)]

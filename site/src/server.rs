@@ -16,6 +16,7 @@ use std::path::Path;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::cmp::Ordering;
+use std::borrow::Cow;
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -40,7 +41,7 @@ use regex::Regex;
 use reqwest;
 
 use git;
-use util::{self, get_repo_path};
+use util::{self, get_repo_path, Interpolate};
 pub use api::{self, github, status, nll_dashboard, dashboard, data, days, graph, info, CommitResponse, ServerResult};
 use collector::{Date, Run, version_supports_incremental};
 use collector::api::collected;
@@ -50,8 +51,10 @@ use load::CurrentState;
 
 header! { (HubSignature, "X-Hub-Signature") => [String] }
 
+static INTERPOLATED_COLOR: &str = "#fcb0f1";
+
 /// Data associated with a specific date
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DateData {
     pub date: Date,
     pub commit: String,
@@ -105,7 +108,7 @@ pub fn handle_nll_dashboard(
     body: nll_dashboard::Request,
     data: &InputData
 ) -> ServerResult<nll_dashboard::Response> {
-    let commit = util::find_commit(data, &body.commit, false)?.1;
+    let commit = util::find_commit(data, &body.commit, false, Interpolate::No)?.1;
     let mut points = commit.benchmarks.iter()
         .filter_map(|b| b.1.as_ref().ok())
         .map(|bench| {
@@ -163,7 +166,7 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
         }
     });
 
-    versions.push(format!("master: {}", &data.data.keys().last().unwrap().sha[0..8]));
+    versions.push(format!("master: {}", &data.data(Interpolate::Yes).keys().last().unwrap().sha[0..8]));
 
     let mut check_clean_average = Vec::new();
     let mut check_base_incr_average = Vec::new();
@@ -196,7 +199,7 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
         let mut opt_println_incr_points = Vec::new();
 
         let mut benches = if version.starts_with("master") {
-            let data = data.data.values().last().unwrap();
+            let data = data.data(Interpolate::Yes).values().last().unwrap();
             let benches = data.benchmarks.iter()
                 .filter(|(name, _)| benchmark_names.contains(name)).collect::<Vec<_>>();
             assert_eq!(benches.len(), benchmark_names.len());
@@ -273,7 +276,7 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
 }
 
 pub fn handle_status_page(data: &InputData) -> status::Response {
-    let last_commit = data.data.iter().last().unwrap();
+    let last_commit = data.data(Interpolate::No).iter().last().unwrap();
 
     let mut benchmark_state = last_commit.1.benchmarks.iter()
         .map(|(name, res)| {
@@ -324,7 +327,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
     )?.0;
 
     // crate list * 3 because we have check, debug, and opt variants.
-    let mut result = HashMap::with_capacity(data.crate_list.len() * 3);
+    let mut result: HashMap<_, HashMap<Cow<str>, _>> = HashMap::with_capacity(data.crate_list.len() * 3);
     let elements = out.len();
     let mut last_commit = None;
     let mut initial_debug_base_compile = None;
@@ -334,6 +337,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
         let commit = date_data.commit;
         let mut summary_points = HashMap::new();
         for (name, runs) in date_data.data {
+            let bench_name = name.clone();
             let mut entry = result
                 .entry(name.clone())
                 .or_insert_with(|| HashMap::with_capacity(runs.len()));
@@ -348,18 +352,33 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
                 }
 
                 let mut entry = entry
-                    .entry(name)
+                    .entry(name.into())
                     .or_insert_with(|| Vec::<graph::GraphData>::with_capacity(elements));
                 let first = entry.first().map(|d| d.absolute as f32);
                 let percent = first.map_or(0.0, |f| (value - f) / f * 100.0);
                 entry.push(graph::GraphData {
-                    benchmark: run.state.name(),
+                    benchmark: run.state.name().into(),
                     commit: commit.clone(),
                     prev_commit: last_commit.clone(),
                     absolute: value,
                     percent: percent,
                     y: if body.absolute { value } else { percent },
                     x: date_data.date.0.timestamp() as u64 * 1000, // all dates are since 1970
+                    color: {
+                        data.interpolated.get(&commit)
+                            .map(|c| c.iter().any(|interpolation| {
+                                if !bench_name.starts_with(&interpolation.benchmark) {
+                                    return false;
+                                }
+                                if let Some(run_name) = &interpolation.run {
+                                    run == *run_name
+                                } else {
+                                    true
+                                }
+                            }))
+                            .map(|b| if b { String::from(INTERPOLATED_COLOR) } else { String::new() })
+                            .unwrap_or(String::new())
+                    }
                 });
             }
             if base_compile && is_println_incr {
@@ -396,8 +415,8 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
             } else {
                 "-debug"
             };
-            let summary = result
-                .entry(String::from("Summary") + appendix)
+            let summary: &mut HashMap<Cow<str>, _> = result
+                .entry((String::from("Summary") + appendix).into())
                 .or_insert_with(HashMap::new);
             let entry = summary.entry(state.name()).or_insert_with(Vec::new);
             let value = (values.iter().sum::<f64>() as f32) / (values.len() as f32);
@@ -411,13 +430,25 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
             let first = entry.first().map(|d: &graph::GraphData| d.absolute as f32);
             let percent = first.map_or(0.0, |f| (value - f) / f * 100.0);
             entry.push(graph::GraphData {
-                benchmark: state.name(),
+                benchmark: state.name().into(),
                 commit: commit.clone(),
                 prev_commit: last_commit.clone(),
                 absolute: value,
                 percent: percent,
                 y: if body.absolute { value } else { percent },
                 x: date_data.date.0.timestamp() as u64 * 1000, // all dates are since 1970
+                color: {
+                    data.interpolated.get(&commit)
+                        .map(|c| c.iter().any(|interpolation| {
+                            if let Some(run) = &interpolation.run {
+                                *run.name() == (state.name() + appendix)
+                            } else {
+                                true
+                            }
+                        }))
+                        .map(|b| if b { String::from(INTERPOLATED_COLOR) } else { String::new() })
+                        .unwrap_or(String::new())
+                }
             });
         }
         last_commit = Some(commit);
@@ -438,16 +469,20 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
 
     Ok(graph::Response {
         max: maxes,
-        benchmarks: result,
+        benchmarks: result.into_iter()
+            .map(|(k, v)| {
+                (k, v.into_iter().map(|(k, v)| (k.into_owned(), v)).collect())
+            })
+            .collect()
     })
 }
 
-pub fn handle_data(body: data::Request, data: &InputData) -> ServerResult<data::Response> {
+fn handle_data(body: data::Request, data: &InputData) -> ServerResult<data::Response> {
     debug!(
         "handle_data: start = {:?}, end = {:?}",
         body.start, body.end
     );
-    let range = util::data_range(&data, &body.start, &body.end)?;
+    let range = util::data_range(&data, &body.start, &body.end, Interpolate::Yes)?;
     let mut result = range
         .into_iter()
         .map(|(_, day)| day)
@@ -476,8 +511,8 @@ pub fn handle_data(body: data::Request, data: &InputData) -> ServerResult<data::
 }
 
 pub fn handle_days(body: days::Request, data: &InputData) -> ServerResult<days::Response> {
-    let a = util::find_commit(data, &body.start, true)?;
-    let b = util::find_commit(data, &body.end, false)?;
+    let a = util::find_commit(data, &body.start, true, Interpolate::No)?;
+    let b = util::find_commit(data, &body.end, false, Interpolate::No)?;
     Ok(days::Response {
         a: DateData::for_day(a.1, &body.stat),
         b: DateData::for_day(b.1, &body.stat),
@@ -896,7 +931,6 @@ impl Service for Server {
         match req.path() {
             "/perf/info" => self.handle_get(&req, handle_info),
             "/perf/dashboard" => self.handle_get(&req, handle_dashboard),
-            "/perf/data" => self.handle_post(req, handle_data),
             "/perf/graph" => self.handle_post(req, handle_graph),
             "/perf/get" => self.handle_post(req, handle_days),
             "/perf/nll_dashboard" => self.handle_post(req, handle_nll_dashboard),
