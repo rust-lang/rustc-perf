@@ -589,7 +589,7 @@ pub fn handle_github(request: github::Request, data: &InputData) -> ServerResult
             let commit_response: github::Commit =
             client.get(&format!("{}/commits/{}", request.issue.repository_url, commit))
                 .send().map_err(|_| String::from("cannot get commit"))?
-                .json().map_err(|_| String::from("cannot deserialize commit"))?;
+                .json().map_err(|e| format!("cannot deserialize commit: {:?}", e))?;
             if commit_response.parents.len() != 2 {
                 post_comment(&data.config, &request,
                     &format!("Bors try commit {} unexpectedly has {} parents.",
