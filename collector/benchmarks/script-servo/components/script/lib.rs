@@ -8,7 +8,7 @@
 #![feature(const_fn)]
 #![feature(mpsc_select)]
 #![feature(plugin)]
-#![feature(proc_macro)]
+#![feature(proc_macro_quote, use_extern_macros)]
 
 #![deny(unsafe_code)]
 #![allow(non_snake_case)]
