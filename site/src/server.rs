@@ -312,8 +312,8 @@ pub fn handle_status_page(data: &InputData) -> status::Response {
     }
 }
 
-pub fn handle_next_commit(data: &InputData) -> String {
-    data.missing_commits().unwrap().into_iter().next().unwrap().sha
+pub fn handle_next_commit(data: &InputData) -> Option<String> {
+    data.missing_commits().ok().map(|c| c.into_iter().next().unwrap().sha)
 }
 
 pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<graph::Response> {

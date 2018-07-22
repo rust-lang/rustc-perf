@@ -532,10 +532,17 @@ fn main_result() -> Result<i32, Error> {
             println!("processing commits");
             let commits = get_commits()?;
             let client = reqwest::Client::new();
-            let commit: String = client.get(&format!(
+            let commit: Option<String> = client.get(&format!(
                 "{}/perf/next_commit",
                 env::var("SITE_URL").expect("SITE_URL defined")
             )).send()?.json()?;
+            let commit = if let Some(c) = commit {
+                c
+            } else {
+                // no missing commits
+                return Ok(0);
+            };
+
             let commit = commits.iter()
                 .find(|c| c.sha == commit)
                 .cloned()
