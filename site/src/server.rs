@@ -313,7 +313,7 @@ pub fn handle_status_page(data: &InputData) -> status::Response {
 }
 
 pub fn handle_next_commit(data: &InputData) -> Option<String> {
-    data.missing_commits().ok().map(|c| c.into_iter().next().unwrap().sha)
+    data.missing_commits().ok().and_then(|c| c.into_iter().next()).map(|c| c.sha)
 }
 
 pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<graph::Response> {
