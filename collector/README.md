@@ -184,8 +184,8 @@ All this is the same as for the `bench_local` subcommand, except that
   - **Slowdown**. Depends where the `eprintln!` statements are inserted.
   - **Output**. The output of these `eprintln!` statements (and everything else
     written to `stderr`) is written to files with an `eprintln` prefix. Those
-    files can be post-processed in any appropriate fashion; `sort $FILE | uniq
-    -c` is one possibility.
+    files can be post-processed in any appropriate fashion;
+    [`counts`](https://github.com/nnethercote/counts) is one possibility.
 
 ## @bors try builds
 
