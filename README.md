@@ -1,5 +1,7 @@
 # Rust Compiler Performance Monitoring & Benchmarking
 
+just testing
+
 This repository contains two primary crates: `collector` and `site`. Collector gathers data for each
 bors commit and the site displays the data.
 
