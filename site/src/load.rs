@@ -421,14 +421,19 @@ impl InputData {
 
                 // benchmark exists, but might have runs missing
                 if let Ok(benchmark) = entry {
-                    let missing_runs = known_runs[benchmark_name]
-                        .iter()
-                        .filter(|rname| !benchmark.runs.iter().any(|r| *r == **rname))
-                        .collect::<Vec<_>>();
-                    if !missing_runs.is_empty() {
-                        let before = benchmark.runs.len();
-                        fill_benchmark_runs(benchmark, missing_runs, &mut assoc);
-                        assert_ne!(before, benchmark.runs.len(), "made progress");
+                    // If we've not had a benchmark at all in the last few
+                    // commits then just skip run interpolation for it; the
+                    // benchmark should get total-benchmark interpolated.
+                    if let Some(known_runs) = known_runs.get(benchmark_name) {
+                        let missing_runs = known_runs
+                            .iter()
+                            .filter(|rname| !benchmark.runs.iter().any(|r| *r == **rname))
+                            .collect::<Vec<_>>();
+                        if !missing_runs.is_empty() {
+                            let before = benchmark.runs.len();
+                            fill_benchmark_runs(benchmark, missing_runs, &mut assoc);
+                            assert_ne!(before, benchmark.runs.len(), "made progress");
+                        }
                     }
                 }
             }
