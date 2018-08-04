@@ -1,4 +1,4 @@
-[root]
+[[package]]
 name = "issue-20936-deep-vector"
 version = "0.1.0"
 
