@@ -1,0 +1,4 @@
+[package]
+name = "ctfe-stress"
+version = "0.1.0"
+authors = ["Ralf Jung <post@ralfj.de>"]
