@@ -1,0 +1,15 @@
+[package]
+name = "fannkuch_redux"
+version = "0.1.0"
+authors = ["gnzlbg <gonzalobg88@gmail.com>"]
+
+[dependencies]
+packed_simd = { path = "../.." }
+
+[[bin]]
+name = "fannkuch_redux"
+path = "src/main.rs"
+
+[lib]
+name = "fannkuch_redux_lib"
+path = "src/lib.rs"

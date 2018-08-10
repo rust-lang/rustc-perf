@@ -1,0 +1,11 @@
+[package]
+name = "dot_product"
+version = "0.1.0"
+authors = ["Gonzalo Brito Gadeschi <gonzalobg88@gmail.com>"]
+
+[dependencies]
+packed_simd = { path = "../.." }
+
+[lib]
+name = "dot_product_lib"
+path = "src/lib.rs"

@@ -1,0 +1,42 @@
+[package]
+name = "packed_simd"
+version = "0.1.0"
+authors = ["Gonzalo Brito Gadeschi <gonzalobg88@gmail.com>"]
+description = "Portable Packed SIMD vectors"
+documentation = "https://docs.rs/crate/packed_simd/"
+homepage = "https://github.com/rust-lang-nursery/packed_simd"
+repository = "https://github.com/rust-lang-nursery/packed_simd"
+keywords = ["simd", "vector", "portability"]
+categories = ["hardware-support", "concurrency", "no-std", "data-structures"]
+license = "MIT/Apache-2.0"
+
+[badges]
+appveyor = { repository = "rust-lang-nursery/packed_simd" }
+travis-ci = { repository = "rust-lang-nursery/packed_simd" }
+codecov = { repository = "rust-lang-nursery/packed_simd" }
+is-it-maintained-issue-resolution = { repository = "rust-lang-nursery/packed_simd" }
+is-it-maintained-open-issues = { repository = "rust-lang-nursery/packed_simd" }
+maintenance = { status = "experimental" }
+
+[dependencies]
+cfg-if = "^0.1"
+
+[dev-dependencies]
+interpolate_idents = "^0.2"
+arrayvec = { version = "^0.4", default-features = false }
+
+# FIXME: neon requires recompiling the std library with neon enabled.
+# This works around that by fetching coresimd from the nursery directly,
+# and recompiling it with neon.
+[target.'cfg(all(target_arch = "arm", target_feature = "v7", target_feature = "neon"))'.dependencies.coresimd]
+git = "http://github.com/rust-lang-nursery/stdsimd.git"
+optional = true
+
+# FIXME: table lookup aarch64 intrinsics are not in nightly yet
+[target.'cfg(all(target_arch = "aarch64", target_feature = "neon"))'.dependencies.coresimd]
+git = "http://github.com/rust-lang-nursery/stdsimd.git"
+optional = true
+
+[features]
+default = []
+into_bits = []

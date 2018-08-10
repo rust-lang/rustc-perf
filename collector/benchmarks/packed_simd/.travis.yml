@@ -1,0 +1,136 @@
+language: rust
+sudo: false
+rust: nightly
+
+matrix:
+  fast_finish: true
+  include:
+    # Android:
+    - env: TARGET=x86_64-linux-android
+    - env: TARGET=arm-linux-androideabi
+      install:
+        - rustup target add $TARGET || true
+      script:
+        - cargo generate-lockfile
+        - travis_wait 50 ci/run-docker.sh $TARGET $FEATURES
+    - env: TARGET=aarch64-linux-android
+      install:
+        - rustup target add $TARGET || true
+      script:
+        - cargo generate-lockfile
+        - travis_wait 50 ci/run-docker.sh $TARGET $FEATURES
+    # Linux:
+    - env: TARGET=i586-unknown-linux-gnu
+    - env: TARGET=i686-unknown-linux-gnu
+    - env: TARGET=x86_64-unknown-linux-gnu
+    - env: TARGET=x86_64-unknown-linux-gnu-emulated
+    - env: TARGET=arm-unknown-linux-gnueabi
+    - env: TARGET=arm-unknown-linux-gnueabihf
+    - env: TARGET=armv7-unknown-linux-gnueabihf
+    - env: TARGET=aarch64-unknown-linux-gnu
+    - env: TARGET=mips-unknown-linux-gnu
+    - env: TARGET=mipsel-unknown-linux-musl
+    - env: TARGET=mips64-unknown-linux-gnuabi64
+    - env: TARGET=mips64el-unknown-linux-gnuabi64
+    - env: TARGET=powerpc-unknown-linux-gnu
+    - env: TARGET=powerpc64-unknown-linux-gnu
+    - env: TARGET=powerpc64le-unknown-linux-gnu
+    - env: TARGET=s390x-unknown-linux-gnu
+    - env: TARGET=sparc64-unknown-linux-gnu
+    # MacOSX:
+    - os: osx
+      env: TARGET=i686-apple-darwin
+      script: ci/run.sh
+      osx_image: xcode9.4
+    - os: osx
+      env: TARGET=x86_64-apple-darwin
+      script: ci/run.sh
+      osx_image: xcode9.4
+    # *BSDs:
+    #- env: TARGET=i686-unknown-freebsd NORUN=1
+    #  script: ci/run.sh
+    #- env: TARGET=x86_64-unknown-freebsd NORUN=1
+    #  script: ci/run.sh
+    #- env: TARGET=x86_64-unknown-netbsd NORUN=1
+    #  script: ci/run.sh
+    # Solaris:
+    #- env: TARGET=x86_64-sun-solaris NORUN=1
+    #  script: ci/run.sh
+    # iOS: 
+    - os: osx
+      env: TARGET=i386-apple-ios
+      script: ci/run.sh
+      osx_image: xcode9.4
+    - os: osx
+      env: TARGET=x86_64-apple-ios
+      script: ci/run.sh
+      osx_image: xcode9.4
+    - os: osx
+      env: TARGET=armv7-apple-ios NORUN=1
+      script: ci/run.sh
+      osx_image: xcode9.4
+    - os: osx
+      env: TARGET=aarch64-apple-ios NORUN=1
+      script: ci/run.sh
+      osx_image: xcode9.4
+    # WASM:
+    - env: TARGET=wasm32-unknown-unknown NORUN=1
+      script: ci/run.sh
+    # TOOLS:
+    - env: DOCUMENTATION
+      install: true
+      script: ci/dox.sh
+    - env: RUSTFMT=On TARGET=x86_64-unknown-linux-gnu
+      before_script:
+      - rustup component add rustfmt-preview
+      script:
+      - cargo fmt --all -- --check
+      - |
+        for dir in examples/*/
+        do
+            dir=${dir%*/}
+            cd ${dir%*/} && cargo fmt --all -- --check && cd -
+        done
+    - env: CLIPPY=On TARGET=x86_64-unknown-linux-gnu
+      before_script:
+      - rustup component add clippy-preview
+      script:
+      - cargo clippy --all -- -D clippy-pedantic
+
+  allow_failures:
+    # FIXME: TBD
+    - env: TARGET=powerpc-unknown-linux-gnu
+    - env: TARGET=powerpc64-unknown-linux-gnu
+    - env: TARGET=powerpc64le-unknown-linux-gnu
+    #- env: TARGET=i686-unknown-freebsd NORUN=1
+    #- env: TARGET=x86_64-unknown-freebsd NORUN=1
+    #- env: TARGET=x86_64-unknown-netbsd NORUN=1
+    #- env: TARGET=x86_64-sun-solaris NORUN=1
+
+    # FIXME: TBD
+    - env: TARGET=arm-linux-androideabi
+    - env: TARGET=aarch64-linux-android
+
+    # FIXME: iOS
+    # https://github.com/rust-lang-nursery/packed_simd/issues/26
+    - env: TARGET=i386-apple-ios
+    - env: TARGET=x86_64-apple-ios
+
+install:
+  - rustup target add $TARGET || true
+
+script:
+  - cargo generate-lockfile
+  - ci/run-docker.sh $TARGET $FEATURES
+
+env:
+  global:
+    secure: "lPHv7s6+AxQYNaFncycVFQt++Y1asQmMhOikQU1ztlP8CK7+hn2m98cg/euOJyzIOb2iJ3ZX4cGZkzw4lc59MQBByb1GtDbazQoUOzVDbVfe9BDD2f8JVoIFh1CMfjPKQ7Gg/rJqWlwrUlSd5GNxPCutKjY7qZhJuR6SQbJjlWaGN2Vd4fVCzKXz8fHRXgMEZS+d+CR4Nsrkb83J3Z4s5kSdJmhYxJ61AWjuzJVwUh4l3/HEYlSL5XXpuh5R2i7W16h1PlNdaTUgkZli1lHzO8+6Q8LzX9+XiLIEVX9lw3A2NdIKGz8E/+7Qs5oYOkwYhjROsDQxIK7xkSM30bQuN7cwMBybAVIyOPJkqXQ1dQyp83KSdsOj7JMyDDRvcEDLI6ehRlm5EcdH7YrReuboN81iUo0Sa7VsuUmgj5hjERCt9r30f9aWuitABai7vKRtjglg7Sp5CrEVPA4PQs6PqKCCRogoggbXJ/Z5Dyw/RZaXPeNR9+qIKN1Vjm9Gew1sRN2JK/3+vXTKtyJXH/uBxgJt4jQlbuShOJuF+BSfTF88sMe67a/357SSOIb4JkaCyd0flDCWYE8576kaHPlVVMT2peXee0LeRXm1e13nG3Na0t3LS/orJLPHOShNQGoDj7qAP5aEKggRya896JGwtvlaBHHTmSQh65G7cyNErZo="
+branches:
+  only:
+    - staging # bors r+
+    - trying  # bors try
+    - master
+notifications:
+  email:
+    on_success: never

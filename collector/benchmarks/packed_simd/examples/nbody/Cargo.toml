@@ -1,0 +1,15 @@
+[package]
+name = "nbody"
+version = "0.1.0"
+authors = ["Gonzalo Brito Gadeschi <gonzalobg88@gmail.com>"]
+
+[dependencies]
+packed_simd = { path = "../.." }
+
+[[bin]]
+name = "nbody"
+path = "src/main.rs"
+
+[lib]
+name = "nbody_lib"
+path = "src/lib.rs"
