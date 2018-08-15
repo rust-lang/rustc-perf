@@ -9,7 +9,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::{self, File};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::io::Read;
 use std::env;
 
@@ -85,6 +85,10 @@ pub struct Persistent {
 
 impl Persistent {
     pub fn write(&self) -> Result<(), Error> {
+        let path = Path::new("persistent.json");
+        if path.exists() {
+            let _ = fs::copy(path, "persistent.json.previous");
+        }
         let s = serde_json::to_string(self)?;
         fs::write("persistent.json", &s).with_context(|_| format!("failed to write persistent DB"))?;
         Ok(())
