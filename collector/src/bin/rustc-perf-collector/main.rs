@@ -289,7 +289,7 @@ fn get_benchmarks(
     exclude: Option<&str>,
 ) -> Result<Vec<Benchmark>, Error> {
     let mut benchmarks = Vec::new();
-    for entry in fs::read_dir(benchmark_dir).context("failed to list benchmarks")? {
+    'outer: for entry in fs::read_dir(benchmark_dir).context("failed to list benchmarks")? {
         let entry = entry?;
         let path = entry.path();
         let name = match entry.file_name().into_string() {
@@ -310,9 +310,11 @@ fn get_benchmarks(
         }
 
         if let Some(exclude) = exclude {
-            if name.contains(exclude) {
-                debug!("benchmark {} - matches --exclude argument, skipping", name);
-                continue;
+            for exc in exclude.split(',') {
+                if name.contains(exc) {
+                    debug!("benchmark {} - matches --exclude argument, skipping", name);
+                    continue 'outer;
+                }
             }
         }
 
@@ -324,7 +326,13 @@ fn get_benchmarks(
 }
 
 fn main() {
-    process::exit(main_result().unwrap())
+    match main_result() {
+        Ok(code) => process::exit(code),
+        Err(err) => {
+            eprintln!("{}", err);
+            process::exit(1);
+        }
+    }
 }
 
 fn main_result() -> Result<i32, Error> {
