@@ -326,7 +326,13 @@ fn get_benchmarks(
 }
 
 fn main() {
-    process::exit(main_result().unwrap())
+    match main_result() {
+        Ok(code) => process::exit(code),
+        Err(err) => {
+            eprintln!("{}", err);
+            process::exit(1);
+        }
+    }
 }
 
 fn main_result() -> Result<i32, Error> {
