@@ -481,7 +481,7 @@ impl InputData {
                     // If we've missed any benchmark, we also want this commit
                     known_benchmarks
                         .iter()
-                        .any(|b| !cd.benchmarks.contains_key(&**b))
+                        .all(|b| cd.benchmarks.contains_key(&**b))
                 } else {
                     true
                 }
