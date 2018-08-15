@@ -61,9 +61,25 @@ pub struct CurrentState {
     pub benchmarks: Vec<String>,
 }
 
+#[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq, Hash)]
+#[serde(untagged)]
+pub enum TryCommit {
+    Parent { sha: String, parent_sha: String, },
+    UnkownParent { sha: String },
+}
+
+impl TryCommit {
+    pub fn sha(&self) -> &str {
+        match self {
+            TryCommit::Parent { sha, .. } => &*sha,
+            TryCommit::UnkownParent { sha } => &*sha,
+        }
+    }
+}
+
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub struct Persistent {
-    pub try_commits: Vec<String>,
+    pub try_commits: Vec<TryCommit>,
     pub current: Option<CurrentState>,
 }
 
@@ -490,7 +506,25 @@ impl InputData {
         missing.reverse();
 
         let mut commits = self.persistent.lock().try_commits.iter()
-            .map(|sha| Commit { sha: sha.clone(), date: Date::ymd_hms(2001, 01, 01, 0, 0, 0) })
+            .flat_map(|c| match c {
+                TryCommit::Parent { sha, parent_sha } => {
+                    let mut ret = Vec::new();
+                    // Schedule the parent first so that we have a more up to date master (in
+                    // theory)
+                    if let Some(commit_data) = have.get(&*parent_sha) {
+                        ret.push(commit_data.commit.clone());
+                    }
+                    ret.push(
+                        Commit { sha: sha.clone(), date: Date::ymd_hms(2001, 01, 01, 0, 0, 0) }
+                    );
+                    ret
+                }
+                TryCommit::UnkownParent { sha } => {
+                    vec![
+                        Commit { sha: sha.clone(), date: Date::ymd_hms(2001, 01, 01, 0, 0, 0) },
+                    ]
+                }
+            })
             .filter(|c| !have.contains_key(&c.sha)) // we may have not updated the try-commits file
             .collect::<Vec<_>>();
 
@@ -500,6 +534,18 @@ impl InputData {
             }
 
             commits.push(missing_commit);
+        }
+
+        let mut seen = HashSet::with_capacity(commits.len());
+
+        // FIXME: replace with Vec::drain_filter when it stabilizes
+        let mut i = 0;
+        while i != commits.len() {
+            if !seen.insert(commits[i].sha.clone()) {
+                commits.remove(i);
+            } else {
+                i += 1;
+            }
         }
 
         Ok(commits)

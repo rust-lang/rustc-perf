@@ -45,7 +45,7 @@ use util::{self, get_repo_path, Interpolate};
 pub use api::{self, github, status, nll_dashboard, dashboard, data, days, graph, info, CommitResponse, ServerResult};
 use collector::{Date, Run, version_supports_incremental};
 use collector::api::collected;
-use load::{Config, CommitData, InputData};
+use load::{Config, CommitData, InputData, TryCommit};
 use antidote::RwLock;
 use load::CurrentState;
 
@@ -598,8 +598,11 @@ pub fn handle_github(request: github::Request, data: &InputData) -> ServerResult
             }
             {
                 let mut persistent = data.persistent.lock();
-                if !persistent.try_commits.contains(&commit_response.sha) {
-                    persistent.try_commits.push(commit_response.sha.clone());
+                if !persistent.try_commits.iter().any(|c| c.sha() == &commit_response.sha) {
+                    persistent.try_commits.push(TryCommit::Parent {
+                        sha: commit_response.sha.clone(),
+                        parent_sha: commit_response.parents[0].sha.clone(),
+                    });
                 }
                 persistent.write().expect("successful encode");
             }
