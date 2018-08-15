@@ -488,11 +488,21 @@ impl InputData {
             })
             .collect::<Vec<_>>();
         missing.reverse();
-        Ok(self.persistent.lock().try_commits.iter()
+
+        let mut commits = self.persistent.lock().try_commits.iter()
             .map(|sha| Commit { sha: sha.clone(), date: Date::ymd_hms(2001, 01, 01, 0, 0, 0) })
             .filter(|c| !have.contains_key(&c.sha)) // we may have not updated the try-commits file
-            .chain(missing)
-            .collect())
+            .collect::<Vec<_>>();
+
+        for missing_commit in missing {
+            if commits.iter().any(|c| c.sha == missing_commit.sha) {
+                continue;
+            }
+
+            commits.push(missing_commit);
+        }
+
+        Ok(commits)
     }
 }
 
