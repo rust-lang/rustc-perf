@@ -65,14 +65,12 @@ pub struct CurrentState {
 #[serde(untagged)]
 pub enum TryCommit {
     Parent { sha: String, parent_sha: String, },
-    UnkownParent { sha: String },
 }
 
 impl TryCommit {
     pub fn sha(&self) -> &str {
         match self {
             TryCommit::Parent { sha, .. } => &*sha,
-            TryCommit::UnkownParent { sha } => &*sha,
         }
     }
 }
@@ -83,14 +81,18 @@ pub struct Persistent {
     pub current: Option<CurrentState>,
 }
 
+lazy_static! {
+    static ref PERSISTENT_PATH: &'static Path = Path::new("persistent.json");
+}
+
 impl Persistent {
     pub fn write(&self) -> Result<(), Error> {
-        let path = Path::new("persistent.json");
-        if path.exists() {
-            let _ = fs::copy(path, "persistent.json.previous");
+        if PERSISTENT_PATH.exists() {
+            let _ = fs::copy(&*PERSISTENT_PATH, "persistent.json.previous");
         }
         let s = serde_json::to_string(self)?;
-        fs::write("persistent.json", &s).with_context(|_| format!("failed to write persistent DB"))?;
+        fs::write(&*PERSISTENT_PATH, &s)
+            .with_context(|_| format!("failed to write persistent DB"))?;
         Ok(())
     }
 
@@ -104,7 +106,7 @@ impl Persistent {
     }
 
     fn load_() -> Option<Persistent> {
-        let s = fs::read_to_string("persistent.json").ok()?;
+        let s = fs::read_to_string(&*PERSISTENT_PATH).ok()?;
         let persistent: Persistent = serde_json::from_str(&s).ok()?;
 
         Some(persistent)
@@ -513,32 +515,22 @@ impl InputData {
             .flat_map(|c| match c {
                 TryCommit::Parent { sha, parent_sha } => {
                     let mut ret = Vec::new();
-                    // Schedule the parent first so that we have a more up to date master (in
-                    // theory)
-                    if let Some(commit_data) = have.get(&*parent_sha) {
-                        ret.push(commit_data.commit.clone());
-                    }
                     ret.push(
                         Commit { sha: sha.clone(), date: Date::ymd_hms(2001, 01, 01, 0, 0, 0) }
                     );
+                    if let Some(commit) = self.commits.iter().find(|c| c.sha == *parent_sha) {
+                        ret.push(
+                            Commit { sha: commit.sha.clone(), date: Date(commit.date.clone()) }
+                        );
+                    } else {
+                        warn!("could not find parent_sha {:?}", parent_sha);
+                    }
                     ret
-                }
-                TryCommit::UnkownParent { sha } => {
-                    vec![
-                        Commit { sha: sha.clone(), date: Date::ymd_hms(2001, 01, 01, 0, 0, 0) },
-                    ]
                 }
             })
             .filter(|c| !have.contains_key(&c.sha)) // we may have not updated the try-commits file
+            .chain(missing)
             .collect::<Vec<_>>();
-
-        for missing_commit in missing {
-            if commits.iter().any(|c| c.sha == missing_commit.sha) {
-                continue;
-            }
-
-            commits.push(missing_commit);
-        }
 
         let mut seen = HashSet::with_capacity(commits.len());
 
