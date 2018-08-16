@@ -49,8 +49,9 @@ fn main() {
                 let has_perf = cmd.output().is_ok();
                 assert!(has_perf);
                 cmd.arg("record")
-                    .arg("--call-graph=dwarf")  // njn: best?
+                    .arg("--call-graph=dwarf")
                     .arg("--output=perf")
+                    .arg("--freq=99")
                     .arg(&rustc)
                     .args(&args);
 
