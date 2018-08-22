@@ -4,11 +4,9 @@
 
 #![cfg_attr(feature = "unstable", feature(core_intrinsics))]
 #![cfg_attr(feature = "unstable", feature(on_unimplemented))]
-#![feature(conservative_impl_trait)]
 #![feature(const_fn)]
 #![feature(mpsc_select)]
 #![feature(plugin)]
-#![feature(proc_macro_quote, use_extern_macros)]
 
 #![deny(unsafe_code)]
 #![allow(non_snake_case)]
