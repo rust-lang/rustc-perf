@@ -125,8 +125,9 @@ pub fn handle_nll_dashboard(
         }).collect::<Vec<_>>();
     points.sort_by(|a, b| {
         match (a.pct(), b.pct()) {
-            (Some(a), Some(b)) => a.cmp(&b).reverse(),
+            (Some(a), Some(b)) => a.partial_cmp(&b).unwrap_or(Ordering::Equal).reverse(),
             (Some(_), None) => Ordering::Less,
+            (None, Some(_)) => Ordering::Greater,
             _ => a.case.cmp(&b.case),
         }
     });

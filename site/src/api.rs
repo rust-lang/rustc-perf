@@ -173,9 +173,9 @@ pub mod nll_dashboard {
     }
 
     impl Point {
-        pub fn pct(&self) -> Option<u64> {
+        pub fn pct(&self) -> Option<f32> {
             if let (Some(clean), Some(nll)) = (self.clean, self.nll) {
-                Some((100.0 * nll / clean) as u64)
+                Some(100.0 * nll / clean)
             } else {
                 None
             }
