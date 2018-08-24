@@ -1,0 +1,5 @@
+language: rust
+script:
+- ./prepare.sh
+- cargo build --release --verbose
+- cargo test --release --verbose

@@ -1,0 +1,20 @@
+[package]
+name = "ucd"
+version = "0.1.1"
+authors = ["sourtin <sourtin>"]
+
+homepage = "https://github.com/sourtin/libucd"
+repository = "https://github.com/sourtin/libucd"
+license = "MIT"
+keywords = ["text", "unicode", "ucd", "character"]
+readme = "README.md"
+description = """
+Extends the char type to provide access to most fields of the UCD, Unicode
+Character Database, as of version 9.0.0. It aims to be compact, fast, and use
+minimal dependencies (only rust's core crate). Not all properties are included,
+most notably character names.
+"""
+
+exclude = ["tests/*", "data/*"]
+
+[dependencies]
