@@ -582,6 +582,7 @@ pub fn handle_github(request: github::Request, data: &InputData) -> ServerResult
 
     if let Some(captures) = BODY_TRY_COMMIT.captures(&body) {
         if let Some(commit) = captures.get(1).map(|c| c.as_str()) {
+            let commit = commit.trim_left_matches("https://github.com/rust-lang/rust/commit/");
             if commit.len() != 40 {
                 post_comment(&data.config, &request, "Please provide the full 40 character commit hash.")?;
                 return Ok(github::Response);
