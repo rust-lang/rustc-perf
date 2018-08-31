@@ -186,7 +186,9 @@
 
         function dodgy_name_title(name) {
             if (name.startsWith("coercions") ||
-                name.startsWith("style-servo")
+                name.startsWith("ctfe-") ||     // all of them
+                name.startsWith("inflate-opt") ||
+                name.startsWith("syn-opt")
             ) {
                 return "One or more of this benchmark's runs have high measurement variation. " +
                        "Treat this value with caution. And see the warning at the bottom of " +
