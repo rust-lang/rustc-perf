@@ -1,25 +1,48 @@
-# Rust Compiler Performance Benchmarking
+# Rust Compiler Performance Benchmarking and Profiling
 
 ## How to build
 
+Before doing anything else, you should build `collector` (for running the
+benchmarks) and `site` (for viewing the results):
 ```
-cargo build -p collector --release
-```
-
-## Benchmarking committed builds
-
-To benchmark builds from a rustc repository:
-```
-./target/release/collector --output-repo $RUSTC_TIMING process
+cargo +nightly build --release
 ```
 
-`$RUSTC_TIMING` is a path (relative or absolute) to a clone of the
-`https://github.com/rust-lang-nursery/rustc-timing` repository, in which the
-output data will be placed and committed.
+## Benchmarking
 
-## Benchmarking local builds
+This section is about benchmarking rustc, i.e. measuring its performance on the
+standard benchmark suite. The most likely reason for doing this is to evaluate
+the performance effect of a change you've made to rustc. It's also done
+regularly by the benchmark server.
 
-To benchmark local builds:
+### How to benchmark a change using the benchmark server
+
+An easy (but slow) way to benchmark the performance effect of a change is to
+request a run on the benchmark server for a specific PR.
+
+First, create a PR with the changes.
+
+After that, you need try privileges, or the assistance of someone with try
+privileges. Ping `simulacrum` on IRC as a starting point.
+
+That person must enter `@bors try` as a comment in the PR. This queues a normal
+try build on Travis, which takes some time.
+
+Once the try build has completed, that person must enter `@rust-timer build
+$MERGE` as a comment in the PR, where `$MERGE` is the full 40 character merge
+revision ID from the try build. This queues a benchmarking run, and a
+comparison URL will be posted in the PR. Several hours later, the results will
+be available at the comparison URL.
+
+Various measurements are available: instructions (the default), cycles, wall
+time, peak RSS memory, etc. There is some non-determinism and natural variation
+in the measurements. Instructions is the default because it has the least
+variation. Benchmarks that are known to have high instructions variance are
+marked with a '?' in the `compare` page.
+
+### How to benchmark a change on your own machine
+
+To benchmark a local build:
 ```
 RUST_LOG=info ./target/release/collector --output-repo $OUTPUT_DIR \
     bench_local --rustc $RUSTC --cargo $CARGO $ID
@@ -32,9 +55,7 @@ that enables more verbose logging, which is mostly useful for debugging
 rustc-perf itself.
 
 `$OUTPUT_DIR` is a path (relative or absolute) to a directory, in which the
-timing data will be placed. Unlike the `process` subcommand (and despite the
-`repo` in `--output-repo`) it need not be a clone of the `rustc-timing`
-repository; in fact, it will be created if it does not already exist.
+timing data will be placed. It will be created if it does not already exist.
 
 `$RUSTC` is a path (relative or absolute) to a rustc executable. Some
 benchmarks use procedural macros, which require a stage 2 compiler. Therefore,
@@ -48,16 +69,16 @@ installed Cargo is fine, e.g. ``--cargo `which cargo` ``.
 `$ID` is an identifier, which will be used in the output file name and
 contents.
 
-## Benchmarking options
+The full benchmark suite takes some time to run: tens of minutes or more,
+depending on the speed of your machine.
 
-`--sync-git` can be passed to make the collector sync with the remote repo
-before and after committing.
+### Benchmarking options
 
 `--filter $STR` can be used to run a subset of the benchmarks. `$STR` is a
 substring of the name of the benchmark(s) you wish to run.
 
-`--exclude $STR` is the inverse of --filter. `$STR` is a substring of the name
-of the benchmark(s) you wish to skip.
+`--exclude $STR` is the inverse of `--filter`. `$STR` is a substring of the
+name of the benchmark(s) you wish to skip.
 
 `--builds $BUILDS` can be used to select what kind of builds are profiled. The
 possible choices are one or more (comma-separated) of `Check`, `Debug`, `Opt`,
@@ -69,22 +90,92 @@ build. The possible choices are one or more (comma-separated) of `Clean`,
 that `BaseIncr` is always run (even if not requested) if either of `CleanIncr`
 or `PatchedIncrs` are run.
 
-## Viewing results
+`--sync-git` can be passed to make the collector sync with the remote
+repository before and after committing. This is usually not useful for
+individual Rust compiler developers.
+
+### Comparing different versions on your own machine
+
+Often you'll want to compare two different compiler versions. For example, you
+might have two clones of the rustc repository: one that is unmodified, and a
+second that contains a branch of your changes. To compare the two versions, do
+something like this:
+
+```
+RUST_LOG=info ./target/release/collector --output-repo sep03 \
+    bench_local --rustc $RUST_TIP --cargo `which cargo` Orig
+
+RUST_LOG=info ./target/release/collector --output-repo sep03 \
+    bench_local --rustc $RUST_MODIFIED --cargo `which cargo` Modified
+```
+
+where `$RUST_TIP` and `$RUST_MODIFIED` are paths (relative or absolute) to the
+relevant rustc executables. The `--output-repo` argument must be the same in
+each invocation.
+
+### How to view the measurements on your own machine
 
 Once the benchmarks have been run, start the website:
 ```
-./target/release/site $RUSTC_TIMING     # or $OUTPUT_DIR
+./target/release/site $OUTPUT_DIR
 ```
-and navigate to localhost:2346 in a web browser. The first time you do this the
-Rust repo is cloned, so it will take a minute or two (or more if you have a
-slow internet connection) before the web server starts up.
+and visit `localhost:2346/compare.html` in a web browser.
+
+The first time you do this the rustc repository is cloned, so it will take a
+minute or two (or more if you have a slow internet connection) before the web
+server starts; wait for the "Starting server with port=2346" message on
+`stdout`.
+
+Subsequent times you do this the rustc repository is updated, so it will take a
+few seconds before the web server starts.
 
 Note that all benchmark data processing happens when the website is started. If
 additional benchmark runs subsequently occur you must restart the website to
 see the data from those runs; reloading the website in the browser isn't
 enough.
 
-## Profiling local builds
+### Technical details of the benchmark server
+
+We download the artifacts (rustc, rust-std, cargo) produced by CI and properly
+unarchive them into the correct directories to allow cargo and rustc to
+function. Currently only `x86_64-unknown-linux-gnu` is supported, but the
+system should trivially expand to other platforms (e.g., Windows), though
+generation and downloading of artifacts becomes necessary at that point.
+
+`perf` is used to gather most of the data.
+
+Benchmarking will only work for commits that have builds on
+`s3://rust-lang-ci/rustc-builds`: these merged after `rust-lang/rust#38748`
+(bors sha: `927c55d86b0be44337f37cf5b0a76fb8ba86e06c`). Additionally, try
+builds can also be tested, but the process is currently manual.
+
+### Benchmark server operations
+
+This section is probably only useful for those with access to the benchmark
+server.
+
+The following command will benchmark and push results for a given commit
+(including a try auto commit).
+```bash
+cd code/rustc-perf
+echo '$COMMIT_HASH' >> try
+```
+
+To benchmark builds from a rustc repository:
+```
+./target/release/collector --output-repo $RUSTC_TIMING process
+```
+
+`$RUSTC_TIMING` is a path (relative or absolute) to a clone of the
+`https://github.com/rust-lang-nursery/rustc-timing` repository, in which the
+output data will be placed and committed.
+
+## Profiling
+
+This section is about profiling rustc, in order to determine how its execution
+might be optimized.
+
+### Profiling local builds
 
 To profile local builds:
 ```
@@ -92,8 +183,8 @@ RUST_LOG=info ./target/release/collector --output-repo $OUTPUT_DIR \
     profile $PROFILER --rustc $RUSTC --cargo $CARGO $ID
 ```
 
-All this is the same as for the `bench_local` subcommand, except that
-`$PROFILER` is one of the following.
+All the parts of this command are the same as for the `bench_local` subcommand,
+except that `$PROFILER` is one of the following.
 - `time-passes`: Profile with rustc's `-Ztime-passes`. 
   - **Purpose**. This gives a high-level indication of compiler performance by
     showing how long each compilation pass takes.
@@ -187,32 +278,7 @@ All this is the same as for the `bench_local` subcommand, except that
     files can be post-processed in any appropriate fashion;
     [`counts`](https://github.com/nnethercote/counts) is one possibility.
 
-## @bors try builds
+### Profiling options
 
-Alternatively, you can ping `simulacrum` on IRC to run the benchmarks on the server for a try build.
-This, today, consists of queueing `$COMMIT_HASH`, and will take around 45 minutes to a couple hours
-once the try build completes. This is the preferred approach, though does take longer than running
-locally (as you have to wait for the try build to complete on Travis), and the currently running
-commits to finish benchmarking.
+These are the same as the benchmarking options above.
 
-On the current benchmark server, the following command will benchmark and push results for a given
-commit (including a try auto commit).
-```bash
-cd code/rustc-perf
-echo '$COMMIT_HASH' >> try
-```
-
-## How it works
-
-We download the artifacts (rustc, rust-std, cargo) produced by CI and properly unarchive them into
-the correct directories to allow cargo and rustc to function. Currently only
-x86_64-unknown-linux-gnu is supported, but the system should trivially expand to other platforms
-(e.g., Windows), though generation and downloading of artifacts becomes necessary at that point.
-
-`perf` is used to gather most of the data.
-
-## Limitations
-
-Will only work for commits that have builds on s3://rust-lang-ci/rustc-builds: these merged after
-rust-lang/rust#38748 (bors sha: 927c55d86b0be44337f37cf5b0a76fb8ba86e06c). Additionally, try builds
-can also be tested, but the process is currently manual.
