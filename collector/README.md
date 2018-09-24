@@ -209,7 +209,7 @@ except that `$PROFILER` is one of the following.
     Cachegrind's results are almost deterministic, which eases comparisons
     across multiple runs.
   - **Slowdown**. Roughly 3--10x.
-  - **Configuration**. Within `bench_local`, Cachegrind is configured to not
+  - **Configuration**. Within `profile`, Cachegrind is configured to not
     simulate caches and the branch predictor, even though it can, because the
     simulation slows it down and 99% of the time instruction counts are all you
     need.
@@ -218,7 +218,7 @@ except that `$PROFILER` is one of the following.
   - **Diffs**. The `cg_diff` command can be used to diff two different raw
     output files, which is very useful for comparing profiles produce by two
     different versions of rustc. If those two versions are in different
-    directories (such as `rust0` and `rust`), use a flag like
+    directories (such as `rust0` and `rust1`), use a flag like
     `--mod-filename='s/rust[01]/rustN/g'` to eliminate path differences.
 - `callgrind`: Profile with
     [Callgrind](http://valgrind.org/docs/manual/cl-manual.html), a tracing
@@ -227,7 +227,7 @@ except that `$PROFILER` is one of the following.
     function call information. So it can be used like either Cachegrind or
     `perf-record`. However, it cannot perform diffs between profiles.
   - **Slowdown**. Roughly 5--20x.
-  - **Configuration**. Like Cachegrind, within `bench_local` Callgrind is
+  - **Configuration**. Like Cachegrind, within `profile` Callgrind is
     configured to not simulate caches and the branch predictor.
   - **Output**. Raw output is written to files with a `clgout` prefix; those
     files can be viewed with the graphical
@@ -244,7 +244,7 @@ except that `$PROFILER` is one of the following.
   - **Slowdown**. Roughly 5--20x.
   - **Prerequisites**. DHAT may require a rustc configured with `use-jemalloc =
     false` to work well.
-  - **Configuration**. DHAT is configured within `bench_local` to run with the
+  - **Configuration**. DHAT is configured within `profile` to run with the
     non-default `--tot-blocks-allocd` option, so that it sorts its
     output by the number of blocks allocated rather than the number of bytes
     allocated. This is because the number of allocations typically has a
