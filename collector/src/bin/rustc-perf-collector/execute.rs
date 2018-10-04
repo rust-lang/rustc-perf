@@ -88,6 +88,7 @@ pub enum Profiler {
     PerfRecord,
     Cachegrind,
     Callgrind,
+    ExpDHAT,
     DHAT,
     Massif,
     Eprintln,
@@ -112,6 +113,7 @@ impl Profiler {
             "perf-record" => Ok(Profiler::PerfRecord),
             "cachegrind" => Ok(Profiler::Cachegrind),
             "callgrind" => Ok(Profiler::Callgrind),
+            "exp-dhat" => Ok(Profiler::ExpDHAT),
             "dhat" => Ok(Profiler::DHAT),
             "massif" => Ok(Profiler::Massif),
             "eprintln" => Ok(Profiler::Eprintln),
@@ -126,6 +128,7 @@ impl Profiler {
             Profiler::PerfRecord => "perf-record",
             Profiler::Cachegrind => "cachegrind",
             Profiler::Callgrind => "callgrind",
+            Profiler::ExpDHAT => "exp-dhat",
             Profiler::DHAT => "dhat",
             Profiler::Massif => "massif",
             Profiler::Eprintln => "eprintln",
@@ -517,14 +520,24 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 f.flush()?;
             }
 
-            // DHAT writes its output to stderr. We copy that output into a
+            // ExpDHAT writes its output to stderr. We copy that output into a
             // file in the output dir.
-            Profiler::DHAT => {
-                let dhat_file = filepath(self.output_dir, &out_file("dhat"));
+            Profiler::ExpDHAT => {
+                let exp_dhat_file = filepath(self.output_dir, &out_file("exp-dhat"));
 
-                let mut f = File::create(dhat_file)?;
+                let mut f = File::create(exp_dhat_file)?;
                 f.write_all(&output.stderr)?;
                 f.flush()?;
+            }
+
+            // DHAT produces (via rustc-fake) a data file called 'dhout'. We
+            // copy it from the temp dir to the output dir, giving it a new
+            // name in the process.
+            Profiler::DHAT => {
+                let tmp_dhout_file = filepath(data.cwd.as_ref(), "dhout");
+                let dhout_file = filepath(self.output_dir, &out_file("dhout"));
+
+                fs::copy(&tmp_dhout_file, &dhout_file)?;
             }
 
             // Massif produces (via rustc-fake) a data file called 'msout'. We
