@@ -28,6 +28,7 @@ use git;
 use collector::Date;
 
 pub use collector::{RunId, Benchmark, CommitData, Commit, ArtifactData, Patch, Run, Stat};
+use api::github;
 use collector;
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
@@ -68,20 +69,20 @@ pub struct Interpolation {
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub struct CurrentState {
     pub commit: Commit,
+    pub issue: Option<github::Issue>,
     pub benchmarks: Vec<String>,
 }
 
-#[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq, Hash)]
-#[serde(untagged)]
-pub enum TryCommit {
-    Parent { sha: String, parent_sha: String, },
+#[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq)]
+pub struct TryCommit {
+    pub sha: String,
+    pub parent_sha: String,
+    pub issue: github::Issue,
 }
 
 impl TryCommit {
     pub fn sha(&self) -> &str {
-        match self {
-            TryCommit::Parent { sha, .. } => &*sha,
-        }
+        self.sha.as_str()
     }
 }
 
@@ -528,25 +529,23 @@ impl InputData {
         missing.reverse();
 
         let mut commits = self.persistent.lock().try_commits.iter()
-            .flat_map(|c| match c {
-                TryCommit::Parent { sha, parent_sha } => {
-                    let mut ret = Vec::new();
-                    ret.push(
-                        (
-                            Commit { sha: sha.clone(), date: Date::ymd_hms(2001, 01, 01, 0, 0, 0) },
-                            MissingReason::TryCommit,
-                        )
-                    );
-                    if let Some(commit) = self.commits.iter().find(|c| c.sha == *parent_sha) {
-                        ret.push((
-                            Commit { sha: commit.sha.clone(), date: Date(commit.date.clone()) },
-                            MissingReason::TryParent
-                        ));
-                    } else {
-                        warn!("could not find parent_sha {:?}", parent_sha);
-                    }
-                    ret
+            .flat_map(|TryCommit { sha, parent_sha, .. }| {
+                let mut ret = Vec::new();
+                ret.push(
+                    (
+                        Commit { sha: sha.clone(), date: Date::ymd_hms(2001, 01, 01, 0, 0, 0) },
+                        MissingReason::TryCommit,
+                    )
+                );
+                if let Some(commit) = self.commits.iter().find(|c| c.sha == *parent_sha) {
+                    ret.push((
+                        Commit { sha: commit.sha.clone(), date: Date(commit.date.clone()) },
+                        MissingReason::TryParent
+                    ));
+                } else {
+                    warn!("could not find parent_sha {:?}", parent_sha);
                 }
+                ret
             })
             .filter(|c| !have.contains_key(&c.0.sha)) // we may have not updated the try-commits file
             .chain(missing)

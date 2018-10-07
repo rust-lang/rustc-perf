@@ -545,10 +545,10 @@ lazy_static! {
     static ref BODY_TRY_COMMIT: Regex = Regex::new(r#"(?:\b|^)@rust-timer\s+build\s+(\w+)(?:\b|$)"#).unwrap();
 }
 
-pub fn post_comment(cfg: &Config, request: &github::Request, body: &str) -> ServerResult<()> {
+pub fn post_comment(cfg: &Config, issue: &github::Issue, body: &str) -> ServerResult<()> {
     let timer_token = cfg.keys.github.clone().expect("needs rust-timer token");
     let client = reqwest::Client::new();
-    let mut req = client.post(&request.issue.comments_url);
+    let mut req = client.post(&issue.comments_url);
     req
         .json(&github::PostComment {
             body: body.to_owned(),
@@ -573,7 +573,7 @@ pub fn handle_github(request: github::Request, data: &InputData) -> ServerResult
 
     if request.comment.author_association != github::Association::Owner &&
         !data.config.users.contains(&request.comment.user.login) {
-        post_comment(&data.config, &request,
+        post_comment(&data.config, &request.issue,
             "Insufficient permissions to issue commands to rust-timer.")?;
         return Ok(github::Response);
     }
@@ -584,7 +584,8 @@ pub fn handle_github(request: github::Request, data: &InputData) -> ServerResult
         if let Some(commit) = captures.get(1).map(|c| c.as_str()) {
             let commit = commit.trim_left_matches("https://github.com/rust-lang/rust/commit/");
             if commit.len() != 40 {
-                post_comment(&data.config, &request, "Please provide the full 40 character commit hash.")?;
+                post_comment(&data.config, &request.issue,
+                    "Please provide the full 40 character commit hash.")?;
                 return Ok(github::Response);
             }
             let client = reqwest::Client::new();
@@ -593,7 +594,7 @@ pub fn handle_github(request: github::Request, data: &InputData) -> ServerResult
                 .send().map_err(|_| String::from("cannot get commit"))?
                 .json().map_err(|e| format!("cannot deserialize commit: {:?}", e))?;
             if commit_response.parents.len() != 2 {
-                post_comment(&data.config, &request,
+                post_comment(&data.config, &request.issue,
                     &format!("Bors try commit {} unexpectedly has {} parents.",
                         commit_response.sha, commit_response.parents.len()))?;
                 return Ok(github::Response);
@@ -601,14 +602,15 @@ pub fn handle_github(request: github::Request, data: &InputData) -> ServerResult
             {
                 let mut persistent = data.persistent.lock();
                 if !persistent.try_commits.iter().any(|c| c.sha() == &commit_response.sha) {
-                    persistent.try_commits.push(TryCommit::Parent {
+                    persistent.try_commits.push(TryCommit {
                         sha: commit_response.sha.clone(),
                         parent_sha: commit_response.parents[0].sha.clone(),
+                        issue: request.issue.clone(),
                     });
                 }
                 persistent.write().expect("successful encode");
             }
-            post_comment(&data.config, &request,
+            post_comment(&data.config, &request.issue,
                 &format!("Success: Queued {} with parent {}, [comparison URL]({}).",
                     commit_response.sha, commit_response.parents[0].sha,
                     format!("https://perf.rust-lang.org/compare.html?start={}&end={}",
@@ -622,14 +624,20 @@ pub fn handle_github(request: github::Request, data: &InputData) -> ServerResult
 pub fn handle_collected(body: collected::Request, data: &InputData) -> ServerResult<collected::Response> {
     let mut persistent = data.persistent.lock();
     {
-        let current = &mut persistent.current;
         match body {
             collected::Request::BenchmarkCommit {
                 commit,
                 benchmarks,
             } => {
-                *current = Some(CurrentState {
+                let issue = if let Some(try) =
+                persistent.try_commits.iter().find(|c| c.sha == commit.sha) {
+                    Some(try.issue.clone())
+                } else {
+                    None
+                };
+                persistent.current = Some(CurrentState {
                     commit,
+                    issue,
                     benchmarks,
                 });
             }
@@ -638,14 +646,23 @@ pub fn handle_collected(body: collected::Request, data: &InputData) -> ServerRes
                 benchmark,
             } => {
                 // If something went wrong, then just clear current commit.
-                if current.as_ref().map_or(false, |c| c.commit != commit) {
-                    *current = None;
+                if persistent.current.as_ref().map_or(false, |c| c.commit != commit) {
+                    persistent.current = None;
                 }
-                if let Some(ref mut current) = current {
+                if let Some(current) = &mut persistent.current {
                     // If the request was received twice (e.g., we stopped after we wrote DB but before
                     // responding) then we don't want to loop the collector.
                     if let Some(pos) = current.benchmarks.iter().position(|b| *b == benchmark) {
                         current.benchmarks.remove(pos);
+                    }
+                    // We've finished with this benchmark
+                    if current.benchmarks.is_empty() {
+                        // post a comment to some issue
+                        if let Some(issue) = &current.issue {
+                            post_comment(&data.config, &issue,
+                                &format!("Finished benchmarking try commit {}",
+                                    current.commit.sha))?;
+                        }
                     }
                 }
             }

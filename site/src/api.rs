@@ -235,7 +235,7 @@ pub mod github {
         pub body: String,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
     pub struct Issue {
         pub comments_url: String,
         pub repository_url: String,
