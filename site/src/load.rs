@@ -30,6 +30,16 @@ use collector::Date;
 pub use collector::{RunId, Benchmark, CommitData, Commit, ArtifactData, Patch, Run, Stat};
 use collector;
 
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+pub enum MissingReason {
+    /// This commmit has not yet been benchmarked
+    Sha,
+    TryParent,
+    TryCommit,
+    Benchmarks(Vec<String>),
+    Other,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub enum InterpolationSource {
     /// We interpolated the first commit in the data set from the commit
@@ -486,7 +496,7 @@ impl InputData {
         })
     }
 
-    pub fn missing_commits(&self) -> Result<Vec<Commit>, Error> {
+    pub fn missing_commits(&self) -> Result<Vec<(Commit, MissingReason)>, Error> {
         let known_benchmarks = self.data.values()
             .rev()
             .take(10)
@@ -498,14 +508,20 @@ impl InputData {
             .iter()
             .map(|commit| Commit { sha: commit.sha.clone(), date: Date(commit.date.clone()) })
             .filter(|c| Utc::now().signed_duration_since(c.date.0) < Duration::days(29))
-            .filter(|c| {
+            .filter_map(|c| {
                 if let Some(cd) = have.get(&c.sha) {
                     // If we've missed any benchmark, we also want this commit
-                    known_benchmarks
-                        .iter()
-                        .all(|b| cd.benchmarks.contains_key(&**b))
+                    let m = known_benchmarks.iter()
+                        .filter(|b| !cd.benchmarks.contains_key(&***b))
+                        .map(|b| b.to_string())
+                        .collect::<Vec<String>>();
+                    if !m.is_empty() {
+                        Some((c, MissingReason::Benchmarks(m)))
+                    } else {
+                        None
+                    }
                 } else {
-                    true
+                    Some((c, MissingReason::Sha))
                 }
             })
             .collect::<Vec<_>>();
@@ -516,19 +532,23 @@ impl InputData {
                 TryCommit::Parent { sha, parent_sha } => {
                     let mut ret = Vec::new();
                     ret.push(
-                        Commit { sha: sha.clone(), date: Date::ymd_hms(2001, 01, 01, 0, 0, 0) }
+                        (
+                            Commit { sha: sha.clone(), date: Date::ymd_hms(2001, 01, 01, 0, 0, 0) },
+                            MissingReason::TryCommit,
+                        )
                     );
                     if let Some(commit) = self.commits.iter().find(|c| c.sha == *parent_sha) {
-                        ret.push(
-                            Commit { sha: commit.sha.clone(), date: Date(commit.date.clone()) }
-                        );
+                        ret.push((
+                            Commit { sha: commit.sha.clone(), date: Date(commit.date.clone()) },
+                            MissingReason::TryParent
+                        ));
                     } else {
                         warn!("could not find parent_sha {:?}", parent_sha);
                     }
                     ret
                 }
             })
-            .filter(|c| !have.contains_key(&c.sha)) // we may have not updated the try-commits file
+            .filter(|c| !have.contains_key(&c.0.sha)) // we may have not updated the try-commits file
             .chain(missing)
             .collect::<Vec<_>>();
 
@@ -537,7 +557,7 @@ impl InputData {
         // FIXME: replace with Vec::drain_filter when it stabilizes
         let mut i = 0;
         while i != commits.len() {
-            if !seen.insert(commits[i].sha.clone()) {
+            if !seen.insert(commits[i].0.sha.clone()) {
                 commits.remove(i);
             } else {
                 i += 1;

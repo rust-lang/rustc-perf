@@ -71,10 +71,10 @@
         let table = document.createElement("table");
         {
             let row = document.createElement("tr");
-            row.innerHTML = `<th>Commit Date</th><th>SHA</th>`;
+            row.innerHTML = `<th>Commit Date</th><th>SHA</th><th>Reason</th>`;
             table.appendChild(row);
         }
-        for (let commit of data.missing) {
+        for (let [commit, reason] of data.missing) {
             let row = document.createElement("tr");
             {
                 let date = new Date(commit.date);
@@ -90,6 +90,11 @@
             {
                 let element = document.createElement("td");
                 element.innerHTML = commit_url(commit);
+                row.appendChild(element);
+            }
+            {
+                let element = document.createElement("td");
+                element.innerHTML = reason;
                 row.appendChild(element);
             }
             table.appendChild(row);

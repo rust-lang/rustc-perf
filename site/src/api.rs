@@ -191,7 +191,7 @@ pub mod nll_dashboard {
 
 pub mod status {
     use collector::Commit;
-    use load::CurrentState;
+    use load::{MissingReason, CurrentState};
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct BenchmarkStatus {
@@ -204,7 +204,7 @@ pub mod status {
     pub struct Response {
         pub last_commit: Commit,
         pub benchmarks: Vec<BenchmarkStatus>,
-        pub missing: Vec<Commit>,
+        pub missing: Vec<(Commit, MissingReason)>,
         pub current: Option<CurrentState>,
     }
 }
