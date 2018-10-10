@@ -74,25 +74,24 @@ depending on the speed of your machine.
 
 ### Benchmarking options
 
-`--filter $STR` can be used to run a subset of the benchmarks. `$STR` is a
-substring of the name of the benchmark(s) you wish to run.
+The following options must appear before `bench_local` in the command.
+- `--filter $STR` can be used to run a subset of the benchmarks. `$STR` is a
+  substring of the name of the benchmark(s) you wish to run.
+- `--exclude $STR` is the inverse of `--filter`. `$STR` is a substring of the
+  name of the benchmark(s) you wish to skip.
+- `--sync-git` can be passed to make the collector sync with the remote
+  repository before and after committing. This is usually not useful for
+  individual Rust compiler developers.
 
-`--exclude $STR` is the inverse of `--filter`. `$STR` is a substring of the
-name of the benchmark(s) you wish to skip.
-
-`--builds $BUILDS` can be used to select what kind of builds are profiled. The
-possible choices are one or more (comma-separated) of `Check`, `Debug`, `Opt`,
-and `All` (the default).
-
-`--runs $RUNS` can be used to select what profiling runs are done for each
-build. The possible choices are one or more (comma-separated) of `Clean`,
-`Nll`, `BaseIncr`, `CleanIncr`, `PatchedIncrs`, and `All` (the default). Note
-that `BaseIncr` is always run (even if not requested) if either of `CleanIncr`
-or `PatchedIncrs` are run.
-
-`--sync-git` can be passed to make the collector sync with the remote
-repository before and after committing. This is usually not useful for
-individual Rust compiler developers.
+The following options must appear after `bench_local` in the command.
+- `--builds $BUILDS` can be used to select what kind of builds are profiled.
+  The possible choices are one or more (comma-separated) of `Check`, `Debug`,
+  `Opt`, and `All` (the default).
+- `--runs $RUNS` can be used to select what profiling runs are done for each
+  build. The possible choices are one or more (comma-separated) of `Clean`,
+  `Nll`, `BaseIncr`, `CleanIncr`, `PatchedIncrs`, and `All` (the default). Note
+  that `BaseIncr` is always run (even if not requested) if either of
+  `CleanIncr` or `PatchedIncrs` are run.
 
 ### Comparing different versions on your own machine
 
