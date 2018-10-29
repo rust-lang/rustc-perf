@@ -1,0 +1,21 @@
+[[package]]
+name = "cfg-if"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "fannkuch_redux"
+version = "0.1.0"
+dependencies = [
+ "packed_simd 0.1.0",
+]
+
+[[package]]
+name = "packed_simd"
+version = "0.1.0"
+dependencies = [
+ "cfg-if 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[metadata]
+"checksum cfg-if 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)" = "082bb9b28e00d3c9d39cc03e64ce4cea0f1bb9b3fde493f0cbc008472d22bdf4"

@@ -1,0 +1,44 @@
+[[package]]
+name = "arrayvec"
+version = "0.4.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "nodrop 0.1.12 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "cfg-if"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "coresimd"
+version = "0.0.3"
+source = "git+http://github.com/rust-lang-nursery/stdsimd.git#3932d27095e85eb8b738487e8cf43a78d1b98022"
+
+[[package]]
+name = "interpolate_idents"
+version = "0.2.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "nodrop"
+version = "0.1.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "packed_simd"
+version = "0.1.0"
+dependencies = [
+ "arrayvec 0.4.7 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cfg-if 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "coresimd 0.0.3 (git+http://github.com/rust-lang-nursery/stdsimd.git)",
+ "interpolate_idents 0.2.8 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[metadata]
+"checksum arrayvec 0.4.7 (registry+https://github.com/rust-lang/crates.io-index)" = "a1e964f9e24d588183fcb43503abda40d288c8657dfc27311516ce2f05675aef"
+"checksum cfg-if 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)" = "082bb9b28e00d3c9d39cc03e64ce4cea0f1bb9b3fde493f0cbc008472d22bdf4"
+"checksum coresimd 0.0.3 (git+http://github.com/rust-lang-nursery/stdsimd.git)" = "<none>"
+"checksum interpolate_idents 0.2.8 (registry+https://github.com/rust-lang/crates.io-index)" = "001fa82e9e01b73b7c11450434d0959dcbd46c0debc75c1841280cf3fbc68255"
+"checksum nodrop 0.1.12 (registry+https://github.com/rust-lang/crates.io-index)" = "9a2228dca57108069a5262f2ed8bd2e82496d2e074a06d1ccc7ce1687b6ae0a2"
