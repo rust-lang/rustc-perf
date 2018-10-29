@@ -2,7 +2,7 @@
 
 use crate::masks::*;
 
-#[cfg_attr(rustfmt, rustfmt_skip)]
+#[rustfmt::skip]
 impl_simd_array!(
     [i8; 32]: i8x32 |
     i8, i8, i8, i8,
@@ -14,7 +14,7 @@ impl_simd_array!(
     i8, i8, i8, i8,
     i8, i8, i8, i8
 );
-#[cfg_attr(rustfmt, rustfmt_skip)]
+#[rustfmt::skip]
 impl_simd_array!(
     [u8; 32]: u8x32 |
     u8, u8, u8, u8,
@@ -26,7 +26,7 @@ impl_simd_array!(
     u8, u8, u8, u8,
     u8, u8, u8, u8
 );
-#[cfg_attr(rustfmt, rustfmt_skip)]
+#[rustfmt::skip]
 impl_simd_array!(
     [m8; 32]: m8x32 |
     i8, i8, i8, i8,
@@ -38,7 +38,7 @@ impl_simd_array!(
     i8, i8, i8, i8,
     i8, i8, i8, i8
 );
-#[cfg_attr(rustfmt, rustfmt_skip)]
+#[rustfmt::skip]
 impl_simd_array!(
     [i16; 16]: i16x16 |
     i16, i16, i16, i16,
@@ -46,7 +46,7 @@ impl_simd_array!(
     i16, i16, i16, i16,
     i16, i16, i16, i16
 );
-#[cfg_attr(rustfmt, rustfmt_skip)]
+#[rustfmt::skip]
 impl_simd_array!(
     [u16; 16]: u16x16 |
     u16, u16, u16, u16,
@@ -54,7 +54,7 @@ impl_simd_array!(
     u16, u16, u16, u16,
     u16, u16, u16, u16
 );
-#[cfg_attr(rustfmt, rustfmt_skip)]
+#[rustfmt::skip]
 impl_simd_array!(
     [m16; 16]: m16x16 |
     i16, i16, i16, i16,

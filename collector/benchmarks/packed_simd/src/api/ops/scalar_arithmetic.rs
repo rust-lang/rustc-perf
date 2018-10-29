@@ -2,14 +2,14 @@
 
 macro_rules! impl_ops_scalar_arithmetic {
     ([$elem_ty:ident; $elem_count:expr]: $id:ident | $test_tt:tt) => {
-        impl ::ops::Add<$elem_ty> for $id {
+        impl crate::ops::Add<$elem_ty> for $id {
             type Output = Self;
             #[inline]
             fn add(self, other: $elem_ty) -> Self {
                 self + $id::splat(other)
             }
         }
-        impl ::ops::Add<$id> for $elem_ty {
+        impl crate::ops::Add<$id> for $elem_ty {
             type Output = $id;
             #[inline]
             fn add(self, other: $id) -> $id {
@@ -17,14 +17,14 @@ macro_rules! impl_ops_scalar_arithmetic {
             }
         }
 
-        impl ::ops::Sub<$elem_ty> for $id {
+        impl crate::ops::Sub<$elem_ty> for $id {
             type Output = Self;
             #[inline]
             fn sub(self, other: $elem_ty) -> Self {
                 self - $id::splat(other)
             }
         }
-        impl ::ops::Sub<$id> for $elem_ty {
+        impl crate::ops::Sub<$id> for $elem_ty {
             type Output = $id;
             #[inline]
             fn sub(self, other: $id) -> $id {
@@ -32,14 +32,14 @@ macro_rules! impl_ops_scalar_arithmetic {
             }
         }
 
-        impl ::ops::Mul<$elem_ty> for $id {
+        impl crate::ops::Mul<$elem_ty> for $id {
             type Output = Self;
             #[inline]
             fn mul(self, other: $elem_ty) -> Self {
                 self * $id::splat(other)
             }
         }
-        impl ::ops::Mul<$id> for $elem_ty {
+        impl crate::ops::Mul<$id> for $elem_ty {
             type Output = $id;
             #[inline]
             fn mul(self, other: $id) -> $id {
@@ -47,14 +47,14 @@ macro_rules! impl_ops_scalar_arithmetic {
             }
         }
 
-        impl ::ops::Div<$elem_ty> for $id {
+        impl crate::ops::Div<$elem_ty> for $id {
             type Output = Self;
             #[inline]
             fn div(self, other: $elem_ty) -> Self {
                 self / $id::splat(other)
             }
         }
-        impl ::ops::Div<$id> for $elem_ty {
+        impl crate::ops::Div<$id> for $elem_ty {
             type Output = $id;
             #[inline]
             fn div(self, other: $id) -> $id {
@@ -62,14 +62,14 @@ macro_rules! impl_ops_scalar_arithmetic {
             }
         }
 
-        impl ::ops::Rem<$elem_ty> for $id {
+        impl crate::ops::Rem<$elem_ty> for $id {
             type Output = Self;
             #[inline]
             fn rem(self, other: $elem_ty) -> Self {
                 self % $id::splat(other)
             }
         }
-        impl ::ops::Rem<$id> for $elem_ty {
+        impl crate::ops::Rem<$id> for $elem_ty {
             type Output = $id;
             #[inline]
             fn rem(self, other: $id) -> $id {
@@ -77,35 +77,35 @@ macro_rules! impl_ops_scalar_arithmetic {
             }
         }
 
-        impl ::ops::AddAssign<$elem_ty> for $id {
+        impl crate::ops::AddAssign<$elem_ty> for $id {
             #[inline]
             fn add_assign(&mut self, other: $elem_ty) {
                 *self = *self + other;
             }
         }
 
-        impl ::ops::SubAssign<$elem_ty> for $id {
+        impl crate::ops::SubAssign<$elem_ty> for $id {
             #[inline]
             fn sub_assign(&mut self, other: $elem_ty) {
                 *self = *self - other;
             }
         }
 
-        impl ::ops::MulAssign<$elem_ty> for $id {
+        impl crate::ops::MulAssign<$elem_ty> for $id {
             #[inline]
             fn mul_assign(&mut self, other: $elem_ty) {
                 *self = *self * other;
             }
         }
 
-        impl ::ops::DivAssign<$elem_ty> for $id {
+        impl crate::ops::DivAssign<$elem_ty> for $id {
             #[inline]
             fn div_assign(&mut self, other: $elem_ty) {
                 *self = *self / other;
             }
         }
 
-        impl ::ops::RemAssign<$elem_ty> for $id {
+        impl crate::ops::RemAssign<$elem_ty> for $id {
             #[inline]
             fn rem_assign(&mut self, other: $elem_ty) {
                 *self = *self % other;
@@ -115,9 +115,9 @@ macro_rules! impl_ops_scalar_arithmetic {
         test_if!{
             $test_tt:
             interpolate_idents! {
-                mod [$id _ops_scalar_arith] {
+                pub mod [$id _ops_scalar_arith] {
                     use super::*;
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn ops_scalar_arithmetic() {
                         let zi = 0 as $elem_ty;
                         let oi = 1 as $elem_ty;

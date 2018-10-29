@@ -1,22 +1,34 @@
 //! Implements portable horizontal vector min/max reductions.
 
 macro_rules! impl_reduction_min_max {
-    ([$elem_ty:ident; $elem_count:expr]: $id:ident | $test_tt:tt) => {
+    ([$elem_ty:ident; $elem_count:expr]: $id:ident
+     | $ielem_ty:ident | $test_tt:tt) => {
         impl $id {
             /// Largest vector element value.
             #[inline]
             pub fn max_element(self) -> $elem_ty {
-                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm",
-                              target_arch = "powerpc64",)))]
+                #[cfg(not(any(
+                    target_arch = "aarch64",
+                    target_arch = "arm",
+                    target_arch = "powerpc64",
+                    target_arch = "wasm32",
+                )))]
                 {
-                    use llvm::simd_reduce_max;
-                    unsafe { simd_reduce_max(self.0) }
+                    use crate::llvm::simd_reduce_max;
+                    let v: $ielem_ty = unsafe { simd_reduce_max(self.0) };
+                    v as $elem_ty
                 }
-                #[cfg(any(target_arch = "aarch64", target_arch = "arm",
-                          target_arch = "powerpc64",))]
+                #[cfg(any(
+                    target_arch = "aarch64",
+                    target_arch = "arm",
+                    target_arch = "powerpc64",
+                    target_arch = "wasm32",
+                ))]
                 {
                     // FIXME: broken on AArch64
                     // https://github.com/rust-lang-nursery/packed_simd/issues/15
+                    // FIXME: broken on WASM32
+                    // https://github.com/rust-lang-nursery/packed_simd/issues/91
                     let mut x = self.extract(0);
                     for i in 1..$id::lanes() {
                         x = x.max(self.extract(i));
@@ -28,36 +40,32 @@ macro_rules! impl_reduction_min_max {
             /// Smallest vector element value.
             #[inline]
             pub fn min_element(self) -> $elem_ty {
-                #[cfg(
-                    not(
-                        any(
-                            target_arch = "aarch64",
-                            target_arch = "arm",
-                            all(
-                                target_arch = "x86",
-                                not(target_feature = "sse2")
-                            ),
-                            target_arch = "powerpc64",
-                        )
-                    )
-                )]
+                #[cfg(not(any(
+                    target_arch = "aarch64",
+                    target_arch = "arm",
+                    all(target_arch = "x86", not(target_feature = "sse2")),
+                    target_arch = "powerpc64",
+                    target_arch = "wasm32",
+                ),))]
                 {
-                    use llvm::simd_reduce_min;
-                    unsafe { simd_reduce_min(self.0) }
+                    use crate::llvm::simd_reduce_min;
+                    let v: $ielem_ty = unsafe { simd_reduce_min(self.0) };
+                    v as $elem_ty
                 }
-                #[cfg(
-                    any(
-                        target_arch = "aarch64",
-                        target_arch = "arm",
-                        all(target_arch = "x86", not(target_feature = "sse2")),
-                        target_arch = "powerpc64",
-                    )
-                )]
+                #[cfg(any(
+                    target_arch = "aarch64",
+                    target_arch = "arm",
+                    all(target_arch = "x86", not(target_feature = "sse2")),
+                    target_arch = "powerpc64",
+                    target_arch = "wasm32",
+                ))]
                 {
                     // FIXME: broken on AArch64
                     // https://github.com/rust-lang-nursery/packed_simd/issues/15
                     // FIXME: broken on i586-unknown-linux-gnu
                     // https://github.com/rust-lang-nursery/packed_simd/issues/22
+                    // FIXME: broken on WASM32
+                    // https://github.com/rust-lang-nursery/packed_simd/issues/91
                     let mut x = self.extract(0);
                     for i in 1..$id::lanes() {
                         x = x.min(self.extract(i));
@@ -68,10 +76,10 @@ macro_rules! impl_reduction_min_max {
         }
         test_if!{$test_tt:
         interpolate_idents! {
-            mod [$id _reduction_min_max] {
+            pub mod [$id _reduction_min_max] {
                 use super::*;
-                #[test]
-                fn max_element() {
+                #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+                pub fn max_element() {
                     let v = $id::splat(0 as $elem_ty);
                     assert_eq!(v.max_element(), 0 as $elem_ty);
                     if $id::lanes() > 1 {
@@ -82,8 +90,8 @@ macro_rules! impl_reduction_min_max {
                     assert_eq!(v.max_element(), 2 as $elem_ty);
                 }
 
-                #[test]
-                fn min_element() {
+                #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+                pub fn min_element() {
                     let v = $id::splat(0 as $elem_ty);
                     assert_eq!(v.min_element(), 0 as $elem_ty);
                     if $id::lanes() > 1 {
@@ -114,11 +122,11 @@ macro_rules! test_reduction_float_min_max {
         test_if!{
             $test_tt:
             interpolate_idents! {
-                mod [$id _reduction_min_max_nan] {
+                pub mod [$id _reduction_min_max_nan] {
                     use super::*;
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn min_element_test() {
-                        let n = $elem_ty::NAN;
+                        let n = crate::$elem_ty::NAN;
 
                         assert_eq!(n.min(-3.), -3.);
                         assert_eq!((-3. as $elem_ty).min(n), -3.);
@@ -128,7 +136,7 @@ macro_rules! test_reduction_float_min_max {
                         let target_with_broken_last_lane_nan = !cfg!(any(
                             target_arch = "arm", target_arch = "aarch64",
                             all(target_arch = "x86", not(target_feature = "sse2")),
-                            target_arch = "powerpc64",
+                            target_arch = "powerpc64", target_arch = "wasm32",
                         ));
 
                         // The vector is initialized to `-3.`s: [-3, -3, -3, -3]
@@ -220,9 +228,9 @@ macro_rules! test_reduction_float_min_max {
                                 $id::splat(n), $id::splat(n).min_element(),
                                 $id::splat(n).min_element().is_nan());
                     }
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn max_element_test() {
-                        let n = $elem_ty::NAN;
+                        let n = crate::$elem_ty::NAN;
 
                         assert_eq!(n.max(-3.), -3.);
                         assert_eq!((-3. as $elem_ty).max(n), -3.);
@@ -231,7 +239,7 @@ macro_rules! test_reduction_float_min_max {
 
                         let target_with_broken_last_lane_nan = !cfg!(any(
                             target_arch = "arm", target_arch = "aarch64",
-                            target_arch = "powerpc64",
+                            target_arch = "powerpc64", target_arch = "wasm32",
                         ));
 
                         // The vector is initialized to `-3.`s: [-3, -3, -3, -3]

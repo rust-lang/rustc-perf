@@ -1,0 +1,22 @@
+[package]
+name = "micro_benchmarks"
+version = "0.1.0"
+authors = ["gnzlbg <gonzalobg88@gmail.com>"]
+autobenches = false
+edition = "2018"
+
+[dev-dependencies]
+packed_simd = { path = ".." }
+interpolate_idents = "0.2"
+criterion = "0.2"
+
+[profile.bench]
+opt-level = 3
+debug = false
+lto = 'fat'
+debug-assertions = false
+codegen-units = 1
+
+[[bench]]
+name = "mask_reductions"
+harness = false

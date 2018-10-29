@@ -6,14 +6,14 @@ macro_rules! impl_ops_scalar_mask_bitwise {
         $id:ident | $test_tt:tt |
         ($true:expr, $false:expr)
     ) => {
-        impl ::ops::BitXor<bool> for $id {
+        impl crate::ops::BitXor<bool> for $id {
             type Output = Self;
             #[inline]
             fn bitxor(self, other: bool) -> Self {
                 self ^ $id::splat(other)
             }
         }
-        impl ::ops::BitXor<$id> for bool {
+        impl crate::ops::BitXor<$id> for bool {
             type Output = $id;
             #[inline]
             fn bitxor(self, other: $id) -> $id {
@@ -21,14 +21,14 @@ macro_rules! impl_ops_scalar_mask_bitwise {
             }
         }
 
-        impl ::ops::BitAnd<bool> for $id {
+        impl crate::ops::BitAnd<bool> for $id {
             type Output = Self;
             #[inline]
             fn bitand(self, other: bool) -> Self {
                 self & $id::splat(other)
             }
         }
-        impl ::ops::BitAnd<$id> for bool {
+        impl crate::ops::BitAnd<$id> for bool {
             type Output = $id;
             #[inline]
             fn bitand(self, other: $id) -> $id {
@@ -36,14 +36,14 @@ macro_rules! impl_ops_scalar_mask_bitwise {
             }
         }
 
-        impl ::ops::BitOr<bool> for $id {
+        impl crate::ops::BitOr<bool> for $id {
             type Output = Self;
             #[inline]
             fn bitor(self, other: bool) -> Self {
                 self | $id::splat(other)
             }
         }
-        impl ::ops::BitOr<$id> for bool {
+        impl crate::ops::BitOr<$id> for bool {
             type Output = $id;
             #[inline]
             fn bitor(self, other: $id) -> $id {
@@ -51,19 +51,19 @@ macro_rules! impl_ops_scalar_mask_bitwise {
             }
         }
 
-        impl ::ops::BitAndAssign<bool> for $id {
+        impl crate::ops::BitAndAssign<bool> for $id {
             #[inline]
             fn bitand_assign(&mut self, other: bool) {
                 *self = *self & other;
             }
         }
-        impl ::ops::BitOrAssign<bool> for $id {
+        impl crate::ops::BitOrAssign<bool> for $id {
             #[inline]
             fn bitor_assign(&mut self, other: bool) {
                 *self = *self | other;
             }
         }
-        impl ::ops::BitXorAssign<bool> for $id {
+        impl crate::ops::BitXorAssign<bool> for $id {
             #[inline]
             fn bitxor_assign(&mut self, other: bool) {
                 *self = *self ^ other;
@@ -73,9 +73,9 @@ macro_rules! impl_ops_scalar_mask_bitwise {
         test_if!{
             $test_tt:
             interpolate_idents! {
-                mod [$id _ops_scalar_mask_bitwise] {
+                pub mod [$id _ops_scalar_mask_bitwise] {
                     use super::*;
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn ops_scalar_mask_bitwise() {
                         let ti = true;
                         let fi = false;

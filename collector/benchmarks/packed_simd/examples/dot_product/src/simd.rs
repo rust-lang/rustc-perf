@@ -19,5 +19,5 @@ pub fn dot_prod(a: &[f32], b: &[f32]) -> f32 {
 #[cfg(test)]
 #[test]
 fn test() {
-    ::test(dot_prod)
+    crate::test(dot_prod)
 }

@@ -4,7 +4,7 @@ crate mod llvm;
 crate mod math;
 crate mod reductions;
 crate mod shuffle;
-crate mod shuffle_bytes;
+crate mod shuffle1_dyn;
 crate mod swap_bytes;
 
 macro_rules! impl_simd_array {
@@ -31,6 +31,8 @@ macro_rules! impl_simd_array {
     }
 }
 
+crate mod pointer_sized_int;
+
 crate mod v16;
 crate use self::v16::*;
 
@@ -48,3 +50,9 @@ crate use self::v256::*;
 
 crate mod v512;
 crate use self::v512::*;
+
+crate mod vSize;
+crate use self::vSize::*;
+
+crate mod vPtr;
+crate use self::vPtr::*;

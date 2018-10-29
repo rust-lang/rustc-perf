@@ -1,17 +1,16 @@
+#![deny(warnings)]
+
 extern crate spectral_norm_lib;
 use spectral_norm_lib::*;
 
-fn run<O: ::std::io::Write>(o: &mut O, n: usize, alg: usize) {
+fn run<O: std::io::Write>(o: &mut O, n: usize, alg: usize) {
     let answer = spectral_norm(n, alg);
-    write!(o, "{:.9}\n", answer).unwrap();
+    writeln!(o, "{:.9}", answer).unwrap();
 }
 
 fn main() {
-    let n: usize = std::env::args()
-        .nth(1)
-        .expect("need one arg")
-        .parse()
-        .unwrap();
+    let n: usize =
+        std::env::args().nth(1).expect("need one arg").parse().unwrap();
 
     let alg = if let Some(v) = std::env::args().nth(2) {
         v.parse().unwrap()
@@ -19,7 +18,7 @@ fn main() {
         0
     };
 
-    run(&mut ::std::io::stdout(), n, alg);
+    run(&mut std::io::stdout(), n, alg);
 }
 
 #[cfg(test)]

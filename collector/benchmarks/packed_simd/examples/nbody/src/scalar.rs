@@ -15,13 +15,10 @@ struct Body {
 }
 
 const N_BODIES: usize = 5;
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::unreadable_literal))]
 const BODIES: [Body; N_BODIES] = [
     // Sun
-    Body {
-        x: [0., 0., 0.],
-        v: [0., 0., 0.],
-        mass: SOLAR_MASS,
-    },
+    Body { x: [0., 0., 0.], v: [0., 0., 0.], mass: SOLAR_MASS },
     // Jupiter
     Body {
         x: [
@@ -82,32 +79,32 @@ const BODIES: [Body; N_BODIES] = [
 
 fn advance(bodies: &mut [Body; N_BODIES], dt: f64) {
     let mut b_slice: &mut [_] = bodies;
-    loop {
-        let bi = match shift_mut_ref(&mut b_slice) {
-            Some(bi) => bi,
-            None => break,
-        };
+    while let Some(bi) = shift_mut_ref(&mut b_slice) {
         for bj in b_slice.iter_mut() {
             let mut dx = [0.; 3];
-            for i in 0..3 {
-                dx[i] = bi.x[i] - bj.x[i];
+            for (dx, (x_i, x_j)) in
+                dx.iter_mut().zip(bi.x.iter().zip(bj.x.iter()))
+            {
+                *dx = x_i - x_j;
             }
 
             let mut d2: f64 = 0.;
-            for i in 0..3 {
-                d2 += dx[i] * dx[i];
+            for dx in &dx {
+                d2 += dx * dx;
             }
             let mag = dt / (d2 * d2.sqrt());
 
             let massi_mag = bi.mass * mag;
             let massj_mag = bj.mass * mag;
-            for i in 0..3 {
-                bj.v[i] += dx[i] * massi_mag;
-                bi.v[i] -= dx[i] * massj_mag;
+            for (v_j, (v_i, dx)) in
+                bj.v.iter_mut().zip(bi.v.iter_mut().zip(dx.iter()))
+            {
+                *v_j += dx * massi_mag;
+                *v_i -= dx * massj_mag;
             }
         }
-        for i in 0..3 {
-            bi.x[i] += dt * bi.v[i];
+        for (x, v) in bi.x.iter_mut().zip(bi.v.iter()) {
+            *x += dt * v;
         }
     }
 }
@@ -115,20 +112,16 @@ fn advance(bodies: &mut [Body; N_BODIES], dt: f64) {
 fn energy(bodies: &[Body; N_BODIES]) -> f64 {
     let mut e = 0.0;
     let mut bodies = bodies.iter();
-    loop {
-        let bi = match bodies.next() {
-            Some(bi) => bi,
-            None => break,
-        };
+    while let Some(bi) = bodies.next() {
         let mut e_l = 0.;
-        for i in 0..3 {
-            e_l += bi.v[i] * bi.v[i];
+        for v in &bi.v {
+            e_l += v * v;
         }
         e += e_l * bi.mass / 2.0;
         for bj in bodies.clone() {
             let mut dist = 0.;
-            for i in 0..3 {
-                let dx = bi.x[i] - bj.x[i];
+            for (xi, xj) in bi.x.iter().zip(bj.x.iter()) {
+                let dx = xi - xj;
                 dist += dx * dx;
             }
             e -= bi.mass * bj.mass / dist.sqrt();
@@ -140,23 +133,24 @@ fn energy(bodies: &[Body; N_BODIES]) -> f64 {
 fn offset_momentum(bodies: &mut [Body; N_BODIES]) {
     let mut p = [0.; 3];
     for bi in bodies.iter() {
-        for i in 0..3 {
-            p[i] += bi.v[i] * bi.mass;
+        for (p, v) in p.iter_mut().zip(bi.v.iter()) {
+            *p += v * bi.mass;
         }
     }
     let sun = &mut bodies[0];
-    for i in 0..3 {
-        sun.v[i] = -p[i] / SOLAR_MASS;
+    for (v, p) in sun.v.iter_mut().zip(p.iter()) {
+        *v = -p / SOLAR_MASS;
     }
 }
 
 /// Pop a mutable reference off the head of a slice, mutating the slice to no
 /// longer contain the mutable reference.
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::mut_mut))]
 fn shift_mut_ref<'a, T>(r: &mut &'a mut [T]) -> Option<&'a mut T> {
-    if r.len() == 0 {
+    if r.is_empty() {
         return None;
     }
-    let tmp = ::std::mem::replace(r, &mut []);
+    let tmp = std::mem::replace(r, &mut []);
     let (h, t) = tmp.split_at_mut(1);
     *r = t;
     Some(&mut h[0])
@@ -177,7 +171,7 @@ pub fn run(n: usize) -> (f64, f64) {
 mod tests {
     #[test]
     fn test() {
-        for &(size, a_e, b_e) in ::RESULTS {
+        for &(size, a_e, b_e) in crate::RESULTS {
             let (a, b) = super::run(size);
             assert_eq!(format!("{:.9}", a), a_e);
             assert_eq!(format!("{:.9}", b), b_e);

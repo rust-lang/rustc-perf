@@ -1,7 +1,16 @@
 //! Fannkuch redux
+#![deny(warnings, rust_2018_idioms)]
 #![allow(non_snake_case, non_camel_case_types)]
-
-extern crate packed_simd;
+#![cfg_attr(
+    feature = "cargo-clippy",
+    allow(
+        clippy::similar_names,
+        clippy::many_single_char_names,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::cast_possible_wrap
+    )
+)]
 
 pub mod scalar;
 pub mod simd;

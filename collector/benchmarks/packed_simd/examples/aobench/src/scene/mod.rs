@@ -1,9 +1,8 @@
 /// Scene interface
-use geometry::{f32xN, Plane, Sphere};
+use crate::geometry::{f32xN, Plane, Sphere};
 
-pub trait Scene: Send + Sync {
+pub trait Scene: Send + Sync + Default {
     const NAO_SAMPLES: usize;
-    fn new() -> Self;
     fn rand(&mut self) -> f32;
     fn plane(&self) -> &Plane;
     fn spheres(&self) -> &[Sphere];

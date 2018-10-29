@@ -1,6 +1,6 @@
 //! `FromBits` and `IntoBits` between portable vector types and the
 //! architecture-specific vector types.
-#![cfg_attr(rustfmt, rustfmt_skip)]
+#![rustfmt::skip]
 
 // FIXME: MIPS FromBits/IntoBits
 

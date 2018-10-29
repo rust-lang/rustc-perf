@@ -1,106 +1,54 @@
-//! The mandelbrot benchmark from the [benchmarks game][bg].
+//! The Mandelbrot benchmark from the [benchmarksgame][bg]
 //!
 //! [bg]: https://benchmarksgame-team.pages.debian.net/benchmarksgame/description/mandelbrot.html#mandelbrot
-extern crate mandelbrot_lib;
+
+#![deny(warnings, rust_2018_idioms)]
+
 use mandelbrot_lib::*;
-use std::{env, io, io::Write};
+use std::io;
+use structopt::StructOpt;
 
-enum Algorithm {
-    Scalar,
-    Simd,
-}
-use self::Algorithm::*;
-
-fn run<O: Write>(
-    mut o: O,
+/// Mandelbrot image generator.
+///
+/// Output is printed to `stdout`.
+#[derive(StructOpt)]
+#[structopt(raw(setting = "structopt::clap::AppSettings::ColoredHelp"))]
+struct Opt {
+    /// Image width.
     width: usize,
+    /// Image height.
     height: usize,
-    alg: Algorithm,
-    format: Format,
-) {
-    let mut m = Mandelbrot::new(width, height, format);
-    m.write_header(&mut o);
 
-    match alg {
-        Scalar => scalar::output(&mut o, &mut m, LIMIT),
-        Simd => simd::output(&mut o, &mut m, LIMIT),
-    }
+    /// Enable this to output a color image.
+    #[structopt(short = "c", long = "color")]
+    color: bool,
+
+    /// Algorithm
+    #[structopt(short = "a", long = "algo")]
+    algo: String,
 }
+
+const ALGORITHMS: &[&str] = &["scalar", "simd", "ispc"];
 
 fn main() {
-    let mut args = env::args();
-    args.next();
+    let opt = Opt::from_args();
 
-    // width height alg fmt
-    let width = args.next().unwrap().parse().unwrap();
-
-    let height = if let Some(h) = args.next() {
-        h.parse().unwrap()
-    } else {
-        width
+    let algo = match opt.algo.as_str() {
+        "scalar" => Algorithm::Scalar,
+        "simd" => Algorithm::Simd,
+        "ispc" => Algorithm::Ispc,
+        algo => panic!(
+            "Unknown algorithm: {:?}\nAvailable algorithms: {:?}",
+            algo, ALGORITHMS
+        ),
     };
 
-    let alg = if let Some(v) = args.next() {
-        match v.parse().unwrap() {
-            0 => Scalar,
-            1 => Simd,
-            v => panic!("unknown algorithm value: {}", v),
-        }
+    let mb = Mandelbrot::generate((opt.width, opt.height), algo);
+
+    let mut stdout = io::stdout();
+    if opt.color {
+        mb.output_ppm(&mut stdout).unwrap();
     } else {
-        Simd
-    };
-
-    let fmt = if let Some(f) = args.next() {
-        match f.parse().unwrap() {
-            0 => output::Format::PBM,
-            1 => output::Format::PPM,
-            v => panic!("unknown output format value: {}", v),
-        }
-    } else {
-        output::Format::PBM
-    };
-
-    run(io::stdout(), width, height, alg, fmt);
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    static OUTPUT: &'static [u8] = include_bytes!("mandelbrot-output.txt");
-    const WIDTH: usize = 200;
-    const HEIGHT: usize = 200;
-    #[test]
-    fn verify_output_scalar() {
-        let mut out: Vec<u8> = Vec::new();
-
-        run(&mut out, WIDTH, HEIGHT, Scalar, output::Format::PBM);
-
-        assert_eq!(out.len(), OUTPUT.len());
-        if out != OUTPUT {
-            for i in 0..out.len() {
-                assert_eq!(
-                    out[i], OUTPUT[i],
-                    "byte {} differs - is: {:#08b} - should: {:#08b}",
-                    i, out[i], OUTPUT[i]
-                );
-            }
-        }
-    }
-    #[test]
-    fn verify_output_simd() {
-        let mut out: Vec<u8> = Vec::new();
-
-        run(&mut out, WIDTH, HEIGHT, Simd, output::Format::PBM);
-
-        assert_eq!(out.len(), OUTPUT.len());
-        if out != OUTPUT {
-            for i in 0..out.len() {
-                assert_eq!(
-                    out[i], OUTPUT[i],
-                    "byte {} differs - is: {:#08b} - should: {:#08b}",
-                    i, out[i], OUTPUT[i]
-                );
-            }
-        }
+        mb.output_pbm(&mut stdout).unwrap();
     }
 }

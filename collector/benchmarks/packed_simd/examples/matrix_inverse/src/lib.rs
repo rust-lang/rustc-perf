@@ -1,18 +1,15 @@
 //! 4x4 matrix inverse
-#![deny(warnings)]
-
-#[macro_use(shuffle)]
-extern crate packed_simd;
+#![feature(custom_inner_attributes)]
+#![deny(warnings, rust_2018_idioms)]
 
 pub mod scalar;
 pub mod simd;
 
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
-#[repr(align(32))]
 pub struct Matrix4x4([[f32; 4]; 4]);
 
 #[cfg(test)]
-#[cfg_attr(rustfmt, rustfmt_skip)]
+#[rustfmt::skip]
 fn test<F: Fn(Matrix4x4) -> Option<Matrix4x4>>(f: F) {
     let tests: &[(Matrix4x4, Option<Matrix4x4>)] = &[
         // Identity:

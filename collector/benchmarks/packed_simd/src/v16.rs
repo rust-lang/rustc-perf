@@ -2,11 +2,11 @@
 
 use crate::*;
 
-impl_i!([i8; 2]: i8x2, m8x2 | test_v16 | x0, x1 |
+impl_i!([i8; 2]: i8x2, m8x2 | i8 | test_v16 | x0, x1 |
         From: |
         /// A 16-bit vector with 2 `i8` lanes.
 );
-impl_u!([u8; 2]: u8x2, m8x2 | test_v16 | x0, x1 |
+impl_u!([u8; 2]: u8x2, m8x2 | u8 | test_v16 | x0, x1 |
         From: |
         /// A 16-bit vector with 2 `u8` lanes.
 );

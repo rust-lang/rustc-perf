@@ -2,12 +2,13 @@
 
 #![allow(dead_code)]
 
-use crate::{cmp::PartialOrd, fmt::Debug, PartiallyOrdered};
+use crate::{cmp::PartialOrd, fmt::Debug, LexicographicallyOrdered};
 
 /// Tests PartialOrd for `a` and `b` where `a < b` is true.
-pub fn test_lt<T>(a: PartiallyOrdered<T>, b: PartiallyOrdered<T>)
-where
-    PartiallyOrdered<T>: Debug + PartialOrd,
+pub fn test_lt<T>(
+    a: LexicographicallyOrdered<T>, b: LexicographicallyOrdered<T>,
+) where
+    LexicographicallyOrdered<T>: Debug + PartialOrd,
 {
     assert!(a < b, "{:?}, {:?}", a, b);
     assert!(b > a, "{:?}, {:?}", a, b);
@@ -29,9 +30,10 @@ where
 }
 
 /// Tests PartialOrd for `a` and `b` where `a <= b` is true.
-pub fn test_le<T>(a: PartiallyOrdered<T>, b: PartiallyOrdered<T>)
-where
-    PartiallyOrdered<T>: Debug + PartialOrd,
+pub fn test_le<T>(
+    a: LexicographicallyOrdered<T>, b: LexicographicallyOrdered<T>,
+) where
+    LexicographicallyOrdered<T>: Debug + PartialOrd,
 {
     assert!(a <= b, "{:?}, {:?}", a, b);
     assert!(b >= a, "{:?}, {:?}", a, b);
@@ -52,30 +54,26 @@ where
 
 /// Test PartialOrd::partial_cmp for `a` and `b` returning `Ordering`
 pub fn test_cmp<T>(
-    a: PartiallyOrdered<T>,
-    b: PartiallyOrdered<T>,
-    o: Option<::cmp::Ordering>,
+    a: LexicographicallyOrdered<T>, b: LexicographicallyOrdered<T>,
+    o: Option<crate::cmp::Ordering>,
 ) where
-    PartiallyOrdered<T>: PartialOrd + Debug,
+    LexicographicallyOrdered<T>: PartialOrd + Debug,
     T: Debug + crate::sealed::Simd + Copy + Clone,
     <T as crate::sealed::Simd>::Element: Default + Copy + Clone + PartialOrd,
 {
-    assert!(
-        T::LANES <= 64,
-        "array length in these two arrays needs updating"
-    );
+    assert!(T::LANES <= 64, "array length in these two arrays needs updating");
     let mut arr_a: [T::Element; 64] = [Default::default(); 64];
     let mut arr_b: [T::Element; 64] = [Default::default(); 64];
 
     unsafe {
         crate::ptr::write_unaligned(
-            arr_a.as_mut_ptr() as *mut PartiallyOrdered<T>,
+            arr_a.as_mut_ptr() as *mut LexicographicallyOrdered<T>,
             a,
         )
     }
     unsafe {
         crate::ptr::write_unaligned(
-            arr_b.as_mut_ptr() as *mut PartiallyOrdered<T>,
+            arr_b.as_mut_ptr() as *mut LexicographicallyOrdered<T>,
             b,
         )
     }
@@ -84,15 +82,15 @@ pub fn test_cmp<T>(
     assert_eq!(expected, result, "{:?}, {:?}", a, b);
     assert_eq!(o, result, "{:?}, {:?}", a, b);
     match o {
-        Some(::cmp::Ordering::Less) => {
+        Some(crate::cmp::Ordering::Less) => {
             test_lt(a, b);
             test_le(a, b);
         }
-        Some(::cmp::Ordering::Greater) => {
+        Some(crate::cmp::Ordering::Greater) => {
             test_lt(b, a);
             test_le(b, a);
         }
-        Some(::cmp::Ordering::Equal) => {
+        Some(crate::cmp::Ordering::Equal) => {
             assert!(a == b, "{:?}, {:?}", a, b);
             assert!(!(a != b), "{:?}, {:?}", a, b);
             assert!(!(a < b), "{:?}, {:?}", a, b);
@@ -116,4 +114,22 @@ pub fn test_cmp<T>(
             assert!(!(b >= a), "{:?}, {:?}", a, b);
         }
     }
+}
+
+// Returns a tuple containing two distinct pointer values of the same type as
+// the element type of the Simd vector `$id`.
+#[allow(unused)]
+macro_rules! ptr_vals {
+    ($id:ty) => {
+        // expands to an expression
+        #[allow(unused_unsafe)]
+        unsafe {
+            // all bits cleared
+            let clear: <$id as sealed::Simd>::Element = crate::mem::zeroed();
+            // all bits set
+            let set: <$id as sealed::Simd>::Element =
+                crate::mem::transmute(-1_isize);
+            (clear, set)
+        }
+    };
 }

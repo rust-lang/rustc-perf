@@ -1,7 +1,6 @@
 //! Vectorized fannkuch redux implementation
 
 use packed_simd::*;
-use *;
 
 struct State {
     s: [u8; 16],
@@ -13,9 +12,9 @@ struct State {
     checksum: i32,
 }
 
-impl State {
-    fn new() -> State {
-        State {
+impl Default for State {
+    fn default() -> Self {
+        Self {
             s: [0; 16],
             flip_masks: [u8x16::splat(0); 16],
             rotate_masks: [u8x16::splat(0); 16],
@@ -25,9 +24,12 @@ impl State {
             checksum: 0,
         }
     }
+}
+
+impl State {
     fn rotate_sisd(&mut self, n: usize) {
         let c = self.s[0];
-        for i in 1..(n + 1) {
+        for i in 1..=n {
             self.s[i - 1] = self.s[i];
         }
         self.s[n] = c;
@@ -35,8 +37,8 @@ impl State {
     fn popmasks(&mut self) {
         let mut mask = [0_u8; 16];
         for i in 0..16 {
-            for j in 0..16 {
-                mask[j] = j as u8;
+            for (j, m) in mask.iter_mut().enumerate() {
+                *m = j as u8;
             }
 
             for x in 0..(i + 1) / 2 {
@@ -45,8 +47,8 @@ impl State {
 
             self.flip_masks[i] = u8x16::from_slice_unaligned(&mask);
 
-            for j in 0..16 {
-                self.s[j] = j as u8;
+            for (j, s) in self.s.iter_mut().enumerate() {
+                *s = j as u8;
             }
             self.rotate_sisd(i);
             self.rotate_masks[i] = self.load_s();
@@ -54,7 +56,7 @@ impl State {
     }
     fn rotate(&mut self, n: usize) {
         self.load_s()
-            .shuffle_bytes(self.rotate_masks[n])
+            .shuffle1_dyn(self.rotate_masks[n])
             .write_to_slice_unaligned(&mut self.s)
     }
 
@@ -70,15 +72,14 @@ impl State {
             odd: u16,
         }
 
-        let mut perms = [Perm {
-            perm: u8x16::splat(0),
-            start: 0,
-            odd: 0,
-        }; 60];
+        let mut perms = [Perm { perm: u8x16::splat(0), start: 0, odd: 0 }; 60];
 
         let mut i = 0;
         let mut c = [0_u8; 16];
         let mut perm_max = 0;
+        // Cache this locally outside the loop, since the compiler
+        // can't optimize accesses to it otherwise.
+        let mut odd = self.odd;
 
         while i < n {
             while i < n && perm_max < 60 {
@@ -91,18 +92,18 @@ impl State {
 
                 c[i] += 1;
                 i = 1;
-                self.odd = !self.odd;
+                odd = !odd;
                 if self.s[0] != 0 {
-                    if self.s[self.s[0] as usize] != 0 {
-                        perms[perm_max].perm = self.load_s();
-                        perms[perm_max].start = self.s[0];
-                        perms[perm_max].odd = self.odd;
-                        perm_max += 1;
-                    } else {
+                    if self.s[self.s[0] as usize] == 0 {
                         if self.maxflips == 0 {
                             self.maxflips = 1
                         }
-                        self.checksum += if self.odd != 0 { -1 } else { 1 };
+                        self.checksum += if odd == 0 { 1 } else { -1 };
+                    } else {
+                        perms[perm_max].perm = self.load_s();
+                        perms[perm_max].start = self.s[0];
+                        perms[perm_max].odd = odd;
+                        perm_max += 1;
                     }
                 }
             }
@@ -121,9 +122,9 @@ impl State {
 
                 while toterm1 != 0 && toterm2 != 0 {
                     perm1 =
-                        perm1.shuffle_bytes(self.flip_masks[toterm1 as usize]);
+                        perm1.shuffle1_dyn(self.flip_masks[toterm1 as usize]);
                     perm2 =
-                        perm2.shuffle_bytes(self.flip_masks[toterm2 as usize]);
+                        perm2.shuffle1_dyn(self.flip_masks[toterm2 as usize]);
                     toterm1 = perm1.extract(0);
                     toterm2 = perm2.extract(0);
 
@@ -132,13 +133,13 @@ impl State {
                 }
                 while toterm1 != 0 {
                     perm1 =
-                        perm1.shuffle_bytes(self.flip_masks[toterm1 as usize]);
+                        perm1.shuffle1_dyn(self.flip_masks[toterm1 as usize]);
                     toterm1 = perm1.extract(0);
                     f1 += 1;
                 }
                 while toterm2 != 0 {
                     perm2 =
-                        perm2.shuffle_bytes(self.flip_masks[toterm2 as usize]);
+                        perm2.shuffle1_dyn(self.flip_masks[toterm2 as usize]);
                     toterm2 = perm2.extract(0);
                     f2 += 1;
                 }
@@ -149,8 +150,8 @@ impl State {
                 if f2 > self.maxflips {
                     self.maxflips = f2
                 }
-                self.checksum += if pk.odd != 0 { -f1 } else { f1 };
-                self.checksum += if pk1.odd != 0 { -f2 } else { f2 };
+                self.checksum += if pk.odd == 0 { f1 } else { -f1 };
+                self.checksum += if pk1.odd == 0 { f2 } else { -f2 };
 
                 k += 2;
             }
@@ -160,15 +161,14 @@ impl State {
                 let mut f = 0;
                 let mut toterm = pk.start;
                 while toterm != 0 {
-                    perm =
-                        perm.shuffle_bytes(self.flip_masks[toterm as usize]);
+                    perm = perm.shuffle1_dyn(self.flip_masks[toterm as usize]);
                     toterm = perm.extract(0);
                     f += 1;
                 }
                 if f > self.maxflips {
                     self.maxflips = f
                 }
-                self.checksum += if pk.odd != 0 { -f } else { f };
+                self.checksum += if pk.odd == 0 { f } else { -f };
                 k += 1
             }
             perm_max = 0;
@@ -177,7 +177,7 @@ impl State {
 }
 
 pub fn fannkuch_redux(n: usize) -> (i32, i32) {
-    let mut state = State::new();
+    let mut state = State::default();
     state.popmasks();
 
     for i in 0..n {

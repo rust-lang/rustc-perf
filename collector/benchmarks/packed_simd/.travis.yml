@@ -6,44 +6,133 @@ matrix:
   fast_finish: true
   include:
     # Android:
-    - env: TARGET=x86_64-linux-android
+    - env: TARGET=x86_64-linux-android NOVERIFY=1
+      name: "x86_64-unknown-linux-android + SSE2"
     - env: TARGET=arm-linux-androideabi
-      install:
-        - rustup target add $TARGET || true
-      script:
-        - cargo generate-lockfile
-        - travis_wait 50 ci/run-docker.sh $TARGET $FEATURES
+      name: "arm-linux-androideabi"
+    - env: TARGET=arm-linux-androideabi RUSTFLAGS="-C target-feature=+v7,+neon"
+      name: "arm-linux-androideabi + NEON"
     - env: TARGET=aarch64-linux-android
-      install:
-        - rustup target add $TARGET || true
-      script:
-        - cargo generate-lockfile
-        - travis_wait 50 ci/run-docker.sh $TARGET $FEATURES
+      name: "aarch64-unknown-linux-android"
+    - env: TARGET=aarch64-linux-android RUSTFLAGS="-C target-feature=+neon"
+      name: "aarch64-unknown-linux-android + NEON"
     # Linux:
     - env: TARGET=i586-unknown-linux-gnu
+      name: "i586-unknown-linux-gnu"
+    - env: TARGET=i586-unknown-linux-gnu RUSTFLAGS="-C target-feature=+sse"
+      name: "i586-unknown-linux-gnu + SSE"
+    - env: TARGET=i586-unknown-linux-gnu RUSTFLAGS="-C target-feature=+sse2"
+      name: "i586-unknown-linux-gnu + SSE2"
     - env: TARGET=i686-unknown-linux-gnu
+      name: "i686-unknown-linux-gnu + SSE2"
+    - env: TARGET=i686-unknown-linux-gnu RUSTFLAGS="-C target-feature=+sse4.2"
+      name: "i686-unknown-linux-gnu + SSE4.2"
+    - env: TARGET=i686-unknown-linux-gnu RUSTFLAGS="-C target-feature=+avx2"
+      name: "i686-unknown-linux-gnu + AVX2"
     - env: TARGET=x86_64-unknown-linux-gnu
+      name: "x86_64-unknown-linux-gnu + SSE2"
+      install: rustup component add rustfmt-preview
+    - env: TARGET=x86_64-unknown-linux-gnu RUSTFLAGS="-C target-feature=+sse4.2"
+      name: "x86_64-unknown-linux-gnu + SSE4.2"
+      install: rustup component add rustfmt-preview
+    - env: TARGET=x86_64-unknown-linux-gnu RUSTFLAGS="-C target-feature=+avx"
+      name: "x86_64-unknown-linux-gnu + AVX"
+      install: rustup component add rustfmt-preview
+    - env: TARGET=x86_64-unknown-linux-gnu RUSTFLAGS="-C target-feature=+avx2"
+      name: "x86_64-unknown-linux-gnu + AVX2"
+      install: rustup component add rustfmt-preview
     - env: TARGET=x86_64-unknown-linux-gnu-emulated
+      name: "Intel SDE + SSE2"
+      install: true
+    - env: TARGET=x86_64-unknown-linux-gnu-emulated RUSTFLAGS="-C target-feature=+sse4.2"
+      name: "Intel SDE + SSE4.2"
+      install: true
+    - env: TARGET=x86_64-unknown-linux-gnu-emulated RUSTFLAGS="-C target-feature=+avx"
+      name: "Intel SDE + AVX"
+      install: true
+    - env: TARGET=x86_64-unknown-linux-gnu-emulated RUSTFLAGS="-C target-feature=+avx2"
+      name: "Intel SDE + AVX2"
+      install: true
+    - env: TARGET=x86_64-unknown-linux-gnu-emulated RUSTFLAGS="-C target-feature=+avx-512f"
+      name: "Intel SDE + AVX-512"
+      install: true
     - env: TARGET=arm-unknown-linux-gnueabi
+      name: "arm-unknown-linux-gnueabi"
+    - env: TARGET=arm-unknown-linux-gnueabi RUSTFLAGS="-C target-feature=+v7,+neon"
+      name: "arm-unknown-linux-gnueabi + NEON"
     - env: TARGET=arm-unknown-linux-gnueabihf
+      name: "arm-unknown-linux-gnueabihf"
+    - env: TARGET=arm-unknown-linux-gnueabihf RUSTFLAGS="-C target-feature=+v7,+neon"
+      name: "arm-unknown-linux-gnueabihf + NEON"
     - env: TARGET=armv7-unknown-linux-gnueabihf
+      name: "armv7-unknown-linux-gnueabihf"
+    - env: TARGET=armv7-unknown-linux-gnueabihf RUSTFLAGS="-C target-feature=+neon"
+      name: "armv7-unknown-linux-gnueabihf + NEON"
     - env: TARGET=aarch64-unknown-linux-gnu
+      name: "aarch64-unknown-linux-gnu"
+    - env: TARGET=aarch64-unknown-linux-gnu RUSTFLAGS="-C target-feature=+neon"
+      name: "aarch64-unknown-linux-gnu + NEON"
     - env: TARGET=mips-unknown-linux-gnu
+      name: "mips-unknown-linux-gnu"
     - env: TARGET=mipsel-unknown-linux-musl
+      name: "mipsel-unknown-linux-musl"
     - env: TARGET=mips64-unknown-linux-gnuabi64
+      name: "mips64-unknown-linux-gnuabi64"
     - env: TARGET=mips64el-unknown-linux-gnuabi64
+      name: "mips64el-unknown-linux-gnuabi64"
+      # FIXME: https://github.com/rust-lang-nursery/packed_simd/issues/18
+      # env: TARGET=mips64el-unknown-linux-gnuabi64 RUSTFLAGS="-C target-feature=+msa -C target-cpu=mips64r6"
     - env: TARGET=powerpc-unknown-linux-gnu
+      name: "powerpc-unknown-linux-gnu"
     - env: TARGET=powerpc64-unknown-linux-gnu
+      name: "powerpc64-unknown-linux-gnu"
     - env: TARGET=powerpc64le-unknown-linux-gnu
+      name: "powerpc64le-unknown-linux-gnu"
+    - env: TARGET=powerpc64le-unknown-linux-gnu RUSTFLAGS="-C target-feature=+altivec"
+      name: "powerpc64le-unknown-linux-gnu + ALTIVEC"
+    - env: TARGET=powerpc64le-unknown-linux-gnu RUSTFLAGS="-C target-feature=+vsx"
+      name: "powerpc64le-unknown-linux-gnu + VSX"
     - env: TARGET=s390x-unknown-linux-gnu
+      name: "s390x-unknown-linux-gnu"
     - env: TARGET=sparc64-unknown-linux-gnu
+      name: "sparc64-unknown-linux-gnu"
+    # WebAssembly:
+    - env: TARGET=wasm32-unknown-unknown
+      name: "wasm32-unknown-unknown"
     # MacOSX:
     - os: osx
       env: TARGET=i686-apple-darwin
+      name: "i686-apple-darwin + SSE2"
+      script: ci/run.sh
+      osx_image: xcode9.4
+    - os: osx
+      env: TARGET=i686-apple-darwin RUSTFLAGS="-C target-feature=+sse4.2"
+      name: "i686-apple-darwin + SSE4.2"
+      script: ci/run.sh
+      osx_image: xcode9.4
+      # Travis-CI OSX build bots do not support AVX2:
+    - os: osx
+      env: TARGET=i686-apple-darwin RUSTFLAGS="-C target-feature=+avx"
+      name: "i686-apple-darwin + AVX"
       script: ci/run.sh
       osx_image: xcode9.4
     - os: osx
       env: TARGET=x86_64-apple-darwin
+      name: "x86_64-apple-darwin + SSE2"
+      install: true
+      script: ci/run.sh
+      osx_image: xcode9.4
+    - os: osx
+      env: TARGET=x86_64-apple-darwin RUSTFLAGS="-C target-feature=+sse4.2"
+      name: "x86_64-apple-darwin + SSE4.2"
+      install: true
+      script: ci/run.sh
+      osx_image: xcode9.4
+      # Travis-CI OSX build bots do not support AVX2:
+    - os: osx
+      env: TARGET=x86_64-apple-darwin RUSTFLAGS="-C target-feature=+avx"
+      name: "x86_64-apple-darwin + AVX"
+      install: true
       script: ci/run.sh
       osx_image: xcode9.4
     # *BSDs:
@@ -56,52 +145,56 @@ matrix:
     # Solaris:
     #- env: TARGET=x86_64-sun-solaris NORUN=1
     #  script: ci/run.sh
-    # iOS: 
+    # iOS:
     - os: osx
       env: TARGET=i386-apple-ios
+      name: "i386-apple-ios"
       script: ci/run.sh
       osx_image: xcode9.4
     - os: osx
       env: TARGET=x86_64-apple-ios
+      name: "x86_64-apple-ios + SSE2"
       script: ci/run.sh
       osx_image: xcode9.4
     - os: osx
       env: TARGET=armv7-apple-ios NORUN=1
+      name: "armv7-apple-ios [BUILD only]"
       script: ci/run.sh
       osx_image: xcode9.4
     - os: osx
       env: TARGET=aarch64-apple-ios NORUN=1
+      name: "aarch64-apple-ios [BUILD only]"
       script: ci/run.sh
       osx_image: xcode9.4
-    # WASM:
-    - env: TARGET=wasm32-unknown-unknown NORUN=1
-      script: ci/run.sh
+    # BENCHMARKS:
+    - name: "Benchmarks - x86_64-unknown-linux-gnu"
+      install: TARGET=x86_64-unknown-linux-gnu ./ci/setup_benchmarks.sh
+      script: PATH=$(pwd):$PATH NORUN=1 VERIFY=1 FEATURES=coresimd,ispc,sleef-sys ci/benchmark.sh
+    - name: "Benchmarks - x86_64-apple-darwin"
+      install: TARGET=x86_64-apple-darwin ./ci/setup_benchmarks.sh
+      script: PATH=$(pwd):$PATH NORUN=1 VERIFY=1 FEATURES=coresimd,ispc,sleef-sys ci/benchmark.sh
+      os: osx
+      osx_image: xcode9.4
     # TOOLS:
-    - env: DOCUMENTATION
-      install: true
+    - name: "Documentation"
+      install: cargo install mdbook
       script: ci/dox.sh
-    - env: RUSTFMT=On TARGET=x86_64-unknown-linux-gnu
-      before_script:
-      - rustup component add rustfmt-preview
-      script:
-      - cargo fmt --all -- --check
-      - |
-        for dir in examples/*/
-        do
-            dir=${dir%*/}
-            cd ${dir%*/} && cargo fmt --all -- --check && cd -
-        done
-    - env: CLIPPY=On TARGET=x86_64-unknown-linux-gnu
-      before_script:
-      - rustup component add clippy-preview
-      script:
-      - cargo clippy --all -- -D clippy-pedantic
+    - name: "rustfmt"
+      install: true
+      before_script: rustup component add rustfmt-preview
+      script: ci/all.sh check_fmt || true
+    - name: "clippy"
+      install: true
+      before_script: rustup component add clippy-preview
+      script: ci/all.sh clippy
 
   allow_failures:
     # FIXME: TBD
     - env: TARGET=powerpc-unknown-linux-gnu
     - env: TARGET=powerpc64-unknown-linux-gnu
     - env: TARGET=powerpc64le-unknown-linux-gnu
+    - env: TARGET=powerpc64le-unknown-linux-gnu RUSTFLAGS="-C target-feature=+altivec"
+    - env: TARGET=powerpc64le-unknown-linux-gnu RUSTFLAGS="-C target-feature=+vsx"
     #- env: TARGET=i686-unknown-freebsd NORUN=1
     #- env: TARGET=x86_64-unknown-freebsd NORUN=1
     #- env: TARGET=x86_64-unknown-netbsd NORUN=1
@@ -109,19 +202,26 @@ matrix:
 
     # FIXME: TBD
     - env: TARGET=arm-linux-androideabi
+    - env: TARGET=arm-linux-androideabi RUSTFLAGS="-C target-feature=+v7,+neon"
     - env: TARGET=aarch64-linux-android
+    - env: TARGET=aarch64-linux-android RUSTFLAGS="-C target-feature=+neon"
 
     # FIXME: iOS
     # https://github.com/rust-lang-nursery/packed_simd/issues/26
     - env: TARGET=i386-apple-ios
     - env: TARGET=x86_64-apple-ios
 
-install:
-  - rustup target add $TARGET || true
+    # FIXME: https://github.com/rust-lang-nursery/packed_simd/issues/182
+    - env: TARGET=arm-unknown-linux-gnueabi RUSTFLAGS="-C target-feature=+v7,+neon"
+    - env: TARGET=arm-unknown-linux-gnueabihf RUSTFLAGS="-C target-feature=+v7,+neon"
+    - env: TARGET=armv7-unknown-linux-gnueabihf RUSTFLAGS="-C target-feature=+neon"
 
-script:
-  - cargo generate-lockfile
-  - ci/run-docker.sh $TARGET $FEATURES
+    # FIXME: https://github.com/rust-lang-nursery/packed_simd/issues/183
+    - env: TARGET=wasm32-unknown-unknown
+
+install: travis_retry rustup target add $TARGET
+before_script: cargo generate-lockfile
+script: travis_wait 50 ci/run-docker.sh
 
 env:
   global:

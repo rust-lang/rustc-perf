@@ -1,0 +1,30 @@
+[workspace]
+members = [
+    "aobench",
+    "dot_product",
+    "fannkuch_redux",
+    "mandelbrot",
+    "matrix_inverse",
+    "nbody",
+    "options_pricing",
+    "slice_sum",
+    "spectral_norm",
+    "stencil",
+    "triangle_xform",
+]
+
+[profile.release]
+# Remember to uncomment this when profiling
+# debug = 2
+
+# You can set the following to lto = 'thin' and 'codegen-units=16'
+# for better compile times at the cost of performance
+lto = 'fat'
+codegen-units = 1
+
+panic = 'abort'
+
+[profile.bench]
+# Same as above
+lto = 'fat'
+codegen-units = 1

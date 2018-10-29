@@ -1,8 +1,8 @@
 //! Ambient Occlusion implementations
 
-use geometry::{f32xN, Ray, RayxN, Selectable, V3D, V3DxN};
-use intersection::{Intersect, Isect, IsectxN};
-use scene::Scene;
+use crate::geometry::{f32xN, Ray, RayxN, Selectable, V3DxN, V3D};
+use crate::intersection::{Intersect, Isect, IsectxN};
+use crate::scene::Scene;
 use std::f32::consts::PI;
 
 /// Scalar ambient occlusion algorithm
@@ -18,7 +18,7 @@ pub fn scalar<S: Scene>(scene: &mut S, isect: &Isect) -> f32 {
     let nphi: usize = S::NAO_SAMPLES;
     for _i in 0..ntheta {
         for _j in 0..nphi {
-            let theta = scene.rand();
+            let theta = scene.rand().sqrt();
             let phi = 2. * PI * scene.rand();
 
             let n = V3D {
@@ -29,7 +29,7 @@ pub fn scalar<S: Scene>(scene: &mut S, isect: &Isect) -> f32 {
             let dir = basis * n;
             let ray = Ray { origin, dir };
 
-            let mut occ_isect = Isect::new();
+            let mut occ_isect = Isect::default();
             for s in scene.spheres() {
                 occ_isect = ray.intersect(s, occ_isect);
             }
@@ -63,17 +63,18 @@ pub fn vector<S: Scene>(scene: &mut S, isect: &Isect) -> f32 {
     for _i in 0..ntheta {
         for _j in (0..nphi).step_by(f32xN::lanes()) {
             let (theta, phi) = scene.rand_f32xN();
-            let phi = f32xN::splat(2. * PI) * phi;
+            let theta = theta.sqrte();
+            let (sin, cos) = (2. * phi).sin_cos_pi();
 
             let n = V3DxN {
-                x: phi.cos() * theta,
-                y: phi.sin() * theta,
+                x: cos * theta,
+                y: sin * theta,
                 z: (f32xN::splat(1.0) - theta * theta).sqrt(),
             };
             let dir = basis * n;
             let ray = RayxN { origin, dir };
 
-            let mut occ_isect = IsectxN::new();
+            let mut occ_isect = IsectxN::default();
             for s in scene.spheres() {
                 occ_isect = ray.intersect(s, occ_isect);
             }
@@ -86,25 +87,63 @@ pub fn vector<S: Scene>(scene: &mut S, isect: &Isect) -> f32 {
     1. - occlusion.sum() / (ntheta * nphi) as f32
 }
 
+/// Vectorized ambient occlusion algorithm using ray packets
+#[inline(always)]
+pub fn vector_tiled<S: Scene>(scene: &mut S, isect: &IsectxN) -> f32xN {
+    let mut occlusion = f32xN::splat(0.0);
+
+    let basis = isect.n.ortho_basis();
+    let eps = f32xN::splat(0.0001);
+    let origin = isect.p + eps * isect.n;
+
+    let ntheta: usize = S::NAO_SAMPLES;
+    let nphi: usize = S::NAO_SAMPLES;
+    for _i in 0..ntheta {
+        for _j in 0..nphi {
+            let (theta, phi) = scene.rand_f32xN();
+            let theta = theta.sqrte();
+            let (sin, cos) = (2. * phi).sin_cos_pi();
+
+            let n = V3DxN {
+                x: cos * theta,
+                y: sin * theta,
+                z: (1.0 - theta * theta).sqrt(),
+            };
+            let dir = basis * n;
+            let ray = RayxN { origin, dir };
+
+            let mut occ_isect = IsectxN::default();
+            for s in scene.spheres() {
+                occ_isect = ray.intersect(s, occ_isect);
+            }
+            occ_isect = ray.intersect(scene.plane(), occ_isect);
+
+            occlusion += occ_isect.hit.sel(f32xN::splat(1.), f32xN::splat(0.));
+        }
+    }
+
+    f32xN::splat(1.) - occlusion / (ntheta * nphi) as f32
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use geometry::V3D;
+    use crate::geometry::V3D;
 
     #[test]
     fn sanity_hit() {
-        let scene = ::scene::Test::new();
+        let scene = crate::scene::Test::default();
         let mut scene_scalar = scene.clone();
         let mut scene_vector = scene.clone();
         let ray = Ray {
-            origin: V3D::new(),
+            origin: V3D::default(),
             dir: V3D {
                 x: -0.2,
                 y: -0.2,
                 z: -0.2,
             },
         };
-        let mut isect = Isect::new();
+        let mut isect = Isect::default();
 
         for s in scene.spheres() {
             isect = ray.intersect(s, isect);
@@ -120,19 +159,19 @@ mod tests {
 
     #[test]
     fn sanity_miss() {
-        let scene = ::scene::Test::new();
+        let scene = crate::scene::Test::default();
         let mut scene_scalar = scene.clone();
         let mut scene_vector = scene.clone();
 
         let ray = Ray {
-            origin: V3D::new(),
+            origin: V3D::default(),
             dir: V3D {
                 x: 0.2,
                 y: 0.2,
                 z: 0.2,
             },
         };
-        let mut isect = Isect::new();
+        let mut isect = Isect::default();
 
         for s in scene.spheres() {
             isect = ray.intersect(s, isect);

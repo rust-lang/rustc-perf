@@ -1,7 +1,8 @@
 //! `FromBits` and `IntoBits` implementations for portable 16-bit wide vectors
-#![cfg_attr(rustfmt, rustfmt_skip)]
+#![rustfmt::skip]
 
-use crate::v16::*;
+#[allow(unused)]  // wasm_bindgen_test
+use crate::*;
 
 impl_from_bits!(i8x2[test_v16]: u8x2, m8x2);
 impl_from_bits!(u8x2[test_v16]: i8x2, m8x2);

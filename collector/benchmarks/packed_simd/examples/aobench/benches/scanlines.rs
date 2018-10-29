@@ -1,8 +1,5 @@
 #![feature(test)]
 
-extern crate aobench_lib;
-
-extern crate test;
 use test::{black_box, Bencher};
 
 #[bench]

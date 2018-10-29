@@ -1,7 +1,9 @@
-//! Minimal API of signed integer, unsigned integer, and floating-point vectors.
+//! Minimal API of signed integer, unsigned integer, and floating-point
+//! vectors.
 
 macro_rules! impl_minimal_iuf {
-    ([$elem_ty:ident; $elem_count:expr]: $id:ident | $test_tt:tt |
+    ([$elem_ty:ident; $elem_count:expr]: $id:ident | $ielem_ty:ident | $test_tt:tt |
+
      $($elem_name:ident),+ |
      $(#[$doc:meta])*) => {
 
@@ -18,9 +20,9 @@ macro_rules! impl_minimal_iuf {
             /// Creates a new instance with each vector elements initialized
             /// with the provided values.
             #[inline]
-            #[cfg_attr(feature = "cargo-clippy", allow(too_many_arguments))]
+            #[cfg_attr(feature = "cargo-clippy", allow(clippy::too_many_arguments))]
             pub const fn new($($elem_name: $elem_ty),*) -> Self {
-                Simd(codegen::$id($($elem_name),*))
+                Simd(codegen::$id($($elem_name as $ielem_ty),*))
             }
 
             /// Returns the number of vector lanes.
@@ -36,7 +38,7 @@ macro_rules! impl_minimal_iuf {
                 Simd(codegen::$id($({
                     #[allow(non_camel_case_types, dead_code)]
                     struct $elem_name;
-                    value
+                    value as $ielem_ty
                 }),*))
             }
 
@@ -58,8 +60,9 @@ macro_rules! impl_minimal_iuf {
             /// If `index >= Self::lanes()` the behavior is undefined.
             #[inline]
             pub unsafe fn extract_unchecked(self, index: usize) -> $elem_ty {
-                use llvm::simd_extract;
-                simd_extract(self.0, index as u32)
+                use crate::llvm::simd_extract;
+                let e: $ielem_ty = simd_extract(self.0, index as u32);
+                e as $elem_ty
             }
 
             /// Returns a new vector where the value at `index` is replaced by `new_value`.
@@ -86,17 +89,17 @@ macro_rules! impl_minimal_iuf {
                 index: usize,
                 new_value: $elem_ty,
             ) -> Self {
-                use llvm::simd_insert;
-                Simd(simd_insert(self.0, index as u32, new_value))
+                use crate::llvm::simd_insert;
+                Simd(simd_insert(self.0, index as u32, new_value as $ielem_ty))
             }
         }
 
         test_if!{
             $test_tt:
             interpolate_idents! {
-                mod [$id _minimal] {
+                pub mod [$id _minimal] {
                     use super::*;
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn minimal() {
                         // lanes:
                         assert_eq!($elem_count, $id::lanes());
@@ -130,6 +133,9 @@ macro_rules! impl_minimal_iuf {
                         }
                     }
 
+                    // FIXME: wasm-bindgen-test does not support #[should_panic]
+                    // #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+                    #[cfg(not(target_arch = "wasm32"))]
                     #[test]
                     #[should_panic]
                     fn extract_panic_oob() {
@@ -137,6 +143,9 @@ macro_rules! impl_minimal_iuf {
                         const VEC: $id = $id::splat(VAL);
                         let _ = VEC.extract($id::lanes());
                     }
+                    // FIXME: wasm-bindgen-test does not support #[should_panic]
+                    // #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+                    #[cfg(not(target_arch = "wasm32"))]
                     #[test]
                     #[should_panic]
                     fn replace_panic_oob() {

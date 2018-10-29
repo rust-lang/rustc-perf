@@ -11,31 +11,31 @@ macro_rules! impl_from_vector {
                     U: crate::sealed::Simd<LanesType = T::LanesType>,
                 {
                 }
-                use llvm::simd_cast;
+                use crate::llvm::simd_cast;
                 static_assert_same_number_of_lanes::<$id, $source>();
                 Simd(unsafe { simd_cast(source.0) })
             }
         }
 
         // FIXME: `Into::into` is not inline, but due to
-                        // the blanket impl in `std`, which is not
-                        // marked `default`, we cannot override it here with
-                        // specialization.
-                        /*
-                        impl Into<$id> for $source {
-                            #[inline]
-                            fn into(self) -> $id {
-                                unsafe { simd_cast(self) }
-                            }
-                        }
-                        */
+                                                        // the blanket impl in `std`, which is not
+                                                        // marked `default`, we cannot override it here with
+                                                        // specialization.
+                                                        /*
+                                                        impl Into<$id> for $source {
+                                                            #[inline]
+                                                            fn into(self) -> $id {
+                                                                unsafe { simd_cast(self) }
+                                                            }
+                                                        }
+                                                        */
 
         test_if!{
             $test_tt:
             interpolate_idents! {
-                mod [$id _from_ $source] {
+                pub mod [$id _from_ $source] {
                     use super::*;
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn from() {
                         assert_eq!($id::lanes(), $source::lanes());
                         let source: $source = Default::default();

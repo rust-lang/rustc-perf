@@ -1,8 +1,8 @@
 //! Implementations of the `ShuffleResult` trait for the different numbers of
 //! lanes and vector element types.
 
-use masks::*;
-use sealed::Shuffle;
+use crate::masks::*;
+use crate::sealed::Shuffle;
 
 impl Shuffle<[u32; 2]> for i8 {
     type Output = crate::codegen::i8x2;
@@ -219,6 +219,56 @@ impl Shuffle<[u32; 4]> for m64 {
 }
 impl Shuffle<[u32; 8]> for m64 {
     type Output = crate::codegen::m64x8;
+}
+
+impl Shuffle<[u32; 2]> for isize {
+    type Output = crate::codegen::isizex2;
+}
+impl Shuffle<[u32; 4]> for isize {
+    type Output = crate::codegen::isizex4;
+}
+impl Shuffle<[u32; 8]> for isize {
+    type Output = crate::codegen::isizex8;
+}
+
+impl Shuffle<[u32; 2]> for usize {
+    type Output = crate::codegen::usizex2;
+}
+impl Shuffle<[u32; 4]> for usize {
+    type Output = crate::codegen::usizex4;
+}
+impl Shuffle<[u32; 8]> for usize {
+    type Output = crate::codegen::usizex8;
+}
+
+impl<T> Shuffle<[u32; 2]> for *const T {
+    type Output = crate::codegen::cptrx2<T>;
+}
+impl<T> Shuffle<[u32; 4]> for *const T {
+    type Output = crate::codegen::cptrx4<T>;
+}
+impl<T> Shuffle<[u32; 8]> for *const T {
+    type Output = crate::codegen::cptrx8<T>;
+}
+
+impl<T> Shuffle<[u32; 2]> for *mut T {
+    type Output = crate::codegen::mptrx2<T>;
+}
+impl<T> Shuffle<[u32; 4]> for *mut T {
+    type Output = crate::codegen::mptrx4<T>;
+}
+impl<T> Shuffle<[u32; 8]> for *mut T {
+    type Output = crate::codegen::mptrx8<T>;
+}
+
+impl Shuffle<[u32; 2]> for msize {
+    type Output = crate::codegen::msizex2;
+}
+impl Shuffle<[u32; 4]> for msize {
+    type Output = crate::codegen::msizex4;
+}
+impl Shuffle<[u32; 8]> for msize {
+    type Output = crate::codegen::msizex8;
 }
 
 impl Shuffle<[u32; 1]> for i128 {

@@ -1,21 +1,21 @@
 //! Implementation of `FromCast` and `IntoCast`.
-#![cfg_attr(feature = "cargo-clippy", allow(stutter))]
+#![cfg_attr(feature = "cargo-clippy", allow(clippy::stutter))]
 
 /// Numeric cast from `T` to `Self`.
 ///
-/// > Note: This is a temporary workaround until the conversion traits specified
-/// > in [RFC2484] are implemented.
+/// > Note: This is a temporary workaround until the conversion traits
+/// specified > in [RFC2484] are implemented.
 ///
 /// Numeric cast between vectors with the same number of lanes, such that:
 ///
 /// * casting integer vectors whose lane types have the same size (e.g. `i32xN`
 /// -> `u32xN`) is a **no-op**,
 ///
-/// * casting from a larger integer to a smaller integer (e.g. `u32xN` -> `u8xN`)
-/// will **truncate**,
+/// * casting from a larger integer to a smaller integer (e.g. `u32xN` ->
+/// `u8xN`) will **truncate**,
 ///
-/// * casting from a smaller integer to a larger integer
-///   (e.g. `u8xN` -> `u32xN`) will:
+/// * casting from a smaller integer to a larger integer   (e.g. `u8xN` ->
+///   `u32xN`) will:
 ///    * **zero-extend** if the source is unsigned, or
 ///    * **sign-extend** if the source is signed,
 ///
@@ -29,26 +29,26 @@
 /// * casting from an `f64` to an `f32` **rounds to nearest, ties to even**.
 ///
 /// [RFC2484]: https://github.com/rust-lang/rfcs/pull/2484
-pub trait FromCast<T>: ::marker::Sized {
+pub trait FromCast<T>: crate::marker::Sized {
     /// Numeric cast from `T` to `Self`.
-    fn from_cast(T) -> Self;
+    fn from_cast(_: T) -> Self;
 }
 
 /// Numeric cast from `Self` to `T`.
 ///
-/// > Note: This is a temporary workaround until the conversion traits specified
-/// > in [RFC2484] are implemented.
+/// > Note: This is a temporary workaround until the conversion traits
+/// specified > in [RFC2484] are implemented.
 ///
 /// Numeric cast between vectors with the same number of lanes, such that:
 ///
 /// * casting integer vectors whose lane types have the same size (e.g. `i32xN`
 /// -> `u32xN`) is a **no-op**,
 ///
-/// * casting from a larger integer to a smaller integer (e.g. `u32xN` -> `u8xN`)
-/// will **truncate**,
+/// * casting from a larger integer to a smaller integer (e.g. `u32xN` ->
+/// `u8xN`) will **truncate**,
 ///
-/// * casting from a smaller integer to a larger integer
-///   (e.g. `u8xN` -> `u32xN`) will:
+/// * casting from a smaller integer to a larger integer   (e.g. `u8xN` ->
+///   `u32xN`) will:
 ///    * **zero-extend** if the source is unsigned, or
 ///    * **sign-extend** if the source is signed,
 ///
@@ -62,7 +62,7 @@ pub trait FromCast<T>: ::marker::Sized {
 /// * casting from an `f64` to an `f32` **rounds to nearest, ties to even**.
 ///
 /// [RFC2484]: https://github.com/rust-lang/rfcs/pull/2484
-pub trait Cast<T>: ::marker::Sized {
+pub trait Cast<T>: crate::marker::Sized {
     /// Numeric cast from `self` to `T`.
     fn cast(self) -> T;
 }

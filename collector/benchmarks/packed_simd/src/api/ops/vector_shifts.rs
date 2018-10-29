@@ -2,29 +2,29 @@
 
 macro_rules! impl_ops_vector_shifts {
     ([$elem_ty:ident; $elem_count:expr]: $id:ident | $test_tt:tt) => {
-        impl ::ops::Shl<$id> for $id {
+        impl crate::ops::Shl<$id> for $id {
             type Output = Self;
             #[inline]
             fn shl(self, other: Self) -> Self {
-                use llvm::simd_shl;
+                use crate::llvm::simd_shl;
                 unsafe { Simd(simd_shl(self.0, other.0)) }
             }
         }
-        impl ::ops::Shr<$id> for $id {
+        impl crate::ops::Shr<$id> for $id {
             type Output = Self;
             #[inline]
             fn shr(self, other: Self) -> Self {
-                use llvm::simd_shr;
+                use crate::llvm::simd_shr;
                 unsafe { Simd(simd_shr(self.0, other.0)) }
             }
         }
-        impl ::ops::ShlAssign<$id> for $id {
+        impl crate::ops::ShlAssign<$id> for $id {
             #[inline]
             fn shl_assign(&mut self, other: Self) {
                 *self = *self << other;
             }
         }
-        impl ::ops::ShrAssign<$id> for $id {
+        impl crate::ops::ShrAssign<$id> for $id {
             #[inline]
             fn shr_assign(&mut self, other: Self) {
                 *self = *self >> other;
@@ -33,11 +33,12 @@ macro_rules! impl_ops_vector_shifts {
         test_if!{
             $test_tt:
             interpolate_idents! {
-                mod [$id _ops_vector_shifts] {
+                pub mod [$id _ops_vector_shifts] {
                     use super::*;
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     #[cfg_attr(any(target_arch = "s390x", target_arch = "sparc64"),
-                               allow(unreachable_code, unused_variables))]
+                               allow(unreachable_code, unused_variables, unused_mut))]
+                    // ^^^ FIXME: https://github.com/rust-lang/rust/issues/55344
                     fn ops_vector_shifts() {
                         let z = $id::splat(0 as $elem_ty);
                         let o = $id::splat(1 as $elem_ty);

@@ -1,7 +1,7 @@
 //! Intersection of a ray with a plane
 
-use geometry::{f32xN, Dot, Plane, Ray, RayxN, Selectable};
-use intersection::{Intersect, Isect, IsectxN};
+use crate::geometry::{f32xN, Dot, Plane, Ray, RayxN, Selectable};
+use crate::intersection::{Intersect, Isect, IsectxN};
 
 // Scalar ray-plane intersection
 impl Intersect<Plane> for Ray {
@@ -12,7 +12,7 @@ impl Intersect<Plane> for Ray {
         let d = -plane.p.dot(plane.n);
         let v = ray.dir.dot(plane.n);
 
-        if v.abs() < 1.0e-17 {
+        if v.abs() < 1e-17 {
             return isect;
         }
 
@@ -40,14 +40,14 @@ impl Intersect<Plane> for RayxN {
 
         let old_isect = isect;
 
-        let m = v.abs().ge(f32xN::splat(1.0e-17));
+        let m = v.abs().ge(f32xN::splat(1e-17));
         if m.any() {
             let t = m.sel(-(ray.origin.dot(plane.n) + d) / v, isect.t);
             let m = m & t.gt(f32xN::splat(0.)) & t.lt(isect.t);
 
             if m.any() {
                 isect.t = m.sel(t, isect.t);
-                isect.hit = m | isect.hit;
+                isect.hit |= m;
                 isect.p = m.sel(ray.origin + t * ray.dir, isect.p);
                 isect.n = m.sel(plane.n, isect.n);
             }
@@ -60,7 +60,7 @@ impl Intersect<Plane> for RayxN {
                 let old_isect_i = old_isect.get(i);
                 let ray_i = self.get(i);
                 let isect_i = ray_i.intersect(plane, old_isect_i);
-                assert_eq!(isect_i, isect.get(i), "\n\nplane: {:?}\n\nold_isect: {:?}\n\nrays: {:?}\n\ni: {:?}\nold_isect_i: {:?}\nray_i: {:?}\nisect_i: {:?}\n\n", plane, old_isect, self, i, old_isect_i, ray_i, isect_i);
+                assert!(isect_i.almost_eq(&isect.get(i)), "{:?} !~= {:?}\n\nplane: {:?}\n\nold_isect: {:?}\n\nrays: {:?}\n\ni: {:?}\nold_isect_i: {:?}\nray_i: {:?}\n\n", isect_i, isect.get(i), plane, old_isect, self, i, old_isect_i, ray_i);
             }
             true
         });
@@ -72,7 +72,7 @@ impl Intersect<Plane> for RayxN {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use geometry::{m32xN, V3D, V3DxN};
+    use crate::geometry::{m32xN, V3DxN, V3D};
 
     #[test]
     fn sanity() {
@@ -90,7 +90,7 @@ mod tests {
         };
 
         let ray_hit = Ray {
-            origin: V3D::new(),
+            origin: V3D::default(),
             dir: V3D {
                 x: 0.01,
                 y: 0.01,
@@ -98,7 +98,7 @@ mod tests {
             },
         };
         let ray_miss = Ray {
-            origin: V3D::new(),
+            origin: V3D::default(),
             dir: V3D {
                 x: 0.,
                 y: 0.,
@@ -106,9 +106,9 @@ mod tests {
             },
         };
 
-        let isect_hit = ray_hit.intersect(&plane, Isect::new());
+        let isect_hit = ray_hit.intersect(&plane, Isect::default());
         assert!(isect_hit.hit);
-        let isect_miss = ray_miss.intersect(&plane, Isect::new());
+        let isect_miss = ray_miss.intersect(&plane, Isect::default());
         assert!(!isect_miss.hit);
 
         // hit, miss, hit, miss
@@ -119,7 +119,7 @@ mod tests {
         let z_val = f32xN::new(-1., 1., -1., 1.);
 
         let rays = RayxN {
-            origin: V3DxN::new(),
+            origin: V3DxN::default(),
             dir: V3DxN {
                 x: f32xN::splat(0.01),
                 y: f32xN::splat(0.01),
@@ -127,7 +127,7 @@ mod tests {
             },
         };
 
-        let isectxN = rays.intersect(&plane, IsectxN::new());
+        let isectxN = rays.intersect(&plane, IsectxN::default());
 
         #[cfg(feature = "256bit")]
         let expected =

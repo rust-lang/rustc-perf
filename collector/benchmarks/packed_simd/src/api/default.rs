@@ -2,7 +2,7 @@
 
 macro_rules! impl_default {
     ([$elem_ty:ident; $elem_count:expr]: $id:ident | $test_tt:tt) => {
-        impl ::default::Default for $id {
+        impl Default for $id {
             #[inline]
             fn default() -> Self {
                 Self::splat($elem_ty::default())
@@ -12,9 +12,9 @@ macro_rules! impl_default {
         test_if!{
             $test_tt:
             interpolate_idents! {
-                mod [$id _default] {
+                pub mod [$id _default] {
                     use super::*;
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn default() {
                         let a = $id::default();
                         for i in 0..$id::lanes() {

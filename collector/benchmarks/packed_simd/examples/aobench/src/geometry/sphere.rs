@@ -1,6 +1,6 @@
 //! Sphere
 
-use geometry::V3D;
+use crate::geometry::V3D;
 
 #[derive(Copy, Clone, Debug)]
 pub struct Sphere {

@@ -1,13 +1,13 @@
 //! Implementation of `FromBits` and `IntoBits`.
 
 /// Safe lossless bitwise conversion from `T` to `Self`.
-pub trait FromBits<T>: ::marker::Sized {
+pub trait FromBits<T>: crate::marker::Sized {
     /// Safe lossless bitwise transmute from `T` to `Self`.
-    fn from_bits(T) -> Self;
+    fn from_bits(t: T) -> Self;
 }
 
 /// Safe lossless bitwise conversion from `Self` to `T`.
-pub trait IntoBits<T>: ::marker::Sized {
+pub trait IntoBits<T>: crate::marker::Sized {
     /// Safe lossless bitwise transmute from `self` to `T`.
     fn into_bits(self) -> T;
 }
@@ -19,7 +19,9 @@ where
 {
     #[inline]
     fn into_bits(self) -> U {
-        debug_assert!(::mem::size_of::<Self>() == ::mem::size_of::<U>());
+        debug_assert!(
+            crate::mem::size_of::<Self>() == crate::mem::size_of::<U>()
+        );
         U::from_bits(self)
     }
 }

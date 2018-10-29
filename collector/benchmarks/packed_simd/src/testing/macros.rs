@@ -15,7 +15,7 @@ macro_rules! test_if {
                                 test_v128,
                                 test_v256,
                                 test_v512,
-                                test_none,
+                                test_none,  // disables all tests
                             ))),
                             // Test if:
                             //
@@ -24,5 +24,21 @@ macro_rules! test_if {
                             all(test, $cfg_tt),
                         ))]
         $it
+    };
+}
+
+#[cfg(test)]
+#[allow(unused)]
+macro_rules! ref_ {
+    ($anything:tt) => {
+        &$anything
+    };
+}
+
+#[cfg(test)]
+#[allow(unused)]
+macro_rules! ref_mut_ {
+    ($anything:tt) => {
+        &mut $anything
     };
 }

@@ -1,14 +1,15 @@
 //! 4x4 matrix inverse using SIMD
-use *;
+use crate::*;
+use packed_simd::shuffle;
 
 use packed_simd::f32x4;
 
 pub fn inv4x4(m: Matrix4x4) -> Option<Matrix4x4> {
     let m = m.0;
-    let m_0 = f32x4::from_slice_aligned(&m[0]);
-    let m_1 = f32x4::from_slice_aligned(&m[1]);
-    let m_2 = f32x4::from_slice_aligned(&m[2]);
-    let m_3 = f32x4::from_slice_aligned(&m[3]);
+    let m_0 = f32x4::from_slice_unaligned(&m[0]);
+    let m_1 = f32x4::from_slice_unaligned(&m[1]);
+    let m_2 = f32x4::from_slice_unaligned(&m[2]);
+    let m_3 = f32x4::from_slice_unaligned(&m[3]);
 
     let tmp1: f32x4 = shuffle!(m_0, m_1, [0, 1, 4, 5]);
     let row1: f32x4 = shuffle!(m_2, m_3, [0, 1, 4, 5]);
@@ -92,10 +93,10 @@ pub fn inv4x4(m: Matrix4x4) -> Option<Matrix4x4> {
 
     let mut m = m;
 
-    res0.write_to_slice_aligned(&mut m[0]);
-    res1.write_to_slice_aligned(&mut m[1]);
-    res2.write_to_slice_aligned(&mut m[2]);
-    res3.write_to_slice_aligned(&mut m[3]);
+    res0.write_to_slice_unaligned(&mut m[0]);
+    res1.write_to_slice_unaligned(&mut m[1]);
+    res2.write_to_slice_unaligned(&mut m[2]);
+    res3.write_to_slice_unaligned(&mut m[3]);
 
     Some(Matrix4x4(m))
 }
@@ -103,5 +104,5 @@ pub fn inv4x4(m: Matrix4x4) -> Option<Matrix4x4> {
 #[cfg(test)]
 #[test]
 fn test() {
-    ::test(inv4x4)
+    crate::test(inv4x4)
 }

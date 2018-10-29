@@ -23,9 +23,9 @@ macro_rules! impl_reduction_mask {
         test_if!{
             $test_tt:
             interpolate_idents! {
-                mod [$id _reduction] {
+                pub mod [$id _reduction] {
                     use super::*;
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn all() {
                         let a = $id::splat(true);
                         assert!(a.all());
@@ -43,7 +43,7 @@ macro_rules! impl_reduction_mask {
                             }
                         }
                     }
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn any() {
                         let a = $id::splat(true);
                         assert!(a.any());
@@ -61,7 +61,7 @@ macro_rules! impl_reduction_mask {
                             }
                         }
                     }
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn none() {
                         let a = $id::splat(true);
                         assert!(!a.none());

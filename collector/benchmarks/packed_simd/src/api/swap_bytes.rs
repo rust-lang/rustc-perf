@@ -45,7 +45,7 @@ macro_rules! impl_swap_bytes {
         test_if! {
             $test_tt:
             interpolate_idents! {
-                mod [$id _swap_bytes] {
+                pub mod [$id _swap_bytes] {
                     use super::*;
 
                     const BYTES: [u8; 64] = [
@@ -79,7 +79,7 @@ macro_rules! impl_swap_bytes {
                         ($func: ident) => {{
                             let actual = swap!($func);
                             let expected =
-                                BYTES.iter().rev().skip(64 - mem::size_of::<$id>());
+                                BYTES.iter().rev().skip(64 - crate::mem::size_of::<$id>());
 
                             assert!(actual.iter().zip(expected).all(|(x, y)| x == y));
                         }};
@@ -94,12 +94,12 @@ macro_rules! impl_swap_bytes {
                         }};
                     }
 
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn swap_bytes() {
                         test_swap!(swap_bytes);
                     }
 
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn to_le() {
                         #[cfg(target_endian = "little")]
                         {
@@ -111,7 +111,7 @@ macro_rules! impl_swap_bytes {
                         }
                     }
 
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn to_be() {
                         #[cfg(target_endian = "big")]
                         {

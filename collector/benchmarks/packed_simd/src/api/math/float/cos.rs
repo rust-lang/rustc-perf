@@ -9,16 +9,23 @@ macro_rules! impl_math_float_cos {
                 use crate::codegen::math::float::cos::Cos;
                 Cos::cos(self)
             }
+
+            /// Cosine of `self * PI`.
+            #[inline]
+            pub fn cos_pi(self) -> Self {
+                use crate::codegen::math::float::cos_pi::CosPi;
+                CosPi::cos_pi(self)
+            }
         }
 
         test_if!{
             $test_tt:
             interpolate_idents! {
-                mod [$id _math_cos] {
+                pub mod [$id _math_cos] {
                     use super::*;
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn cos() {
-                        use $elem_ty::consts::PI;
+                        use crate::$elem_ty::consts::PI;
                         let z = $id::splat(0 as $elem_ty);
                         let o = $id::splat(1 as $elem_ty);
                         let p = $id::splat(PI as $elem_ty);

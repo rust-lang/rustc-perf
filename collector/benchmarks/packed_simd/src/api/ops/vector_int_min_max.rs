@@ -23,9 +23,9 @@ macro_rules! impl_ops_vector_int_min_max {
         }
         test_if!{$test_tt:
         interpolate_idents! {
-            mod [$id _ops_vector_min_max] {
+            pub mod [$id _ops_vector_min_max] {
                 use super::*;
-                #[test]
+                #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                 fn min_max() {
                     let o = $id::splat(1 as $elem_ty);
                     let t = $id::splat(2 as $elem_ty);

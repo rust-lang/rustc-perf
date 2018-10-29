@@ -2,14 +2,14 @@
 
 macro_rules! impl_ops_scalar_shifts {
     ([$elem_ty:ident; $elem_count:expr]: $id:ident | $test_tt:tt) => {
-        impl ::ops::Shl<u32> for $id {
+        impl crate::ops::Shl<u32> for $id {
             type Output = Self;
             #[inline]
             fn shl(self, other: u32) -> Self {
                 self << $id::splat(other as $elem_ty)
             }
         }
-        impl ::ops::Shr<u32> for $id {
+        impl crate::ops::Shr<u32> for $id {
             type Output = Self;
             #[inline]
             fn shr(self, other: u32) -> Self {
@@ -17,13 +17,13 @@ macro_rules! impl_ops_scalar_shifts {
             }
         }
 
-        impl ::ops::ShlAssign<u32> for $id {
+        impl crate::ops::ShlAssign<u32> for $id {
             #[inline]
             fn shl_assign(&mut self, other: u32) {
                 *self = *self << other;
             }
         }
-        impl ::ops::ShrAssign<u32> for $id {
+        impl crate::ops::ShrAssign<u32> for $id {
             #[inline]
             fn shr_assign(&mut self, other: u32) {
                 *self = *self >> other;
@@ -32,11 +32,12 @@ macro_rules! impl_ops_scalar_shifts {
         test_if!{
             $test_tt:
             interpolate_idents! {
-                mod [$id _ops_scalar_shifts] {
+                pub mod [$id _ops_scalar_shifts] {
                     use super::*;
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     #[cfg_attr(any(target_arch = "s390x", target_arch = "sparc64"),
-                               allow(unreachable_code, unused_variables))]
+                               allow(unreachable_code, unused_variables, unused_mut))]
+                    // ^^^ FIXME: https://github.com/rust-lang/rust/issues/55344
                     fn ops_scalar_shifts() {
                         let z = $id::splat(0 as $elem_ty);
                         let o = $id::splat(1 as $elem_ty);

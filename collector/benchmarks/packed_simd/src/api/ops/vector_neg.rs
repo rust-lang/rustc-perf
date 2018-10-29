@@ -2,7 +2,7 @@
 
 macro_rules! impl_ops_vector_neg {
     ([$elem_ty:ident; $elem_count:expr]: $id:ident | $test_tt:tt) => {
-        impl ::ops::Neg for $id {
+        impl crate::ops::Neg for $id {
             type Output = Self;
             #[inline]
             fn neg(self) -> Self {
@@ -12,9 +12,9 @@ macro_rules! impl_ops_vector_neg {
         test_if!{
             $test_tt:
             interpolate_idents! {
-                mod [$id _ops_vector_neg] {
+                pub mod [$id _ops_vector_neg] {
                     use super::*;
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn neg() {
                         let z = $id::splat(0 as $elem_ty);
                         let o = $id::splat(1 as $elem_ty);

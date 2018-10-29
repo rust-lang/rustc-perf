@@ -1,6 +1,6 @@
 //! A ray
 
-use geometry::V3D;
+use crate::geometry::V3D;
 
 /// Ray starting at `origin` in `dir` direction.
 #[derive(Copy, Clone, Debug)]

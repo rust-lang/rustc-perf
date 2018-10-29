@@ -4,10 +4,10 @@
 set -ex
 
 run() {
-    echo "Building docker container for TARGET=${1}"
-    docker build -t ppv -f ci/docker/$1/Dockerfile ci/
+    echo "Building docker container for TARGET=${TARGET} RUSTFLAGS=${RUSTFLAGS}"
+    docker build -t packed_simd -f ci/docker/${TARGET}/Dockerfile ci/
     mkdir -p target
-    target=$(echo $1 | sed 's/-emulated//')
+    target=$(echo "${TARGET}" | sed 's/-emulated//')
     echo "Running docker"
     docker run \
       --user `id -u`:`id -g` \
@@ -18,19 +18,21 @@ run() {
       --volume `rustc --print sysroot`:/rust:ro \
       --env TARGET=$target \
       --env NORUN \
+      --env NOVERIFY \
+      --env RUSTFLAGS \
       --volume `pwd`:/checkout:ro \
       --volume `pwd`/target:/checkout/target \
       --workdir /checkout \
       --privileged \
-      ppv \
+      packed_simd \
       bash \
       -c 'PATH=$PATH:/rust/bin exec ci/run.sh'
 }
 
-if [ -z "$1" ]; then
+if [ -z "${TARGET}" ]; then
   for d in `ls ci/docker/`; do
     run $d
   done
 else
-  run $1
+  run ${TARGET}
 fi

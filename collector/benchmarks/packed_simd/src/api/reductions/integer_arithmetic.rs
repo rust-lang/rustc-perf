@@ -1,7 +1,8 @@
 //! Implements portable horizontal integer vector arithmetic reductions.
 
 macro_rules! impl_reduction_integer_arithmetic {
-    ([$elem_ty:ident; $elem_count:expr]: $id:ident | $test_tt:tt) => {
+    ([$elem_ty:ident; $elem_count:expr]: $id:ident | $ielem_ty:ident | $test_tt:tt) => {
+
         impl $id {
             /// Horizontal wrapping sum of the vector elements.
             ///
@@ -16,8 +17,11 @@ macro_rules! impl_reduction_integer_arithmetic {
             pub fn wrapping_sum(self) -> $elem_ty {
                 #[cfg(not(target_arch = "aarch64"))]
                 {
-                    use llvm::simd_reduce_add_ordered;
-                    unsafe { simd_reduce_add_ordered(self.0, 0 as $elem_ty) }
+                    use crate::llvm::simd_reduce_add_ordered;
+                    let v: $ielem_ty = unsafe {
+                        simd_reduce_add_ordered(self.0, 0 as $ielem_ty)
+                    };
+                    v as $elem_ty
                 }
                 #[cfg(target_arch = "aarch64")]
                 {
@@ -44,8 +48,11 @@ macro_rules! impl_reduction_integer_arithmetic {
             pub fn wrapping_product(self) -> $elem_ty {
                 #[cfg(not(target_arch = "aarch64"))]
                 {
-                    use llvm::simd_reduce_mul_ordered;
-                    unsafe { simd_reduce_mul_ordered(self.0, 1 as $elem_ty) }
+                    use crate::llvm::simd_reduce_mul_ordered;
+                    let v: $ielem_ty = unsafe {
+                        simd_reduce_mul_ordered(self.0, 1 as $ielem_ty)
+                    };
+                    v as $elem_ty
                 }
                 #[cfg(target_arch = "aarch64")]
                 {
@@ -60,10 +67,38 @@ macro_rules! impl_reduction_integer_arithmetic {
             }
         }
 
+        impl crate::iter::Sum for $id {
+            #[inline]
+            fn sum<I: Iterator<Item=$id>>(iter: I) -> $id {
+                iter.fold($id::splat(0), crate::ops::Add::add)
+            }
+        }
+
+        impl crate::iter::Product for $id {
+            #[inline]
+            fn product<I: Iterator<Item=$id>>(iter: I) -> $id {
+                iter.fold($id::splat(1), crate::ops::Mul::mul)
+            }
+        }
+
+        impl<'a> crate::iter::Sum<&'a $id> for $id {
+            #[inline]
+            fn sum<I: Iterator<Item=&'a $id>>(iter: I) -> $id {
+                iter.fold($id::splat(0), |a, b| crate::ops::Add::add(a, *b))
+            }
+        }
+
+        impl<'a> crate::iter::Product<&'a $id> for $id {
+            #[inline]
+            fn product<I: Iterator<Item=&'a $id>>(iter: I) -> $id {
+                iter.fold($id::splat(1), |a, b| crate::ops::Mul::mul(a, *b))
+            }
+        }
+
         test_if!{
             $test_tt:
             interpolate_idents! {
-                mod [$id _reduction_int_arith] {
+                pub mod [$id _reduction_int_arith] {
                     use super::*;
 
                     fn alternating(x: usize) -> $id {
@@ -76,7 +111,7 @@ macro_rules! impl_reduction_integer_arithmetic {
                         v
                     }
 
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn wrapping_sum() {
                         let v = $id::splat(0 as $elem_ty);
                         assert_eq!(v.wrapping_sum(), 0 as $elem_ty);
@@ -95,7 +130,7 @@ macro_rules! impl_reduction_integer_arithmetic {
                             );
                         }
                     }
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn wrapping_sum_overflow() {
                         let start = $elem_ty::max_value()
                             - ($id::lanes() as $elem_ty / 2);
@@ -110,7 +145,7 @@ macro_rules! impl_reduction_integer_arithmetic {
                         assert_eq!(wrapping_sum, vwrapping_sum, "v = {:?}", v);
                     }
 
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn wrapping_product() {
                         let v = $id::splat(0 as $elem_ty);
                         assert_eq!(v.wrapping_product(), 0 as $elem_ty);
@@ -136,7 +171,7 @@ macro_rules! impl_reduction_integer_arithmetic {
                         }
                     }
 
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn wrapping_product_overflow() {
                         let start = $elem_ty::max_value()
                             - ($id::lanes() as $elem_ty / 2);

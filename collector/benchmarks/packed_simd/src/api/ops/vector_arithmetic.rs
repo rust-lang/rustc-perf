@@ -2,80 +2,80 @@
 
 macro_rules! impl_ops_vector_arithmetic {
     ([$elem_ty:ident; $elem_count:expr]: $id:ident | $test_tt:tt) => {
-        impl ::ops::Add for $id {
+        impl crate::ops::Add for $id {
             type Output = Self;
             #[inline]
             fn add(self, other: Self) -> Self {
-                use llvm::simd_add;
+                use crate::llvm::simd_add;
                 unsafe { Simd(simd_add(self.0, other.0)) }
             }
         }
 
-        impl ::ops::Sub for $id {
+        impl crate::ops::Sub for $id {
             type Output = Self;
             #[inline]
             fn sub(self, other: Self) -> Self {
-                use llvm::simd_sub;
+                use crate::llvm::simd_sub;
                 unsafe { Simd(simd_sub(self.0, other.0)) }
             }
         }
 
-        impl ::ops::Mul for $id {
+        impl crate::ops::Mul for $id {
             type Output = Self;
             #[inline]
             fn mul(self, other: Self) -> Self {
-                use llvm::simd_mul;
+                use crate::llvm::simd_mul;
                 unsafe { Simd(simd_mul(self.0, other.0)) }
             }
         }
 
-        impl ::ops::Div for $id {
+        impl crate::ops::Div for $id {
             type Output = Self;
             #[inline]
             fn div(self, other: Self) -> Self {
-                use llvm::simd_div;
+                use crate::llvm::simd_div;
                 unsafe { Simd(simd_div(self.0, other.0)) }
             }
         }
 
-        impl ::ops::Rem for $id {
+        impl crate::ops::Rem for $id {
             type Output = Self;
             #[inline]
             fn rem(self, other: Self) -> Self {
-                use llvm::simd_rem;
+                use crate::llvm::simd_rem;
                 unsafe { Simd(simd_rem(self.0, other.0)) }
             }
         }
 
-        impl ::ops::AddAssign for $id {
+        impl crate::ops::AddAssign for $id {
             #[inline]
             fn add_assign(&mut self, other: Self) {
                 *self = *self + other;
             }
         }
 
-        impl ::ops::SubAssign for $id {
+        impl crate::ops::SubAssign for $id {
             #[inline]
             fn sub_assign(&mut self, other: Self) {
                 *self = *self - other;
             }
         }
 
-        impl ::ops::MulAssign for $id {
+        impl crate::ops::MulAssign for $id {
             #[inline]
             fn mul_assign(&mut self, other: Self) {
                 *self = *self * other;
             }
         }
 
-        impl ::ops::DivAssign for $id {
+        impl crate::ops::DivAssign for $id {
             #[inline]
             fn div_assign(&mut self, other: Self) {
                 *self = *self / other;
             }
         }
 
-        impl ::ops::RemAssign for $id {
+        impl crate::ops::RemAssign for $id {
             #[inline]
             fn rem_assign(&mut self, other: Self) {
                 *self = *self % other;
@@ -85,9 +85,9 @@ macro_rules! impl_ops_vector_arithmetic {
         test_if!{
             $test_tt:
             interpolate_idents! {
-                mod [$id _ops_vector_arith] {
+               pub mod [$id _ops_vector_arith] {
                     use super::*;
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn ops_vector_arithmetic() {
                         let z = $id::splat(0 as $elem_ty);
                         let o = $id::splat(1 as $elem_ty);

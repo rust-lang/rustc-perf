@@ -5,7 +5,7 @@ macro_rules! impl_from_cast_ {
         impl crate::api::cast::FromCast<$from_ty> for $id {
             #[inline]
             fn from_cast(x: $from_ty) -> Self {
-                use codegen::llvm::simd_cast;
+                use crate::llvm::simd_cast;
                 debug_assert_eq!($from_ty::lanes(), $id::lanes());
                 Simd(unsafe { simd_cast(x.0) })
             }
@@ -14,9 +14,9 @@ macro_rules! impl_from_cast_ {
         test_if!{
             $test_tt:
             interpolate_idents! {
-                mod [$id _from_cast_ $from_ty] {
+                pub mod [$id _from_cast_ $from_ty] {
                     use super::*;
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn test() {
                         assert_eq!($id::lanes(), $from_ty::lanes());
                     }
@@ -48,9 +48,9 @@ macro_rules! impl_from_cast_mask_ {
         test_if!{
             $test_tt:
             interpolate_idents! {
-                mod [$id _from_cast_ $from_ty] {
+                pub mod [$id _from_cast_ $from_ty] {
                     use super::*;
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn test() {
                         assert_eq!($id::lanes(), $from_ty::lanes());
 

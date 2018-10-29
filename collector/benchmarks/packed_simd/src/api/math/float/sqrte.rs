@@ -8,19 +8,19 @@ macro_rules! impl_math_float_sqrte {
             /// FIXME: The precision of the estimate is currently unspecified.
             #[inline]
             pub fn sqrte(self) -> Self {
-                use llvm::simd_fsqrt;
-                Simd(unsafe { simd_fsqrt(self.0) })
+                use crate::codegen::math::float::sqrte::Sqrte;
+                Sqrte::sqrte(self)
             }
         }
 
         test_if!{
             $test_tt:
             interpolate_idents! {
-                mod [$id _math_sqrte] {
+                pub mod [$id _math_sqrte] {
                     use super::*;
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn sqrte() {
-                        use $elem_ty::consts::SQRT_2;
+                        use crate::$elem_ty::consts::SQRT_2;
                         let tol = $id::splat(2.4e-4 as $elem_ty);
 
                         let z = $id::splat(0 as $elem_ty);

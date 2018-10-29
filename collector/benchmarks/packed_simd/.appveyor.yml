@@ -1,22 +1,52 @@
 matrix:
   allow_failures:
-    # FIXME: https://github.com/rust-lang-nursery/packed_simd/issues/39
-    - TARGET: x86_64-pc-windows-msvc
+    # FIXME: https://github.com/rust-lang-nursery/packed_simd/issues/72
     - TARGET: i686-pc-windows-msvc
-    - TARGET: x86_64-pc-windows-gnu
     - TARGET: i686-pc-windows-gnu
+    - TARGET: x86_64-pc-windows-gnu
   fast_finish: true
 
 environment:
   matrix:
     - TARGET: x86_64-pc-windows-msvc
       MSYSTEM: MINGW64
+      NOVERIFY: "1"
+    - TARGET: x86_64-pc-windows-msvc
+      MSYSTEM: MINGW64
+      RUSTFLAGS: "-C target-feature=+sse4.2"
+      NOVERIFY: "1"
+    - TARGET: x86_64-pc-windows-msvc
+      MSYSTEM: MINGW64
+      RUSTFLAGS: "-C target-feature=+avx"
+      NOVERIFY: "1"
+    - TARGET: x86_64-pc-windows-msvc
+      MSYSTEM: MINGW64
+      RUSTFLAGS: "-C target-feature=+avx2"
+      NOVERIFY: "1"
+
     - TARGET: i686-pc-windows-msvc
+      MSYSTEM: MINGW32
+      NOVERIFY: "1"
+    - TARGET: i686-pc-windows-msvc
+      MSYSTEM: MINGW32
+      RUSTFLAGS: "-C target-feature=+sse4.2"
+      NOVERIFY: "1"
+    - TARGET: i686-pc-windows-msvc
+      MSYSTEM: MINGW32
+      RUSTFLAGS: "-C target-feature=+avx"
+      NOVERIFY: "1"
+    - TARGET: i686-pc-windows-msvc
+      MSYSTEM: MINGW32
+      RUSTFLAGS: "-C target-feature=+avx2"
+      NOVERIFY: "1"
+
+    - TARGET: x86_64-pc-windows-gnu
+      MSYSTEM: MINGW64
+
+    - TARGET: i686-pc-windows-gnu
       MSYSTEM: MINGW32
     - TARGET: x86_64-pc-windows-gnu
       MSYSTEM: MINGW64
-    - TARGET: i686-pc-windows-gnu
-      MSYSTEM: MINGW32
 install:
   - ps: if (ls -r . -fi "*.rs" | sls "`t") { throw "Found tab character" }
   - ps: Start-FileDownload "https://static.rust-lang.org/dist/rust-nightly-${env:TARGET}.exe" -FileName "rust-install.exe"

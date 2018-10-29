@@ -76,7 +76,7 @@ macro_rules! impl_from_array {
                             // so we can take a reference to it:
                             let p = unsafe { &mut array.other as *mut () as *mut $elem_ty };
                             // note: default is a valid bit-pattern for $elem_ty:
-                            unsafe { ::ptr::write(p.wrapping_add(i), default) };
+                            unsafe { crate::ptr::write(p.wrapping_add(i), default) };
                         }
                         // note: the array variant of the union is properly initialized:
                         let mut array = unsafe { array.array };

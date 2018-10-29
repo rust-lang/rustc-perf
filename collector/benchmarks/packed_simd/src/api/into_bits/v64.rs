@@ -1,7 +1,8 @@
 //! `FromBits` and `IntoBits` implementations for portable 64-bit wide vectors
-#![cfg_attr(rustfmt, rustfmt_skip)]
+#![rustfmt::skip]
 
-use crate::v64::*;
+#[allow(unused)]  // wasm_bindgen_test
+use crate::*;
 
 impl_from_bits!(i8x8[test_v64]: u8x8, m8x8, i16x4, u16x4, m16x4, i32x2, u32x2, f32x2, m32x2);
 impl_from_bits!(u8x8[test_v64]: i8x8, m8x8, i16x4, u16x4, m16x4, i32x2, u32x2, f32x2, m32x2);

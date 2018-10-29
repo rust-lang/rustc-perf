@@ -13,11 +13,11 @@ macro_rules! impl_math_float_sqrt {
         test_if!{
             $test_tt:
             interpolate_idents! {
-                mod [$id _math_sqrt] {
+                pub mod [$id _math_sqrt] {
                     use super::*;
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn sqrt() {
-                        use $elem_ty::consts::SQRT_2;
+                        use crate::$elem_ty::consts::SQRT_2;
                         let z = $id::splat(0 as $elem_ty);
                         let o = $id::splat(1 as $elem_ty);
                         assert_eq!(z, z.sqrt());

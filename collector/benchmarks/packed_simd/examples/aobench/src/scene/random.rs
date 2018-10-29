@@ -1,7 +1,7 @@
 //! Aobench scene: 3 spheres and a plane using a random number generator
 
-use geometry::{f32xN, Plane, Sphere, V3D};
-use scene::Scene;
+use crate::geometry::{f32xN, Plane, Sphere, V3D};
+use crate::scene::Scene;
 
 #[derive(Clone)]
 pub struct Random {
@@ -9,9 +9,8 @@ pub struct Random {
     pub spheres: [Sphere; 3],
 }
 
-impl Scene for Random {
-    const NAO_SAMPLES: usize = 8;
-    fn new() -> Self {
+impl Default for Random {
+    fn default() -> Self {
         let plane = Plane {
             p: V3D {
                 x: 0.,
@@ -52,17 +51,25 @@ impl Scene for Random {
         ];
         Self { plane, spheres }
     }
+}
+
+impl Scene for Random {
+    const NAO_SAMPLES: usize = 8;
+    #[inline(always)]
     fn rand(&mut self) -> f32 {
-        ::random::scalar::thread_rng().gen()
+        crate::random::scalar::thread_rng().gen()
     }
+    #[inline(always)]
     fn plane(&self) -> &Plane {
         &self.plane
     }
+    #[inline(always)]
     fn spheres(&self) -> &[Sphere] {
         &self.spheres
     }
+    #[inline(always)]
     fn rand_f32xN(&mut self) -> (f32xN, f32xN) {
-        let mut rng = ::random::vector::thread_rng();
+        let mut rng = crate::random::vector::thread_rng();
         (rng.gen(), rng.gen())
     }
 }

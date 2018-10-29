@@ -5,26 +5,26 @@ macro_rules! impl_from_bits_ {
         impl crate::api::into_bits::FromBits<$from_ty> for $id {
             #[inline]
             fn from_bits(x: $from_ty) -> Self {
-                unsafe { ::mem::transmute(x) }
+                unsafe { crate::mem::transmute(x) }
             }
         }
 
         test_if!{
             $test_tt:
             interpolate_idents! {
-                mod [$id _from_bits_ $from_ty] {
+                pub mod [$id _from_bits_ $from_ty] {
                     use super::*;
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn test() {
-                        use ::{ptr::{read_unaligned}, mem::{size_of, zeroed}};
-                        use ::IntoBits;
+                        use crate::{ptr::{read_unaligned}, mem::{size_of, zeroed}};
+                        use crate::IntoBits;
                         assert_eq!(size_of::<$id>(),
                                    size_of::<$from_ty>());
                         // This is safe becasue we never create a reference
                         // to uninitialized memory:
                         let a: $from_ty = unsafe { zeroed() };
 
-                        let b_0: $id = ::FromBits::from_bits(a);
+                        let b_0: $id = crate::FromBits::from_bits(a);
                         let b_1: $id = a.into_bits();
 
                         // Check that these are byte-wise equal, that is,

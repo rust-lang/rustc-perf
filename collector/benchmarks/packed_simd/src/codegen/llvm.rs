@@ -1,9 +1,9 @@
 //! LLVM's platform intrinsics
 #![allow(dead_code)]
 
-use sealed::Shuffle;
+use crate::sealed::Shuffle;
 #[allow(unused_imports)] // FIXME: spurious warning?
-use sealed::Simd;
+use crate::sealed::Simd;
 
 // Shuffle intrinsics: expanded in users' crates, therefore public.
 extern "platform-intrinsic" {
@@ -93,4 +93,7 @@ extern "platform-intrinsic" {
 
     crate fn simd_fsqrt<T>(a: T) -> T;
     crate fn simd_fma<T>(a: T, b: T, c: T) -> T;
+
+    crate fn simd_gather<T, P, M>(value: T, pointers: P, mask: M) -> T;
+    crate fn simd_scatter<T, P, M>(value: T, pointers: P, mask: M);
 }

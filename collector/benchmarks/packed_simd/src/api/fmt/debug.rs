@@ -1,35 +1,19 @@
 //! Implement debug formatting
 
-macro_rules! impl_fmt_debug {
-    ([$elem_ty:ident; $elem_count:expr]: $id:ident | $test_tt:tt) => {
-        impl ::fmt::Debug for $id {
-            #[cfg_attr(feature = "cargo-clippy",
-                       allow(missing_inline_in_public_items))]
-            fn fmt(&self, f: &mut ::fmt::Formatter) -> ::fmt::Result {
-                // FIXME: https://github.com/rust-lang-nursery/rust-clippy/issues/2891
-                #[cfg_attr(feature = "cargo-clippy", allow(write_literal))]
-                write!(f, "{}(", stringify!($id))?;
-                for i in 0..$elem_count {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    self.extract(i).fmt(f)?;
-                }
-                write!(f, ")")
-            }
-        }
+macro_rules! impl_fmt_debug_tests {
+    ([$elem_ty:ty; $elem_count:expr]: $id:ident | $test_tt:tt) => {
         test_if!{
             $test_tt:
             interpolate_idents! {
-                mod [$id _fmt_debug] {
+                pub mod [$id _fmt_debug] {
                     use super::*;
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn debug() {
                         use arrayvec::{ArrayString,ArrayVec};
                         type TinyString = ArrayString<[u8; 512]>;
 
-                        use fmt::Write;
-                        let v = $id::splat($elem_ty::default());
+                        use crate::fmt::Write;
+                        let v = $id::default();
                         let mut s = TinyString::new();
                         write!(&mut s, "{:?}", v).unwrap();
 
@@ -52,5 +36,29 @@ macro_rules! impl_fmt_debug {
                 }
             }
         }
+    };
+}
+
+macro_rules! impl_fmt_debug {
+    ([$elem_ty:ty; $elem_count:expr]: $id:ident | $test_tt:tt) => {
+        impl crate::fmt::Debug for $id {
+            #[cfg_attr(
+                feature = "cargo-clippy",
+                allow(clippy::missing_inline_in_public_items)
+            )]
+            fn fmt(
+                &self, f: &mut crate::fmt::Formatter<'_>,
+            ) -> crate::fmt::Result {
+                write!(f, "{}(", stringify!($id))?;
+                for i in 0..$elem_count {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    self.extract(i).fmt(f)?;
+                }
+                write!(f, ")")
+            }
+        }
+        impl_fmt_debug_tests!([$elem_ty; $elem_count]: $id | $test_tt);
     };
 }

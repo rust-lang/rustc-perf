@@ -20,7 +20,7 @@ mod vector_shifts;
 mod scalar_shifts;
 
 #[macro_use]
-mod scalar_rotates;
+mod vector_rotates;
 
 #[macro_use]
 mod vector_neg;

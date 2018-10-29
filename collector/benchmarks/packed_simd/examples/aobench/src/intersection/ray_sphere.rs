@@ -1,7 +1,7 @@
 //! Intersection of a ray with a sphere.
 
-use geometry::{f32xN, Dot, Ray, RayxN, Selectable, Sphere};
-use intersection::{Intersect, Isect, IsectxN};
+use crate::geometry::{f32xN, Dot, Ray, RayxN, Selectable, Sphere};
+use crate::intersection::{Intersect, Isect, IsectxN};
 
 // Scalar ray-sphere intersection
 impl Intersect<Sphere> for Ray {
@@ -39,8 +39,9 @@ impl Intersect<Sphere> for RayxN {
         let rs = ray.origin - sphere.center;
 
         let b = rs.dot(ray.dir);
-        let c = rs.dot(rs) - sphere.radius * sphere.radius;
-        let d = b * b - c;
+        let radius = f32xN::splat(sphere.radius);
+        let c = radius.mul_adde(-radius, rs.dot(rs));
+        let d = b.mul_adde(b, -c);
 
         let old_isect = isect;
 
@@ -51,7 +52,7 @@ impl Intersect<Sphere> for RayxN {
 
             if m.any() {
                 isect.t = m.sel(t, isect.t);
-                isect.hit = m | isect.hit;
+                isect.hit |= m;
                 isect.p = m.sel(ray.origin + t * ray.dir, isect.p);
                 isect.n =
                     m.sel((isect.p - sphere.center).normalized(), isect.n);
@@ -65,7 +66,7 @@ impl Intersect<Sphere> for RayxN {
                 let old_isect_i = old_isect.get(i);
                 let ray_i = self.get(i);
                 let isect_i = ray_i.intersect(sphere, old_isect_i);
-                assert_eq!(isect_i, isect.get(i), "\n\nsphere: {:?}\n\nold_isect: {:?}\n\nrays: {:?}\n\ni: {:?}\nold_isect_i: {:?}\nray_i: {:?}\nisect_i: {:?}\n\n", sphere, old_isect, self, i, old_isect_i, ray_i, isect_i);
+                assert!(isect_i.almost_eq(&isect.get(i)), "{:?} !~= {:?}\n\nsphere: {:?}\n\nold_isect: {:?}\n\nrays: {:?}\n\ni: {:?}\nold_isect_i: {:?}\nray_i: {:?}\n\n", isect_i, isect.get(i), sphere, old_isect, self, i, old_isect_i, ray_i);
             }
             true
         });
@@ -77,7 +78,7 @@ impl Intersect<Sphere> for RayxN {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use geometry::{m32xN, V3D, V3DxN};
+    use crate::geometry::{m32xN, V3DxN, V3D};
 
     #[test]
     fn sanity() {
@@ -91,7 +92,7 @@ mod tests {
         };
 
         let ray_hit = Ray {
-            origin: V3D::new(),
+            origin: V3D::default(),
             dir: V3D {
                 x: 0.01,
                 y: 0.01,
@@ -99,7 +100,7 @@ mod tests {
             },
         };
         let ray_miss = Ray {
-            origin: V3D::new(),
+            origin: V3D::default(),
             dir: V3D {
                 x: 0.,
                 y: 0.,
@@ -107,9 +108,9 @@ mod tests {
             },
         };
 
-        let isect_hit = ray_hit.intersect(&sphere, Isect::new());
+        let isect_hit = ray_hit.intersect(&sphere, Isect::default());
         assert!(isect_hit.hit);
-        let isect_miss = ray_miss.intersect(&sphere, Isect::new());
+        let isect_miss = ray_miss.intersect(&sphere, Isect::default());
         assert!(!isect_miss.hit);
 
         // hit, miss, hit, miss
@@ -119,7 +120,7 @@ mod tests {
         let z_val = f32xN::new(-1., 1., -1., 1.);
 
         let rays = RayxN {
-            origin: V3DxN::new(),
+            origin: V3DxN::default(),
             dir: V3DxN {
                 x: f32xN::splat(0.01),
                 y: f32xN::splat(0.01),
@@ -127,7 +128,7 @@ mod tests {
             },
         };
 
-        let isectxN = rays.intersect(&sphere, IsectxN::new());
+        let isectxN = rays.intersect(&sphere, IsectxN::default());
 
         #[cfg(feature = "256bit")]
         let expected =

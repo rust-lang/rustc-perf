@@ -1,6 +1,6 @@
 //! Four packed rays
 
-use geometry::{Ray, V3DxN};
+use crate::geometry::{Ray, V3DxN};
 
 /// Four packed rays starting at `origin` in `dir` direction.
 #[derive(Copy, Clone, Debug)]

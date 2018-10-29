@@ -1,10 +1,8 @@
 //! Minimal API of mask vectors.
 
 macro_rules! impl_minimal_mask {
-    ([$elem_ty:ident; $elem_count:expr]: $id:ident | $test_tt:tt | $ielem_ty:ident |
-     $($elem_name:ident),+ |
-     $(#[$doc:meta])*) => {
-
+    ([$elem_ty:ident; $elem_count:expr]: $id:ident | $ielem_ty:ident
+    | $test_tt:tt | $($elem_name:ident),+ | $(#[$doc:meta])*) => {
         $(#[$doc])*
         pub type $id = Simd<[$elem_ty; $elem_count]>;
 
@@ -18,14 +16,14 @@ macro_rules! impl_minimal_mask {
             /// Creates a new instance with each vector elements initialized
             /// with the provided values.
             #[inline]
-            #[cfg_attr(feature = "cargo-clippy", allow(too_many_arguments))]
+            #[cfg_attr(feature = "cargo-clippy", allow(clippy::too_many_arguments))]
             pub const fn new($($elem_name: bool),*) -> Self {
                 Simd(codegen::$id($(Self::bool_to_internal($elem_name)),*))
             }
 
             /// Converts a boolean type into the type of the vector lanes.
             #[inline]
-            #[cfg_attr(feature = "cargo-clippy", allow(indexing_slicing))]
+            #[cfg_attr(feature = "cargo-clippy", allow(clippy::indexing_slicing))]
             const fn bool_to_internal(x: bool) -> $ielem_ty {
                 [0 as $ielem_ty, !(0 as $ielem_ty)][x as usize]
             }
@@ -63,7 +61,7 @@ macro_rules! impl_minimal_mask {
             /// If `index >= Self::lanes()` the behavior is undefined.
             #[inline]
             pub unsafe fn extract_unchecked(self, index: usize) -> bool {
-                use llvm::simd_extract;
+                use crate::llvm::simd_extract;
                 let x: $ielem_ty = simd_extract(self.0, index as u32);
                 x != 0
             }
@@ -92,7 +90,7 @@ macro_rules! impl_minimal_mask {
                 index: usize,
                 new_value: bool,
             ) -> Self {
-                use llvm::simd_insert;
+                use crate::llvm::simd_insert;
                 Simd(simd_insert(self.0, index as u32, Self::bool_to_internal(new_value)))
             }
         }
@@ -100,9 +98,9 @@ macro_rules! impl_minimal_mask {
         test_if!{
             $test_tt:
             interpolate_idents! {
-                mod [$id _minimal] {
+                pub mod [$id _minimal] {
                     use super::*;
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn minimal() {
                         // TODO: test new
 
@@ -134,12 +132,19 @@ macro_rules! impl_minimal_mask {
                             }
                         }
                     }
+
+                    // FIXME: wasm-bindgen-test does not support #[should_panic]
+                    // #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+                    #[cfg(not(target_arch = "wasm32"))]
                     #[test]
                     #[should_panic]
                     fn extract_panic_oob() {
                         let vec = $id::splat(false);
                         let _ = vec.extract($id::lanes());
                     }
+                    // FIXME: wasm-bindgen-test does not support #[should_panic]
+                    // #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+                    #[cfg(not(target_arch = "wasm32"))]
                     #[test]
                     #[should_panic]
                     fn replace_panic_oob() {

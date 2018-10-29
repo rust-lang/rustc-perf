@@ -12,6 +12,7 @@ pub struct Body {
     pub mass: f64,
 }
 const N_BODIES: usize = 5;
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::unreadable_literal))]
 const BODIES: [Body; N_BODIES] = [
     // sun:
     Body {
@@ -131,7 +132,7 @@ pub fn advance(bodies: &mut [Body; N_BODIES], dt: f64) {
         i += 2;
     }
 
-    let mut i = 0;
+    i = 0;
     for j in 0..N_BODIES {
         for k in j + 1..N_BODIES {
             let f = r[i] * mag[i];
@@ -168,7 +169,7 @@ pub fn run(n: usize) -> (f64, f64) {
 mod tests {
     #[test]
     fn test() {
-        for &(size, a_e, b_e) in ::RESULTS {
+        for &(size, a_e, b_e) in crate::RESULTS {
             let (a, b) = super::run(size);
             assert_eq!(format!("{:.9}", a), a_e);
             assert_eq!(format!("{:.9}", b), b_e);

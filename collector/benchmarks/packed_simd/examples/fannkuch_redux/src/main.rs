@@ -1,25 +1,23 @@
-extern crate fannkuch_redux_lib;
+#![deny(warnings, rust_2018_idioms)]
+
 use fannkuch_redux_lib::*;
 
-fn run<O: ::std::io::Write>(o: &mut O, n: usize, alg: usize) {
+fn run<O: std::io::Write>(o: &mut O, n: usize, alg: usize) {
     let (checksum, maxflips) = fannkuch_redux(n, alg);
-    write!(o, "{}\nPfannkuchen({}) = {}\n", checksum, n, maxflips).unwrap();
+    writeln!(o, "{}\nPfannkuchen({}) = {}", checksum, n, maxflips).unwrap();
 }
 
 fn main() {
-    let n: usize = std::env::args()
-        .nth(1)
-        .expect("need one arg")
-        .parse()
-        .unwrap();
-    assert!(n <= 3 && n <= 14, "n = {} is out-of-range [3, 14]", n);
+    let n: usize =
+        std::env::args().nth(1).expect("need one arg").parse().unwrap();
+    assert!(3 <= n && n <= 14, "n = {} is out-of-range [3, 14]", n);
     let alg = if let Some(v) = std::env::args().nth(2) {
         v.parse().unwrap()
     } else {
         0
     };
 
-    run(&mut ::std::io::stdout(), n, alg);
+    run(&mut std::io::stdout(), n, alg);
 }
 
 #[cfg(test)]

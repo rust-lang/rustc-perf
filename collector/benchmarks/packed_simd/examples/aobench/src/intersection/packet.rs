@@ -1,7 +1,7 @@
 //! SIMD intersection result
 
-use geometry::{f32xN, m32xN, V3DxN};
-use intersection::Isect;
+use crate::geometry::{f32xN, m32xN, V3DxN};
+use crate::intersection::Isect;
 
 /// Intersection result
 #[derive(Copy, Clone, Debug)]
@@ -12,15 +12,19 @@ pub struct IsectxN {
     pub hit: m32xN,
 }
 
-impl IsectxN {
-    pub fn new() -> Self {
+impl Default for IsectxN {
+    #[inline]
+    fn default() -> Self {
         Self {
-            t: f32xN::splat(1.0e+17),
+            t: f32xN::splat(1e17),
             hit: m32xN::splat(false),
-            p: V3DxN::new(),
-            n: V3DxN::new(),
+            p: V3DxN::default(),
+            n: V3DxN::default(),
         }
     }
+}
+
+impl IsectxN {
     pub fn get(&self, idx: usize) -> Isect {
         Isect {
             t: self.t.extract(idx),

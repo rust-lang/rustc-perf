@@ -1,9 +1,11 @@
 //! The N-body benchmark from the [benchmarks game][bg].
 //!
 //! [bg]: https://benchmarksgame-team.pages.debian.net/benchmarksgame/description/nbody.html#nbody
-#![deny(warnings)]
-
-extern crate packed_simd;
+#![deny(warnings, rust_2018_idioms)]
+#![cfg_attr(
+    feature = "cargo-clippy",
+    allow(clippy::similar_names, clippy::excessive_precision)
+)]
 
 pub mod scalar;
 pub mod simd;

@@ -12,7 +12,7 @@ fn rotate(x: &mut [i32]) {
 
 fn next_permutation(perm: &mut [i32], count: &mut [i32]) {
     for i in 1..perm.len() {
-        rotate(&mut perm[..i + 1]);
+        rotate(&mut perm[..=i]);
         let count_i = &mut count[i];
         if *count_i >= i as i32 {
             *count_i = 0;
@@ -38,22 +38,16 @@ struct Perm {
 }
 
 impl Perm {
-    fn new(n: u32) -> Perm {
+    fn new(n: u32) -> Self {
         let mut fact = [1; 16];
-        for i in 1..n as usize + 1 {
+        for i in 1..=n as usize {
             fact[i] = fact[i - 1] * i as u32;
         }
-        Perm {
-            cnt: [0; 16],
-            fact: fact,
-            n: n,
-            permcount: 0,
-            perm: P { p: [0; 16] },
-        }
+        Self { cnt: [0; 16], fact, n, permcount: 0, perm: P { p: [0; 16] } }
     }
 
     fn get(&mut self, mut idx: i32) -> P {
-        let mut pp = [0u8; 16];
+        let mut pp = [0_u8; 16];
         self.permcount = idx as u32;
         for (i, place) in self.perm.p.iter_mut().enumerate() {
             *place = i as i32 + 1;
@@ -63,19 +57,17 @@ impl Perm {
             let d = idx / self.fact[i] as i32;
             self.cnt[i] = d;
             idx %= self.fact[i] as i32;
-            for (place, val) in
-                pp.iter_mut().zip(self.perm.p[..(i + 1)].iter())
-            {
+            for (place, val) in pp.iter_mut().zip(self.perm.p[..=i].iter()) {
                 *place = (*val) as u8
             }
 
             let d = d as usize;
-            for j in 0..i + 1 {
-                self.perm.p[j] = if j + d <= i {
+            for j in 0..=i {
+                self.perm.p[j] = i32::from(if j + d <= i {
                     pp[j + d]
                 } else {
                     pp[j + d - i - 1]
-                } as i32;
+                });
             }
         }
 
@@ -128,11 +120,11 @@ fn work(mut perm: Perm, n: usize, max: usize) -> (i32, i32) {
 pub fn fannkuch_redux(n: usize) -> (i32, i32) {
     let perm = Perm::new(n as u32);
 
-    let n = 1;
+    let m = 1;
     let mut futures = vec![];
-    let k = perm.max() / n;
+    let k = perm.max() / m;
 
-    for j in (0..).map(|x| x * k).take_while(|&j| j < k * n) {
+    for j in (0..).map(|x| x * k).take_while(|&j| j < k * m) {
         let max = cmp::min(j + k, perm.max());
 
         futures
@@ -141,7 +133,7 @@ pub fn fannkuch_redux(n: usize) -> (i32, i32) {
 
     let mut checksum = 0;
     let mut maxflips = 0;
-    for fut in futures.into_iter() {
+    for fut in futures {
         let (cs, mf) = fut.join().unwrap();
         checksum += cs;
         maxflips = cmp::max(maxflips, mf);

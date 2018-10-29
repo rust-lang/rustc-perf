@@ -6,6 +6,12 @@ macro_rules! impl_mask_ty {
         #[derive(Copy, Clone)]
         pub struct $id($elem_ty);
 
+        impl crate::sealed::Mask for $id {
+            fn test(&self) -> bool {
+                $id::test(self)
+            }
+        }
+
         impl $id {
             /// Instantiate a mask with `value`
             #[inline]
@@ -30,7 +36,7 @@ macro_rules! impl_mask_ty {
             }
         }
 
-        #[cfg_attr(feature = "cargo-clippy", allow(partialeq_ne_impl))]
+        #[cfg_attr(feature = "cargo-clippy", allow(clippy::partialeq_ne_impl))]
         impl PartialEq<$id> for $id {
             #[inline]
             fn eq(&self, other: &Self) -> bool {
@@ -47,8 +53,7 @@ macro_rules! impl_mask_ty {
         impl PartialOrd<$id> for $id {
             #[inline]
             fn partial_cmp(
-                &self,
-                other: &Self,
+                &self, other: &Self,
             ) -> Option<crate::cmp::Ordering> {
                 use crate::cmp::Ordering;
                 if self == other {
@@ -100,10 +105,8 @@ macro_rules! impl_mask_ty {
 
         impl crate::fmt::Debug for $id {
             #[inline]
-            #[cfg_attr(feature = "cargo-clippy", allow(write_literal))]
             fn fmt(
-                &self,
-                fmtter: &mut crate::fmt::Formatter,
+                &self, fmtter: &mut crate::fmt::Formatter<'_>,
             ) -> Result<(), crate::fmt::Error> {
                 write!(fmtter, "{}({})", stringify!($id), self.0 != 0)
             }
@@ -120,4 +123,6 @@ impl_mask_ty!(m32: i32 | /// 32-bit wide mask.
 impl_mask_ty!(m64: i64 | /// 64-bit wide mask.
 );
 impl_mask_ty!(m128: i128 | /// 128-bit wide mask.
+);
+impl_mask_ty!(msize: isize | /// isize-wide mask.
 );

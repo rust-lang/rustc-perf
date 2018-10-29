@@ -9,17 +9,17 @@ macro_rules! impl_cmp_ord {
         impl $id {
             /// Returns a wrapper that implements `Ord`.
             #[inline]
-            pub fn ord(&self) -> PartiallyOrdered<$id> {
-                PartiallyOrdered(*self)
+            pub fn lex_ord(&self) -> LexicographicallyOrdered<$id> {
+                LexicographicallyOrdered(*self)
             }
         }
 
-        impl ::cmp::Ord for PartiallyOrdered<$id> {
+        impl crate::cmp::Ord for LexicographicallyOrdered<$id> {
             #[inline]
-            fn cmp(&self, other: &Self) -> ::cmp::Ordering {
+            fn cmp(&self, other: &Self) -> crate::cmp::Ordering {
                 match self.partial_cmp(other) {
                     Some(x) => x,
-                    None => unsafe { ::hint::unreachable_unchecked() },
+                    None => unsafe { crate::hint::unreachable_unchecked() },
                 }
             }
         }
@@ -27,14 +27,14 @@ macro_rules! impl_cmp_ord {
         test_if!{
             $test_tt:
             interpolate_idents! {
-                mod [$id _cmp_ord] {
+                pub mod [$id _cmp_ord] {
                     use super::*;
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn eq() {
-                        fn foo<E: ::cmp::Ord>(_: E) {}
+                        fn foo<E: crate::cmp::Ord>(_: E) {}
                         let a = $id::splat($false);
-                        foo(a.partial_ord());
-                        foo(a.ord());
+                        foo(a.partial_lex_ord());
+                        foo(a.lex_ord());
                     }
                 }
             }

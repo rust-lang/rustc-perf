@@ -15,8 +15,8 @@ pub struct Image {
 impl Image {
     pub fn new(width: usize, height: usize) -> Self {
         Self {
-            width: width,
-            height: height,
+            width,
+            height,
             data: vec![0_u8; width * height * 3 /* RGBA */],
             fdata: vec![0_f32; width * height * 3 /* RGBA */],
         }
@@ -35,21 +35,6 @@ impl Image {
         output: &Path,
         soa: bool,
     ) -> Result<(), Error> {
-        use png::HasParameters;
-        use std::fs::File;
-        use std::io::BufWriter;
-
-        let file = File::create(output)?;
-        let ref mut buf_writer = BufWriter::new(file);
-        let mut encoder = png::Encoder::new(
-            buf_writer,
-            self.width as u32,
-            self.height as u32,
-        );
-
-        encoder.set(png::ColorType::RGB).set(png::BitDepth::Eight);
-        let mut writer = encoder.write_header().unwrap();
-
         fn clamp(x: f32) -> u8 {
             let mut i = (x * 255.5) as isize;
 
@@ -60,14 +45,25 @@ impl Image {
                 i = 255
             };
 
-            return i as u8;
+            i as u8
         }
 
-        if !soa {
-            for (&fp, up) in self.fdata.iter().zip(self.data.iter_mut()) {
-                (*up) = clamp(fp);
-            }
-        } else {
+        use png::HasParameters;
+        use std::fs::File;
+        use std::io::BufWriter;
+
+        let file = File::create(output)?;
+        let buf_writer = &mut BufWriter::new(file);
+        let mut encoder = png::Encoder::new(
+            buf_writer,
+            self.width as u32,
+            self.height as u32,
+        );
+
+        encoder.set(png::ColorType::RGB).set(png::BitDepth::Eight);
+        let mut writer = encoder.write_header().unwrap();
+
+        if soa {
             let len = (self.width * self.height) as usize;
             let (r, tail) = self.fdata.split_at(len);
             let (g, b) = tail.split_at(len);
@@ -79,6 +75,10 @@ impl Image {
                 self.data[3 * i + 0] = clamp(r[i]);
                 self.data[3 * i + 1] = clamp(g[i]);
                 self.data[3 * i + 2] = clamp(b[i]);
+            }
+        } else {
+            for (&fp, up) in self.fdata.iter().zip(self.data.iter_mut()) {
+                (*up) = clamp(fp);
             }
         }
 

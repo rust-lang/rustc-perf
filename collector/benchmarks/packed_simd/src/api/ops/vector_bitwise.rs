@@ -6,50 +6,50 @@ macro_rules! impl_ops_vector_bitwise {
         $id:ident | $test_tt:tt |
         ($true:expr, $false:expr)
     ) => {
-        impl ::ops::Not for $id {
+        impl crate::ops::Not for $id {
             type Output = Self;
             #[inline]
             fn not(self) -> Self {
                 Self::splat($true) ^ self
             }
         }
-        impl ::ops::BitXor for $id {
+        impl crate::ops::BitXor for $id {
             type Output = Self;
             #[inline]
             fn bitxor(self, other: Self) -> Self {
-                use llvm::simd_xor;
+                use crate::llvm::simd_xor;
                 unsafe { Simd(simd_xor(self.0, other.0)) }
             }
         }
-        impl ::ops::BitAnd for $id {
+        impl crate::ops::BitAnd for $id {
             type Output = Self;
             #[inline]
             fn bitand(self, other: Self) -> Self {
-                use llvm::simd_and;
+                use crate::llvm::simd_and;
                 unsafe { Simd(simd_and(self.0, other.0)) }
             }
         }
-        impl ::ops::BitOr for $id {
+        impl crate::ops::BitOr for $id {
             type Output = Self;
             #[inline]
             fn bitor(self, other: Self) -> Self {
-                use llvm::simd_or;
+                use crate::llvm::simd_or;
                 unsafe { Simd(simd_or(self.0, other.0)) }
             }
         }
-        impl ::ops::BitAndAssign for $id {
+        impl crate::ops::BitAndAssign for $id {
             #[inline]
             fn bitand_assign(&mut self, other: Self) {
                 *self = *self & other;
             }
         }
-        impl ::ops::BitOrAssign for $id {
+        impl crate::ops::BitOrAssign for $id {
             #[inline]
             fn bitor_assign(&mut self, other: Self) {
                 *self = *self | other;
             }
         }
-        impl ::ops::BitXorAssign for $id {
+        impl crate::ops::BitXorAssign for $id {
             #[inline]
             fn bitxor_assign(&mut self, other: Self) {
                 *self = *self ^ other;
@@ -59,9 +59,9 @@ macro_rules! impl_ops_vector_bitwise {
         test_if!{
             $test_tt:
             interpolate_idents! {
-                mod [$id _ops_vector_bitwise] {
+                pub mod [$id _ops_vector_bitwise] {
                     use super::*;
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn ops_vector_bitwise() {
 
                         let z = $id::splat(0 as $elem_ty);

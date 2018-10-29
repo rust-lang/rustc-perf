@@ -15,9 +15,9 @@ macro_rules! impl_slice_write_to_slice {
                     assert!(slice.len() >= $elem_count);
                     let target_ptr =
                         slice.get_unchecked_mut(0) as *mut $elem_ty;
-                    assert!(
-                        target_ptr.align_offset(mem::align_of::<Self>())
-                            == 0
+                    assert_eq!(
+                        target_ptr.align_offset(crate::mem::align_of::<Self>()),
+                        0
                     );
                     self.write_to_slice_aligned_unchecked(slice);
                 }
@@ -47,9 +47,16 @@ macro_rules! impl_slice_write_to_slice {
             pub unsafe fn write_to_slice_aligned_unchecked(
                 self, slice: &mut [$elem_ty],
             ) {
-                #[cfg_attr(feature = "cargo-clippy", allow(cast_ptr_alignment))]
-                *(slice.get_unchecked_mut(0) as *mut $elem_ty as *mut Self) =
-                    self;
+                debug_assert!(slice.len() >= $elem_count);
+                let target_ptr =
+                    slice.get_unchecked_mut(0) as *mut $elem_ty;
+                debug_assert_eq!(
+                    target_ptr.align_offset(crate::mem::align_of::<Self>()),
+                    0
+                );
+
+                #[cfg_attr(feature = "cargo-clippy", allow(clippy::cast_ptr_alignment))]
+                *(target_ptr as *mut Self) = self;
             }
 
             /// Writes the values of the vector to the `slice`.
@@ -61,13 +68,14 @@ macro_rules! impl_slice_write_to_slice {
             pub unsafe fn write_to_slice_unaligned_unchecked(
                 self, slice: &mut [$elem_ty],
             ) {
+                debug_assert!(slice.len() >= $elem_count);
                 let target_ptr =
                     slice.get_unchecked_mut(0) as *mut $elem_ty as *mut u8;
                 let self_ptr = &self as *const Self as *const u8;
-                ptr::copy_nonoverlapping(
+                crate::ptr::copy_nonoverlapping(
                     self_ptr,
                     target_ptr,
-                    mem::size_of::<Self>(),
+                    crate::mem::size_of::<Self>(),
                 );
             }
         }
@@ -76,11 +84,11 @@ macro_rules! impl_slice_write_to_slice {
         test_if!{
             $test_tt:
             interpolate_idents! {
-                mod [$id _slice_write_to_slice] {
+                pub mod [$id _slice_write_to_slice] {
                     use super::*;
-                    use iter::Iterator;
+                    use crate::iter::Iterator;
 
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn write_to_slice_unaligned() {
                         let mut unaligned = [0 as $elem_ty; $id::lanes() + 1];
                         let vec = $id::splat(42 as $elem_ty);
@@ -89,11 +97,15 @@ macro_rules! impl_slice_write_to_slice {
                             if index == 0 {
                                 assert_eq!(b, 0 as $elem_ty);
                             } else {
+                                assert_eq!(b, 42 as $elem_ty);
                                 assert_eq!(b, vec.extract(index - 1));
                             }
                         }
                     }
 
+                    // FIXME: wasm-bindgen-test does not support #[should_panic]
+                    // #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+                    #[cfg(not(target_arch = "wasm32"))]
                     #[test]
                     #[should_panic]
                     fn write_to_slice_unaligned_fail() {
@@ -107,7 +119,7 @@ macro_rules! impl_slice_write_to_slice {
                         _vec: $id,
                     }
 
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn write_to_slice_aligned() {
                         let mut aligned = A {
                             data: [0 as $elem_ty; 2 * $id::lanes()],
@@ -118,11 +130,15 @@ macro_rules! impl_slice_write_to_slice {
                             if index < $id::lanes() {
                                 assert_eq!(b, 0 as $elem_ty);
                             } else {
+                                assert_eq!(b, 42 as $elem_ty);
                                 assert_eq!(b, vec.extract(index - $id::lanes()));
                             }
                         }
                     }
 
+                    // FIXME: wasm-bindgen-test does not support #[should_panic]
+                    // #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+                    #[cfg(not(target_arch = "wasm32"))]
                     #[test]
                     #[should_panic]
                     fn write_to_slice_aligned_fail_lanes() {
@@ -135,6 +151,9 @@ macro_rules! impl_slice_write_to_slice {
                         };
                     }
 
+                    // FIXME: wasm-bindgen-test does not support #[should_panic]
+                    // #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+                    #[cfg(not(target_arch = "wasm32"))]
                     #[test]
                     #[should_panic]
                     fn write_to_slice_aligned_fail_align() {
@@ -148,7 +167,7 @@ macro_rules! impl_slice_write_to_slice {
                             // offset pointer by one element
                             let ptr = ptr.wrapping_add(1);
 
-                            if ptr.align_offset(mem::align_of::<$id>()) == 0 {
+                            if ptr.align_offset(crate::mem::align_of::<$id>()) == 0 {
                                 // the pointer is properly aligned, so write_to_slice_aligned
                                 // won't fail here (e.g. this can happen for i128x1). So
                                 // we panic to make the "should_fail" test pass:

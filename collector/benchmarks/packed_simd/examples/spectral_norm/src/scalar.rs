@@ -1,10 +1,10 @@
 //! Scalar spectral norm implementation
 
+use crate::*;
 use std::{
     iter::*,
     ops::{Add, Div},
 };
-use *;
 
 struct f64x2(f64, f64);
 impl Add for f64x2 {
@@ -38,7 +38,7 @@ fn mult_AtAv(v: &[f64], out: &mut [f64], tmp: &mut [f64]) {
 }
 
 fn mult_Av(v: &[f64], out: &mut [f64]) {
-    mult(v, out, 0, |i, j| A(i, j));
+    mult(v, out, 0, A);
 }
 
 fn mult_Atv(v: &[f64], out: &mut [f64]) {
@@ -62,10 +62,7 @@ where
 }
 
 fn dot(x: &[f64], y: &[f64]) -> f64 {
-    x.iter()
-        .zip(y)
-        .map(|(&x, &y)| x * y)
-        .fold(0.0, |a, b| a + b)
+    x.iter().zip(y).map(|(&x, &y)| x * y).fold(0.0, |a, b| a + b)
 }
 
 #[cfg(test)]

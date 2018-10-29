@@ -16,7 +16,7 @@ macro_rules! impl_reduction_float_arithmetic {
             #[inline]
             pub fn sum(self) -> $elem_ty {
                 #[cfg(not(target_arch = "aarch64"))] {
-                    use llvm::simd_reduce_add_ordered;
+                    use crate::llvm::simd_reduce_add_ordered;
                     unsafe { simd_reduce_add_ordered(self.0, 0 as $elem_ty) }
                 }
                 #[cfg(target_arch = "aarch64")] {
@@ -43,7 +43,7 @@ macro_rules! impl_reduction_float_arithmetic {
             #[inline]
             pub fn product(self) -> $elem_ty {
                 #[cfg(not(target_arch = "aarch64"))] {
-                    use llvm::simd_reduce_mul_ordered;
+                    use crate::llvm::simd_reduce_mul_ordered;
                     unsafe { simd_reduce_mul_ordered(self.0, 1 as $elem_ty) }
                 }
                 #[cfg(target_arch = "aarch64")] {
@@ -58,10 +58,38 @@ macro_rules! impl_reduction_float_arithmetic {
             }
         }
 
+        impl crate::iter::Sum for $id {
+            #[inline]
+            fn sum<I: Iterator<Item=$id>>(iter: I) -> $id {
+                iter.fold($id::splat(0.), crate::ops::Add::add)
+            }
+        }
+
+        impl crate::iter::Product for $id {
+            #[inline]
+            fn product<I: Iterator<Item=$id>>(iter: I) -> $id {
+                iter.fold($id::splat(1.), crate::ops::Mul::mul)
+            }
+        }
+
+        impl<'a> crate::iter::Sum<&'a $id> for $id {
+            #[inline]
+            fn sum<I: Iterator<Item=&'a $id>>(iter: I) -> $id {
+                iter.fold($id::splat(0.), |a, b| crate::ops::Add::add(a, *b))
+            }
+        }
+
+        impl<'a> crate::iter::Product<&'a $id> for $id {
+            #[inline]
+            fn product<I: Iterator<Item=&'a $id>>(iter: I) -> $id {
+                iter.fold($id::splat(1.), |a, b| crate::ops::Mul::mul(a, *b))
+            }
+        }
+
         test_if!{
             $test_tt:
             interpolate_idents! {
-                mod [$id _reduction_float_arith] {
+                pub mod [$id _reduction_float_arith] {
                     use super::*;
                     fn alternating(x: usize) -> $id {
                         let mut v = $id::splat(1 as $elem_ty);
@@ -73,7 +101,7 @@ macro_rules! impl_reduction_float_arithmetic {
                         v
                     }
 
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn sum() {
                         let v = $id::splat(0 as $elem_ty);
                         assert_eq!(v.sum(), 0 as $elem_ty);
@@ -82,7 +110,7 @@ macro_rules! impl_reduction_float_arithmetic {
                         let v = alternating(2);
                         assert_eq!(v.sum(), ($id::lanes() / 2 + $id::lanes()) as $elem_ty);
                     }
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn product() {
                         let v = $id::splat(0 as $elem_ty);
                         assert_eq!(v.product(), 0 as $elem_ty);
@@ -101,14 +129,16 @@ macro_rules! impl_reduction_float_arithmetic {
                         );
                     }
 
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     #[allow(unreachable_code)]
+                    #[allow(unused_mut)]
+                    // ^^^ FIXME: https://github.com/rust-lang/rust/issues/55344
                     fn sum_nan() {
                         // FIXME: https://bugs.llvm.org/show_bug.cgi?id=36732
                         // https://github.com/rust-lang-nursery/packed_simd/issues/6
                         return;
 
-                        let n0 = $elem_ty::NAN;
+                        let n0 = crate::$elem_ty::NAN;
                         let v0 = $id::splat(-3.0);
                         for i in 0..$id::lanes() {
                             let mut v = v0.replace(i, n0);
@@ -129,14 +159,16 @@ macro_rules! impl_reduction_float_arithmetic {
                         assert!(v.sum().is_nan(), "all nans | {:?}", v);
                     }
 
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     #[allow(unreachable_code)]
+                    #[allow(unused_mut)]
+                    // ^^^ FIXME: https://github.com/rust-lang/rust/issues/55344
                     fn product_nan() {
                         // FIXME: https://bugs.llvm.org/show_bug.cgi?id=36732
                         // https://github.com/rust-lang-nursery/packed_simd/issues/6
                         return;
 
-                        let n0 = $elem_ty::NAN;
+                        let n0 = crate::$elem_ty::NAN;
                         let v0 = $id::splat(-3.0);
                         for i in 0..$id::lanes() {
                             let mut v = v0.replace(i, n0);
@@ -157,7 +189,7 @@ macro_rules! impl_reduction_float_arithmetic {
                         assert!(v.product().is_nan(), "all nans | {:?}", v);
                     }
 
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     #[allow(unused, dead_code)]
                     fn sum_roundoff() {
                         // Performs a tree-reduction
@@ -174,7 +206,7 @@ macro_rules! impl_reduction_float_arithmetic {
                             }
                         }
 
-                        let mut start = $elem_ty::EPSILON;
+                        let mut start = crate::$elem_ty::EPSILON;
                         let mut scalar_reduction = 0. as $elem_ty;
 
                         let mut v = $id::splat(0. as $elem_ty);
@@ -206,7 +238,7 @@ macro_rules! impl_reduction_float_arithmetic {
                         );
                     }
 
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     #[allow(unused, dead_code)]
                     fn product_roundoff() {
                         // Performs a tree-reduction
@@ -223,7 +255,7 @@ macro_rules! impl_reduction_float_arithmetic {
                             }
                         }
 
-                        let mut start = $elem_ty::EPSILON;
+                        let mut start = crate::$elem_ty::EPSILON;
                         let mut scalar_reduction = 1. as $elem_ty;
 
                         let mut v = $id::splat(0. as $elem_ty);

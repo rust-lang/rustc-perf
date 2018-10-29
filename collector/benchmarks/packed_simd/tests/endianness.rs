@@ -1,9 +1,11 @@
-extern crate packed_simd;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen_test::*;
 
 use packed_simd::*;
 use std::{mem, slice};
 
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
 fn endian_indexing() {
     let v = i32x4::new(0, 1, 2, 3);
     assert_eq!(v.extract(0), 0);
@@ -12,7 +14,8 @@ fn endian_indexing() {
     assert_eq!(v.extract(3), 3);
 }
 
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
 fn endian_bitcasts() {
     #[cfg_attr(rustfmt, rustfmt_skip)]
     let x = i8x16::new(
@@ -28,7 +31,8 @@ fn endian_bitcasts() {
     assert_eq!(t, e);
 }
 
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
 fn endian_casts() {
     #[cfg_attr(rustfmt, rustfmt_skip)]
     let x = i8x16::new(
@@ -44,7 +48,8 @@ fn endian_casts() {
     assert_eq!(t, e);
 }
 
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
 fn endian_load_and_stores() {
     #[cfg_attr(rustfmt, rustfmt_skip)]
     let x = i8x16::new(
@@ -69,26 +74,19 @@ fn endian_load_and_stores() {
     assert_eq!(z, x);
 }
 
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
 fn endian_array_union() {
     union A {
         data: [f32; 4],
         vec: f32x4,
     }
-    let x: [f32; 4] = unsafe {
-        A {
-            vec: f32x4::new(0., 1., 2., 3.),
-        }.data
-    };
+    let x: [f32; 4] = unsafe { A { vec: f32x4::new(0., 1., 2., 3.) }.data };
     assert_eq!(x[0], 0_f32);
     assert_eq!(x[1], 1_f32);
     assert_eq!(x[2], 2_f32);
     assert_eq!(x[3], 3_f32);
-    let y: f32x4 = unsafe {
-        A {
-            data: [3., 2., 1., 0.],
-        }.vec
-    };
+    let y: f32x4 = unsafe { A { data: [3., 2., 1., 0.] }.vec };
     assert_eq!(y, f32x4::new(3., 2., 1., 0.));
 
     union B {
@@ -138,27 +136,20 @@ fn endian_array_union() {
     assert_eq!(x, e);
 }
 
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
 fn endian_tuple_access() {
     type F32x4T = (f32, f32, f32, f32);
     union A {
         data: F32x4T,
         vec: f32x4,
     }
-    let x: F32x4T = unsafe {
-        A {
-            vec: f32x4::new(0., 1., 2., 3.),
-        }.data
-    };
+    let x: F32x4T = unsafe { A { vec: f32x4::new(0., 1., 2., 3.) }.data };
     assert_eq!(x.0, 0_f32);
     assert_eq!(x.1, 1_f32);
     assert_eq!(x.2, 2_f32);
     assert_eq!(x.3, 3_f32);
-    let y: f32x4 = unsafe {
-        A {
-            data: (3., 2., 1., 0.),
-        }.vec
-    };
+    let y: f32x4 = unsafe { A { data: (3., 2., 1., 0.) }.vec };
     assert_eq!(y, f32x4::new(3., 2., 1., 0.));
 
     #[cfg_attr(rustfmt, rustfmt_skip)]

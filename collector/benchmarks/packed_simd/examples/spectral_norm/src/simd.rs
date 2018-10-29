@@ -1,13 +1,13 @@
 //! Vectorized spectral norm implementation
 
+use crate::*;
 use packed_simd::*;
-use *;
 
 fn mult_Av(v: &[f64], out: &mut [f64]) {
     assert!(v.len() == out.len());
     assert!(v.len() % 2 == 0);
 
-    for i in 0..v.len() {
+    for (i, out) in out.iter_mut().enumerate() {
         let mut sum = f64x2::splat(0.0);
 
         let mut j = 0;
@@ -17,7 +17,7 @@ fn mult_Av(v: &[f64], out: &mut [f64]) {
             sum += b / a;
             j += 2
         }
-        out[i] = sum.sum();
+        *out = sum.sum();
     }
 }
 
@@ -25,7 +25,7 @@ fn mult_Atv(v: &[f64], out: &mut [f64]) {
     assert!(v.len() == out.len());
     assert!(v.len() % 2 == 0);
 
-    for i in 0..v.len() {
+    for (i, out) in out.iter_mut().enumerate() {
         let mut sum = f64x2::splat(0.0);
 
         let mut j = 0;
@@ -35,7 +35,7 @@ fn mult_Atv(v: &[f64], out: &mut [f64]) {
             sum += b / a;
             j += 2
         }
-        out[i] = sum.sum();
+        *out = sum.sum();
     }
 }
 
@@ -60,10 +60,7 @@ pub fn spectral_norm(n: usize) -> f64 {
 
 fn dot(x: &[f64], y: &[f64]) -> f64 {
     // This is auto-vectorized:
-    x.iter()
-        .zip(y)
-        .map(|(&x, &y)| x * y)
-        .fold(0.0, |a, b| a + b)
+    x.iter().zip(y).map(|(&x, &y)| x * y).fold(0.0, |a, b| a + b)
 }
 
 #[cfg(test)]

@@ -7,14 +7,16 @@ macro_rules! impl_select {
             /// Selects elements of `a` and `b` using mask.
             ///
             /// The lanes of the result for which the mask is `true` contain
-            /// the values of `a`. The remaining lanes contain the values of `b`.
+            /// the values of `a`. The remaining lanes contain the values of
+            /// `b`.
             #[inline]
             pub fn select<T>(self, a: Simd<T>, b: Simd<T>) -> Simd<T>
-                where
+            where
                 T: sealed::SimdArray<
-                NT=<[$elem_ty; $elem_count] as sealed::SimdArray>::NT>
+                    NT = <[$elem_ty; $elem_count] as sealed::SimdArray>::NT,
+                >,
             {
-                use llvm::simd_select;
+                use crate::llvm::simd_select;
                 Simd(unsafe { simd_select(self.0, a.0, b.0) })
             }
         }
@@ -33,10 +35,10 @@ macro_rules! test_select {
         test_if! {
             $test_tt:
             interpolate_idents! {
-                mod [$vec_ty _select] {
+                pub mod [$vec_ty _select] {
                     use super::*;
 
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn select() {
                         let o = $small as $elem_ty;
                         let t = $large as $elem_ty;

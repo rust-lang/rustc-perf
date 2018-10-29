@@ -9,16 +9,30 @@ macro_rules! impl_math_float_sin {
                 use crate::codegen::math::float::sin::Sin;
                 Sin::sin(self)
             }
+
+            /// Sine of `self * PI`.
+            #[inline]
+            pub fn sin_pi(self) -> Self {
+                use crate::codegen::math::float::sin_pi::SinPi;
+                SinPi::sin_pi(self)
+            }
+
+            /// Sine and cosine of `self * PI`.
+            #[inline]
+            pub fn sin_cos_pi(self) -> (Self, Self) {
+                use crate::codegen::math::float::sin_cos_pi::SinCosPi;
+                SinCosPi::sin_cos_pi(self)
+            }
         }
 
         test_if!{
             $test_tt:
             interpolate_idents! {
-                mod [$id _math_sin] {
+                pub mod [$id _math_sin] {
                     use super::*;
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn sin() {
-                        use $elem_ty::consts::PI;
+                        use crate::$elem_ty::consts::PI;
                         let z = $id::splat(0 as $elem_ty);
                         let p = $id::splat(PI as $elem_ty);
                         let ph = $id::splat(PI as $elem_ty / 2.);

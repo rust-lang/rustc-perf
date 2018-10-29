@@ -4,8 +4,7 @@
 macro_rules! impl_reduction_bitwise {
     (
         [$elem_ty:ident; $elem_count:expr]:
-        $id:ident | $test_tt:tt |
-        $ielem_ty:ident |
+        $id:ident | $ielem_ty:ident | $test_tt:tt |
         ($convert:expr) |
         ($true:expr, $false:expr)
     ) => {
@@ -18,7 +17,7 @@ macro_rules! impl_reduction_bitwise {
             pub fn and(self) -> $elem_ty {
                 #[cfg(not(target_arch = "aarch64"))]
                 {
-                    use llvm::simd_reduce_and;
+                    use crate::llvm::simd_reduce_and;
                     let r: $ielem_ty = unsafe { simd_reduce_and(self.0) };
                     $convert(r)
                 }
@@ -42,7 +41,7 @@ macro_rules! impl_reduction_bitwise {
             pub fn or(self) -> $elem_ty {
                 #[cfg(not(target_arch = "aarch64"))]
                 {
-                    use llvm::simd_reduce_or;
+                    use crate::llvm::simd_reduce_or;
                     let r: $ielem_ty = unsafe { simd_reduce_or(self.0) };
                     $convert(r)
                 }
@@ -66,7 +65,7 @@ macro_rules! impl_reduction_bitwise {
             pub fn xor(self) -> $elem_ty {
                 #[cfg(not(target_arch = "aarch64"))]
                 {
-                    use llvm::simd_reduce_xor;
+                    use crate::llvm::simd_reduce_xor;
                     let r: $ielem_ty = unsafe { simd_reduce_xor(self.0) };
                     $convert(r)
                 }
@@ -86,10 +85,10 @@ macro_rules! impl_reduction_bitwise {
         test_if!{
             $test_tt:
             interpolate_idents! {
-                mod [$id _reduction_bitwise] {
+                pub mod [$id _reduction_bitwise] {
                     use super::*;
 
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn and() {
                         let v = $id::splat($false);
                         assert_eq!(v.and(), $false);
@@ -107,7 +106,7 @@ macro_rules! impl_reduction_bitwise {
                         assert_eq!(v.and(), $false);
 
                     }
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn or() {
                         let v = $id::splat($false);
                         assert_eq!(v.or(), $false);
@@ -124,7 +123,7 @@ macro_rules! impl_reduction_bitwise {
                             assert_eq!(v.or(), $false);
                         }
                     }
-                    #[test]
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn xor() {
                         let v = $id::splat($false);
                         assert_eq!(v.xor(), $false);

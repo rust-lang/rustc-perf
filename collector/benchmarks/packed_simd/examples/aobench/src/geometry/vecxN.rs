@@ -2,7 +2,7 @@
 
 use std::ops::*;
 
-use geometry::{f32xN, m32xN, Dot, M3x3, V3D};
+use crate::geometry::{f32xN, m32xN, Dot, M3x3, V3D};
 
 #[derive(Copy, Clone, Debug)]
 pub struct V3DxN {
@@ -11,20 +11,25 @@ pub struct V3DxN {
     pub z: f32xN,
 }
 
-impl V3DxN {
+impl Default for V3DxN {
     #[inline(always)]
     #[must_use]
-    pub fn new() -> Self {
+    fn default() -> Self {
         Self {
             x: f32xN::splat(0.),
             y: f32xN::splat(0.),
             z: f32xN::splat(0.),
         }
     }
+}
+
+impl V3DxN {
     #[inline(always)]
     #[must_use]
     pub fn normalized(self) -> Self {
-        (1. / self.dot(self).sqrt()) * self
+        let len2 = self.dot(self);
+        let invlen = len2.rsqrte();
+        invlen * self
     }
 
     pub fn get(&self, idx: usize) -> V3D {
@@ -37,9 +42,9 @@ impl V3DxN {
 
     #[must_use]
     #[inline(always)]
-    pub fn ortho_basis(self) -> [V3DxN; 3] {
+    pub fn ortho_basis(self) -> [Self; 3] {
         let n = self;
-        let mut basis = [V3DxN::new(), V3DxN::new(), n];
+        let mut basis = [Self::default(), Self::default(), n];
 
         let max = f32xN::splat(0.6);
         let min = f32xN::splat(-0.6);
@@ -73,7 +78,7 @@ impl Add for V3DxN {
     type Output = Self;
     #[inline(always)]
     fn add(self, o: Self) -> Self::Output {
-        V3DxN {
+        Self {
             x: self.x + o.x,
             y: self.y + o.y,
             z: self.z + o.z,
@@ -85,7 +90,7 @@ impl Mul for V3DxN {
     type Output = Self;
     #[inline(always)]
     fn mul(self, o: Self) -> Self::Output {
-        V3DxN {
+        Self {
             x: self.x * o.x,
             y: self.y * o.y,
             z: self.z * o.z,
@@ -105,11 +110,35 @@ impl Mul<V3DxN> for f32xN {
     }
 }
 
+impl Mul<V3DxN> for [V3DxN; 3] {
+    type Output = V3DxN;
+    #[inline(always)]
+    fn mul(self, o: V3DxN) -> Self::Output {
+        V3DxN {
+            x: o.dot(V3DxN {
+                x: self[0].x,
+                y: self[1].x,
+                z: self[2].x,
+            }),
+            y: o.dot(V3DxN {
+                x: self[0].y,
+                y: self[1].y,
+                z: self[2].y,
+            }),
+            z: o.dot(V3DxN {
+                x: self[0].z,
+                y: self[1].z,
+                z: self[2].z,
+            }),
+        }
+    }
+}
+
 impl Sub<V3D> for V3DxN {
     type Output = Self;
     #[inline(always)]
     fn sub(self, o: V3D) -> Self::Output {
-        V3DxN {
+        Self {
             x: self.x - f32xN::splat(o.x),
             y: self.y - f32xN::splat(o.y),
             z: self.z - f32xN::splat(o.z),
@@ -120,8 +149,8 @@ impl Sub<V3D> for V3DxN {
 impl Dot<V3DxN> for V3DxN {
     type Output = f32xN;
     #[inline(always)]
-    fn dot(self, o: V3DxN) -> Self::Output {
-        self.x * o.x + self.y * o.y + self.z * o.z
+    fn dot(self, o: Self) -> Self::Output {
+        self.x.mul_adde(o.x, self.y.mul_adde(o.y, self.z * o.z))
     }
 }
 
@@ -129,9 +158,10 @@ impl Dot<V3D> for V3DxN {
     type Output = f32xN;
     #[inline(always)]
     fn dot(self, o: V3D) -> Self::Output {
-        self.x * f32xN::splat(o.x)
-            + self.y * f32xN::splat(o.y)
-            + self.z * f32xN::splat(o.z)
+        self.x.mul_adde(
+            f32xN::splat(o.x),
+            self.y.mul_adde(f32xN::splat(o.y), self.z * o.z),
+        )
     }
 }
 
@@ -177,41 +207,27 @@ impl Mul<V3DxN> for M3x3 {
     #[inline(always)]
     fn mul(self, o: V3DxN) -> Self::Output {
         V3DxN {
-            x: o.x * f32xN::splat(self[0].x)
-                + o.y * f32xN::splat(self[1].x)
-                + o.z * f32xN::splat(self[2].x),
-            y: o.x * f32xN::splat(self[0].y)
-                + o.y * f32xN::splat(self[1].y)
-                + o.z * f32xN::splat(self[2].y),
-            z: o.x * f32xN::splat(self[0].z)
-                + o.y * f32xN::splat(self[1].z)
-                + o.z * f32xN::splat(self[2].z),
+            x: o.x.mul_adde(
+                f32xN::splat(self[0].x),
+                o.y.mul_adde(
+                    f32xN::splat(self[1].x),
+                    o.z * f32xN::splat(self[2].x),
+                ),
+            ),
+            y: o.x.mul_adde(
+                f32xN::splat(self[0].y),
+                o.y.mul_adde(
+                    f32xN::splat(self[1].y),
+                    o.z * f32xN::splat(self[2].y),
+                ),
+            ),
+            z: o.x.mul_adde(
+                f32xN::splat(self[0].z),
+                o.y.mul_adde(
+                    f32xN::splat(self[1].z),
+                    o.z * f32xN::splat(self[2].z),
+                ),
+            ),
         }
     }
 }
-
-/*
-
-impl Mul<f32> for V3D {
-    type Output = Self;
-    #[inline(always)]
-    fn mul(self, o: f32) -> Self::Output {
-        V3D {
-            x: self.x * o,
-            y: self.y * o,
-            z: self.z * o,
-        }
-    }
-}
-
-impl Mul<V3D> for f32 {
-    type Output = V3D;
-    #[inline(always)]
-    fn mul(self, o: V3D) -> Self::Output {
-        o * self
-    }
-}
-
-
-
-*/

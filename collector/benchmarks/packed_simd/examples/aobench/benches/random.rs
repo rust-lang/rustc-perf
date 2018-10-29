@@ -1,11 +1,6 @@
 //! Benchmarks PNRG
 #![feature(stdsimd)]
 
-extern crate aobench_lib;
-
-#[macro_use]
-extern crate criterion;
-
 use aobench_lib::geometry::f32xN;
 use aobench_lib::random;
 use criterion::*;
@@ -18,7 +13,8 @@ fn random_scalar(c: &mut Criterion) {
             b.iter(|| {
                 black_box(rng.gen());
             })
-        }).throughput(Throughput::Elements(1)),
+        })
+        .throughput(Throughput::Elements(1)),
     );
 }
 
@@ -30,7 +26,8 @@ fn random_vector(c: &mut Criterion) {
             b.iter(|| {
                 black_box(rng.gen());
             })
-        }).throughput(Throughput::Elements(f32xN::lanes() as u32)),
+        })
+        .throughput(Throughput::Elements(f32xN::lanes() as u32)),
     );
 }
 

@@ -6,7 +6,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   make \
   ca-certificates \
   wget \
-  bzip2
+  bzip2 \
+  cmake \
+  libclang-dev \
+  clang
 
 RUN wget https://github.com/gnzlbg/intel_sde/raw/master/sde-external-8.16.0-2018-01-30-lin.tar.bz2
 RUN tar -xjf sde-external-8.16.0-2018-01-30-lin.tar.bz2
