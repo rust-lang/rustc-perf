@@ -1,0 +1,56 @@
+[package]
+name = "aobench"
+version = "0.1.0"
+authors = ["gnzlbg <gonzalobg88@gmail.com>"]
+autobenches = false
+edition = "2018"
+
+[[bin]]
+name = "aobench"
+path = "src/main.rs"
+
+[lib]
+name = "aobench_lib"
+path = "src/lib.rs"
+
+[dependencies]
+structopt = "^0.2"
+failure = "^0.1"
+png = "^0.13"
+packed_simd = { path = "../.." }
+rayon = "^1.0"
+time = "^0.1"
+cfg-if = "^0.1"
+ispc = { version = "^0.3.6", optional = true }
+
+[build-dependencies]
+ispc = { version = "^0.3.6", optional = true }
+
+[dev-dependencies]
+criterion = { version = '^0.2', features=['real_blackbox'] }
+
+[features]
+default = [ "256bit" ]
+256bit = []
+sleef-sys = [ "packed_simd/sleef-sys" ]
+coresimd = [ "packed_simd/coresimd" ]
+
+[[bench]]
+name = "isec_sphere"
+path = "benches/isec_sphere.rs"
+harness = false
+
+[[bench]]
+name = "isec_plane"
+path = "benches/isec_plane.rs"
+harness = false
+
+[[bench]]
+name = "ambient_occlusion"
+path = "benches/ambient_occlusion.rs"
+harness = false
+
+[[bench]]
+name = "random"
+path = "benches/random.rs"
+harness = false

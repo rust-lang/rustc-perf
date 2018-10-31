@@ -1,0 +1,28 @@
+[package]
+name = "options_pricing"
+version = "0.1.0"
+authors = ["gnzlbg <gonzalobg88@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+packed_simd = { path = "../.." }
+time = "^0.1"
+rayon = "^1.0"
+ispc = { version = "^0.3.6", optional = true }
+
+[build-dependencies]
+ispc = { version = "^0.3.6", optional = true }
+
+[[bin]]
+name = "options_pricing"
+path = "src/main.rs"
+
+[lib]
+name = "options_pricing_lib"
+path = "src/lib.rs"
+
+[features]
+default = []
+coresimd = [ "packed_simd/coresimd" ]
+sleef-sys = [ "packed_simd/sleef-sys" ]
+ispc_libm = [ "ispc" ]

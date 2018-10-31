@@ -1,0 +1,27 @@
+[package]
+name = "stencil"
+version = "0.1.0"
+authors = ["gnzlbg <gonzalobg88@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+packed_simd = { path = "../.." }
+time = "^0.1"
+rayon = "^1.0"
+ispc = { version = "^0.3.6", optional = true }
+
+[build-dependencies]
+ispc = { version = "^0.3.6", optional = true }
+
+[[bin]]
+name = "stencil"
+path = "src/main.rs"
+
+[lib]
+name = "stencil_lib"
+path = "src/lib.rs"
+
+[features]
+default = []
+coresimd = ["packed_simd/coresimd"]
+sleef-sys = ["packed_simd/sleef-sys"]
