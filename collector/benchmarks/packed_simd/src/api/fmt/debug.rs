@@ -4,8 +4,8 @@ macro_rules! impl_fmt_debug_tests {
     ([$elem_ty:ty; $elem_count:expr]: $id:ident | $test_tt:tt) => {
         test_if!{
             $test_tt:
-            interpolate_idents! {
-                pub mod [$id _fmt_debug] {
+            paste::item! {
+                pub mod [<$id _fmt_debug>] {
                     use super::*;
                     #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn debug() {

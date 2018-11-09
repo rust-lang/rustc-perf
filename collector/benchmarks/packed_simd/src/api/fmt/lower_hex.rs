@@ -19,8 +19,8 @@ macro_rules! impl_fmt_lower_hex {
         }
         test_if!{
             $test_tt:
-            interpolate_idents! {
-                pub mod [$id _fmt_lower_hex] {
+            paste::item! {
+                pub mod [<$id _fmt_lower_hex>] {
                     use super::*;
                     #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn lower_hex() {

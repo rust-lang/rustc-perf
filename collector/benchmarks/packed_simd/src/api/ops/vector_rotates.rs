@@ -37,14 +37,14 @@ macro_rules! impl_ops_vector_rotates {
 
         test_if!{
             $test_tt:
-            interpolate_idents! {
+            paste::item! {
                 // FIXME:
                 // https://github.com/rust-lang-nursery/packed_simd/issues/75
                 #[cfg(not(any(
                     target_arch = "s390x",
                     target_arch = "sparc64",
                 )))]
-                pub mod [$id _ops_vector_rotate] {
+                pub mod [<$id _ops_vector_rotate>] {
                     use super::*;
                     #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn rotate_ops() {

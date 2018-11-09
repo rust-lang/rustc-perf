@@ -13,8 +13,8 @@ macro_rules! impl_math_float_exp {
 
         test_if!{
             $test_tt:
-            interpolate_idents! {
-                pub mod [$id _math_exp] {
+            paste::item! {
+                pub mod [<$id _math_exp>] {
                     use super::*;
                     #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn exp() {

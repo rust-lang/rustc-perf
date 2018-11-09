@@ -97,8 +97,8 @@ macro_rules! impl_reduction_integer_arithmetic {
 
         test_if!{
             $test_tt:
-            interpolate_idents! {
-                pub mod [$id _reduction_int_arith] {
+            paste::item! {
+                pub mod [<$id _reduction_int_arith>] {
                     use super::*;
 
                     fn alternating(x: usize) -> $id {

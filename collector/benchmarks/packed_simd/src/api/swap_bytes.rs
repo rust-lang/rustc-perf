@@ -40,12 +40,44 @@ macro_rules! impl_swap_bytes {
                     self.swap_bytes()
                 }
             }
+
+            /// Converts a vector from little endian to the target's endianness.
+            ///
+            /// On little endian this is a no-op. On big endian the bytes are
+            /// swapped.
+            #[inline]
+            pub fn from_le(x: Self) -> Self {
+                #[cfg(target_endian = "little")]
+                {
+                    x
+                }
+                #[cfg(not(target_endian = "little"))]
+                {
+                    x.swap_bytes()
+                }
+            }
+
+            /// Converts a vector from big endian to the target's endianness.
+            ///
+            /// On big endian this is a no-op. On little endian the bytes are
+            /// swapped.
+            #[inline]
+            pub fn from_be(x: Self) -> Self {
+                #[cfg(target_endian = "big")]
+                {
+                    x
+                }
+                #[cfg(not(target_endian = "big"))]
+                {
+                    x.swap_bytes()
+                }
+            }
         }
 
         test_if! {
             $test_tt:
-            interpolate_idents! {
-                pub mod [$id _swap_bytes] {
+            paste::item_with_macros! {
+                pub mod [<$id _swap_bytes>] {
                     use super::*;
 
                     const BYTES: [u8; 64] = [
@@ -61,7 +93,7 @@ macro_rules! impl_swap_bytes {
                             assert!(mem::size_of::<$id>() <= 64);
 
                             let mut actual = BYTES;
-                            let elems: &mut [[$elem_ty]] = unsafe {
+                            let elems: &mut [$elem_ty] = unsafe {
                                 slice::from_raw_parts_mut(
                                     actual.as_mut_ptr() as *mut $elem_ty,
                                     $id::lanes(),
@@ -69,7 +101,7 @@ macro_rules! impl_swap_bytes {
                             };
 
                             let vec = $id::from_slice_unaligned(elems);
-                            vec.$func().write_to_slice_unaligned(elems);
+                            $id::$func(vec).write_to_slice_unaligned(elems);
 
                             actual
                         }};
@@ -79,7 +111,7 @@ macro_rules! impl_swap_bytes {
                         ($func: ident) => {{
                             let actual = swap!($func);
                             let expected =
-                                BYTES.iter().rev().skip(64 - crate::mem::size_of::<$id>());
+                                BYTES.iter().rev().skip(64 - mem::size_of::<$id>());
 
                             assert!(actual.iter().zip(expected).all(|(x, y)| x == y));
                         }};
@@ -120,6 +152,30 @@ macro_rules! impl_swap_bytes {
                         #[cfg(not(target_endian = "big"))]
                         {
                             test_swap!(to_be);
+                        }
+                    }
+
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+                    fn from_le() {
+                        #[cfg(target_endian = "little")]
+                        {
+                            test_no_swap!(from_le);
+                        }
+                        #[cfg(not(target_endian = "little"))]
+                        {
+                            test_swap!(from_le);
+                        }
+                    }
+
+                    #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+                    fn from_be() {
+                        #[cfg(target_endian = "big")]
+                        {
+                            test_no_swap!(from_be);
+                        }
+                        #[cfg(not(target_endian = "big"))]
+                        {
+                            test_swap!(from_be);
                         }
                     }
                 }

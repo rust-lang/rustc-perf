@@ -31,21 +31,21 @@ macro_rules! impl_ptr_read {
 
         test_if! {
             $test_tt:
-            interpolate_idents! {
-                mod [$id _read] {
+            paste::item! {
+                mod [<$id _read>] {
                     use super::*;
                     #[test]
                     fn read() {
                         let mut v = [0_i32; $elem_count];
                         for i in 0..$elem_count {
-                            v[[i]] = i as i32;
+                            v[i] = i as i32;
                         }
 
                         let mut ptr = $id::<i32>::null();
 
                         for i in 0..$elem_count {
                             ptr = ptr.replace(i, unsafe {
-                                crate::mem::transmute(&v[[i]] as *const i32)
+                                crate::mem::transmute(&v[i] as *const i32)
                             });
                         }
 
@@ -67,7 +67,7 @@ macro_rules! impl_ptr_read {
                         let mut e = v;
                         for i in 0..$elem_count {
                             if i % 2 != 0 {
-                                e[[i]] = 42;
+                                e[i] = 42;
                             }
                         }
                         assert_eq!(r, Simd::<[i32; $elem_count]>::from_slice_unaligned(&e));
@@ -136,8 +136,8 @@ macro_rules! impl_ptr_write {
 
         test_if! {
             $test_tt:
-            interpolate_idents! {
-                mod [$id _write] {
+            paste::item! {
+                mod [<$id _write>] {
                     use super::*;
                     #[test]
                     fn write() {
@@ -147,7 +147,7 @@ macro_rules! impl_ptr_write {
                         // This test will write to this array
                         let mut arr = [0_i32; $elem_count];
                         for i in 0..$elem_count {
-                            arr[[i]] = i as i32;
+                            arr[i] = i as i32;
                         }
                         // arr = [0, 1, 2, ...]
 
@@ -182,7 +182,7 @@ macro_rules! impl_ptr_write {
                             let mut r = arr;
                             for i in 0..$elem_count {
                                 if i % 2 == 0 {
-                                    r[[i]] = 42;
+                                    r[i] = 42;
                                 }
                             }
 

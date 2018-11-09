@@ -88,8 +88,8 @@ macro_rules! impl_reduction_float_arithmetic {
 
         test_if!{
             $test_tt:
-            interpolate_idents! {
-                pub mod [$id _reduction_float_arith] {
+            paste::item! {
+                pub mod [<$id _reduction_float_arith>] {
                     use super::*;
                     fn alternating(x: usize) -> $id {
                         let mut v = $id::splat(1 as $elem_ty);
@@ -193,7 +193,7 @@ macro_rules! impl_reduction_float_arithmetic {
                     #[allow(unused, dead_code)]
                     fn sum_roundoff() {
                         // Performs a tree-reduction
-                        fn tree_reduce_sum(a: &[[$elem_ty]]) -> $elem_ty {
+                        fn tree_reduce_sum(a: &[$elem_ty]) -> $elem_ty {
                             assert!(!a.is_empty());
                             if a.len() == 1 {
                                 a[0]
@@ -242,7 +242,7 @@ macro_rules! impl_reduction_float_arithmetic {
                     #[allow(unused, dead_code)]
                     fn product_roundoff() {
                         // Performs a tree-reduction
-                        fn tree_reduce_product(a: &[[$elem_ty]]) -> $elem_ty {
+                        fn tree_reduce_product(a: &[$elem_ty]) -> $elem_ty {
                             assert!(!a.is_empty());
                             if a.len() == 1 {
                                 a[0]

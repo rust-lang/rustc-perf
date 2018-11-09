@@ -107,8 +107,8 @@ macro_rules! impl_minimal_p {
 
         test_if!{
             $test_tt:
-            interpolate_idents! {
-                pub mod [$id _minimal] {
+            paste::item! {
+                pub mod [<$id _minimal>] {
                     use super::*;
                     #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn minimal() {
@@ -199,8 +199,8 @@ macro_rules! impl_minimal_p {
 
          test_if!{
             $test_tt:
-            interpolate_idents! {
-                pub mod [$id _fmt_debug] {
+            paste::item! {
+                pub mod [<$id _fmt_debug>] {
                     use super::*;
                     #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn debug() {
@@ -242,8 +242,8 @@ macro_rules! impl_minimal_p {
 
         test_if!{
             $test_tt:
-            interpolate_idents! {
-                pub mod [$id _default] {
+            paste::item! {
+                pub mod [<$id _default>] {
                     use super::*;
                     #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn default() {
@@ -326,8 +326,8 @@ macro_rules! impl_minimal_p {
 
         test_if!{
             $test_tt:
-            interpolate_idents! {
-                pub mod [$id _cmp_vertical] {
+            paste::item! {
+                pub mod [<$id _cmp_vertical>] {
                     use super::*;
                     #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn cmp() {
@@ -398,8 +398,8 @@ macro_rules! impl_minimal_p {
 
         test_if!{
             $test_tt:
-            interpolate_idents! {
-                pub mod [$id _cmp_PartialEq] {
+            paste::item! {
+                pub mod [<$id _cmp_PartialEq>] {
                     use super::*;
                     #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn partial_eq() {
@@ -430,8 +430,8 @@ macro_rules! impl_minimal_p {
 
         test_if!{
             $test_tt:
-            interpolate_idents! {
-                pub mod [$id _cmp_eq] {
+            paste::item! {
+                pub mod [<$id _cmp_eq>] {
                     use super::*;
                     #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn eq() {
@@ -476,8 +476,8 @@ macro_rules! impl_minimal_p {
 
         test_if!{
             $test_tt:
-            interpolate_idents! {
-                pub mod [$id _from] {
+            paste::item! {
+                pub mod [<$id _from>] {
                     use super::*;
                     #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn array() {
@@ -487,9 +487,9 @@ macro_rules! impl_minimal_p {
                         let mut array = [$id::<i32>::null().extract(0); $elem_count];
 
                         for i in 0..$elem_count {
-                            let ptr = unsafe { crate::mem::transmute(&values[[i]] as *const i32) };
+                            let ptr = unsafe { crate::mem::transmute(&values[i] as *const i32) };
                             vec = vec.replace(i, ptr);
-                            array[[i]] = ptr;
+                            array[i] = ptr;
                         }
 
                         // FIXME: there is no impl of From<$id<T>> for [$elem_ty; N]
@@ -579,8 +579,8 @@ macro_rules! impl_minimal_p {
 
         test_if!{
             $test_tt:
-            interpolate_idents! {
-                pub mod [$id _slice_from_slice] {
+            paste::item! {
+                pub mod [<$id _slice_from_slice>] {
                     use super::*;
                     use crate::iter::Iterator;
 
@@ -626,7 +626,7 @@ macro_rules! impl_minimal_p {
                         };
                         for i in $id::<i32>::lanes()..(2 * $id::<i32>::lanes()) {
                             unsafe {
-                                aligned.data[[i]] = non_null;
+                                aligned.data[i] = non_null;
                             }
                         }
 
@@ -766,8 +766,8 @@ macro_rules! impl_minimal_p {
 
         test_if!{
             $test_tt:
-            interpolate_idents! {
-                pub mod [$id _slice_write_to_slice] {
+            paste::item! {
+                pub mod [<$id _slice_write_to_slice>] {
                     use super::*;
                     use crate::iter::Iterator;
 
@@ -887,8 +887,8 @@ macro_rules! impl_minimal_p {
 
         test_if! {
             $test_tt:
-            interpolate_idents! {
-                pub mod [$id _hash] {
+            paste::item! {
+                pub mod [<$id _hash>] {
                     use super::*;
                     #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn hash() {
@@ -902,9 +902,9 @@ macro_rules! impl_minimal_p {
                         let mut array = [$id::<i32>::null().extract(0); $elem_count];
 
                         for i in 0..$elem_count {
-                            let ptr = unsafe { crate::mem::transmute(&values[[i]] as *const i32) };
+                            let ptr = unsafe { crate::mem::transmute(&values[i] as *const i32) };
                             vec = vec.replace(i, ptr);
-                            array[[i]] = ptr;
+                            array[i] = ptr;
                         }
 
                         #[allow(deprecated)]
@@ -1187,8 +1187,8 @@ macro_rules! impl_minimal_p {
 
         test_if! {
                 $test_tt:
-            interpolate_idents! {
-                pub mod [$id _shuffle1_dyn] {
+            paste::item! {
+                pub mod [<$id _shuffle1_dyn>] {
                     use super::*;
                     #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn shuffle1_dyn() {

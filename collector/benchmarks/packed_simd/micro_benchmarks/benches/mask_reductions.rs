@@ -1,7 +1,6 @@
 //! Benchmarks for the mask reductions `all`, `any`, and `none`.
 #![deny(warnings, rust_2018_idioms)]
-#![feature(plugin, test)]
-#![plugin(interpolate_idents)]
+#![feature(test)]
 
 use test::black_box;
 use packed_simd::*;
@@ -11,8 +10,8 @@ const NO_ITERATIONS: u32 = 1_000;
 
 macro_rules! bench {
     ($id:ident) => {
-        interpolate_idents! {
-            fn [ $id _all ](c: &mut Criterion) {
+        paste::item! {
+            fn [<$id _all>](c: &mut Criterion) {
                 c.bench(
                     stringify!($id),
                     Benchmark::new("all", |b| b.iter(|| {
@@ -25,7 +24,7 @@ macro_rules! bench {
                     })).throughput(Throughput::Elements(NO_ITERATIONS))
                 );
             }
-            fn [ $id _any ](c: &mut Criterion) {
+            fn [<$id _any>](c: &mut Criterion) {
                 c.bench(
                     stringify!($id),
                     Benchmark::new("any", |b| b.iter(|| {
@@ -38,7 +37,7 @@ macro_rules! bench {
                     })).throughput(Throughput::Elements(NO_ITERATIONS))
                 );
             }
-            fn [ $id _none ](c: &mut Criterion) {
+            fn [<$id _none>](c: &mut Criterion) {
                 c.bench(
                     stringify!($id),
                     Benchmark::new("none", |b| b.iter(|| {
@@ -55,10 +54,10 @@ macro_rules! bench {
     };
     ($($id:ident),*) => {
         $( bench!($id); )*
-        interpolate_idents! {
+        paste::item! {
             criterion_group!(
                 benches,
-                $([$id _all]),*, $([$id _any]),*, $([$id _none]),*
+                $([<$id _all>]),*, $([<$id _any>]),*, $([<$id _none>]),*
             );
         }
     };
