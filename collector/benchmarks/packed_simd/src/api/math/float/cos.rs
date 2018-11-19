@@ -20,8 +20,8 @@ macro_rules! impl_math_float_cos {
 
         test_if!{
             $test_tt:
-            interpolate_idents! {
-                pub mod [$id _math_cos] {
+            paste::item! {
+                pub mod [<$id _math_cos>] {
                     use super::*;
                     #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn cos() {

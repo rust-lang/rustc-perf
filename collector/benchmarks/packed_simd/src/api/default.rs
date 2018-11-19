@@ -11,8 +11,8 @@ macro_rules! impl_default {
 
         test_if!{
             $test_tt:
-            interpolate_idents! {
-                pub mod [$id _default] {
+            paste::item! {
+                pub mod [<$id _default>] {
                     use super::*;
                     #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn default() {

@@ -32,8 +32,8 @@ macro_rules! impl_from_vector {
 
         test_if!{
             $test_tt:
-            interpolate_idents! {
-                pub mod [$id _from_ $source] {
+            paste::item! {
+                pub mod [<$id _from_ $source>] {
                     use super::*;
                     #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn from() {

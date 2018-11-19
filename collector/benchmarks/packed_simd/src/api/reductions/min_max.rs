@@ -75,8 +75,8 @@ macro_rules! impl_reduction_min_max {
             }
         }
         test_if!{$test_tt:
-        interpolate_idents! {
-            pub mod [$id _reduction_min_max] {
+        paste::item! {
+            pub mod [<$id _reduction_min_max>] {
                 use super::*;
                 #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                 pub fn max_element() {
@@ -121,8 +121,8 @@ macro_rules! test_reduction_float_min_max {
     ([$elem_ty:ident; $elem_count:expr]: $id:ident | $test_tt:tt) => {
         test_if!{
             $test_tt:
-            interpolate_idents! {
-                pub mod [$id _reduction_min_max_nan] {
+            paste::item! {
+                pub mod [<$id _reduction_min_max_nan>] {
                     use super::*;
                     #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn min_element_test() {

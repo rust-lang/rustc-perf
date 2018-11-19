@@ -19,8 +19,8 @@ macro_rules! test_shuffle1_dyn {
     ([$elem_ty:ident; $elem_count:expr]: $id:ident | $test_tt:tt) => {
         test_if! {
             $test_tt:
-            interpolate_idents! {
-                pub mod [$id _shuffle1_dyn] {
+            paste::item! {
+                pub mod [<$id _shuffle1_dyn>] {
                     use super::*;
                     #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn shuffle1_dyn() {
@@ -72,8 +72,8 @@ macro_rules! test_shuffle1_dyn_mask {
     ([$elem_ty:ident; $elem_count:expr]: $id:ident | $test_tt:tt) => {
         test_if! {
             $test_tt:
-            interpolate_idents! {
-                pub mod [$id _shuffle1_dyn] {
+            paste::item! {
+                pub mod [<$id _shuffle1_dyn>] {
                     use super::*;
                     #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn shuffle1_dyn() {

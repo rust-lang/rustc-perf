@@ -55,8 +55,8 @@ macro_rules! impl_from_array {
 
         test_if!{
             $test_tt:
-            interpolate_idents! {
-                mod [$id _from] {
+            paste::item! {
+                mod [<$id _from>] {
                     use super::*;
                     #[test]
                     fn array() {
@@ -89,7 +89,7 @@ macro_rules! impl_from_array {
                         let array_from_vec = <[$elem_ty; $elem_count]>::from(vec);
                         // FIXME: Workaround for arrays with more than 32 elements.
                         for i in 0..$elem_count {
-                            assert_eq!(array_from_vec[[i]], array[[i]]);
+                            assert_eq!(array_from_vec[i], array[i]);
                         }
 
                         let vec_from_into_array: $id = array.into();
@@ -97,7 +97,7 @@ macro_rules! impl_from_array {
                         let array_from_into_vec: [$elem_ty; $elem_count] = vec.into();
                         // FIXME: Workaround for arrays with more than 32 elements.
                         for i in 0..$elem_count {
-                            assert_eq!(array_from_into_vec[[i]], array[[i]]);
+                            assert_eq!(array_from_into_vec[i], array[i]);
                         }
                     }
                 }

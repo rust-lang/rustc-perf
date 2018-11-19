@@ -13,8 +13,8 @@ macro_rules! impl_from_cast_ {
 
         test_if!{
             $test_tt:
-            interpolate_idents! {
-                pub mod [$id _from_cast_ $from_ty] {
+            paste::item! {
+                pub mod [<$id _from_cast_ $from_ty>] {
                     use super::*;
                     #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn test() {
@@ -47,8 +47,8 @@ macro_rules! impl_from_cast_mask_ {
 
         test_if!{
             $test_tt:
-            interpolate_idents! {
-                pub mod [$id _from_cast_ $from_ty] {
+            paste::item! {
+                pub mod [<$id _from_cast_ $from_ty>] {
                     use super::*;
                     #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn test() {

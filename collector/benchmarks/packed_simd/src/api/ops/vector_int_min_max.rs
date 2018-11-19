@@ -22,8 +22,8 @@ macro_rules! impl_ops_vector_int_min_max {
             }
         }
         test_if!{$test_tt:
-        interpolate_idents! {
-            pub mod [$id _ops_vector_min_max] {
+        paste::item! {
+            pub mod [<$id _ops_vector_min_max>] {
                 use super::*;
                 #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                 fn min_max() {

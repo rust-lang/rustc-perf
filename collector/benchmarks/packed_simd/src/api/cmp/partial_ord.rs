@@ -69,8 +69,8 @@ macro_rules! test_cmp_partial_ord_int {
     ([$elem_ty:ident; $elem_count:expr]: $id:ident | $test_tt:tt) => {
         test_if!{
             $test_tt:
-            interpolate_idents! {
-                pub mod [$id _cmp_PartialOrd] {
+            paste::item! {
+                pub mod [<$id _cmp_PartialOrd>] {
                     use super::*;
                     #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn partial_lex_ord() {
@@ -156,8 +156,8 @@ macro_rules! test_cmp_partial_ord_mask {
     ([$elem_ty:ident; $elem_count:expr]: $id:ident | $test_tt:tt) => {
         test_if!{
             $test_tt:
-            interpolate_idents! {
-                pub mod [$id _cmp_PartialOrd] {
+            paste::item! {
+                pub mod [<$id _cmp_PartialOrd>] {
                     use super::*;
                     #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn partial_lex_ord() {

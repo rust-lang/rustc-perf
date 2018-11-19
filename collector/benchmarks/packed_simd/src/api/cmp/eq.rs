@@ -11,8 +11,8 @@ macro_rules! impl_cmp_eq {
 
         test_if!{
             $test_tt:
-            interpolate_idents! {
-                pub mod [$id _cmp_eq] {
+            paste::item! {
+                pub mod [<$id _cmp_eq>] {
                     use super::*;
                     #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn eq() {

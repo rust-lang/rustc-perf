@@ -83,8 +83,8 @@ macro_rules! impl_slice_write_to_slice {
 
         test_if!{
             $test_tt:
-            interpolate_idents! {
-                pub mod [$id _slice_write_to_slice] {
+            paste::item! {
+                pub mod [<$id _slice_write_to_slice>] {
                     use super::*;
                     use crate::iter::Iterator;
 
@@ -176,7 +176,7 @@ macro_rules! impl_slice_write_to_slice {
 
                             // create a slice - this is safe, because the elements
                             // of the slice exist, are properly initialized, and properly aligned:
-                            let s: &mut [[$elem_ty]] = slice::from_raw_parts_mut(ptr, $id::lanes());
+                            let s: &mut [$elem_ty] = slice::from_raw_parts_mut(ptr, $id::lanes());
                             // this should always panic because the slice alignment does not match
                             // the alignment requirements for the vector type:
                             let vec = $id::splat(42 as $elem_ty);

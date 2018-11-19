@@ -17,8 +17,8 @@ macro_rules! impl_math_float_mul_adde {
 
         test_if!{
             $test_tt:
-            interpolate_idents! {
-                pub mod [$id _math_mul_adde] {
+            paste::item! {
+                pub mod [<$id _math_mul_adde>] {
                     use super::*;
                     #[cfg_attr(not(target_arch = "wasm32"), test)] #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
                     fn mul_adde() {

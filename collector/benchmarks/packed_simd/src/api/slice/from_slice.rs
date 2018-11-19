@@ -80,8 +80,8 @@ macro_rules! impl_slice_from_slice {
 
         test_if!{
             $test_tt:
-            interpolate_idents! {
-                pub mod [$id _slice_from_slice] {
+            paste::item! {
+                pub mod [<$id _slice_from_slice>] {
                     use super::*;
                     use crate::iter::Iterator;
 
@@ -124,7 +124,7 @@ macro_rules! impl_slice_from_slice {
                         };
                         for i in $id::lanes()..(2 * $id::lanes()) {
                             unsafe {
-                                aligned.data[[i]] = 42 as $elem_ty;
+                                aligned.data[i] = 42 as $elem_ty;
                             }
                         }
 
@@ -179,7 +179,7 @@ macro_rules! impl_slice_from_slice {
 
                             // create a slice - this is safe, because the elements
                             // of the slice exist, are properly initialized, and properly aligned:
-                            let s: &[[$elem_ty]] = slice::from_raw_parts(ptr, $id::lanes());
+                            let s: &[$elem_ty] = slice::from_raw_parts(ptr, $id::lanes());
                             // this should always panic because the slice alignment does not match
                             // the alignment requirements for the vector type:
                             let _vec = $id::from_slice_aligned(s);
