@@ -18,7 +18,7 @@ use collector::self_profile::SelfProfile;
 use failure::{err_msg, Error, ResultExt};
 use serde_json;
 
-use {BuildKind, RunKind};
+use {Compiler, BuildKind, RunKind};
 
 fn command_output(cmd: &mut Command) -> Result<process::Output, Error> {
     trace!("running: {:?}", cmd);
@@ -134,8 +134,7 @@ impl Profiler {
 }
 
 struct CargoProcess<'a> {
-    rustc_path: &'a Path,
-    cargo_path: &'a Path,
+    compiler: Compiler<'a>,
     cwd: &'a Path,
     build_kind: BuildKind,
     incremental: bool,
@@ -174,8 +173,8 @@ impl<'a> CargoProcess<'a> {
             // PATH is needed to find things like linkers used by rustc/Cargo.
             .env("PATH", env::var_os("PATH").unwrap_or_default())
             .env("RUSTC", &*FAKE_RUSTC)
-            .env("RUSTC_REAL", &self.rustc_path)
-            .env("CARGO", &self.cargo_path)
+            .env("RUSTC_REAL", &self.compiler.rustc)
+            .env("CARGO", &self.compiler.cargo)
             .env(
                 "CARGO_INCREMENTAL",
                 &format!("{}", self.incremental as usize),
@@ -212,8 +211,10 @@ impl<'a> CargoProcess<'a> {
                 cmd.arg("-Zborrowck=mir");
                 cmd.arg("-Ztwo-phase-borrows");
             }
-            cmd.arg("-Zself-profile");
-            cmd.arg("-Zprofile-json");
+            if self.compiler.is_nightly {
+                cmd.arg("-Zself-profile");
+                cmd.arg("-Zprofile-json");
+            }
             // --wrap-rustc-with is not a valid rustc flag. But rustc-fake
             // recognizes it, strips it (and its argument) out, and uses it as an
             // indicator that the rustc invocation should be profiled. This works
@@ -229,9 +230,10 @@ impl<'a> CargoProcess<'a> {
             debug!("{:?}", cmd);
 
             touch_all(&self.cwd)?;
+            let is_nightly = self.compiler.is_nightly;
 
             let output = command_output(&mut cmd)?;
-            let self_profile_json = fs::read_to_string(self.cwd.join("self_profile_results.json"))?;
+            let self_profile_json = fs::read_to_string(self.cwd.join("self_profile_results.json"));
             if let Some((ref mut processor, name, run_kind, run_kind_str, patch)) =
                     self.processor_etc {
                 let data = ProcessOutputData {
@@ -241,7 +243,12 @@ impl<'a> CargoProcess<'a> {
                     run_kind,
                     run_kind_str,
                     patch,
-                    self_profile: serde_json::from_str(&self_profile_json).unwrap(),
+                    self_profile: self_profile_json
+                        .map(|s| serde_json::from_str(&s).unwrap())
+                        .unwrap_or_else(|_| {
+                            assert!(is_nightly);
+                            SelfProfile::default()
+                        }),
                 };
                 match processor.process_output(&data, output) {
                     Ok(Retry::No) => return Ok(()),
@@ -599,14 +606,12 @@ impl Benchmark {
 
     fn mk_cargo_process<'a>(
         &self,
-        rustc_path: &'a Path,
-        cargo_path: &'a Path,
+        compiler: Compiler<'a>,
         cwd: &'a Path,
         build_kind: BuildKind,
     ) -> CargoProcess<'a> {
         CargoProcess {
-            rustc_path: rustc_path,
-            cargo_path: cargo_path,
+            compiler,
             cwd: cwd,
             build_kind: build_kind,
             incremental: false,
@@ -639,8 +644,7 @@ impl Benchmark {
         processor: &mut dyn Processor,
         build_kinds: &[BuildKind],
         run_kinds: &[RunKind],
-        rustc_path: &Path,
-        cargo_path: &Path,
+        compiler: Compiler,
         iterations: usize,
     ) -> Result<(), Error> {
 
@@ -659,7 +663,7 @@ impl Benchmark {
             // built on every iteration. A different temp dir is used for the
             // timing builds.
             let prep_dir = self.make_temp_dir(&self.path)?;
-            self.mk_cargo_process(rustc_path, cargo_path, prep_dir.path(), build_kind)
+            self.mk_cargo_process(compiler, prep_dir.path(), build_kind)
                 .run_rustc()?;
 
             for i in 0..iterations {
@@ -669,7 +673,7 @@ impl Benchmark {
 
                 // A full non-incremental build.
                 if run_kinds.contains(&RunKind::Clean) {
-                    self.mk_cargo_process(rustc_path, cargo_path, cwd, build_kind)
+                    self.mk_cargo_process(compiler, cwd, build_kind)
                         .processor(processor, &self.name, RunKind::Clean, "Clean", None)
                         .run_rustc()?;
                 }
@@ -680,7 +684,7 @@ impl Benchmark {
                 let is_check = build_kind == BuildKind::Check;
                 if run_kinds.contains(&RunKind::Nll) && ((has_check && is_check) || !has_check)
                 {
-                    self.mk_cargo_process(rustc_path, cargo_path, cwd, build_kind)
+                    self.mk_cargo_process(compiler, cwd, build_kind)
                         .nll(true)
                         .processor(processor, &self.name, RunKind::Nll, "Nll", None)
                         .run_rustc()?;
@@ -691,7 +695,7 @@ impl Benchmark {
                 if run_kinds.contains(&RunKind::BaseIncr) ||
                    run_kinds.contains(&RunKind::CleanIncr) ||
                    run_kinds.contains(&RunKind::PatchedIncrs) {
-                    self.mk_cargo_process(rustc_path, cargo_path, cwd, build_kind)
+                    self.mk_cargo_process(compiler, cwd, build_kind)
                         .incremental(true)
                         .processor(processor, &self.name, RunKind::BaseIncr, "BaseIncr", None)
                         .run_rustc()?;
@@ -699,7 +703,7 @@ impl Benchmark {
 
                 // An incremental build with no changes (fastest incremental case).
                 if run_kinds.contains(&RunKind::CleanIncr) {
-                    self.mk_cargo_process(rustc_path, cargo_path, cwd, build_kind)
+                    self.mk_cargo_process(compiler, cwd, build_kind)
                         .incremental(true)
                         .processor(processor, &self.name, RunKind::CleanIncr, "CleanIncr", None)
                         .run_rustc()?;
@@ -713,7 +717,7 @@ impl Benchmark {
                         // An incremental build with some changes (realistic
                         // incremental case).
                         let run_kind_str = format!("PatchedIncr{}", i);
-                        self.mk_cargo_process(rustc_path, cargo_path, cwd, build_kind)
+                        self.mk_cargo_process(compiler, cwd, build_kind)
                             .incremental(true)
                             .processor(processor, &self.name, RunKind::PatchedIncrs, &run_kind_str,
                                        Some(&patch))

@@ -52,6 +52,13 @@ mod outrepo;
 
 use execute::{Benchmark, Profiler};
 
+#[derive(Debug, Copy, Clone)]
+pub struct Compiler<'a> {
+    pub rustc: &'a Path,
+    pub cargo: &'a Path,
+    pub is_nightly: bool,
+}
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum BuildKind {
     Check,
@@ -203,8 +210,7 @@ fn bench_commit(
     triple: &str,
     build_kinds: &[BuildKind],
     run_kinds: &[RunKind],
-    rustc_path: &Path,
-    cargo_path: &Path,
+    compiler: Compiler,
     benchmarks: &[Benchmark],
     iterations: usize,
     call_home: bool,
@@ -249,8 +255,8 @@ fn bench_commit(
         }
 
         let mut processor = execute::MeasureProcessor::new(&benchmark.name);
-        let result = benchmark.measure(&mut processor, build_kinds, run_kinds, rustc_path,
-                                       cargo_path, iterations);
+        let result = benchmark.measure(
+            &mut processor, build_kinds, run_kinds, compiler, iterations);
         let result = match result {
             Ok(()) => Ok(processor.collected),
             Err(ref s) => {
@@ -448,8 +454,11 @@ fn main_result() -> Result<i32, Error> {
                 &sysroot.triple,
                 build_kinds,
                 &run_kinds,
-                &sysroot.rustc,
-                &sysroot.cargo,
+                Compiler {
+                    rustc: &sysroot.rustc,
+                    cargo: &sysroot.cargo,
+                    is_nightly: true,
+                },
                 &benchmarks,
                 3,
                 false,
@@ -485,8 +494,11 @@ fn main_result() -> Result<i32, Error> {
                 "x86_64-unknown-linux-gnu",
                 &build_kinds,
                 &run_kinds,
-                &rustc_path,
-                &cargo_path,
+                Compiler {
+                    rustc: &rustc_path,
+                    cargo: &cargo_path,
+                    is_nightly: true,
+                },
                 &benchmarks,
                 1,
                 false,
@@ -525,8 +537,11 @@ fn main_result() -> Result<i32, Error> {
                 "x86_64-unknown-linux-gnu",
                 &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
                 &run_kinds,
-                &toolchain.binary_file("rustc"),
-                &toolchain.binary_file("cargo"),
+                Compiler {
+                    rustc: &toolchain.binary_file("rustc"),
+                    cargo: &toolchain.binary_file("cargo"),
+                    is_nightly: false,
+                },
                 &benchmarks,
                 3,
                 false,
@@ -569,8 +584,11 @@ fn main_result() -> Result<i32, Error> {
                     &sysroot.triple,
                     &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
                     &RunKind::all(),
-                    &sysroot.rustc,
-                    &sysroot.cargo,
+                    Compiler {
+                        rustc: &sysroot.rustc,
+                        cargo: &sysroot.cargo,
+                        is_nightly: true,
+                    },
                     &benchmarks,
                     3,
                     true,
@@ -596,12 +614,13 @@ fn main_result() -> Result<i32, Error> {
 
             let rustc_path = PathBuf::from(rustc).canonicalize()?;
             let cargo_path = PathBuf::from(cargo).canonicalize()?;
+            let compiler = Compiler { rustc: &rustc_path, cargo: &cargo_path, is_nightly: true };
 
             for (i, benchmark) in benchmarks.iter().enumerate() {
                 let out_dir = get_out_dir();
                 let mut processor = execute::ProfileProcessor::new(profiler, &out_dir, &id);
                 let result = benchmark.measure(&mut processor, &build_kinds, &run_kinds,
-                                               &rustc_path, &cargo_path, 1);
+                                               compiler, 1);
                 if let Err(ref s) = result {
                     info!("failed to profile {} with {:?}, recorded: {:?}",
                           benchmark.name, profiler, s);
@@ -653,8 +672,11 @@ fn main_result() -> Result<i32, Error> {
                     &sysroot.triple,
                     &[BuildKind::Check], // no Debug or Opt builds
                     &RunKind::all(),
-                    &sysroot.rustc,
-                    &sysroot.cargo,
+                    Compiler {
+                        rustc: &sysroot.rustc,
+                        cargo: &sysroot.cargo,
+                        is_nightly: true,
+                    },
                     &benchmarks,
                     1,
                     false,

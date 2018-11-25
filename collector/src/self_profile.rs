@@ -1,4 +1,4 @@
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct SelfProfile {
     pub category_data: Vec<Category>,
     // This field is intentionally private as for perf it should not be read.
@@ -18,7 +18,7 @@ pub struct Category {
     pub query_hits: f32,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 struct Options {
     optimization_level: String,
     incremental: bool,
