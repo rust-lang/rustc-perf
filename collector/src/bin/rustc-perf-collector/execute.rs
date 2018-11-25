@@ -230,7 +230,6 @@ impl<'a> CargoProcess<'a> {
             debug!("{:?}", cmd);
 
             touch_all(&self.cwd)?;
-            let is_nightly = self.compiler.is_nightly;
 
             let output = command_output(&mut cmd)?;
             let self_profile_json = fs::read_to_string(self.cwd.join("self_profile_results.json"));
@@ -243,10 +242,10 @@ impl<'a> CargoProcess<'a> {
                     run_kind,
                     run_kind_str,
                     patch,
-                    self_profile: self_profile_json
+                    self_profile: self_profile_json.as_ref()
                         .map(|s| serde_json::from_str(&s).unwrap())
                         .unwrap_or_else(|_| {
-                            assert!(is_nightly);
+                            eprintln!("self profile results: {:?}", self_profile_json);
                             SelfProfile::default()
                         }),
                 };
