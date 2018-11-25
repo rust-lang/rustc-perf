@@ -13,6 +13,7 @@ use std::cmp;
 use tempfile::TempDir;
 
 use collector::{Benchmark as CollectedBenchmark, BenchmarkState, Patch, Run, Stat};
+use collector::self_profile::SelfProfile;
 
 use failure::{err_msg, Error, ResultExt};
 use serde_json;
@@ -211,6 +212,8 @@ impl<'a> CargoProcess<'a> {
                 cmd.arg("-Zborrowck=mir");
                 cmd.arg("-Ztwo-phase-borrows");
             }
+            cmd.arg("-Zself-profile");
+            cmd.arg("-Zprofile-json");
             // --wrap-rustc-with is not a valid rustc flag. But rustc-fake
             // recognizes it, strips it (and its argument) out, and uses it as an
             // indicator that the rustc invocation should be profiled. This works
@@ -228,6 +231,7 @@ impl<'a> CargoProcess<'a> {
             touch_all(&self.cwd)?;
 
             let output = command_output(&mut cmd)?;
+            let self_profile_json = fs::read_to_string(self.cwd.join("self_profile_results.json"))?;
             if let Some((ref mut processor, name, run_kind, run_kind_str, patch)) =
                     self.processor_etc {
                 let data = ProcessOutputData {
@@ -237,6 +241,7 @@ impl<'a> CargoProcess<'a> {
                     run_kind,
                     run_kind_str,
                     patch,
+                    self_profile: serde_json::from_str(&self_profile_json).unwrap(),
                 };
                 match processor.process_output(&data, output) {
                     Ok(Retry::No) => return Ok(()),
@@ -271,6 +276,7 @@ pub struct ProcessOutputData<'a> {
     build_kind: BuildKind,
     run_kind: RunKind,
     run_kind_str: &'a str,
+    self_profile: SelfProfile,
     patch: Option<&'a Patch>,
 }
 
@@ -290,11 +296,11 @@ pub trait Processor {
 }
 
 pub struct MeasureProcessor {
-    clean_stats: Vec<Vec<Stat>>,
-    nll_stats: Vec<Vec<Stat>>,
-    base_incr_stats: Vec<Vec<Stat>>,
-    clean_incr_stats: Vec<Vec<Stat>>,
-    patched_incr_stats: Vec<(Patch, Vec<Vec<Stat>>)>,
+    clean_stats: Vec<(Vec<Stat>, SelfProfile)>,
+    nll_stats: Vec<(Vec<Stat>, SelfProfile)>,
+    base_incr_stats: Vec<(Vec<Stat>, SelfProfile)>,
+    clean_incr_stats: Vec<(Vec<Stat>, SelfProfile)>,
+    patched_incr_stats: Vec<(Patch, Vec<(Vec<Stat>, SelfProfile)>)>,
 
     pub collected: CollectedBenchmark,
 }
@@ -329,20 +335,21 @@ impl Processor for MeasureProcessor {
                       -> Result<Retry, Error> {
         match process_perf_stat_output(output) {
             Ok(stats) => {
+                let self_profile = data.self_profile.clone();
                 match data.run_kind {
-                    RunKind::Clean => { self.clean_stats.push(stats); }
-                    RunKind::Nll => { self.nll_stats.push(stats); }
-                    RunKind::BaseIncr => { self.base_incr_stats.push(stats); }
-                    RunKind::CleanIncr => { self.clean_incr_stats.push(stats); }
+                    RunKind::Clean => { self.clean_stats.push((stats, self_profile)); }
+                    RunKind::Nll => { self.nll_stats.push((stats, self_profile)); }
+                    RunKind::BaseIncr => { self.base_incr_stats.push((stats, self_profile)); }
+                    RunKind::CleanIncr => { self.clean_incr_stats.push((stats, self_profile)); }
                     RunKind::PatchedIncrs => {
                         let patch = data.patch.unwrap();
                         if let Some(mut entry) =
                             self.patched_incr_stats.iter_mut().find(|s| &s.0 == patch)
                         {
-                            entry.1.push(stats);
+                            entry.1.push((stats, self_profile));
                             return Ok(Retry::No);
                         }
-                        self.patched_incr_stats.push((patch.clone(), vec![stats]));
+                        self.patched_incr_stats.push((patch.clone(), vec![(stats, self_profile)]));
                     }
                 }
                 Ok(Retry::No)
@@ -776,10 +783,14 @@ fn process_perf_stat_output(output: process::Output) -> Result<Vec<Stat>, Deseri
     Ok(stats)
 }
 
-fn process_stats(build_kind: BuildKind, state: BenchmarkState, runs: &[Vec<Stat>]) -> Run {
+fn process_stats(
+    build_kind: BuildKind,
+    state: BenchmarkState,
+    runs: &[(Vec<Stat>, SelfProfile)],
+) -> Run {
     let mut stats: HashMap<String, Vec<f64>> = HashMap::new();
-    for run in runs.clone() {
-        for stat in run {
+    for (run_stats, _) in runs.clone() {
+        for stat in run_stats {
             stats
                 .entry(stat.name.clone())
                 .or_insert_with(|| Vec::new())
@@ -811,5 +822,7 @@ fn process_stats(build_kind: BuildKind, state: BenchmarkState, runs: &[Vec<Stat>
         check: build_kind == BuildKind::Check,
         release: build_kind == BuildKind::Opt,
         state: state,
+        // TODO: Aggregate self profiles.
+        self_profile: runs[0].1.clone(),
     }
 }

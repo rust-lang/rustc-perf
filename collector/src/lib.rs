@@ -21,6 +21,7 @@ use chrono::naive::NaiveDate;
 use serde::{Deserialize, Serialize};
 
 pub mod api;
+pub mod self_profile;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Commit {
@@ -194,6 +195,7 @@ pub struct Stat {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Run {
     pub stats: Vec<Stat>,
+    pub self_profile: self_profile::SelfProfile,
     #[serde(default)]
     pub check: bool,
     pub release: bool,
