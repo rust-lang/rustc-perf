@@ -232,7 +232,8 @@ impl<'a> CargoProcess<'a> {
             touch_all(&self.cwd)?;
 
             let output = command_output(&mut cmd)?;
-            let self_profile_json = fs::read_to_string(self.cwd.join("self_profile_results.json"));
+            let self_profile_file = self.cwd.join("self_profiler_results.json");
+            let self_profile_json = fs::read_to_string(&self_profile_file);
             if let Some((ref mut processor, name, run_kind, run_kind_str, patch)) =
                     self.processor_etc {
                 let data = ProcessOutputData {
@@ -245,7 +246,8 @@ impl<'a> CargoProcess<'a> {
                     self_profile: self_profile_json.as_ref()
                         .map(|s| serde_json::from_str(&s).unwrap())
                         .unwrap_or_else(|_| {
-                            eprintln!("self profile results: {:?}", self_profile_json);
+                            eprintln!("self profile results: {:?} from {:?}",
+                                self_profile_json, self_profile_file);
                             SelfProfile::default()
                         }),
                 };
