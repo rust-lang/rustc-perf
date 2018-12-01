@@ -23,8 +23,6 @@ extern crate semver;
 extern crate reqwest;
 extern crate futures;
 
-use reqwest::header::{Authorization, Bearer};
-
 use failure::{Error, ResultExt, SyncFailure};
 
 use std::collections::HashSet;
@@ -172,7 +170,7 @@ fn start_bg_thread() -> Arc<(UnboundedSender<Option<collected::Request>>, JoinHa
                         "{}/perf/collected",
                         env::var("SITE_URL").expect("SITE_URL defined")
                     ))
-                    .header(Authorization(Bearer { token: env::var("PERF_SECRET_KEY").unwrap() }))
+                    .bearer_auth(env::var("PERF_SECRET_KEY").unwrap())
                     .json(&request)
                     .send()?;
                 if !resp.status().is_success() {

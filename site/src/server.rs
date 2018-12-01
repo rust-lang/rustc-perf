@@ -27,7 +27,6 @@ use futures_cpupool::CpuPool;
 use hyper::{self, Get, Post, StatusCode};
 use hyper::header::{AcceptEncoding, CacheControl, CacheDirective, Encoding};
 use hyper::header::{ContentEncoding, ContentLength, ContentType, Authorization, Bearer};
-use hyper::header::{UserAgent};
 use hyper::mime;
 use hyper::server::{Http, Request, Response, Service};
 use url::Url;
@@ -39,6 +38,7 @@ use ring::{hmac, digest};
 use hex;
 use regex::Regex;
 use reqwest;
+use reqwest::header::USER_AGENT;
 
 use git;
 use util::{self, get_repo_path, Interpolate};
@@ -548,12 +548,11 @@ lazy_static! {
 pub fn post_comment(cfg: &Config, issue: &github::Issue, body: &str) -> ServerResult<()> {
     let timer_token = cfg.keys.github.clone().expect("needs rust-timer token");
     let client = reqwest::Client::new();
-    let mut req = client.post(&issue.comments_url);
-    req
+    let req = client.post(&issue.comments_url)
         .json(&github::PostComment {
             body: body.to_owned(),
         })
-        .header(UserAgent::new("perf-rust-lang-org-server"))
+        .header(USER_AGENT, "perf-rust-lang-org-server")
         .basic_auth("rust-timer", Some(timer_token));
 
     let res = req.send();
