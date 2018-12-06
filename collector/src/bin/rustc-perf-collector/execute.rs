@@ -13,11 +13,12 @@ use std::cmp;
 use tempfile::TempDir;
 
 use collector::{Benchmark as CollectedBenchmark, BenchmarkState, Patch, Run, Stat};
+use collector::self_profile::SelfProfile;
 
 use failure::{err_msg, Error, ResultExt};
 use serde_json;
 
-use {BuildKind, RunKind};
+use {Compiler, BuildKind, RunKind};
 
 fn command_output(cmd: &mut Command) -> Result<process::Output, Error> {
     trace!("running: {:?}", cmd);
@@ -133,8 +134,7 @@ impl Profiler {
 }
 
 struct CargoProcess<'a> {
-    rustc_path: &'a Path,
-    cargo_path: &'a Path,
+    compiler: Compiler<'a>,
     cwd: &'a Path,
     build_kind: BuildKind,
     incremental: bool,
@@ -173,8 +173,8 @@ impl<'a> CargoProcess<'a> {
             // PATH is needed to find things like linkers used by rustc/Cargo.
             .env("PATH", env::var_os("PATH").unwrap_or_default())
             .env("RUSTC", &*FAKE_RUSTC)
-            .env("RUSTC_REAL", &self.rustc_path)
-            .env("CARGO", &self.cargo_path)
+            .env("RUSTC_REAL", &self.compiler.rustc)
+            .env("CARGO", &self.compiler.cargo)
             .env(
                 "CARGO_INCREMENTAL",
                 &format!("{}", self.incremental as usize),
@@ -211,6 +211,10 @@ impl<'a> CargoProcess<'a> {
                 cmd.arg("-Zborrowck=mir");
                 cmd.arg("-Ztwo-phase-borrows");
             }
+            if self.compiler.is_nightly {
+                cmd.arg("-Zself-profile");
+                cmd.arg("-Zprofile-json");
+            }
             // --wrap-rustc-with is not a valid rustc flag. But rustc-fake
             // recognizes it, strips it (and its argument) out, and uses it as an
             // indicator that the rustc invocation should be profiled. This works
@@ -228,6 +232,8 @@ impl<'a> CargoProcess<'a> {
             touch_all(&self.cwd)?;
 
             let output = command_output(&mut cmd)?;
+            let self_profile_file = self.cwd.join("self_profiler_results.json");
+            let self_profile_json = fs::read_to_string(&self_profile_file);
             if let Some((ref mut processor, name, run_kind, run_kind_str, patch)) =
                     self.processor_etc {
                 let data = ProcessOutputData {
@@ -237,6 +243,13 @@ impl<'a> CargoProcess<'a> {
                     run_kind,
                     run_kind_str,
                     patch,
+                    self_profile: self_profile_json.as_ref()
+                        .map(|s| serde_json::from_str(&s).unwrap())
+                        .unwrap_or_else(|_| {
+                            eprintln!("self profile results: {:?} from {:?}",
+                                self_profile_json, self_profile_file);
+                            SelfProfile::default()
+                        }),
                 };
                 match processor.process_output(&data, output) {
                     Ok(Retry::No) => return Ok(()),
@@ -271,6 +284,7 @@ pub struct ProcessOutputData<'a> {
     build_kind: BuildKind,
     run_kind: RunKind,
     run_kind_str: &'a str,
+    self_profile: SelfProfile,
     patch: Option<&'a Patch>,
 }
 
@@ -290,11 +304,11 @@ pub trait Processor {
 }
 
 pub struct MeasureProcessor {
-    clean_stats: Vec<Vec<Stat>>,
-    nll_stats: Vec<Vec<Stat>>,
-    base_incr_stats: Vec<Vec<Stat>>,
-    clean_incr_stats: Vec<Vec<Stat>>,
-    patched_incr_stats: Vec<(Patch, Vec<Vec<Stat>>)>,
+    clean_stats: Vec<(Vec<Stat>, SelfProfile)>,
+    nll_stats: Vec<(Vec<Stat>, SelfProfile)>,
+    base_incr_stats: Vec<(Vec<Stat>, SelfProfile)>,
+    clean_incr_stats: Vec<(Vec<Stat>, SelfProfile)>,
+    patched_incr_stats: Vec<(Patch, Vec<(Vec<Stat>, SelfProfile)>)>,
 
     pub collected: CollectedBenchmark,
 }
@@ -329,20 +343,21 @@ impl Processor for MeasureProcessor {
                       -> Result<Retry, Error> {
         match process_perf_stat_output(output) {
             Ok(stats) => {
+                let self_profile = data.self_profile.clone();
                 match data.run_kind {
-                    RunKind::Clean => { self.clean_stats.push(stats); }
-                    RunKind::Nll => { self.nll_stats.push(stats); }
-                    RunKind::BaseIncr => { self.base_incr_stats.push(stats); }
-                    RunKind::CleanIncr => { self.clean_incr_stats.push(stats); }
+                    RunKind::Clean => { self.clean_stats.push((stats, self_profile)); }
+                    RunKind::Nll => { self.nll_stats.push((stats, self_profile)); }
+                    RunKind::BaseIncr => { self.base_incr_stats.push((stats, self_profile)); }
+                    RunKind::CleanIncr => { self.clean_incr_stats.push((stats, self_profile)); }
                     RunKind::PatchedIncrs => {
                         let patch = data.patch.unwrap();
                         if let Some(mut entry) =
                             self.patched_incr_stats.iter_mut().find(|s| &s.0 == patch)
                         {
-                            entry.1.push(stats);
+                            entry.1.push((stats, self_profile));
                             return Ok(Retry::No);
                         }
-                        self.patched_incr_stats.push((patch.clone(), vec![stats]));
+                        self.patched_incr_stats.push((patch.clone(), vec![(stats, self_profile)]));
                     }
                 }
                 Ok(Retry::No)
@@ -592,14 +607,12 @@ impl Benchmark {
 
     fn mk_cargo_process<'a>(
         &self,
-        rustc_path: &'a Path,
-        cargo_path: &'a Path,
+        compiler: Compiler<'a>,
         cwd: &'a Path,
         build_kind: BuildKind,
     ) -> CargoProcess<'a> {
         CargoProcess {
-            rustc_path: rustc_path,
-            cargo_path: cargo_path,
+            compiler,
             cwd: cwd,
             build_kind: build_kind,
             incremental: false,
@@ -632,8 +645,7 @@ impl Benchmark {
         processor: &mut dyn Processor,
         build_kinds: &[BuildKind],
         run_kinds: &[RunKind],
-        rustc_path: &Path,
-        cargo_path: &Path,
+        compiler: Compiler,
         iterations: usize,
     ) -> Result<(), Error> {
 
@@ -652,7 +664,7 @@ impl Benchmark {
             // built on every iteration. A different temp dir is used for the
             // timing builds.
             let prep_dir = self.make_temp_dir(&self.path)?;
-            self.mk_cargo_process(rustc_path, cargo_path, prep_dir.path(), build_kind)
+            self.mk_cargo_process(compiler, prep_dir.path(), build_kind)
                 .run_rustc()?;
 
             for i in 0..iterations {
@@ -662,7 +674,7 @@ impl Benchmark {
 
                 // A full non-incremental build.
                 if run_kinds.contains(&RunKind::Clean) {
-                    self.mk_cargo_process(rustc_path, cargo_path, cwd, build_kind)
+                    self.mk_cargo_process(compiler, cwd, build_kind)
                         .processor(processor, &self.name, RunKind::Clean, "Clean", None)
                         .run_rustc()?;
                 }
@@ -673,7 +685,7 @@ impl Benchmark {
                 let is_check = build_kind == BuildKind::Check;
                 if run_kinds.contains(&RunKind::Nll) && ((has_check && is_check) || !has_check)
                 {
-                    self.mk_cargo_process(rustc_path, cargo_path, cwd, build_kind)
+                    self.mk_cargo_process(compiler, cwd, build_kind)
                         .nll(true)
                         .processor(processor, &self.name, RunKind::Nll, "Nll", None)
                         .run_rustc()?;
@@ -684,7 +696,7 @@ impl Benchmark {
                 if run_kinds.contains(&RunKind::BaseIncr) ||
                    run_kinds.contains(&RunKind::CleanIncr) ||
                    run_kinds.contains(&RunKind::PatchedIncrs) {
-                    self.mk_cargo_process(rustc_path, cargo_path, cwd, build_kind)
+                    self.mk_cargo_process(compiler, cwd, build_kind)
                         .incremental(true)
                         .processor(processor, &self.name, RunKind::BaseIncr, "BaseIncr", None)
                         .run_rustc()?;
@@ -692,7 +704,7 @@ impl Benchmark {
 
                 // An incremental build with no changes (fastest incremental case).
                 if run_kinds.contains(&RunKind::CleanIncr) {
-                    self.mk_cargo_process(rustc_path, cargo_path, cwd, build_kind)
+                    self.mk_cargo_process(compiler, cwd, build_kind)
                         .incremental(true)
                         .processor(processor, &self.name, RunKind::CleanIncr, "CleanIncr", None)
                         .run_rustc()?;
@@ -706,7 +718,7 @@ impl Benchmark {
                         // An incremental build with some changes (realistic
                         // incremental case).
                         let run_kind_str = format!("PatchedIncr{}", i);
-                        self.mk_cargo_process(rustc_path, cargo_path, cwd, build_kind)
+                        self.mk_cargo_process(compiler, cwd, build_kind)
                             .incremental(true)
                             .processor(processor, &self.name, RunKind::PatchedIncrs, &run_kind_str,
                                        Some(&patch))
@@ -776,10 +788,14 @@ fn process_perf_stat_output(output: process::Output) -> Result<Vec<Stat>, Deseri
     Ok(stats)
 }
 
-fn process_stats(build_kind: BuildKind, state: BenchmarkState, runs: &[Vec<Stat>]) -> Run {
+fn process_stats(
+    build_kind: BuildKind,
+    state: BenchmarkState,
+    runs: &[(Vec<Stat>, SelfProfile)],
+) -> Run {
     let mut stats: HashMap<String, Vec<f64>> = HashMap::new();
-    for run in runs.clone() {
-        for stat in run {
+    for (run_stats, _) in runs.clone() {
+        for stat in run_stats {
             stats
                 .entry(stat.name.clone())
                 .or_insert_with(|| Vec::new())
@@ -811,5 +827,7 @@ fn process_stats(build_kind: BuildKind, state: BenchmarkState, runs: &[Vec<Stat>
         check: build_kind == BuildKind::Check,
         release: build_kind == BuildKind::Opt,
         state: state,
+        // TODO: Aggregate self profiles.
+        self_profile: runs[0].1.clone(),
     }
 }
