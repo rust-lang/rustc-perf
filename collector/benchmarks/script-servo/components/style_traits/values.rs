@@ -71,6 +71,7 @@ where
     }
 }
 
+/// A macro.
 #[macro_export]
 macro_rules! serialize_function {
     ($dest: expr, $name: ident($( $arg: expr, )+)) => {
@@ -379,6 +380,7 @@ impl_to_css_for_predefined_type!(::cssparser::RGBA);
 impl_to_css_for_predefined_type!(::cssparser::Color);
 impl_to_css_for_predefined_type!(::cssparser::UnicodeRange);
 
+/// A macro.
 #[macro_export]
 macro_rules! define_css_keyword_enum {
     ($name: ident: values { $( $css: expr => $variant: ident),+, }
@@ -409,6 +411,7 @@ macro_rules! define_css_keyword_enum {
     };
 }
 
+/// A macro.
 #[cfg(feature = "servo")]
 #[macro_export]
 macro_rules! __define_css_keyword_enum__add_optional_traits {
@@ -422,6 +425,7 @@ macro_rules! __define_css_keyword_enum__add_optional_traits {
     };
 }
 
+/// A macro.
 #[cfg(not(feature = "servo"))]
 #[macro_export]
 macro_rules! __define_css_keyword_enum__add_optional_traits {
@@ -435,6 +439,7 @@ macro_rules! __define_css_keyword_enum__add_optional_traits {
     };
 }
 
+/// A macro.
 #[macro_export]
 macro_rules! __define_css_keyword_enum__actual {
     ($name: ident [ $( $derived_trait: ident),* ]

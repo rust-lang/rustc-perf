@@ -48,6 +48,7 @@ pub use self::upgrade::{Upgrade, Protocol, ProtocolName};
 pub use self::user_agent::UserAgent;
 pub use self::vary::Vary;
 
+/// A macro.
 #[macro_export]
 macro_rules! bench_header(
     ($name:ident, $ty:ty, $value:expr) => {
@@ -79,6 +80,7 @@ macro_rules! bench_header(
     }
 );
 
+/// A macro.
 #[macro_export]
 macro_rules! __hyper__deref {
     ($from:ty => $to:ty) => {
@@ -98,6 +100,7 @@ macro_rules! __hyper__deref {
     }
 }
 
+/// A macro.
 #[macro_export]
 macro_rules! __hyper__tm {
     ($id:ident, $tm:ident{$($tf:item)*}) => {
@@ -114,6 +117,7 @@ macro_rules! __hyper__tm {
     }
 }
 
+/// A macro.
 #[macro_export]
 macro_rules! test_header {
     ($id:ident, $raw:expr) => {
@@ -154,6 +158,7 @@ macro_rules! test_header {
     }
 }
 
+/// A macro.
 #[macro_export]
 macro_rules! header {
     // $a:meta: Attributes associated with the header item (usually docs)

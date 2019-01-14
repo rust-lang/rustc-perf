@@ -11,6 +11,7 @@ use std::fmt;
 use std::ops::Deref;
 use string_cache::{Atom, WeakAtom};
 
+/// A macro.
 #[macro_export]
 macro_rules! ns {
     () => { $crate::string_cache::Namespace(atom!("")) };
