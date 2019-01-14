@@ -1,4 +1,5 @@
 
+/// A macro.
 #[macro_export]
 macro_rules! try_poll {
     ($e:expr) => (match $e {

@@ -50,6 +50,7 @@ use style_adjuster::StyleAdjuster;
 
 pub use self::declaration_block::*;
 
+/// A macro.
 #[cfg(feature = "gecko")]
 #[macro_export]
 macro_rules! property_name {
@@ -3593,6 +3594,7 @@ impl AliasId {
     }
 }
 
+/// A macro.
 #[macro_export]
 macro_rules! css_properties_accessors {
     ($macro_name: ident) => {
@@ -3615,6 +3617,7 @@ macro_rules! css_properties_accessors {
     }
 }
 
+/// A macro.
 #[macro_export]
 macro_rules! longhand_properties_idents {
     ($macro_name: ident) => {

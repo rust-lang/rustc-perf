@@ -202,6 +202,7 @@ RULE_TEMPLATE = ('("{atom}") =>\n  '
                  ' }};')
 
 MACRO = '''
+/// A macro.
 #[macro_export]
 macro_rules! atom {{
 {}

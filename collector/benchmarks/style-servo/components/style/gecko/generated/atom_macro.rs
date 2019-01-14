@@ -15534,6 +15534,7 @@ cfg_if! {
     }
 }
 
+/// A macro.
 #[macro_export]
 macro_rules! atom {
 ("") =>
