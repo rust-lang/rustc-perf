@@ -195,7 +195,7 @@ pub struct Stat {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Run {
     pub stats: Vec<Stat>,
-    pub self_profile: self_profile::SelfProfile,
+    pub self_profile: Option<self_profile::SelfProfile>,
     #[serde(default)]
     pub check: bool,
     pub release: bool,

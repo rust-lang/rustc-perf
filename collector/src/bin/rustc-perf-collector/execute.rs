@@ -828,6 +828,6 @@ fn process_stats(
         release: build_kind == BuildKind::Opt,
         state: state,
         // TODO: Aggregate self profiles.
-        self_profile: runs[0].1.clone(),
+        self_profile: Some(runs[0].1.clone()),
     }
 }
