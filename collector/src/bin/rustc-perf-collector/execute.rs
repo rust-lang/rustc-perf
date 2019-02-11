@@ -1,24 +1,23 @@
 //! Execute benchmarks.
 
+use std::cmp;
+use std::collections::{HashMap, HashSet};
 use std::env;
+use std::f64;
+use std::fs::{self, File};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{self, Command};
 use std::str;
-use std::f64;
-use std::io::Write;
-use std::fs::{self, File};
-use std::collections::{HashMap, HashSet};
-use std::cmp;
 
 use tempfile::TempDir;
 
 use collector::{Benchmark as CollectedBenchmark, BenchmarkState, Patch, Run, Stat};
-use collector::self_profile::SelfProfile;
 
 use failure::{err_msg, Error, ResultExt};
 use serde_json;
 
-use {Compiler, BuildKind, RunKind};
+use {BuildKind, Compiler, RunKind};
 
 fn command_output(cmd: &mut Command) -> Result<process::Output, Error> {
     trace!("running: {:?}", cmd);
@@ -142,7 +141,13 @@ struct CargoProcess<'a> {
     build_kind: BuildKind,
     incremental: bool,
     nll: bool,
-    processor_etc: Option<(&'a mut dyn Processor, &'a str, RunKind, &'a str, Option<&'a Patch>)>,
+    processor_etc: Option<(
+        &'a mut dyn Processor,
+        &'a str,
+        RunKind,
+        &'a str,
+        Option<&'a Patch>,
+    )>,
     manifest_path: String,
     cargo_args: Vec<String>,
     rustc_args: Vec<String>,
@@ -159,8 +164,14 @@ impl<'a> CargoProcess<'a> {
         self
     }
 
-    fn processor(mut self, processor: &'a mut dyn Processor, name: &'a str,
-                 run_kind: RunKind, run_kind_str: &'a str, patch: Option<&'a Patch>) -> Self {
+    fn processor(
+        mut self,
+        processor: &'a mut dyn Processor,
+        name: &'a str,
+        run_kind: RunKind,
+        run_kind_str: &'a str,
+        patch: Option<&'a Patch>,
+    ) -> Self {
         self.processor_etc = Some((processor, name, run_kind, run_kind_str, patch));
         self
     }
@@ -184,7 +195,8 @@ impl<'a> CargoProcess<'a> {
             )
             .current_dir(cwd)
             .arg(subcommand)
-            .arg("--manifest-path").arg(&self.manifest_path);
+            .arg("--manifest-path")
+            .arg(&self.manifest_path);
         cmd
     }
 
@@ -204,9 +216,13 @@ impl<'a> CargoProcess<'a> {
             let mut cmd = self.base_command(self.cwd, "rustc");
             cmd.arg("-p").arg(self.get_pkgid(self.cwd));
             match self.build_kind {
-                BuildKind::Check => { cmd.arg("--profile").arg("check"); }
+                BuildKind::Check => {
+                    cmd.arg("--profile").arg("check");
+                }
                 BuildKind::Debug => {}
-                BuildKind::Opt => { cmd.arg("--release"); }
+                BuildKind::Opt => {
+                    cmd.arg("--release");
+                }
             }
             cmd.args(&self.cargo_args);
             cmd.arg("--");
@@ -235,10 +251,9 @@ impl<'a> CargoProcess<'a> {
             touch_all(&self.cwd)?;
 
             let output = command_output(&mut cmd)?;
-            let self_profile_file = self.cwd.join("self_profiler_results.json");
-            let self_profile_json = fs::read_to_string(&self_profile_file);
             if let Some((ref mut processor, name, run_kind, run_kind_str, patch)) =
-                    self.processor_etc {
+                self.processor_etc
+            {
                 let data = ProcessOutputData {
                     name,
                     cwd: self.cwd,
@@ -246,21 +261,14 @@ impl<'a> CargoProcess<'a> {
                     run_kind,
                     run_kind_str,
                     patch,
-                    self_profile: self_profile_json.as_ref()
-                        .map(|s| serde_json::from_str(&s).unwrap())
-                        .unwrap_or_else(|_| {
-                            eprintln!("self profile results: {:?} from {:?}",
-                                self_profile_json, self_profile_file);
-                            SelfProfile::default()
-                        }),
                 };
                 match processor.process_output(&data, output) {
                     Ok(Retry::No) => return Ok(()),
-                    Ok(Retry::Yes) => {},
+                    Ok(Retry::Yes) => {}
                     Err(e) => return Err(e),
                 }
             } else {
-                return Ok(())
+                return Ok(());
             }
         }
     }
@@ -287,7 +295,6 @@ pub struct ProcessOutputData<'a> {
     build_kind: BuildKind,
     run_kind: RunKind,
     run_kind_str: &'a str,
-    self_profile: SelfProfile,
     patch: Option<&'a Patch>,
 }
 
@@ -298,8 +305,11 @@ pub trait Processor {
     fn profiler(&self) -> Profiler;
 
     /// Process the output produced by the particular `Profiler` being used.
-    fn process_output(&mut self, data: &ProcessOutputData, output: process::Output)
-                      -> Result<Retry, Error>;
+    fn process_output(
+        &mut self,
+        data: &ProcessOutputData,
+        output: process::Output,
+    ) -> Result<Retry, Error>;
 
     /// Called when all the runs of a benchmark for a particular `BuildKind`
     /// have been completed. Can be used to process/reset accumulated state.
@@ -307,11 +317,11 @@ pub trait Processor {
 }
 
 pub struct MeasureProcessor {
-    clean_stats: Vec<(Vec<Stat>, SelfProfile)>,
-    nll_stats: Vec<(Vec<Stat>, SelfProfile)>,
-    base_incr_stats: Vec<(Vec<Stat>, SelfProfile)>,
-    clean_incr_stats: Vec<(Vec<Stat>, SelfProfile)>,
-    patched_incr_stats: Vec<(Patch, Vec<(Vec<Stat>, SelfProfile)>)>,
+    clean_stats: Vec<Vec<Stat>>,
+    nll_stats: Vec<Vec<Stat>>,
+    base_incr_stats: Vec<Vec<Stat>>,
+    clean_incr_stats: Vec<Vec<Stat>>,
+    patched_incr_stats: Vec<(Patch, Vec<Vec<Stat>>)>,
 
     pub collected: CollectedBenchmark,
 }
@@ -342,59 +352,80 @@ impl Processor for MeasureProcessor {
         Profiler::PerfStat
     }
 
-    fn process_output(&mut self, data: &ProcessOutputData, output: process::Output)
-                      -> Result<Retry, Error> {
+    fn process_output(
+        &mut self,
+        data: &ProcessOutputData,
+        output: process::Output,
+    ) -> Result<Retry, Error> {
         match process_perf_stat_output(output) {
             Ok(stats) => {
-                let self_profile = data.self_profile.clone();
                 match data.run_kind {
-                    RunKind::Clean => { self.clean_stats.push((stats, self_profile)); }
-                    RunKind::Nll => { self.nll_stats.push((stats, self_profile)); }
-                    RunKind::BaseIncr => { self.base_incr_stats.push((stats, self_profile)); }
-                    RunKind::CleanIncr => { self.clean_incr_stats.push((stats, self_profile)); }
+                    RunKind::Clean => {
+                        self.clean_stats.push(stats);
+                    }
+                    RunKind::Nll => {
+                        self.nll_stats.push(stats);
+                    }
+                    RunKind::BaseIncr => {
+                        self.base_incr_stats.push(stats);
+                    }
+                    RunKind::CleanIncr => {
+                        self.clean_incr_stats.push(stats);
+                    }
                     RunKind::PatchedIncrs => {
                         let patch = data.patch.unwrap();
                         if let Some(mut entry) =
                             self.patched_incr_stats.iter_mut().find(|s| &s.0 == patch)
                         {
-                            entry.1.push((stats, self_profile));
+                            entry.1.push(stats);
                             return Ok(Retry::No);
                         }
-                        self.patched_incr_stats.push((patch.clone(), vec![(stats, self_profile)]));
+                        self.patched_incr_stats.push((patch.clone(), vec![stats]));
                     }
                 }
                 Ok(Retry::No)
             }
-	    Err(DeserializeStatError::NoOutput(output)) => {
-		warn!(
-		    "failed to deserialize stats, retrying; output: {:?}",
-		    output
-		);
+            Err(DeserializeStatError::NoOutput(output)) => {
+                warn!(
+                    "failed to deserialize stats, retrying; output: {:?}",
+                    output
+                );
                 Ok(Retry::Yes)
-	    }
-	    Err(e @ DeserializeStatError::ParseError { .. }) => {
-		panic!("process_perf_stat_output failed: {:?}", e);
-	    }
+            }
+            Err(e @ DeserializeStatError::ParseError { .. }) => {
+                panic!("process_perf_stat_output failed: {:?}", e);
+            }
         }
     }
 
     fn finish_build_kind(&mut self, build_kind: BuildKind) {
         if !self.clean_stats.is_empty() {
-            self.collected.runs.push(
-                process_stats(build_kind, BenchmarkState::Clean, &self.clean_stats));
+            self.collected.runs.push(process_stats(
+                build_kind,
+                BenchmarkState::Clean,
+                &self.clean_stats,
+            ));
         }
         if !self.nll_stats.is_empty() {
-            self.collected.runs.push(
-                process_stats(build_kind, BenchmarkState::Nll, &self.nll_stats));
+            self.collected.runs.push(process_stats(
+                build_kind,
+                BenchmarkState::Nll,
+                &self.nll_stats,
+            ));
         }
         if !self.base_incr_stats.is_empty() {
-            self.collected.runs.push(
-                process_stats(build_kind, BenchmarkState::IncrementalStart, &self.base_incr_stats));
+            self.collected.runs.push(process_stats(
+                build_kind,
+                BenchmarkState::IncrementalStart,
+                &self.base_incr_stats,
+            ));
         }
         if !self.clean_incr_stats.is_empty() {
-            self.collected.runs.push(
-                process_stats(build_kind, BenchmarkState::IncrementalClean,
-                              &self.clean_incr_stats));
+            self.collected.runs.push(process_stats(
+                build_kind,
+                BenchmarkState::IncrementalClean,
+                &self.clean_incr_stats,
+            ));
         }
         if !self.patched_incr_stats.is_empty() {
             for (patch, results) in self.patched_incr_stats.iter() {
@@ -436,12 +467,17 @@ impl<'a> Processor for ProfileProcessor<'a> {
         self.profiler
     }
 
-    fn process_output(&mut self, data: &ProcessOutputData, output: process::Output)
-                      -> Result<Retry, Error> {
+    fn process_output(
+        &mut self,
+        data: &ProcessOutputData,
+        output: process::Output,
+    ) -> Result<Retry, Error> {
         // Produce a name of the form $PREFIX-$ID-$BENCHMARK-$BUILDKIND-$RUNKIND.
         let out_file = |prefix: &str| -> String {
-            format!("{}-{}-{}-{:?}-{}",
-                    prefix, self.id, data.name, data.build_kind, data.run_kind_str)
+            format!(
+                "{}-{}-{}-{:?}-{}",
+                prefix, self.id, data.name, data.build_kind, data.run_kind_str
+            )
         };
 
         // Combine a dir and a file.
@@ -488,9 +524,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 fs::copy(&tmp_cgout_file, &cgout_file)?;
 
                 let mut cg_annotate_cmd = Command::new("cg_annotate");
-                cg_annotate_cmd
-                    .arg("--auto=yes")
-                    .arg(&cgout_file);
+                cg_annotate_cmd.arg("--auto=yes").arg(&cgout_file);
                 let output = cg_annotate_cmd.output()?;
 
                 let mut f = File::create(cgann_file)?;
@@ -510,9 +544,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 fs::copy(&tmp_clgout_file, &clgout_file)?;
 
                 let mut clg_annotate_cmd = Command::new("callgrind_annotate");
-                clg_annotate_cmd
-                    .arg("--auto=yes")
-                    .arg(&clgout_file);
+                clg_annotate_cmd.arg("--auto=yes").arg(&clgout_file);
                 let output = clg_annotate_cmd.output()?;
 
                 let mut f = File::create(clgann_file)?;
@@ -583,11 +615,11 @@ impl Benchmark {
 
         let config_path = path.join("perf-config.json");
         let config: BenchmarkConfig = if config_path.exists() {
-            serde_json::from_reader(File::open(&config_path)
-                .with_context(|_| format!("failed to open {:?}", config_path))?)
-                .with_context(|_| {
-                format!("failed to parse {:?}", config_path)
-            })?
+            serde_json::from_reader(
+                File::open(&config_path)
+                    .with_context(|_| format!("failed to open {:?}", config_path))?,
+            )
+            .with_context(|_| format!("failed to parse {:?}", config_path))?
         } else {
             BenchmarkConfig::default()
         };
@@ -611,9 +643,7 @@ impl Benchmark {
         base_dot.push(".");
         let tmp_dir = TempDir::new()?;
         let mut cmd = Command::new("cp");
-        cmd.arg("-R")
-            .arg(base_dot)
-            .arg(tmp_dir.path());
+        cmd.arg("-R").arg(base_dot).arg(tmp_dir.path());
         command_output(&mut cmd).with_context(|_| format!("copying {} to tmp dir", self.name))?;
         Ok(tmp_dir)
     }
@@ -631,18 +661,21 @@ impl Benchmark {
             incremental: false,
             nll: false,
             processor_etc: None,
-            manifest_path: self.config
+            manifest_path: self
+                .config
                 .cargo_toml
                 .clone()
                 .unwrap_or_else(|| String::from("Cargo.toml")),
-            cargo_args: self.config
+            cargo_args: self
+                .config
                 .cargo_opts
                 .clone()
                 .unwrap_or_default()
                 .split_whitespace()
                 .map(String::from)
                 .collect(),
-            rustc_args: self.config
+            rustc_args: self
+                .config
                 .cargo_rustc_opts
                 .clone()
                 .unwrap_or_default()
@@ -661,7 +694,6 @@ impl Benchmark {
         compiler: Compiler,
         iterations: usize,
     ) -> Result<(), Error> {
-
         let iterations = cmp::min(iterations, self.config.runs);
 
         if self.config.disabled {
@@ -696,8 +728,7 @@ impl Benchmark {
                 // These are only collected on check builds to save time.
                 let has_check = build_kinds.contains(&BuildKind::Check);
                 let is_check = build_kind == BuildKind::Check;
-                if run_kinds.contains(&RunKind::Nll) && ((has_check && is_check) || !has_check)
-                {
+                if run_kinds.contains(&RunKind::Nll) && ((has_check && is_check) || !has_check) {
                     self.mk_cargo_process(compiler, cwd, build_kind)
                         .nll(true)
                         .processor(processor, &self.name, RunKind::Nll, "Nll", None)
@@ -706,9 +737,10 @@ impl Benchmark {
 
                 // An incremental build from scratch (slowest incremental case).
                 // This is required for any subsequent incremental builds.
-                if run_kinds.contains(&RunKind::BaseIncr) ||
-                   run_kinds.contains(&RunKind::CleanIncr) ||
-                   run_kinds.contains(&RunKind::PatchedIncrs) {
+                if run_kinds.contains(&RunKind::BaseIncr)
+                    || run_kinds.contains(&RunKind::CleanIncr)
+                    || run_kinds.contains(&RunKind::PatchedIncrs)
+                {
                     self.mk_cargo_process(compiler, cwd, build_kind)
                         .incremental(true)
                         .processor(processor, &self.name, RunKind::BaseIncr, "BaseIncr", None)
@@ -733,8 +765,13 @@ impl Benchmark {
                         let run_kind_str = format!("PatchedIncr{}", i);
                         self.mk_cargo_process(compiler, cwd, build_kind)
                             .incremental(true)
-                            .processor(processor, &self.name, RunKind::PatchedIncrs, &run_kind_str,
-                                       Some(&patch))
+                            .processor(
+                                processor,
+                                &self.name,
+                                RunKind::PatchedIncrs,
+                                &run_kind_str,
+                                Some(&patch),
+                            )
                             .run_rustc()?;
                     }
                 }
@@ -749,7 +786,10 @@ impl Benchmark {
 
 #[derive(Fail, PartialEq, Eq, Debug)]
 enum DeserializeStatError {
-    #[fail(display = "could not deserialize empty output to stats, output: {:?}", _0)]
+    #[fail(
+        display = "could not deserialize empty output to stats, output: {:?}",
+        _0
+    )]
     NoOutput(process::Output),
     #[fail(display = "could not parse `{}` as a float", _0)]
     ParseError(String, #[fail(cause)] ::std::num::ParseFloatError),
@@ -789,7 +829,8 @@ fn process_perf_stat_output(output: process::Output) -> Result<Vec<Stat>, Deseri
         }
         stats.push(Stat {
             name: name.to_string(),
-            cnt: cnt.parse()
+            cnt: cnt
+                .parse()
                 .map_err(|e| DeserializeStatError::ParseError(cnt.to_string(), e))?,
         });
     }
@@ -801,13 +842,9 @@ fn process_perf_stat_output(output: process::Output) -> Result<Vec<Stat>, Deseri
     Ok(stats)
 }
 
-fn process_stats(
-    build_kind: BuildKind,
-    state: BenchmarkState,
-    runs: &[(Vec<Stat>, SelfProfile)],
-) -> Run {
+fn process_stats(build_kind: BuildKind, state: BenchmarkState, runs: &[Vec<Stat>]) -> Run {
     let mut stats: HashMap<String, Vec<f64>> = HashMap::new();
-    for (run_stats, _) in runs.clone() {
+    for run_stats in runs.clone() {
         for stat in run_stats {
             stats
                 .entry(stat.name.clone())
@@ -840,7 +877,5 @@ fn process_stats(
         check: build_kind == BuildKind::Check,
         release: build_kind == BuildKind::Opt,
         state: state,
-        // TODO: Aggregate self profiles.
-        self_profile: Some(runs[0].1.clone()),
     }
 }
