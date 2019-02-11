@@ -230,10 +230,6 @@ impl<'a> CargoProcess<'a> {
                 cmd.arg("-Zborrowck=mir");
                 cmd.arg("-Ztwo-phase-borrows");
             }
-            if self.compiler.is_nightly {
-                cmd.arg("-Zself-profile");
-                cmd.arg("-Zprofile-json");
-            }
             // --wrap-rustc-with is not a valid rustc flag. But rustc-fake
             // recognizes it, strips it (and its argument) out, and uses it as an
             // indicator that the rustc invocation should be profiled. This works
