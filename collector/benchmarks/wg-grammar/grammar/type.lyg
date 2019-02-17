@@ -1,0 +1,27 @@
+Type =
+  | Infer:"_"
+  | Never:"!"
+  | Paren:{ "(" ty:Type ")" }
+  | RawPtr:{ "*" { "const" | mutable:"mut" } pointee:Type }
+  | Ref:{ "&" lt:LIFETIME? mutable:"mut"? pointee:Type }
+  | Slice:{ "[" elem:Type "]" }
+  | Array:{ "[" elem:Type ";" len:Expr "]" }
+  | Tuple:{ "(" tys:Type* % "," ","? ")" }
+  | Path:QPath
+  | FnPtr:{
+      binder:ForAllBinder? unsafety:"unsafe"? { "extern" abi:Abi }?
+      "fn" "(" inputs:FnSigInputs? ","? ")" { "->" ret_ty:Type }?
+    }
+  | ImplTrait:{ "impl" bounds:TypeBound+ % "+" "+"? }
+  | DynTrait:{ "dyn"? bounds:TypeBound+ % "+" "+"? }
+    // unstable(not exposed to users):
+  | TypeOf:{ "typeof" "(" expr:Expr ")" }
+  | MacroCall:MacroCall
+  ;
+
+FnSigInputs =
+  | Regular:FnSigInput+ % ","
+  | Variadic:"..."
+  | RegularAndVariadic:{ inputs:FnSigInput+ % "," "," "..." }
+  ;
+FnSigInput = { pat:Pat ":" }? ty:Type;

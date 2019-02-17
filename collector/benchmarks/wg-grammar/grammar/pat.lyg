@@ -1,0 +1,47 @@
+Pat =
+  | Wild:"_"
+  | Literal:{ minus:"-"? lit:LITERAL }
+  // unstable(exclusive_range_pattern):
+  | Range:{ start:PatRangeValue ".." end:PatRangeValue }
+  | RangeInclusive:{ start:PatRangeValue { "..." | "..=" } end:PatRangeValue }
+  | Binding:{ binding:Binding { "@" subpat:Pat }? }
+  | Paren:{ "(" pat:Pat ")" }
+  | Ref:{ "&" mutable:"mut"? pat:Pat }
+  // unstable(box_patterns):
+  | Box:{ "box" pat:Pat }
+  | Slice:{ "[" elems:SlicePatElem* % "," ","? "]" }
+  | Tuple:{ "(" fields:TuplePatField* % "," ","? ")" }
+  | Path:QPath
+  | TupleStruct:{ path:Path "(" fields:TuplePatField* % "," ","? ")" }
+  | Struct:{ path:Path "{" fields:StructPatFieldsAndEllipsis "}" }
+  | MacroCall:MacroCall
+  ;
+
+PatRangeValue =
+  | Literal:{ minus:"-"? lit:LITERAL }
+  | Path:QPath
+  ;
+
+Binding = boxed:"box"? reference:"ref"? mutable:"mut"? name:IDENT;
+
+SlicePatElem =
+  | Subslice:{ subpat:Pat? ".." }
+  | Pat:Pat
+  ;
+
+TuplePatField =
+  | Ellipsis:".."
+  | Pat:Pat
+  ;
+
+// FIXME(eddyb) find a way to express this `A* B?` pattern better
+StructPatFieldsAndEllipsis =
+  | Fields:{ fields:StructPatField* % "," ","? }
+  | Ellipsis:{ ".." }
+  | FieldsAndEllipsis:{ fields:StructPatField+ % "," "," ".." }
+  ;
+
+StructPatField =
+  | Shorthand:Binding
+  | Explicit:{ field:FieldName ":" pat:Pat }
+  ;

@@ -1,0 +1,42 @@
+Generics = "<" params:GenericParam* % "," ","? ">";
+GenericParam = attrs:OuterAttr* kind:GenericParamKind;
+GenericParamKind =
+  | Lifetime:{ name:LIFETIME { ":" bounds:LifetimeBound* % "+" "+"? }? }
+  | Type:{ name:IDENT { ":" bounds:TypeBound* % "+" "+"? }? { "=" default:Type }? }
+  ;
+
+ForAllBinder = "for" generics:Generics;
+
+WhereClause = "where" bounds:WhereBound* % "," ","?;
+WhereBound =
+  | Lifetime:{ lt:LIFETIME ":" bounds:LifetimeBound* % "+" "+"? }
+  | Type:{ binder:ForAllBinder? ty:Type ":" bounds:TypeBound* % "+" "+"? }
+  // unstable(#20041):
+  | TypeEq:{ binder:ForAllBinder? left:Type { "=" | "==" } right:Type }
+  ;
+
+LifetimeBound = outlives:LIFETIME;
+TypeBound =
+  | Outlives:LIFETIME
+  | Trait:TypeTraitBound
+  | TraitParen:{ "(" bound:TypeTraitBound ")" }
+  ;
+TypeTraitBound = unbound:"?"? binder:ForAllBinder? path:Path;
+
+GenericArgs =
+  | AngleBracket:{ "<" args_and_bindings:AngleBracketGenericArgsAndBindings? ","? ">" }
+  | Paren:{ "(" inputs:Type* % "," ","? ")" { "->" output:Type }? }
+  ;
+
+// FIXME(eddyb) find a way to express this `A* B*` pattern better
+AngleBracketGenericArgsAndBindings =
+  | Args:GenericArg+ % ","
+  | Bindings:TypeBinding+ % ","
+  | ArgsAndBindings:{ args:GenericArg+ % "," "," bindings:TypeBinding+ % "," }
+  ;
+
+GenericArg =
+  | Lifetime:LIFETIME
+  | Type:Type
+  ;
+TypeBinding = name:IDENT "=" ty:Type;

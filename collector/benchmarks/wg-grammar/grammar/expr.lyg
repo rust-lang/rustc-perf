@@ -1,0 +1,130 @@
+Expr = attrs:OuterAttr* kind:ExprKind;
+ExprKind =
+  | Literal:LITERAL
+  | Paren:{ "(" attrs:InnerAttr* expr:Expr ")" }
+  | Borrow:{ "&" mutable:"mut"? expr:Expr }
+  | Box:{ "box" expr:Expr }
+  | Unary:{ op:UnaryOp expr:Expr }
+  | Try:{ expr:Expr "?" }
+  | Binary:{ left:Expr op:BinaryOp right:Expr }
+  | Assign:{ left:Expr { "=" | op:BinaryAssignOp } right:Expr }
+  | Range:{ start:Expr? ".." end:Expr? }
+  | RangeInclusive:{ start:Expr? "..=" end:Expr }
+  // unstable(type_ascription):
+  | Type:{ expr:Expr ":" ty:Type }
+  | Cast:{ expr:Expr "as" ty:Type }
+  | Field:{ base:Expr "." field:FieldName }
+  | Index:{ base:Expr "[" index:Expr "]" }
+  | Array:{ "[" attrs:InnerAttr* exprs:Expr* % "," ","? "]" }
+  | Repeat:{ "[" attrs:InnerAttr* elem:Expr ";" count:Expr "]" }
+  | Tuple:{ "(" attrs:InnerAttr* exprs:Expr* % "," ","? ")" }
+  | Path:QPath
+  | Call:{ callee:Expr "(" args:Expr* % "," ","? ")" }
+  | MethodCall:{ receiver:Expr "." method:PathSegment "(" args:Expr* % "," ","? ")" }
+  | Struct:{ path:Path "{" attrs:InnerAttr* fields:StructExprFieldsAndBase "}" }
+  | Block:{ { label:Label ":" }? unsafety:"unsafe"? block:Block }
+  // ustable(async_await):
+  | AsyncBlock:{ "async" block:Block }
+  // unstable(try_block):
+  | TryBlock:{ "try" block:Block }
+  | Continue:{ "continue" label:Label? }
+  | Break:{ "break" label:Label? value:Expr? }
+  | Return:{ "return" value:Expr? }
+  // unstable(generators):
+  | Yield:{ "yield" value:Expr? }
+  | If:If
+  | Match:{ "match" expr:Expr "{" attrs:InnerAttr* arms:MatchArm* "}" }
+  | Loop:{ { label:Label ":" }? "loop" body:Block }
+  | While:{ { label:Label ":" }? "while" cond:Cond body:Block }
+  | For:{ { label:Label ":" }? "for" pat:Pat "in" expr:Expr body:Block }
+  | Closure:{
+      // unstable(generators):
+      generator_static:"static"?
+      // unstable(async_await):
+      asyncness:"async"?
+      by_val:"move"?
+      "|" args:ClosureArg* % "," ","? "|" { "->" ret_ty:Type }? body:Expr
+    }
+  | MacroCall:MacroCall
+  ;
+
+UnaryOp =
+  | Not:"!"
+  | Neg:"-"
+  | Deref:"*";
+
+BinaryOp =
+  // Arithmetic & bitwise (these also have `BinaryAssignOp` forms)
+  | Add:"+"
+  | Sub:"-"
+  | Mul:"*"
+  | Div:"/"
+  | Rem:"%"
+  | BitXor:"^"
+  | BitAnd:"&"
+  | BitOr:"|"
+  | Shl:"<<"
+  | Shr:">>"
+  // Logic (short-circuiting)
+  | LogicAnd:"&&"
+  | LogicOr:"||"
+  // Comparisons
+  | Eq:"=="
+  | Lt:"<"
+  | Le:"<="
+  | Ne:"!="
+  | Gt:">"
+  | Ge:">="
+  ;
+
+// FIXME(eddyb) figure out how to deduplicate this with `BinaryOp`
+// The problem is something like `BinaryOp "="` allows a space in between,
+// as the last token inside each `BinaryOp` case does not require being
+// joint, but each token before the `=` here does impose that requirement.
+BinaryAssignOp =
+  | Add:"+="
+  | Sub:"-="
+  | Mul:"*="
+  | Div:"/="
+  | Rem:"%="
+  | BitXor:"^="
+  | BitAnd:"&="
+  | BitOr:"|="
+  | Shl:"<<="
+  | Shr:">>="
+  ;
+
+FieldName =
+  | Ident:IDENT
+  // FIXME(eddyb) restrict this to only integer literals
+  | Numeric:LITERAL
+  ;
+
+// FIXME(eddyb) find a way to express this `A* B?` pattern better
+StructExprFieldsAndBase =
+  | Fields:{ fields:StructExprField* % "," ","? }
+  | Base:{ ".." base:Expr }
+  | FieldsAndBase:{ fields:StructExprField+ % "," "," ".." base:Expr }
+  ;
+
+StructExprField = attrs:OuterAttr* kind:StructExprFieldKind;
+StructExprFieldKind =
+  | Shorthand:IDENT
+  | Explicit:{ field:FieldName ":" expr:Expr }
+  ;
+
+Label = LIFETIME;
+
+If = "if" cond:Cond then:Block { "else" else_expr:ElseExpr }?;
+Cond =
+  | Bool:Expr
+  | Let:{ "let" pat:Pat "=" expr:Expr }
+  ;
+ElseExpr =
+  | Block:Block
+  | If:If
+  ;
+
+MatchArm = attrs:OuterAttr* "|"? pats:Pat+ % "|" { "if" guard:Expr }? "=>" body:Expr ","?;
+
+ClosureArg = pat:Pat { ":" ty:Type }?;

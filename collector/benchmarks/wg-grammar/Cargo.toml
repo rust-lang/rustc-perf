@@ -1,0 +1,14 @@
+[package]
+name = "rust-grammar"
+version = "0.1.0"
+authors = ["The Rust Project Developers"]
+
+[dependencies]
+gll = { git = "https://github.com/rust-lang-nursery/gll" }
+proc-macro2 = "0.4.0"
+structopt = "0.2.12"
+walkdir = "2.2.6"
+
+[build-dependencies]
+gll = { git = "https://github.com/rust-lang-nursery/gll" }
+walkdir = "2.2.6"
