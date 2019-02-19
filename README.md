@@ -7,6 +7,8 @@ The primary required setup is to provide a folder with a `retries` file and a `t
 is gathered into https://github.com/rust-lang-nursery/rustc-timing by Rust Infrastructure; cloning
 that is the best approach for working on the frontend.
 
-Additional documentation on running and setting up the frontend and backend can be found in README
-files in the `collector` and `site` directories.
+Additional documentation on running and setting up the frontend and backend can
+be found in the `README` files in the `collector` and `site` directories.
 
+Additional documentation on the benchmark programs can be found in the `README`
+file in the `collector/benchmarks` directory.

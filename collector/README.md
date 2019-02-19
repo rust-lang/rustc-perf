@@ -1,5 +1,10 @@
 # Rust Compiler Performance Benchmarking and Profiling
 
+## The benchmarks
+
+The individual benchmarks are described in the `README` file in the
+`collector/benchmarks` directory.
+
 ## How to build
 
 Before doing anything else, you should build `collector` (for running the
