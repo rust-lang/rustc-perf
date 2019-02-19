@@ -4,7 +4,7 @@
 // And without support for loops.
 
 macro_rules! const_repeat {
-    // Base case: Use 16 at the end to avoid function calls at the leaves as much as possibele.
+    // Base case: Use 16 at the end to avoid function calls at the leafs as much as possible.
     ([16] $e: expr, $T: ty) => {{
         $e; $e; $e; $e;
         $e; $e; $e; $e;
@@ -60,3 +60,8 @@ expensive_static!(OPS: i32 = ((((10 >> 1) + 3) * 7) / 2 - 12) << 4; [4 16 16 16 
 expensive_static!(RELOCATIONS : &'static str = "hello"; [8 16 16 16 16]);
 expensive_static!(UNSIZE_SLICE: &'static [u8] = b"foo"; [4 16 16 16 16 16]);
 expensive_static!(UNSIZE_TRAIT: &'static Trait = &42u32; [4 16 16 16 16 16]);
+
+// copying all these zeros and the corresponding definedness bits can be expensive and is probably
+// prone to regressions.
+// 24 is an exponent that makes the repeat expression take less than two seconds to compute
+const FOO: [i32; 1 << 24] = [0; 1 << 24];
