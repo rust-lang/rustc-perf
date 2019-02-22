@@ -129,7 +129,6 @@ pub struct Keys {
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    pub users: Vec<String>,
     pub keys: Keys,
     #[serde(default)]
     pub skip: HashSet<String>,
@@ -260,7 +259,6 @@ impl InputData {
             toml::from_str(&s)?
         } else {
             Config {
-                users: Vec::new(),
                 keys: Keys::default(),
                 skip: HashSet::default(),
             }

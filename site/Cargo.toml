@@ -27,6 +27,7 @@ reqwest = "0.9"
 toml = "0.4"
 jemallocator = "0.1.9"
 jemalloc-ctl = "0.2"
+rust_team_data = { git = "https://github.com/rust-lang/team" }
 
 [dependencies.collector]
 path = "../collector"
