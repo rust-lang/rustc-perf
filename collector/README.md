@@ -74,7 +74,8 @@ depending on the speed of your machine.
 
 ### Benchmarking options
 
-The following options must appear before `bench_local` in the command.
+The following options, if present, must appear before `bench_local` in the
+command.
 - `--filter $STR` can be used to run a subset of the benchmarks. `$STR` is a
   substring of the name of the benchmark(s) you wish to run.
 - `--exclude $STR` is the inverse of `--filter`. `$STR` is a substring of the
@@ -83,7 +84,8 @@ The following options must appear before `bench_local` in the command.
   repository before and after committing. This is usually not useful for
   individual Rust compiler developers.
 
-The following options must appear after `bench_local` in the command.
+The following options, if present, must appear after `bench_local` in the
+command.
 - `--builds $BUILDS` can be used to select what kind of builds are profiled.
   The possible choices are one or more (comma-separated) of `Check`, `Debug`,
   `Opt`, and `All` (the default).
@@ -242,8 +244,8 @@ except that `$PROFILER` is one of the following.
     `perf-record` or Cachegrind tell you that `malloc` and `free` are hot
     functions (as they often are).
   - **Slowdown**. Roughly 5--20x.
-  - **Prerequisites**. ExpDHAT may require a rustc configured with
-    `use-jemalloc = false` to work well.
+  - **Prerequisites**. ExpDHAT may require a rustc configured with `jemalloc =
+    false` to work well.
   - **Configuration**. ExpDHAT is configured within `profile` to run with the
     non-default `--tot-blocks-allocd` option, so that it sorts its output by
     the number of blocks allocated rather than the number of bytes allocated.
@@ -265,7 +267,7 @@ except that `$PROFILER` is one of the following.
     functions (as they often are). It also gives insight into peak memory
     usage, similar to Massif.
   - **Slowdown**. Roughly 5--20x.
-  - **Prerequisites**. DHAT may require a rustc configured with `use-jemalloc =
+  - **Prerequisites**. DHAT may require a rustc configured with `jemalloc =
     false` to work well.
   - **Configuration**. DHAT is configured within `profile` to run with the
     non-default `--num-callers=4` option, which dictates stack depths. (This
@@ -281,8 +283,8 @@ except that `$PROFILER` is one of the following.
   - **Purpose**. Massif is designed to give insight into a program's peak
     memory usage.
   - **Slowdown**. Roughly 3--10x.
-  - **Prerequisites**. Massif may require a rustc configured with `use-jemalloc
-    = false` to work well.
+  - **Prerequisites**. Massif may require a rustc configured with `jemalloc =
+    false` to work well.
   - **Output**. Raw output is written to files with a `msout` prefix. Those
     files can be post-processed with `ms_print` or viewed with the graphical
     [`massif-visualizer`](https://github.com/KDE/massif-visualizer); the latter
