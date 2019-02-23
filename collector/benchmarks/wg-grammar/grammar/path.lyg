@@ -1,9 +1,0 @@
-Path = global:"::"? path:RelativePath;
-RelativePath = segments:PathSegment+ % "::";
-PathSegment = ident:IDENT { "::"? args:GenericArgs }?;
-
-QSelf = "<" ty:Type { "as" trait_path:Path }? ">";
-QPath =
-  | Unqualified:Path
-  | Qualified:{ qself:QSelf "::" path:RelativePath }
-  ;

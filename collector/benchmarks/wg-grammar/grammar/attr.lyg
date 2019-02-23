@@ -1,8 +1,0 @@
-OuterAttr = "#" attr:Attr;
-InnerAttr = "#" "!" attr:Attr;
-Attr = "[" path:Path input:AttrInput "]";
-AttrInput =
-  | {}
-  | "=" TOKEN_TREE
-  | MacroInput
-  ;
