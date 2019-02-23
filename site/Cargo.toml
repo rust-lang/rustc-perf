@@ -35,4 +35,4 @@ optional = false
 
 [dev-dependencies]
 lazy_static = "1"
-pretty_assertions = "0.5"
+pretty_assertions = "0.6"
