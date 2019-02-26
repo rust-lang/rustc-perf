@@ -9,7 +9,7 @@
 
 use std::env;
 
-use load::{Commit, CommitData, InputData};
+use crate::load::{Commit, CommitData, InputData};
 use collector::Bound;
 use failure::Error;
 
@@ -55,7 +55,8 @@ pub fn find_commit<'a>(
     }
 
     if !left && *idx == Bound::None {
-        return data.data(interpolate)
+        return data
+            .data(interpolate)
             .iter()
             .last()
             .ok_or_else(|| format!("at least one commit"));

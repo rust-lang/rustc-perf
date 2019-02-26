@@ -1,54 +1,34 @@
 #![recursion_limit = "1024"]
 
-extern crate cargo_metadata;
-extern crate chrono;
-#[macro_use]
-extern crate clap;
-extern crate collector;
-extern crate env_logger;
 #[macro_use]
 extern crate failure;
 #[macro_use]
-extern crate lazy_static;
-#[macro_use]
-extern crate log;
-extern crate rust_sysroot;
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
-extern crate serde_json;
-extern crate tempfile;
-extern crate rustup;
-extern crate semver;
-extern crate reqwest;
-extern crate futures;
-
-use failure::{Error, ResultExt, SyncFailure};
-
-use std::collections::HashSet;
-use std::fs;
-use std::env;
-use std::process;
-use std::str;
-use std::path::{Path, PathBuf};
-use std::io::{stderr, Write};
-use std::collections::BTreeMap;
-use std::sync::Arc;
-use std::thread::{self, JoinHandle};
+extern crate clap;
 
 use chrono::{Timelike, Utc};
-use futures::sync::mpsc::{unbounded as unbounded_channel, UnboundedSender, UnboundedReceiver};
-use futures::stream::Stream;
-
-use collector::{Commit, ArtifactData, CommitData, Date};
 use collector::api::collected;
+use collector::{ArtifactData, Commit, CommitData, Date};
+use failure::{Error, ResultExt, SyncFailure};
+use futures::stream::Stream;
+use futures::sync::mpsc::{unbounded as unbounded_channel, UnboundedReceiver, UnboundedSender};
+use log::{debug, error, info, warn};
 use rust_sysroot::git::Commit as GitCommit;
 use rust_sysroot::sysroot::Sysroot;
+use std::collections::BTreeMap;
+use std::collections::HashSet;
+use std::env;
+use std::fs;
+use std::io::{stderr, Write};
+use std::path::{Path, PathBuf};
+use std::process;
+use std::str;
+use std::sync::Arc;
+use std::thread::{self, JoinHandle};
 
 mod execute;
 mod outrepo;
 
-use execute::{Benchmark, Profiler};
+use crate::execute::{Benchmark, Profiler};
 
 #[derive(Debug, Copy, Clone)]
 pub struct Compiler<'a> {
@@ -61,7 +41,7 @@ pub struct Compiler<'a> {
 pub enum BuildKind {
     Check,
     Debug,
-    Opt
+    Opt,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -75,12 +55,22 @@ pub enum RunKind {
 
 impl RunKind {
     fn all() -> Vec<RunKind> {
-        vec![RunKind::Clean, RunKind::Nll, RunKind::BaseIncr, RunKind::CleanIncr,
-             RunKind::PatchedIncrs]
+        vec![
+            RunKind::Clean,
+            RunKind::Nll,
+            RunKind::BaseIncr,
+            RunKind::CleanIncr,
+            RunKind::PatchedIncrs,
+        ]
     }
 
     fn all_except_nll() -> Vec<RunKind> {
-        vec![RunKind::Clean, RunKind::BaseIncr, RunKind::CleanIncr, RunKind::PatchedIncrs]
+        vec![
+            RunKind::Clean,
+            RunKind::BaseIncr,
+            RunKind::CleanIncr,
+            RunKind::PatchedIncrs,
+        ]
     }
 
     fn all_non_incr_except_nll() -> Vec<RunKind> {
@@ -128,9 +118,9 @@ pub fn run_kinds_from_arg(arg: &Option<&str>) -> Result<Vec<RunKind>, KindError>
 
 // Converts a comma-separated list of kind names to a vector of kinds with no
 // duplicates.
-fn kinds_from_arg<K>(strings_and_kinds: &[(&str, K)], arg: &str)
-                     -> Result<Vec<K>, KindError>
-    where K: Copy + Eq + ::std::hash::Hash
+fn kinds_from_arg<K>(strings_and_kinds: &[(&str, K)], arg: &str) -> Result<Vec<K>, KindError>
+where
+    K: Copy + Eq + ::std::hash::Hash,
 {
     let mut kind_set = HashSet::new();
 
@@ -142,7 +132,7 @@ fn kinds_from_arg<K>(strings_and_kinds: &[(&str, K)], arg: &str)
                 kind_set.insert(k);
             }
         } else {
-            return Err(KindError::UnknownKind("build", s.to_string()))
+            return Err(KindError::UnknownKind("build", s.to_string()));
         }
     }
 
@@ -156,12 +146,14 @@ fn kinds_from_arg<K>(strings_and_kinds: &[(&str, K)], arg: &str)
     Ok(v)
 }
 
-lazy_static! {
-    static ref BG_THREAD: Arc<(UnboundedSender<Option<collected::Request>>, JoinHandle<()>)> = start_bg_thread();
+lazy_static::lazy_static! {
+    static ref BG_THREAD: Arc<(UnboundedSender<Option<collected::Request>>, JoinHandle<()>)> =
+        start_bg_thread();
 }
 
 fn start_bg_thread() -> Arc<(UnboundedSender<Option<collected::Request>>, JoinHandle<()>)> {
-    let (sender, receiver): (_, UnboundedReceiver<Option<collected::Request>>) = unbounded_channel();
+    let (sender, receiver): (_, UnboundedReceiver<Option<collected::Request>>) =
+        unbounded_channel();
     let sender_thread = sender.clone();
     let handle = thread::spawn(move || {
         for request in receiver.wait() {
@@ -173,7 +165,8 @@ fn start_bg_thread() -> Arc<(UnboundedSender<Option<collected::Request>>, JoinHa
             let request = request.unwrap();
             let ret = (|| {
                 let client = reqwest::ClientBuilder::new().build()?;
-                let resp = client.post(&format!(
+                let resp = client
+                    .post(&format!(
                         "{}/perf/collected",
                         env::var("SITE_URL").expect("SITE_URL defined")
                     ))
@@ -186,11 +179,13 @@ fn start_bg_thread() -> Arc<(UnboundedSender<Option<collected::Request>>, JoinHa
                 Ok(())
             })();
             match ret {
-                Ok(()) => {},
+                Ok(()) => {}
                 Err(err) => {
                     warn!("call home failed: {:?}", err);
                     thread::sleep(std::time::Duration::from_secs(10));
-                    sender_thread.unbounded_send(Some(request)).expect("can send on thread channel");
+                    sender_thread
+                        .unbounded_send(Some(request))
+                        .expect("can send on thread channel");
                 }
             }
         }
@@ -208,7 +203,7 @@ fn bench_commit(
     triple: &str,
     build_kinds: &[BuildKind],
     run_kinds: &[RunKind],
-    compiler: Compiler,
+    compiler: Compiler<'_>,
     benchmarks: &[Benchmark],
     iterations: usize,
     call_home: bool,
@@ -253,8 +248,8 @@ fn bench_commit(
         }
 
         let mut processor = execute::MeasureProcessor::new(&benchmark.name);
-        let result = benchmark.measure(
-            &mut processor, build_kinds, run_kinds, compiler, iterations);
+        let result =
+            benchmark.measure(&mut processor, build_kinds, run_kinds, compiler, iterations);
         let result = match result {
             Ok(()) => Ok(processor.collected),
             Err(ref s) => {
@@ -308,7 +303,10 @@ fn get_benchmarks(
 
         if let Some(filter) = filter {
             if !name.contains(filter) {
-                debug!("benchmark {} - doesn't match --filter argument, skipping", name);
+                debug!(
+                    "benchmark {} - doesn't match --filter argument, skipping",
+                    name
+                );
                 continue;
             }
         }
@@ -400,16 +398,13 @@ fn main_result() -> Result<i32, Error> {
        (@subcommand test_benchmarks =>
            (about: "test benchmark the most recent commit")
        )
-    ).get_matches();
+    )
+    .get_matches();
 
     let benchmark_dir = PathBuf::from("collector/benchmarks");
     let filter = matches.value_of("filter");
     let exclude = matches.value_of("exclude");
-    let mut benchmarks = get_benchmarks(
-        &benchmark_dir,
-        filter,
-        exclude,
-    )?;
+    let mut benchmarks = get_benchmarks(&benchmark_dir, filter, exclude)?;
     let use_remote = matches.is_present("sync_git");
 
     let get_out_dir = || {
@@ -418,9 +413,8 @@ fn main_result() -> Result<i32, Error> {
         path
     };
 
-    let get_out_repo = |allow_new_dir| {
-        outrepo::Repo::open(get_out_dir(), allow_new_dir, use_remote)
-    };
+    let get_out_repo =
+        |allow_new_dir| outrepo::Repo::open(get_out_dir(), allow_new_dir, use_remote);
 
     let get_commits = || {
         rust_sysroot::get_commits(rust_sysroot::EPOCH_COMMIT, "master").map_err(SyncFailure::new)
@@ -513,12 +507,13 @@ fn main_result() -> Result<i32, Error> {
                 date: Date::ymd_hms(2010, 01, 01, 0, 0, 0).0,
                 summary: String::new(),
             };
-            let cfg = rustup::Cfg::from_env(Arc::new(|_| {}))
-                .map_err(SyncFailure::new)?;
+            let cfg = rustup::Cfg::from_env(Arc::new(|_| {})).map_err(SyncFailure::new)?;
             let toolchain = rustup::Toolchain::from(&cfg, id)
                 .map_err(SyncFailure::new)
                 .with_context(|_| format!("creating toolchain for id: {}", id))?;
-            toolchain.install_from_dist_if_not_installed().map_err(SyncFailure::new)?;
+            toolchain
+                .install_from_dist_if_not_installed()
+                .map_err(SyncFailure::new)?;
 
             // Remove benchmarks that don't work with a stable compiler.
             benchmarks.retain(|b| b.supports_stable());
@@ -529,7 +524,10 @@ fn main_result() -> Result<i32, Error> {
             } else {
                 RunKind::all_non_incr_except_nll()
             };
-            let CommitData { benchmarks: benchmark_data, .. } = bench_commit(
+            let CommitData {
+                benchmarks: benchmark_data,
+                ..
+            } = bench_commit(
                 None,
                 &commit,
                 "x86_64-unknown-linux-gnu",
@@ -544,7 +542,10 @@ fn main_result() -> Result<i32, Error> {
                 3,
                 false,
             );
-            repo.success_artifact(&ArtifactData { id: id.to_string(), benchmarks: benchmark_data })?;
+            repo.success_artifact(&ArtifactData {
+                id: id.to_string(),
+                benchmarks: benchmark_data,
+            })?;
             Ok(0)
         }
 
@@ -553,10 +554,13 @@ fn main_result() -> Result<i32, Error> {
             println!("processing commits");
             let commits = get_commits()?;
             let client = reqwest::Client::new();
-            let commit: Option<String> = client.get(&format!(
-                "{}/perf/next_commit",
-                env::var("SITE_URL").expect("SITE_URL defined")
-            )).send()?.json()?;
+            let commit: Option<String> = client
+                .get(&format!(
+                    "{}/perf/next_commit",
+                    env::var("SITE_URL").expect("SITE_URL defined")
+                ))
+                .send()?
+                .json()?;
             let commit = if let Some(c) = commit {
                 c
             } else {
@@ -564,7 +568,8 @@ fn main_result() -> Result<i32, Error> {
                 return Ok(0);
             };
 
-            let commit = commits.iter()
+            let commit = commits
+                .iter()
                 .find(|c| c.sha == commit)
                 .cloned()
                 .unwrap_or_else(|| {
@@ -575,7 +580,8 @@ fn main_result() -> Result<i32, Error> {
                         summary: String::new(),
                     }
                 });
-            if let Ok(sysroot) = Sysroot::install(&commit, "x86_64-unknown-linux-gnu", false, false) {
+            if let Ok(sysroot) = Sysroot::install(&commit, "x86_64-unknown-linux-gnu", false, false)
+            {
                 let result = out_repo.success(&bench_commit(
                     Some(&out_repo),
                     &commit,
@@ -612,16 +618,22 @@ fn main_result() -> Result<i32, Error> {
 
             let rustc_path = PathBuf::from(rustc).canonicalize()?;
             let cargo_path = PathBuf::from(cargo).canonicalize()?;
-            let compiler = Compiler { rustc: &rustc_path, cargo: &cargo_path, is_nightly: true };
+            let compiler = Compiler {
+                rustc: &rustc_path,
+                cargo: &cargo_path,
+                is_nightly: true,
+            };
 
             for (i, benchmark) in benchmarks.iter().enumerate() {
                 let out_dir = get_out_dir();
                 let mut processor = execute::ProfileProcessor::new(profiler, &out_dir, &id);
-                let result = benchmark.measure(&mut processor, &build_kinds, &run_kinds,
-                                               compiler, 1);
+                let result =
+                    benchmark.measure(&mut processor, &build_kinds, &run_kinds, compiler, 1);
                 if let Err(ref s) = result {
-                    info!("failed to profile {} with {:?}, recorded: {:?}",
-                          benchmark.name, profiler, s);
+                    info!(
+                        "failed to profile {} with {:?}, recorded: {:?}",
+                        benchmark.name, profiler, s
+                    );
                 }
                 info!("{} benchmarks left", benchmarks.len() - i - 1);
             }
@@ -648,7 +660,8 @@ fn main_result() -> Result<i32, Error> {
                 let out_repo = get_out_repo(false)?;
                 if let Ok(mut data) = out_repo.load_commit_data(&commit, "x86_64-unknown-linux-gnu")
                 {
-                    let benchmarks = data.benchmarks
+                    let benchmarks = data
+                        .benchmarks
                         .into_iter()
                         .filter(|&(_, ref v)| v.is_ok())
                         .collect();

@@ -7,8 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-extern crate env_logger;
-extern crate site;
+use env_logger;
 
 use site::{load, server, util};
 use std::env;

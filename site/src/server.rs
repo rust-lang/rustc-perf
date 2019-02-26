@@ -7,47 +7,51 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::str;
+use std::borrow::Cow;
+use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Read, Write};
-use std::sync::Arc;
-use std::collections::HashMap;
-use std::path::Path;
 use std::net::SocketAddr;
+use std::path::Path;
+use std::str;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
-use std::cmp::Ordering;
-use std::borrow::Cow;
+use std::sync::Arc;
 
-use serde::Serialize;
-use serde::de::DeserializeOwned;
-use serde_json;
-use rmp_serde;
+use failure::Error;
+use flate2::write::GzEncoder;
+use flate2::Compression;
 use futures::{self, Future, Stream};
 use futures_cpupool::CpuPool;
-use hyper::{self, Get, Post, StatusCode};
+use hex;
 use hyper::header::{AcceptEncoding, CacheControl, CacheDirective, Encoding};
-use hyper::header::{ContentEncoding, ContentLength, ContentType, Authorization, Bearer};
+use hyper::header::{Authorization, Bearer, ContentEncoding, ContentLength, ContentType};
 use hyper::mime;
 use hyper::server::{Http, Request, Response, Service};
-use url::Url;
-use flate2::Compression;
-use flate2::write::GzEncoder;
-use semver::Version;
-use failure::Error;
-use ring::{hmac, digest};
-use hex;
+use hyper::{self, Get, Post, StatusCode};
+use log::{debug, error, info};
 use regex::Regex;
 use reqwest;
 use reqwest::header::USER_AGENT;
+use ring::{digest, hmac};
+use rmp_serde;
+use semver::Version;
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+use serde_json;
+use url::Url;
 
-use git;
-use util::{self, get_repo_path, Interpolate};
-pub use api::{self, github, status, nll_dashboard, dashboard, data, days, graph, info, CommitResponse, ServerResult};
-use collector::{Date, Run, version_supports_incremental};
-use collector::api::collected;
-use load::{Config, CommitData, InputData, TryCommit};
+pub use crate::api::{
+    self, dashboard, data, days, github, graph, info, nll_dashboard, status, CommitResponse,
+    ServerResult,
+};
+use crate::git;
+use crate::load::CurrentState;
+use crate::load::{CommitData, Config, InputData, TryCommit};
+use crate::util::{self, get_repo_path, Interpolate};
 use antidote::RwLock;
-use load::CurrentState;
+use collector::api::collected;
+use collector::{version_supports_incremental, Date, Run};
 
 header! { (HubSignature, "X-Hub-Signature") => [String] }
 
@@ -106,15 +110,23 @@ impl DateData {
 
 pub fn handle_nll_dashboard(
     body: nll_dashboard::Request,
-    data: &InputData
+    data: &InputData,
 ) -> ServerResult<nll_dashboard::Response> {
     let commit = util::find_commit(data, &body.commit, false, Interpolate::No)?.1;
-    let mut points = commit.benchmarks.iter()
+    let mut points = commit
+        .benchmarks
+        .iter()
         .filter_map(|b| b.1.as_ref().ok())
         .map(|bench| {
-            let nll = bench.runs.iter().find(|r| r.check && r.is_nll())
+            let nll = bench
+                .runs
+                .iter()
+                .find(|r| r.check && r.is_nll())
                 .and_then(|r| r.get_stat(&body.stat));
-            let clean = bench.runs.iter().find(|r| r.check && r.is_clean())
+            let clean = bench
+                .runs
+                .iter()
+                .find(|r| r.check && r.is_clean())
                 .and_then(|r| r.get_stat(&body.stat));
 
             nll_dashboard::Point {
@@ -122,16 +134,18 @@ pub fn handle_nll_dashboard(
                 clean: clean.map(|clean| round(clean) as f32),
                 nll: nll.map(|nll| round(nll) as f32),
             }
-        }).collect::<Vec<_>>();
-    points.sort_by(|a, b| {
-        match (a.pct(), b.pct()) {
-            (Some(a), Some(b)) => a.partial_cmp(&b).unwrap_or(Ordering::Equal).reverse(),
-            (Some(_), None) => Ordering::Less,
-            (None, Some(_)) => Ordering::Greater,
-            _ => a.case.cmp(&b.case),
-        }
+        })
+        .collect::<Vec<_>>();
+    points.sort_by(|a, b| match (a.pct(), b.pct()) {
+        (Some(a), Some(b)) => a.partial_cmp(&b).unwrap_or(Ordering::Equal).reverse(),
+        (Some(_), None) => Ordering::Less,
+        (None, Some(_)) => Ordering::Greater,
+        _ => a.case.cmp(&b.case),
     });
-    Ok(nll_dashboard::Response { commit: commit.commit.sha.clone(), points })
+    Ok(nll_dashboard::Response {
+        commit: commit.commit.sha.clone(),
+        points,
+    })
 }
 
 pub fn handle_info(data: &InputData) -> info::Response {
@@ -152,8 +166,8 @@ fn round(v: f64) -> f64 {
 
 pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
     let mut versions = data.artifact_data.keys().cloned().collect::<Vec<_>>();
-    versions.sort_by(|a, b| {
-        match (a.parse::<Version>().ok(), b.parse::<Version>().ok()) {
+    versions.sort_by(
+        |a, b| match (a.parse::<Version>().ok(), b.parse::<Version>().ok()) {
             (Some(a), Some(b)) => a.cmp(&b),
             (_, _) => {
                 if a == "beta" {
@@ -164,10 +178,13 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
                     panic!("unexpected version")
                 }
             }
-        }
-    });
+        },
+    );
 
-    versions.push(format!("master: {}", &data.data(Interpolate::Yes).keys().last().unwrap().sha[0..8]));
+    versions.push(format!(
+        "master: {}",
+        &data.data(Interpolate::Yes).keys().last().unwrap().sha[0..8]
+    ));
 
     let mut check_clean_average = Vec::new();
     let mut check_base_incr_average = Vec::new();
@@ -182,7 +199,9 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
     let mut opt_clean_incr_average = Vec::new();
     let mut opt_println_incr_average = Vec::new();
 
-    let benchmark_names = data.artifact_data["beta"].benchmarks.keys()
+    let benchmark_names = data.artifact_data["beta"]
+        .benchmarks
+        .keys()
         .filter(|key| data.artifact_data["beta"].benchmarks[*key].is_ok())
         .collect::<Vec<_>>();
     for version in &versions {
@@ -199,14 +218,20 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
         let mut opt_clean_incr_points = Vec::new();
         let mut opt_println_incr_points = Vec::new();
 
-        let mut benches = if version.starts_with("master") {
+        let benches = if version.starts_with("master") {
             let data = data.data(Interpolate::Yes).values().last().unwrap();
-            let benches = data.benchmarks.iter()
-                .filter(|(name, _)| benchmark_names.contains(name)).collect::<Vec<_>>();
+            let benches = data
+                .benchmarks
+                .iter()
+                .filter(|(name, _)| benchmark_names.contains(name))
+                .collect::<Vec<_>>();
             assert_eq!(benches.len(), benchmark_names.len());
             benches
         } else {
-            data.artifact_data[version].benchmarks.iter().collect::<Vec<_>>()
+            data.artifact_data[version]
+                .benchmarks
+                .iter()
+                .collect::<Vec<_>>()
         };
         for (_, bench) in benches {
             let bench = match bench {
@@ -220,19 +245,35 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
                     if let Some(stat) = run.and_then(|r| r.get_stat("wall-time")) {
                         $v.push(stat);
                     }
-                }
+                };
             }
 
             extend!(check_clean_points, r, r.is_clean() && r.check);
-            extend!(debug_clean_points, r, r.is_clean() && !r.check && !r.release);
+            extend!(
+                debug_clean_points,
+                r,
+                r.is_clean() && !r.check && !r.release
+            );
             extend!(opt_clean_points, r, r.is_clean() && r.release);
             if version_supports_incremental(version) {
                 extend!(check_base_incr_points, r, r.is_base_incr() && r.check);
                 extend!(check_clean_incr_points, r, r.is_clean_incr() && r.check);
                 extend!(check_println_incr_points, r, r.is_println_incr() && r.check);
-                extend!(debug_base_incr_points, r, r.is_base_incr() && !r.check && !r.release);
-                extend!(debug_clean_incr_points, r, r.is_clean_incr() && !r.check && !r.release);
-                extend!(debug_println_incr_points, r, r.is_println_incr() && !r.check && !r.release);
+                extend!(
+                    debug_base_incr_points,
+                    r,
+                    r.is_base_incr() && !r.check && !r.release
+                );
+                extend!(
+                    debug_clean_incr_points,
+                    r,
+                    r.is_clean_incr() && !r.check && !r.release
+                );
+                extend!(
+                    debug_println_incr_points,
+                    r,
+                    r.is_println_incr() && !r.check && !r.release
+                );
                 extend!(opt_base_incr_points, r, r.is_base_incr() && r.release);
                 extend!(opt_clean_incr_points, r, r.is_clean_incr() && r.release);
                 extend!(opt_println_incr_points, r, r.is_println_incr() && r.release);
@@ -279,7 +320,10 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
 pub fn handle_status_page(data: &InputData) -> status::Response {
     let last_commit = data.data(Interpolate::No).iter().last().unwrap();
 
-    let mut benchmark_state = last_commit.1.benchmarks.iter()
+    let mut benchmark_state = last_commit
+        .1
+        .benchmarks
+        .iter()
         .map(|(name, res)| {
             let error = res.as_ref().err().cloned();
             let mut msg = String::new();
@@ -297,7 +341,8 @@ pub fn handle_status_page(data: &InputData) -> status::Response {
                 success: res.is_ok(),
                 error: error.as_ref().map(|_| msg),
             }
-        }).collect::<Vec<_>>();
+        })
+        .collect::<Vec<_>>();
 
     benchmark_state.sort_by_key(|s| s.error.is_some());
     benchmark_state.reverse();
@@ -314,7 +359,10 @@ pub fn handle_status_page(data: &InputData) -> status::Response {
 }
 
 pub fn handle_next_commit(data: &InputData) -> Option<String> {
-    data.missing_commits().ok().and_then(|c| c.into_iter().next()).map(|c| c.0.sha)
+    data.missing_commits()
+        .ok()
+        .and_then(|c| c.into_iter().next())
+        .map(|c| c.0.sha)
 }
 
 pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<graph::Response> {
@@ -325,10 +373,12 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
             stat: body.stat.clone(),
         },
         data,
-    )?.0;
+    )?
+    .0;
 
     // crate list * 3 because we have check, debug, and opt variants.
-    let mut result: HashMap<_, HashMap<Cow<str>, _>> = HashMap::with_capacity(data.crate_list.len() * 3);
+    let mut result: HashMap<_, HashMap<Cow<'_, str>, _>> =
+        HashMap::with_capacity(data.crate_list.len() * 3);
     let elements = out.len();
     let mut last_commit = None;
     let mut initial_debug_base_compile = None;
@@ -339,7 +389,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
         let mut summary_points = HashMap::new();
         for (name, runs) in date_data.data {
             let bench_name = name.clone();
-            let mut entry = result
+            let entry = result
                 .entry(name.clone())
                 .or_insert_with(|| HashMap::with_capacity(runs.len()));
             let mut base_compile = false;
@@ -352,7 +402,7 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
                     is_println_incr = true;
                 }
 
-                let mut entry = entry
+                let entry = entry
                     .entry(name.into())
                     .or_insert_with(|| Vec::<graph::GraphData>::with_capacity(elements));
                 let first = entry.first().map(|d| d.absolute as f32);
@@ -366,20 +416,29 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
                     y: if body.absolute { value } else { percent },
                     x: date_data.date.0.timestamp() as u64 * 1000, // all dates are since 1970
                     color: {
-                        data.interpolated.get(&commit)
-                            .map(|c| c.iter().any(|interpolation| {
-                                if !bench_name.starts_with(&interpolation.benchmark) {
-                                    return false;
-                                }
-                                if let Some(run_name) = &interpolation.run {
-                                    run == *run_name
+                        data.interpolated
+                            .get(&commit)
+                            .map(|c| {
+                                c.iter().any(|interpolation| {
+                                    if !bench_name.starts_with(&interpolation.benchmark) {
+                                        return false;
+                                    }
+                                    if let Some(run_name) = &interpolation.run {
+                                        run == *run_name
+                                    } else {
+                                        true
+                                    }
+                                })
+                            })
+                            .map(|b| {
+                                if b {
+                                    String::from(INTERPOLATED_COLOR)
                                 } else {
-                                    true
+                                    String::new()
                                 }
-                            }))
-                            .map(|b| if b { String::from(INTERPOLATED_COLOR) } else { String::new() })
+                            })
                             .unwrap_or(String::new())
-                    }
+                    },
                 });
             }
             if base_compile && is_println_incr {
@@ -397,8 +456,8 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
         }
         for (&(release, check, ref state), values) in &summary_points {
             let value = (values.iter().sum::<f64>() as f32) / (values.len() as f32);
-            if !release && !check && state.is_base_compile() &&
-                initial_debug_base_compile.is_none() {
+            if !release && !check && state.is_base_compile() && initial_debug_base_compile.is_none()
+            {
                 initial_debug_base_compile = Some(value);
             }
             if check && state.is_base_compile() && initial_check_base_compile.is_none() {
@@ -416,18 +475,19 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
             } else {
                 "-debug"
             };
-            let summary: &mut HashMap<Cow<str>, _> = result
+            let summary: &mut HashMap<Cow<'_, str>, _> = result
                 .entry((String::from("Summary") + appendix).into())
                 .or_insert_with(HashMap::new);
             let entry = summary.entry(state.name()).or_insert_with(Vec::new);
             let value = (values.iter().sum::<f64>() as f32) / (values.len() as f32);
-            let value = value / if release {
-                initial_release_base_compile.unwrap()
-            } else if check {
-                initial_check_base_compile.unwrap()
-            } else {
-                initial_debug_base_compile.unwrap()
-            };
+            let value = value
+                / if release {
+                    initial_release_base_compile.unwrap()
+                } else if check {
+                    initial_check_base_compile.unwrap()
+                } else {
+                    initial_debug_base_compile.unwrap()
+                };
             let first = entry.first().map(|d: &graph::GraphData| d.absolute as f32);
             let percent = first.map_or(0.0, |f| (value - f) / f * 100.0);
             entry.push(graph::GraphData {
@@ -439,17 +499,26 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
                 y: if body.absolute { value } else { percent },
                 x: date_data.date.0.timestamp() as u64 * 1000, // all dates are since 1970
                 color: {
-                    data.interpolated.get(&commit)
-                        .map(|c| c.iter().any(|interpolation| {
-                            if let Some(run) = &interpolation.run {
-                                *run.name() == (state.name() + appendix)
+                    data.interpolated
+                        .get(&commit)
+                        .map(|c| {
+                            c.iter().any(|interpolation| {
+                                if let Some(run) = &interpolation.run {
+                                    *run.name() == (state.name() + appendix)
+                                } else {
+                                    true
+                                }
+                            })
+                        })
+                        .map(|b| {
+                            if b {
+                                String::from(INTERPOLATED_COLOR)
                             } else {
-                                true
+                                String::new()
                             }
-                        }))
-                        .map(|b| if b { String::from(INTERPOLATED_COLOR) } else { String::new() })
+                        })
                         .unwrap_or(String::new())
-                }
+                },
             });
         }
         last_commit = Some(commit);
@@ -457,7 +526,10 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
 
     let mut maxes = HashMap::with_capacity(result.len());
     for (ref crate_name, ref benchmarks) in &result {
-        let name = crate_name.replace("-check", "").replace("-debug", "").replace("-opt", "");
+        let name = crate_name
+            .replace("-check", "")
+            .replace("-debug", "")
+            .replace("-opt", "");
         let mut max = 0.0f32;
         for points in benchmarks.values() {
             for point in points {
@@ -470,11 +542,10 @@ pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<grap
 
     Ok(graph::Response {
         max: maxes,
-        benchmarks: result.into_iter()
-            .map(|(k, v)| {
-                (k, v.into_iter().map(|(k, v)| (k.into_owned(), v)).collect())
-            })
-            .collect()
+        benchmarks: result
+            .into_iter()
+            .map(|(k, v)| (k, v.into_iter().map(|(k, v)| (k.into_owned(), v)).collect()))
+            .collect(),
     })
 }
 
@@ -541,14 +612,16 @@ pub fn handle_pr_commit(pr: u64) -> CommitResponse {
     }
 }
 
-lazy_static! {
-    static ref BODY_TRY_COMMIT: Regex = Regex::new(r#"(?:\b|^)@rust-timer\s+build\s+(\w+)(?:\b|$)"#).unwrap();
+lazy_static::lazy_static! {
+    static ref BODY_TRY_COMMIT: Regex =
+        Regex::new(r#"(?:\b|^)@rust-timer\s+build\s+(\w+)(?:\b|$)"#).unwrap();
 }
 
 pub fn post_comment(cfg: &Config, issue: &github::Issue, body: &str) -> ServerResult<()> {
     let timer_token = cfg.keys.github.clone().expect("needs rust-timer token");
     let client = reqwest::Client::new();
-    let req = client.post(&issue.comments_url)
+    let req = client
+        .post(&issue.comments_url)
         .json(&github::PostComment {
             body: body.to_owned(),
         })
@@ -557,7 +630,7 @@ pub fn post_comment(cfg: &Config, issue: &github::Issue, body: &str) -> ServerRe
 
     let res = req.send();
     match res {
-        Ok(_) => { }
+        Ok(_) => {}
         Err(err) => {
             eprintln!("failed to post comment: {:?}", err);
         }
@@ -570,10 +643,14 @@ pub fn handle_github(request: github::Request, data: &InputData) -> ServerResult
         return Ok(github::Response);
     }
 
-    if request.comment.author_association != github::Association::Owner &&
-        !data.config.users.contains(&request.comment.user.login) {
-        post_comment(&data.config, &request.issue,
-            "Insufficient permissions to issue commands to rust-timer.")?;
+    if request.comment.author_association != github::Association::Owner
+        && !data.config.users.contains(&request.comment.user.login)
+    {
+        post_comment(
+            &data.config,
+            &request.issue,
+            "Insufficient permissions to issue commands to rust-timer.",
+        )?;
         return Ok(github::Response);
     }
 
@@ -581,26 +658,44 @@ pub fn handle_github(request: github::Request, data: &InputData) -> ServerResult
 
     if let Some(captures) = BODY_TRY_COMMIT.captures(&body) {
         if let Some(commit) = captures.get(1).map(|c| c.as_str()) {
-            let commit = commit.trim_left_matches("https://github.com/rust-lang/rust/commit/");
+            let commit = commit.trim_start_matches("https://github.com/rust-lang/rust/commit/");
             if commit.len() != 40 {
-                post_comment(&data.config, &request.issue,
-                    "Please provide the full 40 character commit hash.")?;
+                post_comment(
+                    &data.config,
+                    &request.issue,
+                    "Please provide the full 40 character commit hash.",
+                )?;
                 return Ok(github::Response);
             }
             let client = reqwest::Client::new();
-            let commit_response: github::Commit =
-            client.get(&format!("{}/commits/{}", request.issue.repository_url, commit))
-                .send().map_err(|_| String::from("cannot get commit"))?
-                .json().map_err(|e| format!("cannot deserialize commit: {:?}", e))?;
+            let commit_response: github::Commit = client
+                .get(&format!(
+                    "{}/commits/{}",
+                    request.issue.repository_url, commit
+                ))
+                .send()
+                .map_err(|_| String::from("cannot get commit"))?
+                .json()
+                .map_err(|e| format!("cannot deserialize commit: {:?}", e))?;
             if commit_response.parents.len() != 2 {
-                post_comment(&data.config, &request.issue,
-                    &format!("Bors try commit {} unexpectedly has {} parents.",
-                        commit_response.sha, commit_response.parents.len()))?;
+                post_comment(
+                    &data.config,
+                    &request.issue,
+                    &format!(
+                        "Bors try commit {} unexpectedly has {} parents.",
+                        commit_response.sha,
+                        commit_response.parents.len()
+                    ),
+                )?;
                 return Ok(github::Response);
             }
             {
                 let mut persistent = data.persistent.lock();
-                if !persistent.try_commits.iter().any(|c| c.sha() == &commit_response.sha) {
+                if !persistent
+                    .try_commits
+                    .iter()
+                    .any(|c| c.sha() == &commit_response.sha)
+                {
                     persistent.try_commits.push(TryCommit {
                         sha: commit_response.sha.clone(),
                         parent_sha: commit_response.parents[0].sha.clone(),
@@ -609,28 +704,37 @@ pub fn handle_github(request: github::Request, data: &InputData) -> ServerResult
                 }
                 persistent.write().expect("successful encode");
             }
-            post_comment(&data.config, &request.issue,
-                &format!("Success: Queued {} with parent {}, [comparison URL]({}).",
-                    commit_response.sha, commit_response.parents[0].sha,
-                    format!("https://perf.rust-lang.org/compare.html?start={}&end={}",
-                        commit_response.parents[0].sha, commit_response.sha)))?;
+            post_comment(
+                &data.config,
+                &request.issue,
+                &format!(
+                    "Success: Queued {} with parent {}, [comparison URL]({}).",
+                    commit_response.sha,
+                    commit_response.parents[0].sha,
+                    format!(
+                        "https://perf.rust-lang.org/compare.html?start={}&end={}",
+                        commit_response.parents[0].sha, commit_response.sha
+                    )
+                ),
+            )?;
         }
     }
 
     Ok(github::Response)
 }
 
-pub fn handle_collected(body: collected::Request, data: &InputData) -> ServerResult<collected::Response> {
+pub fn handle_collected(
+    body: collected::Request,
+    data: &InputData,
+) -> ServerResult<collected::Response> {
     let mut persistent = data.persistent.lock();
     {
         match body {
-            collected::Request::BenchmarkCommit {
-                commit,
-                benchmarks,
-            } => {
-                let issue = if let Some(try) =
-                persistent.try_commits.iter().find(|c| c.sha == commit.sha) {
-                    Some(try.issue.clone())
+            collected::Request::BenchmarkCommit { commit, benchmarks } => {
+                let issue = if let Some(r#try) =
+                    persistent.try_commits.iter().find(|c| c.sha == commit.sha)
+                {
+                    Some(r#try.issue.clone())
                 } else {
                     None
                 };
@@ -640,12 +744,13 @@ pub fn handle_collected(body: collected::Request, data: &InputData) -> ServerRes
                     benchmarks,
                 });
             }
-            collected::Request::BenchmarkDone {
-                commit,
-                benchmark,
-            } => {
+            collected::Request::BenchmarkDone { commit, benchmark } => {
                 // If something went wrong, then just clear current commit.
-                if persistent.current.as_ref().map_or(false, |c| c.commit != commit) {
+                if persistent
+                    .current
+                    .as_ref()
+                    .map_or(false, |c| c.commit != commit)
+                {
                     persistent.current = None;
                 }
                 if let Some(current) = &mut persistent.current {
@@ -658,9 +763,11 @@ pub fn handle_collected(body: collected::Request, data: &InputData) -> ServerRes
                     if current.benchmarks.is_empty() {
                         // post a comment to some issue
                         if let Some(issue) = &current.issue {
-                            post_comment(&data.config, &issue,
-                                &format!("Finished benchmarking try commit {}",
-                                    current.commit.sha))?;
+                            post_comment(
+                                &data.config,
+                                &issue,
+                                &format!("Finished benchmarking try commit {}", current.commit.sha),
+                            )?;
                         }
                     }
                 }
@@ -670,7 +777,7 @@ pub fn handle_collected(body: collected::Request, data: &InputData) -> ServerRes
 
     persistent.write().unwrap();
 
-    Ok(collected::Response { })
+    Ok(collected::Response {})
 }
 
 struct Server {
@@ -769,14 +876,20 @@ impl Server {
         self.handle_post_(req, handler, false)
     }
 
-    fn handle_post_<'de, F, D, S>(&self, req: Request, handler: F, gh: bool) -> <Server as Service>::Future
+    fn handle_post_<'de, F, D, S>(
+        &self,
+        req: Request,
+        handler: F,
+        gh: bool,
+    ) -> <Server as Service>::Future
     where
         F: FnOnce(D, &InputData) -> ServerResult<S> + Send + 'static,
         D: DeserializeOwned,
         S: Serialize,
     {
         check_http_method!(*req.method(), Post);
-        let length = req.headers()
+        let length = req
+            .headers()
             .get::<ContentLength>()
             .expect("content-length to exist")
             .0;
@@ -784,7 +897,8 @@ impl Server {
         if length > 25_000 {
             return Box::new(futures::future::err(hyper::Error::TooLarge));
         }
-        let accepts_gzip = req.headers()
+        let accepts_gzip = req
+            .headers()
             .get::<AcceptEncoding>()
             .map_or(false, |e| e.iter().any(|e| e.item == Encoding::Gzip));
         let data = self.data.clone();
@@ -797,7 +911,9 @@ impl Server {
                 })
                 .map(move |body| {
                     let data = data.read();
-                    if gh && !verify_gh_sig(&data.config, gh_header.unwrap(), &body).unwrap_or(false) {
+                    if gh
+                        && !verify_gh_sig(&data.config, gh_header.unwrap(), &body).unwrap_or(false)
+                    {
                         return Response::new().with_status(StatusCode::Unauthorized);
                     }
                     let body: D = match serde_json::from_slice(&body) {
@@ -818,7 +934,7 @@ impl Server {
                     let result = handler(body, &data);
                     match result {
                         Ok(result) => {
-                            let mut response = Response::new()
+                            let response = Response::new()
                                 .with_header(ContentType::octet_stream())
                                 .with_header(CacheControl(vec![
                                     CacheDirective::NoCache,
@@ -851,7 +967,8 @@ impl Server {
 
     fn handle_push(&self, _req: Request) -> <Self as Service>::Future {
         // set to updating
-        let was_updating = self.updating
+        let was_updating = self
+            .updating
             .compare_and_swap(false, true, AtomicOrdering::AcqRel);
 
         if was_updating {
@@ -871,27 +988,29 @@ impl Server {
 
         let rwlock = self.data.clone();
         let updating = self.updating.clone();
-        let response = self.pool.spawn_fn(move || -> Result<serde_json::Value, Error> {
-            let repo_path = get_repo_path()?;
+        let response = self
+            .pool
+            .spawn_fn(move || -> Result<serde_json::Value, Error> {
+                let repo_path = get_repo_path()?;
 
-            git::update_repo(&repo_path)?;
+                git::update_repo(&repo_path)?;
 
-            info!("updating from filesystem...");
-            let new_data = InputData::from_fs(&repo_path)?;
-            debug!("last date = {:?}", new_data.last_date);
+                info!("updating from filesystem...");
+                let new_data = InputData::from_fs(&repo_path)?;
+                debug!("last date = {:?}", new_data.last_date);
 
-            // Retrieve the stored InputData from the request.
-            let mut data = rwlock.write();
+                // Retrieve the stored InputData from the request.
+                let mut data = rwlock.write();
 
-            // Write the new data back into the request
-            *data = new_data;
+                // Write the new data back into the request
+                *data = new_data;
 
-            updating.store(false, AtomicOrdering::Release);
+                updating.store(false, AtomicOrdering::Release);
 
-            Ok(serde_json::to_value(
-                "Successfully updated from filesystem",
-            )?)
-        });
+                Ok(serde_json::to_value(
+                    "Successfully updated from filesystem",
+                )?)
+            });
 
         let updating = self.updating.clone();
         Box::new(
@@ -914,7 +1033,7 @@ impl Service for Server {
     type Request = Request;
     type Response = Response;
     type Error = hyper::Error;
-    type Future = Box<Future<Item = Self::Response, Error = Self::Error>>;
+    type Future = Box<dyn Future<Item = Self::Response, Error = Self::Error>>;
 
     fn call(&self, req: Request) -> Self::Future {
         let fs_path = format!(
@@ -958,7 +1077,8 @@ impl Service for Server {
             "/perf/status_page" => self.handle_get(&req, handle_status_page),
             "/perf/next_commit" => self.handle_get(&req, handle_next_commit),
             "/perf/pr_commit" => self.handle_get_req(&req, |req, _data| {
-                let res = req.query()
+                let res = req
+                    .query()
                     .unwrap_or_default()
                     .split('&')
                     .find(|q| q.starts_with("pr="))
@@ -989,10 +1109,8 @@ impl Service for Server {
 }
 
 fn verify_gh_sig(cfg: &Config, header: HubSignature, body: &[u8]) -> Option<bool> {
-    let key = hmac::VerificationKey::new(
-        &digest::SHA1,
-        cfg.keys.secret.as_ref().unwrap().as_bytes(),
-    );
+    let key =
+        hmac::VerificationKey::new(&digest::SHA1, cfg.keys.secret.as_ref().unwrap().as_bytes());
     let sha = header.0.get(5..)?; // strip sha1=
     let sha = hex::decode(sha).ok()?;
     if let Ok(()) = hmac::verify(&key, body, &sha) {

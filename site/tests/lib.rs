@@ -9,18 +9,18 @@ extern crate rustc_perf;
 extern crate serde;
 extern crate serde_json;
 
+use std::cmp::PartialEq;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
-use std::cmp::PartialEq;
 
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 
-use rustc_perf::server::{self, GroupBy};
-use rustc_perf::load::InputData;
-use rustc_perf::date::{Bound, Date, OptionalDate};
 use rustc_perf::api::{data, days, stats, tabular};
+use rustc_perf::date::{Bound, Date, OptionalDate};
+use rustc_perf::load::InputData;
+use rustc_perf::server::{self, GroupBy};
 
 lazy_static! {
     static ref INPUT_DATA: InputData = InputData::from_fs("tests/data").unwrap();

@@ -1,11 +1,3 @@
-extern crate chrono;
-#[macro_use]
-extern crate log;
-extern crate semver;
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
-
 use std::borrow::Cow;
 use std::cmp::{Ord, Ordering, PartialOrd};
 use std::collections::BTreeMap;
@@ -22,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod api;
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct Commit {
     pub sha: String,
     pub date: Date,
@@ -116,7 +108,7 @@ impl Patch {
     }
 
     pub fn apply(&self, dir: &Path) -> Result<(), String> {
-        debug!("applying {} to {:?}", self.name, dir);
+        log::debug!("applying {} to {:?}", self.name, dir);
         let mut cmd = process::Command::new("patch");
         cmd.current_dir(dir).args(&["-Np1", "-i"]).arg(&self.path);
         cmd.stdout(Stdio::null());
@@ -214,7 +206,7 @@ impl RunId {
 }
 
 impl fmt::Display for RunId {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let opt = if self.release {
             "-opt"
         } else if self.check {
@@ -357,7 +349,7 @@ impl<'de> Deserialize<'de> for Bound {
                 Ok(bound)
             }
 
-            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 f.write_str("either a YYYY-mm-dd date or a 40 character long git commit hash")
             }
         }
@@ -414,7 +406,7 @@ impl Date {
 }
 
 impl fmt::Display for Date {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0.to_rfc3339())
     }
 }
@@ -473,7 +465,7 @@ impl<'de> Deserialize<'de> for Date {
                 })
             }
 
-            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 f.write_str("an RFC 3339 date")
             }
         }

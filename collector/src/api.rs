@@ -1,7 +1,7 @@
 pub mod collected {
-    use Commit;
+    use crate::Commit;
 
-    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+    #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
     pub enum Request {
         // Will benchmark commit with these benchmarks
         BenchmarkCommit {
@@ -12,10 +12,10 @@ pub mod collected {
         BenchmarkDone {
             benchmark: String,
             commit: Commit,
-        }
+        },
     }
 
-    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+    #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
     pub struct Response {
         // nothing
     }

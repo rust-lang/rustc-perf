@@ -17,10 +17,10 @@ use collector::{Benchmark as CollectedBenchmark, BenchmarkState, Patch, Run, Sta
 use failure::{err_msg, Error, ResultExt};
 use serde_json;
 
-use {BuildKind, Compiler, RunKind};
+use crate::{BuildKind, Compiler, RunKind};
 
 fn command_output(cmd: &mut Command) -> Result<process::Output, Error> {
-    trace!("running: {:?}", cmd);
+    log::trace!("running: {:?}", cmd);
     let output = cmd.output()?;
     if !output.status.success() {
         bail!(
@@ -47,7 +47,7 @@ fn default_runs() -> usize {
 
 /// This is the internal representation of an individual benchmark's
 /// perf-config.json file.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize)]
 struct BenchmarkConfig {
     cargo_opts: Option<String>,
     cargo_rustc_opts: Option<String>,
@@ -242,7 +242,7 @@ impl<'a> CargoProcess<'a> {
                 cmd.args(&self.rustc_args);
             }
 
-            debug!("{:?}", cmd);
+            log::debug!("{:?}", cmd);
 
             touch_all(&self.cwd)?;
 
@@ -270,7 +270,7 @@ impl<'a> CargoProcess<'a> {
     }
 }
 
-lazy_static! {
+lazy_static::lazy_static! {
     static ref FAKE_RUSTC: PathBuf = {
         let mut fake_rustc = env::current_exe().unwrap();
         fake_rustc.pop();
@@ -303,7 +303,7 @@ pub trait Processor {
     /// Process the output produced by the particular `Profiler` being used.
     fn process_output(
         &mut self,
-        data: &ProcessOutputData,
+        data: &ProcessOutputData<'_>,
         output: process::Output,
     ) -> Result<Retry, Error>;
 
@@ -350,7 +350,7 @@ impl Processor for MeasureProcessor {
 
     fn process_output(
         &mut self,
-        data: &ProcessOutputData,
+        data: &ProcessOutputData<'_>,
         output: process::Output,
     ) -> Result<Retry, Error> {
         match process_perf_stat_output(output) {
@@ -370,7 +370,7 @@ impl Processor for MeasureProcessor {
                     }
                     RunKind::PatchedIncrs => {
                         let patch = data.patch.unwrap();
-                        if let Some(mut entry) =
+                        if let Some(entry) =
                             self.patched_incr_stats.iter_mut().find(|s| &s.0 == patch)
                         {
                             entry.1.push(stats);
@@ -382,7 +382,7 @@ impl Processor for MeasureProcessor {
                 Ok(Retry::No)
             }
             Err(DeserializeStatError::NoOutput(output)) => {
-                warn!(
+                log::warn!(
                     "failed to deserialize stats, retrying; output: {:?}",
                     output
                 );
@@ -465,7 +465,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
 
     fn process_output(
         &mut self,
-        data: &ProcessOutputData,
+        data: &ProcessOutputData<'_>,
         output: process::Output,
     ) -> Result<Retry, Error> {
         // Produce a name of the form $PREFIX-$ID-$BENCHMARK-$BUILDKIND-$RUNKIND.
@@ -687,7 +687,7 @@ impl Benchmark {
         processor: &mut dyn Processor,
         build_kinds: &[BuildKind],
         run_kinds: &[RunKind],
-        compiler: Compiler,
+        compiler: Compiler<'_>,
         iterations: usize,
     ) -> Result<(), Error> {
         let iterations = cmp::min(iterations, self.config.runs);
@@ -698,7 +698,7 @@ impl Benchmark {
         }
 
         for &build_kind in build_kinds {
-            info!("Running {}: {:?} + {:?}", self.name, build_kind, run_kinds);
+            log::info!("Running {}: {:?} + {:?}", self.name, build_kind, run_kinds);
 
             // Build everything, including all dependent crates, in a temp dir.
             // We do this before the iterations so that dependent crates aren't
@@ -709,7 +709,7 @@ impl Benchmark {
                 .run_rustc()?;
 
             for i in 0..iterations {
-                debug!("Benchmark iteration {}/{}", i + 1, iterations);
+                log::debug!("Benchmark iteration {}/{}", i + 1, iterations);
                 let timing_dir = self.make_temp_dir(prep_dir.path())?;
                 let cwd = timing_dir.path();
 
@@ -753,7 +753,7 @@ impl Benchmark {
 
                 if run_kinds.contains(&RunKind::PatchedIncrs) {
                     for (i, patch) in self.patches.iter().enumerate() {
-                        debug!("applying patch {}", patch.name);
+                        log::debug!("applying patch {}", patch.name);
                         patch.apply(cwd).map_err(|s| err_msg(s))?;
 
                         // An incremental build with some changes (realistic
@@ -802,7 +802,7 @@ fn process_perf_stat_output(output: process::Output) -> Result<Vec<Stat>, Deseri
                 match $e {
                     Some(s) => s,
                     None => {
-                        warn!("unhandled line: {}", line);
+                        log::warn!("unhandled line: {}", line);
                         continue;
                     }
                 }

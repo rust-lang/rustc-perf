@@ -13,6 +13,7 @@
 //!
 //! The responses are calculated in the server.rs file.
 
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::result::Result as StdResult;
 
@@ -49,6 +50,7 @@ pub type ServerResult<T> = StdResult<T, String>;
 
 pub mod info {
     use collector::Date;
+    use serde::{Deserialize, Serialize};
     use std::collections::BTreeSet;
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -65,6 +67,7 @@ pub mod info {
 }
 
 pub mod dashboard {
+    use serde::{Deserialize, Serialize};
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct Cases {
         pub clean_averages: Vec<f64>,
@@ -88,8 +91,9 @@ pub struct CommitResponse {
 }
 
 pub mod data {
-    use server::DateData;
+    use crate::server::DateData;
     use collector::Bound;
+    use serde::{Deserialize, Serialize};
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct Request {
@@ -107,6 +111,7 @@ pub mod data {
 
 pub mod graph {
     use collector::Bound;
+    use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
@@ -138,8 +143,9 @@ pub mod graph {
 }
 
 pub mod days {
-    use server::DateData;
+    use crate::server::DateData;
     use collector::Bound;
+    use serde::{Deserialize, Serialize};
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct Request {
@@ -158,6 +164,7 @@ pub mod days {
 
 pub mod nll_dashboard {
     use collector::Bound;
+    use serde::{Deserialize, Serialize};
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct Request {
@@ -190,8 +197,9 @@ pub mod nll_dashboard {
 }
 
 pub mod status {
+    use crate::load::{CurrentState, MissingReason};
     use collector::Commit;
-    use load::{MissingReason, CurrentState};
+    use serde::{Deserialize, Serialize};
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct BenchmarkStatus {
@@ -210,6 +218,8 @@ pub mod status {
 }
 
 pub mod github {
+    use serde::{Deserialize, Serialize};
+
     #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
     #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
     pub enum Association {

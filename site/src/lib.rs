@@ -7,33 +7,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-extern crate antidote;
-extern crate chrono;
-extern crate collector;
-extern crate flate2;
-extern crate futures;
-extern crate futures_cpupool;
-#[macro_use]
-extern crate hyper;
-#[macro_use]
-extern crate log;
-extern crate rust_sysroot;
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
-extern crate serde_json;
-extern crate rmp_serde;
-extern crate url;
-extern crate semver;
 #[macro_use]
 extern crate failure;
-extern crate ring;
-extern crate hex;
-extern crate regex;
 #[macro_use]
-extern crate lazy_static;
-extern crate reqwest;
-extern crate toml;
+extern crate hyper;
 
 #[derive(Fail, Debug)]
 #[fail(display = "command failed: {}", command)]
@@ -45,5 +22,5 @@ mod git;
 
 pub mod api;
 pub mod load;
-pub mod util;
 pub mod server;
+pub mod util;

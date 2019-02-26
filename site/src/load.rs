@@ -17,19 +17,18 @@ use antidote::Mutex;
 use chrono::{Duration, Utc};
 use failure::SyncFailure;
 use failure::{Error, ResultExt};
-use rust_sysroot;
 use rust_sysroot::git::Commit as GitCommit;
-use serde_json;
-use toml;
+use serde::{Deserialize, Serialize};
 
+use crate::git;
+use crate::util;
+use crate::util::Interpolate;
 use collector::Date;
-use git;
-use util;
-use util::Interpolate;
 
-use api::github;
+use crate::api::github;
 use collector;
 pub use collector::{ArtifactData, Benchmark, Commit, CommitData, Patch, Run, RunId, Stat};
+use log::{error, info, trace, warn};
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum MissingReason {
@@ -92,7 +91,7 @@ pub struct Persistent {
     pub current: Option<CurrentState>,
 }
 
-lazy_static! {
+lazy_static::lazy_static! {
     static ref PERSISTENT_PATH: &'static Path = Path::new("persistent.json");
 }
 
@@ -339,7 +338,7 @@ impl InputData {
         for (_, cd) in data_real.iter().rev().take(20) {
             for (name, benchmark) in &cd.benchmarks {
                 if let Ok(benchmark) = benchmark {
-                    let mut entry = known_runs.entry(name.clone()).or_insert_with(HashSet::new);
+                    let entry = known_runs.entry(name.clone()).or_insert_with(HashSet::new);
                     for run in &benchmark.runs {
                         entry.insert(run.id());
                     }
@@ -391,7 +390,7 @@ impl InputData {
         for (idx, needle) in data_commits.iter().enumerate() {
             for (name, value) in &data_real[needle].benchmarks {
                 if let Ok(bench) = value {
-                    let mut e = last_seen.entry(name.clone()).or_insert_with(HashMap::new);
+                    let e = last_seen.entry(name.clone()).or_insert_with(HashMap::new);
                     for run in bench.runs.iter() {
                         e.insert(run.id(), (idx, run.clone()));
                     }
@@ -403,7 +402,7 @@ impl InputData {
         for (idx, needle) in data_commits.iter().enumerate().rev() {
             for (name, value) in &data_real[needle].benchmarks {
                 if let Ok(bench) = value {
-                    let mut e = last_seen.entry(name.clone()).or_insert_with(HashMap::new);
+                    let e = last_seen.entry(name.clone()).or_insert_with(HashMap::new);
                     for run in bench.runs.iter() {
                         e.insert(run.id(), (idx, run.clone()));
                     }
@@ -636,7 +635,7 @@ struct AssociatedData<'a> {
 fn fill_benchmark_runs(
     benchmark: &mut Benchmark,
     missing_runs: Vec<&RunId>,
-    data: &mut AssociatedData,
+    data: &mut AssociatedData<'_>,
 ) {
     let commit_idx = data.commit_map[data.commit];
     for missing_run in missing_runs {
@@ -654,7 +653,7 @@ fn fill_benchmark_runs(
         assert_ne!(start_commit.as_ref(), Some(data.commit));
         assert_ne!(end_commit.as_ref(), Some(data.commit));
 
-        let mut interpolations = data
+        let interpolations = data
             .interpolated
             .entry(data.commit.sha.clone())
             .or_insert_with(Vec::new);
@@ -697,7 +696,7 @@ fn fill_benchmark_runs(
     }
 }
 
-fn fill_benchmark_data(benchmark_name: &str, data: &mut AssociatedData) -> Option<Vec<Run>> {
+fn fill_benchmark_data(benchmark_name: &str, data: &mut AssociatedData<'_>) -> Option<Vec<Run>> {
     let commit_idx = data.commit_map[data.commit];
     let interpolation_entry = data
         .interpolated

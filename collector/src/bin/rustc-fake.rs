@@ -38,8 +38,7 @@ fn main() {
 
             "time-passes" => {
                 let mut cmd = Command::new(&rustc);
-                cmd.arg("-Ztime-passes")
-                    .args(&args);
+                cmd.arg("-Ztime-passes").args(&args);
 
                 assert!(cmd.status().expect("failed to spawn").success());
             }
@@ -146,7 +145,6 @@ fn main() {
                 panic!("unknown wrapper: {}", wrapper);
             }
         }
-
     } else {
         let mut cmd = Command::new(&rustc);
         cmd.args(&args);
@@ -163,7 +161,7 @@ fn exec(cmd: &mut Command) -> ! {
 
 #[cfg(unix)]
 fn raise_priority() {
-    extern crate libc;
+    use libc;
 
     unsafe {
         // Try to reduce jitter in wall time by increasing our priority to the
@@ -179,7 +177,7 @@ fn raise_priority() {
 
 #[cfg(unix)]
 fn print_memory() {
-    extern crate libc;
+    use libc;
 
     use std::mem;
 

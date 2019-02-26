@@ -2,6 +2,7 @@
 authors = ["Mark-Simulacrum <mark.simulacrum@gmail.com>", "Nicholas Cameron <ncameron@mozilla.com>", "The rustc-perf contributors"]
 name = "site"
 version = "0.1.0"
+edition = '2018'
 
 [dependencies]
 env_logger = "0.6"

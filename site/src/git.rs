@@ -10,8 +10,8 @@
 use std::path::Path;
 use std::process::Command;
 
+use crate::CommandFailed;
 use failure::Error;
-use CommandFailed;
 
 const BRANCH: &'static str = "master";
 const GIT: &'static str = "git";
@@ -33,7 +33,9 @@ pub fn execute_command(working_dir: &Path, args: &[&str]) -> Result<(), Error> {
     if status.success() {
         Ok(())
     } else {
-        Err(CommandFailed { command: format!("{} {:?}", GIT, args) })?
+        Err(CommandFailed {
+            command: format!("{} {:?}", GIT, args),
+        })?
     }
 }
 
