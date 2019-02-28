@@ -12,8 +12,6 @@ use failure::{Error, ResultExt, SyncFailure};
 use futures::stream::Stream;
 use futures::sync::mpsc::{unbounded as unbounded_channel, UnboundedReceiver, UnboundedSender};
 use log::{debug, error, info, warn};
-use rust_sysroot::git::Commit as GitCommit;
-use rust_sysroot::sysroot::Sysroot;
 use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::env;
@@ -27,8 +25,10 @@ use std::thread::{self, JoinHandle};
 
 mod execute;
 mod outrepo;
+mod sysroot;
 
 use crate::execute::{Benchmark, Profiler};
+use crate::sysroot::Sysroot;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Compiler<'a> {
@@ -199,7 +199,7 @@ fn send_home(d: &collected::Request) {
 
 fn bench_commit(
     repo: Option<&outrepo::Repo>,
-    commit: &GitCommit,
+    commit: &Commit,
     triple: &str,
     build_kinds: &[BuildKind],
     run_kinds: &[RunKind],
@@ -215,10 +215,7 @@ fn bench_commit(
 
     if call_home {
         send_home(&collected::Request::BenchmarkCommit {
-            commit: Commit {
-                sha: commit.sha.clone(),
-                date: Date(commit.date),
-            },
+            commit: commit.clone(),
             benchmarks: benchmarks.iter().map(|b| b.name.clone()).collect(),
         });
     }
@@ -231,10 +228,7 @@ fn bench_commit(
                 if call_home {
                     send_home(&collected::Request::BenchmarkDone {
                         benchmark: benchmark.name.clone(),
-                        commit: Commit {
-                            sha: commit.sha.clone(),
-                            date: Date(commit.date),
-                        },
+                        commit: commit.clone(),
                     });
                 }
                 results.insert(benchmark.name.clone(), result.clone());
@@ -261,10 +255,7 @@ fn bench_commit(
         if call_home {
             send_home(&collected::Request::BenchmarkDone {
                 benchmark: benchmark.name.clone(),
-                commit: Commit {
-                    sha: commit.sha.clone(),
-                    date: Date(commit.date),
-                },
+                commit: commit.clone(),
             });
         }
 
@@ -273,10 +264,7 @@ fn bench_commit(
     }
 
     CommitData {
-        commit: Commit {
-            sha: commit.sha.clone(),
-            date: Date(commit.date),
-        },
+        commit: commit.clone(),
         triple: triple.to_string(),
         benchmarks: results,
     }
@@ -416,9 +404,7 @@ fn main_result() -> Result<i32, Error> {
     let get_out_repo =
         |allow_new_dir| outrepo::Repo::open(get_out_dir(), allow_new_dir, use_remote);
 
-    let get_commits = || {
-        rust_sysroot::get_commits(rust_sysroot::EPOCH_COMMIT, "master").map_err(SyncFailure::new)
-    };
+    let get_commits = || collector::git::get_rust_commits();
 
     let ret = match matches.subcommand() {
         ("bench_commit", Some(sub_m)) => {
@@ -429,15 +415,13 @@ fn main_result() -> Result<i32, Error> {
                 .cloned()
                 .unwrap_or_else(|| {
                     warn!("utilizing fake commit!");
-                    rust_sysroot::git::Commit {
+                    Commit {
                         sha: commit.to_string(),
-                        date: Date::ymd_hms(2000, 01, 01, 0, 0, 0).0,
-                        summary: String::new(),
+                        date: Date::ymd_hms(2000, 01, 01, 0, 0, 0),
                     }
                 });
             let out_repo = get_out_repo(false)?;
-            let sysroot = Sysroot::install(&commit, "x86_64-unknown-linux-gnu", false, false)
-                .map_err(SyncFailure::new)?;
+            let sysroot = Sysroot::install(&commit.sha, commit.date.0, "x86_64-unknown-linux-gnu")?;
             let build_kinds = &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt];
             let run_kinds = RunKind::all();
             out_repo.success(&bench_commit(
@@ -469,11 +453,10 @@ fn main_result() -> Result<i32, Error> {
             // arbitrary identifier, not a commit SHA. But that's ok for local
             // runs, because `commit` is only used when producing the output
             // files, not for interacting with a repo.
-            let commit = GitCommit {
+            let commit = Commit {
                 sha: id.to_string(),
                 // Drop the nanoseconds; we don't want that level of precision.
-                date: Utc::now().with_nanosecond(0).unwrap(),
-                summary: String::new(),
+                date: Date(Utc::now().with_nanosecond(0).unwrap()),
             };
             let rustc_path = PathBuf::from(rustc).canonicalize()?;
             let cargo_path = PathBuf::from(cargo).canonicalize()?;
@@ -502,10 +485,9 @@ fn main_result() -> Result<i32, Error> {
         ("bench_published", Some(sub_m)) => {
             let id = sub_m.value_of("ID").unwrap();
             let repo = get_out_repo(false)?;
-            let commit = rust_sysroot::git::Commit {
+            let commit = Commit {
                 sha: String::from("<none>"),
-                date: Date::ymd_hms(2010, 01, 01, 0, 0, 0).0,
-                summary: String::new(),
+                date: Date::ymd_hms(2010, 01, 01, 0, 0, 0),
             };
             let cfg = rustup::Cfg::from_env(Arc::new(|_| {})).map_err(SyncFailure::new)?;
             let toolchain = rustup::Toolchain::from(&cfg, id)
@@ -574,13 +556,13 @@ fn main_result() -> Result<i32, Error> {
                 .cloned()
                 .unwrap_or_else(|| {
                     warn!("utilizing fake commit!");
-                    rust_sysroot::git::Commit {
+                    Commit {
                         sha: commit.to_string(),
-                        date: Date::ymd_hms(2000, 01, 01, 0, 0, 0).0,
-                        summary: String::new(),
+                        date: Date::ymd_hms(2000, 01, 01, 0, 0, 0),
                     }
                 });
-            if let Ok(sysroot) = Sysroot::install(&commit, "x86_64-unknown-linux-gnu", false, false)
+            if let Ok(sysroot) =
+                Sysroot::install(&commit.sha, commit.date.0, "x86_64-unknown-linux-gnu")
             {
                 let result = out_repo.success(&bench_commit(
                     Some(&out_repo),
@@ -674,8 +656,8 @@ fn main_result() -> Result<i32, Error> {
 
         ("test_benchmarks", Some(_)) => {
             if let Some(commit) = get_commits()?.last() {
-                let sysroot = Sysroot::install(commit, "x86_64-unknown-linux-gnu", false, false)
-                    .map_err(SyncFailure::new)?;
+                let sysroot =
+                    Sysroot::install(&commit.sha, commit.date.0, "x86_64-unknown-linux-gnu")?;
                 // filter out servo benchmarks as they simply take too long
                 bench_commit(
                     None,

@@ -39,7 +39,6 @@ use semver::Version;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json;
-use url::Url;
 
 pub use crate::api::{
     self, dashboard, data, days, github, graph, info, nll_dashboard, status, CommitResponse,
@@ -591,27 +590,6 @@ pub fn handle_days(body: days::Request, data: &InputData) -> ServerResult<days::
     })
 }
 
-pub fn handle_date_commit(date: Date) -> CommitResponse {
-    let commits = ::rust_sysroot::get_commits(::rust_sysroot::EPOCH_COMMIT, "master").unwrap();
-
-    let commit = commits.into_iter().rfind(|c| c.date < date.0);
-
-    CommitResponse {
-        commit: commit.map(|c| c.sha),
-    }
-}
-
-pub fn handle_pr_commit(pr: u64) -> CommitResponse {
-    let commits = ::rust_sysroot::get_commits(::rust_sysroot::EPOCH_COMMIT, "master").unwrap();
-
-    let pr = format!("#{}", pr);
-    let commit = commits.into_iter().find(|c| c.summary.contains(&pr));
-
-    CommitResponse {
-        commit: commit.map(|c| c.sha),
-    }
-}
-
 lazy_static::lazy_static! {
     static ref BODY_TRY_COMMIT: Regex =
         Regex::new(r#"(?:\b|^)@rust-timer\s+build\s+(\w+)(?:\b|$)"#).unwrap();
@@ -805,21 +783,6 @@ impl Server {
         let data = self.data.clone();
         let data = data.read();
         let result = handler(&data);
-        let response = Response::new()
-            .with_header(ContentType::json())
-            .with_body(serde_json::to_string(&result).unwrap());
-        Box::new(futures::future::ok(response))
-    }
-
-    fn handle_get_req<F, S>(&self, req: &Request, handler: F) -> <Server as Service>::Future
-    where
-        F: FnOnce(&Request, &InputData) -> S,
-        S: Serialize,
-    {
-        check_http_method!(*req.method(), Get);
-        let data = self.data.clone();
-        let data = data.read();
-        let result = handler(req, &data);
         let response = Response::new()
             .with_header(ContentType::json())
             .with_body(serde_json::to_string(&result).unwrap());
@@ -1076,26 +1039,6 @@ impl Service for Server {
             "/perf/nll_dashboard" => self.handle_post(req, handle_nll_dashboard),
             "/perf/status_page" => self.handle_get(&req, handle_status_page),
             "/perf/next_commit" => self.handle_get(&req, handle_next_commit),
-            "/perf/pr_commit" => self.handle_get_req(&req, |req, _data| {
-                let res = req
-                    .query()
-                    .unwrap_or_default()
-                    .split('&')
-                    .find(|q| q.starts_with("pr="))
-                    .and_then(|p| p.split('=').next())
-                    .and_then(|pr| pr.parse().ok())
-                    .map(|pr| handle_pr_commit(pr));
-                if let Some(res) = res {
-                    res
-                } else {
-                    CommitResponse { commit: None }
-                }
-            }),
-            "/perf/date_commit" => self.handle_get_req(&req, |req, _data| {
-                let url = Url::parse(req.uri().as_ref()).unwrap();
-                let date = url.query_pairs().find(|&(ref k, _)| k == "date");
-                handle_date_commit(date.unwrap().1.parse().unwrap())
-            }),
             "/perf/onpush" => self.handle_push(req),
             "/perf/collected" => self.handle_auth_post(req, handle_collected),
             "/perf/github-hook" => self.handle_github_auth_post(req, handle_github),
