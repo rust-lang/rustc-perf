@@ -15,9 +15,7 @@ use std::path::{Path, PathBuf};
 
 use antidote::Mutex;
 use chrono::{Duration, Utc};
-use failure::SyncFailure;
 use failure::{Error, ResultExt};
-use rust_sysroot::git::Commit as GitCommit;
 use serde::{Deserialize, Serialize};
 
 use crate::git;
@@ -166,7 +164,7 @@ pub struct InputData {
 
     pub artifact_data: BTreeMap<String, ArtifactData>,
 
-    pub commits: Vec<GitCommit>,
+    pub commits: Vec<Commit>,
 
     pub persistent: Mutex<Persistent>,
 
@@ -307,8 +305,7 @@ impl InputData {
 
         let last_date = last_date.expect("No dates found");
         println!("Updating rust.git clone...");
-        let commits = rust_sysroot::get_commits(rust_sysroot::EPOCH_COMMIT, "master")
-            .map_err(SyncFailure::new)?;
+        let commits = collector::git::get_rust_commits()?;
         println!("Update of rust.git complete");
 
         let data_commits = data.keys().cloned().collect::<Vec<_>>();
@@ -531,10 +528,7 @@ impl InputData {
         let mut missing = self
             .commits
             .iter()
-            .map(|commit| Commit {
-                sha: commit.sha.clone(),
-                date: Date(commit.date.clone()),
-            })
+            .cloned()
             .filter(|c| Utc::now().signed_duration_since(c.date.0) < Duration::days(29))
             .filter_map(|c| {
                 if let Some(cd) = have.get(&c.sha) {
@@ -576,13 +570,7 @@ impl InputData {
                         MissingReason::TryCommit,
                     ));
                     if let Some(commit) = self.commits.iter().find(|c| c.sha == *parent_sha) {
-                        ret.push((
-                            Commit {
-                                sha: commit.sha.clone(),
-                                date: Date(commit.date.clone()),
-                            },
-                            MissingReason::TryParent,
-                        ));
+                        ret.push((commit.clone(), MissingReason::TryParent));
                     } else {
                         warn!("could not find parent_sha {:?}", parent_sha);
                     }

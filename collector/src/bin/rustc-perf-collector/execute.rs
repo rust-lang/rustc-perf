@@ -12,26 +12,14 @@ use std::str;
 
 use tempfile::TempDir;
 
-use collector::{Benchmark as CollectedBenchmark, BenchmarkState, Patch, Run, Stat};
+use collector::{
+    command_output, Benchmark as CollectedBenchmark, BenchmarkState, Patch, Run, Stat,
+};
 
 use failure::{err_msg, Error, ResultExt};
 use serde_json;
 
 use crate::{BuildKind, Compiler, RunKind};
-
-fn command_output(cmd: &mut Command) -> Result<process::Output, Error> {
-    log::trace!("running: {:?}", cmd);
-    let output = cmd.output()?;
-    if !output.status.success() {
-        bail!(
-            "expected success, got {}\n\nstderr={}\n\n stdout={}",
-            output.status,
-            String::from_utf8_lossy(&output.stderr),
-            String::from_utf8_lossy(&output.stdout)
-        );
-    }
-    Ok(output)
-}
 
 fn touch_all(path: &Path) -> Result<(), Error> {
     let mut cmd = Command::new("bash");

@@ -5,7 +5,7 @@ use std::fmt;
 use std::hash;
 use std::ops::{Add, Sub};
 use std::path::{Path, PathBuf};
-use std::process::{self, Stdio};
+use std::process::{self, Command, Stdio};
 use std::str::FromStr;
 
 use chrono::naive::NaiveDate;
@@ -13,6 +13,7 @@ use chrono::{DateTime, Datelike, Duration, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 
 pub mod api;
+pub mod git;
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct Commit {
@@ -508,4 +509,27 @@ pub mod round_float {
         let n = f64::deserialize(deserializer)?;
         Ok((n * 100.0).round() / 100.0)
     }
+}
+
+pub fn run_command(cmd: &mut Command) -> Result<(), failure::Error> {
+    log::trace!("running: {:?}", cmd);
+    let status = cmd.status()?;
+    if !status.success() {
+        failure::bail!("expected success {:?}", status);
+    }
+    Ok(())
+}
+
+pub fn command_output(cmd: &mut Command) -> Result<process::Output, failure::Error> {
+    log::trace!("running: {:?}", cmd);
+    let output = cmd.output()?;
+    if !output.status.success() {
+        failure::bail!(
+            "expected success, got {}\n\nstderr={}\n\n stdout={}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr),
+            String::from_utf8_lossy(&output.stdout)
+        );
+    }
+    Ok(output)
 }

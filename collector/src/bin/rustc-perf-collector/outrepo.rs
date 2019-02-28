@@ -1,9 +1,8 @@
 //! Write benchmark information to the output repository
 
-use collector::{ArtifactData, CommitData};
+use collector::{ArtifactData, Commit, CommitData};
 use failure::{Error, ResultExt};
 use log::{debug, info, trace, warn};
-use rust_sysroot::git::Commit as GitCommit;
 use serde_json;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
@@ -128,10 +127,10 @@ impl Repo {
         Ok(data)
     }
 
-    pub fn load_commit_data(&self, commit: &GitCommit, triple: &str) -> Result<CommitData, Error> {
+    pub fn load_commit_data(&self, commit: &Commit, triple: &str) -> Result<CommitData, Error> {
         let filepath = self.times().join(format!(
             "{}-{}-{}.json",
-            commit.date.to_rfc3339(),
+            commit.date.0.to_rfc3339(),
             commit.sha,
             triple
         ));
@@ -194,7 +193,7 @@ impl Repo {
         Ok(())
     }
 
-    pub fn write_broken_commit(&self, commit: &GitCommit, err: Error) -> Result<(), Error> {
+    pub fn write_broken_commit(&self, commit: &Commit, err: Error) -> Result<(), Error> {
         info!("writing broken commit {:?}: {:?}", commit, err);
         let mut broken = OpenOptions::new()
             .write(true)
