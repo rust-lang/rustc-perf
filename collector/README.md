@@ -8,6 +8,20 @@ benchmarks) and `site` (for viewing the results):
 cargo +nightly build --release
 ```
 
+### Other steps
+
+You may need to install OpenSSL libraries so that the `openssl-sys` crate used
+by several benchmarks will compile. On Ubuntu Linux 18.10 do the following:
+```
+sudo apt install libssl1.0-dev
+```
+Without this, you will likely get the following build panic on some benchmarks:
+```
+This crate is only compatible with OpenSSL 1.0.1, 1.0.2, and 1.1.0, or LibreSSL
+2.5 and 2.6.0, but a different version of OpenSSL was found. The build is now
+aborting due to this version mismatch.
+```
+
 ## Benchmarking
 
 This section is about benchmarking rustc, i.e. measuring its performance on the
