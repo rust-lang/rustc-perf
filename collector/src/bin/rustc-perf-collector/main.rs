@@ -9,8 +9,6 @@ use chrono::{Timelike, Utc};
 use collector::api::collected;
 use collector::{ArtifactData, Commit, CommitData, Date};
 use failure::{Error, ResultExt, SyncFailure};
-use futures::stream::Stream;
-use futures::sync::mpsc::{unbounded as unbounded_channel, UnboundedReceiver, UnboundedSender};
 use log::{debug, error, info, warn};
 use std::collections::BTreeMap;
 use std::collections::HashSet;
@@ -21,14 +19,15 @@ use std::path::{Path, PathBuf};
 use std::process;
 use std::str;
 use std::sync::Arc;
-use std::thread::{self, JoinHandle};
 
+mod background_worker;
 mod execute;
 mod outrepo;
 mod sysroot;
 
-use crate::execute::{Benchmark, Profiler};
-use crate::sysroot::Sysroot;
+use background_worker::send_home;
+use execute::{Benchmark, Profiler};
+use sysroot::Sysroot;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Compiler<'a> {
@@ -146,57 +145,6 @@ where
     Ok(v)
 }
 
-lazy_static::lazy_static! {
-    static ref BG_THREAD: Arc<(UnboundedSender<Option<collected::Request>>, JoinHandle<()>)> =
-        start_bg_thread();
-}
-
-fn start_bg_thread() -> Arc<(UnboundedSender<Option<collected::Request>>, JoinHandle<()>)> {
-    let (sender, receiver): (_, UnboundedReceiver<Option<collected::Request>>) =
-        unbounded_channel();
-    let sender_thread = sender.clone();
-    let handle = thread::spawn(move || {
-        for request in receiver.wait() {
-            let request = request.expect("result is Ok");
-            if request.is_none() {
-                // termination requested
-                break;
-            }
-            let request = request.unwrap();
-            let ret = (|| {
-                let client = reqwest::ClientBuilder::new().build()?;
-                let resp = client
-                    .post(&format!(
-                        "{}/perf/collected",
-                        env::var("SITE_URL").expect("SITE_URL defined")
-                    ))
-                    .bearer_auth(env::var("PERF_SECRET_KEY").unwrap())
-                    .json(&request)
-                    .send()?;
-                if !resp.status().is_success() {
-                    bail!("ping home failed: {:?}", resp);
-                }
-                Ok(())
-            })();
-            match ret {
-                Ok(()) => {}
-                Err(err) => {
-                    warn!("call home failed: {:?}", err);
-                    thread::sleep(std::time::Duration::from_secs(10));
-                    sender_thread
-                        .unbounded_send(Some(request))
-                        .expect("can send on thread channel");
-                }
-            }
-        }
-    });
-    Arc::new((sender, handle))
-}
-
-fn send_home(d: &collected::Request) {
-    BG_THREAD.0.unbounded_send(Some(d.clone())).unwrap();
-}
-
 fn bench_commit(
     repo: Option<&outrepo::Repo>,
     commit: &Commit,
@@ -214,7 +162,7 @@ fn bench_commit(
     );
 
     if call_home {
-        send_home(&collected::Request::BenchmarkCommit {
+        send_home(collected::Request::BenchmarkCommit {
             commit: commit.clone(),
             benchmarks: benchmarks.iter().map(|b| b.name.clone()).collect(),
         });
@@ -226,7 +174,7 @@ fn bench_commit(
         for benchmark in benchmarks {
             if let Some(result) = data.benchmarks.get(&benchmark.name) {
                 if call_home {
-                    send_home(&collected::Request::BenchmarkDone {
+                    send_home(collected::Request::BenchmarkDone {
                         benchmark: benchmark.name.clone(),
                         commit: commit.clone(),
                     });
@@ -253,7 +201,7 @@ fn bench_commit(
         };
 
         if call_home {
-            send_home(&collected::Request::BenchmarkDone {
+            send_home(collected::Request::BenchmarkDone {
                 benchmark: benchmark.name.clone(),
                 commit: commit.clone(),
             });
@@ -685,7 +633,7 @@ fn main_result() -> Result<i32, Error> {
             Ok(2)
         }
     };
-    BG_THREAD.0.unbounded_send(None).unwrap();
-    thread::sleep(std::time::Duration::from_secs(1));
+    background_worker::shut_down();
+    std::thread::sleep(std::time::Duration::from_secs(1));
     ret
 }
