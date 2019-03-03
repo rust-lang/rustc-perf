@@ -634,6 +634,5 @@ fn main_result() -> Result<i32, Error> {
         }
     };
     background_worker::shut_down();
-    std::thread::sleep(std::time::Duration::from_secs(1));
     ret
 }
