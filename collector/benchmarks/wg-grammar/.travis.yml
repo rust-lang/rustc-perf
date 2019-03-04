@@ -1,0 +1,11 @@
+git:
+  submodules: false
+before_install:
+  - git submodule init
+  - git submodule update
+language: rust
+rust:
+  - stable
+script:
+  - cargo check
+  - cargo run --release -- dir external/rust/src

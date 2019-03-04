@@ -1,0 +1,23 @@
+// Grammar file used to generate src/parse.rs
+
+Expr =
+  | Literal:LITERAL
+  | Paren:{ "("  expr:Expr ")" }
+  | Borrow:{ "&" mutable:"mut"? expr:Expr }
+  | Box:{ "box" expr:Expr }
+  | Try:{ expr:Expr "?" }
+  | Range:{ start:Expr? ".." end:Expr? }
+  | RangeInclusive:{ start:Expr? "..=" end:Expr }
+  | Cast:{ expr:Expr "as" ty:IDENT }
+  | Index:{ base:Expr "[" index:Expr "]" }
+  | Array:{ "["  exprs:Expr* % "," ","? "]" }
+  | Repeat:{ "["  elem:Expr ";" count:Expr "]" }
+  | Tuple:{ "("  exprs:Expr* % "," ","? ")" }
+  | Call:{ callee:Expr "(" args:Expr* % "," ","? ")" }
+  | MethodCall:{ receiver:Expr "." method:IDENT "(" args:Expr* % "," ","? ")" }
+  | Continue:{ "continue"  }
+  | Break:{ "break"  value:Expr? }
+  | Return:{ "return" value:Expr? }
+  ;
+
+ModuleContents = items:Expr*;
