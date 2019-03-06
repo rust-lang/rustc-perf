@@ -509,29 +509,30 @@ fn main_result() -> Result<i32, Error> {
                         date: Date::ymd_hms(2000, 01, 01, 0, 0, 0),
                     }
                 });
-            if let Ok(sysroot) =
-                Sysroot::install(&commit.sha, commit.date.0, "x86_64-unknown-linux-gnu")
-            {
-                let result = out_repo.success(&bench_commit(
-                    Some(&out_repo),
-                    &commit,
-                    &sysroot.triple,
-                    &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
-                    &RunKind::all(),
-                    Compiler {
-                        rustc: &sysroot.rustc,
-                        cargo: &sysroot.cargo,
-                        is_nightly: true,
-                    },
-                    &benchmarks,
-                    3,
-                    true,
-                ));
-                if let Err(err) = result {
-                    out_repo.write_broken_commit(&commit, err)?;
+            match Sysroot::install(&commit.sha, commit.date.0, "x86_64-unknown-linux-gnu") {
+                Ok(sysroot) => {
+                    let result = out_repo.success(&bench_commit(
+                        Some(&out_repo),
+                        &commit,
+                        &sysroot.triple,
+                        &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
+                        &RunKind::all(),
+                        Compiler {
+                            rustc: &sysroot.rustc,
+                            cargo: &sysroot.cargo,
+                            is_nightly: true,
+                        },
+                        &benchmarks,
+                        3,
+                        true,
+                    ));
+                    if let Err(err) = result {
+                        out_repo.write_broken_commit(&commit, err)?;
+                    }
                 }
-            } else {
-                error!("failed to install sysroot for {:?}", commit);
+                Err(err) => {
+                    error!("failed to install sysroot for {:?}: {:?}", commit, err);
+                }
             }
             Ok(0)
         }
