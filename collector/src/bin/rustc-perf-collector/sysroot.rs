@@ -105,7 +105,7 @@ impl ModuleVariant {
 }
 
 impl SysrootDownload {
-    fn into_sysroot(self, used_fallback_cargo: bool) -> Result<Sysroot, Error> {
+    fn into_sysroot(self, download_cargo: bool) -> Result<Sysroot, Error> {
         Ok(Sysroot {
             rustc: self
                 .directory
@@ -123,7 +123,7 @@ impl SysrootDownload {
                 .with_context(|_| {
                     format!("failed to canonicalize rustdoc path for {}", self.rust_sha)
                 })?,
-            cargo: if used_fallback_cargo {
+            cargo: if !download_cargo {
                 // go with cargo present in environment if we need to fallback
                 PathBuf::from("cargo")
             } else {
