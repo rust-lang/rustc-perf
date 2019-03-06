@@ -127,13 +127,13 @@ impl SysrootDownload {
                 // go with cargo present in environment if we need to fallback
                 PathBuf::from("cargo")
             } else {
-                self.directory
-                    .join(&self.rust_sha)
-                    .join("cargo/bin/cargo")
-                    .canonicalize()
-                    .with_context(|_| {
-                        format!("failed to canonicalize cargo path for {}", self.rust_sha)
-                    })?
+                let path = self.directory.join(&self.rust_sha).join("cargo/bin/cargo");
+                path.canonicalize().with_context(|_| {
+                    format!(
+                        "failed to canonicalize cargo path for {}: {:?}",
+                        self.rust_sha, path
+                    )
+                })?
             },
             sha: self.rust_sha,
             triple: self.triple,
