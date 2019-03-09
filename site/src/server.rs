@@ -592,7 +592,7 @@ pub fn handle_days(body: days::Request, data: &InputData) -> ServerResult<days::
 
 lazy_static::lazy_static! {
     static ref BODY_TRY_COMMIT: Regex =
-        Regex::new(r#"(?:\b|^)@rust-timer\s+build\s+(\w+)(?:\b|$)"#).unwrap();
+        Regex::new(r#"(?:\W|^)@rust-timer\s+build\s+(\w+)(?:\W|$)"#).unwrap();
 }
 
 pub fn post_comment(cfg: &Config, issue: &github::Issue, body: &str) -> ServerResult<()> {
