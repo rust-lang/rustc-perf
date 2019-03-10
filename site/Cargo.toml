@@ -25,6 +25,8 @@ regex = "1"
 lazy_static = "1"
 reqwest = "0.9"
 toml = "0.4"
+jemallocator = "0.1.9"
+jemalloc-ctl = "0.2"
 
 [dependencies.collector]
 path = "../collector"
