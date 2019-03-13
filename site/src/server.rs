@@ -1049,12 +1049,6 @@ impl Server {
             }
         );
 
-        info!(
-            "handling: req.path()={:?}, fs_path={:?}",
-            req.uri().path(),
-            fs_path
-        );
-
         if fs_path.contains("./") | fs_path.contains("../") {
             return Box::new(futures::future::ok(
                 http::Response::builder()
@@ -1118,7 +1112,15 @@ pub fn start(data: InputData, port: u16) {
     server_address.set_port(port);
     let server = hyper::Server::bind(&server_address).serve(move || {
         let s = server.clone();
-        hyper::service::service_fn(move |req| s.call(req))
+        hyper::service::service_fn(move |req| {
+            let start = std::time::Instant::now();
+            let desc = format!("{} {}", req.method(), req.uri());
+            s.call(req).map(move |r| {
+                let dur = start.elapsed();
+                info!("{}: {} {:?}", desc, r.status(), dur);
+                r
+            })
+        })
     });
     hyper::rt::run(server.map_err(|e| {
         error!("server error: {:?}", e);
