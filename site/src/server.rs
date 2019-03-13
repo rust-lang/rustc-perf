@@ -317,28 +317,27 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
 }
 
 pub fn handle_status_page(data: &InputData) -> status::Response {
-    let last_commit = data.data(Interpolate::No).iter().last().unwrap();
+    let last_commit = data.data(Interpolate::No).iter().next_back().unwrap();
 
     let mut benchmark_state = last_commit
         .1
         .benchmarks
         .iter()
         .map(|(name, res)| {
-            let error = res.as_ref().err().cloned();
-            let mut msg = String::new();
-            if let Some(error) = error.as_ref() {
+            let msg = if let Some(error) = res.as_ref().err() {
                 let mut lines = error.lines();
                 let first = lines.next().unwrap();
                 let log = &first[first.find('"').unwrap() + 1..];
                 let log = &log[..log.find("\" }").unwrap()];
                 let log = log.replace("\\n", "\n");
-
-                msg.push_str(&log);
-            }
+                Some(log)
+            } else {
+                None
+            };
             status::BenchmarkStatus {
                 name: name.clone(),
                 success: res.is_ok(),
-                error: error.as_ref().map(|_| msg),
+                error: msg,
             }
         })
         .collect::<Vec<_>>();
