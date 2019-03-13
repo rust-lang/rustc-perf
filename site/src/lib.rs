@@ -9,8 +9,6 @@
 
 #[macro_use]
 extern crate failure;
-#[macro_use]
-extern crate hyper;
 
 #[derive(Fail, Debug)]
 #[fail(display = "command failed: {}", command)]

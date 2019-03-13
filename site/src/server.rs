@@ -10,6 +10,7 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::fmt;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::net::SocketAddr;
@@ -23,12 +24,10 @@ use flate2::write::GzEncoder;
 use flate2::Compression;
 use futures::{self, Future, Stream};
 use futures_cpupool::CpuPool;
-use hex;
-use hyper::header::{AcceptEncoding, CacheControl, CacheDirective, Encoding};
-use hyper::header::{Authorization, Bearer, ContentEncoding, ContentLength, ContentType};
-use hyper::mime;
-use hyper::server::{Http, Request, Response, Service};
-use hyper::{self, Get, Post, StatusCode};
+use headers::CacheControl;
+use headers::Header;
+use headers::{Authorization, ContentEncoding, ContentLength, ContentType};
+use hyper::StatusCode;
 use log::{debug, error, info};
 use regex::Regex;
 use reqwest;
@@ -39,6 +38,9 @@ use semver::Version;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json;
+
+type Request = http::Request<hyper::Body>;
+type Response = http::Response<hyper::Body>;
 
 pub use crate::api::{
     self, dashboard, data, days, github, graph, info, nll_dashboard, status, CommitResponse,
@@ -51,8 +53,6 @@ use crate::util::{self, get_repo_path, Interpolate};
 use antidote::RwLock;
 use collector::api::collected;
 use collector::{version_supports_incremental, Date, Run};
-
-header! { (HubSignature, "X-Hub-Signature") => [String] }
 
 static INTERPOLATED_COLOR: &str = "#fcb0f1";
 
@@ -776,32 +776,58 @@ struct Server {
 macro_rules! check_http_method {
     ($lhs: expr, $rhs: expr) => {
         if $lhs != $rhs {
-            let resp = Response::new().with_status(StatusCode::MethodNotAllowed);
+            let resp = http::Response::builder()
+                .status(StatusCode::METHOD_NOT_ALLOWED)
+                .body(hyper::Body::empty())
+                .unwrap();
             return Box::new(futures::future::ok(resp));
         }
     };
 }
 
+trait ResponseHeaders {
+    fn header_typed<T: headers::Header>(&mut self, h: T) -> &mut Self;
+}
+
+impl ResponseHeaders for http::response::Builder {
+    fn header_typed<T: headers::Header>(&mut self, h: T) -> &mut Self {
+        let mut v = vec![];
+        h.encode(&mut v);
+        for value in v {
+            self.header(T::name(), value);
+        }
+        self
+    }
+}
+
 impl Server {
-    fn handle_get<F, S>(&self, req: &Request, handler: F) -> <Server as Service>::Future
+    fn handle_get<F, S>(&self, req: &Request, handler: F) -> ServerFut
     where
         F: FnOnce(&InputData) -> S,
         S: Serialize,
     {
-        check_http_method!(*req.method(), Get);
+        check_http_method!(*req.method(), http::Method::GET);
         let data = self.data.clone();
         let data = data.read();
         let result = handler(&data);
-        let response = Response::new()
-            .with_header(ContentType::json())
-            .with_body(serde_json::to_string(&result).unwrap());
+        let response = http::Response::builder()
+            .header_typed(ContentType::json())
+            .body(hyper::Body::from(serde_json::to_string(&result).unwrap()))
+            .unwrap();
         Box::new(futures::future::ok(response))
     }
 
     fn check_auth(&self, req: &Request) -> bool {
-        if let Some(auth) = req.headers().get::<Authorization<Bearer>>() {
+        if let Some(auth) = req
+            .headers()
+            .get(Authorization::<headers::authorization::Bearer>::name())
+        {
             let data = self.data.read();
-            if auth.0.token == *data.config.keys.secret.as_ref().unwrap() {
+            let auth = Authorization::<headers::authorization::Bearer>::decode(
+                &mut Some(auth).into_iter(),
+            )
+            .unwrap();
+            if auth.0.token() == *data.config.keys.secret.as_ref().unwrap() {
                 return true;
             }
         }
@@ -809,11 +835,7 @@ impl Server {
         false
     }
 
-    fn handle_github_auth_post<'de, F, D, S>(
-        &self,
-        req: Request,
-        handler: F,
-    ) -> <Server as Service>::Future
+    fn handle_github_auth_post<'de, F, D, S>(&self, req: Request, handler: F) -> ServerFut
     where
         F: FnOnce(D, &InputData) -> ServerResult<S> + Send + 'static,
         D: DeserializeOwned,
@@ -822,24 +844,23 @@ impl Server {
         self.handle_post_(req, handler, true)
     }
 
-    fn handle_auth_post<'de, F, D, S>(
-        &self,
-        req: Request,
-        handler: F,
-    ) -> <Server as Service>::Future
+    fn handle_auth_post<'de, F, D, S>(&self, req: Request, handler: F) -> ServerFut
     where
         F: FnOnce(D, &InputData) -> ServerResult<S> + Send + 'static,
         D: DeserializeOwned,
         S: Serialize,
     {
         if !self.check_auth(&req) {
-            let resp = Response::new().with_status(StatusCode::Unauthorized);
+            let resp = http::Response::builder()
+                .status(StatusCode::UNAUTHORIZED)
+                .body(hyper::Body::empty())
+                .unwrap();
             return Box::new(futures::future::ok(resp));
         }
         self.handle_post(req, handler)
     }
 
-    fn handle_post<'de, F, D, S>(&self, req: Request, handler: F) -> <Server as Service>::Future
+    fn handle_post<'de, F, D, S>(&self, req: Request, handler: F) -> ServerFut
     where
         F: FnOnce(D, &InputData) -> ServerResult<S> + Send + 'static,
         D: DeserializeOwned,
@@ -848,45 +869,45 @@ impl Server {
         self.handle_post_(req, handler, false)
     }
 
-    fn handle_post_<'de, F, D, S>(
-        &self,
-        req: Request,
-        handler: F,
-        gh: bool,
-    ) -> <Server as Service>::Future
+    fn handle_post_<'de, F, D, S>(&self, req: Request, handler: F, gh: bool) -> ServerFut
     where
         F: FnOnce(D, &InputData) -> ServerResult<S> + Send + 'static,
         D: DeserializeOwned,
         S: Serialize,
     {
-        check_http_method!(*req.method(), Post);
+        check_http_method!(*req.method(), http::Method::POST);
         let length = req
             .headers()
-            .get::<ContentLength>()
+            .get(ContentLength::name())
             .expect("content-length to exist")
-            .0;
+            .to_str()
+            .unwrap()
+            .parse::<u64>()
+            .expect("correct content length");
         // 25 kB
         if length > 25_000 {
-            return Box::new(futures::future::err(hyper::Error::TooLarge));
+            return Box::new(futures::future::err(ServerError(format!("too large"))));
         }
         let accepts_gzip = req
             .headers()
-            .get::<AcceptEncoding>()
-            .map_or(false, |e| e.iter().any(|e| e.item == Encoding::Gzip));
+            .get(http::header::ACCEPT_ENCODING)
+            .map_or(false, |e| e.to_str().unwrap().contains("gzip"));
         let data = self.data.clone();
-        let gh_header = req.headers().get::<HubSignature>().cloned();
+        let gh_header = req.headers().get("X-Hub-Signature").cloned();
+        let gh_header = gh_header.and_then(|g| g.to_str().ok().map(|s| s.to_owned()));
         Box::new(self.pool.spawn_fn(move || {
-            req.body()
-                .fold(Vec::new(), |mut acc, chunk| {
-                    acc.extend_from_slice(&*chunk);
-                    futures::future::ok::<_, <Self as Service>::Error>(acc)
-                })
+            req.into_body()
+                .concat2()
+                .map_err(|e| ServerError(format!("{:?}", e)))
                 .map(move |body| {
                     let data = data.read();
                     if gh
-                        && !verify_gh_sig(&data.config, gh_header.unwrap(), &body).unwrap_or(false)
+                        && !verify_gh_sig(&data.config, &gh_header.unwrap(), &body).unwrap_or(false)
                     {
-                        return Response::new().with_status(StatusCode::Unauthorized);
+                        return http::Response::builder()
+                            .status(StatusCode::UNAUTHORIZED)
+                            .body(hyper::Body::empty())
+                            .unwrap();
                     }
                     let body: D = match serde_json::from_slice(&body) {
                         Ok(d) => d,
@@ -898,46 +919,48 @@ impl Server {
                                     err
                                 );
                             }
-                            return Response::new()
-                                .with_header(ContentType::plaintext())
-                                .with_body(format!("Failed to deserialize request; {:?}", err));
+                            return http::Response::builder()
+                                .header_typed(ContentType::text_utf8())
+                                .status(StatusCode::BAD_REQUEST)
+                                .body(hyper::Body::from(format!(
+                                    "Failed to deserialize request; {:?}",
+                                    err
+                                )))
+                                .unwrap();
                         }
                     };
                     let result = handler(body, &data);
                     match result {
                         Ok(result) => {
-                            let response = Response::new()
-                                .with_header(ContentType::octet_stream())
-                                .with_header(CacheControl(vec![
-                                    CacheDirective::NoCache,
-                                    CacheDirective::NoStore,
-                                ]));
+                            let mut response = http::Response::builder();
+                            response
+                                .header_typed(ContentType::octet_stream())
+                                .header_typed(CacheControl::new().with_no_cache().with_no_store());
                             let body = rmp_serde::to_vec_named(&result).unwrap();
                             if accepts_gzip {
                                 let mut encoder = GzEncoder::new(Vec::new(), Compression::best());
                                 encoder.write_all(&*body).unwrap();
                                 let body = encoder.finish().unwrap();
                                 response
-                                    .with_header(ContentEncoding(vec![Encoding::Gzip]))
-                                    .with_body(body)
+                                    .header_typed(ContentEncoding::gzip())
+                                    .body(hyper::Body::from(body))
+                                    .unwrap()
                             } else {
-                                response.with_body(body)
+                                response.body(hyper::Body::from(body)).unwrap()
                             }
                         }
-                        Err(err) => Response::new()
-                            .with_status(StatusCode::InternalServerError)
-                            .with_header(ContentType::plaintext())
-                            .with_header(CacheControl(vec![
-                                CacheDirective::NoCache,
-                                CacheDirective::NoStore,
-                            ]))
-                            .with_body(err),
+                        Err(err) => http::Response::builder()
+                            .status(StatusCode::INTERNAL_SERVER_ERROR)
+                            .header_typed(ContentType::text_utf8())
+                            .header_typed(CacheControl::new().with_no_cache().with_no_store())
+                            .body(hyper::Body::from(err))
+                            .unwrap(),
                     }
                 })
         }))
     }
 
-    fn handle_push(&self, _req: Request) -> <Self as Service>::Future {
+    fn handle_push(&self, _req: Request) -> ServerFut {
         // set to updating
         let was_updating = self
             .updating
@@ -945,10 +968,11 @@ impl Server {
 
         if was_updating {
             return Box::new(futures::future::ok(
-                Response::new()
-                    .with_body(format!("Already updating!"))
-                    .with_status(StatusCode::Ok)
-                    .with_header(ContentType(mime::TEXT_PLAIN_UTF_8)),
+                http::Response::builder()
+                    .status(StatusCode::OK)
+                    .header_typed(ContentType::text_utf8())
+                    .body(hyper::Body::from("Already updating!"))
+                    .unwrap(),
             ));
         }
 
@@ -960,74 +984,84 @@ impl Server {
 
         let rwlock = self.data.clone();
         let updating = self.updating.clone();
-        let response = self
-            .pool
-            .spawn_fn(move || -> Result<serde_json::Value, Error> {
-                let repo_path = get_repo_path()?;
+        let response = self.pool.spawn_fn(move || -> Result<(), Error> {
+            let repo_path = get_repo_path()?;
 
-                git::update_repo(&repo_path)?;
+            git::update_repo(&repo_path)?;
 
-                info!("updating from filesystem...");
-                let new_data = InputData::from_fs(&repo_path)?;
-                debug!("last date = {:?}", new_data.last_date);
+            info!("updating from filesystem...");
+            let new_data = InputData::from_fs(&repo_path)?;
+            debug!("last date = {:?}", new_data.last_date);
 
-                // Retrieve the stored InputData from the request.
-                let mut data = rwlock.write();
+            // Retrieve the stored InputData from the request.
+            let mut data = rwlock.write();
 
-                // Write the new data back into the request
-                *data = new_data;
+            // Write the new data back into the request
+            *data = new_data;
 
-                updating.store(false, AtomicOrdering::Release);
+            updating.store(false, AtomicOrdering::Release);
 
-                Ok(serde_json::to_value(
-                    "Successfully updated from filesystem",
-                )?)
-            });
+            Ok(())
+        });
 
         let updating = self.updating.clone();
         Box::new(
             response
-                .map(|value| Response::new().with_body(serde_json::to_string(&value).unwrap()))
+                .map(|_| Response::new(hyper::Body::from("Successfully updated!")))
                 .or_else(move |err| {
                     updating.store(false, AtomicOrdering::Release);
                     futures::future::ok(
-                        Response::new()
-                            .with_body(format!("Internal Server Error: {:?}", err))
-                            .with_status(StatusCode::InternalServerError)
-                            .with_header(ContentType(mime::TEXT_PLAIN_UTF_8)),
+                        http::Response::builder()
+                            .status(StatusCode::INTERNAL_SERVER_ERROR)
+                            .header_typed(ContentType::text_utf8())
+                            .body(hyper::Body::from(format!(
+                                "Internal Server Error: {:?}",
+                                err
+                            )))
+                            .unwrap(),
                     )
                 }),
         )
     }
 }
 
-impl Service for Server {
-    type Request = Request;
-    type Response = Response;
-    type Error = hyper::Error;
-    type Future = Box<dyn Future<Item = Self::Response, Error = Self::Error>>;
+#[derive(Debug)]
+struct ServerError(String);
 
-    fn call(&self, req: Request) -> Self::Future {
+impl fmt::Display for ServerError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "server failed: {}", self.0)
+    }
+}
+
+impl std::error::Error for ServerError {}
+
+type ServerFut = Box<dyn Future<Item = Response, Error = ServerError> + Send>;
+
+impl Server {
+    fn call(&self, req: Request) -> ServerFut {
         let fs_path = format!(
             "site/static{}",
-            if req.path() == "" || req.path() == "/" {
+            if req.uri().path() == "" || req.uri().path() == "/" {
                 "/index.html"
             } else {
-                req.path()
+                req.uri().path()
             }
         );
 
         info!(
             "handling: req.path()={:?}, fs_path={:?}",
-            req.path(),
+            req.uri().path(),
             fs_path
         );
 
         if fs_path.contains("./") | fs_path.contains("../") {
             return Box::new(futures::future::ok(
-                Response::new()
-                    .with_header(ContentType::html())
-                    .with_status(StatusCode::NotFound),
+                http::Response::builder()
+                    .header_typed(ContentType::html())
+                    .status(StatusCode::NOT_FOUND)
+                    .body(hyper::Body::empty())
+                    .unwrap(),
             ));
         }
 
@@ -1036,11 +1070,11 @@ impl Service for Server {
                 let mut f = File::open(&fs_path).unwrap();
                 let mut source = Vec::new();
                 f.read_to_end(&mut source).unwrap();
-                futures::future::ok(Response::new().with_body(source))
+                futures::future::ok(Response::new(hyper::Body::from(source)))
             }));
         }
 
-        match req.path() {
+        match req.uri().path() {
             "/perf/info" => self.handle_get(&req, handle_info),
             "/perf/dashboard" => self.handle_get(&req, handle_dashboard),
             "/perf/graph" => self.handle_post(req, handle_graph),
@@ -1052,18 +1086,20 @@ impl Service for Server {
             "/perf/collected" => self.handle_auth_post(req, handle_collected),
             "/perf/github-hook" => self.handle_github_auth_post(req, handle_github),
             _ => Box::new(futures::future::ok(
-                Response::new()
-                    .with_header(ContentType::html())
-                    .with_status(StatusCode::NotFound),
+                http::Response::builder()
+                    .header_typed(ContentType::html())
+                    .status(StatusCode::NOT_FOUND)
+                    .body(hyper::Body::empty())
+                    .unwrap(),
             )),
         }
     }
 }
 
-fn verify_gh_sig(cfg: &Config, header: HubSignature, body: &[u8]) -> Option<bool> {
+fn verify_gh_sig(cfg: &Config, header: &str, body: &[u8]) -> Option<bool> {
     let key =
         hmac::VerificationKey::new(&digest::SHA1, cfg.keys.secret.as_ref().unwrap().as_bytes());
-    let sha = header.0.get(5..)?; // strip sha1=
+    let sha = header.get(5..)?; // strip sha1=
     let sha = hex::decode(sha).ok()?;
     if let Ok(()) = hmac::verify(&key, body, &sha) {
         return Some(true);
@@ -1080,6 +1116,11 @@ pub fn start(data: InputData, port: u16) {
     });
     let mut server_address: SocketAddr = "0.0.0.0:2346".parse().unwrap();
     server_address.set_port(port);
-    let server = Http::new().bind(&server_address, move || Ok(server.clone()));
-    server.unwrap().run().unwrap();
+    let server = hyper::Server::bind(&server_address).serve(move || {
+        let s = server.clone();
+        hyper::service::service_fn(move |req| s.call(req))
+    });
+    hyper::rt::run(server.map_err(|e| {
+        error!("server error: {:?}", e);
+    }));
 }
