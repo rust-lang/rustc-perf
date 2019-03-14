@@ -911,7 +911,16 @@ impl Server {
                     let body: D = match serde_json::from_slice(&body) {
                         Ok(d) => d,
                         Err(err) => {
-                            if !gh {
+                            if gh {
+                                return http::Response::builder()
+                                    .header_typed(ContentType::text_utf8())
+                                    .status(StatusCode::OK)
+                                    .body(hyper::Body::from(format!(
+                                        "Failed to parse event, skipping. Error: {:?}",
+                                        err
+                                    )))
+                                    .unwrap();
+                            } else {
                                 error!(
                                     "failed to deserialize request {}: {:?}",
                                     String::from_utf8_lossy(&body),
