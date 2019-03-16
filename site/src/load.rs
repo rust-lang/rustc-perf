@@ -148,8 +148,8 @@ pub struct InputData {
     pub last_date: Date,
 
     /// `data_real` is as-is, `data` has been interpolated.
-    data_real: BTreeMap<Commit, CommitData>,
-    data: BTreeMap<Commit, CommitData>,
+    data_real: Vec<(Commit, CommitData)>,
+    data: Vec<(Commit, CommitData)>,
 
     /// The benchmarks we interpolated for a given commit.
     ///
@@ -166,7 +166,7 @@ pub struct InputData {
 }
 
 impl InputData {
-    pub fn data(&self, interpolate: Interpolate) -> &BTreeMap<Commit, CommitData> {
+    pub fn data(&self, interpolate: Interpolate) -> &[(Commit, CommitData)] {
         match interpolate {
             Interpolate::Yes => &self.data,
             Interpolate::No => &self.data_real,
@@ -272,11 +272,12 @@ impl InputData {
         artifact_data: BTreeMap<String, ArtifactData>,
         config: Config,
     ) -> Result<InputData, Error> {
+        let data = data.into_iter().collect::<Vec<_>>();
         let mut last_date = None;
         let mut crate_list = BTreeSet::new();
         let mut stats_list = BTreeSet::new();
 
-        for commit_data in data.values() {
+        for commit_data in data.iter().map(|kv| &kv.1) {
             if last_date.is_none() || last_date.as_ref().unwrap() < &commit_data.commit.date {
                 last_date = Some(commit_data.commit.date);
             }
@@ -303,7 +304,7 @@ impl InputData {
 
         let mut data_commits = Vec::with_capacity(data.len());
         let mut commit_map = HashMap::with_capacity(data.len());
-        for (idx, commit) in data.keys().enumerate() {
+        for (idx, commit) in data.iter().map(|kv| &kv.0).enumerate() {
             data_commits.push(commit.clone());
             commit_map.insert(commit.clone(), idx);
         }
@@ -345,19 +346,19 @@ impl InputData {
         let mut next_commit = Vec::with_capacity(data_next.len());
 
         let mut last_seen = HashMap::new();
-        for (commit, collected) in data_real.iter() {
+        for (idx, (_, collected)) in data_real.iter().enumerate() {
             for (name, value) in &collected.benchmarks {
                 if value.is_ok() {
-                    last_seen.insert(name.as_str(), commit);
+                    last_seen.insert(name.as_str(), idx);
                 }
             }
             last_commit.push(last_seen.clone());
         }
         last_seen.clear();
-        for (commit, collected) in data_real.iter().rev() {
+        for (idx, (_, collected)) in data_real.iter().enumerate().rev() {
             for (name, value) in &collected.benchmarks {
                 if value.is_ok() {
-                    last_seen.insert(name.as_str(), commit);
+                    last_seen.insert(name.as_str(), idx);
                 }
             }
             next_commit.push(last_seen.clone());
@@ -377,7 +378,7 @@ impl InputData {
         let mut next_run = Vec::with_capacity(data_next.len());
 
         let mut last_seen = HashMap::new();
-        for (idx, collected) in data_real.values().enumerate() {
+        for (idx, collected) in data_real.iter().map(|kv| &kv.1).enumerate() {
             for (name, value) in &collected.benchmarks {
                 if let Ok(bench) = value {
                     let e = last_seen.entry(name.clone()).or_insert_with(HashMap::new);
@@ -389,7 +390,7 @@ impl InputData {
             last_run.push(last_seen.clone());
         }
         last_seen.clear();
-        for (idx, collected) in data_real.values().enumerate().rev() {
+        for (idx, collected) in data_real.iter().map(|kv| &kv.1).enumerate().rev() {
             for (name, value) in &collected.benchmarks {
                 if let Ok(bench) = value {
                     let e = last_seen.entry(name.clone()).or_insert_with(HashMap::new);
@@ -507,7 +508,8 @@ impl InputData {
     pub fn missing_commits(&self) -> Result<Vec<(Commit, MissingReason)>, Error> {
         let known_benchmarks = self
             .data
-            .values()
+            .iter()
+            .map(|(_, v)| v)
             .rev()
             .take(10)
             .flat_map(|v| v.benchmarks.keys())
@@ -596,14 +598,14 @@ pub struct Percent(#[serde(with = "util::round_float")] pub f64);
 struct AssociatedData<'a> {
     commit_idx: usize,
     commit: &'a Commit,
-    data: &'a BTreeMap<Commit, CommitData>,
+    data: &'a [(Commit, CommitData)],
     commits: &'a [Commit],
     commit_map: &'a HashMap<Commit, usize>,
     interpolated: &'a mut HashMap<String, Vec<Interpolation>>,
 
-    // By benchmark name
-    last_seen_commit: &'a [HashMap<&'a str, &'a Commit>],
-    next_seen_commit: &'a [HashMap<&'a str, &'a Commit>],
+    // By benchmark name, mapping to the index in the data vector
+    last_seen_commit: &'a [HashMap<&'a str, usize>],
+    next_seen_commit: &'a [HashMap<&'a str, usize>],
 
     last_seen_run: &'a [HashMap<String, HashMap<RunId, (usize, Run)>>],
     next_seen_run: &'a [HashMap<String, HashMap<RunId, (usize, Run)>>],
@@ -684,23 +686,17 @@ fn fill_benchmark_data(benchmark_name: &str, data: &mut AssociatedData<'_>) -> O
         .entry(data.commit.sha.clone())
         .or_insert_with(Vec::new);
 
-    let start = if let Some(needle) = data.last_seen_commit[commit_idx].get(benchmark_name) {
-        let commit: Commit = (*needle).clone();
-        let bench = data.data[&commit].benchmarks[benchmark_name]
-            .as_ref()
-            .unwrap()
-            .clone();
-        Some((commit, bench))
+    let start = if let Some(&needle) = data.last_seen_commit[commit_idx].get(benchmark_name) {
+        let (commit, cd) = &data.data[needle];
+        let bench = cd.benchmarks[benchmark_name].as_ref().unwrap().clone();
+        Some((commit.clone(), bench))
     } else {
         None
     };
-    let end = if let Some(needle) = data.next_seen_commit[commit_idx].get(benchmark_name) {
-        let commit: Commit = (*needle).clone();
-        let bench = data.data[&commit].benchmarks[benchmark_name]
-            .as_ref()
-            .unwrap()
-            .clone();
-        Some((commit, bench))
+    let end = if let Some(&needle) = data.next_seen_commit[commit_idx].get(benchmark_name) {
+        let (commit, cd) = &data.data[needle];
+        let bench = cd.benchmarks[benchmark_name].as_ref().unwrap().clone();
+        Some((commit.clone(), bench))
     } else {
         None
     };

@@ -26,9 +26,10 @@ pub fn find_commit<'a>(
     idx: &Bound,
     left: bool,
     interpolate: Interpolate,
-) -> Result<(&'a Commit, &'a CommitData), String> {
+) -> Result<&'a (Commit, CommitData), String> {
     let last_month = data.last_date.0.naive_utc().date() - Duration::days(30);
-    for (commit, cd) in data.data(interpolate) {
+    for element in data.data(interpolate) {
+        let (commit, _) = element;
         let found = match *idx {
             Bound::Commit(ref sha) => commit.sha == *sha,
             Bound::Date(ref date) => {
@@ -50,7 +51,7 @@ pub fn find_commit<'a>(
             }
         };
         if found {
-            return Ok((commit, cd));
+            return Ok(element);
         }
     }
 
@@ -76,8 +77,8 @@ pub fn data_range<'a>(
 ) -> Result<Vec<(&'a Commit, &'a CommitData)>, String> {
     let mut ret = Vec::new();
     let mut in_range = false;
-    let left_bound = find_commit(data, a, true, interpolate)?.0;
-    let right_bound = find_commit(data, b, false, interpolate)?.0;
+    let left_bound = &find_commit(data, a, true, interpolate)?.0;
+    let right_bound = &find_commit(data, b, false, interpolate)?.0;
     for (commit, cd) in data.data(interpolate) {
         if commit.sha == left_bound.sha {
             in_range = true;

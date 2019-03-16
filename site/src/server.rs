@@ -60,7 +60,7 @@ pub fn handle_nll_dashboard(
     body: nll_dashboard::Request,
     data: &InputData,
 ) -> ServerResult<nll_dashboard::Response> {
-    let commit = util::find_commit(data, &body.commit, false, Interpolate::No)?.1;
+    let commit = &util::find_commit(data, &body.commit, false, Interpolate::No)?.1;
     let mut points = commit
         .benchmarks
         .iter()
@@ -131,7 +131,7 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
 
     versions.push(format!(
         "master: {}",
-        &data.data(Interpolate::Yes).keys().last().unwrap().sha[0..8]
+        &data.data(Interpolate::Yes).iter().last().unwrap().0.sha[0..8]
     ));
 
     let mut check_clean_average = Vec::new();
@@ -167,7 +167,7 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
         let mut opt_println_incr_points = Vec::new();
 
         let benches = if version.starts_with("master") {
-            let data = data.data(Interpolate::Yes).values().last().unwrap();
+            let data = &data.data(Interpolate::Yes).iter().last().unwrap().1;
             let benches = data
                 .benchmarks
                 .iter()
@@ -533,8 +533,8 @@ pub fn handle_days(body: days::Request, data: &InputData) -> ServerResult<days::
     let a = util::find_commit(data, &body.start, true, Interpolate::No)?;
     let b = util::find_commit(data, &body.end, false, Interpolate::No)?;
     Ok(days::Response {
-        a: DateData::for_day(a.1, &body.stat),
-        b: DateData::for_day(b.1, &body.stat),
+        a: DateData::for_day(&a.1, &body.stat),
+        b: DateData::for_day(&b.1, &body.stat),
     })
 }
 
