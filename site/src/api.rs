@@ -13,9 +13,62 @@
 //!
 //! The responses are calculated in the server.rs file.
 
+use crate::load::CommitData;
+use collector::{Date, Run};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::result::Result as StdResult;
+
+/// Data associated with a specific date
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DateData {
+    pub date: Date,
+    pub commit: String,
+    pub data: HashMap<String, Vec<(String, Run, f64)>>,
+}
+
+impl DateData {
+    pub fn for_day(commit: &CommitData, stat: &str) -> DateData {
+        let benchmarks = commit.benchmarks.values().filter_map(|v| v.as_ref().ok());
+        let mut out = HashMap::with_capacity(commit.benchmarks.len() * 3);
+        for benchmark in benchmarks {
+            let mut runs_check = Vec::with_capacity(benchmark.runs.len() / 3);
+            let mut runs_opt = Vec::with_capacity(benchmark.runs.len() / 3);
+            let mut runs_debug = Vec::with_capacity(benchmark.runs.len() / 3);
+            for run in &benchmark.runs {
+                let v = if run.release {
+                    &mut runs_opt
+                } else if run.check {
+                    &mut runs_check
+                } else {
+                    &mut runs_debug
+                };
+                if let Some(mut value) = run.get_stat(stat) {
+                    if stat == "cpu-clock" {
+                        // convert to seconds; perf records it in milliseconds
+                        value /= 1000.0;
+                    }
+                    v.push((run.name(), run.clone(), value));
+                }
+            }
+            if !runs_opt.is_empty() {
+                out.insert(benchmark.name.clone() + "-opt", runs_opt);
+            }
+            if !runs_check.is_empty() {
+                out.insert(benchmark.name.clone() + "-check", runs_check);
+            }
+            if !runs_debug.is_empty() {
+                out.insert(benchmark.name.clone() + "-debug", runs_debug);
+            }
+        }
+
+        DateData {
+            date: commit.commit.date,
+            commit: commit.commit.sha.clone(),
+            data: out,
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "list", content = "content")]
@@ -91,7 +144,7 @@ pub struct CommitResponse {
 }
 
 pub mod data {
-    use crate::server::DateData;
+    use crate::api::DateData;
     use collector::Bound;
     use serde::{Deserialize, Serialize};
 
@@ -143,7 +196,7 @@ pub mod graph {
 }
 
 pub mod days {
-    use crate::server::DateData;
+    use crate::api::DateData;
     use collector::Bound;
     use serde::{Deserialize, Serialize};
 

@@ -9,7 +9,7 @@
 
 use env_logger;
 
-use site::{load, server, util};
+use site::{load, util};
 use std::env;
 
 #[global_allocator]
@@ -27,5 +27,5 @@ fn main() {
         .unwrap_or(2346);
     println!("Starting server with port={:?}", port);
 
-    server::start(data, port);
+    site::server::start(data, port);
 }
