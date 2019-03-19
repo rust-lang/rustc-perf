@@ -26,7 +26,7 @@ hex = "0.3.2"
 regex = "1"
 lazy_static = "1"
 reqwest = "0.9"
-toml = "0.4"
+toml = "0.5"
 jemallocator = "0.1.9"
 jemalloc-ctl = "0.2"
 rust_team_data = { git = "https://github.com/rust-lang/team" }
