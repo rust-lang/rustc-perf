@@ -216,6 +216,18 @@ except that `$PROFILER` is one of the following.
   - **Slowdown**. Negligible.
   - **Output**. Binary output is written to files with a `perf` prefix. Those
     files can be read with `perf-report` and other similar `perf` commands.
+- `oprofile`: Profile with [OProfile](http://oprofile.sourceforge.net/), a
+  sampling profiler.
+  - **Purpose**. OProfile is a general-purpose profiler, good for seeing
+    where execution time is spent and finding hot functions and lines.
+  - **Slowdown**. Negligible.
+  - **Output**. Binary output is written to a directory with an `opout` prefix.
+    That directory can be processed with `opreport` and `opannotate`.
+    Human-readable output is also written to files with an `oprep` and an
+    `opann` prefix.
+  - **Notes**. OProfile fails moderately often with this message: "operf-record
+    process killed by signal 13". The failures seem to be random; re-running
+    often results in success.
 - `cachegrind`: Profile with
   [Cachegrind](http://valgrind.org/docs/manual/cg-manual.html), a tracing
   profiler.

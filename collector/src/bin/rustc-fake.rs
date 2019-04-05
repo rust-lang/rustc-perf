@@ -57,6 +57,18 @@ fn main() {
                 assert!(cmd.status().expect("failed to spawn").success());
             }
 
+            "oprofile" => {
+                let mut cmd = Command::new("operf");
+                let has_oprofile = cmd.output().is_ok();
+                assert!(has_oprofile);
+                // Other possibly useful args: --callgraph, --separate-thread
+                cmd.arg("operf")
+                    .arg(&rustc)
+                    .args(&args);
+
+                assert!(cmd.status().expect("failed to spawn").success());
+            }
+
             "cachegrind" => {
                 let mut cmd = Command::new("valgrind");
                 let has_valgrind = cmd.output().is_ok();
