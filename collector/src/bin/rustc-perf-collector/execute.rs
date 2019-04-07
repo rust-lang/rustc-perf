@@ -5,7 +5,6 @@ use std::collections::{HashMap, HashSet};
 use std::env;
 use std::f64;
 use std::fs::{self, File};
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{self, Command};
 use std::str;
@@ -73,6 +72,7 @@ pub enum Profiler {
     PerfStat,
     TimePasses,
     PerfRecord,
+    OProfile,
     Cachegrind,
     Callgrind,
     ExpDHAT,
@@ -98,6 +98,7 @@ impl Profiler {
             "perf-stat" => Err(FromNameError::PerfStat),
             "time-passes" => Ok(Profiler::TimePasses),
             "perf-record" => Ok(Profiler::PerfRecord),
+            "oprofile" => Ok(Profiler::OProfile),
             "cachegrind" => Ok(Profiler::Cachegrind),
             "callgrind" => Ok(Profiler::Callgrind),
             "exp-dhat" => Ok(Profiler::ExpDHAT),
@@ -113,6 +114,7 @@ impl Profiler {
             Profiler::PerfStat => "perf-stat",
             Profiler::TimePasses => "time-passes",
             Profiler::PerfRecord => "perf-record",
+            Profiler::OProfile => "oprofile",
             Profiler::Cachegrind => "cachegrind",
             Profiler::Callgrind => "callgrind",
             Profiler::ExpDHAT => "exp-dhat",
@@ -481,9 +483,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
             Profiler::TimePasses => {
                 let ztp_file = filepath(self.output_dir, &out_file("Ztp"));
 
-                let mut f = File::create(ztp_file)?;
-                f.write_all(&output.stdout)?;
-                f.flush()?;
+                fs::write(ztp_file, &output.stdout)?;
             }
 
             // perf-record produces (via rustc-fake) a data file called 'perf'.
@@ -494,6 +494,50 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 let perf_file = filepath(self.output_dir, &out_file("perf"));
 
                 fs::copy(&tmp_perf_file, &perf_file)?;
+            }
+
+            // OProfile produces (via rustc-fake) a data directory called
+            // 'oprofile_data'. We copy it from the temp dir to the output dir,
+            // giving it a new name in the process, and then post-process it
+            // twice to produce another two data files in the output dir.
+            Profiler::OProfile => {
+                let tmp_opout_dir = filepath(data.cwd.as_ref(), "oprofile_data");
+                let opout_dir = filepath(self.output_dir, &out_file("opout"));
+                let oprep_file = filepath(self.output_dir, &out_file("oprep"));
+                let opann_file = filepath(self.output_dir, &out_file("opann"));
+
+                // Remove the directory if it exists.
+                if opout_dir.exists() {
+                    fs::remove_dir_all(&opout_dir)?;
+                }
+                fs::rename(&tmp_opout_dir, &opout_dir)?;
+
+                let mut session_dir_arg = "--session-dir=".to_string();
+                session_dir_arg.push_str(opout_dir.to_str().unwrap());
+
+                let mut op_report_cmd = Command::new("opreport");
+                // Other possibly useful args: --callgraph (requires
+                // --callgraph for operf), --details
+                op_report_cmd
+                    .arg("--symbols")
+                    .arg("--debug-info")
+                    .arg("--threshold")
+                    .arg("0.5")
+                    .arg(&session_dir_arg);
+                let output = op_report_cmd.output()?;
+
+                fs::write(oprep_file, &output.stdout)?;
+
+                let mut op_annotate_cmd = Command::new("opannotate");
+                // Other possibly useful args: --assembly
+                op_annotate_cmd
+                    .arg("--source")
+                    .arg("--threshold")
+                    .arg("0.5")
+                    .arg(&session_dir_arg);
+                let output = op_annotate_cmd.output()?;
+
+                fs::write(opann_file, &output.stdout)?;
             }
 
             // Cachegrind produces (via rustc-fake) a data file called 'cgout'.
@@ -511,9 +555,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 cg_annotate_cmd.arg("--auto=yes").arg(&cgout_file);
                 let output = cg_annotate_cmd.output()?;
 
-                let mut f = File::create(cgann_file)?;
-                f.write_all(&output.stdout)?;
-                f.flush()?;
+                fs::write(cgann_file, &output.stdout)?;
             }
 
             // Callgrind produces (via rustc-fake) a data file called 'clgout'.
@@ -531,9 +573,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 clg_annotate_cmd.arg("--auto=yes").arg(&clgout_file);
                 let output = clg_annotate_cmd.output()?;
 
-                let mut f = File::create(clgann_file)?;
-                f.write_all(&output.stdout)?;
-                f.flush()?;
+                fs::write(clgann_file, &output.stdout)?;
             }
 
             // ExpDHAT writes its output to stderr. We copy that output into a
@@ -541,9 +581,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
             Profiler::ExpDHAT => {
                 let exp_dhat_file = filepath(self.output_dir, &out_file("exp-dhat"));
 
-                let mut f = File::create(exp_dhat_file)?;
-                f.write_all(&output.stderr)?;
-                f.flush()?;
+                fs::write(exp_dhat_file, &output.stderr)?;
             }
 
             // DHAT produces (via rustc-fake) a data file called 'dhout'. We
@@ -571,9 +609,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
             Profiler::Eprintln => {
                 let eprintln_file = filepath(self.output_dir, &out_file("eprintln"));
 
-                let mut f = File::create(eprintln_file)?;
-                f.write_all(&output.stderr)?;
-                f.flush()?;
+                fs::write(eprintln_file, &output.stderr)?;
             }
         }
         Ok(Retry::No)
