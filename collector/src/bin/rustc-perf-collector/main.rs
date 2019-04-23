@@ -46,7 +46,6 @@ pub enum BuildKind {
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum RunKind {
     Clean,
-    Nll,
     BaseIncr,
     CleanIncr,
     PatchedIncrs,
@@ -56,7 +55,6 @@ impl RunKind {
     fn all() -> Vec<RunKind> {
         vec![
             RunKind::Clean,
-            RunKind::Nll,
             RunKind::BaseIncr,
             RunKind::CleanIncr,
             RunKind::PatchedIncrs,
@@ -93,7 +91,6 @@ const STRINGS_AND_BUILD_KINDS: &[(&str, BuildKind)] = &[
 // How the --runs arg maps to RunKinds.
 const STRINGS_AND_RUN_KINDS: &[(&str, RunKind)] = &[
     ("Clean", RunKind::Clean),
-    ("Nll", RunKind::Nll),
     ("BaseIncr", RunKind::BaseIncr),
     ("CleanIncr", RunKind::CleanIncr),
     ("PatchedIncrs", RunKind::PatchedIncrs),
@@ -298,7 +295,7 @@ fn main_result() -> Result<i32, Error> {
             "One or more (comma-separated) of: 'Check', 'Debug',\n\
             'Opt', 'All'")
            (@arg RUNS: --runs +takes_value
-            "One or more (comma-separated) of: 'Clean', 'Nll',\n\
+            "One or more (comma-separated) of: 'Clean',\n\
             'BaseIncr', 'CleanIncr', 'PatchedIncrs', 'All'")
            (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
        )
@@ -317,7 +314,7 @@ fn main_result() -> Result<i32, Error> {
             "One or more (comma-separated) of: 'Check', 'Debug',\n\
             'Opt', 'All'")
            (@arg RUNS: --runs +takes_value
-            "One or more (comma-separated) of: 'Clean', 'Nll',\n\
+            "One or more (comma-separated) of: 'Clean',\n\
             'BaseIncr', 'CleanIncr', 'PatchedIncrs', 'All'")
            (@arg PROFILER: +required +takes_value
             "One of: 'time-passes', 'perf-record', 'cachegrind',\n\

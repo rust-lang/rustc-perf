@@ -130,7 +130,6 @@ struct CargoProcess<'a> {
     cwd: &'a Path,
     build_kind: BuildKind,
     incremental: bool,
-    nll: bool,
     processor_etc: Option<(
         &'a mut dyn Processor,
         &'a str,
@@ -146,11 +145,6 @@ struct CargoProcess<'a> {
 impl<'a> CargoProcess<'a> {
     fn incremental(mut self, incremental: bool) -> Self {
         self.incremental = incremental;
-        self
-    }
-
-    fn nll(mut self, nll: bool) -> Self {
-        self.nll = nll;
         self
     }
 
@@ -216,10 +210,6 @@ impl<'a> CargoProcess<'a> {
             }
             cmd.args(&self.cargo_args);
             cmd.arg("--");
-            if self.nll {
-                cmd.arg("-Zborrowck=mir");
-                cmd.arg("-Ztwo-phase-borrows");
-            }
             // --wrap-rustc-with is not a valid rustc flag. But rustc-fake
             // recognizes it, strips it (and its argument) out, and uses it as an
             // indicator that the rustc invocation should be profiled. This works
@@ -304,7 +294,6 @@ pub trait Processor {
 
 pub struct MeasureProcessor {
     clean_stats: Vec<Vec<Stat>>,
-    nll_stats: Vec<Vec<Stat>>,
     base_incr_stats: Vec<Vec<Stat>>,
     clean_incr_stats: Vec<Vec<Stat>>,
     patched_incr_stats: Vec<(Patch, Vec<Vec<Stat>>)>,
@@ -320,7 +309,6 @@ impl MeasureProcessor {
 
         MeasureProcessor {
             clean_stats: Vec::new(),
-            nll_stats: Vec::new(),
             base_incr_stats: Vec::new(),
             clean_incr_stats: Vec::new(),
             patched_incr_stats: Vec::new(),
@@ -348,9 +336,6 @@ impl Processor for MeasureProcessor {
                 match data.run_kind {
                     RunKind::Clean => {
                         self.clean_stats.push(stats);
-                    }
-                    RunKind::Nll => {
-                        self.nll_stats.push(stats);
                     }
                     RunKind::BaseIncr => {
                         self.base_incr_stats.push(stats);
@@ -392,13 +377,6 @@ impl Processor for MeasureProcessor {
                 &self.clean_stats,
             ));
         }
-        if !self.nll_stats.is_empty() {
-            self.collected.runs.push(process_stats(
-                build_kind,
-                BenchmarkState::Nll,
-                &self.nll_stats,
-            ));
-        }
         if !self.base_incr_stats.is_empty() {
             self.collected.runs.push(process_stats(
                 build_kind,
@@ -425,7 +403,6 @@ impl Processor for MeasureProcessor {
 
         // Empty all the vectors.
         self.clean_stats.clear();
-        self.nll_stats.clear();
         self.base_incr_stats.clear();
         self.clean_incr_stats.clear();
         self.patched_incr_stats.clear();
@@ -679,7 +656,6 @@ impl Benchmark {
             cwd: cwd,
             build_kind: build_kind,
             incremental: false,
-            nll: false,
             processor_etc: None,
             manifest_path: self
                 .config
@@ -741,17 +717,6 @@ impl Benchmark {
                 if run_kinds.contains(&RunKind::Clean) {
                     self.mk_cargo_process(compiler, cwd, build_kind)
                         .processor(processor, &self.name, RunKind::Clean, "Clean", None)
-                        .run_rustc()?;
-                }
-
-                // A full non-incremental build with NLL enabled.
-                // These are only collected on check builds to save time.
-                let has_check = build_kinds.contains(&BuildKind::Check);
-                let is_check = build_kind == BuildKind::Check;
-                if run_kinds.contains(&RunKind::Nll) && ((has_check && is_check) || !has_check) {
-                    self.mk_cargo_process(compiler, cwd, build_kind)
-                        .nll(true)
-                        .processor(processor, &self.name, RunKind::Nll, "Nll", None)
                         .run_rustc()?;
                 }
 
