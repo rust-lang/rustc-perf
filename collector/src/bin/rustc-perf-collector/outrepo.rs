@@ -30,7 +30,7 @@ impl Repo {
                 .with_context(|_| format!("could not spawn git {:?}", args))?;
             let start_time = Instant::now();
             loop {
-                if start_time.elapsed().as_secs() > 3 {
+                if start_time.elapsed().as_secs() > 30 { // network operations may take up to 30sec
                     warn!("killing git command -- timed out");
                     child.kill()?;
                     break;
