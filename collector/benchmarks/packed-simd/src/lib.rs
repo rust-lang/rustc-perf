@@ -209,7 +209,6 @@
     link_llvm_intrinsics,
     core_intrinsics,
     stmt_expr_attributes,
-    align_offset,
     mmx_target_feature,
     crate_visibility_modifier,
     custom_inner_attributes
