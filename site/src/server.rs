@@ -43,8 +43,8 @@ type Request = http::Request<hyper::Body>;
 type Response = http::Response<hyper::Body>;
 
 pub use crate::api::{
-    self, dashboard, data, days, github, graph, info, nll_dashboard, status, CommitResponse,
-    DateData, ServerResult,
+    self, dashboard, data, days, github, graph, info, status, CommitResponse, DateData,
+    ServerResult,
 };
 use crate::git;
 use crate::load::CurrentState;
@@ -55,46 +55,6 @@ use collector::api::collected;
 use collector::version_supports_incremental;
 
 static INTERPOLATED_COLOR: &str = "#fcb0f1";
-
-pub fn handle_nll_dashboard(
-    body: nll_dashboard::Request,
-    data: &InputData,
-) -> ServerResult<nll_dashboard::Response> {
-    let commit = &util::find_commit(data, &body.commit, false, Interpolate::No)?.1;
-    let mut points = commit
-        .benchmarks
-        .iter()
-        .filter_map(|b| b.1.as_ref().ok())
-        .map(|bench| {
-            let nll = bench
-                .runs
-                .iter()
-                .find(|r| r.check && r.is_nll())
-                .and_then(|r| r.get_stat(&body.stat));
-            let clean = bench
-                .runs
-                .iter()
-                .find(|r| r.check && r.is_clean())
-                .and_then(|r| r.get_stat(&body.stat));
-
-            nll_dashboard::Point {
-                case: bench.name.clone(),
-                clean: clean.map(|clean| round(clean) as f32),
-                nll: nll.map(|nll| round(nll) as f32),
-            }
-        })
-        .collect::<Vec<_>>();
-    points.sort_by(|a, b| match (a.pct(), b.pct()) {
-        (Some(a), Some(b)) => a.partial_cmp(&b).unwrap_or(Ordering::Equal).reverse(),
-        (Some(_), None) => Ordering::Less,
-        (None, Some(_)) => Ordering::Greater,
-        _ => a.case.cmp(&b.case),
-    });
-    Ok(nll_dashboard::Response {
-        commit: commit.commit.sha.clone(),
-        points,
-    })
-}
 
 pub fn handle_info(data: &InputData) -> info::Response {
     info::Response {
@@ -1030,7 +990,6 @@ impl Server {
             "/perf/dashboard" => self.handle_get(&req, handle_dashboard),
             "/perf/graph" => self.handle_post(req, handle_graph),
             "/perf/get" => self.handle_post(req, handle_days),
-            "/perf/nll_dashboard" => self.handle_post(req, handle_nll_dashboard),
             "/perf/status_page" => self.handle_get(&req, handle_status_page),
             "/perf/next_commit" => self.handle_get(&req, handle_next_commit),
             "/perf/onpush" => self.handle_push(req),

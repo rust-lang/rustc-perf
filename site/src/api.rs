@@ -215,40 +215,6 @@ pub mod days {
     }
 }
 
-pub mod nll_dashboard {
-    use collector::Bound;
-    use serde::{Deserialize, Serialize};
-
-    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-    pub struct Request {
-        pub commit: Bound,
-        pub stat: String,
-    }
-
-    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-    pub struct Point {
-        pub case: String,
-        pub clean: Option<f32>,
-        pub nll: Option<f32>,
-    }
-
-    impl Point {
-        pub fn pct(&self) -> Option<f32> {
-            if let (Some(clean), Some(nll)) = (self.clean, self.nll) {
-                Some(100.0 * nll / clean)
-            } else {
-                None
-            }
-        }
-    }
-
-    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-    pub struct Response {
-        pub commit: String,
-        pub points: Vec<Point>,
-    }
-}
-
 pub mod status {
     use crate::load::{CurrentState, MissingReason};
     use collector::Commit;
