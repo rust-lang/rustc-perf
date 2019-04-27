@@ -68,10 +68,6 @@ fn average(v: &[f64]) -> f64 {
     (v.iter().sum::<f64>() / v.len() as f64 * 10.0).round() / 10.0
 }
 
-fn round(v: f64) -> f64 {
-    (v * 10.0).round() / 10.0
-}
-
 pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
     let mut versions = data.artifact_data.keys().cloned().collect::<Vec<_>>();
     versions.sort_by(

@@ -173,8 +173,6 @@ fn exec(cmd: &mut Command) -> ! {
 
 #[cfg(unix)]
 fn raise_priority() {
-    use libc;
-
     unsafe {
         // Try to reduce jitter in wall time by increasing our priority to the
         // maximum
@@ -189,8 +187,6 @@ fn raise_priority() {
 
 #[cfg(unix)]
 fn print_memory() {
-    use libc;
-
     use std::mem;
 
     unsafe {
