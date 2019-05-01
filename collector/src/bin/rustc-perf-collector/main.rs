@@ -61,16 +61,7 @@ impl RunKind {
         ]
     }
 
-    fn all_except_nll() -> Vec<RunKind> {
-        vec![
-            RunKind::Clean,
-            RunKind::BaseIncr,
-            RunKind::CleanIncr,
-            RunKind::PatchedIncrs,
-        ]
-    }
-
-    fn all_non_incr_except_nll() -> Vec<RunKind> {
+    fn all_non_incr() -> Vec<RunKind> {
         vec![RunKind::Clean]
     }
 }
@@ -445,11 +436,10 @@ fn main_result() -> Result<i32, Error> {
             // Remove benchmarks that don't work with a stable compiler.
             benchmarks.retain(|b| b.supports_stable());
 
-            // No NLL runs when testing stable builds.
             let run_kinds = if collector::version_supports_incremental(id) {
-                RunKind::all_except_nll()
+                RunKind::all()
             } else {
-                RunKind::all_non_incr_except_nll()
+                RunKind::all_non_incr()
             };
             let CommitData {
                 benchmarks: benchmark_data,

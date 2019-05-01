@@ -123,7 +123,6 @@ impl Patch {
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Deserialize, Serialize)]
 pub enum BenchmarkState {
     Clean,
-    Nll,
     IncrementalStart,
     IncrementalClean,
     IncrementalPatched(Patch),
@@ -149,7 +148,6 @@ impl BenchmarkState {
     pub fn name(&self) -> Cow<'static, str> {
         match *self {
             BenchmarkState::Clean => "clean".into(),
-            BenchmarkState::Nll => "nll".into(),
             BenchmarkState::IncrementalStart => "baseline incremental".into(),
             BenchmarkState::IncrementalClean => "clean incremental".into(),
             BenchmarkState::IncrementalPatched(ref patch) => {
@@ -234,10 +232,6 @@ impl PartialEq<RunId> for Run {
 impl Run {
     pub fn is_clean(&self) -> bool {
         self.state == BenchmarkState::Clean
-    }
-
-    pub fn is_nll(&self) -> bool {
-        self.state == BenchmarkState::Nll
     }
 
     pub fn is_base_incr(&self) -> bool {
