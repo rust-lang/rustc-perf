@@ -36,6 +36,16 @@ pub struct Compiler<'a> {
     pub is_nightly: bool,
 }
 
+impl<'a> Compiler<'a> {
+    fn from_sysroot(sysroot: &'a Sysroot) -> Compiler<'a> {
+        Compiler {
+            rustc: &sysroot.rustc,
+            cargo: &sysroot.cargo,
+            is_nightly: true,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum BuildKind {
     Check,
@@ -366,11 +376,7 @@ fn main_result() -> Result<i32, Error> {
                 &sysroot.triple,
                 build_kinds,
                 &run_kinds,
-                Compiler {
-                    rustc: &sysroot.rustc,
-                    cargo: &sysroot.cargo,
-                    is_nightly: true,
-                },
+                Compiler::from_sysroot(&sysroot),
                 &benchmarks,
                 3,
                 false,
@@ -504,11 +510,7 @@ fn main_result() -> Result<i32, Error> {
                         &sysroot.triple,
                         &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
                         &RunKind::all(),
-                        Compiler {
-                            rustc: &sysroot.rustc,
-                            cargo: &sysroot.cargo,
-                            is_nightly: true,
-                        },
+                        Compiler::from_sysroot(&sysroot),
                         &benchmarks,
                         3,
                         true,
@@ -601,11 +603,7 @@ fn main_result() -> Result<i32, Error> {
                     &sysroot.triple,
                     &[BuildKind::Check], // no Debug or Opt builds
                     &RunKind::all(),
-                    Compiler {
-                        rustc: &sysroot.rustc,
-                        cargo: &sysroot.cargo,
-                        is_nightly: true,
-                    },
+                    Compiler::from_sysroot(&sysroot),
                     &benchmarks,
                     1,
                     false,
