@@ -69,10 +69,8 @@ struct SysrootDownload {
     triple: String,
 }
 
-const MODULE_URLS: &[&str] = &[
-    "https://s3-us-west-1.amazonaws.com/rust-lang-ci2/rustc-builds/@SHA@/@MODULE@-nightly-@TRIPLE@.tar.xz",
-    "https://s3-us-west-1.amazonaws.com/rust-lang-ci2/rustc-builds-try/@SHA@/@MODULE@-nightly-@TRIPLE@.tar.xz",
-];
+const MODULE_URL: &str =
+    "https://rust-lang-ci2.s3.amazonaws.com/rustc-builds/@SHA@/@MODULE@-nightly-@TRIPLE@.tar.xz";
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum ModuleVariant {
@@ -92,15 +90,11 @@ impl fmt::Display for ModuleVariant {
 }
 
 impl ModuleVariant {
-    fn urls(&self, sysroot: &SysrootDownload, triple: &str) -> Vec<String> {
-        MODULE_URLS
-            .iter()
-            .map(|url| {
-                url.replace("@MODULE@", &self.to_string())
-                    .replace("@SHA@", &sysroot.rust_sha)
-                    .replace("@TRIPLE@", triple)
-            })
-            .collect()
+    fn url(&self, sysroot: &SysrootDownload, triple: &str) -> String {
+        MODULE_URL
+            .replace("@MODULE@", &self.to_string())
+            .replace("@SHA@", &sysroot.rust_sha)
+            .replace("@TRIPLE@", triple)
     }
 }
 
@@ -158,20 +152,16 @@ impl SysrootDownload {
             }
         }
 
-        for url in variant.urls(self, &self.triple) {
-            log::debug!("requesting: {}", url);
-            let resp = reqwest::get(&url)?;
-            log::debug!("{}", resp.status());
-            let reader = if resp.status().is_success() {
-                XzDecoder::new(BufReader::new(resp))
-            } else {
-                continue;
-            };
+        let url = variant.url(self, &self.triple);
+        log::debug!("requesting: {}", url);
+        let resp = reqwest::get(&url)?;
+        log::debug!("{}", resp.status());
+        if resp.status().is_success() {
+            let reader = XzDecoder::new(BufReader::new(resp));
             match self.extract(variant, reader) {
                 Ok(()) => return Ok(()),
                 Err(err) => {
                     log::warn!("extracting {} failed: {:?}", url, err);
-                    continue;
                 }
             }
         }
