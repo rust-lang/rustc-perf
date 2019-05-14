@@ -4,8 +4,7 @@ use collector::{ArtifactData, Commit, CommitData};
 use failure::{Error, ResultExt};
 use log::{debug, info, trace, warn};
 use serde_json;
-use std::fs::{self, File};
-use std::io::Read;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str;
@@ -70,19 +69,19 @@ impl Repo {
         };
 
         // Don't nuke random repositories, unless specifically requested.
-        if !allow_new_dir && !result.times().exists() {
+        if !allow_new_dir && !result.perf_file().exists() {
             bail!(
-                "`{}` directory not present, refusing to run",
-                result.times().display()
+                "`{}` file not present, refusing to run",
+                result.perf_file().display()
             );
         }
 
-        if result.use_remote {
+        if result.use_remote && result.path.join(".git").exists() {
             result.git(&["fetch"])?;
             result.git(&["reset", "--hard", "@{upstream}"])?;
         }
 
-        fs::create_dir_all(result.times()).context("can't create `times/`")?;
+        fs::create_dir_all(result.times())?;
 
         Ok(result)
     }
@@ -96,8 +95,8 @@ impl Repo {
     pub fn success_artifact(&self, data: &ArtifactData) -> Result<(), Error> {
         let filepath = self.times().join(format!("artifact-{}.json", data.id));
         info!("creating file {}", filepath.display());
-        let mut file = File::create(&filepath)?;
-        serde_json::to_writer(&mut file, &data)?;
+        let serialized = serde_json::to_vec(&data)?;
+        fs::write(&filepath, &serialized)?;
         self.commit_and_push(&format!("{} - success", data.id))?;
         Ok(())
     }
@@ -119,9 +118,8 @@ impl Repo {
 
     fn load_commit_data_file(&self, filepath: &Path) -> Result<CommitData, Error> {
         trace!("loading file {}", filepath.display());
-        let mut file = File::open(&filepath)?;
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)?;
+        let contents = fs::read_to_string(&filepath)
+            .with_context(|_| format!("failed to read {:?}", filepath))?;
         let data = serde_json::from_str(&contents)
             .with_context(|_| format!("failed to read JSON from {:?}", filepath))?;
         Ok(data)
@@ -150,9 +148,13 @@ impl Repo {
             .times()
             .join(format!("commit-{}-{}.json", commit.sha, data.triple));
         info!("creating file {}", filepath.display());
-        let mut file = File::create(&filepath)?;
-        serde_json::to_writer(&mut file, &data)?;
+        let serialized = serde_json::to_vec(&data)?;
+        fs::write(&filepath, &serialized)?;
         Ok(())
+    }
+
+    fn perf_file(&self) -> PathBuf {
+        self.path.join(".is-perf-timing-directory")
     }
 
     fn times(&self) -> PathBuf {

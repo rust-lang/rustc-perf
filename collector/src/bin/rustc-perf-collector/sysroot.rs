@@ -147,7 +147,7 @@ impl SysrootDownload {
                 Ok(()) => return Ok(()),
                 Err(err) => {
                     log::warn!("extracting {} failed: {:?}", archive_path.display(), err);
-                    fs::remove_file(&archive_path)?;
+                    fs::remove_file(&archive_path).context("removing archive_path")?;
                 }
             }
         }
