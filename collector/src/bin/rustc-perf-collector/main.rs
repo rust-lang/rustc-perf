@@ -494,7 +494,7 @@ fn main_result() -> Result<i32, Error> {
                         true,
                     ));
                     if let Err(err) = result {
-                        out_repo.write_broken_commit(&commit, err)?;
+                        panic!("failed to record success: {:?}", err);
                     }
                 }
                 Err(err) => {

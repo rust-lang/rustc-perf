@@ -4,8 +4,8 @@ use collector::{ArtifactData, Commit, CommitData};
 use failure::{Error, ResultExt};
 use log::{debug, info, trace, warn};
 use serde_json;
-use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Write};
+use std::fs::{self, File};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str;
@@ -15,7 +15,6 @@ use std::time::{self, Instant};
 pub struct Repo {
     path: PathBuf,
     use_remote: bool,
-    retries: Vec<String>,
 }
 
 impl Repo {
@@ -30,7 +29,8 @@ impl Repo {
                 .with_context(|_| format!("could not spawn git {:?}", args))?;
             let start_time = Instant::now();
             loop {
-                if start_time.elapsed().as_secs() > 30 { // network operations may take up to 30sec
+                if start_time.elapsed().as_secs() > 30 {
+                    // network operations may take up to 30sec
                     warn!("killing git command -- timed out");
                     child.kill()?;
                     break;
@@ -64,15 +64,17 @@ impl Repo {
     }
 
     pub fn open(path: PathBuf, allow_new_dir: bool, use_remote: bool) -> Result<Self, Error> {
-        let mut result = Repo {
+        let result = Repo {
             path: path,
             use_remote,
-            retries: vec![],
         };
 
         // Don't nuke random repositories, unless specifically requested.
-        if !allow_new_dir && !result.retries_file().exists() {
-            bail!("`{}` file not present", result.retries_file().display());
+        if !allow_new_dir && !result.times().exists() {
+            bail!(
+                "`{}` directory not present, refusing to run",
+                result.times().display()
+            );
         }
 
         if result.use_remote {
@@ -81,7 +83,6 @@ impl Repo {
         }
 
         fs::create_dir_all(result.times()).context("can't create `times/`")?;
-        result.load_retries()?;
 
         Ok(result)
     }
@@ -102,8 +103,7 @@ impl Repo {
     }
 
     fn commit_and_push(&self, message: &str) -> Result<(), Error> {
-        self.write_retries()?;
-        self.git(&["add", "retries", "times"])?;
+        self.git(&["add", "times"])?;
 
         // dirty index
         if let Err(_) = self.git(&["diff-index", "--quiet", "--cached", "HEAD"]) {
@@ -153,64 +153,6 @@ impl Repo {
         let mut file = File::create(&filepath)?;
         serde_json::to_writer(&mut file, &data)?;
         Ok(())
-    }
-
-    fn load_retries(&mut self) -> Result<(), Error> {
-        let mut retries = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(self.retries_file())
-            .with_context(|_| format!("can't create `{}`", self.retries_file().display()))?;
-        let mut retries_s = String::new();
-        retries.read_to_string(&mut retries_s)?;
-        self.retries = retries_s
-            .split('\n')
-            .map(|line| line.trim())
-            .filter(|line| !line.is_empty())
-            .map(|line| {
-                if line.len() == 40 {
-                    Ok(line.to_owned())
-                } else {
-                    bail!("bad retry hash `{}`", line)
-                }
-            })
-            .collect::<Result<_, _>>()?;
-        info!("loaded retries: {:?}", self.retries);
-        Ok(())
-    }
-
-    fn write_retries(&self) -> Result<(), Error> {
-        info!("writing retries");
-        let mut retries = OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open(self.retries_file())
-            .context("can't create `retries`")?;
-        for retry in self.retries.iter() {
-            writeln!(retries, "{}", retry)?;
-        }
-        Ok(())
-    }
-
-    pub fn write_broken_commit(&self, commit: &Commit, err: Error) -> Result<(), Error> {
-        info!("writing broken commit {:?}: {:?}", commit, err);
-        let mut broken = OpenOptions::new()
-            .write(true)
-            .append(true)
-            .create(true)
-            .open(self.broken_commits_file())
-            .context("can't create `broken-commits-log`")?;
-        writeln!(broken, "{}: \"{:?}\"", commit.sha, err)?;
-        Ok(())
-    }
-
-    fn broken_commits_file(&self) -> PathBuf {
-        self.path.join("broken-commits-log")
-    }
-
-    fn retries_file(&self) -> PathBuf {
-        self.path.join("retries")
     }
 
     fn times(&self) -> PathBuf {
