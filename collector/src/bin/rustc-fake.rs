@@ -6,6 +6,13 @@ fn main() {
     let mut args = env::args_os().skip(1).collect::<Vec<_>>();
     let rustc = env::var_os("RUSTC_REAL").unwrap();
 
+    if let Some(count) = env::var("RUSTC_THREAD_COUNT")
+        .ok()
+        .and_then(|v| v.parse::<u32>().ok())
+    {
+        args.push(std::ffi::OsString::from(format!("-Zthreads={}", count)));
+    }
+
     if let Some(pos) = args.iter().position(|arg| arg == "--wrap-rustc-with") {
         // Strip out the flag and its argument, and run rustc under the wrapper
         // program named by the argument.
@@ -62,9 +69,7 @@ fn main() {
                 let has_oprofile = cmd.output().is_ok();
                 assert!(has_oprofile);
                 // Other possibly useful args: --callgraph, --separate-thread
-                cmd.arg("operf")
-                    .arg(&rustc)
-                    .args(&args);
+                cmd.arg("operf").arg(&rustc).args(&args);
 
                 assert!(cmd.status().expect("failed to spawn").success());
             }

@@ -651,6 +651,21 @@ impl Benchmark {
         cwd: &'a Path,
         build_kind: BuildKind,
     ) -> CargoProcess<'a> {
+        let mut cargo_args = self
+            .config
+            .cargo_opts
+            .clone()
+            .unwrap_or_default()
+            .split_whitespace()
+            .map(String::from)
+            .collect::<Vec<_>>();
+        if let Some(count) = env::var("CARGO_THREAD_COUNT")
+            .ok()
+            .and_then(|v| v.parse::<u32>().ok())
+        {
+            cargo_args.push(format!("-j{}", count));
+        }
+
         CargoProcess {
             compiler,
             cwd: cwd,
@@ -662,14 +677,7 @@ impl Benchmark {
                 .cargo_toml
                 .clone()
                 .unwrap_or_else(|| String::from("Cargo.toml")),
-            cargo_args: self
-                .config
-                .cargo_opts
-                .clone()
-                .unwrap_or_default()
-                .split_whitespace()
-                .map(String::from)
-                .collect(),
+            cargo_args,
             rustc_args: self
                 .config
                 .cargo_rustc_opts
