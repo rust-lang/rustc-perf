@@ -580,6 +580,11 @@ pub fn handle_github(request: github::Request, data: &InputData) -> ServerResult
                 )?;
                 return Ok(github::Response);
             }
+            let try_commit = TryCommit {
+                sha: commit_response.sha.clone(),
+                parent_sha: commit_response.parents[0].sha.clone(),
+                issue: request.issue.clone(),
+            };
             {
                 let mut persistent = data.persistent.lock();
                 if !persistent
@@ -587,11 +592,7 @@ pub fn handle_github(request: github::Request, data: &InputData) -> ServerResult
                     .iter()
                     .any(|c| c.sha() == &commit_response.sha)
                 {
-                    persistent.try_commits.push(TryCommit {
-                        sha: commit_response.sha.clone(),
-                        parent_sha: commit_response.parents[0].sha.clone(),
-                        issue: request.issue.clone(),
-                    });
+                    persistent.try_commits.push(try_commit.clone());
                 }
                 persistent.write().expect("successful encode");
             }
@@ -602,10 +603,7 @@ pub fn handle_github(request: github::Request, data: &InputData) -> ServerResult
                     "Success: Queued {} with parent {}, [comparison URL]({}).",
                     commit_response.sha,
                     commit_response.parents[0].sha,
-                    format!(
-                        "https://perf.rust-lang.org/compare.html?start={}&end={}",
-                        commit_response.parents[0].sha, commit_response.sha
-                    )
+                    try_commit.comparison_url(),
                 ),
             )?;
         }
@@ -644,7 +642,17 @@ pub fn handle_collected(
                 {
                     persistent.current = None;
                 }
-                if let Some(current) = &mut persistent.current {
+                let current_sha = persistent.current.as_ref().map(|c| c.commit.sha.to_owned());
+                let comparison_url = if let Some(try_commit) = persistent
+                    .try_commits
+                    .iter()
+                    .find(|c| Some(&c.sha) == current_sha.as_ref())
+                {
+                    format!(": [comparison url]({})", try_commit.comparison_url())
+                } else {
+                    String::new()
+                };
+                if let Some(current) = persistent.current.as_mut() {
                     // If the request was received twice (e.g., we stopped after we wrote DB but before
                     // responding) then we don't want to loop the collector.
                     if let Some(pos) = current.benchmarks.iter().position(|b| *b == benchmark) {
@@ -657,7 +665,10 @@ pub fn handle_collected(
                             post_comment(
                                 &data.config,
                                 &issue,
-                                &format!("Finished benchmarking try commit {}", current.commit.sha),
+                                &format!(
+                                    "Finished benchmarking try commit {}{}",
+                                    current.commit.sha, comparison_url
+                                ),
                             )?;
                         }
                     }
