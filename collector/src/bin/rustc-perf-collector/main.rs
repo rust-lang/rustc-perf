@@ -33,6 +33,7 @@ use sysroot::Sysroot;
 pub struct Compiler<'a> {
     pub rustc: &'a Path,
     pub cargo: &'a Path,
+    pub triple: &'a str,
     pub is_nightly: bool,
 }
 
@@ -41,6 +42,7 @@ impl<'a> Compiler<'a> {
         Compiler {
             rustc: &sysroot.rustc,
             cargo: &sysroot.cargo,
+            triple: &sysroot.triple,
             is_nightly: true,
         }
     }
@@ -146,7 +148,6 @@ where
 fn bench_commit(
     repo: Option<&outrepo::Repo>,
     commit: &Commit,
-    triple: &str,
     build_kinds: &[BuildKind],
     run_kinds: &[RunKind],
     compiler: Compiler<'_>,
@@ -156,7 +157,7 @@ fn bench_commit(
 ) -> CommitData {
     info!(
         "benchmarking commit {} ({}) for triple {}",
-        commit.sha, commit.date, triple
+        commit.sha, commit.date, compiler.triple
     );
 
     if call_home {
@@ -165,7 +166,7 @@ fn bench_commit(
             benchmarks: benchmarks.iter().map(|b| b.name.clone()).collect(),
         });
     }
-    let existing_data = repo.and_then(|r| r.load_commit_data(&commit, &triple).ok());
+    let existing_data = repo.and_then(|r| r.load_commit_data(&commit, &compiler.triple).ok());
 
     let mut results = BTreeMap::new();
     if let Some(ref data) = existing_data {
@@ -211,7 +212,7 @@ fn bench_commit(
 
     CommitData {
         commit: commit.clone(),
-        triple: triple.to_string(),
+        triple: compiler.triple.to_string(),
         benchmarks: results,
     }
 }
@@ -373,7 +374,6 @@ fn main_result() -> Result<i32, Error> {
             out_repo.success(&bench_commit(
                 Some(&out_repo),
                 &commit,
-                &sysroot.triple,
                 build_kinds,
                 &run_kinds,
                 Compiler::from_sysroot(&sysroot),
@@ -408,12 +408,12 @@ fn main_result() -> Result<i32, Error> {
             let result = bench_commit(
                 None,
                 &commit,
-                "x86_64-unknown-linux-gnu",
                 &build_kinds,
                 &run_kinds,
                 Compiler {
                     rustc: &rustc_path,
                     cargo: &cargo_path,
+                    triple: "x86_64-unknown-linux-gnu",
                     is_nightly: true,
                 },
                 &benchmarks,
@@ -453,13 +453,13 @@ fn main_result() -> Result<i32, Error> {
             } = bench_commit(
                 None,
                 &commit,
-                "x86_64-unknown-linux-gnu",
                 &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
                 &run_kinds,
                 Compiler {
                     rustc: &toolchain.binary_file("rustc"),
                     cargo: &toolchain.binary_file("cargo"),
                     is_nightly: false,
+                    triple: "x86_64-unknown-linux-gnu",
                 },
                 &benchmarks,
                 3,
@@ -507,7 +507,6 @@ fn main_result() -> Result<i32, Error> {
                     let result = out_repo.success(&bench_commit(
                         Some(&out_repo),
                         &commit,
-                        &sysroot.triple,
                         &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
                         &RunKind::all(),
                         Compiler::from_sysroot(&sysroot),
@@ -542,6 +541,7 @@ fn main_result() -> Result<i32, Error> {
                 rustc: &rustc_path,
                 cargo: &cargo_path,
                 is_nightly: true,
+                triple: "x86_64-unknown-linux-gnu", // XXX: Technically not necessarily true
             };
 
             for (i, benchmark) in benchmarks.iter().enumerate() {
@@ -600,7 +600,6 @@ fn main_result() -> Result<i32, Error> {
                 bench_commit(
                     None,
                     commit,
-                    &sysroot.triple,
                     &[BuildKind::Check], // no Debug or Opt builds
                     &RunKind::all(),
                     Compiler::from_sysroot(&sysroot),
