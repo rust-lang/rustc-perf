@@ -7,6 +7,8 @@ extern crate clap;
 
 use chrono::{Timelike, Utc};
 use collector::api::collected;
+use collector::git::get_commit_or_fake_it;
+use collector::git::get_rust_commits as get_commits;
 use collector::{ArtifactData, Commit, CommitData, Date};
 use failure::{Error, ResultExt, SyncFailure};
 use log::{debug, error, info, warn};
@@ -351,22 +353,10 @@ fn main_result() -> Result<i32, Error> {
     let get_out_repo =
         |allow_new_dir| outrepo::Repo::open(get_out_dir(), allow_new_dir, use_remote);
 
-    let get_commits = || collector::git::get_rust_commits();
-
     let ret = match matches.subcommand() {
         ("bench_commit", Some(sub_m)) => {
             let commit = sub_m.value_of("COMMIT").unwrap();
-            let commit = get_commits()?
-                .iter()
-                .find(|c| c.sha == commit)
-                .cloned()
-                .unwrap_or_else(|| {
-                    warn!("utilizing fake commit!");
-                    Commit {
-                        sha: commit.to_string(),
-                        date: Date::ymd_hms(2000, 01, 01, 0, 0, 0),
-                    }
-                });
+            let commit = get_commit_or_fake_it(&commit)?;
             let out_repo = get_out_repo(false)?;
             let sysroot = Sysroot::install(&commit.sha, commit.date.0, "x86_64-unknown-linux-gnu")?;
             let build_kinds = &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt];
@@ -475,7 +465,6 @@ fn main_result() -> Result<i32, Error> {
         ("process", Some(_)) => {
             let out_repo = get_out_repo(false)?;
             println!("processing commits");
-            let commits = get_commits()?;
             let client = reqwest::Client::new();
             let commit: Option<String> = client
                 .get(&format!(
@@ -491,17 +480,7 @@ fn main_result() -> Result<i32, Error> {
                 return Ok(0);
             };
 
-            let commit = commits
-                .iter()
-                .find(|c| c.sha == commit)
-                .cloned()
-                .unwrap_or_else(|| {
-                    warn!("utilizing fake commit!");
-                    Commit {
-                        sha: commit.to_string(),
-                        date: Date::ymd_hms(2000, 01, 01, 0, 0, 0),
-                    }
-                });
+            let commit = get_commit_or_fake_it(&commit)?;
             match Sysroot::install(&commit.sha, commit.date.0, "x86_64-unknown-linux-gnu") {
                 Ok(sysroot) => {
                     let result = out_repo.success(&bench_commit(

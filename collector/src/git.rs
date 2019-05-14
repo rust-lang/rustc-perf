@@ -6,6 +6,20 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+pub fn get_commit_or_fake_it(sha: &str) -> Result<Commit, failure::Error> {
+    Ok(get_rust_commits()?
+        .iter()
+        .find(|c| c.sha == sha)
+        .cloned()
+        .unwrap_or_else(|| {
+            log::warn!("utilizing fake commit!");
+            Commit {
+                sha: sha.to_string(),
+                date: crate::Date::ymd_hms(2000, 01, 01, 0, 0, 0),
+            }
+        }))
+}
+
 /// This retrieves the list of Rust commits which may be available in the CI S3 bucket.
 pub fn get_rust_commits() -> Result<Vec<Commit>, failure::Error> {
     let repo_dir =
