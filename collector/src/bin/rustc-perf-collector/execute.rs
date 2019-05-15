@@ -170,6 +170,10 @@ impl<'a> CargoProcess<'a> {
             .env("SHELL", env::var_os("SHELL").unwrap_or_default())
             // PATH is needed to find things like linkers used by rustc/Cargo.
             .env("PATH", env::var_os("PATH").unwrap_or_default())
+            .env(
+                "RUSTC_THREAD_COUNT",
+                env::var_os("RUSTC_THREAD_COUNT").unwrap_or_default(),
+            )
             .env("RUSTC", &*FAKE_RUSTC)
             .env("RUSTC_REAL", &self.compiler.rustc)
             .env("CARGO", &self.compiler.cargo)
