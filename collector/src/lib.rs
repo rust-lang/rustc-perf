@@ -335,19 +335,11 @@ impl<'de> Deserialize<'de> for Bound {
                     .parse::<NaiveDate>()
                     .map(|d| Bound::Date(d))
                     .unwrap_or(Bound::Commit(value.to_string()));
-                if let Bound::Commit(ref sha) = bound {
-                    if sha.len() != 40 {
-                        return Err(serde::de::Error::invalid_value(
-                            serde::de::Unexpected::Str(value),
-                            &self,
-                        ));
-                    }
-                }
                 Ok(bound)
             }
 
             fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                f.write_str("either a YYYY-mm-dd date or a 40 character long git commit hash")
+                f.write_str("either a YYYY-mm-dd date or a collection ID (usually commit hash)")
             }
         }
 
