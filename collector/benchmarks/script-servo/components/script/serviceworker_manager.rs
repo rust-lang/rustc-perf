@@ -188,10 +188,16 @@ impl ServiceWorkerManager {
     fn receive_message(&mut self) -> Result<Message, RecvError> {
         let msg_from_constellation = &self.own_port;
         let msg_from_resource = &self.resource_receiver;
+/*
         select! {
             msg = msg_from_constellation.recv() => msg.map(Message::FromConstellation),
             msg = msg_from_resource.recv() => msg.map(Message::FromResource)
         }
+*/
+        // `std::select` was deprecated in Rust 1.36, so we just replaced this
+        // occurrence with a panic. (That's good enough for a compile-time
+        // benchmark whose generated code is never run.)
+        panic!();
     }
 }
 

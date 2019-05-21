@@ -111,7 +111,7 @@ use std::ptr;
 use std::rc::Rc;
 use std::result::Result;
 use std::sync::Arc;
-use std::sync::mpsc::{Receiver, Select, Sender, channel};
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread;
 use style::thread_state::{self, ThreadState};
 use task_source::dom_manipulation::DOMManipulationTaskSource;
@@ -927,6 +927,7 @@ impl ScriptThread {
         // Receive at least one message so we don't spinloop.
         debug!("Waiting for event.");
         let mut event = {
+/*
             let sel = Select::new();
             let mut script_port = sel.handle(&self.port);
             let mut control_port = sel.handle(&self.control_port);
@@ -956,6 +957,11 @@ impl ScriptThread {
             } else {
                 panic!("unexpected select result")
             }
+*/
+            // `std::sync::mpsc::Select` was deprecated in Rust 1.36, so we
+            // just replaced this block with a panic. (That's good enough for a
+            // compile-time benchmark whose generated code is never run.)
+            panic!();
         };
         debug!("Got event.");
 

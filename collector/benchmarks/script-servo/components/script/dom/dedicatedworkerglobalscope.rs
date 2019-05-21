@@ -39,7 +39,7 @@ use servo_url::ServoUrl;
 use std::mem::replace;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::AtomicBool;
-use std::sync::mpsc::{Receiver, RecvError, Select, Sender, channel};
+use std::sync::mpsc::{Receiver, RecvError, Sender, channel};
 use std::thread;
 use style::thread_state::{self, ThreadState};
 
@@ -277,6 +277,7 @@ impl DedicatedWorkerGlobalScope {
 
     #[allow(unsafe_code)]
     fn receive_event(&self) -> Result<MixedMessage, RecvError> {
+/*
         let scope = self.upcast::<WorkerGlobalScope>();
         let worker_port = &self.receiver;
         let timer_event_port = &self.timer_event_port;
@@ -303,6 +304,11 @@ impl DedicatedWorkerGlobalScope {
         } else {
             panic!("unexpected select result!")
         }
+*/
+        // `std::sync::mpsc::Select` was deprecated in Rust 1.36, so we just
+        // replaced this function's body with a panic. (That's good enough for
+        // a compile-time benchmark whose generated code is never run.)
+        panic!();
     }
 
     fn handle_script_event(&self, msg: WorkerScriptMsg) {
