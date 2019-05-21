@@ -5,7 +5,7 @@
 #![cfg_attr(feature = "unstable", feature(core_intrinsics))]
 #![cfg_attr(feature = "unstable", feature(on_unimplemented))]
 #![feature(const_fn)]
-#![feature(mpsc_select)]
+//#![feature(mpsc_select)]
 #![feature(plugin)]
 
 #![deny(unsafe_code)]

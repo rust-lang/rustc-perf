@@ -29,7 +29,7 @@ use script_traits::{TimerEvent, WorkerGlobalScopeInit, ScopeThings, ServiceWorke
 use servo_config::prefs::PREFS;
 use servo_rand::random;
 use servo_url::ServoUrl;
-use std::sync::mpsc::{Receiver, RecvError, Select, Sender, channel};
+use std::sync::mpsc::{Receiver, RecvError, Sender, channel};
 use std::thread;
 use std::time::Duration;
 use style::thread_state::{self, ThreadState};
@@ -277,6 +277,7 @@ impl ServiceWorkerGlobalScope {
 
     #[allow(unsafe_code)]
     fn receive_event(&self) -> Result<MixedMessage, RecvError> {
+/*
         let scope = self.upcast::<WorkerGlobalScope>();
         let worker_port = &self.receiver;
         let devtools_port = scope.from_devtools_receiver();
@@ -304,6 +305,11 @@ impl ServiceWorkerGlobalScope {
         } else {
             panic!("unexpected select result!")
         }
+*/
+        // `std::sync::mpsc::Select` was deprecated in Rust 1.36, so we just
+        // replaced this function's body with a panic. (That's good enough for
+        // a compile-time benchmark whose generated code is never run.)
+        panic!();
     }
 
     pub fn script_chan(&self) -> Box<ScriptChan + Send> {
