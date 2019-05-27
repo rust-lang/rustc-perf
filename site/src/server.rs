@@ -648,7 +648,7 @@ pub fn handle_collected(
                     .iter()
                     .find(|c| Some(&c.sha) == current_sha.as_ref())
                 {
-                    format!(": [comparison url]({})", try_commit.comparison_url())
+                    format!(", [comparison URL]({}).", try_commit.comparison_url())
                 } else {
                     String::new()
                 };
