@@ -55,8 +55,6 @@ use collector::api::collected;
 use collector::version_supports_incremental;
 
 static INTERPOLATED_COLOR: &str = "#fcb0f1";
-const LAST_NOISE_PERF_RUN_LINK: &str
-    = "https://perf.rust-lang.org/compare.html?start=9a90d03ad171856dc016c2dcc19292ec49a8a26f&end=fd7f48b3eff67726d848c059574b6aa86675110b";
 
 pub fn handle_info(data: &InputData) -> info::Response {
     info::Response {
@@ -668,9 +666,8 @@ pub fn handle_collected(
                                 &data.config,
                                 &issue,
                                 &format!(
-                                    "Finished benchmarking try commit {}{}\n\nThe last perf run measuring noise is: {}\n(use it to verify that the perf results you are seeing aren't just noise)",
-                                    current.commit.sha, comparison_url,
-                                    LAST_NOISE_PERF_RUN_LINK
+                                    "Finished benchmarking try commit {}{}",
+                                    current.commit.sha, comparison_url
                                 ),
                             )?;
                         }
