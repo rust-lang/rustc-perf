@@ -520,13 +520,13 @@ pub fn post_comment(cfg: &Config, issue: &github::Issue, body: &str) -> ServerRe
     Ok(())
 }
 
-fn get_authorized_users() -> ServerResult<Vec<String>> {
+fn get_authorized_users() -> ServerResult<Vec<usize>> {
     let url = format!("{}/permissions/perf.json", ::rust_team_data::v1::BASE_URL);
     let perms: ::rust_team_data::v1::Permission = reqwest::get(&url)
         .and_then(|resp| resp.error_for_status())
         .and_then(|mut resp| resp.json())
         .map_err(|err| format!("failed to fetch authorized users: {}", err))?;
-    Ok(perms.github_users)
+    Ok(perms.github_ids)
 }
 
 pub fn handle_github(request: github::Request, data: &InputData) -> ServerResult<github::Response> {
@@ -535,7 +535,7 @@ pub fn handle_github(request: github::Request, data: &InputData) -> ServerResult
     }
 
     if request.comment.author_association != github::Association::Owner
-        && !get_authorized_users()?.contains(&request.comment.user.login)
+        && !get_authorized_users()?.contains(&request.comment.user.id)
     {
         post_comment(
             &data.config,
