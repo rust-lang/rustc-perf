@@ -253,7 +253,7 @@ pub mod github {
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct User {
-        pub login: String,
+        pub id: usize,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
