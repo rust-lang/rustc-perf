@@ -21,6 +21,7 @@
         <select id='stats' name="stat"></select>
         <a href="#" onClick="submit_settings(); return false;">Submit</a>
     </div>
+    <div id="loading"><h2>Loading &amp; rendering data..</h2><h3>This may take a while!</h3></div>
     <div id="charts"></div>
     <div id="as-of"></div>
     <a href="https://github.com/rust-lang-nursery/rustc-perf">
@@ -189,6 +190,8 @@
     }
 
     function make_graph(state) {
+        // it's already visible, but if we would allow calling this more than once this makes it repeatable
+        document.getElementById("loading").style.display = "block";
         let values = Object.assign({}, {
             start: "",
             end: "",
@@ -197,6 +200,7 @@
         }, state);
         make_request("/graph", values).then(function(response) {
             init_graph(response, values.stat, values.absolute);
+            document.getElementById("loading").style.display = "none";
         });
     }
 
