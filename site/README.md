@@ -38,11 +38,14 @@ will intiate a git pull in the timings repo directory passed on startup.
 Launching
 ---------
 
-It can be run with the following command:
+Note that this binary expects its static files under `/site/static` not `/static`. It is meant to be run from the root of this repository, not the `site` directory.
+It can be run with the following command from root-dir:
 
 ```
-cargo run --release data
+cargo run --bin site --release data
 ```
+
+The release flag is on purpose, reducing startup time ~80%.
 
 The first time you do this the Rust repo is cloned, so it will take a minute or
 two (or more if you have a slow internet connection) before the web server
