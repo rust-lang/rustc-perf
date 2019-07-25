@@ -32,7 +32,7 @@ use log::{debug, error, info};
 use regex::Regex;
 use reqwest;
 use reqwest::header::USER_AGENT;
-use ring::{digest, hmac};
+use ring::hmac;
 use rmp_serde;
 use semver::Version;
 use serde::de::DeserializeOwned;
@@ -1014,8 +1014,10 @@ impl Server {
 }
 
 fn verify_gh_sig(cfg: &Config, header: &str, body: &[u8]) -> Option<bool> {
-    let key =
-        hmac::VerificationKey::new(&digest::SHA1, cfg.keys.secret.as_ref().unwrap().as_bytes());
+    let key = hmac::Key::new(
+        hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY,
+        cfg.keys.secret.as_ref().unwrap().as_bytes(),
+    );
     let sha = header.get(5..)?; // strip sha1=
     let sha = hex::decode(sha).ok()?;
     if let Ok(()) = hmac::verify(&key, body, &sha) {
