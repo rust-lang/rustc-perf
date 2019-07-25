@@ -17,7 +17,7 @@ static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 fn main() {
     env_logger::init();
-    let _ = jemalloc_ctl::set_background_thread(true);
+    let _ = jemalloc_ctl::background_thread::write(true);
 
     let data = load::InputData::from_fs(&util::get_repo_path().unwrap()).unwrap();
 

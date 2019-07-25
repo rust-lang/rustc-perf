@@ -1,5 +1,5 @@
 [workspace]
-members = ["site"] # do not add "collector", otherwise the exclude won't work.
+members = ["collector", "site"]
 exclude = ["collector/benchmarks"]
 
 [profile.release]
