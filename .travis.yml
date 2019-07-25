@@ -6,7 +6,7 @@ rust:
 
 before_install:
   - sudo apt-get update
-  - sudo apt-get install -y linux-tools-common linux-tools-generic linux-tools-`uname -r` linux-cloud-tools-`uname -r`
+  - sudo apt-get install -y linux-tools-common linux-tools-generic linux-tools-`uname -r`
   - echo -1 | sudo tee /proc/sys/kernel/perf_event_paranoid
 
 env:
