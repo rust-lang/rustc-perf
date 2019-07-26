@@ -9,8 +9,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::env;
-use std::fs::{self, File};
-use std::io::Read;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use antidote::Mutex;
@@ -203,6 +202,8 @@ impl InputData {
             )?;
         }
 
+        trace!("loading files from directory");
+
         // Read all files from repo_loc/processed
         let mut file_count = 0;
         for entry in fs::read_dir(repo_loc.join("times"))? {
@@ -214,14 +215,8 @@ impl InputData {
 
             let filename = entry.file_name();
             let filename = filename.to_str().unwrap();
-            let mut file = File::open(entry.path())?;
-            let mut file_contents = String::new();
-            // Skip files whose size is 0.
-            if file.read_to_string(&mut file_contents)? == 0 {
-                warn!("Skipping empty file: {}", filename);
-                skipped += 1;
-                continue;
-            }
+            let file_contents = fs::read_to_string(entry.path())
+                .with_context(|_| format!("Failed to read {}", filename))?;
 
             if filename.starts_with("artifact-") {
                 let contents: ArtifactData = match serde_json::from_str(&file_contents) {
