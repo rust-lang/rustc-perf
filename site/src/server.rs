@@ -12,7 +12,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt;
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::Read;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::str;
@@ -20,13 +20,11 @@ use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::sync::Arc;
 
 use failure::Error;
-use flate2::write::GzEncoder;
-use flate2::Compression;
 use futures::{self, Future, Stream};
 use futures_cpupool::CpuPool;
 use headers::CacheControl;
 use headers::Header;
-use headers::{Authorization, ContentEncoding, ContentLength, ContentType};
+use headers::{Authorization, ContentLength, ContentType};
 use hyper::StatusCode;
 use log::{debug, error, info};
 use regex::Regex;
@@ -807,10 +805,6 @@ impl Server {
         if length > 25_000 {
             return Box::new(futures::future::err(ServerError(format!("too large"))));
         }
-        let accepts_gzip = req
-            .headers()
-            .get(http::header::ACCEPT_ENCODING)
-            .map_or(false, |e| e.to_str().unwrap().contains("gzip"));
         let data = self.data.clone();
         let gh_header = req.headers().get("X-Hub-Signature").cloned();
         let gh_header = gh_header.and_then(|g| g.to_str().ok().map(|s| s.to_owned()));
@@ -865,17 +859,7 @@ impl Server {
                                 .header_typed(ContentType::octet_stream())
                                 .header_typed(CacheControl::new().with_no_cache().with_no_store());
                             let body = rmp_serde::to_vec_named(&result).unwrap();
-                            if accepts_gzip {
-                                let mut encoder = GzEncoder::new(Vec::new(), Compression::fast());
-                                encoder.write_all(&*body).unwrap();
-                                let body = encoder.finish().unwrap();
-                                response
-                                    .header_typed(ContentEncoding::gzip())
-                                    .body(hyper::Body::from(body))
-                                    .unwrap()
-                            } else {
-                                response.body(hyper::Body::from(body)).unwrap()
-                            }
+                            response.body(hyper::Body::from(body)).unwrap()
                         }
                         Err(err) => http::Response::builder()
                             .status(StatusCode::INTERNAL_SERVER_ERROR)
