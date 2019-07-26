@@ -208,14 +208,7 @@ impl RunId {
 
 impl fmt::Display for RunId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let opt = if self.release {
-            "-opt"
-        } else if self.check {
-            "-check"
-        } else {
-            ""
-        };
-        write!(f, "{}{}", self.state.name(), opt)
+        write!(f, "{}", self.state.name())
     }
 }
 
