@@ -16,6 +16,7 @@
             last "noise run"</a> which shows the perf difference of a non-functional change.
         </p>
     </div>
+    Filter runs: <input id="filter" type="text" />
     <div id="content" style="display: none"></div>
     <div id="settings">
         <div id="commits" class="settings" style="text-align:left;">
@@ -87,6 +88,17 @@
     }
 
     function populate_data(data) {
+        {
+            let filter = document.querySelector("#filter").value;
+            let test_names = unique([...Object.keys(data.a.data), ...Object.keys(data.b.data)]);
+            for (let name of test_names) {
+                if (!name.includes(filter)) {
+                    delete data.a.data[name];
+                    delete data.b.data[name];
+                }
+            }
+        }
+
         let html = `<table class="compare" style="font-size: medium !important;">`;
 
         // Heading: the two dates, and the time and rss percent changes.
@@ -265,6 +277,7 @@
         }
     }
 
+    var DATA;
     function make_data(state) {
         let values = Object.assign({}, {
             start: "",
@@ -272,6 +285,8 @@
             stat: "instructions:u",
         }, state);
         make_request("/get", values).then(function(data) {
+            DATA = data;
+            data = JSON.parse(JSON.stringify(DATA)); // deep copy
             populate_data(data);
         });
     }
@@ -288,6 +303,12 @@
     }
 
     load_state(make_data);
+
+    document.querySelector("#filter").addEventListener("change", () => {
+        let data = JSON.parse(JSON.stringify(DATA)); // deep copy
+        populate_data(data);
+    });
+
     </script>
 </body>
 </html>
