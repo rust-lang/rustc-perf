@@ -383,9 +383,9 @@ impl InputData {
         for (idx, collected) in data_real.iter().enumerate() {
             for (name, value) in &collected.benchmarks {
                 if let Ok(bench) = value {
-                    let e = last_seen.entry(name.clone()).or_insert_with(HashMap::new);
+                    let e = last_seen.entry(name.as_str()).or_insert_with(HashMap::new);
                     for run in bench.runs.iter() {
-                        e.insert(run.id(), (idx, run.clone()));
+                        e.insert(run.id(), (idx, run));
                     }
                 }
             }
@@ -395,9 +395,9 @@ impl InputData {
         for (idx, collected) in data_real.iter().enumerate().rev() {
             for (name, value) in &collected.benchmarks {
                 if let Ok(bench) = value {
-                    let e = last_seen.entry(name.clone()).or_insert_with(HashMap::new);
+                    let e = last_seen.entry(name.as_str()).or_insert_with(HashMap::new);
                     for run in bench.runs.iter() {
-                        e.insert(run.id(), (idx, run.clone()));
+                        e.insert(run.id(), (idx, run));
                     }
                 }
             }
@@ -608,8 +608,8 @@ struct AssociatedData<'a> {
     last_seen_commit: &'a [HashMap<&'a str, usize>],
     next_seen_commit: &'a [HashMap<&'a str, usize>],
 
-    last_seen_run: &'a [HashMap<String, HashMap<RunId, (usize, Run)>>],
-    next_seen_run: &'a [HashMap<String, HashMap<RunId, (usize, Run)>>],
+    last_seen_run: &'a [HashMap<&'a str, HashMap<RunId, (usize, &'a Run)>>],
+    next_seen_run: &'a [HashMap<&'a str, HashMap<RunId, (usize, &'a Run)>>],
 
     dur: &'a mut ::std::time::Duration,
 }
@@ -625,10 +625,10 @@ fn fill_benchmark_runs(
     for missing_run in missing_runs {
         let time_start = ::std::time::Instant::now();
         let start = data.last_seen_run[commit_idx]
-            .get(&benchmark.name)
+            .get(benchmark.name.as_str())
             .and_then(|b| b.get(missing_run));
         let end = data.next_seen_run[commit_idx]
-            .get(&benchmark.name)
+            .get(benchmark.name.as_str())
             .and_then(|b| b.get(missing_run));
         let start_commit = start.map(|(idx, _)| data.commits[*idx].clone());
         let end_commit = end.map(|(idx, _)| data.commits[*idx].clone());
