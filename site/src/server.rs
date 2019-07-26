@@ -11,17 +11,14 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt;
-use std::fs::File;
-use std::io::Read;
+use std::fs;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::str;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::sync::Arc;
 
-use failure::Error;
 use futures::{self, Future, Stream};
-use futures_cpupool::CpuPool;
 use headers::CacheControl;
 use headers::Header;
 use headers::{Authorization, ContentLength, ContentType};
@@ -686,8 +683,32 @@ pub fn handle_collected(
 
 struct Server {
     data: Arc<RwLock<InputData>>,
-    pool: CpuPool,
-    updating: Arc<AtomicBool>,
+    updating: UpdatingStatus,
+}
+
+struct UpdatingStatus(Arc<AtomicBool>);
+
+struct IsUpdating(Arc<AtomicBool>);
+
+impl Drop for IsUpdating {
+    fn drop(&mut self) {
+        self.0.store(false, AtomicOrdering::Release);
+    }
+}
+
+impl UpdatingStatus {
+    fn new() -> Self {
+        UpdatingStatus(Arc::new(AtomicBool::new(false)))
+    }
+
+    // Returns previous state
+    fn set_updating(&self) -> bool {
+        self.0.compare_and_swap(false, true, AtomicOrdering::AcqRel)
+    }
+
+    fn release_on_drop(&self) -> IsUpdating {
+        IsUpdating(self.0.clone())
+    }
 }
 
 macro_rules! check_http_method {
@@ -808,7 +829,7 @@ impl Server {
         let data = self.data.clone();
         let gh_header = req.headers().get("X-Hub-Signature").cloned();
         let gh_header = gh_header.and_then(|g| g.to_str().ok().map(|s| s.to_owned()));
-        Box::new(self.pool.spawn_fn(move || {
+        Box::new(
             req.into_body()
                 .concat2()
                 .map_err(|e| ServerError(format!("{:?}", e)))
@@ -868,15 +889,13 @@ impl Server {
                             .body(hyper::Body::from(err))
                             .unwrap(),
                     }
-                })
-        }))
+                }),
+        )
     }
 
     fn handle_push(&self, _req: Request) -> ServerFut {
         // set to updating
-        let was_updating = self
-            .updating
-            .compare_and_swap(false, true, AtomicOrdering::AcqRel);
+        let was_updating = self.updating.set_updating();
 
         if was_updating {
             return Box::new(futures::future::ok(
@@ -895,14 +914,14 @@ impl Server {
         debug!("received onpush hook");
 
         let rwlock = self.data.clone();
-        let updating = self.updating.clone();
-        let response = self.pool.spawn_fn(move || -> Result<(), Error> {
-            let repo_path = get_repo_path()?;
+        let updating = self.updating.release_on_drop();
+        let _ = std::thread::spawn(move || {
+            let repo_path = get_repo_path().unwrap();
 
-            git::update_repo(&repo_path)?;
+            git::update_repo(&repo_path).unwrap();
 
             info!("updating from filesystem...");
-            let new_data = InputData::from_fs(&repo_path)?;
+            let new_data = InputData::from_fs(&repo_path).unwrap();
             debug!("last date = {:?}", new_data.last_date);
 
             // Retrieve the stored InputData from the request.
@@ -911,29 +930,12 @@ impl Server {
             // Write the new data back into the request
             *data = new_data;
 
-            updating.store(false, AtomicOrdering::Release);
-
-            Ok(())
+            std::mem::drop(updating);
         });
 
-        let updating = self.updating.clone();
-        Box::new(
-            response
-                .map(|_| Response::new(hyper::Body::from("Successfully updated!")))
-                .or_else(move |err| {
-                    updating.store(false, AtomicOrdering::Release);
-                    futures::future::ok(
-                        http::Response::builder()
-                            .status(StatusCode::INTERNAL_SERVER_ERROR)
-                            .header_typed(ContentType::text_utf8())
-                            .body(hyper::Body::from(format!(
-                                "Internal Server Error: {:?}",
-                                err
-                            )))
-                            .unwrap(),
-                    )
-                }),
-        )
+        Box::new(futures::future::ok(Response::new(hyper::Body::from(
+            "Queued update",
+        ))))
     }
 }
 
@@ -972,12 +974,10 @@ impl Server {
         }
 
         if Path::new(&fs_path).is_file() {
-            return Box::new(self.pool.spawn_fn(move || {
-                let mut f = File::open(&fs_path).unwrap();
-                let mut source = Vec::new();
-                f.read_to_end(&mut source).unwrap();
-                futures::future::ok(Response::new(hyper::Body::from(source)))
-            }));
+            let source = fs::read(&fs_path).unwrap();
+            return Box::new(futures::future::ok(Response::new(hyper::Body::from(
+                source,
+            ))));
         }
 
         match req.uri().path() {
@@ -1018,8 +1018,7 @@ fn verify_gh_sig(cfg: &Config, header: &str, body: &[u8]) -> Option<bool> {
 pub fn start(data: InputData, port: u16) {
     let server = Arc::new(Server {
         data: Arc::new(RwLock::new(data)),
-        pool: CpuPool::new_num_cpus(),
-        updating: Arc::new(AtomicBool::new(false)),
+        updating: UpdatingStatus::new(),
     });
     let mut server_address: SocketAddr = "0.0.0.0:2346".parse().unwrap();
     server_address.set_port(port);
