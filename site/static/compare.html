@@ -16,7 +16,14 @@
             last "noise run"</a> which shows the perf difference of a non-functional change.
         </p>
     </div>
-    Filter runs: <input id="filter" type="text" />
+    Filter runs: <input id="filter" type="text" /><br>
+    Include builds:
+    <div>
+        <div><input type="checkbox" id="build-clean" checked />Clean</div>
+        <div><input type="checkbox" id="build-baseline-incr" checked />Baseline incremental</div>
+        <div><input type="checkbox" id="build-clean-incr" checked />Clean incremental</div>
+        <div><input type="checkbox" id="build-patch-incr" checked />Patched incremental</div>
+    </div>
     <div id="content" style="display: none"></div>
     <div id="settings">
         <div id="commits" class="settings" style="text-align:left;">
@@ -99,6 +106,21 @@
             }
         }
 
+        function shouldShowBuild(name) {
+            if (name == "clean") {
+                return document.querySelector("#build-clean").checked;
+            } else if (name == "baseline incremental") {
+                return document.querySelector("#build-baseline-incr").checked;
+            } else if (name == "clean incremental") {
+                return document.querySelector("#build-clean-incr").checked;
+            } else if (name.startsWith("patched incremental")) {
+                return document.querySelector("#build-patch-incr").checked;
+            } else {
+                // Unknown, but by default we should show things
+                return true;
+            }
+        }
+
         let html = `<table class="compare" style="font-size: medium !important;">`;
 
         // Heading: the two dates, and the time and rss percent changes.
@@ -169,12 +191,14 @@
                 } else {
                     // should be unreachable
                 }
-                fields.push({
-                    casename: key,
-                    datum_a,
-                    datum_b,
-                    percent: percent_chg(datum_a, datum_b),
-                });
+                if (shouldShowBuild(key)) {
+                    fields.push({
+                        casename: key,
+                        datum_a,
+                        datum_b,
+                        percent: percent_chg(datum_a, datum_b),
+                    });
+                }
             }
 
             return fields;
@@ -304,10 +328,16 @@
 
     load_state(make_data);
 
-    document.querySelector("#filter").addEventListener("change", () => {
+    function rerender() {
         let data = JSON.parse(JSON.stringify(DATA)); // deep copy
         populate_data(data);
-    });
+    }
+
+    document.querySelector("#filter").addEventListener("change", rerender);
+    document.querySelector("#build-clean").addEventListener("change", rerender);
+    document.querySelector("#build-baseline-incr").addEventListener("change", rerender);
+    document.querySelector("#build-clean-incr").addEventListener("change", rerender);
+    document.querySelector("#build-patch-incr").addEventListener("change", rerender);
 
     </script>
 </body>
