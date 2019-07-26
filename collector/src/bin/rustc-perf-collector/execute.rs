@@ -16,7 +16,6 @@ use collector::{
 };
 
 use failure::{err_msg, Error, ResultExt};
-use serde_json;
 
 use crate::{BuildKind, Compiler, RunKind};
 

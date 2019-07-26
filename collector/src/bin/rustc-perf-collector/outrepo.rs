@@ -3,7 +3,6 @@
 use collector::{ArtifactData, Commit, CommitData};
 use failure::{Error, ResultExt};
 use log::{debug, info, trace, warn};
-use serde_json;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -93,9 +92,9 @@ impl Repo {
     }
 
     pub fn success_artifact(&self, data: &ArtifactData) -> Result<(), Error> {
-        let filepath = self.times().join(format!("artifact-{}.json", data.id));
+        let filepath = self.times().join(format!("artifact-{}.bincode", data.id));
         info!("creating file {}", filepath.display());
-        let serialized = serde_json::to_vec(&data)?;
+        let serialized = bincode::serialize(&data)?;
         fs::write(&filepath, &serialized)?;
         self.commit_and_push(&format!("{} - success", data.id))?;
         Ok(())
@@ -118,16 +117,16 @@ impl Repo {
 
     fn load_commit_data_file(&self, filepath: &Path) -> Result<CommitData, Error> {
         trace!("loading file {}", filepath.display());
-        let contents = fs::read_to_string(&filepath)
-            .with_context(|_| format!("failed to read {:?}", filepath))?;
-        let data = serde_json::from_str(&contents)
-            .with_context(|_| format!("failed to read JSON from {:?}", filepath))?;
+        let contents =
+            fs::read(&filepath).with_context(|_| format!("failed to read {:?}", filepath))?;
+        let data = bincode::deserialize(&contents)
+            .with_context(|_| format!("failed to read bincode from {:?}", filepath))?;
         Ok(data)
     }
 
     pub fn load_commit_data(&self, commit: &Commit, triple: &str) -> Result<CommitData, Error> {
         let filepath = self.times().join(format!(
-            "{}-{}-{}.json",
+            "{}-{}-{}.bincode",
             commit.date.0.to_rfc3339(),
             commit.sha,
             triple
@@ -137,7 +136,7 @@ impl Repo {
             Err(_) => self.load_commit_data_file(
                 &self
                     .times()
-                    .join(format!("commit-{}-{}.json", commit.sha, triple)),
+                    .join(format!("commit-{}-{}.bincode", commit.sha, triple)),
             ),
         }
     }
@@ -146,9 +145,9 @@ impl Repo {
         let commit = &data.commit;
         let filepath = self
             .times()
-            .join(format!("commit-{}-{}.json", commit.sha, data.triple));
+            .join(format!("commit-{}-{}.bincode", commit.sha, data.triple));
         info!("creating file {}", filepath.display());
-        let serialized = serde_json::to_vec(&data)?;
+        let serialized = bincode::serialize(&data)?;
         fs::write(&filepath, &serialized)?;
         Ok(())
     }

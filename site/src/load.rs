@@ -215,11 +215,11 @@ impl InputData {
 
             let filename = entry.file_name();
             let filename = filename.to_str().unwrap();
-            let file_contents = fs::read_to_string(entry.path())
-                .with_context(|_| format!("Failed to read {}", filename))?;
+            let file_contents =
+                fs::read(entry.path()).with_context(|_| format!("Failed to read {}", filename))?;
 
             if filename.starts_with("artifact-") {
-                let contents: ArtifactData = match serde_json::from_str(&file_contents) {
+                let contents: ArtifactData = match bincode::deserialize(&file_contents) {
                     Ok(j) => j,
                     Err(err) => {
                         error!("Failed to parse JSON for {}: {:?}", filename, err);
@@ -235,7 +235,7 @@ impl InputData {
 
                 artifact_data.insert(contents.id.clone(), contents);
             } else {
-                let contents: CommitData = match serde_json::from_str(&file_contents) {
+                let contents: CommitData = match bincode::deserialize(&file_contents) {
                     Ok(json) => json,
                     Err(err) => {
                         error!("Failed to parse JSON for {}: {:?}", filename, err);
