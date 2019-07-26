@@ -866,7 +866,7 @@ impl Server {
                                 .header_typed(CacheControl::new().with_no_cache().with_no_store());
                             let body = rmp_serde::to_vec_named(&result).unwrap();
                             if accepts_gzip {
-                                let mut encoder = GzEncoder::new(Vec::new(), Compression::best());
+                                let mut encoder = GzEncoder::new(Vec::new(), Compression::fast());
                                 encoder.write_all(&*body).unwrap();
                                 let body = encoder.finish().unwrap();
                                 response
