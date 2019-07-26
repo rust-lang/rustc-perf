@@ -9,7 +9,7 @@
 
 use std::env;
 
-use crate::load::{Commit, CommitData, InputData};
+use crate::load::{CommitData, InputData};
 use collector::Bound;
 use failure::Error;
 
@@ -26,10 +26,10 @@ pub fn find_commit<'a>(
     idx: &Bound,
     left: bool,
     interpolate: Interpolate,
-) -> Result<&'a (Commit, CommitData), String> {
+) -> Result<&'a CommitData, String> {
     let last_month = data.last_date.0.naive_utc().date() - Duration::days(30);
     for element in data.data(interpolate) {
-        let (commit, _) = element;
+        let commit = &element.commit;
         let found = match *idx {
             Bound::Commit(ref sha) => commit.sha == *sha,
             Bound::Date(ref date) => {
@@ -74,17 +74,18 @@ pub fn data_range<'a>(
     a: &Bound,
     b: &Bound,
     interpolate: Interpolate,
-) -> Result<Vec<(&'a Commit, &'a CommitData)>, String> {
+) -> Result<Vec<&'a CommitData>, String> {
     let mut ret = Vec::new();
     let mut in_range = false;
-    let left_bound = &find_commit(data, a, true, interpolate)?.0;
-    let right_bound = &find_commit(data, b, false, interpolate)?.0;
-    for (commit, cd) in data.data(interpolate) {
+    let left_bound = &find_commit(data, a, true, interpolate)?.commit;
+    let right_bound = &find_commit(data, b, false, interpolate)?.commit;
+    for cd in data.data(interpolate) {
+        let commit = &cd.commit;
         if commit.sha == left_bound.sha {
             in_range = true;
         }
         if in_range {
-            ret.push((commit, cd));
+            ret.push(cd);
         }
         if commit.sha == right_bound.sha {
             break;

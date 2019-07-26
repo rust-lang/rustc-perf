@@ -87,7 +87,13 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
 
     versions.push(format!(
         "master: {}",
-        &data.data(Interpolate::Yes).iter().last().unwrap().0.sha[0..8]
+        &data
+            .data(Interpolate::Yes)
+            .iter()
+            .last()
+            .unwrap()
+            .commit
+            .sha[0..8]
     ));
 
     let mut check_clean_average = Vec::new();
@@ -123,7 +129,7 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
         let mut opt_println_incr_points = Vec::new();
 
         let benches = if version.starts_with("master") {
-            let data = &data.data(Interpolate::Yes).iter().last().unwrap().1;
+            let data = &data.data(Interpolate::Yes).iter().last().unwrap();
             let benches = data
                 .benchmarks
                 .iter()
@@ -225,7 +231,6 @@ pub fn handle_status_page(data: &InputData) -> status::Response {
     let last_commit = data.data(Interpolate::No).iter().next_back().unwrap();
 
     let mut benchmark_state = last_commit
-        .1
         .benchmarks
         .iter()
         .map(|(name, res)| {
@@ -254,7 +259,7 @@ pub fn handle_status_page(data: &InputData) -> status::Response {
     let current = data.persistent.lock().current.clone();
 
     status::Response {
-        last_commit: last_commit.0.clone(),
+        last_commit: last_commit.commit.clone(),
         benchmarks: benchmark_state,
         missing,
         current: current,
@@ -460,7 +465,6 @@ fn handle_data(body: data::Request, data: &InputData) -> ServerResult<data::Resp
     let range = util::data_range(&data, &body.start, &body.end, Interpolate::Yes)?;
     let mut result = range
         .into_iter()
-        .map(|(_, day)| day)
         .map(|day| DateData::for_day(day, &body.stat))
         .collect::<Vec<_>>();
 
@@ -489,8 +493,8 @@ pub fn handle_days(body: days::Request, data: &InputData) -> ServerResult<days::
     let a = util::find_commit(data, &body.start, true, Interpolate::No)?;
     let b = util::find_commit(data, &body.end, false, Interpolate::No)?;
     Ok(days::Response {
-        a: DateData::for_day(&a.1, &body.stat),
-        b: DateData::for_day(&b.1, &body.stat),
+        a: DateData::for_day(&a, &body.stat),
+        b: DateData::for_day(&b, &body.stat),
     })
 }
 
