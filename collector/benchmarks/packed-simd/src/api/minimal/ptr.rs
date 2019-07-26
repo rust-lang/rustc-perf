@@ -186,7 +186,7 @@ macro_rules! impl_minimal_p {
             #[cfg_attr(feature = "cargo-clippy",
                        allow(clippy::missing_inline_in_public_items))]
             fn fmt(&self, f: &mut crate::fmt::Formatter<'_>) -> crate::fmt::Result {
-                write!(f, "{}<{}>(", stringify!($id), unsafe { crate::intrinsics::type_name::<T>() })?;
+                write!(f, "{}<{}>(", stringify!($id), crate::intrinsics::type_name::<T>())?;
                 for i in 0..$elem_count {
                     if i > 0 {
                         write!(f, ", ")?;

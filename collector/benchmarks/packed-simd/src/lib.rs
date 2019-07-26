@@ -228,7 +228,7 @@
     feature = "cargo-clippy",
     deny(clippy::missing_inline_in_public_items)
 )]
-#![deny(warnings, rust_2018_idioms)]
+#![allow(warnings, rust_2018_idioms)]
 #![no_std]
 
 use cfg_if::cfg_if;
