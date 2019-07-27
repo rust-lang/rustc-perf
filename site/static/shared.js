@@ -222,6 +222,11 @@ function load_state(callback) {
 
 // This one is for making the request we send to the backend.
 function make_request(path, body) {
+    if(window.msgpack === undefined) {
+        alert("msgpack is not loaded, maybe allow scripts from cdnjs.cloudflare.com?");
+        return Promise.reject("msgpack is not loaded");
+    }
+
     return fetch(BASE_URL + path, {
         method: "POST",
         body: JSON.stringify(body),
