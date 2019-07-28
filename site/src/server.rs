@@ -500,7 +500,7 @@ lazy_static::lazy_static! {
 
 pub fn post_comment(cfg: &Config, issue: &github::Issue, body: &str) -> ServerResult<()> {
     let timer_token = cfg.keys.github.clone().expect("needs rust-timer token");
-    let client = reqwest::Client::new();
+    let client = reqwest::r#async::Client::new();
     let req = client
         .post(&issue.comments_url)
         .json(&github::PostComment {
@@ -509,7 +509,7 @@ pub fn post_comment(cfg: &Config, issue: &github::Issue, body: &str) -> ServerRe
         .header(USER_AGENT, "perf-rust-lang-org-server")
         .basic_auth("rust-timer", Some(timer_token));
 
-    let res = req.send();
+    let res = req.send().wait();
     match res {
         Ok(_) => {}
         Err(err) => {
@@ -521,9 +521,13 @@ pub fn post_comment(cfg: &Config, issue: &github::Issue, body: &str) -> ServerRe
 
 fn get_authorized_users() -> ServerResult<Vec<usize>> {
     let url = format!("{}/permissions/perf.json", ::rust_team_data::v1::BASE_URL);
-    let perms: ::rust_team_data::v1::Permission = reqwest::get(&url)
+    let client = reqwest::r#async::Client::new();
+    let perms: ::rust_team_data::v1::Permission = client
+        .get(&url)
+        .send()
+        .wait()
         .and_then(|resp| resp.error_for_status())
-        .and_then(|mut resp| resp.json())
+        .and_then(|mut resp| resp.json().wait())
         .map_err(|err| format!("failed to fetch authorized users: {}", err))?;
     Ok(perms.github_ids)
 }
