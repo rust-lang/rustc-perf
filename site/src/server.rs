@@ -549,16 +549,18 @@ pub fn handle_github(request: github::Request, data: &InputData) -> ServerResult
     if let Some(captures) = BODY_TRY_COMMIT.captures(&body) {
         if let Some(commit) = captures.get(1).map(|c| c.as_str()) {
             let commit = commit.trim_start_matches("https://github.com/rust-lang/rust/commit/");
-            let client = reqwest::Client::new();
+            let client = reqwest::r#async::Client::new();
             let commit_response: github::Commit = client
                 .get(&format!(
                     "{}/commits/{}",
                     request.issue.repository_url, commit
                 ))
                 .send()
-                .map_err(|_| String::from("cannot get commit"))?
+                .map_err(|_| String::from("cannot get commit"))
+                .wait()?
                 .json()
-                .map_err(|e| format!("cannot deserialize commit: {:?}", e))?;
+                .map_err(|e| format!("cannot deserialize commit: {:?}", e))
+                .wait()?;
             if commit_response.parents.len() != 2 {
                 post_comment(
                     &data.config,
