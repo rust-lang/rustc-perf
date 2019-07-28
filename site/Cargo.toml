@@ -7,7 +7,7 @@ edition = '2018'
 [dependencies]
 env_logger = "0.6"
 failure = "0.1"
-futures = "0.1.28"
+futures-preview = { version = "0.3.0-alpha.17", features = ["compat"] }
 log = "0.4"
 serde = "1"
 serde_derive = "1"
@@ -15,7 +15,6 @@ serde_json = "1"
 hyper = "0.12"
 headers = "0.2.1"
 http = "0.1.17"
-antidote = "1.0"
 chrono = "0.4"
 rmp-serde = "0.13.7"
 semver = "0.9"
@@ -29,6 +28,7 @@ jemallocator = "0.3"
 jemalloc-ctl = "0.3"
 rust_team_data = { git = "https://github.com/rust-lang/team" }
 bincode = "1"
+parking_lot = "0.9"
 
 [dependencies.collector]
 path = "../collector"

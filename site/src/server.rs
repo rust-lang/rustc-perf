@@ -18,13 +18,17 @@ use std::str;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::sync::Arc;
 
-use futures::{self, Future, Stream};
+use futures::{
+    compat::{Future01CompatExt, Stream01CompatExt},
+    future::{FutureExt, TryFutureExt},
+    stream::StreamExt,
+};
+
 use headers::CacheControl;
 use headers::Header;
-use headers::{Authorization, ContentLength, ContentType};
+use headers::{Authorization, ContentType};
 use hyper::StatusCode;
 use log::{debug, error, info};
-use regex::Regex;
 use ring::hmac;
 use rmp_serde;
 use semver::Version;
@@ -44,9 +48,9 @@ use crate::github::post_comment;
 use crate::load::CurrentState;
 use crate::load::{Config, InputData};
 use crate::util::{self, get_repo_path, Interpolate};
-use antidote::RwLock;
 use collector::api::collected;
 use collector::version_supports_incremental;
+use parking_lot::RwLock;
 
 static INTERPOLATED_COLOR: &str = "#fcb0f1";
 
@@ -267,7 +271,7 @@ pub fn handle_next_commit(data: &InputData) -> Option<String> {
         .map(|c| c.0.sha)
 }
 
-pub fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<graph::Response> {
+pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<graph::Response> {
     let out = handle_data(
         data::Request {
             start: body.start.clone(),
@@ -483,7 +487,7 @@ fn handle_data(body: data::Request, data: &InputData) -> ServerResult<data::Resp
     Ok(data::Response(result))
 }
 
-pub fn handle_days(body: days::Request, data: &InputData) -> ServerResult<days::Response> {
+pub async fn handle_days(body: days::Request, data: &InputData) -> ServerResult<days::Response> {
     let a = util::find_commit(data, &body.start, true, Interpolate::No)?;
     let b = util::find_commit(data, &body.end, false, Interpolate::No)?;
     Ok(days::Response {
@@ -492,21 +496,20 @@ pub fn handle_days(body: days::Request, data: &InputData) -> ServerResult<days::
     })
 }
 
-lazy_static::lazy_static! {
-    static ref BODY_TRY_COMMIT: Regex =
-        Regex::new(r#"(?:\W|^)@rust-timer\s+build\s+(\w+)(?:\W|$)"#).unwrap();
+pub async fn handle_github(
+    request: github::Request,
+    data: &InputData,
+) -> ServerResult<github::Response> {
+    crate::github::handle_github(request, data).await
 }
 
-pub fn handle_github(request: github::Request, data: &InputData) -> ServerResult<github::Response> {
-    crate::github::handle_github(request, data)
-}
-
-pub fn handle_collected(
+pub async fn handle_collected(
     body: collected::Request,
     data: &InputData,
 ) -> ServerResult<collected::Response> {
-    let mut persistent = data.persistent.lock();
+    let mut comment = None;
     {
+        let mut persistent = data.persistent.lock();
         match body {
             collected::Request::BenchmarkCommit { commit, benchmarks } => {
                 let issue = if let Some(r#try) =
@@ -551,28 +554,30 @@ pub fn handle_collected(
                     if current.benchmarks.is_empty() {
                         // post a comment to some issue
                         if let Some(issue) = &current.issue {
-                            post_comment(
-                                &data.config,
-                                &issue,
-                                &format!(
+                            comment = Some((
+                                issue.clone(),
+                                format!(
                                     "Finished benchmarking try commit {}{}",
                                     current.commit.sha, comparison_url
                                 ),
-                            )?;
+                            ));
                         }
                     }
                 }
             }
         }
-    }
 
-    persistent.write().unwrap();
+        persistent.write().unwrap();
+    }
+    if let Some((issue, comment)) = comment {
+        post_comment(&data.config, &issue, comment).await;
+    }
 
     Ok(collected::Response {})
 }
 
 struct Server {
-    data: Arc<RwLock<InputData>>,
+    data: Arc<RwLock<Arc<InputData>>>,
     updating: UpdatingStatus,
 }
 
@@ -604,11 +609,10 @@ impl UpdatingStatus {
 macro_rules! check_http_method {
     ($lhs: expr, $rhs: expr) => {
         if $lhs != $rhs {
-            let resp = http::Response::builder()
+            return Ok(http::Response::builder()
                 .status(StatusCode::METHOD_NOT_ALLOWED)
                 .body(hyper::Body::empty())
-                .unwrap();
-            return Box::new(futures::future::ok(resp));
+                .unwrap());
         }
     };
 }
@@ -629,7 +633,7 @@ impl ResponseHeaders for http::response::Builder {
 }
 
 impl Server {
-    fn handle_get<F, S>(&self, req: &Request, handler: F) -> ServerFut
+    fn handle_get<F, S>(&self, req: &Request, handler: F) -> Result<Response, ServerError>
     where
         F: FnOnce(&InputData) -> S,
         S: Serialize,
@@ -638,16 +642,15 @@ impl Server {
         let data = self.data.clone();
         let data = data.read();
         let result = handler(&data);
-        let response = http::Response::builder()
+        Ok(http::Response::builder()
             .header_typed(ContentType::json())
             .body(hyper::Body::from(serde_json::to_string(&result).unwrap()))
-            .unwrap();
-        Box::new(futures::future::ok(response))
+            .unwrap())
     }
 
-    fn check_auth(&self, req: &Request) -> bool {
+    fn check_auth(&self, req: &http::request::Parts) -> bool {
         if let Some(auth) = req
-            .headers()
+            .headers
             .get(Authorization::<headers::authorization::Bearer>::name())
         {
             let data = self.data.read();
@@ -663,138 +666,16 @@ impl Server {
         false
     }
 
-    fn handle_github_auth_post<'de, F, D, S>(&self, req: Request, handler: F) -> ServerFut
-    where
-        F: FnOnce(D, &InputData) -> ServerResult<S> + Send + 'static,
-        D: DeserializeOwned,
-        S: Serialize,
-    {
-        self.handle_post_(req, handler, true)
-    }
-
-    fn handle_auth_post<'de, F, D, S>(&self, req: Request, handler: F) -> ServerFut
-    where
-        F: FnOnce(D, &InputData) -> ServerResult<S> + Send + 'static,
-        D: DeserializeOwned,
-        S: Serialize,
-    {
-        if !self.check_auth(&req) {
-            let resp = http::Response::builder()
-                .status(StatusCode::UNAUTHORIZED)
-                .body(hyper::Body::empty())
-                .unwrap();
-            return Box::new(futures::future::ok(resp));
-        }
-        self.handle_post(req, handler)
-    }
-
-    fn handle_post<'de, F, D, S>(&self, req: Request, handler: F) -> ServerFut
-    where
-        F: FnOnce(D, &InputData) -> ServerResult<S> + Send + 'static,
-        D: DeserializeOwned,
-        S: Serialize,
-    {
-        self.handle_post_(req, handler, false)
-    }
-
-    fn handle_post_<'de, F, D, S>(&self, req: Request, handler: F, gh: bool) -> ServerFut
-    where
-        F: FnOnce(D, &InputData) -> ServerResult<S> + Send + 'static,
-        D: DeserializeOwned,
-        S: Serialize,
-    {
-        check_http_method!(*req.method(), http::Method::POST);
-        let length = req
-            .headers()
-            .get(ContentLength::name())
-            .expect("content-length to exist")
-            .to_str()
-            .unwrap()
-            .parse::<u64>()
-            .expect("correct content length");
-        // 25 kB
-        if length > 25_000 {
-            return Box::new(futures::future::err(ServerError(format!("too large"))));
-        }
-        let data = self.data.clone();
-        let gh_header = req.headers().get("X-Hub-Signature").cloned();
-        let gh_header = gh_header.and_then(|g| g.to_str().ok().map(|s| s.to_owned()));
-        Box::new(
-            req.into_body()
-                .concat2()
-                .map_err(|e| ServerError(format!("{:?}", e)))
-                .map(move |body| {
-                    let data = data.read();
-                    if gh
-                        && !verify_gh_sig(&data.config, &gh_header.unwrap(), &body).unwrap_or(false)
-                    {
-                        return http::Response::builder()
-                            .status(StatusCode::UNAUTHORIZED)
-                            .body(hyper::Body::empty())
-                            .unwrap();
-                    }
-                    let body: D = match serde_json::from_slice(&body) {
-                        Ok(d) => d,
-                        Err(err) => {
-                            if gh {
-                                return http::Response::builder()
-                                    .header_typed(ContentType::text_utf8())
-                                    .status(StatusCode::OK)
-                                    .body(hyper::Body::from(format!(
-                                        "Failed to parse event, skipping. Error: {:?}",
-                                        err
-                                    )))
-                                    .unwrap();
-                            } else {
-                                error!(
-                                    "failed to deserialize request {}: {:?}",
-                                    String::from_utf8_lossy(&body),
-                                    err
-                                );
-                            }
-                            return http::Response::builder()
-                                .header_typed(ContentType::text_utf8())
-                                .status(StatusCode::BAD_REQUEST)
-                                .body(hyper::Body::from(format!(
-                                    "Failed to deserialize request; {:?}",
-                                    err
-                                )))
-                                .unwrap();
-                        }
-                    };
-                    let result = handler(body, &data);
-                    match result {
-                        Ok(result) => {
-                            let mut response = http::Response::builder();
-                            response
-                                .header_typed(ContentType::octet_stream())
-                                .header_typed(CacheControl::new().with_no_cache().with_no_store());
-                            let body = rmp_serde::to_vec_named(&result).unwrap();
-                            response.body(hyper::Body::from(body)).unwrap()
-                        }
-                        Err(err) => http::Response::builder()
-                            .status(StatusCode::INTERNAL_SERVER_ERROR)
-                            .header_typed(ContentType::text_utf8())
-                            .header_typed(CacheControl::new().with_no_cache().with_no_store())
-                            .body(hyper::Body::from(err))
-                            .unwrap(),
-                    }
-                }),
-        )
-    }
-
-    fn handle_push(&self, _req: Request) -> ServerFut {
+    async fn handle_push(&self, _req: Request) -> Response {
         // set to updating
         let was_updating = self.updating.set_updating();
 
         if was_updating {
-            return Box::new(futures::future::ok(
-                http::Response::builder()
-                    .status(StatusCode::OK)
-                    .header_typed(ContentType::text_utf8())
-                    .body(hyper::Body::from("Already updating!"))
-                    .unwrap(),
-            ));
+            return http::Response::builder()
+                .status(StatusCode::OK)
+                .header_typed(ContentType::text_utf8())
+                .body(hyper::Body::from("Already updating!"))
+                .unwrap();
         }
 
         // FIXME we are throwing everything away and starting again. It would be
@@ -811,7 +692,7 @@ impl Server {
             git::update_repo(&repo_path).unwrap();
 
             info!("updating from filesystem...");
-            let new_data = InputData::from_fs(&repo_path).unwrap();
+            let new_data = Arc::new(InputData::from_fs(&repo_path).unwrap());
             debug!("last date = {:?}", new_data.last_date);
 
             // Retrieve the stored InputData from the request.
@@ -823,9 +704,7 @@ impl Server {
             std::mem::drop(updating);
         });
 
-        Box::new(futures::future::ok(Response::new(hyper::Body::from(
-            "Queued update",
-        ))))
+        Response::new(hyper::Body::from("Queued update"))
     }
 }
 
@@ -840,55 +719,142 @@ impl fmt::Display for ServerError {
 
 impl std::error::Error for ServerError {}
 
-type ServerFut = Box<dyn Future<Item = Response, Error = ServerError> + Send>;
+async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerError> {
+    let fs_path = format!(
+        "site/static{}",
+        if req.uri().path() == "" || req.uri().path() == "/" {
+            "/index.html"
+        } else {
+            req.uri().path()
+        }
+    );
 
-impl Server {
-    fn call(&self, req: Request) -> ServerFut {
-        let fs_path = format!(
-            "site/static{}",
-            if req.uri().path() == "" || req.uri().path() == "/" {
-                "/index.html"
-            } else {
-                req.uri().path()
+    if fs_path.contains("./") | fs_path.contains("../") {
+        return Ok(http::Response::builder()
+            .header_typed(ContentType::html())
+            .status(StatusCode::NOT_FOUND)
+            .body(hyper::Body::empty())
+            .unwrap());
+    }
+
+    if Path::new(&fs_path).is_file() {
+        let source = fs::read(&fs_path).unwrap();
+        return Ok(Response::new(hyper::Body::from(source)));
+    }
+
+    match req.uri().path() {
+        "/perf/info" => return ctx.handle_get(&req, handle_info),
+        "/perf/dashboard" => return ctx.handle_get(&req, handle_dashboard),
+        "/perf/status_page" => return ctx.handle_get(&req, handle_status_page),
+        "/perf/next_commit" => return ctx.handle_get(&req, handle_next_commit),
+        _ => {}
+    }
+
+    if req.uri().path() == "/perf/onpush" {
+        return Ok(ctx.handle_push(req).await);
+    }
+
+    let (req, body_stream) = req.into_parts();
+    let p = req.uri.path();
+    check_http_method!(req.method, http::Method::POST);
+    let data: Arc<InputData> = ctx.data.read().clone();
+    let mut c = body_stream.compat();
+    let mut body = Vec::new();
+    while let Some(chunk) = c.next().await {
+        let chunk = match chunk {
+            Ok(c) => c,
+            Err(e) => {
+                return Err(ServerError(format!("failed to read chunk: {:?}", e)));
             }
-        );
-
-        if fs_path.contains("./") | fs_path.contains("../") {
-            return Box::new(futures::future::ok(
-                http::Response::builder()
-                    .header_typed(ContentType::html())
-                    .status(StatusCode::NOT_FOUND)
-                    .body(hyper::Body::empty())
-                    .unwrap(),
-            ));
-        }
-
-        if Path::new(&fs_path).is_file() {
-            let source = fs::read(&fs_path).unwrap();
-            return Box::new(futures::future::ok(Response::new(hyper::Body::from(
-                source,
-            ))));
-        }
-
-        match req.uri().path() {
-            "/perf/info" => self.handle_get(&req, handle_info),
-            "/perf/dashboard" => self.handle_get(&req, handle_dashboard),
-            "/perf/graph" => self.handle_post(req, handle_graph),
-            "/perf/get" => self.handle_post(req, handle_days),
-            "/perf/status_page" => self.handle_get(&req, handle_status_page),
-            "/perf/next_commit" => self.handle_get(&req, handle_next_commit),
-            "/perf/onpush" => self.handle_push(req),
-            "/perf/collected" => self.handle_auth_post(req, handle_collected),
-            "/perf/github-hook" => self.handle_github_auth_post(req, handle_github),
-            _ => Box::new(futures::future::ok(
-                http::Response::builder()
-                    .header_typed(ContentType::html())
-                    .status(StatusCode::NOT_FOUND)
-                    .body(hyper::Body::empty())
-                    .unwrap(),
-            )),
+        };
+        body.extend_from_slice(&chunk);
+        if body.len() > 25_000 {
+            return Ok(http::Response::builder()
+                .status(StatusCode::PAYLOAD_TOO_LARGE)
+                .body(hyper::Body::empty())
+                .unwrap());
         }
     }
+
+    macro_rules! body {
+        ($e:expr) => {
+            match $e {
+                Ok(v) => v,
+                Err(e) => return Ok(e),
+            }
+        };
+    }
+
+    // Can't use match because of https://github.com/rust-lang/rust/issues/57017
+    if p == "/perf/graph" {
+        Ok(to_response(
+            handle_graph(body!(parse_body(&body)), &data).await,
+        ))
+    } else if p == "/perf/get" {
+        Ok(to_response(
+            handle_days(body!(parse_body(&body)), &data).await,
+        ))
+    } else if p == "/perf/collected" {
+        if !ctx.check_auth(&req) {
+            return Ok(http::Response::builder()
+                .status(StatusCode::UNAUTHORIZED)
+                .body(hyper::Body::empty())
+                .unwrap());
+        }
+        Ok(to_response(
+            handle_collected(body!(parse_body(&body)), &data).await,
+        ))
+    } else if p == "/perf/github-hook" {
+        if !verify_gh(&data.config, &req, &body) {
+            return Ok(http::Response::builder()
+                .status(StatusCode::UNAUTHORIZED)
+                .body(hyper::Body::empty())
+                .unwrap());
+        }
+        Ok(to_response(
+            handle_github(body!(parse_body(&body)), &data).await,
+        ))
+    } else {
+        return Ok(http::Response::builder()
+            .header_typed(ContentType::html())
+            .status(StatusCode::NOT_FOUND)
+            .body(hyper::Body::empty())
+            .unwrap());
+    }
+}
+
+fn parse_body<D>(body: &[u8]) -> Result<D, Response>
+where
+    D: DeserializeOwned,
+{
+    match serde_json::from_slice(&body) {
+        Ok(d) => Ok(d),
+        Err(err) => {
+            error!(
+                "failed to deserialize request {}: {:?}",
+                String::from_utf8_lossy(&body),
+                err
+            );
+            return Err(http::Response::builder()
+                .header_typed(ContentType::text_utf8())
+                .status(StatusCode::BAD_REQUEST)
+                .body(hyper::Body::from(format!(
+                    "Failed to deserialize request; {:?}",
+                    err
+                )))
+                .unwrap());
+        }
+    }
+}
+
+fn verify_gh(config: &Config, req: &http::request::Parts, body: &[u8]) -> bool {
+    let gh_header = req.headers.get("X-Hub-Signature").cloned();
+    let gh_header = gh_header.and_then(|g| g.to_str().ok().map(|s| s.to_owned()));
+    let gh_header = match gh_header {
+        Some(v) => v,
+        None => return false,
+    };
+    verify_gh_sig(config, &gh_header, &body).unwrap_or(false)
 }
 
 fn verify_gh_sig(cfg: &Config, header: &str, body: &[u8]) -> Option<bool> {
@@ -905,26 +871,60 @@ fn verify_gh_sig(cfg: &Config, header: &str, body: &[u8]) -> Option<bool> {
     Some(false)
 }
 
-pub fn start(data: InputData, port: u16) {
-    let server = Arc::new(Server {
-        data: Arc::new(RwLock::new(data)),
+fn to_response<S>(result: ServerResult<S>) -> Response
+where
+    S: Serialize,
+{
+    match result {
+        Ok(result) => {
+            let mut response = http::Response::builder();
+            response
+                .header_typed(ContentType::octet_stream())
+                .header_typed(CacheControl::new().with_no_cache().with_no_store());
+            let body = rmp_serde::to_vec_named(&result).unwrap();
+            response.body(hyper::Body::from(body)).unwrap()
+        }
+        Err(err) => http::Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .header_typed(ContentType::text_utf8())
+            .header_typed(CacheControl::new().with_no_cache().with_no_store())
+            .body(hyper::Body::from(err))
+            .unwrap(),
+    }
+}
+
+async fn run_server(data: InputData, addr: SocketAddr) {
+    let ctx = Arc::new(Server {
+        data: Arc::new(RwLock::new(Arc::new(data))),
         updating: UpdatingStatus::new(),
     });
-    let mut server_address: SocketAddr = "0.0.0.0:2346".parse().unwrap();
-    server_address.set_port(port);
-    let server = hyper::Server::bind(&server_address).serve(move || {
-        let s = server.clone();
+    let server = hyper::Server::bind(&addr).serve(move || {
+        let ctx = ctx.clone();
         hyper::service::service_fn(move |req| {
             let start = std::time::Instant::now();
             let desc = format!("{} {}", req.method(), req.uri());
-            s.call(req).map(move |r| {
-                let dur = start.elapsed();
-                info!("{}: {} {:?}", desc, r.status(), dur);
-                r
-            })
+            serve_req(ctx.clone(), req)
+                .inspect(move |r| {
+                    let dur = start.elapsed();
+                    info!("{}: {:?} {:?}", desc, r.as_ref().map(|r| r.status()), dur)
+                })
+                .boxed()
+                .compat()
         })
     });
-    hyper::rt::run(server.map_err(|e| {
-        error!("server error: {:?}", e);
-    }));
+
+    if let Err(e) = server.compat().await {
+        eprintln!("server error: {:?}", e);
+    }
+}
+
+pub fn start(data: InputData, port: u16) {
+    let mut server_address: SocketAddr = "0.0.0.0:2346".parse().unwrap();
+    server_address.set_port(port);
+    hyper::rt::run(
+        run_server(data, server_address)
+            .unit_error()
+            .boxed()
+            .compat(),
+    );
 }

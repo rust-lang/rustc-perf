@@ -12,9 +12,9 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use antidote::Mutex;
 use chrono::{Duration, Utc};
 use failure::{Error, ResultExt};
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
 use crate::git;
