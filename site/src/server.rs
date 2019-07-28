@@ -768,7 +768,8 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
             }
         };
         body.extend_from_slice(&chunk);
-        if body.len() > 25_000 {
+        // More than 10 MB of data
+        if body.len() > 1024 * 1024 * 10 {
             return Ok(http::Response::builder()
                 .status(StatusCode::PAYLOAD_TOO_LARGE)
                 .body(hyper::Body::empty())
