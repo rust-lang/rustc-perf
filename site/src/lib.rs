@@ -17,6 +17,7 @@ pub struct CommandFailed {
 }
 
 mod git;
+mod github;
 
 pub mod api;
 pub mod load;
