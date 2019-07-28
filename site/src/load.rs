@@ -567,7 +567,10 @@ impl InputData {
                     if let Some(commit) = self.commits.iter().find(|c| c.sha == *parent_sha) {
                         ret.push((commit.clone(), MissingReason::TryParent));
                     } else {
-                        warn!("could not find parent_sha {:?}", parent_sha);
+                        // could not find parent SHA
+                        // Unfortunately this just means that the parent commit is older than 168
+                        // days for the most part so we don't have artifacts for it anymore anyway;
+                        // in that case, just ignore this "error".
                     }
                     ret
                 },
