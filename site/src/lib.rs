@@ -7,8 +7,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(async_await)]
-
 #[macro_use]
 extern crate failure;
 
