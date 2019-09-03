@@ -1554,7 +1554,7 @@ dependencies = [
 
 [[package]]
 name = "ring"
-version = "0.16.7"
+version = "0.16.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "cc 1.0.38 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1805,7 +1805,7 @@ dependencies = [
  "pretty_assertions 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "regex 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "reqwest 0.9.20 (registry+https://github.com/rust-lang/crates.io-index)",
- "ring 0.16.7 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ring 0.16.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "rmp-serde 0.13.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "rust_team_data 1.0.0 (git+https://github.com/rust-lang/team)",
  "semver 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2600,7 +2600,7 @@ dependencies = [
 "checksum remove_dir_all 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)" = "4a83fa3702a688b9359eccba92d153ac33fd2e8462f9e0e3fdf155239ea7792e"
 "checksum reqwest 0.9.20 (registry+https://github.com/rust-lang/crates.io-index)" = "0f6d896143a583047512e59ac54a215cb203c29cc941917343edea3be8df9c78"
 "checksum retry 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)" = "c8ac83b31b3831aa4b07608db4170f6555ab12942197037c38570dc4c5ba5028"
-"checksum ring 0.16.7 (registry+https://github.com/rust-lang/crates.io-index)" = "796ae8317a07b04dffb1983bdc7045ccd02f741f0b411704f07fd35dbf99f757"
+"checksum ring 0.16.9 (registry+https://github.com/rust-lang/crates.io-index)" = "6747f8da1f2b1fabbee1aaa4eb8a11abf9adef0bf58a41cee45db5d59cecdfac"
 "checksum rmp 0.8.7 (registry+https://github.com/rust-lang/crates.io-index)" = "a3d45d7afc9b132b34a2479648863aa95c5c88e98b32285326a6ebadc80ec5c9"
 "checksum rmp-serde 0.13.7 (registry+https://github.com/rust-lang/crates.io-index)" = "011e1d58446e9fa3af7cdc1fb91295b10621d3ac4cb3a85cc86385ee9ca50cd3"
 "checksum rs_tracing 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)" = "92b10cbf58a21be5d96a9c0336bd06b50f581dcb735f66ff69781a12336ac03b"
