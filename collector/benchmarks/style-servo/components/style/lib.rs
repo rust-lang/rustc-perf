@@ -24,7 +24,7 @@
 //! [selectors]: ../selectors/index.html
 
 #![deny(missing_docs)]
-
+#![allow(warnings)]
 // FIXME(bholley): We need to blanket-allow unsafe code in order to make the
 // gecko atom!() macro work. When Rust 1.14 is released [1], we can uncomment
 // the commented-out attributes in regen_atoms.py and go back to denying unsafe
@@ -33,40 +33,56 @@
 // [1] https://github.com/rust-lang/rust/issues/15701#issuecomment-251900615
 //#![deny(unsafe_code)]
 #![allow(unused_unsafe)]
-
-#![recursion_limit = "500"]  // For define_css_keyword_enum! in -moz-appearance
+#![recursion_limit = "500"] // For define_css_keyword_enum! in -moz-appearance
 
 extern crate app_units;
 extern crate arrayvec;
 extern crate atomic_refcell;
 #[macro_use]
 extern crate bitflags;
-#[allow(unused_extern_crates)] extern crate byteorder;
-#[cfg(feature = "gecko")] #[macro_use] #[no_link] extern crate cfg_if;
-#[macro_use] extern crate cssparser;
+#[allow(unused_extern_crates)]
+extern crate byteorder;
+#[cfg(feature = "gecko")]
+#[macro_use]
+#[no_link]
+extern crate cfg_if;
+#[macro_use]
+extern crate cssparser;
 extern crate euclid;
 extern crate fallible;
 extern crate fnv;
-#[cfg(feature = "gecko")] #[macro_use] pub mod gecko_string_cache;
+#[cfg(feature = "gecko")]
+#[macro_use]
+pub mod gecko_string_cache;
 extern crate hashglobe;
-#[cfg(feature = "servo")] extern crate heapsize;
-#[cfg(feature = "servo")] #[macro_use] extern crate heapsize_derive;
+#[cfg(feature = "servo")]
+extern crate heapsize;
+#[cfg(feature = "servo")]
+#[macro_use]
+extern crate heapsize_derive;
 extern crate itertools;
 extern crate itoa;
-#[cfg(feature = "servo")] #[macro_use] extern crate html5ever;
+#[cfg(feature = "servo")]
+#[macro_use]
+extern crate html5ever;
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]
 extern crate log;
 extern crate lru_cache;
-#[cfg(feature = "gecko")] #[macro_use] extern crate malloc_size_of;
-#[cfg(feature = "gecko")] #[macro_use] extern crate malloc_size_of_derive;
+#[cfg(feature = "gecko")]
+#[macro_use]
+extern crate malloc_size_of;
+#[cfg(feature = "gecko")]
+#[macro_use]
+extern crate malloc_size_of_derive;
 #[allow(unused_extern_crates)]
 #[macro_use]
 extern crate matches;
 #[cfg(feature = "gecko")]
 pub extern crate nsstring_vendor as nsstring;
-#[cfg(feature = "gecko")] extern crate num_cpus;
+#[cfg(feature = "gecko")]
+extern crate num_cpus;
 extern crate num_integer;
 extern crate num_traits;
 extern crate ordered_float;
@@ -76,11 +92,17 @@ extern crate pdqsort;
 extern crate precomputed_hash;
 extern crate rayon;
 extern crate selectors;
-#[cfg(feature = "servo")] #[macro_use] extern crate serde;
+#[cfg(feature = "servo")]
+#[macro_use]
+extern crate serde;
 pub extern crate servo_arc;
-#[cfg(feature = "servo")] #[macro_use] extern crate servo_atoms;
-#[cfg(feature = "servo")] extern crate servo_config;
-#[cfg(feature = "servo")] extern crate servo_url;
+#[cfg(feature = "servo")]
+#[macro_use]
+extern crate servo_atoms;
+#[cfg(feature = "servo")]
+extern crate servo_config;
+#[cfg(feature = "servo")]
+extern crate servo_url;
 extern crate smallbitvec;
 extern crate smallvec;
 #[macro_use]
@@ -95,10 +117,12 @@ extern crate unicode_segmentation;
 #[macro_use]
 mod macros;
 
-#[cfg(feature = "servo")] pub mod animation;
+#[cfg(feature = "servo")]
+pub mod animation;
 pub mod applicable_declarations;
 #[allow(missing_docs)] // TODO.
-#[cfg(feature = "servo")] pub mod attr;
+#[cfg(feature = "servo")]
+pub mod attr;
 pub mod bezier;
 pub mod bloom;
 pub mod context;
@@ -108,12 +132,17 @@ pub mod data;
 pub mod dom;
 pub mod driver;
 pub mod element_state;
-#[cfg(feature = "servo")] mod encoding_support;
+#[cfg(feature = "servo")]
+mod encoding_support;
 pub mod error_reporting;
 pub mod font_face;
 pub mod font_metrics;
-#[cfg(feature = "gecko")] #[allow(unsafe_code)] pub mod gecko;
-#[cfg(feature = "gecko")] #[allow(unsafe_code)] pub mod gecko_bindings;
+#[cfg(feature = "gecko")]
+#[allow(unsafe_code)]
+pub mod gecko;
+#[cfg(feature = "gecko")]
+#[allow(unsafe_code)]
+pub mod gecko_bindings;
 pub mod hash;
 pub mod invalidation;
 #[allow(missing_docs)] // TODO.
@@ -127,15 +156,17 @@ pub mod rule_tree;
 pub mod scoped_tls;
 pub mod selector_map;
 pub mod selector_parser;
+#[cfg(feature = "servo")]
+#[allow(unsafe_code)]
+pub mod servo;
 pub mod shared_lock;
 pub mod sharing;
-pub mod style_resolver;
-pub mod stylist;
-#[cfg(feature = "servo")] #[allow(unsafe_code)] pub mod servo;
 pub mod str;
 pub mod style_adjuster;
+pub mod style_resolver;
 pub mod stylesheet_set;
 pub mod stylesheets;
+pub mod stylist;
 pub mod thread_state;
 pub mod timer;
 pub mod traversal;
@@ -147,16 +178,25 @@ pub mod values;
 use std::fmt;
 use style_traits::ToCss;
 
-#[cfg(feature = "gecko")] pub use gecko_string_cache as string_cache;
-#[cfg(feature = "gecko")] pub use gecko_string_cache::Atom;
-#[cfg(feature = "gecko")] pub use gecko_string_cache::Namespace;
-#[cfg(feature = "gecko")] pub use gecko_string_cache::Atom as Prefix;
-#[cfg(feature = "gecko")] pub use gecko_string_cache::Atom as LocalName;
+#[cfg(feature = "gecko")]
+pub use gecko_string_cache as string_cache;
+#[cfg(feature = "gecko")]
+pub use gecko_string_cache::Atom;
+#[cfg(feature = "gecko")]
+pub use gecko_string_cache::Atom as Prefix;
+#[cfg(feature = "gecko")]
+pub use gecko_string_cache::Atom as LocalName;
+#[cfg(feature = "gecko")]
+pub use gecko_string_cache::Namespace;
 
-#[cfg(feature = "servo")] pub use servo_atoms::Atom;
-#[cfg(feature = "servo")] pub use html5ever::Prefix;
-#[cfg(feature = "servo")] pub use html5ever::LocalName;
-#[cfg(feature = "servo")] pub use html5ever::Namespace;
+#[cfg(feature = "servo")]
+pub use html5ever::LocalName;
+#[cfg(feature = "servo")]
+pub use html5ever::Namespace;
+#[cfg(feature = "servo")]
+pub use html5ever::Prefix;
+#[cfg(feature = "servo")]
+pub use servo_atoms::Atom;
 
 /// The CSS properties supported by the style system.
 /// Generated from the properties.mako.rs template by build.rs
@@ -191,11 +231,10 @@ longhand_properties_idents!(reexport_computed_values);
 
 /// Serializes as CSS a comma-separated list of any `T` that supports being
 /// serialized as CSS.
-pub fn serialize_comma_separated_list<W, T>(dest: &mut W,
-                                            list: &[T])
-                                            -> fmt::Result
-    where W: fmt::Write,
-          T: ToCss,
+pub fn serialize_comma_separated_list<W, T>(dest: &mut W, list: &[T]) -> fmt::Result
+where
+    W: fmt::Write,
+    T: ToCss,
 {
     if list.is_empty() {
         return Ok(());
@@ -211,8 +250,10 @@ pub fn serialize_comma_separated_list<W, T>(dest: &mut W,
     Ok(())
 }
 
-#[cfg(feature = "gecko")] use gecko_string_cache::WeakAtom;
-#[cfg(feature = "servo")] use servo_atoms::Atom as WeakAtom;
+#[cfg(feature = "gecko")]
+use gecko_string_cache::WeakAtom;
+#[cfg(feature = "servo")]
+use servo_atoms::Atom as WeakAtom;
 
 /// Extension methods for selectors::attr::CaseSensitivity
 pub trait CaseSensitivityExt {
