@@ -1,2 +1,5 @@
 [workspace]
 members = ["components/script"]
+
+[patch.crates-io]
+cssparser = { path = "../style-servo/rust-cssparser" }
