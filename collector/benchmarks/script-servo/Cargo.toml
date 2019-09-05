@@ -2,4 +2,4 @@
 members = ["components/script"]
 
 [patch.crates-io]
-cssparser = { path = "../style-servo/rust-cssparser" }
+cssparser = { path = "./rust-cssparser" }
