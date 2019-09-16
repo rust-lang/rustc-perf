@@ -266,6 +266,7 @@ pub mod github {
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
     pub struct Issue {
+        pub number: u32,
         pub comments_url: String,
         pub repository_url: String,
     }

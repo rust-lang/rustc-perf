@@ -93,6 +93,11 @@ impl TryCommit {
 pub struct Persistent {
     pub try_commits: Vec<TryCommit>,
     pub current: Option<CurrentState>,
+    // this is a list of pr numbers for which we expect to run
+    // a perf build once the try build completes.
+    // This only persists for one try build (so should not be long at any point).
+    #[serde(default)]
+    pub pending_try_builds: HashSet<u32>,
 }
 
 lazy_static::lazy_static! {
@@ -114,6 +119,7 @@ impl Persistent {
         let p = Persistent::load_().unwrap_or_else(|| Persistent {
             try_commits: Vec::new(),
             current: None,
+            pending_try_builds: HashSet::new(),
         });
         p.write().unwrap();
         p
