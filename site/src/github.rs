@@ -70,7 +70,7 @@ pub async fn handle_github(
         post_comment(
             &data.config,
             &request.issue,
-            "Successfully queued build, kicking off bors: @bors try",
+            "Awaiting bors try build completion",
         )
         .await;
         return Ok(github::Response);
@@ -139,7 +139,7 @@ async fn enqueue_sha(
         &data.config,
         &request.issue,
         format!(
-            "Success: Queued {} with parent {}, [comparison URL]({}).",
+            "Queued {} with parent {}, future [comparison URL]({}).",
             commit_response.sha,
             commit_response.parents[0].sha,
             try_commit.comparison_url(),
