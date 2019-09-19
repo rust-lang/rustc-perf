@@ -129,13 +129,8 @@ struct CargoProcess<'a> {
     cwd: &'a Path,
     build_kind: BuildKind,
     incremental: bool,
-    processor_etc: Option<(
-        &'a mut dyn Processor,
-        &'a str,
-        RunKind,
-        &'a str,
-        Option<&'a Patch>,
-    )>,
+    processor_etc: Option<(&'a mut dyn Processor, RunKind, &'a str, Option<&'a Patch>)>,
+    processor_name: &'a str,
     manifest_path: String,
     cargo_args: Vec<String>,
     rustc_args: Vec<String>,
@@ -150,12 +145,11 @@ impl<'a> CargoProcess<'a> {
     fn processor(
         mut self,
         processor: &'a mut dyn Processor,
-        name: &'a str,
         run_kind: RunKind,
         run_kind_str: &'a str,
         patch: Option<&'a Patch>,
     ) -> Self {
-        self.processor_etc = Some((processor, name, run_kind, run_kind_str, patch));
+        self.processor_etc = Some((processor, run_kind, run_kind_str, patch));
         self
     }
 
@@ -230,11 +224,9 @@ impl<'a> CargoProcess<'a> {
             touch_all(&self.cwd)?;
 
             let output = command_output(&mut cmd)?;
-            if let Some((ref mut processor, name, run_kind, run_kind_str, patch)) =
-                self.processor_etc
-            {
+            if let Some((ref mut processor, run_kind, run_kind_str, patch)) = self.processor_etc {
                 let data = ProcessOutputData {
-                    name,
+                    name: self.processor_name,
                     cwd: self.cwd,
                     build_kind: self.build_kind,
                     run_kind,
@@ -649,7 +641,7 @@ impl Benchmark {
     }
 
     fn mk_cargo_process<'a>(
-        &self,
+        &'a self,
         compiler: Compiler<'a>,
         cwd: &'a Path,
         build_kind: BuildKind,
@@ -671,6 +663,7 @@ impl Benchmark {
 
         CargoProcess {
             compiler,
+            processor_name: &self.name,
             cwd: cwd,
             build_kind: build_kind,
             incremental: false,
@@ -727,7 +720,7 @@ impl Benchmark {
                 // A full non-incremental build.
                 if run_kinds.contains(&RunKind::Clean) {
                     self.mk_cargo_process(compiler, cwd, build_kind)
-                        .processor(processor, &self.name, RunKind::Clean, "Clean", None)
+                        .processor(processor, RunKind::Clean, "Clean", None)
                         .run_rustc()?;
                 }
 
@@ -739,7 +732,7 @@ impl Benchmark {
                 {
                     self.mk_cargo_process(compiler, cwd, build_kind)
                         .incremental(true)
-                        .processor(processor, &self.name, RunKind::BaseIncr, "BaseIncr", None)
+                        .processor(processor, RunKind::BaseIncr, "BaseIncr", None)
                         .run_rustc()?;
                 }
 
@@ -747,7 +740,7 @@ impl Benchmark {
                 if run_kinds.contains(&RunKind::CleanIncr) {
                     self.mk_cargo_process(compiler, cwd, build_kind)
                         .incremental(true)
-                        .processor(processor, &self.name, RunKind::CleanIncr, "CleanIncr", None)
+                        .processor(processor, RunKind::CleanIncr, "CleanIncr", None)
                         .run_rustc()?;
                 }
 
@@ -763,7 +756,6 @@ impl Benchmark {
                             .incremental(true)
                             .processor(
                                 processor,
-                                &self.name,
                                 RunKind::PatchedIncrs,
                                 &run_kind_str,
                                 Some(&patch),
