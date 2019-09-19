@@ -1,7 +1,7 @@
 # Rust Compiler Performance Monitoring & Benchmarking
 
 This repository contains two primary crates: `collector` and `site`. Collector gathers data for each
-bors commit and the site displays the data.
+bors commit and the site displays the data and provides a GitHub bot for on-demand benchmarking.
 
 The primary required setup is to provide a folder with a `retries` file and a `times` folder. Data
 is gathered into https://github.com/rust-lang-nursery/rustc-timing by Rust Infrastructure; cloning

@@ -5,6 +5,8 @@ This is the website for Rust compiler performance monitoring. The website
 contains a backend to process the raw data and expose it to the frontend,
 which displays graphs to the user.
 
+This also contains a GitHub bot to trigger on-demand benchmarking.
+
 https://github.com/rust-lang-nursery/rustc-timing contains the raw data
 from which rustc-perf pulls.
 
