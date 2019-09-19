@@ -104,15 +104,14 @@ pub type ServerResult<T> = StdResult<T, String>;
 pub mod info {
     use collector::Date;
     use serde::{Deserialize, Serialize};
-    use std::collections::BTreeSet;
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct Response {
         /// Sorted vector of crate names
-        pub crates: BTreeSet<String>,
+        pub crates: Vec<String>,
 
         /// Sorted list of statistic names known
-        pub stats: BTreeSet<String>,
+        pub stats: Vec<String>,
 
         /// Chronologically last loaded run date.
         pub as_of: Date,

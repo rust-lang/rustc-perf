@@ -149,10 +149,10 @@ pub struct Config {
 #[derive(Debug)]
 pub struct InputData {
     /// A set containing all crate names of the bootstrap kind.
-    pub crate_list: BTreeSet<String>,
+    pub crate_list: Vec<String>,
 
     /// All known statistics gathered for crates
-    pub stats_list: BTreeSet<String>,
+    pub stats_list: Vec<String>,
 
     /// The last date that was seen while loading files. The DateTime variant is
     /// used here since the date may or may not contain a time. Since the
@@ -500,8 +500,8 @@ impl InputData {
         let data = data_next;
 
         Ok(InputData {
-            crate_list: crate_list,
-            stats_list: stats_list,
+            crate_list: crate_list.into_iter().collect(),
+            stats_list: stats_list.into_iter().collect(),
             interpolated,
             last_date: last_date,
             data_real: data_real,
