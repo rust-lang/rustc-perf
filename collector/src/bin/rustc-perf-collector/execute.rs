@@ -1,9 +1,8 @@
 //! Execute benchmarks.
 
 use std::cmp;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::env;
-use std::f64;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::process::{self, Command};
@@ -12,7 +11,7 @@ use std::str;
 use tempfile::TempDir;
 
 use collector::{
-    command_output, Benchmark as CollectedBenchmark, BenchmarkState, Patch, Run, Stat,
+    command_output, Benchmark as CollectedBenchmark, BenchmarkState, Patch, Run, StatId, Stats,
 };
 
 use failure::{err_msg, Error, ResultExt};
@@ -288,10 +287,10 @@ pub trait Processor {
 }
 
 pub struct MeasureProcessor {
-    clean_stats: Vec<Vec<Stat>>,
-    base_incr_stats: Vec<Vec<Stat>>,
-    clean_incr_stats: Vec<Vec<Stat>>,
-    patched_incr_stats: Vec<(Patch, Vec<Vec<Stat>>)>,
+    clean_stats: Vec<Stats>,
+    base_incr_stats: Vec<Stats>,
+    clean_incr_stats: Vec<Stats>,
+    patched_incr_stats: Vec<(Patch, Vec<Stats>)>,
 
     pub collected: CollectedBenchmark,
 }
@@ -783,9 +782,9 @@ enum DeserializeStatError {
     ParseError(String, #[fail(cause)] ::std::num::ParseFloatError),
 }
 
-fn process_perf_stat_output(output: process::Output) -> Result<Vec<Stat>, DeserializeStatError> {
+fn process_perf_stat_output(output: process::Output) -> Result<Stats, DeserializeStatError> {
     let stdout = String::from_utf8(output.stdout.clone()).expect("utf8 output");
-    let mut stats = Vec::new();
+    let mut stats = Stats::new();
 
     for line in stdout.lines() {
         // github.com/torvalds/linux/blob/bc78d646e708/tools/perf/Documentation/perf-stat.txt#L281
@@ -815,12 +814,11 @@ fn process_perf_stat_output(output: process::Output) -> Result<Vec<Stat>, Deseri
                 name, pct
             );
         }
-        stats.push(Stat {
-            name: name.to_string(),
-            cnt: cnt
-                .parse()
+        stats.insert(
+            StatId::from_str(name).unwrap(),
+            cnt.parse()
                 .map_err(|e| DeserializeStatError::ParseError(cnt.to_string(), e))?,
-        });
+        );
     }
 
     if stats.is_empty() {
@@ -830,38 +828,26 @@ fn process_perf_stat_output(output: process::Output) -> Result<Vec<Stat>, Deseri
     Ok(stats)
 }
 
-fn process_stats(build_kind: BuildKind, state: BenchmarkState, runs: &[Vec<Stat>]) -> Run {
-    let mut stats: HashMap<String, Vec<f64>> = HashMap::new();
-    for run_stats in runs.clone() {
-        for stat in run_stats {
-            stats
-                .entry(stat.name.clone())
-                .or_insert_with(|| Vec::new())
-                .push(stat.cnt);
-        }
-    }
+fn process_stats(build_kind: BuildKind, state: BenchmarkState, runs: &[Stats]) -> Run {
     // all stats should be present in all runs
-    let map = stats.values().map(|v| v.len()).collect::<HashSet<_>>();
+    let map = runs.iter().map(|v| v.len()).collect::<HashSet<_>>();
     if map.len() != 1 {
         eprintln!("build_kind: {:?}", build_kind);
         eprintln!("state: {:?}", state);
         eprintln!("lengths: {:?}", map);
         eprintln!("runs: {:?}", runs);
-        eprintln!("stats: {:?}", stats);
         panic!("expected all stats to be present in all runs");
     }
-    let stats = stats
-        .into_iter()
-        .map(|(stat, counts)| Stat {
-            name: stat,
-            cnt: counts
-                .into_iter()
-                .fold(f64::INFINITY, |acc, v| f64::min(acc, v)),
-        })
-        .collect();
+    let mut overall = Stats::new();
+    for run_stats in runs {
+        for (stat, value) in run_stats.iter() {
+            let previous = overall.get(stat).unwrap_or(value);
+            overall.insert(stat, previous.min(value));
+        }
+    }
 
     Run {
-        stats,
+        stats: overall,
         check: build_kind == BuildKind::Check,
         release: build_kind == BuildKind::Opt,
         state: state,

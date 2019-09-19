@@ -24,7 +24,9 @@ use collector::Date;
 
 use crate::api::github;
 use collector;
-pub use collector::{ArtifactData, Benchmark, Commit, CommitData, Patch, Run, RunId, Stat};
+pub use collector::{
+    ArtifactData, Benchmark, Commit, CommitData, Patch, Run, RunId, StatId, Stats,
+};
 use log::{error, info, trace, warn};
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
@@ -152,7 +154,7 @@ pub struct InputData {
     pub crate_list: Vec<String>,
 
     /// All known statistics gathered for crates
-    pub stats_list: Vec<String>,
+    pub stats_list: Vec<&'static str>,
 
     /// The last date that was seen while loading files. The DateTime variant is
     /// used here since the date may or may not contain a time. Since the
@@ -298,8 +300,8 @@ impl InputData {
                 for run in &benchmark.runs {
                     let run_name = benchmark.name.clone() + &run.name();
                     crate_list.insert(run_name);
-                    for stat in &run.stats {
-                        stats_list.insert(stat.name.clone());
+                    for (stat, _) in run.stats.iter() {
+                        stats_list.insert(stat.as_str());
                     }
                 }
             }
@@ -787,16 +789,13 @@ fn fill_benchmark_data(benchmark_name: &str, data: &mut AssociatedData<'_>) -> O
     // we never reach here
 }
 
-fn interpolate_stats(srun: &Run, erun: &Run, distance: usize, from_start: usize) -> Vec<Stat> {
-    let mut interpolated_stats = Vec::with_capacity(srun.stats.len());
-    for sstat in &srun.stats {
-        if let Some(estat) = erun.get_stat(&sstat.name) {
-            let slope = (estat - sstat.cnt) / (distance as f64);
-            let interpolated = slope * (from_start as f64) + sstat.cnt;
-            interpolated_stats.push(collector::Stat {
-                name: sstat.name.clone(),
-                cnt: interpolated,
-            });
+fn interpolate_stats(srun: &Run, erun: &Run, distance: usize, from_start: usize) -> Stats {
+    let mut interpolated_stats = Stats::new();
+    for (sstat, sstat_value) in srun.stats.iter() {
+        if let Some(estat) = erun.get_stat(sstat) {
+            let slope = (estat - sstat_value) / (distance as f64);
+            let interpolated = slope * (from_start as f64) + sstat_value;
+            interpolated_stats.insert(sstat, interpolated);
         }
     }
     interpolated_stats

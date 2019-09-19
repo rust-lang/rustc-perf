@@ -50,6 +50,7 @@ use crate::load::{Config, InputData};
 use crate::util::{self, get_repo_path, Interpolate};
 use collector::api::collected;
 use collector::version_supports_incremental;
+use collector::StatId;
 use parking_lot::RwLock;
 
 static INTERPOLATED_COLOR: &str = "#fcb0f1";
@@ -150,7 +151,7 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
             macro_rules! extend {
                 ($v:ident, $r: ident, $cond: expr) => {
                     let run = bench.runs.iter().find(|$r| $cond);
-                    if let Some(stat) = run.and_then(|r| r.get_stat("wall-time")) {
+                    if let Some(stat) = run.and_then(|r| r.get_stat(StatId::WallTime)) {
                         $v.push(stat);
                     }
                 };
@@ -463,8 +464,8 @@ fn handle_data(body: data::Request, data: &InputData) -> ServerResult<data::Resp
     let range = util::data_range(&data, &body.start, &body.end, Interpolate::Yes)?;
     let mut result = range
         .into_iter()
-        .map(|day| DateData::for_day(day, &body.stat))
-        .collect::<Vec<_>>();
+        .map(|day| Ok(DateData::for_day(day, StatId::from_str(&body.stat)?)))
+        .collect::<ServerResult<Vec<_>>>()?;
 
     if result.is_empty() {
         return Err(format!(
@@ -491,8 +492,8 @@ pub async fn handle_days(body: days::Request, data: &InputData) -> ServerResult<
     let a = util::find_commit(data, &body.start, true, Interpolate::No)?;
     let b = util::find_commit(data, &body.end, false, Interpolate::No)?;
     Ok(days::Response {
-        a: DateData::for_day(&a, &body.stat),
-        b: DateData::for_day(&b, &body.stat),
+        a: DateData::for_day(&a, StatId::from_str(&body.stat)?),
+        b: DateData::for_day(&b, StatId::from_str(&body.stat)?),
     })
 }
 

@@ -14,7 +14,7 @@
 //! The responses are calculated in the server.rs file.
 
 use crate::load::CommitData;
-use collector::{Date, Run};
+use collector::{Date, Run, StatId};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
 use std::result::Result as StdResult;
@@ -28,7 +28,7 @@ pub struct DateData {
 }
 
 impl DateData {
-    pub fn for_day(commit: &CommitData, stat: &str) -> DateData {
+    pub fn for_day(commit: &CommitData, stat: StatId) -> DateData {
         let benchmarks = commit.benchmarks.values().filter_map(|v| v.as_ref().ok());
         let mut out = HashMap::with_capacity(commit.benchmarks.len() * 3);
         for benchmark in benchmarks {
@@ -44,7 +44,7 @@ impl DateData {
                     &mut runs_debug
                 };
                 if let Some(mut value) = run.get_stat(stat) {
-                    if stat == "cpu-clock" {
+                    if stat == StatId::CpuClock || stat == StatId::CpuClockUser {
                         // convert to seconds; perf records it in milliseconds
                         value /= 1000.0;
                     }
@@ -103,15 +103,15 @@ pub type ServerResult<T> = StdResult<T, String>;
 
 pub mod info {
     use collector::Date;
-    use serde::{Deserialize, Serialize};
+    use serde::Serialize;
 
-    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Serialize)]
     pub struct Response {
         /// Sorted vector of crate names
         pub crates: Vec<String>,
 
         /// Sorted list of statistic names known
-        pub stats: Vec<String>,
+        pub stats: Vec<&'static str>,
 
         /// Chronologically last loaded run date.
         pub as_of: Date,
