@@ -37,7 +37,7 @@ pub async fn handle_github(
 ) -> ServerResult<github::Response> {
     if request.comment.body.contains(" homu: ") {
         if let Some(sha) = handle_homu_res(&request, data).await {
-            return enqueue_sha(request, data, &sha).await;
+            return enqueue_sha(request, data, sha).await;
         }
     }
 
@@ -59,9 +59,7 @@ pub async fn handle_github(
         return Ok(github::Response);
     }
 
-    let body = &request.comment.body;
-
-    if BODY_QUEUE.is_match(&body) {
+    if BODY_QUEUE.is_match(&request.comment.body) {
         {
             let mut persistent = data.persistent.lock();
             persistent.pending_try_builds.insert(request.issue.number);
@@ -76,10 +74,11 @@ pub async fn handle_github(
         return Ok(github::Response);
     }
 
-    if let Some(captures) = BODY_TRY_COMMIT.captures(&body) {
+    if let Some(captures) = BODY_TRY_COMMIT.captures(&request.comment.body) {
         if let Some(commit) = captures.get(1).map(|c| c.as_str().to_owned()) {
             let commit = commit.trim_start_matches("https://github.com/rust-lang/rust/commit/");
-            return enqueue_sha(request, data, &commit).await;
+            let f = enqueue_sha(request, data, commit.to_owned());
+            return f.await;
         }
     }
 
@@ -89,34 +88,28 @@ pub async fn handle_github(
 async fn enqueue_sha(
     request: github::Request,
     data: &InputData,
-    commit: &str,
+    commit: String,
 ) -> ServerResult<github::Response> {
     let client = reqwest::r#async::Client::new();
+    let url = format!("{}/commits/{}", request.issue.repository_url, commit);
     let mut commit_response = client
-        .get(&format!(
-            "{}/commits/{}",
-            request.issue.repository_url, commit
-        ))
+        .get(&url)
         .send()
         .compat()
         .await
         .map_err(|_| String::from("cannot get commit"))?;
-    let commit_response = commit_response
-        .json::<github::Commit>()
-        .compat()
-        .await
-        .map_err(|e| format!("cannot deserialize commit: {:?}", e))?;
+    let commit_response = commit_response.json::<github::Commit>().compat().await;
+    let commit_response = match commit_response {
+        Err(e) => return Err(format!("cannot deserialize commit: {:?}", e)),
+        Ok(c) => c,
+    };
     if commit_response.parents.len() != 2 {
-        post_comment(
-            &data.config,
-            &request.issue,
-            format!(
-                "Bors try commit {} unexpectedly has {} parents.",
-                commit_response.sha,
-                commit_response.parents.len()
-            ),
-        )
-        .await;
+        let msg = format!(
+            "Bors try commit {} unexpectedly has {} parents.",
+            commit_response.sha,
+            commit_response.parents.len()
+        );
+        post_comment(&data.config, &request.issue, msg).await;
         return Ok(github::Response);
     }
     let try_commit = TryCommit {
@@ -135,17 +128,13 @@ async fn enqueue_sha(
         }
         persistent.write().expect("successful encode");
     }
-    post_comment(
-        &data.config,
-        &request.issue,
-        format!(
-            "Queued {} with parent {}, future [comparison URL]({}).",
-            commit_response.sha,
-            commit_response.parents[0].sha,
-            try_commit.comparison_url(),
-        ),
-    )
-    .await;
+    let msg = format!(
+        "Queued {} with parent {}, future [comparison URL]({}).",
+        commit_response.sha,
+        commit_response.parents[0].sha,
+        try_commit.comparison_url(),
+    );
+    post_comment(&data.config, &request.issue, msg).await;
     Ok(github::Response)
 }
 
