@@ -315,7 +315,6 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
                 let first = entry.first().map(|d| d.absolute as f32);
                 let percent = first.map_or(0.0, |f| (value - f) / f * 100.0);
                 entry.push(graph::GraphData {
-                    benchmark: run.state.name().into(),
                     commit: commit.clone(),
                     prev_commit: last_commit.clone(),
                     absolute: value,
@@ -398,7 +397,6 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
             let first = entry.first().map(|d: &graph::GraphData| d.absolute as f32);
             let percent = first.map_or(0.0, |f| (value - f) / f * 100.0);
             entry.push(graph::GraphData {
-                benchmark: state.name().into(),
                 commit: commit.clone(),
                 prev_commit: last_commit.clone(),
                 absolute: value,

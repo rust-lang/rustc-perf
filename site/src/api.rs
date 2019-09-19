@@ -176,7 +176,6 @@ pub mod graph {
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct GraphData {
-        pub benchmark: String,
         pub commit: String,
         pub prev_commit: Option<String>,
         pub absolute: f32,

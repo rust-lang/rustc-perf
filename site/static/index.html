@@ -107,10 +107,12 @@
             for (let name of benchmark_names) {
                 let data = response.benchmarks[crate_name][name];
                 datasets.push({
-                    name: data[0].benchmark,
+                    name,
                     animation: false,
                     allowPointSelect: true,
-                    data: data,
+                    data: data.map(([commit, prev_commit, absolute, percent, y, x, color]) => ({
+                        commit, prev_commit, absolute, percent, y, x, color,
+                    })),
                     marker: {
                         enabled: true
                     },
