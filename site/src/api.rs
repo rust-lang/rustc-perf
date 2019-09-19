@@ -176,13 +176,13 @@ pub mod graph {
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct GraphData {
-        pub commit: String,
-        pub prev_commit: Option<String>,
+        pub commit: u32,
+        pub prev_commit: Option<u32>,
         pub absolute: f32,
         pub percent: f32,
         pub y: f32,
         pub x: u64,
-        pub color: String,
+        pub is_interpolated: bool,
     }
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
@@ -190,6 +190,8 @@ pub mod graph {
         /// Crate -> Benchmark -> [GraphData]
         pub benchmarks: HashMap<String, HashMap<String, Vec<GraphData>>>,
         pub max: HashMap<String, f32>,
+        pub colors: Vec<String>,
+        pub commits: Vec<String>,
     }
 }
 

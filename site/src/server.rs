@@ -10,6 +10,7 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::fmt;
 use std::fs;
 use std::net::SocketAddr;
@@ -272,6 +273,32 @@ pub fn handle_next_commit(data: &InputData) -> Option<String> {
         .map(|c| c.0.sha)
 }
 
+struct CommitCache {
+    commits_cache: Vec<String>,
+    commit_in_cache: HashMap<String, usize>,
+}
+
+impl CommitCache {
+    fn new() -> Self {
+        Self {
+            commits_cache: Vec::new(),
+            commit_in_cache: HashMap::new(),
+        }
+    }
+
+    fn insert(&mut self, commit: &str) -> u32 {
+        let idx = if let Some(idx) = self.commit_in_cache.get(commit) {
+            *idx
+        } else {
+            let idx = self.commits_cache.len();
+            self.commits_cache.push(commit.to_owned());
+            self.commit_in_cache.insert(commit.to_owned(), idx);
+            idx
+        };
+        u32::try_from(idx).unwrap_or_else(|_| panic!("{} did not fit into u32", idx))
+    }
+}
+
 pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<graph::Response> {
     let out = handle_data(
         data::Request {
@@ -287,10 +314,13 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
     let mut result: HashMap<_, HashMap<Cow<'_, str>, _>> =
         HashMap::with_capacity(data.crate_list.len() * 3);
     let elements = out.len();
-    let mut last_commit = None;
+    let mut last_commit = None::<String>;
     let mut initial_debug_base_compile = None;
     let mut initial_check_base_compile = None;
     let mut initial_release_base_compile = None;
+
+    let mut cc = CommitCache::new();
+
     for date_data in out {
         let commit = date_data.commit;
         let mut summary_points = HashMap::new();
@@ -315,36 +345,28 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
                 let first = entry.first().map(|d| d.absolute as f32);
                 let percent = first.map_or(0.0, |f| (value - f) / f * 100.0);
                 entry.push(graph::GraphData {
-                    commit: commit.clone(),
-                    prev_commit: last_commit.clone(),
+                    commit: cc.insert(&commit),
+                    prev_commit: last_commit.as_ref().map(|l| cc.insert(&l)),
                     absolute: value,
                     percent: percent,
                     y: if body.absolute { value } else { percent },
                     x: date_data.date.0.timestamp() as u64 * 1000, // all dates are since 1970
-                    color: {
-                        data.interpolated
-                            .get(&commit)
-                            .map(|c| {
-                                c.iter().any(|interpolation| {
-                                    if !bench_name.starts_with(&interpolation.benchmark) {
-                                        return false;
-                                    }
-                                    if let Some(run_name) = &interpolation.run {
-                                        run == *run_name
-                                    } else {
-                                        true
-                                    }
-                                })
-                            })
-                            .map(|b| {
-                                if b {
-                                    String::from(INTERPOLATED_COLOR)
+                    is_interpolated: data
+                        .interpolated
+                        .get(&commit)
+                        .filter(|c| {
+                            c.iter().any(|interpolation| {
+                                if !bench_name.starts_with(&interpolation.benchmark) {
+                                    return false;
+                                }
+                                if let Some(run_name) = &interpolation.run {
+                                    run == *run_name
                                 } else {
-                                    String::new()
+                                    true
                                 }
                             })
-                            .unwrap_or(String::new())
-                    },
+                        })
+                        .is_some(),
                 });
             }
             if base_compile && is_println_incr {
@@ -397,33 +419,25 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
             let first = entry.first().map(|d: &graph::GraphData| d.absolute as f32);
             let percent = first.map_or(0.0, |f| (value - f) / f * 100.0);
             entry.push(graph::GraphData {
-                commit: commit.clone(),
-                prev_commit: last_commit.clone(),
+                commit: cc.insert(&commit),
+                prev_commit: last_commit.as_ref().map(|l| cc.insert(&l)),
                 absolute: value,
                 percent: percent,
                 y: if body.absolute { value } else { percent },
                 x: date_data.date.0.timestamp() as u64 * 1000, // all dates are since 1970
-                color: {
-                    data.interpolated
-                        .get(&commit)
-                        .map(|c| {
-                            c.iter().any(|interpolation| {
-                                if let Some(run) = &interpolation.run {
-                                    *run.name() == (state.name() + appendix)
-                                } else {
-                                    true
-                                }
-                            })
-                        })
-                        .map(|b| {
-                            if b {
-                                String::from(INTERPOLATED_COLOR)
+                is_interpolated: data
+                    .interpolated
+                    .get(&commit)
+                    .filter(|c| {
+                        c.iter().any(|interpolation| {
+                            if let Some(run) = &interpolation.run {
+                                *run.name() == (state.name() + appendix)
                             } else {
-                                String::new()
+                                true
                             }
                         })
-                        .unwrap_or(String::new())
-                },
+                    })
+                    .is_some(),
             });
         }
         last_commit = Some(commit);
@@ -451,6 +465,8 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
             .into_iter()
             .map(|(k, v)| (k, v.into_iter().map(|(k, v)| (k.into_owned(), v)).collect()))
             .collect(),
+        colors: vec![String::new(), String::from(INTERPOLATED_COLOR)],
+        commits: cc.commits_cache,
     })
 }
 

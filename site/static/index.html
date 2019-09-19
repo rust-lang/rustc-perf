@@ -110,8 +110,10 @@
                     name,
                     animation: false,
                     allowPointSelect: true,
-                    data: data.map(([commit, prev_commit, absolute, percent, y, x, color]) => ({
-                        commit, prev_commit, absolute, percent, y, x, color,
+                    data: data.map(([commit, prev_commit, absolute, percent, y, x, is_interpolated]) => ({
+                        commit: response.commits[commit],
+                        prev_commit: commit == 0 ? null : commit - 1,
+                        absolute, percent, y, x, color: response.colors[is_interpolated],
                     })),
                     marker: {
                         enabled: true
