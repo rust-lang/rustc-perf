@@ -317,6 +317,8 @@ impl InputData {
         let mut latest_section_start = ::std::time::Instant::now();
         let start = ::std::time::Instant::now();
         let data_real = data.clone();
+        trace!("cloned data in {:?}", latest_section_start.elapsed());
+        latest_section_start = ::std::time::Instant::now();
         let mut interpolated = HashMap::new();
         let mut data_next = data;
 
