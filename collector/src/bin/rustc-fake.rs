@@ -36,14 +36,16 @@ fn main() {
                     .arg(&rustc)
                     .args(&args);
 
+                let prof_out_dir = std::env::current_dir().unwrap().join("self-profile-output");
                 if wrapper == "perf-stat-self-profile" {
-                    cmd.arg("-Zself-profile=self-profile-output");
+                    cmd.arg(&format!(
+                        "-Zself-profile={}",
+                        prof_out_dir.to_str().unwrap()
+                    ));
                 }
 
                 let start = Instant::now();
-                let mut child = cmd.spawn().expect("failed to spawn");
-                let pid = child.id();
-                let status = child.wait().expect("failed to wait");
+                let status = cmd.status().expect("failed to spawn");
                 let dur = start.elapsed();
                 assert!(status.success());
                 print_memory();
@@ -54,17 +56,38 @@ fn main() {
                         .find(|args| args[0] == "--crate-name")
                         .and_then(|args| args[1].to_str())
                         .expect("rustc to be invoked with crate name");
-                    let prof_out_dir = std::env::current_dir().unwrap().join("self-profile-output");
-                    let prefix = format!("{}-{}", crate_name, pid);
-                    // FIXME: it'd be great to have a less generic name for this
+                    let mut prefix = None;
+                    // We don't know the pid of rustc, and can't easily get it -- we only know the
+                    // `perf` pid. So just blindly look in the directory to hopefully find it.
+                    for entry in std::fs::read_dir(&prof_out_dir).unwrap() {
+                        let entry = entry.unwrap();
+                        if entry
+                            .file_name()
+                            .to_str()
+                            .map_or(false, |s| s.starts_with(crate_name))
+                        {
+                            let file = entry.file_name().to_str().unwrap().to_owned();
+                            prefix = Some(file[..file.find('.').unwrap()].to_owned());
+                        }
+                    }
+                    let prefix = prefix.expect(&format!("found prefix {:?}", prof_out_dir));
+                    // FIXME: it'd be great to have a less generic name for this;
+                    // we should think about renaming the binary in measureme to measureme, such
+                    // that the command is `measureme summarize ...`.
                     let mut cmd = Command::new("summarize");
                     cmd.current_dir(&prof_out_dir);
                     cmd.arg("summarize").arg("--json");
                     cmd.arg(&prefix);
-                    assert!(cmd
-                        .status()
-                        .expect("summarize spawned successfully")
-                        .success());
+                    let status = cmd.status().expect(&format!(
+                        "summarize spawned successfully in {:?}",
+                        prof_out_dir
+                    ));
+                    assert!(
+                        status.success(),
+                        "summarize failed in {:?}; prefix is {:?}",
+                        prof_out_dir,
+                        prefix
+                    );
                     let json =
                         std::fs::read_to_string(prof_out_dir.join(&format!("{}.json", prefix)))
                             .expect("able to read JSON output");
