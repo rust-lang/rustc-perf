@@ -14,6 +14,9 @@ use serde::{Deserialize, Serialize};
 
 pub mod api;
 pub mod git;
+pub mod self_profile;
+
+use self_profile::SelfProfile;
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct Commit {
@@ -321,6 +324,8 @@ impl StatId {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Run {
     pub stats: Stats,
+    #[serde(default)]
+    pub self_profile: Option<SelfProfile>,
     #[serde(default)]
     pub check: bool,
     pub release: bool,

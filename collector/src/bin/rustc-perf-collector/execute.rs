@@ -854,6 +854,7 @@ fn process_stats(build_kind: BuildKind, state: BenchmarkState, runs: &[Stats]) -
 
     Run {
         stats: overall,
+        self_profile: None,
         check: build_kind == BuildKind::Check,
         release: build_kind == BuildKind::Opt,
         state: state,
