@@ -113,7 +113,7 @@
                     data: data.map(([commit, prev_commit, absolute, percent, y, x, is_interpolated]) => ({
                         commit: response.commits[commit],
                         prev_commit: commit == 0 ? null : commit - 1,
-                        absolute, percent, y, x, color: response.colors[is_interpolated],
+                        absolute, percent, y, x, color: response.colors[is_interpolated ? 1 : 0],
                     })),
                     marker: {
                         enabled: true
