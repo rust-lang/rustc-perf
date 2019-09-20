@@ -16,7 +16,7 @@ pub mod api;
 pub mod git;
 pub mod self_profile;
 
-use self_profile::SelfProfile;
+pub use self_profile::{QueryData, SelfProfile};
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct Commit {

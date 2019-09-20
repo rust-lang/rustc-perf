@@ -9,7 +9,7 @@ use std::str;
 
 use tempfile::TempDir;
 
-use collector::{command_output, BenchmarkState, Patch, Run, StatId, Stats};
+use collector::{command_output, BenchmarkState, Patch, Run, SelfProfile, StatId, Stats};
 
 use failure::{err_msg, Error, ResultExt};
 
@@ -71,6 +71,7 @@ pub struct Benchmark {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Profiler {
     PerfStat,
+    PerfStatSelfProfile,
     TimePasses,
     PerfRecord,
     OProfile,
@@ -113,6 +114,7 @@ impl Profiler {
     fn name(&self) -> &'static str {
         match self {
             Profiler::PerfStat => "perf-stat",
+            Profiler::PerfStatSelfProfile => "perf-stat-self-profile",
             Profiler::TimePasses => "time-passes",
             Profiler::PerfRecord => "perf-record",
             Profiler::OProfile => "oprofile",
@@ -290,10 +292,10 @@ pub trait Processor {
 }
 
 pub struct MeasureProcessor {
-    clean_stats: Stats,
-    base_incr_stats: Stats,
-    clean_incr_stats: Stats,
-    patched_incr_stats: Vec<(Patch, Stats)>,
+    clean_stats: (Stats, Option<SelfProfile>),
+    base_incr_stats: (Stats, Option<SelfProfile>),
+    clean_incr_stats: (Stats, Option<SelfProfile>),
+    patched_incr_stats: Vec<(Patch, (Stats, Option<SelfProfile>))>,
 }
 
 impl MeasureProcessor {
@@ -303,9 +305,9 @@ impl MeasureProcessor {
         assert!(has_perf);
 
         MeasureProcessor {
-            clean_stats: Stats::new(),
-            base_incr_stats: Stats::new(),
-            clean_incr_stats: Stats::new(),
+            clean_stats: (Stats::new(), None),
+            base_incr_stats: (Stats::new(), None),
+            clean_incr_stats: (Stats::new(), None),
             patched_incr_stats: Vec::new(),
         }
     }
@@ -313,7 +315,7 @@ impl MeasureProcessor {
 
 impl Processor for MeasureProcessor {
     fn profiler(&self) -> Profiler {
-        Profiler::PerfStat
+        Profiler::PerfStatSelfProfile
     }
 
     fn process_output(
@@ -322,26 +324,31 @@ impl Processor for MeasureProcessor {
         output: process::Output,
     ) -> Result<Retry, Error> {
         match process_perf_stat_output(output) {
-            Ok(stats) => {
+            Ok((stats, profile)) => {
                 match data.run_kind {
                     RunKind::Clean => {
-                        self.clean_stats.combine_with(stats);
+                        self.clean_stats.0.combine_with(stats);
+                        self.clean_stats.1 = profile;
                     }
                     RunKind::BaseIncr => {
-                        self.base_incr_stats.combine_with(stats);
+                        self.base_incr_stats.0.combine_with(stats);
+                        self.clean_incr_stats.1 = profile;
                     }
                     RunKind::CleanIncr => {
-                        self.clean_incr_stats.combine_with(stats);
+                        self.clean_incr_stats.0.combine_with(stats);
+                        self.clean_incr_stats.1 = profile;
                     }
                     RunKind::PatchedIncrs => {
                         let patch = data.patch.unwrap();
                         if let Some(entry) =
                             self.patched_incr_stats.iter_mut().find(|s| &s.0 == patch)
                         {
-                            entry.1.combine_with(stats);
+                            (entry.1).0.combine_with(stats);
+                            (entry.1).1 = profile;
                             return Ok(Retry::No);
                         }
-                        self.patched_incr_stats.push((patch.clone(), stats));
+                        self.patched_incr_stats
+                            .push((patch.clone(), (stats, profile)));
                     }
                 }
                 Ok(Retry::No)
@@ -360,25 +367,28 @@ impl Processor for MeasureProcessor {
     }
 
     fn finish_build_kind(&mut self, build_kind: BuildKind, runs: &mut Vec<Run>) {
-        if !self.clean_stats.is_empty() {
+        if !self.clean_stats.0.is_empty() {
             runs.push(process_stats(
                 build_kind,
                 BenchmarkState::Clean,
-                self.clean_stats.clone(),
+                self.clean_stats.0.clone(),
+                self.clean_stats.1.clone(),
             ));
         }
-        if !self.base_incr_stats.is_empty() {
+        if !self.base_incr_stats.0.is_empty() {
             runs.push(process_stats(
                 build_kind,
                 BenchmarkState::IncrementalStart,
-                self.base_incr_stats.clone(),
+                self.base_incr_stats.0.clone(),
+                self.base_incr_stats.1.clone(),
             ));
         }
-        if !self.clean_incr_stats.is_empty() {
+        if !self.clean_incr_stats.0.is_empty() {
             runs.push(process_stats(
                 build_kind,
                 BenchmarkState::IncrementalClean,
-                self.clean_incr_stats.clone(),
+                self.clean_incr_stats.0.clone(),
+                self.clean_incr_stats.1.clone(),
             ));
         }
         if !self.patched_incr_stats.is_empty() {
@@ -386,16 +396,20 @@ impl Processor for MeasureProcessor {
                 runs.push(process_stats(
                     build_kind,
                     BenchmarkState::IncrementalPatched(patch.clone()),
-                    results.clone(),
+                    results.0.clone(),
+                    results.1.clone(),
                 ));
             }
         }
 
         // Empty all the vectors.
-        self.clean_stats.clear();
-        self.base_incr_stats.clear();
-        self.clean_incr_stats.clear();
+        self.clean_stats.0.clear();
+        self.base_incr_stats.0.clear();
+        self.clean_incr_stats.0.clear();
         self.patched_incr_stats.clear();
+        self.clean_stats.1.take();
+        self.base_incr_stats.1.take();
+        self.clean_incr_stats.1.take();
     }
 }
 
@@ -441,7 +455,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
         };
 
         match self.profiler {
-            Profiler::PerfStat => {
+            Profiler::PerfStat | Profiler::PerfStatSelfProfile => {
                 panic!("unexpected profiler");
             }
 
@@ -780,11 +794,19 @@ enum DeserializeStatError {
     ParseError(String, #[fail(cause)] ::std::num::ParseFloatError),
 }
 
-fn process_perf_stat_output(output: process::Output) -> Result<Stats, DeserializeStatError> {
+fn process_perf_stat_output(
+    output: process::Output,
+) -> Result<(Stats, Option<SelfProfile>), DeserializeStatError> {
     let stdout = String::from_utf8(output.stdout.clone()).expect("utf8 output");
     let mut stats = Stats::new();
 
+    let mut profile: Option<SelfProfile> = None;
     for line in stdout.lines() {
+        if line.starts_with("!self-profile-output:") {
+            profile = Some(serde_json::from_str(&line["!self-profile-output:".len()..]).unwrap());
+            continue;
+        }
+
         // github.com/torvalds/linux/blob/bc78d646e708/tools/perf/Documentation/perf-stat.txt#L281
         macro_rules! get {
             ($e: expr) => {
@@ -823,13 +845,18 @@ fn process_perf_stat_output(output: process::Output) -> Result<Stats, Deserializ
         return Err(DeserializeStatError::NoOutput(output));
     }
 
-    Ok(stats)
+    Ok((stats, profile))
 }
 
-fn process_stats(build_kind: BuildKind, state: BenchmarkState, runs: Stats) -> Run {
+fn process_stats(
+    build_kind: BuildKind,
+    state: BenchmarkState,
+    runs: Stats,
+    prof: Option<SelfProfile>,
+) -> Run {
     Run {
         stats: runs,
-        self_profile: None,
+        self_profile: prof,
         check: build_kind == BuildKind::Check,
         release: build_kind == BuildKind::Opt,
         state: state,

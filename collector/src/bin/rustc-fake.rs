@@ -23,7 +23,7 @@ fn main() {
         raise_priority();
 
         match wrapper {
-            "perf-stat" => {
+            "perf-stat" | "perf-stat-self-profile" => {
                 let mut cmd = Command::new("perf");
                 let has_perf = cmd.output().is_ok();
                 assert!(has_perf);
@@ -36,11 +36,40 @@ fn main() {
                     .arg(&rustc)
                     .args(&args);
 
+                if wrapper == "perf-stat-self-profile" {
+                    cmd.arg("-Zself-profile=self-profile-output");
+                }
+
                 let start = Instant::now();
-                assert!(cmd.status().expect("failed to spawn").success());
+                let mut child = cmd.spawn().expect("failed to spawn");
+                let pid = child.id();
+                let status = child.wait().expect("failed to wait");
                 let dur = start.elapsed();
+                assert!(status.success());
                 print_memory();
                 print_time(dur);
+                if wrapper == "perf-stat-self-profile" {
+                    let crate_name = args
+                        .windows(2)
+                        .find(|args| args[0] == "--crate-name")
+                        .and_then(|args| args[1].to_str())
+                        .expect("rustc to be invoked with crate name");
+                    let prof_out_dir = std::env::current_dir().unwrap().join("self-profile-output");
+                    let prefix = format!("{}-{}", crate_name, pid);
+                    // FIXME: it'd be great to have a less generic name for this
+                    let mut cmd = Command::new("summarize");
+                    cmd.current_dir(&prof_out_dir);
+                    cmd.arg("summarize").arg("--json");
+                    cmd.arg(&prefix);
+                    assert!(cmd
+                        .status()
+                        .expect("summarize spawned successfully")
+                        .success());
+                    let json =
+                        std::fs::read_to_string(prof_out_dir.join(&format!("{}.json", prefix)))
+                            .expect("able to read JSON output");
+                    println!("!self-profile-output:{}", json);
+                }
             }
 
             "time-passes" => {
