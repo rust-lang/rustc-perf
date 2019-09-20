@@ -28,6 +28,7 @@ mod outrepo;
 mod sysroot;
 
 use background_worker::send_home;
+use collector::Benchmark as CollectedBenchmark;
 use execute::{Benchmark, Profiler};
 use sysroot::Sysroot;
 
@@ -190,11 +191,14 @@ fn bench_commit(
             continue;
         }
 
-        let mut processor = execute::MeasureProcessor::new(&benchmark.name);
+        let mut processor = execute::MeasureProcessor::new();
         let result =
             benchmark.measure(&mut processor, build_kinds, run_kinds, compiler, iterations);
         let result = match result {
-            Ok(()) => Ok(processor.collected),
+            Ok(runs) => Ok(CollectedBenchmark {
+                name: benchmark.name.to_string(),
+                runs,
+            }),
             Err(ref s) => {
                 info!("failed to benchmark {}, recorded: {}", benchmark.name, s);
                 Err(format!("{:?}", s))

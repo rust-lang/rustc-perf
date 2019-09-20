@@ -9,9 +9,7 @@ use std::str;
 
 use tempfile::TempDir;
 
-use collector::{
-    command_output, Benchmark as CollectedBenchmark, BenchmarkState, Patch, Run, StatId, Stats,
-};
+use collector::{command_output, BenchmarkState, Patch, Run, StatId, Stats};
 
 use failure::{err_msg, Error, ResultExt};
 
@@ -288,7 +286,7 @@ pub trait Processor {
 
     /// Called when all the runs of a benchmark for a particular `BuildKind`
     /// have been completed. Can be used to process/reset accumulated state.
-    fn finish_build_kind(&mut self, _build_kind: BuildKind) {}
+    fn finish_build_kind(&mut self, _build_kind: BuildKind, _runs: &mut Vec<Run>) {}
 }
 
 pub struct MeasureProcessor {
@@ -296,12 +294,10 @@ pub struct MeasureProcessor {
     base_incr_stats: Stats,
     clean_incr_stats: Stats,
     patched_incr_stats: Vec<(Patch, Stats)>,
-
-    pub collected: CollectedBenchmark,
 }
 
 impl MeasureProcessor {
-    pub fn new(name: &str) -> Self {
+    pub fn new() -> Self {
         // Check we have `perf` available.
         let has_perf = Command::new("perf").output().is_ok();
         assert!(has_perf);
@@ -311,11 +307,6 @@ impl MeasureProcessor {
             base_incr_stats: Stats::new(),
             clean_incr_stats: Stats::new(),
             patched_incr_stats: Vec::new(),
-
-            collected: CollectedBenchmark {
-                name: name.to_string(),
-                runs: Vec::new(),
-            },
         }
     }
 }
@@ -368,23 +359,23 @@ impl Processor for MeasureProcessor {
         }
     }
 
-    fn finish_build_kind(&mut self, build_kind: BuildKind) {
+    fn finish_build_kind(&mut self, build_kind: BuildKind, runs: &mut Vec<Run>) {
         if !self.clean_stats.is_empty() {
-            self.collected.runs.push(process_stats(
+            runs.push(process_stats(
                 build_kind,
                 BenchmarkState::Clean,
                 self.clean_stats.clone(),
             ));
         }
         if !self.base_incr_stats.is_empty() {
-            self.collected.runs.push(process_stats(
+            runs.push(process_stats(
                 build_kind,
                 BenchmarkState::IncrementalStart,
                 self.base_incr_stats.clone(),
             ));
         }
         if !self.clean_incr_stats.is_empty() {
-            self.collected.runs.push(process_stats(
+            runs.push(process_stats(
                 build_kind,
                 BenchmarkState::IncrementalClean,
                 self.clean_incr_stats.clone(),
@@ -392,7 +383,7 @@ impl Processor for MeasureProcessor {
         }
         if !self.patched_incr_stats.is_empty() {
             for (patch, results) in self.patched_incr_stats.iter() {
-                self.collected.runs.push(process_stats(
+                runs.push(process_stats(
                     build_kind,
                     BenchmarkState::IncrementalPatched(patch.clone()),
                     results.clone(),
@@ -697,13 +688,15 @@ impl Benchmark {
         run_kinds: &[RunKind],
         compiler: Compiler<'_>,
         iterations: usize,
-    ) -> Result<(), Error> {
+    ) -> Result<Vec<Run>, Error> {
         let iterations = cmp::min(iterations, self.config.runs);
 
         if self.config.disabled {
             eprintln!("skipping {}: disabled", self.name);
             bail!("disabled benchmark");
         }
+
+        let mut runs = Vec::new();
 
         for &build_kind in build_kinds {
             log::info!("Running {}: {:?} + {:?}", self.name, build_kind, run_kinds);
@@ -769,10 +762,10 @@ impl Benchmark {
                 }
             }
 
-            processor.finish_build_kind(build_kind);
+            processor.finish_build_kind(build_kind, &mut runs);
         }
 
-        Ok(())
+        Ok(runs)
     }
 }
 
