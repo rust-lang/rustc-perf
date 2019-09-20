@@ -589,6 +589,79 @@ pub async fn handle_collected(
     Ok(collected::Response {})
 }
 
+pub async fn handle_self_profile(
+    body: crate::api::self_profile::Request,
+    data: &InputData,
+) -> ServerResult<crate::api::self_profile::Response> {
+    let commit = data
+        .data(Interpolate::No)
+        .iter()
+        .find(|cd| cd.commit.sha == body.commit)
+        .ok_or(format!("could not find commit {}", body.commit))?;
+    let mut it = body.benchmark.rsplitn(2, '-');
+    let bench_ty = it.next().ok_or(format!("no benchmark type"))?;
+    let bench_name = it.next().ok_or(format!("no benchmark name"))?;
+    let benchmark = commit
+        .benchmarks
+        .get(bench_name)
+        .ok_or(format!("No benchmark with name {}", bench_name))?;
+    let benchmark = benchmark.as_ref().map_err(|_| {
+        format!(
+            "Benchmark {} did not compile successfully at this commit",
+            bench_name
+        )
+    })?;
+
+    let run = benchmark
+        .runs
+        .iter()
+        .find(|r| {
+            let id = r.id();
+            id.check == (bench_ty == "check")
+                && id.release == (bench_ty == "opt")
+                && id.state.name() == body.run_name
+        })
+        .ok_or(format!("No such run"))?;
+
+    let mut profile = run
+        .self_profile
+        .as_ref()
+        .ok_or(format!("No self profile results for this commit"))?
+        .clone();
+
+    let sort_idx = body
+        .sort_idx
+        .parse::<i32>()
+        .ok()
+        .ok_or(format!("sort_idx needs to be i32"))?;
+    match sort_idx.abs() {
+        1 => profile.query_data.sort_by_key(|qd| qd.label.clone()),
+        2 => profile.query_data.sort_by_key(|qd| qd.self_time),
+        3 => profile
+            .query_data
+            .sort_by_key(|qd| qd.number_of_cache_misses),
+        4 => profile.query_data.sort_by_key(|qd| qd.number_of_cache_hits),
+        5 => profile.query_data.sort_by_key(|qd| qd.invocation_count),
+        6 => profile.query_data.sort_by_key(|qd| qd.blocked_time),
+        7 => profile
+            .query_data
+            .sort_by_key(|qd| qd.incremental_load_time),
+        9 => profile.query_data.sort_by_key(|qd| {
+            // convert to displayed percentage
+            ((qd.number_of_cache_hits as f64 / qd.invocation_count as f64) * 10_000.0) as u64
+        }),
+        _ => {}
+    }
+
+    if sort_idx < 0 {
+        profile.query_data.reverse();
+    }
+
+    Ok(crate::api::self_profile::Response {
+        profile: profile.clone(),
+    })
+}
+
 struct Server {
     data: Arc<RwLock<Arc<InputData>>>,
     updating: UpdatingStatus,
@@ -827,6 +900,10 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
         }
         Ok(to_response(
             handle_github(body!(parse_body(&body)), &data).await,
+        ))
+    } else if p == "/perf/self-profile" {
+        Ok(to_response(
+            handle_self_profile(body!(parse_body(&body)), &data).await,
         ))
     } else {
         return Ok(http::Response::builder()

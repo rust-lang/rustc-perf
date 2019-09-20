@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>rustc performance data</title>
+<link rel="stylesheet" type="text/css" href="perf.css">
+<style>
+    thead th {
+        padding-left: 1em;
+    }
+</style>
+</head>
+<body class="container">
+    <div>&gt; <a href="index.html">graphs</a>, <a href="compare.html">compare</a>,
+        <a href="dashboard.html">dashboard</a>, <a href="status.html">status</a>.</div>
+    <div id="content">
+        <table>
+            <thead>
+                <tr id="table-header">
+                    <th data-sort-idx="1" data-default-sort-dir="1">Query</th>
+                    <th data-sort-idx="2" data-default-sort-dir="-1">Time</th>
+                    <th data-sort-idx="5" data-default-sort-dir="-1">Invocations</th>
+                    <th data-sort-idx="4" data-default-sort-dir="-1">Cache Hits</th>
+                    <th data-sort-idx="3" data-default-sort-dir="-1">Cache Misses</th>
+                    <th data-sort-idx="9" data-default-sort-dir="-1">Cache Hits (%)</th>
+                    <th data-sort-idx="7" data-default-sort-dir="-1">Blocked</th>
+                    <th data-sort-idx="8" data-default-sort-dir="-1">Incremental Loading</th>
+                </tr>
+            </thead>
+            <tbody id="primary-table">
+            </tbody>
+        </table>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/msgpack-lite/0.1.26/msgpack.min.js"></script>
+    <script src="shared.js"></script>
+    <script>
+        function fmt_time(time) {
+            return `${time[0]}s ${time[1]}ns`;
+        }
+
+        function populate_data(data, state) {
+            let sort_idx = state.sort_idx;
+            let header = document.getElementById("table-header");
+            for (let th of header.querySelectorAll("th")) {
+                let idx = th.attributes["data-sort-idx"].value;
+                if (idx == sort_idx) {
+                    th.setAttribute("data-sorted-by", "desc");
+                } else if (idx == -sort_idx) {
+                    th.setAttribute("data-sorted-by", "asc");
+                }
+                th.addEventListener("click", () => {
+                    let sortedBy = th.attributes["data-sorted-by"];
+                    if (sortedBy && sortedBy.value == "desc") {
+                        state.sort_idx = -idx;
+                    } else if (sortedBy && sortedBy.value == "asc") {
+                        state.sort_idx = idx;
+                    } else {
+                        // start with descending
+                        if (th.attributes["data-default-sort-dir"].value == "1") {
+                            state.sort_idx = idx;
+                        } else {
+                            state.sort_idx = -idx;
+                        }
+                    }
+                    console.log(state);
+                    window.location.search = query_string_for_state(state);
+                });
+            }
+            let table = document.getElementById("primary-table");
+            for (let [
+                label, self_time, cache_misses,
+                cache_hits, invocation_count, blocked_time,
+                incremental_load_time
+            ] of data.profile.query_data) {
+                let row = document.createElement("tr");
+                function td(row, content) {
+                    let td = document.createElement("td");
+                    td.innerText = content;
+                    row.appendChild(td);
+                }
+                td(row, label);
+                td(row, fmt_time(self_time));
+                td(row, invocation_count);
+                td(row, cache_hits);
+                td(row, cache_misses);
+                td(row, (cache_hits / invocation_count).toFixed(2));
+                td(row, fmt_time(blocked_time));
+                td(row, fmt_time(incremental_load_time));
+                table.appendChild(row);
+            }
+        }
+
+        var DATA;
+        function make_data(state) {
+            let values = Object.assign({
+                sort_idx: -2,
+            }, state);
+            make_request("/self-profile", values).then(function(data) {
+                DATA = data;
+                data = JSON.parse(JSON.stringify(DATA)); // deep copy
+                populate_data(data, values);
+            });
+        }
+
+        load_state(make_data, true);
+    </script>
+</body>
+</html>

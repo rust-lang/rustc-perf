@@ -345,9 +345,9 @@ pub struct Run {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RunId {
-    check: bool,
-    release: bool,
-    state: BenchmarkState,
+    pub check: bool,
+    pub release: bool,
+    pub state: BenchmarkState,
 }
 
 impl RunId {

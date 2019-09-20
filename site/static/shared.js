@@ -186,7 +186,7 @@ function query_string_for_state(state) {
     return result;
 }
 
-function load_state(callback) {
+function load_state(callback, skip_settings) {
     let params = new URLSearchParams(window.location.search.slice(1));
     let state = {};
     for (let param of params) {
@@ -212,12 +212,16 @@ function load_state(callback) {
             element.checked = true;
         }
     }
-    make_settings(() => {
-        if (state.stat) {
-            setSelected("stats", state.stat);
-        }
+    if (!skip_settings) {
+        make_settings(() => {
+            if (state.stat) {
+                setSelected("stats", state.stat);
+            }
+            callback(state);
+        });
+    } else {
         callback(state);
-    });
+    }
 }
 
 // This one is for making the request we send to the backend.

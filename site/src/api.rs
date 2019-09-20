@@ -233,6 +233,24 @@ pub mod status {
     }
 }
 
+pub mod self_profile {
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+    pub struct Request {
+        pub commit: String,
+        pub benchmark: String,
+        pub run_name: String,
+
+        pub sort_idx: String,
+    }
+
+    #[derive(Debug, Clone, Serialize)]
+    pub struct Response {
+        pub profile: collector::SelfProfile,
+    }
+}
+
 pub mod github {
     use serde::{Deserialize, Serialize};
 
