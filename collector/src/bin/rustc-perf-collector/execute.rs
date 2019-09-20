@@ -23,6 +23,12 @@ fn touch_all(path: &Path) -> Result<(), Error> {
     cmd.current_dir(path)
         .args(&["-c", "find . -name '*.rs' | xargs touch"]);
     command_output(&mut cmd)?;
+    // We also delete the cmake caches to avoid errors when moving directories around.
+    // This might be a bit slower but at least things build
+    let mut cmd = Command::new("bash");
+    cmd.current_dir(path)
+        .args(&["-c", "find . -name 'CMakeCache.txt' -delete"]);
+    command_output(&mut cmd)?;
     Ok(())
 }
 
