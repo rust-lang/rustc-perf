@@ -58,7 +58,6 @@ static INTERPOLATED_COLOR: &str = "#fcb0f1";
 
 pub fn handle_info(data: &InputData) -> info::Response {
     info::Response {
-        crates: data.crate_list.clone(),
         stats: data.stats_list.clone(),
         as_of: data.last_date,
     }
@@ -311,8 +310,7 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
     .0;
 
     // crate list * 3 because we have check, debug, and opt variants.
-    let mut result: HashMap<_, HashMap<Cow<'_, str>, _>> =
-        HashMap::with_capacity(data.crate_list.len() * 3);
+    let mut result: HashMap<_, HashMap<Cow<'_, str>, _>> = HashMap::new();
     let elements = out.len();
     let mut last_commit = None::<String>;
     let mut initial_debug_base_compile = None;

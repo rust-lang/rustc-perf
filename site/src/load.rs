@@ -150,9 +150,6 @@ pub struct Config {
 
 #[derive(Debug)]
 pub struct InputData {
-    /// A set containing all crate names of the bootstrap kind.
-    pub crate_list: Vec<String>,
-
     /// All known statistics gathered for crates
     pub stats_list: Vec<&'static str>,
 
@@ -284,7 +281,6 @@ impl InputData {
     ) -> Result<InputData, Error> {
         let data = data.into_iter().map(|(_, v)| v).collect::<Vec<_>>();
         let mut last_date = None;
-        let mut crate_list = BTreeSet::new();
         let mut stats_list = BTreeSet::new();
 
         for commit_data in data.iter() {
@@ -298,8 +294,6 @@ impl InputData {
                 .filter_map(|v| v.as_ref().ok());
             for benchmark in benchmarks {
                 for run in &benchmark.runs {
-                    let run_name = benchmark.name.clone() + &run.name();
-                    crate_list.insert(run_name);
                     for (stat, _) in run.stats.iter() {
                         stats_list.insert(stat.as_str());
                     }
@@ -502,7 +496,6 @@ impl InputData {
         let data = data_next;
 
         Ok(InputData {
-            crate_list: crate_list.into_iter().collect(),
             stats_list: stats_list.into_iter().collect(),
             interpolated,
             last_date: last_date,

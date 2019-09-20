@@ -146,7 +146,7 @@ function dispatch_on_params(f) {
         let key = param[0];
         let value = param[1];
 
-        if (key == "crates" || key == "phases" || key == "dates") {
+        if (key == "phases" || key == "dates") {
             value = JSON.parse(value);
         }
 

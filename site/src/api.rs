@@ -107,9 +107,6 @@ pub mod info {
 
     #[derive(Debug, Clone, PartialEq, Serialize)]
     pub struct Response {
-        /// Sorted vector of crate names
-        pub crates: Vec<String>,
-
         /// Sorted list of statistic names known
         pub stats: Vec<&'static str>,
 
