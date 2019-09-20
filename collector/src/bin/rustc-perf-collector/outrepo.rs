@@ -92,9 +92,9 @@ impl Repo {
     }
 
     pub fn success_artifact(&self, data: &ArtifactData) -> Result<(), Error> {
-        let filepath = self.times().join(format!("artifact-{}.bincode", data.id));
+        let filepath = self.times().join(format!("artifact-{}.json", data.id));
         info!("creating file {}", filepath.display());
-        let serialized = bincode::serialize(&data)?;
+        let serialized = serde_json::to_string(&data)?;
         fs::write(&filepath, &serialized)?;
         self.commit_and_push(&format!("{} - success", data.id))?;
         Ok(())
@@ -119,14 +119,14 @@ impl Repo {
         trace!("loading file {}", filepath.display());
         let contents =
             fs::read(&filepath).with_context(|_| format!("failed to read {:?}", filepath))?;
-        let data = bincode::deserialize(&contents)
-            .with_context(|_| format!("failed to read bincode from {:?}", filepath))?;
+        let data = serde_json::from_slice(&contents)
+            .with_context(|_| format!("failed to read JSON from {:?}", filepath))?;
         Ok(data)
     }
 
     pub fn load_commit_data(&self, commit: &Commit, triple: &str) -> Result<CommitData, Error> {
         let filepath = self.times().join(format!(
-            "{}-{}-{}.bincode",
+            "{}-{}-{}.json",
             commit.date.0.to_rfc3339(),
             commit.sha,
             triple
@@ -136,7 +136,7 @@ impl Repo {
             Err(_) => self.load_commit_data_file(
                 &self
                     .times()
-                    .join(format!("commit-{}-{}.bincode", commit.sha, triple)),
+                    .join(format!("commit-{}-{}.json", commit.sha, triple)),
             ),
         }
     }
@@ -145,9 +145,9 @@ impl Repo {
         let commit = &data.commit;
         let filepath = self
             .times()
-            .join(format!("commit-{}-{}.bincode", commit.sha, data.triple));
+            .join(format!("commit-{}-{}.json", commit.sha, data.triple));
         info!("creating file {}", filepath.display());
-        let serialized = bincode::serialize(&data)?;
+        let serialized = serde_json::to_string(&data)?;
         fs::write(&filepath, &serialized)?;
         Ok(())
     }
