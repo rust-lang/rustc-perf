@@ -1,7 +1,6 @@
 //! Execute benchmarks.
 
 use std::cmp;
-use std::collections::HashSet;
 use std::env;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
@@ -293,10 +292,10 @@ pub trait Processor {
 }
 
 pub struct MeasureProcessor {
-    clean_stats: Vec<Stats>,
-    base_incr_stats: Vec<Stats>,
-    clean_incr_stats: Vec<Stats>,
-    patched_incr_stats: Vec<(Patch, Vec<Stats>)>,
+    clean_stats: Stats,
+    base_incr_stats: Stats,
+    clean_incr_stats: Stats,
+    patched_incr_stats: Vec<(Patch, Stats)>,
 
     pub collected: CollectedBenchmark,
 }
@@ -308,9 +307,9 @@ impl MeasureProcessor {
         assert!(has_perf);
 
         MeasureProcessor {
-            clean_stats: Vec::new(),
-            base_incr_stats: Vec::new(),
-            clean_incr_stats: Vec::new(),
+            clean_stats: Stats::new(),
+            base_incr_stats: Stats::new(),
+            clean_incr_stats: Stats::new(),
             patched_incr_stats: Vec::new(),
 
             collected: CollectedBenchmark {
@@ -335,23 +334,23 @@ impl Processor for MeasureProcessor {
             Ok(stats) => {
                 match data.run_kind {
                     RunKind::Clean => {
-                        self.clean_stats.push(stats);
+                        self.clean_stats.combine_with(stats);
                     }
                     RunKind::BaseIncr => {
-                        self.base_incr_stats.push(stats);
+                        self.base_incr_stats.combine_with(stats);
                     }
                     RunKind::CleanIncr => {
-                        self.clean_incr_stats.push(stats);
+                        self.clean_incr_stats.combine_with(stats);
                     }
                     RunKind::PatchedIncrs => {
                         let patch = data.patch.unwrap();
                         if let Some(entry) =
                             self.patched_incr_stats.iter_mut().find(|s| &s.0 == patch)
                         {
-                            entry.1.push(stats);
+                            entry.1.combine_with(stats);
                             return Ok(Retry::No);
                         }
-                        self.patched_incr_stats.push((patch.clone(), vec![stats]));
+                        self.patched_incr_stats.push((patch.clone(), stats));
                     }
                 }
                 Ok(Retry::No)
@@ -374,21 +373,21 @@ impl Processor for MeasureProcessor {
             self.collected.runs.push(process_stats(
                 build_kind,
                 BenchmarkState::Clean,
-                &self.clean_stats,
+                self.clean_stats.clone(),
             ));
         }
         if !self.base_incr_stats.is_empty() {
             self.collected.runs.push(process_stats(
                 build_kind,
                 BenchmarkState::IncrementalStart,
-                &self.base_incr_stats,
+                self.base_incr_stats.clone(),
             ));
         }
         if !self.clean_incr_stats.is_empty() {
             self.collected.runs.push(process_stats(
                 build_kind,
                 BenchmarkState::IncrementalClean,
-                &self.clean_incr_stats,
+                self.clean_incr_stats.clone(),
             ));
         }
         if !self.patched_incr_stats.is_empty() {
@@ -396,7 +395,7 @@ impl Processor for MeasureProcessor {
                 self.collected.runs.push(process_stats(
                     build_kind,
                     BenchmarkState::IncrementalPatched(patch.clone()),
-                    &results,
+                    results.clone(),
                 ));
             }
         }
@@ -834,26 +833,9 @@ fn process_perf_stat_output(output: process::Output) -> Result<Stats, Deserializ
     Ok(stats)
 }
 
-fn process_stats(build_kind: BuildKind, state: BenchmarkState, runs: &[Stats]) -> Run {
-    // all stats should be present in all runs
-    let map = runs.iter().map(|v| v.len()).collect::<HashSet<_>>();
-    if map.len() != 1 {
-        eprintln!("build_kind: {:?}", build_kind);
-        eprintln!("state: {:?}", state);
-        eprintln!("lengths: {:?}", map);
-        eprintln!("runs: {:?}", runs);
-        panic!("expected all stats to be present in all runs");
-    }
-    let mut overall = Stats::new();
-    for run_stats in runs {
-        for (stat, value) in run_stats.iter() {
-            let previous = overall.get(stat).unwrap_or(value);
-            overall.insert(stat, previous.min(value));
-        }
-    }
-
+fn process_stats(build_kind: BuildKind, state: BenchmarkState, runs: Stats) -> Run {
     Run {
-        stats: overall,
+        stats: runs,
         self_profile: None,
         check: build_kind == BuildKind::Check,
         release: build_kind == BuildKind::Opt,

@@ -200,6 +200,10 @@ impl Stats {
             .filter_map(|(idx, s)| s.map(|s| (StatId::from_id(idx as u16), s)))
     }
 
+    pub fn clear(&mut self) {
+        *self = Stats::new();
+    }
+
     pub fn len(&self) -> usize {
         self.stats.iter().filter(|s| s.is_some()).count()
     }
@@ -218,6 +222,13 @@ impl Stats {
 
     pub fn get(&self, stat: StatId) -> Option<f64> {
         self.stats.get(stat.to_id() as usize).and_then(|a| *a)
+    }
+
+    pub fn combine_with(&mut self, other: Stats) {
+        for (stat, value) in other.iter() {
+            let previous = self.get(stat).unwrap_or(value);
+            self.insert(stat, previous.min(value));
+        }
     }
 }
 
