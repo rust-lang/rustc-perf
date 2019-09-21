@@ -96,7 +96,7 @@
                 td(row, invocation_count);
                 td(row, cache_hits);
                 td(row, cache_misses);
-                td(row, (cache_hits / invocation_count).toFixed(2));
+                td(row, ((cache_hits / invocation_count) * 100).toFixed(2));
                 td(row, fmt_time(blocked_time));
                 td(row, fmt_time(incremental_load_time));
                 table.appendChild(row);
