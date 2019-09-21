@@ -42,12 +42,15 @@
             if (benchmark.error) {
                 element.innerHTML = `<details open>
                     <summary>${benchmark.name} - error</summary>
-                    <pre>${benchmark.error}</pre>
+                    <pre class="benchmark-error"></pre>
                 </details>`;
             } else {
                 element.innerHTML = `
                     <p style="margin:0.1em;">${benchmark.name} - successful</p>
                 `;
+            }
+            if (benchmark.error) {
+                element.querySelector(".benchmark-error").innerText = benchmark.error;
             }
             state_div.appendChild(element);
         }
