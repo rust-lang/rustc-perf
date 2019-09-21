@@ -330,7 +330,7 @@ impl Processor for MeasureProcessor {
                     }
                     RunKind::BaseIncr => {
                         self.base_incr_stats.0.combine_with(stats);
-                        self.clean_incr_stats.1 = profile;
+                        self.base_incr_stats.1 = profile;
                     }
                     RunKind::CleanIncr => {
                         self.clean_incr_stats.0.combine_with(stats);
@@ -839,6 +839,10 @@ fn process_perf_stat_output(
         );
     }
 
+    if profile.is_none() {
+	eprintln!("stdout: {}", stdout);
+    }
+
     if stats.is_empty() {
         return Err(DeserializeStatError::NoOutput(output));
     }
@@ -854,7 +858,7 @@ fn process_stats(
 ) -> Run {
     Run {
         stats: runs,
-        self_profile: prof,
+        self_profile: Some(prof.expect(&format!("able to gather self profile for {:?}, {:?}", build_kind, state))),
         check: build_kind == BuildKind::Check,
         release: build_kind == BuildKind::Opt,
         state: state,

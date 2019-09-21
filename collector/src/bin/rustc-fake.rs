@@ -42,6 +42,9 @@ fn main() {
                         "-Zself-profile={}",
                         prof_out_dir.to_str().unwrap()
                     ));
+                    cmd.arg("-Zself-profile-events=all");
+                    let _ = std::fs::remove_dir_all(&prof_out_dir);
+                    let _ = std::fs::create_dir_all(&prof_out_dir);
                 }
 
                 let start = Instant::now();
@@ -67,7 +70,14 @@ fn main() {
                             .map_or(false, |s| s.starts_with(crate_name))
                         {
                             let file = entry.file_name().to_str().unwrap().to_owned();
-                            prefix = Some(file[..file.find('.').unwrap()].to_owned());
+                            let new_prefix = Some(file[..file.find('.').unwrap()].to_owned());
+                            assert!(
+                                prefix.is_none() || prefix == new_prefix,
+                                "prefix={:?}, new_prefix={:?}",
+                                prefix,
+                                new_prefix
+                            );
+                            prefix = new_prefix;
                         }
                     }
                     let prefix = prefix.expect(&format!("found prefix {:?}", prof_out_dir));
