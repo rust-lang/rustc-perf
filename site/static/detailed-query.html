@@ -46,7 +46,7 @@
     <script src="shared.js"></script>
     <script>
         function fmt_time(time) {
-            return `${time[0]}s ${time[1]}ns`;
+            return `<span title="${time[0]}s ${time[1]}ns">${(time[0] + time[1] / 1000000000).toFixed(3)}s</span>`;
         }
 
         function populate_data(data, state) {
