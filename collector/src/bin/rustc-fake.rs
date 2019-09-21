@@ -13,6 +13,8 @@ fn main() {
         args.push(std::ffi::OsString::from(format!("-Zthreads={}", count)));
     }
 
+    args.push(std::ffi::OsString::from("-Adeprecated"));
+
     if let Some(pos) = args.iter().position(|arg| arg == "--wrap-rustc-with") {
         // Strip out the flag and its argument, and run rustc under the wrapper
         // program named by the argument.
