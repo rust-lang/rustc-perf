@@ -51,7 +51,7 @@
 
         function populate_data(data, state) {
             document.querySelector("#title").innerText =
-                `Self profile results for ${state.benchmark} run ${state.run_name} in commit ${state.commit}`;
+                `${state.commit.substring(0, 10)}: Self profile results for ${state.benchmark} run ${state.run_name}`;
             let sort_idx = state.sort_idx;
             let header = document.getElementById("table-header");
             for (let th of header.querySelectorAll("th")) {
@@ -106,7 +106,7 @@
         var DATA;
         function make_data(state) {
             let values = Object.assign({
-                sort_idx: -2,
+                sort_idx: "-2",
             }, state);
             make_request("/self-profile", values).then(function(data) {
                 DATA = data;
