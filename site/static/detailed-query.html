@@ -8,12 +8,23 @@
     thead th {
         padding-left: 1em;
     }
+
+    [data-sort-idx]::after {
+        content: "⇕";
+    }
+    [data-sorted-by="desc"]::after {
+        content: "▲";
+    }
+    [data-sorted-by="asc"]::after {
+        content: "▼";
+    }
 </style>
 </head>
 <body class="container">
     <div>&gt; <a href="index.html">graphs</a>, <a href="compare.html">compare</a>,
         <a href="dashboard.html">dashboard</a>, <a href="status.html">status</a>.</div>
     <div id="content">
+        <h3 id="title"></h3>
         <table>
             <thead>
                 <tr id="table-header">
@@ -39,6 +50,8 @@
         }
 
         function populate_data(data, state) {
+            document.querySelector("#title").innerText =
+                `Self profile results for ${state.benchmark} run ${state.run_name} in commit ${state.commit}`;
             let sort_idx = state.sort_idx;
             let header = document.getElementById("table-header");
             for (let th of header.querySelectorAll("th")) {
