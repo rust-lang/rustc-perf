@@ -88,7 +88,7 @@
                 let row = document.createElement("tr");
                 function td(row, content) {
                     let td = document.createElement("td");
-                    td.innerText = content;
+                    td.innerHTML = content;
                     row.appendChild(td);
                 }
                 td(row, label);
