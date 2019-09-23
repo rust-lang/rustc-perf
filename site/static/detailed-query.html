@@ -77,23 +77,35 @@
                 });
             }
             let table = document.getElementById("primary-table");
-            for (let [
-                label, self_time, cache_misses,
-                _cache_hits, invocation_count, _blocked_time,
-                incremental_load_time
-            ] of data.profile.query_data) {
+            for (let element of data.profile.query_data) {
+                let a = to_object(element);
                 let row = document.createElement("tr");
                 function td(row, content) {
                     let td = document.createElement("td");
                     td.innerHTML = content;
                     row.appendChild(td);
                 }
-                td(row, label);
-                td(row, fmt_time(self_time));
-                td(row, invocation_count);
-                td(row, cache_misses);
-                td(row, fmt_time(incremental_load_time));
+                td(row, a.label);
+                td(row, fmt_time(a.self_time));
+                td(row, a.invocation_count);
+                td(row, a.cache_misses);
+                td(row, fmt_time(a.incremental_load_time));
                 table.appendChild(row);
+            }
+        }
+
+        function to_object(element) {
+            let [
+                label, self_time, cache_misses,
+                _cache_hits, invocation_count, _blocked_time,
+                incremental_load_time
+            ] = element;
+            {
+                label,
+                self_time,
+                cache_misses,
+                invocation_count,
+                incremental_load_time,
             }
         }
 
