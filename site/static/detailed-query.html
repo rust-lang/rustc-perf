@@ -31,10 +31,7 @@
                     <th data-sort-idx="1" data-default-sort-dir="1">Query</th>
                     <th data-sort-idx="2" data-default-sort-dir="-1">Time</th>
                     <th data-sort-idx="5" data-default-sort-dir="-1">Invocations</th>
-                    <th data-sort-idx="4" data-default-sort-dir="-1">Cache Hits</th>
                     <th data-sort-idx="3" data-default-sort-dir="-1">Cache Misses</th>
-                    <th data-sort-idx="9" data-default-sort-dir="-1">Cache Hits (%)</th>
-                    <th data-sort-idx="6" data-default-sort-dir="-1">Blocked</th>
                     <th data-sort-idx="7" data-default-sort-dir="-1">Incremental Loading</th>
                 </tr>
             </thead>
@@ -82,7 +79,7 @@
             let table = document.getElementById("primary-table");
             for (let [
                 label, self_time, cache_misses,
-                cache_hits, invocation_count, blocked_time,
+                _cache_hits, invocation_count, _blocked_time,
                 incremental_load_time
             ] of data.profile.query_data) {
                 let row = document.createElement("tr");
@@ -94,10 +91,7 @@
                 td(row, label);
                 td(row, fmt_time(self_time));
                 td(row, invocation_count);
-                td(row, cache_hits);
                 td(row, cache_misses);
-                td(row, ((cache_hits / invocation_count) * 100).toFixed(2));
-                td(row, fmt_time(blocked_time));
                 td(row, fmt_time(incremental_load_time));
                 table.appendChild(row);
             }
