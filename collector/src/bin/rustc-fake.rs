@@ -44,7 +44,6 @@ fn main() {
                         "-Zself-profile={}",
                         prof_out_dir.to_str().unwrap()
                     ));
-                    cmd.arg("-Zself-profile-events=all");
                     let _ = std::fs::remove_dir_all(&prof_out_dir);
                     let _ = std::fs::create_dir_all(&prof_out_dir);
                 }
