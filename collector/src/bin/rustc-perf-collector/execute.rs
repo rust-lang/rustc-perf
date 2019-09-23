@@ -70,6 +70,7 @@ pub struct Benchmark {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Profiler {
+    PerfStat,
     PerfStatSelfProfile,
     TimePasses,
     PerfRecord,
@@ -112,6 +113,7 @@ impl Profiler {
 
     fn name(&self) -> &'static str {
         match self {
+            Profiler::PerfStat => "perf-stat",
             Profiler::PerfStatSelfProfile => "perf-stat-self-profile",
             Profiler::TimePasses => "time-passes",
             Profiler::PerfRecord => "perf-record",
@@ -453,7 +455,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
         };
 
         match self.profiler {
-            Profiler::PerfStatSelfProfile => {
+            Profiler::PerfStat | Profiler::PerfStatSelfProfile => {
                 panic!("unexpected profiler");
             }
 
