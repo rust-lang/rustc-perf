@@ -50,26 +50,29 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/msgpack-lite/0.1.26/msgpack.min.js"></script>
     <script src="shared.js"></script>
     <script>
-        function fmt_time(time) {
-            return `<span title="${time[0]}s ${time[1]}ns">${(time[0] + time[1] / 1000000000).toFixed(3)}s</span>`;
-        }
-
-        function fmt_time_delta(a, b) {
-            let nsa = a[0] * 1000000000 + a[1];
-            let nsb = b[0] * 1000000000 + b[1];
-
-            let time_delta = nsb - nsa;
-            if (time_delta < 0) {
-                time_delta = [Math.ceil(time_delta / 1000000000), time_delta % 1000000000];
-            } else {
-                time_delta = [Math.floor(time_delta / 1000000000), time_delta % 1000000000];
-            }
-            return fmt_time(time_delta);
+        function to_seconds(time) {
+            return time[0] + time[1] / 1000000000;
         }
 
         function fmt_delta(from, to) {
             let delta = from - to;
-            return `<span title="Original: ${from}">${delta}</span>`;
+            let pct = (from - to) / to * 100;
+            if (from == to) {
+                pct = 0;
+            }
+            if (pct && pct != Infinity && pct != -Infinity) {
+                let classes;
+                if (delta > 1) {
+                    classes = "positive";
+                } else if (delta < 1) {
+                    classes = "negative";
+                } else {
+                    classes = "neutral";
+                }
+                return `<span class="${classes}" title="${delta.toFixed(3)}">${pct.toFixed(1)}%</span>`;
+            } else {
+                return `<span title="error" style="color: orange;">-</span>`;
+            }
         }
 
         function populate_data(data, state) {
@@ -140,9 +143,9 @@
                     row.appendChild(td);
                 }
                 td(row, a.label);
-                td(row, fmt_time(a.self_time));
+                td(row, to_seconds(a.self_time).toFixed(3));
                 if (b) {
-                    td(row, fmt_time_delta(b.self_time, a.self_time), true);
+                    td(row, fmt_delta(to_seconds(b.self_time), to_seconds(a.self_time)), true);
                 } else {
                     td(row, "-", true);
                 }
@@ -158,9 +161,14 @@
                 } else {
                     td(row, "-", true);
                 }
-                td(row, fmt_time(a.incremental_load_time));
+                td(row, to_seconds(a.incremental_load_time).toFixed(3));
                 if (b) {
-                    td(row, fmt_time_delta(b.incremental_load_time, a.incremental_load_time), true);
+                    td(row,
+                        fmt_delta(
+                            to_seconds(b.incremental_load_time),
+                            to_seconds(a.incremental_load_time),
+                        ),
+                        true);
                 } else {
                     td(row, "-", true);
                 }
