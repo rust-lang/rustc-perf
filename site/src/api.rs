@@ -239,6 +239,7 @@ pub mod self_profile {
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct Request {
         pub commit: String,
+        pub base_commit: Option<String>,
         pub benchmark: String,
         pub run_name: String,
 
@@ -247,6 +248,7 @@ pub mod self_profile {
 
     #[derive(Debug, Clone, Serialize)]
     pub struct Response {
+        pub base_profile: Option<collector::SelfProfile>,
         pub profile: collector::SelfProfile,
     }
 }

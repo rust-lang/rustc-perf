@@ -51,6 +51,7 @@ use crate::load::{Config, InputData};
 use crate::util::{self, get_repo_path, Interpolate};
 use collector::api::collected;
 use collector::version_supports_incremental;
+use collector::CommitData;
 use collector::StatId;
 use parking_lot::RwLock;
 
@@ -589,18 +590,13 @@ pub async fn handle_collected(
     Ok(collected::Response {})
 }
 
-pub async fn handle_self_profile(
-    body: crate::api::self_profile::Request,
-    data: &InputData,
-) -> ServerResult<crate::api::self_profile::Response> {
-    let commit = data
-        .data(Interpolate::No)
-        .iter()
-        .find(|cd| cd.commit.sha == body.commit)
-        .ok_or(format!("could not find commit {}", body.commit))?;
-    let mut it = body.benchmark.rsplitn(2, '-');
-    let bench_ty = it.next().ok_or(format!("no benchmark type"))?;
-    let bench_name = it.next().ok_or(format!("no benchmark name"))?;
+fn get_self_profile_data(
+    commit: &CommitData,
+    bench_ty: &str,
+    bench_name: &str,
+    run_name: &str,
+    sort_idx: Option<i32>,
+) -> ServerResult<collector::SelfProfile> {
     let benchmark = commit
         .benchmarks
         .get(bench_name)
@@ -619,7 +615,7 @@ pub async fn handle_self_profile(
             let id = r.id();
             id.check == (bench_ty == "check")
                 && id.release == (bench_ty == "opt")
-                && id.state.name() == body.run_name
+                && id.state.name() == run_name
         })
         .ok_or(format!("No such run"))?;
 
@@ -629,36 +625,85 @@ pub async fn handle_self_profile(
         .ok_or(format!("No self profile results for this commit"))?
         .clone();
 
+    if let Some(sort_idx) = sort_idx {
+        loop {
+            match sort_idx.abs() {
+                1 => profile.query_data.sort_by_key(|qd| qd.label.clone()),
+                2 => profile.query_data.sort_by_key(|qd| qd.self_time),
+                3 => profile
+                    .query_data
+                    .sort_by_key(|qd| qd.number_of_cache_misses),
+                4 => profile.query_data.sort_by_key(|qd| qd.number_of_cache_hits),
+                5 => profile.query_data.sort_by_key(|qd| qd.invocation_count),
+                6 => profile.query_data.sort_by_key(|qd| qd.blocked_time),
+                7 => profile
+                    .query_data
+                    .sort_by_key(|qd| qd.incremental_load_time),
+                9 => profile.query_data.sort_by_key(|qd| {
+                    // convert to displayed percentage
+                    ((qd.number_of_cache_hits as f64 / qd.invocation_count as f64) * 10_000.0)
+                        as u64
+                }),
+                _ => break,
+            }
+
+            // Only apply this if at least one of the conditions above was met
+            if sort_idx < 0 {
+                profile.query_data.reverse();
+            }
+            break;
+        }
+    }
+
+    Ok(profile)
+}
+
+pub async fn handle_self_profile(
+    body: crate::api::self_profile::Request,
+    data: &InputData,
+) -> ServerResult<crate::api::self_profile::Response> {
+    let mut it = body.benchmark.rsplitn(2, '-');
+    let bench_ty = it.next().ok_or(format!("no benchmark type"))?;
+    let bench_name = it.next().ok_or(format!("no benchmark name"))?;
+
     let sort_idx = body
         .sort_idx
         .parse::<i32>()
         .ok()
         .ok_or(format!("sort_idx needs to be i32"))?;
-    match sort_idx.abs() {
-        1 => profile.query_data.sort_by_key(|qd| qd.label.clone()),
-        2 => profile.query_data.sort_by_key(|qd| qd.self_time),
-        3 => profile
-            .query_data
-            .sort_by_key(|qd| qd.number_of_cache_misses),
-        4 => profile.query_data.sort_by_key(|qd| qd.number_of_cache_hits),
-        5 => profile.query_data.sort_by_key(|qd| qd.invocation_count),
-        6 => profile.query_data.sort_by_key(|qd| qd.blocked_time),
-        7 => profile
-            .query_data
-            .sort_by_key(|qd| qd.incremental_load_time),
-        9 => profile.query_data.sort_by_key(|qd| {
-            // convert to displayed percentage
-            ((qd.number_of_cache_hits as f64 / qd.invocation_count as f64) * 10_000.0) as u64
-        }),
-        _ => {}
-    }
 
-    if sort_idx < 0 {
-        profile.query_data.reverse();
-    }
+    let commit = data
+        .data(Interpolate::No)
+        .iter()
+        .find(|cd| cd.commit.sha == body.commit)
+        .ok_or(format!("could not find commit {}", body.commit))?;
+    let profile = get_self_profile_data(
+        &commit,
+        bench_ty,
+        bench_name,
+        &body.run_name,
+        Some(sort_idx),
+    )?;
+    let base_profile = if let Some(bc) = body.base_commit {
+        let base_commit = data
+            .data(Interpolate::No)
+            .iter()
+            .find(|cd| cd.commit.sha == bc)
+            .ok_or(format!("could not find commit {}", bc))?;
+        Some(get_self_profile_data(
+            &base_commit,
+            bench_ty,
+            bench_name,
+            &body.run_name,
+            None,
+        )?)
+    } else {
+        None
+    };
 
     Ok(crate::api::self_profile::Response {
-        profile: profile.clone(),
+        base_profile,
+        profile,
     })
 }
 

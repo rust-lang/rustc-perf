@@ -9,6 +9,10 @@
         padding-left: 1em;
     }
 
+    body.hide-delta .delta {
+        display: none;
+    }
+
     [data-sort-idx]::after {
         content: "⇕";
     }
@@ -30,9 +34,13 @@
                 <tr id="table-header">
                     <th data-sort-idx="1" data-default-sort-dir="1">Query</th>
                     <th data-sort-idx="2" data-default-sort-dir="-1">Time</th>
+                    <th class="delta">Δ</th>
                     <th data-sort-idx="5" data-default-sort-dir="-1">Invocations</th>
+                    <th class="delta">Δ</th>
                     <th data-sort-idx="3" data-default-sort-dir="-1">Cache Misses</th>
+                    <th class="delta">Δ</th>
                     <th data-sort-idx="7" data-default-sort-dir="-1">Incremental Loading</th>
+                    <th class="delta">Δ</th>
                 </tr>
             </thead>
             <tbody id="primary-table">
@@ -46,12 +54,45 @@
             return `<span title="${time[0]}s ${time[1]}ns">${(time[0] + time[1] / 1000000000).toFixed(3)}s</span>`;
         }
 
+        function fmt_time_delta(a, b) {
+            let nsa = a[0] * 1000000000 + a[1];
+            let nsb = b[0] * 1000000000 + b[1];
+
+            let time_delta = nsb - nsa;
+            if (time_delta < 0) {
+                time_delta = [Math.ceil(time_delta / 1000000000), time_delta % 1000000000];
+            } else {
+                time_delta = [Math.floor(time_delta / 1000000000), time_delta % 1000000000];
+            }
+            return fmt_time(time_delta);
+        }
+
+        function fmt_delta(from, to) {
+            let delta = from - to;
+            return `<span title="Original: ${from}">${delta}</span>`;
+        }
+
         function populate_data(data, state) {
-            document.querySelector("#title").innerText =
-                `${state.commit.substring(0, 10)}: Self profile results for ${state.benchmark} run ${state.run_name}`;
+            let txt = `${state.commit.substring(0, 10)}: Self profile results for ${state.benchmark} run ${state.run_name}`;
+            if (state.base_commit) {
+                let self_href =
+                    `/detailed-query.html?sort_idx=${state.sort_idx}&commit=${state.commit}&run_name=${state.run_name}&benchmark=${state.benchmark}`;
+                let base_href =
+                    `/detailed-query.html?sort_idx=${state.sort_idx}&commit=${state.base_commit}&run_name=${state.run_name}&benchmark=${state.benchmark}`;
+                txt += `<br>diff vs base ${state.base_commit.substring(0, 10)}, <a href="${base_href}">query info for just base commit</a>`;
+                txt += `<br><a href="${self_href}">query info for just this commit</a>`;
+            }
+            document.querySelector("#title").innerHTML = txt;
             let sort_idx = state.sort_idx;
+            if (!data.base_profile) {
+                document.body.classList.add("hide-delta");
+            }
             let header = document.getElementById("table-header");
             for (let th of header.querySelectorAll("th")) {
+                // Skip non-sortable columns
+                if (!th.attributes["data-sort-idx"]) {
+                    continue;
+                }
                 let idx = th.attributes["data-sort-idx"].value;
                 if (idx == sort_idx) {
                     th.setAttribute("data-sorted-by", "desc");
@@ -77,20 +118,54 @@
                 });
             }
             let table = document.getElementById("primary-table");
+            let idx = 0;
             for (let element of data.profile.query_data) {
                 let a = to_object(element);
+                let b = null;
+                if (data.base_profile) {
+                    for (let b_el of data.base_profile[0]) {
+                        if (to_object(b_el).label == a.label) {
+                            b = to_object(b_el);
+                            break;
+                        }
+                    }
+                }
                 let row = document.createElement("tr");
-                function td(row, content) {
+                function td(row, content, is_delta) {
                     let td = document.createElement("td");
                     td.innerHTML = content;
+                    if (is_delta) {
+                        td.classList.add("delta");
+                    }
                     row.appendChild(td);
                 }
                 td(row, a.label);
                 td(row, fmt_time(a.self_time));
+                if (b) {
+                    td(row, fmt_time_delta(b.self_time, a.self_time), true);
+                } else {
+                    td(row, "-", true);
+                }
                 td(row, a.invocation_count);
+                if (b) {
+                    td(row, fmt_delta(b.invocation_count, a.invocation_count), true);
+                } else {
+                    td(row, "-", true);
+                }
                 td(row, a.cache_misses);
+                if (b) {
+                    td(row, fmt_delta(b.cache_misses, a.cache_misses), true);
+                } else {
+                    td(row, "-", true);
+                }
                 td(row, fmt_time(a.incremental_load_time));
+                if (b) {
+                    td(row, fmt_time_delta(b.incremental_load_time, a.incremental_load_time), true);
+                } else {
+                    td(row, "-", true);
+                }
                 table.appendChild(row);
+                idx += 1;
             }
         }
 
@@ -100,13 +175,13 @@
                 _cache_hits, invocation_count, _blocked_time,
                 incremental_load_time
             ] = element;
-            {
+            return {
                 label,
                 self_time,
                 cache_misses,
                 invocation_count,
                 incremental_load_time,
-            }
+            };
         }
 
         var DATA;
