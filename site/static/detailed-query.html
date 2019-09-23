@@ -5,12 +5,24 @@
 <title>rustc performance data</title>
 <link rel="stylesheet" type="text/css" href="perf.css">
 <style>
+    table {
+        border-collapse: collapse;
+    }
+    
     thead th {
         padding-left: 1em;
     }
 
     body.hide-delta .delta {
         display: none;
+    }
+    
+    #primary-table td {
+        border: 1px lightgrey solid;
+    }
+    
+    #primary-table tr:nth-child(2n+1) {
+        background-color: #FBFBFB;   
     }
 
     [data-sort-idx]::after {
