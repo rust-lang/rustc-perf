@@ -757,7 +757,7 @@ impl Benchmark {
             // self-profile separately).
             processor.start_first_collection();
             for i in 0..cmp::max(iterations, 2) {
-                if i == 2 {
+                if i == 1 {
                     let different = processor.finished_first_collection();
                     if iterations == 1 && !different {
                         // Don't run twice if this processor doesn't need it and
