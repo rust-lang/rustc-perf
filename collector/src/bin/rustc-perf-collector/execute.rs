@@ -286,6 +286,15 @@ pub trait Processor {
         output: process::Output,
     ) -> Result<Retry, Error>;
 
+    /// Provided to permit switching off more expensive profiling if it's needed
+    /// for the "first" run, e.g. disabling -Zself-profile.
+    ///
+    /// Return "true" if planning on doing something different for second
+    /// iteration.
+    fn finished_first_collection(&mut self) -> bool {
+        false
+    }
+
     /// Called when all the runs of a benchmark for a particular `BuildKind`
     /// have been completed. Can be used to process/reset accumulated state.
     fn finish_build_kind(&mut self, _build_kind: BuildKind, _runs: &mut Vec<Run>) {}
@@ -296,6 +305,8 @@ pub struct MeasureProcessor {
     base_incr_stats: (Stats, Option<SelfProfile>),
     clean_incr_stats: (Stats, Option<SelfProfile>),
     patched_incr_stats: Vec<(Patch, (Stats, Option<SelfProfile>))>,
+
+    collecting_self_profile: bool,
 }
 
 impl MeasureProcessor {
@@ -309,13 +320,23 @@ impl MeasureProcessor {
             base_incr_stats: (Stats::new(), None),
             clean_incr_stats: (Stats::new(), None),
             patched_incr_stats: Vec::new(),
+            collecting_self_profile: true,
         }
     }
 }
 
 impl Processor for MeasureProcessor {
     fn profiler(&self) -> Profiler {
-        Profiler::PerfStatSelfProfile
+        if self.collecting_self_profile {
+            Profiler::PerfStatSelfProfile
+        } else {
+            Profiler::PerfStat
+        }
+    }
+
+    fn finished_first_collection(&mut self) -> bool {
+        self.collecting_self_profile = false;
+        true
     }
 
     fn process_output(
@@ -723,7 +744,17 @@ impl Benchmark {
             self.mk_cargo_process(compiler, prep_dir.path(), build_kind)
                 .run_rustc()?;
 
-            for i in 0..iterations {
+            // We want at least two runs for all benchmarks (since we run
+            // self-profile separately).
+            for i in 0..cmp::max(iterations, 2) {
+                if i == 2 {
+                    let different = processor.finished_first_collection();
+                    if iterations == 1 && !different {
+                        // Don't run twice if this processor doesn't need it and
+                        // we've only been asked to run once.
+                        break;
+                    }
+                }
                 log::debug!("Benchmark iteration {}/{}", i + 1, iterations);
                 let timing_dir = self.make_temp_dir(prep_dir.path())?;
                 let cwd = timing_dir.path();
@@ -842,7 +873,7 @@ fn process_perf_stat_output(
     }
 
     if profile.is_none() {
-	eprintln!("stdout: {}", stdout);
+        eprintln!("stdout: {}", stdout);
     }
 
     if stats.is_empty() {
@@ -860,7 +891,10 @@ fn process_stats(
 ) -> Run {
     Run {
         stats: runs,
-        self_profile: Some(prof.expect(&format!("able to gather self profile for {:?}, {:?}", build_kind, state))),
+        self_profile: Some(prof.expect(&format!(
+            "able to gather self profile for {:?}, {:?}",
+            build_kind, state
+        ))),
         check: build_kind == BuildKind::Check,
         release: build_kind == BuildKind::Opt,
         state: state,
