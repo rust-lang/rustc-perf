@@ -75,14 +75,19 @@
             }
             if (pct && pct != Infinity && pct != -Infinity) {
                 let classes;
-                if (delta > 1) {
+                if (pct > 1) {
                     classes = "positive";
-                } else if (delta < 1) {
+                } else if (pct < 1) {
                     classes = "negative";
                 } else {
                     classes = "neutral";
                 }
-                return `<span class="${classes}" title="${delta.toFixed(3)}">${pct.toFixed(1)}%</span>`;
+                // some arbitrary "small" value
+                // ignore this because it's not too interesting likely
+                if (Math.abs(delta) <= 0.05) {
+                    classes = "neutral";
+                }
+                return `<span class="${classes}" title="${from.toFixed(3)} - ${to.toFixed(3)} ≈ ${delta.toFixed(3)}">${pct.toFixed(1)}%</span>`;
             } else {
                 return `<span title="error" style="color: orange;">-</span>`;
             }
