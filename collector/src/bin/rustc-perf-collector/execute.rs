@@ -901,10 +901,7 @@ fn process_stats(
 ) -> Run {
     Run {
         stats: runs,
-        self_profile: Some(prof.expect(&format!(
-            "able to gather self profile for {:?}, {:?}",
-            build_kind, state
-        ))),
+        self_profile: prof,
         check: build_kind == BuildKind::Check,
         release: build_kind == BuildKind::Opt,
         state: state,
