@@ -70,16 +70,12 @@
         return arr.filter((value, idx) => arr.indexOf(value) == idx);
     }
 
-    function add_datum_fields(datum, sha1, sha2, bench, run) {
+    function add_datum_fields(datum, sha, bench, run) {
         let html = "";
         if (datum) {
             html += "<td>";
             let txt = datum.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-            if (sha2) {
-                html += `<a href="/detailed-query.html?commit=${sha2}&base_commit=${sha1}&benchmark=${bench}&run_name=${run}">${txt}</a>`;
-            } else {
-                html += `<a href="/detailed-query.html?commit=${sha1}&benchmark=${bench}&run_name=${run}">${txt}</a>`;
-            }
+            html += `<a href="/detailed-query.html?commit=${sha}&benchmark=${bench}&run_name=${run}">${txt}</a>`;
             html += "</td>";
         } else {
             html += "<td>-</td>";
@@ -289,9 +285,12 @@
                 html += "<tr>";
                 html += "<td>" + entry.casename + "</td>";
                 // No base comparison commit for the first datum
-                html += add_datum_fields(entry.datum_a, data.a.commit, null, field.name, entry.casename);
-                html += add_datum_fields(entry.datum_b, data.a.commit, data.b.commit, field.name, entry.casename);
-                html += "<td>" + add_percent(entry.percent, dodgy, "??") + "</td>";
+                html += add_datum_fields(entry.datum_a, data.a.commit, field.name, entry.casename);
+                html += add_datum_fields(entry.datum_b, data.b.commit, field.name, entry.casename);
+                let pct = add_percent(entry.percent, dodgy, "??");
+                let diff_href =
+                    `/detailed-query.html?commit=${data.b.commit}&base_commit=${data.a.commit}&benchmark=${field.name}&run_name=${entry.casename}`;
+                html += `<td><a href="${diff_href}">${pct}</a></td>`;
                 html += "</tr>";
             }
         }
