@@ -286,6 +286,11 @@ pub trait Processor {
         output: process::Output,
     ) -> Result<Retry, Error>;
 
+    /// Provided to permit switching on more expensive profiling if it's needed
+    /// for the "first" run for any given benchmark (we reuse the processor),
+    /// e.g. disabling -Zself-profile.
+    fn start_first_collection(&mut self) {}
+
     /// Provided to permit switching off more expensive profiling if it's needed
     /// for the "first" run, e.g. disabling -Zself-profile.
     ///
@@ -332,6 +337,10 @@ impl Processor for MeasureProcessor {
         } else {
             Profiler::PerfStat
         }
+    }
+
+    fn start_first_collection(&mut self) {
+        self.collecting_self_profile = true;
     }
 
     fn finished_first_collection(&mut self) -> bool {
@@ -746,6 +755,7 @@ impl Benchmark {
 
             // We want at least two runs for all benchmarks (since we run
             // self-profile separately).
+            processor.start_first_collection();
             for i in 0..cmp::max(iterations, 2) {
                 if i == 2 {
                     let different = processor.finished_first_collection();
