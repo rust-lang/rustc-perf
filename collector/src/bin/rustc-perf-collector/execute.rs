@@ -358,15 +358,21 @@ impl Processor for MeasureProcessor {
                 match data.run_kind {
                     RunKind::Clean => {
                         self.clean_stats.0.combine_with(stats);
-                        self.clean_stats.1 = profile;
+                        if profile.is_some() {
+                            self.clean_stats.1 = profile;
+                        }
                     }
                     RunKind::BaseIncr => {
                         self.base_incr_stats.0.combine_with(stats);
-                        self.base_incr_stats.1 = profile;
+                        if profile.is_some() {
+                            self.base_incr_stats.1 = profile;
+                        }
                     }
                     RunKind::CleanIncr => {
                         self.clean_incr_stats.0.combine_with(stats);
-                        self.clean_incr_stats.1 = profile;
+                        if profile.is_some() {
+                            self.clean_incr_stats.1 = profile;
+                        }
                     }
                     RunKind::PatchedIncrs => {
                         let patch = data.patch.unwrap();
@@ -374,7 +380,9 @@ impl Processor for MeasureProcessor {
                             self.patched_incr_stats.iter_mut().find(|s| &s.0 == patch)
                         {
                             (entry.1).0.combine_with(stats);
-                            (entry.1).1 = profile;
+                            if profile.is_some() {
+                                (entry.1).1 = profile;
+                            }
                             return Ok(Retry::No);
                         }
                         self.patched_incr_stats
