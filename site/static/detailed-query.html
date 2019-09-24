@@ -68,8 +68,8 @@
         }
 
         function fmt_delta(from, to) {
-            let delta = from - to;
-            let pct = (from - to) / to * 100;
+            let delta = to - from;
+            let pct = (to - from) / from * 100;
             if (from == to) {
                 pct = 0;
             }
@@ -87,7 +87,7 @@
                 if (Math.abs(delta) <= 0.05) {
                     classes = "neutral";
                 }
-                return `<span class="${classes}" title="${from.toFixed(3)} - ${to.toFixed(3)} ≈ ${delta.toFixed(3)}">${pct.toFixed(1)}%</span>`;
+                return `<span class="${classes}" title="${from.toFixed(3)} to ${to.toFixed(3)} ≈ ${delta.toFixed(3)}">${pct.toFixed(1)}%</span>`;
             } else {
                 return `<span title="error" style="color: orange;">-</span>`;
             }
@@ -141,12 +141,12 @@
             let table = document.getElementById("primary-table");
             let idx = 0;
             for (let element of data.profile.query_data) {
-                let a = to_object(element);
-                let b = null;
+                let cur = to_object(element);
+                let prev = null;
                 if (data.base_profile) {
-                    for (let b_el of data.base_profile[0]) {
-                        if (to_object(b_el).label == a.label) {
-                            b = to_object(b_el);
+                    for (let prev_el of data.base_profile[0]) {
+                        if (to_object(prev_el).label == cur.label) {
+                            prev = to_object(prev_el);
                             break;
                         }
                     }
@@ -160,31 +160,31 @@
                     }
                     row.appendChild(td);
                 }
-                td(row, a.label);
-                td(row, to_seconds(a.self_time).toFixed(3));
-                if (b) {
-                    td(row, fmt_delta(to_seconds(b.self_time), to_seconds(a.self_time)), true);
+                td(row, cur.label);
+                td(row, to_seconds(cur.self_time).toFixed(3));
+                if (prev) {
+                    td(row, fmt_delta(to_seconds(prev.self_time), to_seconds(cur.self_time)), true);
                 } else {
                     td(row, "-", true);
                 }
-                td(row, a.invocation_count);
-                if (b) {
-                    td(row, fmt_delta(b.invocation_count, a.invocation_count), true);
+                td(row, cur.invocation_count);
+                if (prev) {
+                    td(row, fmt_delta(prev.invocation_count, cur.invocation_count), true);
                 } else {
                     td(row, "-", true);
                 }
-                td(row, a.cache_misses);
-                if (b) {
-                    td(row, fmt_delta(b.cache_misses, a.cache_misses), true);
+                td(row, cur.cache_misses);
+                if (prev) {
+                    td(row, fmt_delta(prev.cache_misses, cur.cache_misses), true);
                 } else {
                     td(row, "-", true);
                 }
-                td(row, to_seconds(a.incremental_load_time).toFixed(3));
-                if (b) {
+                td(row, to_seconds(cur.incremental_load_time).toFixed(3));
+                if (prev) {
                     td(row,
                         fmt_delta(
-                            to_seconds(b.incremental_load_time),
-                            to_seconds(a.incremental_load_time),
+                            to_seconds(prev.incremental_load_time),
+                            to_seconds(cur.incremental_load_time),
                         ),
                         true);
                 } else {
