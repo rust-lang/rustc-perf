@@ -44,14 +44,13 @@ First, create a PR with the changes.
 After that, you need try privileges, or the assistance of someone with try
 privileges. Ping `simulacrum` on IRC as a starting point.
 
-That person must enter `@bors try` as a comment in the PR. This queues a normal
-try build on Travis, which takes some time.
-
-Once the try build has completed, that person must enter `@rust-timer build
-$MERGE` as a comment in the PR, where `$MERGE` is the full 40 character merge
-revision ID from the try build. This queues a benchmarking run, and a
-comparison URL will be posted in the PR. Several hours later, the results will
-be available at the comparison URL.
+There are two ways for that person to do a benchmark run.
+- The easier way: they must enter `@bors try @rust-timer queue` as a comment in
+  the PR. This queues a try build and a benchmarking run. Several hours later,
+  the results will be available at the given URL.
+- The harder way: they must first enter `@bors try` to trigger a try build. Once
+  that completes, they must enter `@rust-timer build $MERGE`, where `$MERGE` is
+  the full 40 character merge revision ID from the try build.
 
 Various measurements are available: instructions (the default), cycles, wall
 time, peak RSS memory, etc. There is some non-determinism and natural variation
