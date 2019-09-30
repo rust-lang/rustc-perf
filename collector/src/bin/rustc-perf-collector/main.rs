@@ -158,6 +158,7 @@ fn bench_commit(
     benchmarks: &[Benchmark],
     iterations: usize,
     call_home: bool,
+    collect_self_profile: bool,
 ) -> CommitData {
     info!(
         "benchmarking commit {} ({}) for triple {}",
@@ -188,7 +189,13 @@ fn bench_commit(
     }
 
     let has_measureme = Command::new("summarize").output().is_ok();
-    debug!("attempting self profile data: {}", has_measureme);
+    if collect_self_profile {
+        assert!(
+            has_measureme,
+            "needs `summarize` in PATH for self profile.\n\
+             Pass --skip-self-profile` to opt out"
+        );
+    }
 
     for benchmark in benchmarks {
         if results.contains_key(&benchmark.name) {
@@ -196,7 +203,7 @@ fn bench_commit(
         }
 
         // Only collect self-profile if we have summarize in the path
-        let mut processor = execute::MeasureProcessor::new(has_measureme);
+        let mut processor = execute::MeasureProcessor::new(collect_self_profile);
         let result =
             benchmark.measure(&mut processor, build_kinds, run_kinds, compiler, iterations);
         let result = match result {
@@ -295,6 +302,7 @@ fn main_result() -> Result<i32, Error> {
        (@arg exclude: --exclude +takes_value "Ignore all benchmarks that contain this")
        (@arg sync_git: --("sync-git") "Synchronize repository with remote")
        (@arg output_repo: --("output-repo") +required +takes_value "Output repository/directory")
+       (@arg skip_self_profile: --("skip-self-profile") "Skip self-profile")
 
        (@subcommand bench_commit =>
            (about: "benchmark a bors merge from AWS")
@@ -352,6 +360,7 @@ fn main_result() -> Result<i32, Error> {
     let exclude = matches.value_of("exclude");
     let mut benchmarks = get_benchmarks(&benchmark_dir, filter, exclude)?;
     let use_remote = matches.is_present("sync_git");
+    let collect_self_profile = matches.is_present("skip_self_profile");
 
     let get_out_dir = || {
         let path = PathBuf::from(matches.value_of_os("output_repo").unwrap());
@@ -379,6 +388,7 @@ fn main_result() -> Result<i32, Error> {
                 &benchmarks,
                 3,
                 false,
+                collect_self_profile,
             ))?;
             Ok(0)
         }
@@ -418,6 +428,7 @@ fn main_result() -> Result<i32, Error> {
                 &benchmarks,
                 1,
                 false,
+                collect_self_profile,
             );
             get_out_repo(true)?.add_commit_data(&result)?;
             Ok(0)
@@ -463,6 +474,7 @@ fn main_result() -> Result<i32, Error> {
                 &benchmarks,
                 3,
                 false,
+                false,
             );
             repo.success_artifact(&ArtifactData {
                 id: id.to_string(),
@@ -501,6 +513,7 @@ fn main_result() -> Result<i32, Error> {
                         &benchmarks,
                         3,
                         true,
+                        collect_self_profile,
                     ));
                     if let Err(err) = result {
                         panic!("failed to record success: {:?}", err);
@@ -594,6 +607,7 @@ fn main_result() -> Result<i32, Error> {
                     &benchmarks,
                     1,
                     false,
+                    collect_self_profile,
                 );
             } else {
                 panic!("no commits");
