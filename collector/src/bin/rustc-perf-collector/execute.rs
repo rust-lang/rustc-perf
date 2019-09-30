@@ -312,10 +312,12 @@ pub struct MeasureProcessor {
     patched_incr_stats: Vec<(Patch, (Stats, Option<SelfProfile>))>,
 
     collecting_self_profile: bool,
+
+    should_collect_self_profile: bool,
 }
 
 impl MeasureProcessor {
-    pub fn new() -> Self {
+    pub fn new(collect_self_profile: bool) -> Self {
         // Check we have `perf` available.
         let has_perf = Command::new("perf").output().is_ok();
         assert!(has_perf);
@@ -326,13 +328,15 @@ impl MeasureProcessor {
             clean_incr_stats: (Stats::new(), None),
             patched_incr_stats: Vec::new(),
             collecting_self_profile: true,
+            // Command::new("summarize").status().is_ok()
+            should_collect_self_profile: collect_self_profile,
         }
     }
 }
 
 impl Processor for MeasureProcessor {
     fn profiler(&self) -> Profiler {
-        if self.collecting_self_profile {
+        if self.collecting_self_profile && self.should_collect_self_profile {
             Profiler::PerfStatSelfProfile
         } else {
             Profiler::PerfStat

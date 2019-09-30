@@ -19,6 +19,7 @@ use std::fs;
 use std::io::{stderr, Write};
 use std::path::{Path, PathBuf};
 use std::process;
+use std::process::Command;
 use std::str;
 use std::sync::Arc;
 
@@ -186,12 +187,16 @@ fn bench_commit(
         }
     }
 
+    let has_measureme = Command::new("summarize").output().is_ok();
+    debug!("attempting self profile data: {}", has_measureme);
+
     for benchmark in benchmarks {
         if results.contains_key(&benchmark.name) {
             continue;
         }
 
-        let mut processor = execute::MeasureProcessor::new();
+        // Only collect self-profile if we have summarize in the path
+        let mut processor = execute::MeasureProcessor::new(has_measureme);
         let result =
             benchmark.measure(&mut processor, build_kinds, run_kinds, compiler, iterations);
         let result = match result {
