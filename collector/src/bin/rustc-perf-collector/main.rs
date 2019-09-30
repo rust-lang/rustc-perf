@@ -149,6 +149,104 @@ where
     Ok(v)
 }
 
+fn process_commits(
+    out_repo: outrepo::Repo,
+    benchmarks: &[Benchmark],
+    collect_self_profile: bool,
+) -> Result<(), Error> {
+    println!("processing commits");
+    let client = reqwest::Client::new();
+    let commit: Option<String> = client
+        .get(&format!(
+            "{}/perf/next_commit",
+            env::var("SITE_URL").expect("SITE_URL defined")
+        ))
+        .send()?
+        .json()?;
+    let commit = if let Some(c) = commit {
+        c
+    } else {
+        // no missing commits
+        return Ok(());
+    };
+
+    let commit = get_commit_or_fake_it(&commit)?;
+    match Sysroot::install(&commit.sha, commit.date.0, "x86_64-unknown-linux-gnu") {
+        Ok(sysroot) => {
+            let result = out_repo.success(&bench_commit(
+                Some(&out_repo),
+                &commit,
+                &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
+                &RunKind::all(),
+                Compiler::from_sysroot(&sysroot),
+                &benchmarks,
+                3,
+                true,
+                collect_self_profile,
+            ));
+            if let Err(err) = result {
+                panic!("failed to record success: {:?}", err);
+            }
+        }
+        Err(err) => {
+            error!("failed to install sysroot for {:?}: {:?}", commit, err);
+        }
+    }
+
+    Ok(())
+}
+
+fn bench_published(
+    id: &str,
+    repo: outrepo::Repo,
+    mut benchmarks: Vec<Benchmark>,
+) -> Result<(), Error> {
+    let commit = Commit {
+        sha: String::from("<none>"),
+        date: Date::ymd_hms(2010, 01, 01, 0, 0, 0),
+    };
+    let cfg = rustup::Cfg::from_env(Arc::new(|_| {})).map_err(SyncFailure::new)?;
+    let toolchain = rustup::Toolchain::from(&cfg, id)
+        .map_err(SyncFailure::new)
+        .with_context(|_| format!("creating toolchain for id: {}", id))?;
+    toolchain
+        .install_from_dist_if_not_installed()
+        .map_err(SyncFailure::new)?;
+
+    // Remove benchmarks that don't work with a stable compiler.
+    benchmarks.retain(|b| b.supports_stable());
+
+    let run_kinds = if collector::version_supports_incremental(id) {
+        RunKind::all()
+    } else {
+        RunKind::all_non_incr()
+    };
+    let CommitData {
+        benchmarks: benchmark_data,
+        ..
+    } = bench_commit(
+        None,
+        &commit,
+        &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
+        &run_kinds,
+        Compiler {
+            rustc: &toolchain.binary_file("rustc"),
+            cargo: &toolchain.binary_file("cargo"),
+            is_nightly: false,
+            triple: "x86_64-unknown-linux-gnu",
+        },
+        &benchmarks,
+        3,
+        false,
+        false,
+    );
+    repo.success_artifact(&ArtifactData {
+        id: id.to_string(),
+        benchmarks: benchmark_data,
+    })?;
+    Ok(())
+}
+
 fn bench_commit(
     repo: Option<&outrepo::Repo>,
     commit: &Commit,
@@ -358,7 +456,7 @@ fn main_result() -> Result<i32, Error> {
     let benchmark_dir = PathBuf::from("collector/benchmarks");
     let filter = matches.value_of("filter");
     let exclude = matches.value_of("exclude");
-    let mut benchmarks = get_benchmarks(&benchmark_dir, filter, exclude)?;
+    let benchmarks = get_benchmarks(&benchmark_dir, filter, exclude)?;
     let use_remote = matches.is_present("sync_git");
     let collect_self_profile = matches.is_present("skip_self_profile");
 
@@ -436,93 +534,12 @@ fn main_result() -> Result<i32, Error> {
 
         ("bench_published", Some(sub_m)) => {
             let id = sub_m.value_of("ID").unwrap();
-            let repo = get_out_repo(false)?;
-            let commit = Commit {
-                sha: String::from("<none>"),
-                date: Date::ymd_hms(2010, 01, 01, 0, 0, 0),
-            };
-            let cfg = rustup::Cfg::from_env(Arc::new(|_| {})).map_err(SyncFailure::new)?;
-            let toolchain = rustup::Toolchain::from(&cfg, id)
-                .map_err(SyncFailure::new)
-                .with_context(|_| format!("creating toolchain for id: {}", id))?;
-            toolchain
-                .install_from_dist_if_not_installed()
-                .map_err(SyncFailure::new)?;
-
-            // Remove benchmarks that don't work with a stable compiler.
-            benchmarks.retain(|b| b.supports_stable());
-
-            let run_kinds = if collector::version_supports_incremental(id) {
-                RunKind::all()
-            } else {
-                RunKind::all_non_incr()
-            };
-            let CommitData {
-                benchmarks: benchmark_data,
-                ..
-            } = bench_commit(
-                None,
-                &commit,
-                &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
-                &run_kinds,
-                Compiler {
-                    rustc: &toolchain.binary_file("rustc"),
-                    cargo: &toolchain.binary_file("cargo"),
-                    is_nightly: false,
-                    triple: "x86_64-unknown-linux-gnu",
-                },
-                &benchmarks,
-                3,
-                false,
-                false,
-            );
-            repo.success_artifact(&ArtifactData {
-                id: id.to_string(),
-                benchmarks: benchmark_data,
-            })?;
+            bench_published(&id, get_out_repo(false)?, benchmarks)?;
             Ok(0)
         }
 
         ("process", Some(_)) => {
-            let out_repo = get_out_repo(false)?;
-            println!("processing commits");
-            let client = reqwest::Client::new();
-            let commit: Option<String> = client
-                .get(&format!(
-                    "{}/perf/next_commit",
-                    env::var("SITE_URL").expect("SITE_URL defined")
-                ))
-                .send()?
-                .json()?;
-            let commit = if let Some(c) = commit {
-                c
-            } else {
-                // no missing commits
-                return Ok(0);
-            };
-
-            let commit = get_commit_or_fake_it(&commit)?;
-            match Sysroot::install(&commit.sha, commit.date.0, "x86_64-unknown-linux-gnu") {
-                Ok(sysroot) => {
-                    let result = out_repo.success(&bench_commit(
-                        Some(&out_repo),
-                        &commit,
-                        &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
-                        &RunKind::all(),
-                        Compiler::from_sysroot(&sysroot),
-                        &benchmarks,
-                        3,
-                        true,
-                        collect_self_profile,
-                    ));
-                    if let Err(err) = result {
-                        panic!("failed to record success: {:?}", err);
-                    }
-                }
-                Err(err) => {
-                    error!("failed to install sysroot for {:?}: {:?}", commit, err);
-                }
-            }
+            process_commits(get_out_repo(false)?, &benchmarks, collect_self_profile)?;
             Ok(0)
         }
 
