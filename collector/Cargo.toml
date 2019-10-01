@@ -6,7 +6,7 @@ edition = '2018'
 
 [dependencies]
 clap = "2.25"
-env_logger = "0.6"
+env_logger = "0.7"
 failure = "0.1.1"
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
