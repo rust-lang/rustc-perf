@@ -235,8 +235,9 @@ fn main() {
 #[cfg(unix)]
 fn exec(cmd: &mut Command) -> ! {
     use std::os::unix::prelude::*;
+    let cmd_d = format!("{:?}", cmd);
     let error = cmd.exec();
-    panic!("failed to exec: {}", error);
+    panic!("failed to exec `{}`: {}", cmd_d, error);
 }
 
 #[cfg(unix)]
