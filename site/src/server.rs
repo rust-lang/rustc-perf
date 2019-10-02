@@ -558,6 +558,7 @@ pub async fn handle_collected(
                 } else {
                     String::new()
                 };
+                let mut should_clear = false;
                 if let Some(current) = persistent.current.as_mut() {
                     // If the request was received twice (e.g., we stopped after we wrote DB but before
                     // responding) then we don't want to loop the collector.
@@ -575,8 +576,12 @@ pub async fn handle_collected(
                                     current.commit.sha, comparison_url
                                 ),
                             ));
+                            should_clear = true;
                         }
                     }
+                }
+                if should_clear {
+                    persistent.current = None;
                 }
             }
         }
