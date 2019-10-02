@@ -458,7 +458,7 @@ fn main_result() -> Result<i32, Error> {
     let exclude = matches.value_of("exclude");
     let benchmarks = get_benchmarks(&benchmark_dir, filter, exclude)?;
     let use_remote = matches.is_present("sync_git");
-    let collect_self_profile = matches.is_present("skip_self_profile");
+    let collect_self_profile = !matches.is_present("skip_self_profile");
 
     let get_out_dir = || {
         let path = PathBuf::from(matches.value_of_os("output_repo").unwrap());
