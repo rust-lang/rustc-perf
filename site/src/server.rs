@@ -524,6 +524,7 @@ pub async fn handle_collected(
     let mut comment = None;
     {
         let mut persistent = data.persistent.lock();
+        let mut persistent = &mut *persistent;
         match body {
             collected::Request::BenchmarkCommit { commit, benchmarks } => {
                 let issue = if let Some(r#try) =
@@ -558,7 +559,6 @@ pub async fn handle_collected(
                 } else {
                     String::new()
                 };
-                let mut should_clear = false;
                 if let Some(current) = persistent.current.as_mut() {
                     // If the request was received twice (e.g., we stopped after we wrote DB but before
                     // responding) then we don't want to loop the collector.
@@ -569,19 +569,23 @@ pub async fn handle_collected(
                     if current.benchmarks.is_empty() {
                         // post a comment to some issue
                         if let Some(issue) = &current.issue {
-                            comment = Some((
-                                issue.clone(),
-                                format!(
-                                    "Finished benchmarking try commit {}{}",
-                                    current.commit.sha, comparison_url
-                                ),
-                            ));
-                            should_clear = true;
+                            let commit = current.commit.sha.clone();
+                            if !persistent.posted_ends.contains(&commit) {
+                                comment = Some((
+                                    issue.clone(),
+                                    format!(
+                                        "Finished benchmarking try commit {}{}",
+                                        commit, comparison_url
+                                    ),
+                                ));
+                                persistent.posted_ends.push(commit);
+                                // keep 100 commits in cache
+                                if persistent.posted_ends.len() > 100 {
+                                    persistent.posted_ends.remove(0);
+                                }
+                            }
                         }
                     }
-                }
-                if should_clear {
-                    persistent.current = None;
                 }
             }
         }

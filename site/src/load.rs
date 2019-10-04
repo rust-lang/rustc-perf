@@ -100,6 +100,9 @@ pub struct Persistent {
     // This only persists for one try build (so should not be long at any point).
     #[serde(default)]
     pub pending_try_builds: HashSet<u32>,
+    // Set of commit hashes for which we've completed benchmarking.
+    #[serde(default)]
+    pub posted_ends: Vec<String>,
 }
 
 lazy_static::lazy_static! {
@@ -122,6 +125,7 @@ impl Persistent {
             try_commits: Vec::new(),
             current: None,
             pending_try_builds: HashSet::new(),
+            posted_ends: Vec::new(),
         });
         p.write().unwrap();
         p
