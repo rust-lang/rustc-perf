@@ -18,7 +18,6 @@ use dom::window::Window;
 use dom_struct::dom_struct;
 use std::cell::Cell;
 
-#[must_root]
 #[derive(Clone, JSTraceable, MallocSizeOf)]
 enum WebGLFramebufferAttachment {
     Renderbuffer(Dom<WebGLRenderbuffer>),

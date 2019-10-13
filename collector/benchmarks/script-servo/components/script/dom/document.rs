@@ -204,7 +204,6 @@ impl PendingRestyle {
 }
 
 #[derive(Clone, JSTraceable, MallocSizeOf)]
-#[must_root]
 struct StyleSheetInDocument {
     #[ignore_malloc_size_of = "Arc"]
     sheet: Arc<Stylesheet>,
@@ -4026,7 +4025,6 @@ impl AnimationFrameCallback {
 }
 
 #[derive(Default, JSTraceable, MallocSizeOf)]
-#[must_root]
 struct PendingInOrderScriptVec {
     scripts: DomRefCell<VecDeque<PendingScript>>,
 }
@@ -4059,7 +4057,6 @@ impl PendingInOrderScriptVec {
 }
 
 #[derive(JSTraceable, MallocSizeOf)]
-#[must_root]
 struct PendingScript {
     element: Dom<HTMLScriptElement>,
     load: Option<ScriptResult>,

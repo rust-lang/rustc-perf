@@ -7,14 +7,10 @@
 #![feature(const_fn)]
 //#![feature(mpsc_select)]
 #![feature(plugin)]
-
 #![deny(unsafe_code)]
-#![allow(non_snake_case)]
-
+#![allow(warnings)]
 #![doc = "The script crate contains all matters DOM."]
-
-#![plugin(script_plugins)]
-#![cfg_attr(not(feature = "unrooted_must_root_lint"), allow(unknown_lints))]
+#![allow(unknown_lints)]
 
 extern crate angle;
 extern crate app_units;

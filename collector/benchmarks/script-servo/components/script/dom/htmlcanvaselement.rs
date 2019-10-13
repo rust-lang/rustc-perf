@@ -43,7 +43,6 @@ use style::attr::{AttrValue, LengthOrPercentageOrAuto};
 const DEFAULT_WIDTH: u32 = 300;
 const DEFAULT_HEIGHT: u32 = 150;
 
-#[must_root]
 #[derive(Clone, JSTraceable, MallocSizeOf)]
 pub enum CanvasContext {
     Context2d(Dom<CanvasRenderingContext2D>),

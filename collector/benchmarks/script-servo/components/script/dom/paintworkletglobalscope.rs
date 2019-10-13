@@ -465,7 +465,6 @@ pub enum PaintWorkletTask {
 /// This type is dangerous, because it contains uboxed `Heap<JSVal>` values,
 /// which can't be moved.
 #[derive(JSTraceable, MallocSizeOf)]
-#[must_root]
 struct PaintDefinition {
     class_constructor: Heap<JSVal>,
     paint_function: Heap<JSVal>,

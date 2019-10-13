@@ -42,7 +42,6 @@ impl LoadType {
 /// created via DocumentLoader::fetch_async) are always removed by the time
 /// that the owner is destroyed.
 #[derive(JSTraceable, MallocSizeOf)]
-#[must_root]
 pub struct LoadBlocker {
     /// The document whose load event is blocked by this object existing.
     doc: Dom<Document>,

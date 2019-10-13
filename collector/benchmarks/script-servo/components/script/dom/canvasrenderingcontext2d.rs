@@ -50,7 +50,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 use unpremultiplytable::UNPREMULTIPLY_TABLE;
 
-#[must_root]
 #[derive(Clone, JSTraceable, MallocSizeOf)]
 #[allow(dead_code)]
 enum CanvasFillOrStrokeStyle {
@@ -80,7 +79,6 @@ pub struct CanvasRenderingContext2D {
     origin_clean: Cell<bool>,
 }
 
-#[must_root]
 #[derive(Clone, JSTraceable, MallocSizeOf)]
 struct CanvasContextState {
     global_alpha: f64,

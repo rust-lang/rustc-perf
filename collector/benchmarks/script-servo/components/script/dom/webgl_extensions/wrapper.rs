@@ -26,7 +26,6 @@ pub trait WebGLExtensionWrapper: JSTraceable + MallocSizeOf {
     fn as_any(&self) -> &Any;
 }
 
-#[must_root]
 #[derive(JSTraceable, MallocSizeOf)]
 pub struct TypedWebGLExtensionWrapper<T: WebGLExtension> {
     extension: MutNullableDom<T::Extension>

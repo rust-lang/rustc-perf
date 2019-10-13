@@ -377,7 +377,6 @@ struct WorkletThreadInit {
 }
 
 /// A thread for executing worklets.
-#[must_root]
 struct WorkletThread {
     /// Which role the thread is currently playing
     role: WorkletThreadRole,

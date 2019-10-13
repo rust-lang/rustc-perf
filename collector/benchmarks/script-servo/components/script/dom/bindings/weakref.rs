@@ -30,13 +30,11 @@ use std::ops::{Deref, DerefMut, Drop};
 pub const DOM_WEAK_SLOT: u32 = 1;
 
 /// A weak reference to a JS-managed DOM object.
-#[allow_unrooted_interior]
 pub struct WeakRef<T: WeakReferenceable> {
     ptr: NonZero<*mut WeakBox<T>>,
 }
 
 /// The inner box of weak references, public for the finalization in codegen.
-#[must_root]
 pub struct WeakBox<T: WeakReferenceable> {
     /// The reference count. When it reaches zero, the `value` field should
     /// have already been set to `None`. The pointee contributes one to the count.
@@ -209,7 +207,6 @@ unsafe impl<T: WeakReferenceable> JSTraceable for MutableWeakRef<T> {
 
 /// A vector of weak references. On tracing, the vector retains
 /// only references which still point to live objects.
-#[allow_unrooted_interior]
 #[derive(MallocSizeOf)]
 pub struct WeakRefVec<T: WeakReferenceable> {
     vec: Vec<WeakRef<T>>,
@@ -256,7 +253,6 @@ impl<T: WeakReferenceable> DerefMut for WeakRefVec<T> {
 
 /// An entry of a vector of weak references. Passed to the closure
 /// given to `WeakRefVec::update`.
-#[allow_unrooted_interior]
 pub struct WeakRefEntry<'a, T: WeakReferenceable + 'a> {
     vec: &'a mut WeakRefVec<T>,
     index: &'a mut usize,

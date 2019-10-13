@@ -6070,7 +6070,7 @@ class CGDictionary(CGThing):
         derive = ["JSTraceable"]
         mustRoot = ""
         if self.membersNeedTracing():
-            mustRoot = "#[must_root]\n"
+            mustRoot = ""
             derive += ["Default"]
 
         return (string.Template(
@@ -6522,7 +6522,7 @@ class CGCallback(CGClass):
                          bases=[ClassBase(baseName)],
                          constructors=self.getConstructors(),
                          methods=realMethods + getters + setters,
-                         decorators="#[derive(JSTraceable, PartialEq)]\n#[allow_unrooted_interior]")
+                         decorators="#[derive(JSTraceable, PartialEq)]")
 
     def getConstructors(self):
         return [ClassConstructor(

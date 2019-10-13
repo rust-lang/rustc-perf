@@ -317,7 +317,6 @@ impl OpaqueSender<CommonScriptMsg> for Sender<MainThreadScriptMsg> {
 
 /// The set of all documents managed by this script thread.
 #[derive(JSTraceable)]
-#[must_root]
 pub struct Documents {
     map: HashMap<PipelineId, Dom<Document>>,
 }

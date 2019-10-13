@@ -34,7 +34,6 @@ pub struct CSSStyleDeclaration {
 }
 
 #[derive(JSTraceable, MallocSizeOf)]
-#[must_root]
 pub enum CSSStyleOwner {
     Element(Dom<Element>),
     CSSRule(Dom<CSSRule>,

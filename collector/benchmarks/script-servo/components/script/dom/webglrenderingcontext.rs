@@ -144,7 +144,6 @@ bitflags! {
 }
 
 /// Information about the bound textures of a WebGL texture unit.
-#[must_root]
 #[derive(JSTraceable, MallocSizeOf)]
 struct TextureUnitBindings {
     bound_texture_2d: MutNullableDom<WebGLTexture>,

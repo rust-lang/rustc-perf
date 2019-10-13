@@ -33,7 +33,6 @@ pub struct FileBlob {
 
 
 /// Different backends of Blob
-#[must_root]
 #[derive(JSTraceable)]
 pub enum BlobImpl {
     /// File-based blob, whose content lives in the net process

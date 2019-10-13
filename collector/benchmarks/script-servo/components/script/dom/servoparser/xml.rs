@@ -17,7 +17,6 @@ use xml5ever::tokenizer::XmlTokenizer;
 use xml5ever::tree_builder::{Tracer as XmlTracer, XmlTreeBuilder};
 
 #[derive(JSTraceable, MallocSizeOf)]
-#[must_root]
 pub struct Tokenizer {
     #[ignore_malloc_size_of = "Defined in xml5ever"]
     inner: XmlTokenizer<XmlTreeBuilder<Dom<Node>, Sink>>,

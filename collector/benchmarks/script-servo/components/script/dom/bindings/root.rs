@@ -48,7 +48,6 @@ use style::thread_state;
 
 /// A rooted value.
 #[allow(unrooted_must_root)]
-#[allow_unrooted_interior]
 pub struct Root<T: StableTraceObject> {
     /// The value to root.
     value: T,
@@ -310,7 +309,6 @@ impl<'root, T: RootedReference<'root> + 'root> RootedReference<'root> for Option
 /// on the stack, the `Dom<T>` can point to freed memory.
 ///
 /// This should only be used as a field in other DOM objects.
-#[must_root]
 pub struct Dom<T> {
     ptr: NonZero<*const T>,
 }
@@ -372,7 +370,6 @@ unsafe impl<T: DomObject> JSTraceable for Dom<T> {
 
 /// An unrooted reference to a DOM object for use in layout. `Layout*Helpers`
 /// traits must be implemented on this.
-#[allow_unrooted_interior]
 pub struct LayoutDom<T> {
     ptr: NonZero<*const T>,
 }
@@ -484,7 +481,6 @@ impl LayoutDom<Node> {
 ///
 /// This should only be used as a field in other DOM objects; see warning
 /// on `Dom<T>`.
-#[must_root]
 #[derive(JSTraceable)]
 pub struct MutDom<T: DomObject> {
     val: UnsafeCell<Dom<T>>,
@@ -545,7 +541,6 @@ impl<T: DomObject + PartialEq> PartialEq<T> for MutDom<T> {
 ///
 /// This should only be used as a field in other DOM objects; see warning
 /// on `Dom<T>`.
-#[must_root]
 #[derive(JSTraceable)]
 pub struct MutNullableDom<T: DomObject> {
     ptr: UnsafeCell<Option<Dom<T>>>,
@@ -648,7 +643,6 @@ impl<T: DomObject> MallocSizeOf for MutNullableDom<T> {
 ///
 /// This should only be used as a field in other DOM objects; see warning
 /// on `Dom<T>`.
-#[must_root]
 pub struct DomOnceCell<T: DomObject> {
     ptr: OnceCell<Dom<T>>,
 }

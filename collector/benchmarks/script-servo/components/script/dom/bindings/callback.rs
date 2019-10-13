@@ -36,7 +36,6 @@ pub enum ExceptionHandling {
 /// A common base class for representing IDL callback function and
 /// callback interface types.
 #[derive(JSTraceable)]
-#[must_root]
 pub struct CallbackObject {
     /// The underlying `JSObject`.
     callback: Heap<*mut JSObject>,
@@ -127,7 +126,6 @@ pub trait CallbackContainer {
 
 /// A common base class for representing IDL callback function types.
 #[derive(JSTraceable, PartialEq)]
-#[must_root]
 pub struct CallbackFunction {
     object: CallbackObject,
 }
@@ -158,7 +156,6 @@ impl CallbackFunction {
 
 /// A common base class for representing IDL callback interface types.
 #[derive(JSTraceable, PartialEq)]
-#[must_root]
 pub struct CallbackInterface {
     object: CallbackObject,
 }

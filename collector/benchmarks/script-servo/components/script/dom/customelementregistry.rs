@@ -581,7 +581,6 @@ pub fn try_upgrade_element(element: &Element) {
 }
 
 #[derive(JSTraceable, MallocSizeOf)]
-#[must_root]
 pub enum CustomElementReaction {
     Upgrade(
         #[ignore_malloc_size_of = "Rc"]
@@ -625,7 +624,6 @@ enum BackupElementQueueFlag {
 
 /// <https://html.spec.whatwg.org/multipage/#custom-element-reactions-stack>
 #[derive(JSTraceable, MallocSizeOf)]
-#[must_root]
 pub struct CustomElementReactionStack {
     stack: DomRefCell<Vec<ElementQueue>>,
     backup_queue: ElementQueue,
@@ -774,7 +772,6 @@ impl CustomElementReactionStack {
 
 /// <https://html.spec.whatwg.org/multipage/#element-queue>
 #[derive(JSTraceable, MallocSizeOf)]
-#[must_root]
 struct ElementQueue {
     queue: DomRefCell<VecDeque<Dom<Element>>>,
 }

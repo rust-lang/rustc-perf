@@ -106,7 +106,6 @@ enum ImageRequestPhase {
     Current
 }
 #[derive(JSTraceable, MallocSizeOf)]
-#[must_root]
 struct ImageRequest {
     state: State,
     parsed_url: Option<ServoUrl>,

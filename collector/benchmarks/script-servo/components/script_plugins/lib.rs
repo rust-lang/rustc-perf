@@ -32,19 +32,8 @@ use rustc_plugin::Registry;
 use syntax::feature_gate::AttributeType::Whitelisted;
 use syntax_pos::symbol::Symbol;
 
-#[cfg(feature = "unrooted_must_root_lint")]
-mod unrooted_must_root;
-
-/// Utilities for writing plugins
-#[cfg(feature = "unrooted_must_root_lint")]
-mod utils;
-
 #[plugin_registrar]
 pub fn plugin_registrar(reg: &mut Registry) {
-    #[cfg(feature = "unrooted_must_root_lint")]
-    reg.register_late_lint_pass(Box::new(unrooted_must_root::UnrootedPass::new()));
-
     reg.register_attribute(Symbol::intern("allow_unrooted_interior"), Whitelisted);
     reg.register_attribute(Symbol::intern("must_root"), Whitelisted);
 }
-
