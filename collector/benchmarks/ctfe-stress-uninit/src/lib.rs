@@ -1,5 +1,3 @@
-#![feature(const_fn, const_let)]
-
 // Try CTFE that operate on values that contain largely uninitialized memory, not requiring any
 // particular representation in MIR.
 
