@@ -1,4 +1,4 @@
 [[package]]
-name = "ctfe-uninit-stress"
+name = "ctfe-stress-uninit"
 version = "0.1.0"
 

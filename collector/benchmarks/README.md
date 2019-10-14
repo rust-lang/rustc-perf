@@ -68,7 +68,7 @@ programs.
   caused [poor performance](https://github.com/rust-lang/rust/issues/32278) in
   the past.
 - **ctfe-stress-2**: A stress test for compile-time function evaluation.
-- **ctfe-uninit-stress**: A stress test for representation of values with
+- **ctfe-stress-uninit**: A stress test for representation of values with
   uninitialized bytes in compile-time function evaluation.
 - **deeply-nested**: A small program that caused [exponential
   behavior](https://github.com/rust-lang/rust/issues/38528) in the past.
