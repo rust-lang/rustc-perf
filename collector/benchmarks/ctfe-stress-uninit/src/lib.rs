@@ -1,8 +1,7 @@
 // Try CTFE that operate on values that contain largely uninitialized memory, not requiring any
 // particular representation in MIR.
-
-use core::mem::MaybeUninit;
-type LargeUninit = MaybeUninit<[u8; 1 << 24]>;
+use std::mem::MaybeUninit;
+type LargeUninit = MaybeUninit<[u8; 1 << 23]>;
 
 // copying uninitialized bytes could also be expensive and could be optimized independently, so
 // track regressions here separately. It should also be less costly to compose new values
@@ -13,7 +12,7 @@ const BAR: LargeUninit = MaybeUninit::uninit();
 const fn id<T>(val: T) -> T { val }
 const ID: LargeUninit = id(MaybeUninit::uninit());
 
-const fn build() -> LargeUninit { MaybeUninit::uninit(); }
+const fn build() -> LargeUninit { MaybeUninit::uninit() }
 const BUILD: LargeUninit = build();
 
 // Largely uninitialized memory but initialized with tag at the start, in both cases.
