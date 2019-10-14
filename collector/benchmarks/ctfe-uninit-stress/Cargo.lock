@@ -1,0 +1,4 @@
+[[package]]
+name = "ctfe-uninit-stress"
+version = "0.1.0"
+
