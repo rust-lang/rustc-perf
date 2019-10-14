@@ -64,6 +64,10 @@ These are artificial programs that stress one particular aspect of the
 compiler. Some are entirely artificial, and some are extracted from real
 programs.
 
+- **await-call-tree**: A tree of async fns that await each other, creating a
+  large type composed of many repeated `impl Future` types. Such types caused
+  [poor performance](https://github.com/rust-lang/rust/issues/65147) in the
+  past.
 - **coercions**: Contains a static array with 65,536 string literals, which
   caused [poor performance](https://github.com/rust-lang/rust/issues/32278) in
   the past.

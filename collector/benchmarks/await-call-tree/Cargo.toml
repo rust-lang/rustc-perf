@@ -1,0 +1,5 @@
+[package]
+name = "await-call-tree"
+version = "0.1.0"
+authors = ["Tyler Mandry <tmandry@gmail.com>"]
+edition = "2018"
