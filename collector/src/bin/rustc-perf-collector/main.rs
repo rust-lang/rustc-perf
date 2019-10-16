@@ -289,7 +289,7 @@ fn bench_commit(
         assert!(
             has_measureme,
             "needs `summarize` in PATH for self profile.\n\
-             Pass --skip-self-profile` to opt out"
+             Omit --self-profile` to opt out"
         );
     }
 
@@ -298,7 +298,6 @@ fn bench_commit(
             continue;
         }
 
-        // Only collect self-profile if we have summarize in the path
         let mut processor = execute::MeasureProcessor::new(collect_self_profile);
         let result =
             benchmark.measure(&mut processor, build_kinds, run_kinds, compiler, iterations);
@@ -398,7 +397,7 @@ fn main_result() -> anyhow::Result<i32> {
        (@arg exclude: --exclude +takes_value "Ignore all benchmarks that contain this")
        (@arg sync_git: --("sync-git") "Synchronize repository with remote")
        (@arg output_repo: --("output-repo") +required +takes_value "Output repository/directory")
-       (@arg skip_self_profile: --("skip-self-profile") "Skip self-profile")
+       (@arg self_profile: --("self-profile") "Collect self-profile")
 
        (@subcommand bench_commit =>
            (about: "benchmark a bors merge from AWS")
@@ -456,7 +455,7 @@ fn main_result() -> anyhow::Result<i32> {
     let exclude = matches.value_of("exclude");
     let benchmarks = get_benchmarks(&benchmark_dir, filter, exclude)?;
     let use_remote = matches.is_present("sync_git");
-    let collect_self_profile = !matches.is_present("skip_self_profile");
+    let collect_self_profile = matches.is_present("self_profile");
 
     let get_out_dir = || {
         let path = PathBuf::from(matches.value_of_os("output_repo").unwrap());

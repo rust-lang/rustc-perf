@@ -94,6 +94,8 @@ depending on the speed of your machine.
 
 The following options, if present, must appear before `bench_local` in the
 command.
+- `--self-profile` can be used to do self-profiling, which requires the
+  `measureme` tool.
 - `--filter $STR` can be used to run a subset of the benchmarks. `$STR` is a
   substring of the name of the benchmark(s) you wish to run.
 - `--exclude $STR` is the inverse of `--filter`. `$STR` is a substring of the
@@ -196,7 +198,15 @@ might be optimized.
 
 ### Profiling local builds
 
-To profile local builds:
+To self-profile a local build:
+```
+RUST_LOG=info ./target/release/collector --output-repo $OUTPUT_DIR --self-profile \
+    bench_local $PROFILER --rustc $RUSTC --cargo $CARGO $ID
+```
+
+Then view the results the same way as for the `bench_local` subcommand.
+
+To profile a local build with a different profiler:
 ```
 RUST_LOG=info ./target/release/collector --output-repo $OUTPUT_DIR \
     profile $PROFILER --rustc $RUSTC --cargo $CARGO $ID
