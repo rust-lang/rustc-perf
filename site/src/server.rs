@@ -717,7 +717,7 @@ pub async fn handle_self_profile(
 }
 
 struct Server {
-    data: Arc<RwLock<Arc<InputData>>>,
+    data: Arc<RwLock<Option<Arc<InputData>>>>,
     updating: UpdatingStatus,
 }
 
@@ -781,6 +781,7 @@ impl Server {
         check_http_method!(*req.method(), http::Method::GET);
         let data = self.data.clone();
         let data = data.read();
+        let data = data.as_ref().unwrap();
         let result = handler(&data);
         Ok(http::Response::builder()
             .header_typed(ContentType::json())
@@ -794,6 +795,7 @@ impl Server {
             .get(Authorization::<headers::authorization::Bearer>::name())
         {
             let data = self.data.read();
+            let data = data.as_ref().unwrap();
             let auth = Authorization::<headers::authorization::Bearer>::decode(
                 &mut Some(auth).into_iter(),
             )
@@ -831,6 +833,9 @@ impl Server {
 
             git::update_repo(&repo_path).unwrap();
 
+            // Erase old data
+            *rwlock.write() = None;
+
             info!("updating from filesystem...");
             let new_data = Arc::new(InputData::from_fs(&repo_path).unwrap());
             debug!("last date = {:?}", new_data.last_date);
@@ -839,7 +844,7 @@ impl Server {
             let mut data = rwlock.write();
 
             // Write the new data back into the request
-            *data = new_data;
+            *data = Some(new_data);
 
             std::mem::drop(updating);
         });
@@ -860,6 +865,10 @@ impl fmt::Display for ServerError {
 impl std::error::Error for ServerError {}
 
 async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerError> {
+    if ctx.data.read().is_none() {
+        return Ok(Response::new(hyper::Body::from("no data yet, please wait")));
+    }
+
     let fs_path = format!(
         "site/static{}",
         if req.uri().path() == "" || req.uri().path() == "/" {
@@ -897,7 +906,7 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
     let (req, body_stream) = req.into_parts();
     let p = req.uri.path();
     check_http_method!(req.method, http::Method::POST);
-    let data: Arc<InputData> = ctx.data.read().clone();
+    let data: Arc<InputData> = ctx.data.read().as_ref().unwrap().clone();
     let mut c = body_stream.compat();
     let mut body = Vec::new();
     while let Some(chunk) = c.next().await {
@@ -1038,9 +1047,9 @@ where
     }
 }
 
-async fn run_server(data: InputData, addr: SocketAddr) {
+async fn run_server(data: Arc<RwLock<Option<Arc<InputData>>>>, addr: SocketAddr) {
     let ctx = Arc::new(Server {
-        data: Arc::new(RwLock::new(Arc::new(data))),
+        data,
         updating: UpdatingStatus::new(),
     });
     let server = hyper::Server::bind(&addr).serve(move || {
@@ -1063,7 +1072,7 @@ async fn run_server(data: InputData, addr: SocketAddr) {
     }
 }
 
-pub fn start(data: InputData, port: u16) {
+pub fn start(data: Arc<RwLock<Option<Arc<InputData>>>>, port: u16) {
     let mut server_address: SocketAddr = "0.0.0.0:2346".parse().unwrap();
     server_address.set_port(port);
     hyper::rt::run(

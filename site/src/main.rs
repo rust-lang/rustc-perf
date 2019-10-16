@@ -9,8 +9,10 @@
 
 use env_logger;
 
+use parking_lot::RwLock;
 use site::{load, util};
 use std::env;
+use std::sync::Arc;
 
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
@@ -19,13 +21,17 @@ fn main() {
     env_logger::init();
     let _ = jemalloc_ctl::background_thread::write(true);
 
-    let data = load::InputData::from_fs(&util::get_repo_path().unwrap()).unwrap();
-
+    let data: Arc<RwLock<Option<Arc<load::InputData>>>> = Arc::new(RwLock::new(None));
+    let data_ = data.clone();
+    std::thread::spawn(move || {
+        *data_.write() = Some(Arc::new(
+            load::InputData::from_fs(&util::get_repo_path().unwrap()).unwrap(),
+        ));
+    });
     let port = env::var("PORT")
         .ok()
         .and_then(|x| x.parse().ok())
         .unwrap_or(2346);
     println!("Starting server with port={:?}", port);
-
     site::server::start(data, port);
 }
