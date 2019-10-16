@@ -7,11 +7,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[macro_use]
-extern crate failure;
+use thiserror::Error;
 
-#[derive(Fail, Debug)]
-#[fail(display = "command failed: {}", command)]
+#[derive(Error, Debug)]
+#[error("command failed: {command}")]
 pub struct CommandFailed {
     command: String,
 }

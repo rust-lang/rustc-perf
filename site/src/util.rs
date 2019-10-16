@@ -11,7 +11,6 @@ use std::env;
 
 use crate::load::{CommitData, InputData};
 use collector::Bound;
-use failure::Error;
 
 use chrono::Duration;
 
@@ -96,11 +95,13 @@ pub fn data_range<'a>(
 }
 
 /// Reads the repository path from the arguments passed to main()
-pub fn get_repo_path() -> Result<String, Error> {
+pub fn get_repo_path() -> anyhow::Result<String> {
     if let Some(p) = env::args().nth(1) {
         Ok(p)
     } else {
-        bail!("No argument supplied, needs location of data repo.")
+        return Err(anyhow::anyhow!(
+            "No argument supplied, needs location of data repo."
+        ));
     }
 }
 

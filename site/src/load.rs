@@ -12,8 +12,8 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use anyhow::Context;
 use chrono::{Duration, Utc};
-use failure::{Error, ResultExt};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
@@ -110,13 +110,13 @@ lazy_static::lazy_static! {
 }
 
 impl Persistent {
-    pub fn write(&self) -> Result<(), Error> {
+    pub fn write(&self) -> anyhow::Result<()> {
         if PERSISTENT_PATH.exists() {
             let _ = fs::copy(&*PERSISTENT_PATH, "persistent.json.previous");
         }
         let s = serde_json::to_string(self)?;
         fs::write(&*PERSISTENT_PATH, &s)
-            .with_context(|_| format!("failed to write persistent DB"))?;
+            .with_context(|| format!("failed to write persistent DB"))?;
         Ok(())
     }
 
@@ -189,7 +189,7 @@ impl InputData {
     }
 
     /// Initialize `InputData from the file system.
-    pub fn from_fs(repo_loc: &str) -> Result<InputData, Error> {
+    pub fn from_fs(repo_loc: &str) -> anyhow::Result<InputData> {
         let repo_loc = PathBuf::from(repo_loc);
         let mut skipped = 0;
         let mut artifact_data = BTreeMap::new();
@@ -225,7 +225,7 @@ impl InputData {
             let filename = entry.file_name();
             let filename = filename.to_str().unwrap();
             let file_contents =
-                fs::read(entry.path()).with_context(|_| format!("Failed to read {}", filename))?;
+                fs::read(entry.path()).with_context(|| format!("Failed to read {}", filename))?;
 
             if filename.starts_with("artifact-") {
                 let contents: ArtifactData = match serde_json::from_slice(&file_contents) {
@@ -282,7 +282,7 @@ impl InputData {
         data: BTreeMap<Commit, CommitData>,
         artifact_data: BTreeMap<String, ArtifactData>,
         config: Config,
-    ) -> Result<InputData, Error> {
+    ) -> anyhow::Result<InputData> {
         let data = data.into_iter().map(|(_, v)| v).collect::<Vec<_>>();
         let mut last_date = None;
         let mut stats_list = BTreeSet::new();
@@ -514,7 +514,7 @@ impl InputData {
         })
     }
 
-    pub fn missing_commits(&self) -> Result<Vec<(Commit, MissingReason)>, Error> {
+    pub fn missing_commits(&self) -> anyhow::Result<Vec<(Commit, MissingReason)>> {
         let known_benchmarks = self
             .data
             .iter()

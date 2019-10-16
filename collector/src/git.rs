@@ -6,7 +6,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-pub fn get_commit_or_fake_it(sha: &str) -> Result<Commit, failure::Error> {
+pub fn get_commit_or_fake_it(sha: &str) -> anyhow::Result<Commit> {
     Ok(get_rust_commits()?
         .iter()
         .find(|c| c.sha == sha)
@@ -21,7 +21,7 @@ pub fn get_commit_or_fake_it(sha: &str) -> Result<Commit, failure::Error> {
 }
 
 /// This retrieves the list of Rust commits which may be available in the CI S3 bucket.
-pub fn get_rust_commits() -> Result<Vec<Commit>, failure::Error> {
+pub fn get_rust_commits() -> anyhow::Result<Vec<Commit>> {
     let repo_dir =
         PathBuf::from(env::var("RUST_SRC_REPO").unwrap_or_else(|_| String::from("rust.git")));
 

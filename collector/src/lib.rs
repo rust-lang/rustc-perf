@@ -642,25 +642,25 @@ pub mod round_float {
     }
 }
 
-pub fn run_command(cmd: &mut Command) -> Result<(), failure::Error> {
+pub fn run_command(cmd: &mut Command) -> anyhow::Result<()> {
     log::trace!("running: {:?}", cmd);
     let status = cmd.status()?;
     if !status.success() {
-        failure::bail!("expected success {:?}", status);
+        return Err(anyhow::anyhow!("expected success {:?}", status));
     }
     Ok(())
 }
 
-pub fn command_output(cmd: &mut Command) -> Result<process::Output, failure::Error> {
+pub fn command_output(cmd: &mut Command) -> anyhow::Result<process::Output> {
     log::trace!("running: {:?}", cmd);
     let output = cmd.output()?;
     if !output.status.success() {
-        failure::bail!(
+        return Err(anyhow::anyhow!(
             "expected success, got {}\n\nstderr={}\n\n stdout={}",
             output.status,
             String::from_utf8_lossy(&output.stderr),
             String::from_utf8_lossy(&output.stdout)
-        );
+        ));
     }
     Ok(output)
 }

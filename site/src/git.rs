@@ -11,21 +11,20 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::CommandFailed;
-use failure::Error;
 
 const BRANCH: &'static str = "master";
 const GIT: &'static str = "git";
 const GIT_CHECKOUT: &'static str = "checkout";
 const GIT_PULL: &'static str = "pull";
 
-pub fn update_repo(repo_path: &str) -> Result<(), Error> {
+pub fn update_repo(repo_path: &str) -> anyhow::Result<()> {
     let working_dir = Path::new(repo_path);
     checkout_master(working_dir)?;
     pull_updates(working_dir)?;
     Ok(())
 }
 
-pub fn execute_command(working_dir: &Path, args: &[&str]) -> Result<(), Error> {
+pub fn execute_command(working_dir: &Path, args: &[&str]) -> anyhow::Result<()> {
     let status = Command::new(GIT)
         .current_dir(working_dir)
         .args(args)
@@ -39,10 +38,10 @@ pub fn execute_command(working_dir: &Path, args: &[&str]) -> Result<(), Error> {
     }
 }
 
-fn checkout_master(working_dir: &Path) -> Result<(), Error> {
+fn checkout_master(working_dir: &Path) -> anyhow::Result<()> {
     execute_command(working_dir, &[GIT_CHECKOUT, BRANCH])
 }
 
-fn pull_updates(working_dir: &Path) -> Result<(), Error> {
+fn pull_updates(working_dir: &Path) -> anyhow::Result<()> {
     execute_command(working_dir, &[GIT_PULL])
 }
