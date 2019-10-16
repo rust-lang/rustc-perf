@@ -727,7 +727,7 @@ struct IsUpdating(Arc<AtomicBool>);
 
 impl Drop for IsUpdating {
     fn drop(&mut self) {
-        self.0.store(false, AtomicOrdering::Release);
+        self.0.store(false, AtomicOrdering::SeqCst);
     }
 }
 
@@ -738,7 +738,11 @@ impl UpdatingStatus {
 
     // Returns previous state
     fn set_updating(&self) -> bool {
-        self.0.compare_and_swap(false, true, AtomicOrdering::AcqRel)
+        self.0.compare_and_swap(false, true, AtomicOrdering::SeqCst)
+    }
+
+    fn is_updating(&self) -> bool {
+        self.0.load(AtomicOrdering::SeqCst)
     }
 
     fn release_on_drop(&self) -> IsUpdating {
@@ -830,21 +834,20 @@ impl Server {
         let updating = self.updating.release_on_drop();
         let _ = std::thread::spawn(move || {
             let repo_path = get_repo_path().unwrap();
-
             git::update_repo(&repo_path).unwrap();
 
+            // Acquire the lock. We're not returning data via HTTP already anyway, as we've cleared
+            let mut handle = rwlock.write();
+
             // Erase old data
-            *rwlock.write() = None;
+            *handle = None;
 
             info!("updating from filesystem...");
             let new_data = Arc::new(InputData::from_fs(&repo_path).unwrap());
             debug!("last date = {:?}", new_data.last_date);
 
-            // Retrieve the stored InputData from the request.
-            let mut data = rwlock.write();
-
             // Write the new data back into the request
-            *data = Some(new_data);
+            *handle = Some(new_data);
 
             std::mem::drop(updating);
         });
@@ -865,7 +868,8 @@ impl fmt::Display for ServerError {
 impl std::error::Error for ServerError {}
 
 async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerError> {
-    if ctx.data.read().is_none() {
+    // Don't attempt to get lock if we're updating
+    if ctx.updating.is_updating() || ctx.data.read().is_none() {
         return Ok(Response::new(hyper::Body::from("no data yet, please wait")));
     }
 
