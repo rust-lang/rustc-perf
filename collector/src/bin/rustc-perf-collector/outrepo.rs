@@ -1,7 +1,7 @@
 //! Write benchmark information to the output repository
 
+use anyhow::{anyhow, Context};
 use collector::{ArtifactData, Commit, CommitData};
-use failure::{Error, ResultExt};
 use log::{debug, info, trace, warn};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -16,7 +16,7 @@ pub struct Repo {
 }
 
 impl Repo {
-    fn git(&self, args: &[&str]) -> Result<(), Error> {
+    fn git(&self, args: &[&str]) -> anyhow::Result<()> {
         for iteration in 0..5 {
             let mut command = Command::new("git");
             command.current_dir(&self.path);
@@ -24,7 +24,7 @@ impl Repo {
             command.args(args);
             let mut child = command
                 .spawn()
-                .with_context(|_| format!("could not spawn git {:?}", args))?;
+                .with_context(|| format!("could not spawn git {:?}", args))?;
             let start_time = Instant::now();
             loop {
                 if start_time.elapsed().as_secs() > 30 {
@@ -38,30 +38,34 @@ impl Repo {
                         if status.success() {
                             return Ok(());
                         } else {
-                            bail!(
+                            return Err(anyhow!(
                                 "command `git {:?}` failed in `{}`",
                                 args,
                                 self.path.display()
-                            );
+                            ));
                         }
                     }
                     Ok(None) => {
                         debug!("waiting 250ms...");
                         thread::sleep(time::Duration::from_millis(250));
                     }
-                    Err(err) => bail!(
-                        "command `git {:?}` failed to try_wait in {:?}: {:?}",
-                        args,
-                        self.path.display(),
-                        err
-                    ),
+                    Err(err) => {
+                        return Err(anyhow!(
+                            "command `git {:?}` failed to try_wait in {:?}: {:?}",
+                            args,
+                            self.path.display(),
+                            err
+                        ))
+                    }
                 }
             }
         }
-        bail!("failed to run git command, timed out too many times")
+        Err(anyhow!(
+            "failed to run git command, timed out too many times"
+        ))
     }
 
-    pub fn open(path: PathBuf, allow_new_dir: bool, use_remote: bool) -> Result<Self, Error> {
+    pub fn open(path: PathBuf, allow_new_dir: bool, use_remote: bool) -> anyhow::Result<Self> {
         let result = Repo {
             path: path,
             use_remote,
@@ -69,10 +73,10 @@ impl Repo {
 
         // Don't nuke random repositories, unless specifically requested.
         if !allow_new_dir && !result.perf_file().exists() {
-            bail!(
+            return Err(anyhow!(
                 "`{}` file not present, refusing to run",
                 result.perf_file().display()
-            );
+            ));
         }
 
         if result.use_remote && result.path.join(".git").exists() {
@@ -85,13 +89,13 @@ impl Repo {
         Ok(result)
     }
 
-    pub fn success(&self, data: &CommitData) -> Result<(), Error> {
+    pub fn success(&self, data: &CommitData) -> anyhow::Result<()> {
         self.add_commit_data(data)?;
         self.commit_and_push(&format!("{} - success", data.commit.sha))?;
         Ok(())
     }
 
-    pub fn success_artifact(&self, data: &ArtifactData) -> Result<(), Error> {
+    pub fn success_artifact(&self, data: &ArtifactData) -> anyhow::Result<()> {
         let filepath = self.times().join(format!("artifact-{}.json", data.id));
         info!("creating file {}", filepath.display());
         let serialized = serde_json::to_string(&data)?;
@@ -100,7 +104,7 @@ impl Repo {
         Ok(())
     }
 
-    fn commit_and_push(&self, message: &str) -> Result<(), Error> {
+    fn commit_and_push(&self, message: &str) -> anyhow::Result<()> {
         self.git(&["add", "times"])?;
 
         // dirty index
@@ -115,16 +119,16 @@ impl Repo {
         Ok(())
     }
 
-    fn load_commit_data_file(&self, filepath: &Path) -> Result<CommitData, Error> {
+    fn load_commit_data_file(&self, filepath: &Path) -> anyhow::Result<CommitData> {
         trace!("loading file {}", filepath.display());
         let contents =
-            fs::read(&filepath).with_context(|_| format!("failed to read {:?}", filepath))?;
+            fs::read(&filepath).with_context(|| format!("failed to read {:?}", filepath))?;
         let data = serde_json::from_slice(&contents)
-            .with_context(|_| format!("failed to read JSON from {:?}", filepath))?;
+            .with_context(|| format!("failed to read JSON from {:?}", filepath))?;
         Ok(data)
     }
 
-    pub fn load_commit_data(&self, commit: &Commit, triple: &str) -> Result<CommitData, Error> {
+    pub fn load_commit_data(&self, commit: &Commit, triple: &str) -> anyhow::Result<CommitData> {
         let filepath = self.times().join(format!(
             "{}-{}-{}.json",
             commit.date.0.to_rfc3339(),
@@ -141,7 +145,7 @@ impl Repo {
         }
     }
 
-    pub fn add_commit_data(&self, data: &CommitData) -> Result<(), Error> {
+    pub fn add_commit_data(&self, data: &CommitData) -> anyhow::Result<()> {
         let commit = &data.commit;
         let filepath = self
             .times()

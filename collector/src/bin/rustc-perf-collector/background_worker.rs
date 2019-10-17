@@ -1,3 +1,4 @@
+use anyhow::bail;
 use collector::api::collected;
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use log::warn;
@@ -10,7 +11,7 @@ lazy_static::lazy_static! {
         RwLock::new(Some(start_bg_thread()));
 }
 
-fn call_home(client: &reqwest::Client, request: &collected::Request) -> Result<(), failure::Error> {
+fn call_home(client: &reqwest::Client, request: &collected::Request) -> anyhow::Result<()> {
     let resp = client
         .post(&format!(
             "{}/perf/collected",

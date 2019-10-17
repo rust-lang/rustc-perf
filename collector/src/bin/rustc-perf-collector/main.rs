@@ -1,16 +1,14 @@
 #![recursion_limit = "1024"]
 
 #[macro_use]
-extern crate failure;
-#[macro_use]
 extern crate clap;
 
+use anyhow::{bail, Context};
 use chrono::{Timelike, Utc};
 use collector::api::collected;
 use collector::git::get_commit_or_fake_it;
 use collector::git::get_rust_commits as get_commits;
 use collector::{ArtifactData, Commit, CommitData, Date};
-use failure::{Error, ResultExt, SyncFailure};
 use log::{debug, error, info, warn};
 use std::collections::BTreeMap;
 use std::collections::HashSet;
@@ -82,9 +80,9 @@ impl RunKind {
     }
 }
 
-#[derive(Fail, PartialEq, Eq, Debug)]
+#[derive(thiserror::Error, PartialEq, Eq, Debug)]
 pub enum KindError {
-    #[fail(display = "'{:?}' is not a known {} kind", _1, _0)]
+    #[error("'{:?}' is not a known {} kind", .1, .0)]
     UnknownKind(&'static str, String),
 }
 
@@ -153,7 +151,7 @@ fn process_commits(
     out_repo: outrepo::Repo,
     benchmarks: &[Benchmark],
     collect_self_profile: bool,
-) -> Result<(), Error> {
+) -> anyhow::Result<()> {
     println!("processing commits");
     let client = reqwest::Client::new();
     let commit: Option<String> = client
@@ -200,18 +198,18 @@ fn bench_published(
     id: &str,
     repo: outrepo::Repo,
     mut benchmarks: Vec<Benchmark>,
-) -> Result<(), Error> {
+) -> anyhow::Result<()> {
     let commit = Commit {
         sha: String::from("<none>"),
         date: Date::ymd_hms(2010, 01, 01, 0, 0, 0),
     };
-    let cfg = rustup::Cfg::from_env(Arc::new(|_| {})).map_err(SyncFailure::new)?;
+    let cfg = rustup::Cfg::from_env(Arc::new(|_| {})).map_err(|e| anyhow::anyhow!("{:?}", e))?;
     let toolchain = rustup::Toolchain::from(&cfg, id)
-        .map_err(SyncFailure::new)
-        .with_context(|_| format!("creating toolchain for id: {}", id))?;
+        .map_err(|e| anyhow::anyhow!("{:?}", e))
+        .with_context(|| format!("creating toolchain for id: {}", id))?;
     toolchain
         .install_from_dist_if_not_installed()
-        .map_err(SyncFailure::new)?;
+        .map_err(|e| anyhow::anyhow!("{:?}", e))?;
 
     // Remove benchmarks that don't work with a stable compiler.
     benchmarks.retain(|b| b.supports_stable());
@@ -337,7 +335,7 @@ fn get_benchmarks(
     benchmark_dir: &Path,
     filter: Option<&str>,
     exclude: Option<&str>,
-) -> Result<Vec<Benchmark>, Error> {
+) -> anyhow::Result<Vec<Benchmark>> {
     let mut benchmarks = Vec::new();
     'outer: for entry in fs::read_dir(benchmark_dir).context("failed to list benchmarks")? {
         let entry = entry?;
@@ -388,7 +386,7 @@ fn main() {
     }
 }
 
-fn main_result() -> Result<i32, Error> {
+fn main_result() -> anyhow::Result<i32> {
     env_logger::init();
 
     let matches = clap_app!(rustc_perf_collector =>

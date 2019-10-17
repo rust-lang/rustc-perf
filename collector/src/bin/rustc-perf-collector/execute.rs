@@ -11,11 +11,11 @@ use tempfile::TempDir;
 
 use collector::{command_output, BenchmarkState, Patch, Run, SelfProfile, StatId, Stats};
 
-use failure::{err_msg, Error, ResultExt};
+use anyhow::{bail, Context};
 
 use crate::{BuildKind, Compiler, RunKind};
 
-fn touch_all(path: &Path) -> Result<(), Error> {
+fn touch_all(path: &Path) -> anyhow::Result<()> {
     let mut cmd = Command::new("bash");
     cmd.current_dir(path)
         .args(&["-c", "find . -name '*.rs' | xargs touch"]);
@@ -83,11 +83,11 @@ pub enum Profiler {
     Eprintln,
 }
 
-#[derive(Fail, PartialEq, Eq, Debug)]
+#[derive(thiserror::Error, PartialEq, Eq, Debug)]
 pub enum FromNameError {
-    #[fail(display = "'perf-stat' cannot be used as the profiler")]
+    #[error("'perf-stat' cannot be used as the profiler")]
     PerfStat,
-    #[fail(display = "'{:?}' is not a known profiler", _0)]
+    #[error("'{:?}' is not a known profiler", .0)]
     UnknownProfiler(String),
 }
 
@@ -196,7 +196,7 @@ impl<'a> CargoProcess<'a> {
         package_id.trim().to_string()
     }
 
-    fn run_rustc(&mut self) -> Result<(), Error> {
+    fn run_rustc(&mut self) -> anyhow::Result<()> {
         loop {
             let mut cmd = self.base_command(self.cwd, "rustc");
             cmd.arg("-p").arg(self.get_pkgid(self.cwd));
@@ -284,7 +284,7 @@ pub trait Processor {
         &mut self,
         data: &ProcessOutputData<'_>,
         output: process::Output,
-    ) -> Result<Retry, Error>;
+    ) -> anyhow::Result<Retry>;
 
     /// Provided to permit switching on more expensive profiling if it's needed
     /// for the "first" run for any given benchmark (we reuse the processor),
@@ -356,7 +356,7 @@ impl Processor for MeasureProcessor {
         &mut self,
         data: &ProcessOutputData<'_>,
         output: process::Output,
-    ) -> Result<Retry, Error> {
+    ) -> anyhow::Result<Retry> {
         match process_perf_stat_output(output) {
             Ok((stats, profile)) => {
                 match data.run_kind {
@@ -480,7 +480,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
         &mut self,
         data: &ProcessOutputData<'_>,
         output: process::Output,
-    ) -> Result<Retry, Error> {
+    ) -> anyhow::Result<Retry> {
         // Produce a name of the form $PREFIX-$ID-$BENCHMARK-$BUILDKIND-$RUNKIND.
         let out_file = |prefix: &str| -> String {
             format!(
@@ -640,7 +640,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
 }
 
 impl Benchmark {
-    pub fn new(name: String, path: PathBuf) -> Result<Self, Error> {
+    pub fn new(name: String, path: PathBuf) -> anyhow::Result<Self> {
         let mut patches = vec![];
         for entry in fs::read_dir(&path)? {
             let entry = entry?;
@@ -660,9 +660,9 @@ impl Benchmark {
         let config: BenchmarkConfig = if config_path.exists() {
             serde_json::from_reader(
                 File::open(&config_path)
-                    .with_context(|_| format!("failed to open {:?}", config_path))?,
+                    .with_context(|| format!("failed to open {:?}", config_path))?,
             )
-            .with_context(|_| format!("failed to parse {:?}", config_path))?
+            .with_context(|| format!("failed to parse {:?}", config_path))?
         } else {
             BenchmarkConfig::default()
         };
@@ -679,7 +679,7 @@ impl Benchmark {
         self.config.supports_stable
     }
 
-    fn make_temp_dir(&self, base: &Path) -> Result<TempDir, Error> {
+    fn make_temp_dir(&self, base: &Path) -> anyhow::Result<TempDir> {
         // Appending `.` means we copy just the contents of `base` into
         // `tmp_dir`, rather than `base` itself.
         let mut base_dot = base.to_path_buf();
@@ -687,7 +687,7 @@ impl Benchmark {
         let tmp_dir = TempDir::new()?;
         let mut cmd = Command::new("cp");
         cmd.arg("-R").arg(base_dot).arg(tmp_dir.path());
-        command_output(&mut cmd).with_context(|_| format!("copying {} to tmp dir", self.name))?;
+        command_output(&mut cmd).with_context(|| format!("copying {} to tmp dir", self.name))?;
         Ok(tmp_dir)
     }
 
@@ -744,7 +744,7 @@ impl Benchmark {
         run_kinds: &[RunKind],
         compiler: Compiler<'_>,
         iterations: usize,
-    ) -> Result<Vec<Run>, Error> {
+    ) -> anyhow::Result<Vec<Run>> {
         let iterations = cmp::min(iterations, self.config.runs);
 
         if self.config.disabled {
@@ -811,7 +811,7 @@ impl Benchmark {
                 if run_kinds.contains(&RunKind::PatchedIncrs) {
                     for (i, patch) in self.patches.iter().enumerate() {
                         log::debug!("applying patch {}", patch.name);
-                        patch.apply(cwd).map_err(|s| err_msg(s))?;
+                        patch.apply(cwd).map_err(|s| anyhow::anyhow!("{}", s))?;
 
                         // An incremental build with some changes (realistic
                         // incremental case).
@@ -836,15 +836,12 @@ impl Benchmark {
     }
 }
 
-#[derive(Fail, PartialEq, Eq, Debug)]
+#[derive(thiserror::Error, PartialEq, Eq, Debug)]
 enum DeserializeStatError {
-    #[fail(
-        display = "could not deserialize empty output to stats, output: {:?}",
-        _0
-    )]
+    #[error("could not deserialize empty output to stats, output: {:?}", .0)]
     NoOutput(process::Output),
-    #[fail(display = "could not parse `{}` as a float", _0)]
-    ParseError(String, #[fail(cause)] ::std::num::ParseFloatError),
+    #[error("could not parse `{}` as a float", .0)]
+    ParseError(String, #[source] ::std::num::ParseFloatError),
 }
 
 fn process_perf_stat_output(

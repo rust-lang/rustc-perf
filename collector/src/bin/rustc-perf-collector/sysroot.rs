@@ -1,5 +1,5 @@
+use anyhow::{anyhow, Context};
 use chrono::{DateTime, TimeZone, Utc};
-use failure::{Error, ResultExt};
 use std::ffi::OsStr;
 use std::fmt;
 use std::fs::{self, File};
@@ -23,7 +23,7 @@ pub struct Sysroot {
 }
 
 impl Sysroot {
-    pub fn install(sha: &str, date: DateTime<Utc>, triple: &str) -> Result<Self, Error> {
+    pub fn install(sha: &str, date: DateTime<Utc>, triple: &str) -> anyhow::Result<Self> {
         let commit = Commit {
             sha: sha.to_owned(),
             date,
@@ -99,14 +99,14 @@ impl ModuleVariant {
 }
 
 impl SysrootDownload {
-    fn into_sysroot(self, download_cargo: bool) -> Result<Sysroot, Error> {
+    fn into_sysroot(self, download_cargo: bool) -> anyhow::Result<Sysroot> {
         Ok(Sysroot {
             rustc: self
                 .directory
                 .join(&self.rust_sha)
                 .join("rustc/bin/rustc")
                 .canonicalize()
-                .with_context(|_| {
+                .with_context(|| {
                     format!("failed to canonicalize rustc path for {}", self.rust_sha)
                 })?,
             rustdoc: self
@@ -114,7 +114,7 @@ impl SysrootDownload {
                 .join(&self.rust_sha)
                 .join("rustc/bin/rustdoc")
                 .canonicalize()
-                .with_context(|_| {
+                .with_context(|| {
                     format!("failed to canonicalize rustdoc path for {}", self.rust_sha)
                 })?,
             cargo: if !download_cargo {
@@ -122,7 +122,7 @@ impl SysrootDownload {
                 PathBuf::from("cargo")
             } else {
                 let path = self.directory.join(&self.rust_sha).join("cargo/bin/cargo");
-                path.canonicalize().with_context(|_| {
+                path.canonicalize().with_context(|| {
                     format!(
                         "failed to canonicalize cargo path for {}: {:?}",
                         self.rust_sha, path
@@ -134,7 +134,7 @@ impl SysrootDownload {
         })
     }
 
-    fn get_and_extract(&self, variant: ModuleVariant) -> Result<(), Error> {
+    fn get_and_extract(&self, variant: ModuleVariant) -> anyhow::Result<()> {
         let archive_path = self.directory.join(format!(
             "{}-{}-{}.tar.xz",
             self.rust_sha, self.triple, variant,
@@ -166,15 +166,15 @@ impl SysrootDownload {
             }
         }
 
-        failure::bail!(
+        return Err(anyhow!(
             "unable to download sha {} triple {} module {}",
             self.rust_sha,
             self.triple,
             variant
-        );
+        ));
     }
 
-    fn extract<T: Read>(&self, variant: ModuleVariant, reader: T) -> Result<(), Error> {
+    fn extract<T: Read>(&self, variant: ModuleVariant, reader: T) -> anyhow::Result<()> {
         let is_std = variant == ModuleVariant::Std;
         let mut archive = Archive::new(reader);
         let std_prefix = format!("rust-std-{}/lib/rustlib", self.triple);
@@ -205,7 +205,7 @@ impl SysrootDownload {
                 path.into()
             };
             let path = unpack_into.join(path);
-            fs::create_dir_all(&path.parent().unwrap()).with_context(|_| {
+            fs::create_dir_all(&path.parent().unwrap()).with_context(|| {
                 format!(
                     "could not create intermediate directories for {}",
                     path.display()
@@ -219,10 +219,10 @@ impl SysrootDownload {
         for path in to_link {
             let src = unpack_into.join("rustc/lib").join(
                 path.strip_prefix(&link_src_prefix)
-                    .with_context(|_| format!("stripping prefix from: {:?}", path))?,
+                    .with_context(|| format!("stripping prefix from: {:?}", path))?,
             );
             let dst = link_dst_prefix.join(&path);
-            fs::create_dir_all(&dst.parent().unwrap()).with_context(|_| {
+            fs::create_dir_all(&dst.parent().unwrap()).with_context(|| {
                 format!(
                     "could not create intermediate directories for {}",
                     dst.display()
