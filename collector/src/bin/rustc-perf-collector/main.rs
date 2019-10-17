@@ -150,7 +150,7 @@ where
 fn process_commits(
     out_repo: outrepo::Repo,
     benchmarks: &[Benchmark],
-    collect_self_profile: bool,
+    self_profile: bool,
 ) -> anyhow::Result<()> {
     println!("processing commits");
     let client = reqwest::Client::new();
@@ -180,7 +180,7 @@ fn process_commits(
                 &benchmarks,
                 3,
                 true,
-                collect_self_profile,
+                self_profile,
             ));
             if let Err(err) = result {
                 panic!("failed to record success: {:?}", err);
@@ -254,7 +254,7 @@ fn bench_commit(
     benchmarks: &[Benchmark],
     iterations: usize,
     call_home: bool,
-    collect_self_profile: bool,
+    self_profile: bool,
 ) -> CommitData {
     info!(
         "benchmarking commit {} ({}) for triple {}",
@@ -285,11 +285,11 @@ fn bench_commit(
     }
 
     let has_measureme = Command::new("summarize").output().is_ok();
-    if collect_self_profile {
+    if self_profile {
         assert!(
             has_measureme,
             "needs `summarize` in PATH for self profile.\n\
-             Pass --skip-self-profile` to opt out"
+             Omit --self-profile` to opt out"
         );
     }
 
@@ -298,8 +298,7 @@ fn bench_commit(
             continue;
         }
 
-        // Only collect self-profile if we have summarize in the path
-        let mut processor = execute::MeasureProcessor::new(collect_self_profile);
+        let mut processor = execute::MeasureProcessor::new(self_profile);
         let result =
             benchmark.measure(&mut processor, build_kinds, run_kinds, compiler, iterations);
         let result = match result {
@@ -398,7 +397,7 @@ fn main_result() -> anyhow::Result<i32> {
        (@arg exclude: --exclude +takes_value "Ignore all benchmarks that contain this")
        (@arg sync_git: --("sync-git") "Synchronize repository with remote")
        (@arg output_repo: --("output-repo") +required +takes_value "Output repository/directory")
-       (@arg skip_self_profile: --("skip-self-profile") "Skip self-profile")
+       (@arg self_profile: --("self-profile") "Collect self-profile")
 
        (@subcommand bench_commit =>
            (about: "benchmark a bors merge from AWS")
@@ -456,7 +455,7 @@ fn main_result() -> anyhow::Result<i32> {
     let exclude = matches.value_of("exclude");
     let benchmarks = get_benchmarks(&benchmark_dir, filter, exclude)?;
     let use_remote = matches.is_present("sync_git");
-    let collect_self_profile = !matches.is_present("skip_self_profile");
+    let self_profile = matches.is_present("self_profile");
 
     let get_out_dir = || {
         let path = PathBuf::from(matches.value_of_os("output_repo").unwrap());
@@ -484,7 +483,7 @@ fn main_result() -> anyhow::Result<i32> {
                 &benchmarks,
                 3,
                 false,
-                collect_self_profile,
+                self_profile,
             ))?;
             Ok(0)
         }
@@ -524,7 +523,7 @@ fn main_result() -> anyhow::Result<i32> {
                 &benchmarks,
                 1,
                 false,
-                collect_self_profile,
+                self_profile,
             );
             get_out_repo(true)?.add_commit_data(&result)?;
             Ok(0)
@@ -537,7 +536,7 @@ fn main_result() -> anyhow::Result<i32> {
         }
 
         ("process", Some(_)) => {
-            process_commits(get_out_repo(false)?, &benchmarks, collect_self_profile)?;
+            process_commits(get_out_repo(false)?, &benchmarks, self_profile)?;
             Ok(0)
         }
 
@@ -622,7 +621,7 @@ fn main_result() -> anyhow::Result<i32> {
                     &benchmarks,
                     1,
                     false,
-                    collect_self_profile,
+                    self_profile,
                 );
             } else {
                 panic!("no commits");
