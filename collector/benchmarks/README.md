@@ -81,6 +81,9 @@ programs.
   performance](https://github.com/rust-lang/rust/issues/46449) in the past.
 - **regression-31157**: A small program that caused a [large performance
   regression](https://github.com/rust-lang/rust/issues/31157) from the past.
+- **token-stream-stress**: Constructs a long token stream much like the `quote`
+  crate does, which caused [quadratic
+  behavior](https://github.com/rust-lang/rust/issues/65080) in the past.
 - **tuple-stress**: Contains a single array of 65,535 nested `(i32, (f64, f64,
   f64))` tuples. The data was extracted and reduced from a [program dealing
   with grid coordinates](https://github.com/urschrei/ostn15_phf) that was

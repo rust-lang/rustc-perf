@@ -1,0 +1,3 @@
+{
+    "cargo_opts": "--bin token-stream-stress"
+}
