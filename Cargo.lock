@@ -213,7 +213,7 @@ dependencies = [
  "libc 0.2.64 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "reqwest 0.9.22 (registry+https://github.com/rust-lang/crates.io-index)",
- "rustup 1.20.0 (git+https://github.com/rust-lang-nursery/rustup.rs.git)",
+ "rustup 1.20.2 (git+https://github.com/rust-lang-nursery/rustup.rs.git)",
  "semver 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.101 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_json 1.0.41 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -372,7 +372,7 @@ dependencies = [
 [[package]]
 name = "download"
 version = "0.6.4"
-source = "git+https://github.com/rust-lang-nursery/rustup.rs.git#1a46072ac0a82d3a2dcd38a0afdcc2c7caa69507"
+source = "git+https://github.com/rust-lang-nursery/rustup.rs.git#0fada4f05aa8bf6b6fb8f64701da595b8493c0e6"
 dependencies = [
  "curl 0.4.22 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_proxy 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1566,8 +1566,8 @@ dependencies = [
 
 [[package]]
 name = "rustup"
-version = "1.20.0"
-source = "git+https://github.com/rust-lang-nursery/rustup.rs.git#1a46072ac0a82d3a2dcd38a0afdcc2c7caa69507"
+version = "1.20.2"
+source = "git+https://github.com/rust-lang-nursery/rustup.rs.git#0fada4f05aa8bf6b6fb8f64701da595b8493c0e6"
 dependencies = [
  "cc 1.0.38 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono 0.4.9 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2534,7 +2534,7 @@ dependencies = [
 "checksum rust_team_data 1.0.0 (git+https://github.com/rust-lang/team)" = "<none>"
 "checksum rustc-demangle 0.1.15 (registry+https://github.com/rust-lang/crates.io-index)" = "a7f4dccf6f4891ebcc0c39f9b6eb1a83b9bf5d747cb439ec6fba4f3b977038af"
 "checksum rustc_version 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "138e3e0acb6c9fb258b19b67cb8abd63c00679d2851805ea151465464fe9030a"
-"checksum rustup 1.20.0 (git+https://github.com/rust-lang-nursery/rustup.rs.git)" = "<none>"
+"checksum rustup 1.20.2 (git+https://github.com/rust-lang-nursery/rustup.rs.git)" = "<none>"
 "checksum ryu 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)" = "c92464b447c0ee8c4fb3824ecc8383b81717b9f1e74ba2e72540aef7b9f82997"
 "checksum same-file 1.0.5 (registry+https://github.com/rust-lang/crates.io-index)" = "585e8ddcedc187886a30fa705c47985c3fa88d06624095856b36ca0b82ff4421"
 "checksum schannel 0.1.15 (registry+https://github.com/rust-lang/crates.io-index)" = "f2f6abf258d99c3c1c5c2131d99d064e94b7b3dd5f416483057f308fea253339"
