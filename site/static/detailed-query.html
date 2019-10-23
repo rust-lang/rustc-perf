@@ -120,23 +120,22 @@
                 } else if (idx == -sort_idx) {
                     th.setAttribute("data-sorted-by", "asc");
                 }
-                th.addEventListener("click", () => {
-                    let sortedBy = th.attributes["data-sorted-by"];
-                    if (sortedBy && sortedBy.value == "desc") {
-                        state.sort_idx = -idx;
-                    } else if (sortedBy && sortedBy.value == "asc") {
-                        state.sort_idx = idx;
+                let sortedBy = th.attributes["data-sorted-by"];
+                let clickState = Object.assign({}, state);
+                if (sortedBy && sortedBy.value == "desc") {
+                    clickState.sort_idx = -idx;
+                } else if (sortedBy && sortedBy.value == "asc") {
+                    clickState.sort_idx = idx;
+                } else {
+                    // start with descending
+                    if (th.attributes["data-default-sort-dir"].value == "1") {
+                        clickState.sort_idx = idx;
                     } else {
-                        // start with descending
-                        if (th.attributes["data-default-sort-dir"].value == "1") {
-                            state.sort_idx = idx;
-                        } else {
-                            state.sort_idx = -idx;
-                        }
+                        clickState.sort_idx = -idx;
                     }
-                    console.log(state);
-                    window.location.search = query_string_for_state(state);
-                });
+                }
+                let inner = th.innerHTML;
+                th.innerHTML = `<a href="${query_string_for_state(clickState)}">${inner}</a>`;
             }
             let table = document.getElementById("primary-table");
             let idx = 0;
