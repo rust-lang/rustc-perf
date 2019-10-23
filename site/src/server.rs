@@ -633,11 +633,20 @@ fn get_self_profile_data(
         .as_ref()
         .ok_or(format!("No self profile results for this commit"))?
         .clone();
+    let total_time = profile.query_data.iter().map(|qd| qd.self_time).sum();
     let totals = self_profile::QueryData {
         label: String::from("Totals"),
-        self_time: profile.query_data.iter().map(|qd| qd.self_time).sum(),
+        self_time: total_time,
         // TODO: check against wall-time from perf stats
-        percent_total_time: 100.0,
+        percent_total_time: run
+            .stats
+            .get(StatId::CpuClock)
+            .map(|w| {
+                // this converts the total_time (a Duration) to the milliseconds in cpu-clock
+                (((total_time.as_nanos() as f64 / 1000000.0) / w) * 100.0) as f32
+            })
+            // sentinel "we couldn't compute this time"
+            .unwrap_or(-100.0),
         number_of_cache_misses: profile
             .query_data
             .iter()

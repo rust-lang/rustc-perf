@@ -42,6 +42,8 @@
         <a href="dashboard.html">dashboard</a>, <a href="status.html">status</a>.</div>
     <div id="content">
         <h3 id="title"></h3>
+        <p>Totals row '%total time' is as a comparison to the 'cpu-clock' stat (we do not use
+        wall-time as we want to account for parallelism).</p>
         <table>
             <thead>
                 <tr id="table-header">
@@ -166,7 +168,15 @@
                 }
                 td(row, cur.label);
                 td(row, to_seconds(cur.self_time).toFixed(3));
-                td(row, cur.percent_total_time.toFixed(2));
+                if (cur.percent_total_time < 0) {
+                    td(row, "-").setAttribute("title", "No wall-time stat collected for this run");
+                } else {
+                    let t = td(row, cur.percent_total_time.toFixed(2) + "%");
+                    if (idx == 0) {
+                        t.innerText += "*";
+                        t.setAttribute("title", "% of wall-time stat");
+                    }
+                }
                 if (prev) {
                     td(row, fmt_delta(to_seconds(prev.self_time), to_seconds(cur.self_time)), true);
                 } else {
