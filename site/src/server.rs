@@ -633,38 +633,43 @@ fn get_self_profile_data(
         .as_ref()
         .ok_or(format!("No self profile results for this commit"))?
         .clone();
+    let totals = self_profile::QueryData {
+        label: String::from("Totals"),
+        self_time: profile.query_data.iter().map(|qd| qd.self_time).sum(),
+        // TODO: check against wall-time from perf stats
+        percent_total_time: 100.0,
+        number_of_cache_misses: profile
+            .query_data
+            .iter()
+            .map(|qd| qd.number_of_cache_misses)
+            .sum(),
+        number_of_cache_hits: profile
+            .query_data
+            .iter()
+            .map(|qd| qd.number_of_cache_hits)
+            .sum(),
+        invocation_count: profile
+            .query_data
+            .iter()
+            .map(|qd| qd.invocation_count)
+            .sum(),
+        blocked_time: profile.query_data.iter().map(|qd| qd.blocked_time).sum(),
+        incremental_load_time: profile
+            .query_data
+            .iter()
+            .map(|qd| qd.incremental_load_time)
+            .sum(),
+    };
     let mut profile = self_profile::SelfProfile {
-        totals: self_profile::QueryData {
-            label: String::from("Totals"),
-            self_time: profile.query_data.iter().map(|qd| qd.self_time).sum(),
-            number_of_cache_misses: profile
-                .query_data
-                .iter()
-                .map(|qd| qd.number_of_cache_misses)
-                .sum(),
-            number_of_cache_hits: profile
-                .query_data
-                .iter()
-                .map(|qd| qd.number_of_cache_hits)
-                .sum(),
-            invocation_count: profile
-                .query_data
-                .iter()
-                .map(|qd| qd.invocation_count)
-                .sum(),
-            blocked_time: profile.query_data.iter().map(|qd| qd.blocked_time).sum(),
-            incremental_load_time: profile
-                .query_data
-                .iter()
-                .map(|qd| qd.incremental_load_time)
-                .sum(),
-        },
         query_data: profile
             .query_data
             .into_iter()
             .map(|qd| self_profile::QueryData {
                 label: qd.label,
                 self_time: qd.self_time,
+                percent_total_time: ((qd.self_time.as_nanos() as f64
+                    / totals.self_time.as_nanos() as f64)
+                    * 100.0) as f32,
                 number_of_cache_misses: qd.number_of_cache_misses,
                 number_of_cache_hits: qd.number_of_cache_hits,
                 invocation_count: qd.invocation_count,
@@ -672,6 +677,7 @@ fn get_self_profile_data(
                 incremental_load_time: qd.incremental_load_time,
             })
             .collect(),
+        totals,
     };
 
     if let Some(sort_idx) = sort_idx {
@@ -692,6 +698,11 @@ fn get_self_profile_data(
                     // convert to displayed percentage
                     ((qd.number_of_cache_hits as f64 / qd.invocation_count as f64) * 10_000.0)
                         as u64
+                }),
+                10 => profile.query_data.sort_by(|a, b| {
+                    a.percent_total_time
+                        .partial_cmp(&b.percent_total_time)
+                        .unwrap()
                 }),
                 _ => break,
             }

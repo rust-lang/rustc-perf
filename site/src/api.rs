@@ -263,6 +263,7 @@ pub mod self_profile {
     pub struct QueryData {
         pub label: String,
         pub self_time: Duration,
+        pub percent_total_time: f32,
         pub number_of_cache_misses: usize,
         pub number_of_cache_hits: usize,
         pub invocation_count: usize,

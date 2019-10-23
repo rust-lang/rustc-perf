@@ -47,6 +47,7 @@
                 <tr id="table-header">
                     <th data-sort-idx="1" data-default-sort-dir="1">Query/Function</th>
                     <th data-sort-idx="2" data-default-sort-dir="-1">Time</th>
+                    <th data-sort-idx="10" data-default-sort-dir="-1">% Total Time</th>
                     <th class="delta">Δ</th>
                     <th data-sort-idx="5" data-default-sort-dir="-1">Invocations</th>
                     <th class="delta">Δ</th>
@@ -143,7 +144,7 @@
                 let cur = to_object(element);
                 let prev = null;
                 if (data.base_profile) {
-                    for (let prev_el of data.base_profile[0]) {
+                    for (let prev_el of [data.base_profile[0], ...data.base_profile[1]]) {
                         if (to_object(prev_el).label == cur.label) {
                             prev = to_object(prev_el);
                             break;
@@ -158,12 +159,14 @@
                         td.classList.add("delta");
                     }
                     row.appendChild(td);
+                    return td;
                 }
                 if (idx == 0) {
                     row.style.fontStyle = "italic";
                 }
                 td(row, cur.label);
                 td(row, to_seconds(cur.self_time).toFixed(3));
+                td(row, cur.percent_total_time.toFixed(2));
                 if (prev) {
                     td(row, fmt_delta(to_seconds(prev.self_time), to_seconds(cur.self_time)), true);
                 } else {
@@ -199,9 +202,11 @@
 
         function to_object(element) {
             if (!element.length) {
+                console.log("element:", element);
                 element = [
                     element.label,
                     [ element.self_time.secs, element.self_time.nanos ],
+                    element.percent_total_time,
                     element.number_of_cache_misses,
                     element.number_of_cache_hits,
                     element.invocation_count,
@@ -210,13 +215,14 @@
                 ];
             }
             let [
-                label, self_time, cache_misses,
+                label, self_time, percent_total_time, cache_misses,
                 _cache_hits, invocation_count, _blocked_time,
                 incremental_load_time
             ] = element;
             return {
                 label,
                 self_time,
+                percent_total_time,
                 cache_misses,
                 invocation_count,
                 incremental_load_time,
