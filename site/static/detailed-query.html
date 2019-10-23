@@ -74,7 +74,7 @@
             if (from == to) {
                 pct = 0;
             }
-            if (pct && pct != Infinity && pct != -Infinity) {
+            if (pct != Infinity && pct != -Infinity) {
                 let classes;
                 if (pct > 1) {
                     classes = "positive";
@@ -90,7 +90,7 @@
                 }
                 return `<span class="${classes}" title="${from.toFixed(3)} to ${to.toFixed(3)} ≈ ${delta.toFixed(3)}">${pct.toFixed(1)}%</span>`;
             } else {
-                return `<span title="error" style="color: orange;">-</span>`;
+                return `<span title="error pct=${pct}" style="color: orange;">-</span>`;
             }
         }
 
