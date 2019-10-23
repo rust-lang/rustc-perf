@@ -140,7 +140,7 @@
             }
             let table = document.getElementById("primary-table");
             let idx = 0;
-            for (let element of data.profile.query_data) {
+            for (let element of [data.profile.totals, ...data.profile.query_data]) {
                 let cur = to_object(element);
                 let prev = null;
                 if (data.base_profile) {
@@ -196,6 +196,17 @@
         }
 
         function to_object(element) {
+            if (!element.length) {
+                element = [
+                    element.label,
+                    [ element.self_time.secs, element.self_time.nanos ],
+                    element.number_of_cache_misses,
+                    element.number_of_cache_hits,
+                    element.invocation_count,
+                    [ element.blocked_time.secs, element.blocked_time.nanos ],
+                    [ element.incremental_load_time.secs, element.self_time.nanos ],
+                ];
+            }
             let [
                 label, self_time, cache_misses,
                 _cache_hits, invocation_count, _blocked_time,

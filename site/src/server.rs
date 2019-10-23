@@ -41,8 +41,8 @@ type Request = http::Request<hyper::Body>;
 type Response = http::Response<hyper::Body>;
 
 pub use crate::api::{
-    self, dashboard, data, days, github, graph, info, status, CommitResponse, DateData,
-    ServerResult,
+    self, dashboard, data, days, github, graph, info, self_profile, status, CommitResponse,
+    DateData, ServerResult,
 };
 use crate::git;
 use crate::github::post_comment;
@@ -605,7 +605,7 @@ fn get_self_profile_data(
     bench_name: &str,
     run_name: &str,
     sort_idx: Option<i32>,
-) -> ServerResult<collector::SelfProfile> {
+) -> ServerResult<self_profile::SelfProfile> {
     let benchmark = commit
         .benchmarks
         .get(bench_name)
@@ -628,11 +628,51 @@ fn get_self_profile_data(
         })
         .ok_or(format!("No such run"))?;
 
-    let mut profile = run
+    let profile = run
         .self_profile
         .as_ref()
         .ok_or(format!("No self profile results for this commit"))?
         .clone();
+    let mut profile = self_profile::SelfProfile {
+        totals: self_profile::QueryData {
+            label: String::from("Totals"),
+            self_time: profile.query_data.iter().map(|qd| qd.self_time).sum(),
+            number_of_cache_misses: profile
+                .query_data
+                .iter()
+                .map(|qd| qd.number_of_cache_misses)
+                .sum(),
+            number_of_cache_hits: profile
+                .query_data
+                .iter()
+                .map(|qd| qd.number_of_cache_hits)
+                .sum(),
+            invocation_count: profile
+                .query_data
+                .iter()
+                .map(|qd| qd.invocation_count)
+                .sum(),
+            blocked_time: profile.query_data.iter().map(|qd| qd.blocked_time).sum(),
+            incremental_load_time: profile
+                .query_data
+                .iter()
+                .map(|qd| qd.incremental_load_time)
+                .sum(),
+        },
+        query_data: profile
+            .query_data
+            .into_iter()
+            .map(|qd| self_profile::QueryData {
+                label: qd.label,
+                self_time: qd.self_time,
+                number_of_cache_misses: qd.number_of_cache_misses,
+                number_of_cache_hits: qd.number_of_cache_hits,
+                invocation_count: qd.invocation_count,
+                blocked_time: qd.blocked_time,
+                incremental_load_time: qd.incremental_load_time,
+            })
+            .collect(),
+    };
 
     if let Some(sort_idx) = sort_idx {
         loop {
@@ -668,9 +708,9 @@ fn get_self_profile_data(
 }
 
 pub async fn handle_self_profile(
-    body: crate::api::self_profile::Request,
+    body: self_profile::Request,
     data: &InputData,
-) -> ServerResult<crate::api::self_profile::Response> {
+) -> ServerResult<self_profile::Response> {
     let mut it = body.benchmark.rsplitn(2, '-');
     let bench_ty = it.next().ok_or(format!("no benchmark type"))?;
     let bench_name = it.next().ok_or(format!("no benchmark name"))?;
@@ -710,7 +750,7 @@ pub async fn handle_self_profile(
         None
     };
 
-    Ok(crate::api::self_profile::Response {
+    Ok(self_profile::Response {
         base_profile,
         profile,
     })
