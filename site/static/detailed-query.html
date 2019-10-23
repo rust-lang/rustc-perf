@@ -160,6 +160,9 @@
                     }
                     row.appendChild(td);
                 }
+                if (idx == 0) {
+                    row.style.fontStyle = "italic";
+                }
                 td(row, cur.label);
                 td(row, to_seconds(cur.self_time).toFixed(3));
                 if (prev) {
