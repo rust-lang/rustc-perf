@@ -227,6 +227,14 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
     }
 }
 
+fn prettify_log(log: &str) -> Option<String> {
+    let mut lines = log.lines();
+    let first = lines.next()?;
+    let log = &first[first.find('"')? + 1..];
+    let log = &log[..log.find("\" }")?];
+    Some(log.replace("\\n", "\n"))
+}
+
 pub fn handle_status_page(data: &InputData) -> status::Response {
     let last_commit = data.data(Interpolate::No).iter().next_back().unwrap();
 
@@ -235,12 +243,7 @@ pub fn handle_status_page(data: &InputData) -> status::Response {
         .iter()
         .map(|(name, res)| {
             let msg = if let Some(error) = res.as_ref().err() {
-                let mut lines = error.lines();
-                let first = lines.next().unwrap();
-                let log = &first[first.find('"').unwrap() + 1..];
-                let log = &log[..log.find("\" }").unwrap()];
-                let log = log.replace("\\n", "\n");
-                Some(log)
+                Some(prettify_log(error).unwrap_or_else(|| error.to_owned()))
             } else {
                 None
             };
