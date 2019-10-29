@@ -167,6 +167,8 @@ impl<'a> CargoProcess<'a> {
             .env("SHELL", env::var_os("SHELL").unwrap_or_default())
             // PATH is needed to find things like linkers used by rustc/Cargo.
             .env("PATH", env::var_os("PATH").unwrap_or_default())
+            // HOME is needed for cargo to find its home directory.
+            .env("HOME", env::var_os("HOME").unwrap_or_default())
             .env(
                 "RUSTC_THREAD_COUNT",
                 env::var_os("RUSTC_THREAD_COUNT").unwrap_or_default(),
