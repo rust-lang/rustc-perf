@@ -123,6 +123,17 @@ impl Repo {
         trace!("loading file {}", filepath.display());
         let contents =
             fs::read(&filepath).with_context(|| format!("failed to read {:?}", filepath))?;
+        let c;
+        let contents = if filepath.to_str().map_or(false, |s| s.ends_with(".sz")) {
+            use std::io::Read;
+            let mut out = Vec::with_capacity(snap::decompress_len(&contents).unwrap_or(0));
+            let mut szip_reader = snap::Reader::new(&contents[..]);
+            szip_reader.read_to_end(&mut out).unwrap();
+            c = out;
+            &c
+        } else {
+            &contents
+        };
         let data = serde_json::from_slice(&contents)
             .with_context(|| format!("failed to read JSON from {:?}", filepath))?;
         Ok(data)
@@ -135,24 +146,30 @@ impl Repo {
             commit.sha,
             triple
         ));
-        match self.load_commit_data_file(&filepath) {
-            Ok(v) => return Ok(v),
-            Err(_) => self.load_commit_data_file(
-                &self
-                    .times()
-                    .join(format!("commit-{}-{}.json", commit.sha, triple)),
-            ),
+        if let Ok(v) = self.load_commit_data_file(&filepath) {
+            return Ok(v);
         }
+        let filepath = self
+            .times()
+            .join(format!("commit-{}-{}.json", commit.sha, triple));
+        if let Ok(v) = self.load_commit_data_file(&filepath) {
+            return Ok(v);
+        }
+        let filepath = self
+            .times()
+            .join(format!("commit-{}-{}.json.sz", commit.sha, triple));
+        Ok(self.load_commit_data_file(&filepath)?)
     }
 
     pub fn add_commit_data(&self, data: &CommitData) -> anyhow::Result<()> {
         let commit = &data.commit;
         let filepath = self
             .times()
-            .join(format!("commit-{}-{}.json", commit.sha, data.triple));
+            .join(format!("commit-{}-{}.json.sz", commit.sha, data.triple));
         info!("creating file {}", filepath.display());
-        let serialized = serde_json::to_string(&data)?;
-        fs::write(&filepath, &serialized)?;
+        let mut v = snap::Writer::new(Vec::new());
+        serde_json::to_writer(&mut v, &data)?;
+        fs::write(&filepath, v.into_inner()?)?;
         Ok(())
     }
 
