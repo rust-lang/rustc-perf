@@ -50,7 +50,7 @@ pub fn find_commit<'a>(
             }
         };
         if found {
-            return Ok(element);
+            return Ok(&**element);
         }
     }
 
@@ -59,6 +59,7 @@ pub fn find_commit<'a>(
             .data(interpolate)
             .iter()
             .last()
+            .map(|c| &**c)
             .ok_or_else(|| format!("at least one commit"));
     }
 
@@ -84,7 +85,7 @@ pub fn data_range<'a>(
             in_range = true;
         }
         if in_range {
-            ret.push(cd);
+            ret.push(&**cd);
         }
         if commit.sha == right_bound.sha {
             break;

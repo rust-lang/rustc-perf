@@ -11,6 +11,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::Context;
 use chrono::{Duration, Utc};
@@ -163,8 +164,8 @@ pub struct InputData {
     pub last_date: Date,
 
     /// `data_real` is as-is, `data` has been interpolated.
-    data_real: Vec<CommitData>,
-    data: Vec<CommitData>,
+    data_real: Vec<Arc<CommitData>>,
+    data: Vec<Arc<CommitData>>,
 
     /// The benchmarks we interpolated for a given commit.
     ///
@@ -181,7 +182,7 @@ pub struct InputData {
 }
 
 impl InputData {
-    pub fn data(&self, interpolate: Interpolate) -> &[CommitData] {
+    pub fn data(&self, interpolate: Interpolate) -> &[Arc<CommitData>] {
         match interpolate {
             Interpolate::Yes => &self.data,
             Interpolate::No => &self.data_real,
@@ -277,7 +278,7 @@ impl InputData {
                 }
 
                 if commits.insert(contents.commit.clone()) {
-                    data.push(contents);
+                    data.push(Arc::new(contents));
                 }
             }
         }
@@ -300,7 +301,7 @@ impl InputData {
     }
 
     pub fn new(
-        data: Vec<CommitData>,
+        data: Vec<Arc<CommitData>>,
         artifact_data: HashMap<String, ArtifactData>,
         config: Config,
     ) -> anyhow::Result<InputData> {
@@ -454,7 +455,7 @@ impl InputData {
 
                 let mut assoc = AssociatedData {
                     commit_idx,
-                    commit: &cd.commit,
+                    commit: cd.commit,
                     data: &data_real,
                     commits: &data_commits,
                     commit_map: &commit_map,
@@ -466,26 +467,28 @@ impl InputData {
                     dur: &mut dur,
                 };
 
-                let entry = cd
-                    .benchmarks
-                    .entry(benchmark_name.to_owned())
-                    .or_insert_with(|| Err(String::from("dummy bench")));
-
                 // benchmark did not run successfully at this commit
                 // or benchmark did not attempt to run at this commit
-                if entry.is_err() {
+                if cd
+                    .benchmarks
+                    .get(benchmark_name.as_str())
+                    .map_or(true, |c| c.is_err())
+                {
                     let runs = fill_benchmark_data(benchmark_name, &mut assoc);
                     // If we couldn't do this then do nothing
                     if let Some(runs) = runs {
-                        *entry = Ok(Benchmark {
-                            name: benchmark_name.to_owned(),
-                            runs: runs,
-                        });
+                        Arc::make_mut(cd).benchmarks.insert(
+                            benchmark_name.to_owned(),
+                            Ok(Benchmark {
+                                name: benchmark_name.to_owned(),
+                                runs: runs,
+                            }),
+                        );
                     }
                 }
 
                 // benchmark exists, but might have runs missing
-                if let Ok(benchmark) = entry {
+                if let Some(Ok(benchmark)) = cd.benchmarks.get(benchmark_name.as_str()) {
                     // If we've not had a benchmark at all in the last few
                     // commits then just skip run interpolation for it; the
                     // benchmark should get total-benchmark interpolated.
@@ -496,6 +499,12 @@ impl InputData {
                             .collect::<Vec<_>>();
                         if !missing_runs.is_empty() {
                             let before = benchmark.runs.len();
+                            let benchmark = Arc::make_mut(cd)
+                                .benchmarks
+                                .get_mut(benchmark_name.as_str())
+                                .unwrap()
+                                .as_mut()
+                                .unwrap();
                             fill_benchmark_runs(benchmark, missing_runs, &mut assoc);
                             assert_ne!(before, benchmark.runs.len(), "made progress");
                         }
@@ -630,8 +639,8 @@ pub struct Percent(#[serde(with = "util::round_float")] pub f64);
 
 struct AssociatedData<'a> {
     commit_idx: usize,
-    commit: &'a Commit,
-    data: &'a [CommitData],
+    commit: Commit,
+    data: &'a [Arc<CommitData>],
     commits: &'a [Commit],
     commit_map: &'a HashMap<Commit, usize>,
     interpolated: &'a mut HashMap<Sha, Vec<Interpolation>>,
@@ -666,8 +675,8 @@ fn fill_benchmark_runs(
         let end_commit = end.map(|(idx, _)| data.commits[*idx].clone());
         *data.dur += time_start.elapsed();
 
-        assert_ne!(start_commit.as_ref(), Some(data.commit));
-        assert_ne!(end_commit.as_ref(), Some(data.commit));
+        assert_ne!(start_commit, Some(data.commit));
+        assert_ne!(end_commit, Some(data.commit));
 
         let interpolations = data
             .interpolated
