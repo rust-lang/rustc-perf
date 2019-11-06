@@ -30,7 +30,7 @@ pub fn find_commit<'a>(
     for element in data.data(interpolate) {
         let commit = &element.commit;
         let found = match *idx {
-            Bound::Commit(ref sha) => commit.sha == *sha,
+            Bound::Commit(ref sha) => commit.sha == **sha,
             Bound::Date(ref date) => {
                 if left {
                     commit.date.0.naive_utc().date() == *date

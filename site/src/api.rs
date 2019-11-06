@@ -14,7 +14,7 @@
 //! The responses are calculated in the server.rs file.
 
 use crate::load::CommitData;
-use collector::{Date, Run, StatId};
+use collector::{Date, Run, Sha, StatId};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
 use std::result::Result as StdResult;
@@ -23,7 +23,7 @@ use std::result::Result as StdResult;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DateData {
     pub date: Date,
-    pub commit: String,
+    pub commit: Sha,
     pub data: HashMap<String, Vec<(String, Run, f64)>>,
 }
 
@@ -159,7 +159,7 @@ pub mod data {
 }
 
 pub mod graph {
-    use collector::Bound;
+    use collector::{Bound, Sha};
     use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
 
@@ -188,7 +188,7 @@ pub mod graph {
         pub benchmarks: HashMap<String, HashMap<String, Vec<GraphData>>>,
         pub max: HashMap<String, f32>,
         pub colors: Vec<String>,
-        pub commits: Vec<String>,
+        pub commits: Vec<Sha>,
     }
 }
 

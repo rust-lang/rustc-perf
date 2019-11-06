@@ -9,12 +9,12 @@ use std::{
 pub fn get_commit_or_fake_it(sha: &str) -> anyhow::Result<Commit> {
     Ok(get_rust_commits()?
         .iter()
-        .find(|c| c.sha == sha)
+        .find(|c| c.sha == *sha)
         .cloned()
         .unwrap_or_else(|| {
             log::warn!("utilizing fake commit!");
             Commit {
-                sha: sha.to_string(),
+                sha: sha.into(),
                 date: crate::Date::ymd_hms(2000, 01, 01, 0, 0, 0),
             }
         }))
@@ -73,7 +73,7 @@ pub fn get_rust_commits() -> anyhow::Result<Vec<Commit>> {
         let date = crate::Date(chrono::DateTime::from_utc(date, chrono::Utc));
 
         commits.push(Commit {
-            sha: hash.to_string(),
+            sha: hash.into(),
             date,
         });
     }

@@ -52,6 +52,7 @@ use crate::util::{self, get_repo_path, Interpolate};
 use collector::api::collected;
 use collector::version_supports_incremental;
 use collector::CommitData;
+use collector::Sha;
 use collector::StatId;
 use parking_lot::RwLock;
 
@@ -93,7 +94,8 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
             .last()
             .unwrap()
             .commit
-            .sha[0..8]
+            .sha
+            .to_string()[0..8]
     ));
 
     let mut check_clean_average = Vec::new();
@@ -273,12 +275,12 @@ pub fn handle_next_commit(data: &InputData) -> Option<String> {
     data.missing_commits()
         .ok()
         .and_then(|c| c.into_iter().next())
-        .map(|c| c.0.sha)
+        .map(|c| c.0.sha.to_string())
 }
 
 struct CommitCache {
-    commits_cache: Vec<String>,
-    commit_in_cache: HashMap<String, usize>,
+    commits_cache: Vec<Sha>,
+    commit_in_cache: HashMap<Sha, usize>,
 }
 
 impl CommitCache {
@@ -289,13 +291,13 @@ impl CommitCache {
         }
     }
 
-    fn insert(&mut self, commit: &str) -> u32 {
-        let idx = if let Some(idx) = self.commit_in_cache.get(commit) {
+    fn insert(&mut self, commit: Sha) -> u32 {
+        let idx = if let Some(idx) = self.commit_in_cache.get(&commit) {
             *idx
         } else {
             let idx = self.commits_cache.len();
-            self.commits_cache.push(commit.to_owned());
-            self.commit_in_cache.insert(commit.to_owned(), idx);
+            self.commits_cache.push(commit);
+            self.commit_in_cache.insert(commit, idx);
             idx
         };
         u32::try_from(idx).unwrap_or_else(|_| panic!("{} did not fit into u32", idx))
@@ -316,7 +318,7 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
     // crate list * 3 because we have check, debug, and opt variants.
     let mut result: HashMap<_, HashMap<Cow<'_, str>, _>> = HashMap::new();
     let elements = out.len();
-    let mut last_commit = None::<String>;
+    let mut last_commit = None::<Sha>;
     let mut initial_debug_base_compile = None;
     let mut initial_check_base_compile = None;
     let mut initial_release_base_compile = None;
@@ -347,8 +349,8 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
                 let first = entry.first().map(|d| d.absolute as f32);
                 let percent = first.map_or(0.0, |f| (value - f) / f * 100.0);
                 entry.push(graph::GraphData {
-                    commit: cc.insert(&commit),
-                    prev_commit: last_commit.as_ref().map(|l| cc.insert(&l)),
+                    commit: cc.insert(commit),
+                    prev_commit: last_commit.map(|l| cc.insert(l)),
                     absolute: value,
                     percent: percent,
                     y: if body.absolute { value } else { percent },
@@ -421,8 +423,8 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
             let first = entry.first().map(|d: &graph::GraphData| d.absolute as f32);
             let percent = first.map_or(0.0, |f| (value - f) / f * 100.0);
             entry.push(graph::GraphData {
-                commit: cc.insert(&commit),
-                prev_commit: last_commit.as_ref().map(|l| cc.insert(&l)),
+                commit: cc.insert(commit),
+                prev_commit: last_commit.map(|l| cc.insert(l)),
                 absolute: value,
                 percent: percent,
                 y: if body.absolute { value } else { percent },
@@ -531,7 +533,7 @@ pub async fn handle_collected(
         match body {
             collected::Request::BenchmarkCommit { commit, benchmarks } => {
                 let issue = if let Some(r#try) =
-                    persistent.try_commits.iter().find(|c| c.sha == commit.sha)
+                    persistent.try_commits.iter().find(|c| commit.sha == *c.sha)
                 {
                     Some(r#try.issue.clone())
                 } else {
@@ -553,12 +555,16 @@ pub async fn handle_collected(
                     persistent.current = None;
                 }
                 let current_sha = persistent.current.as_ref().map(|c| c.commit.sha.to_owned());
-                let comparison_url = if let Some(try_commit) = persistent
-                    .try_commits
-                    .iter()
-                    .find(|c| Some(&c.sha) == current_sha.as_ref())
-                {
-                    format!(", [comparison URL]({}).", try_commit.comparison_url())
+                let comparison_url = if let Some(current_sha) = current_sha {
+                    if let Some(try_commit) = persistent
+                        .try_commits
+                        .iter()
+                        .find(|c| current_sha == *c.sha.as_str())
+                    {
+                        format!(", [comparison URL]({}).", try_commit.comparison_url())
+                    } else {
+                        String::new()
+                    }
                 } else {
                     String::new()
                 };
@@ -747,7 +753,7 @@ pub async fn handle_self_profile(
     let commit = data
         .data(Interpolate::No)
         .iter()
-        .find(|cd| cd.commit.sha == body.commit)
+        .find(|cd| cd.commit.sha == *body.commit)
         .ok_or(format!("could not find commit {}", body.commit))?;
     let profile = get_self_profile_data(
         &commit,
@@ -760,7 +766,7 @@ pub async fn handle_self_profile(
         let base_commit = data
             .data(Interpolate::No)
             .iter()
-            .find(|cd| cd.commit.sha == bc)
+            .find(|cd| cd.commit.sha == *bc)
             .ok_or(format!("could not find commit {}", bc))?;
         Some(get_self_profile_data(
             &base_commit,

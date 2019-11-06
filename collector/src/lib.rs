@@ -18,9 +18,216 @@ pub mod self_profile;
 
 pub use self_profile::{QueryData, SelfProfile};
 
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Sha {
+    /// Straight-up bytes of the 40-long hex-encoded sha
+    Hex([u8; 20]),
+    /// Arbitrary bytes, usually a string ID provided by the user.
+    /// Encodes 30 characters by restricting to 5 bits per character
+    /// (enough for 32 different characters, so `a-z`, `-`, and `_`).
+    Raw { length: u8, bytes: [u8; 19] },
+}
+
+impl PartialEq<str> for Sha {
+    fn eq(&self, other: &str) -> bool {
+        self.to_string() == other
+    }
+}
+
+fn hex_decode(s: &str) -> Option<[u8; 20]> {
+    let mut in_progress = 0;
+    let mut v = [0; 20];
+    for (idx, ch) in s.chars().enumerate() {
+        let offset = if idx % 2 == 0 { 4 } else { 0 };
+        in_progress |= (ch.to_digit(16)? as u8) << offset;
+        if idx % 2 != 0 {
+            v[idx / 2] = in_progress;
+            in_progress = 0;
+        }
+    }
+    Some(v)
+}
+
+struct BitView {
+    bytes: [u8; 19],
+    bit_offset: usize,
+}
+
+impl BitView {
+    fn new() -> BitView {
+        BitView {
+            bytes: [0; 19],
+            bit_offset: 0,
+        }
+    }
+
+    fn with_bytes(bytes: [u8; 19]) -> BitView {
+        BitView {
+            bytes,
+            bit_offset: 0,
+        }
+    }
+
+    fn read(&mut self) -> bool {
+        let r = (self.bytes[self.bit_offset / 8] & (1 << (self.bit_offset % 8))) != 0;
+        self.bit_offset += 1;
+
+        if self.bit_offset > 19 * 8 {
+            panic!("pushed past limit of 152 bits");
+        }
+
+        r
+    }
+
+    fn read5(&mut self) -> u8 {
+        let mut v = 0;
+        v |= (self.read() as u8) << 0;
+        v |= (self.read() as u8) << 1;
+        v |= (self.read() as u8) << 2;
+        v |= (self.read() as u8) << 3;
+        v |= (self.read() as u8) << 4;
+        v
+    }
+
+    fn push(&mut self, b: bool) {
+        if b {
+            self.bytes[self.bit_offset / 8] |= 1 << (self.bit_offset % 8);
+        }
+        self.bit_offset += 1;
+
+        if self.bit_offset > 19 * 8 {
+            panic!("pushed past limit of 152 bits");
+        }
+    }
+
+    fn push5(&mut self, v: u8) {
+        assert!(
+            v <= 32,
+            "`{}` must be less than 32 (i.e., no more than 5 bits)",
+            v
+        );
+
+        self.push(v & 0b10000 != 0);
+        self.push(v & 0b01000 != 0);
+        self.push(v & 0b00100 != 0);
+        self.push(v & 0b00010 != 0);
+        self.push(v & 0b00001 != 0);
+    }
+}
+
+impl<'a> From<&'a str> for Sha {
+    fn from(s: &'a str) -> Sha {
+        if let Some(v) = hex_decode(s) {
+            return Sha::Hex(v);
+        }
+
+        assert!(
+            s.len() <= 30,
+            "`{}` is too long ({}), can be at most 30 bytes",
+            s,
+            s.len(),
+        );
+
+        let mut v = BitView::new();
+        for b in s.as_bytes().iter() {
+            let b = *b;
+            match b {
+                b'-' => {
+                    v.push5(0);
+                }
+                b'4' => {
+                    v.push5(1);
+                }
+                b'1' => {
+                    v.push5(2);
+                }
+                b'2' => {
+                    v.push5(3);
+                }
+                b'6' => {
+                    v.push5(4);
+                }
+                b'8' => {
+                    v.push5(5);
+                }
+                b'a'..=b'z' => {
+                    v.push5(b - b'a' + 6);
+                }
+                _ => panic!(
+                    "`{}` is not a valid character for SHA-like IDs, must be in a-z, or -, or _, in `{}`.",
+                    b as char,
+                    s,
+                ),
+            }
+        }
+        Sha::Raw {
+            length: s.len() as u8,
+            bytes: v.bytes,
+        }
+    }
+}
+
+impl Serialize for Sha {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        serializer.collect_str(&self)
+    }
+}
+
+impl<'de> Deserialize<'de> for Sha {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        let s: &'de str = <&'de str>::deserialize(deserializer)?;
+        Ok(s.into())
+    }
+}
+
+impl fmt::Debug for Sha {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
+impl fmt::Display for Sha {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Sha::Hex(hex) => {
+                for &b in hex.iter() {
+                    write!(f, "{:x}{:x}", b >> 4, b & 0xf)?;
+                }
+            }
+            Sha::Raw { length, bytes } => {
+                let mut v = BitView::with_bytes(bytes);
+                let mut decoded = [0; 19];
+                for idx in 0..length as usize {
+                    decoded[idx] = match v.read5() {
+                        0 => b'-',
+                        1 => b'4',
+                        2 => b'1',
+                        3 => b'2',
+                        4 => b'6',
+                        5 => b'8',
+                        other => other - 6 + b'a',
+                    };
+                }
+                write!(
+                    f,
+                    "{}",
+                    std::str::from_utf8(&decoded[..length as usize]).unwrap()
+                )?;
+            }
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct Commit {
-    pub sha: String,
+    pub sha: Sha,
     pub date: Date,
 }
 

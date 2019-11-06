@@ -25,7 +25,7 @@ use collector::Date;
 use crate::api::github;
 use collector;
 pub use collector::{
-    ArtifactData, Benchmark, Commit, CommitData, Patch, Run, RunId, StatId, Stats,
+    ArtifactData, Benchmark, Commit, CommitData, Patch, Run, RunId, Sha, StatId, Stats,
 };
 use log::{error, info, trace, warn};
 
@@ -102,7 +102,7 @@ pub struct Persistent {
     pub pending_try_builds: HashSet<u32>,
     // Set of commit hashes for which we've completed benchmarking.
     #[serde(default)]
-    pub posted_ends: Vec<String>,
+    pub posted_ends: Vec<Sha>,
 }
 
 lazy_static::lazy_static! {
@@ -149,7 +149,7 @@ pub struct Keys {
 pub struct Config {
     pub keys: Keys,
     #[serde(default)]
-    pub skip: HashSet<String>,
+    pub skip: HashSet<Sha>,
 }
 
 #[derive(Debug)]
@@ -169,7 +169,7 @@ pub struct InputData {
     /// The benchmarks we interpolated for a given commit.
     ///
     /// Not all commits are in this map.
-    pub interpolated: HashMap<String, Vec<Interpolation>>,
+    pub interpolated: HashMap<Sha, Vec<Interpolation>>,
 
     pub artifact_data: HashMap<String, ArtifactData>,
 
@@ -586,12 +586,14 @@ impl InputData {
                     let mut ret = Vec::new();
                     ret.push((
                         Commit {
-                            sha: sha.clone(),
+                            sha: sha.as_str().into(),
                             date: Date::ymd_hms(2001, 01, 01, 0, 0, 0),
                         },
                         MissingReason::TryCommit,
                     ));
-                    if let Some(commit) = self.commits.iter().find(|c| c.sha == *parent_sha) {
+                    if let Some(commit) =
+                        self.commits.iter().find(|c| c.sha == *parent_sha.as_str())
+                    {
                         ret.push((commit.clone(), MissingReason::TryParent));
                     } else {
                         // could not find parent SHA
@@ -632,7 +634,7 @@ struct AssociatedData<'a> {
     data: &'a [CommitData],
     commits: &'a [Commit],
     commit_map: &'a HashMap<Commit, usize>,
-    interpolated: &'a mut HashMap<String, Vec<Interpolation>>,
+    interpolated: &'a mut HashMap<Sha, Vec<Interpolation>>,
 
     // By benchmark name, mapping to the index in the data vector
     last_seen_commit: &'a [HashMap<&'a str, usize>],
@@ -669,7 +671,7 @@ fn fill_benchmark_runs(
 
         let interpolations = data
             .interpolated
-            .entry(data.commit.sha.clone())
+            .entry(data.commit.sha)
             .or_insert_with(Vec::new);
         let run = match (start, end) {
             (Some(srun), Some(erun)) => {
@@ -714,7 +716,7 @@ fn fill_benchmark_data(benchmark_name: &str, data: &mut AssociatedData<'_>) -> O
     let commit_idx = data.commit_idx;
     let interpolation_entry = data
         .interpolated
-        .entry(data.commit.sha.clone())
+        .entry(data.commit.sha)
         .or_insert_with(Vec::new);
 
     let start = if let Some(&needle) = data.last_seen_commit[commit_idx].get(benchmark_name) {
