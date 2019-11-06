@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -171,7 +171,7 @@ pub struct InputData {
     /// Not all commits are in this map.
     pub interpolated: HashMap<String, Vec<Interpolation>>,
 
-    pub artifact_data: BTreeMap<String, ArtifactData>,
+    pub artifact_data: HashMap<String, ArtifactData>,
 
     pub commits: Vec<Commit>,
 
@@ -192,8 +192,9 @@ impl InputData {
     pub fn from_fs(repo_loc: &str) -> anyhow::Result<InputData> {
         let repo_loc = PathBuf::from(repo_loc);
         let mut skipped = 0;
-        let mut artifact_data = BTreeMap::new();
-        let mut data = HashMap::new();
+        let mut artifact_data = HashMap::new();
+        let mut data = Vec::new();
+        let mut commits = HashSet::new();
 
         if !repo_loc.exists() {
             // If the repository doesn't yet exist, simplify clone it to the given location.
@@ -275,7 +276,9 @@ impl InputData {
                     continue;
                 }
 
-                data.insert(contents.commit.clone(), contents);
+                if commits.insert(contents.commit.clone()) {
+                    data.push(contents);
+                }
             }
         }
 
@@ -292,15 +295,15 @@ impl InputData {
             }
         };
 
-        InputData::new(data.into_iter().collect(), artifact_data, config)
+        data.sort_unstable_by_key(|d| d.commit.clone());
+        InputData::new(data, artifact_data, config)
     }
 
     pub fn new(
-        data: BTreeMap<Commit, CommitData>,
-        artifact_data: BTreeMap<String, ArtifactData>,
+        data: Vec<CommitData>,
+        artifact_data: HashMap<String, ArtifactData>,
         config: Config,
     ) -> anyhow::Result<InputData> {
-        let data = data.into_iter().map(|(_, v)| v).collect::<Vec<_>>();
         let mut last_date = None;
         let mut stats_list = BTreeSet::new();
 
