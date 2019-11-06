@@ -225,7 +225,7 @@ impl fmt::Display for Sha {
     }
 }
 
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Copy, Clone, serde::Deserialize, serde::Serialize)]
 pub struct Commit {
     pub sha: Sha,
     pub date: Date,

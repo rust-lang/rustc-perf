@@ -332,9 +332,9 @@ impl InputData {
 
         let mut data_commits = Vec::with_capacity(data.len());
         let mut commit_map = HashMap::with_capacity(data.len());
-        for (idx, commit) in data.iter().map(|cd| &cd.commit).enumerate() {
-            data_commits.push(commit.clone());
-            commit_map.insert(commit.clone(), idx);
+        for (idx, commit) in data.iter().map(|cd| cd.commit).enumerate() {
+            data_commits.push(commit);
+            commit_map.insert(commit, idx);
         }
 
         eprintln!("Starting interpolation...");
