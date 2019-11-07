@@ -202,7 +202,7 @@ impl fmt::Display for Sha {
             }
             Sha::Raw { length, bytes } => {
                 let mut v = BitView::with_bytes(bytes);
-                let mut decoded = [0; 19];
+                let mut decoded = [0; 30];
                 for idx in 0..length as usize {
                     decoded[idx] = match v.read5() {
                         0 => b'-',
