@@ -114,7 +114,7 @@ pub trait TreeBuilderActions<Handle> {
     fn handle_misnested_a_tags(&mut self, tag: &Tag);
     fn is_foreign(&mut self, token: &Token) -> bool;
     fn enter_foreign(&mut self, tag: Tag, ns: Namespace) -> ProcessResult;
-    fn adjust_attributes<F>(&mut self, tag: &mut Tag, mut map: F)
+    fn adjust_attributes<F>(&mut self, tag: &mut Tag, map: F)
         where F: FnMut(Atom) -> Option<QualName>;
     fn adjust_svg_tag_name(&mut self, tag: &mut Tag);
     fn adjust_svg_attributes(&mut self, tag: &mut Tag);
