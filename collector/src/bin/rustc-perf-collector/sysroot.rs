@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Context};
 use chrono::{DateTime, TimeZone, Utc};
+use collector::Sha;
 use std::ffi::OsStr;
 use std::fmt;
 use std::fs::{self, File};
@@ -23,9 +24,9 @@ pub struct Sysroot {
 }
 
 impl Sysroot {
-    pub fn install(sha: &str, date: DateTime<Utc>, triple: &str) -> anyhow::Result<Self> {
+    pub fn install(sha: &Sha, date: DateTime<Utc>, triple: &str) -> anyhow::Result<Self> {
         let commit = Commit {
-            sha: sha.to_owned(),
+            sha: sha.to_string(),
             date,
         };
         let unpack_into = "cache";

@@ -8,7 +8,7 @@ use chrono::{Timelike, Utc};
 use collector::api::collected;
 use collector::git::get_commit_or_fake_it;
 use collector::git::get_rust_commits as get_commits;
-use collector::{ArtifactData, Commit, CommitData, Date};
+use collector::{ArtifactData, Commit, CommitData, Date, Sha};
 use log::{debug, error, info, warn};
 use std::collections::BTreeMap;
 use std::collections::HashSet;
@@ -200,7 +200,7 @@ fn bench_published(
     mut benchmarks: Vec<Benchmark>,
 ) -> anyhow::Result<()> {
     let commit = Commit {
-        sha: String::from("<none>"),
+        sha: Sha::from("<none>"),
         date: Date::ymd_hms(2010, 01, 01, 0, 0, 0),
     };
     let cfg = rustup::Cfg::from_env(Arc::new(|_| {})).map_err(|e| anyhow::anyhow!("{:?}", e))?;
@@ -500,7 +500,7 @@ fn main_result() -> anyhow::Result<i32> {
             // runs, because `commit` is only used when producing the output
             // files, not for interacting with a repo.
             let commit = Commit {
-                sha: id.to_string(),
+                sha: Sha::from(id),
                 // Drop the nanoseconds; we don't want that level of precision.
                 date: Date(Utc::now().with_nanosecond(0).unwrap()),
             };
