@@ -557,7 +557,7 @@ dependencies = [
 [[package]]
 name = "download"
 version = "0.6.4"
-source = "git+https://github.com/rust-lang-nursery/rustup.rs.git#3e177e69cbd6a9b3ecb66115fde2bfa40ffeb50e"
+source = "git+https://github.com/rust-lang-nursery/rustup.rs.git#9a7177c75704071700d098ce351ff46e35d52ed5"
 dependencies = [
  "curl 0.4.22 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_proxy 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1919,7 +1919,7 @@ dependencies = [
 [[package]]
 name = "rustup"
 version = "1.20.2"
-source = "git+https://github.com/rust-lang-nursery/rustup.rs.git#3e177e69cbd6a9b3ecb66115fde2bfa40ffeb50e"
+source = "git+https://github.com/rust-lang-nursery/rustup.rs.git#9a7177c75704071700d098ce351ff46e35d52ed5"
 dependencies = [
  "cc 1.0.38 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono 0.4.9 (registry+https://github.com/rust-lang/crates.io-index)",
