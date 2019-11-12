@@ -2,6 +2,8 @@
 use std::mem::MaybeUninit;
 
 // Try to make CTFE actually do a lot of computation, without producing a big result.
+// The const fn expressions evaluated here take a dummy u32 argument because otherwise
+// const fn memoisation is able to eliminate a lot of the work.
 // And without support for loops.
 
 macro_rules! const_repeat {
@@ -17,27 +19,27 @@ macro_rules! const_repeat {
     }};
     // Recursive case: Take a 16
     ([16 $($n: tt)*] $e: expr, $T: ty) => {{
-        const fn e() -> $T { const_repeat!([$($n)*] $e, $T) }
-        e(); e(); e(); e();
-        e(); e(); e(); e();
-        e(); e(); e(); e();
-        e(); e(); e(); e()
+        const fn e(_: u32) -> $T { const_repeat!([$($n)*] $e, $T) }
+        e(0); e(0); e(0); e(0);
+        e(0); e(0); e(0); e(0);
+        e(0); e(0); e(0); e(0);
+        e(0); e(0); e(0); e(0)
     }};
     // Recursive case: Take a 8
     ([8 $($n: tt)*] $e: expr, $T: ty) => {{
-        const fn e() -> $T { const_repeat!([$($n)*] $e, $T) }
-        e(); e(); e(); e();
-        e(); e(); e(); e()
+        const fn e(_: u32) -> $T { const_repeat!([$($n)*] $e, $T) }
+        e(0); e(0); e(0); e(0);
+        e(0); e(0); e(0); e(0)
     }};
     // Recursive case: Take a 4
     ([4 $($n: tt)*] $e: expr, $T: ty) => {{
-        const fn e() -> $T { const_repeat!([$($n)*] $e, $T) }
-        e(); e(); e(); e()
+        const fn e(_: u32) -> $T { const_repeat!([$($n)*] $e, $T) }
+        e(0); e(0); e(0); e(0)
     }};
     // Recursive case: Take a 2
     ([2 $($n: tt)*] $e: expr, $T: ty) => {{
-        const fn e() -> $T { const_repeat!([$($n)*] $e, $T) }
-        e(); e()
+        const fn e(_: u32) -> $T { const_repeat!([$($n)*] $e, $T) }
+        e(0); e(0)
     }};
 }
 macro_rules! expensive_static {
