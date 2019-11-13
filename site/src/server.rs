@@ -260,7 +260,7 @@ pub fn handle_status_page(data: &InputData) -> status::Response {
     benchmark_state.sort_by_key(|s| s.error.is_some());
     benchmark_state.reverse();
 
-    let missing = data.missing_commits().unwrap();
+    let missing = data.missing_commits.clone();
     let current = data.persistent.lock().current.clone();
 
     status::Response {
@@ -272,9 +272,9 @@ pub fn handle_status_page(data: &InputData) -> status::Response {
 }
 
 pub fn handle_next_commit(data: &InputData) -> Option<String> {
-    data.missing_commits()
-        .ok()
-        .and_then(|c| c.into_iter().next())
+    data.missing_commits
+        .iter()
+        .next()
         .map(|c| c.0.sha.to_string())
 }
 

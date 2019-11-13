@@ -40,29 +40,10 @@ pub enum MissingReason {
     Other,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub enum InterpolationSource {
-    /// We interpolated the first commit in the data set from the commit
-    /// here
-    First(Commit),
-
-    /// We interpolated the last commit in the data set from the commit
-    /// here
-    Last(Commit),
-
-    /// We interpolated a commit in the middle from the two commits
-    /// around it (but not necessarily directly adjacent -- generally
-    /// ranges of commits don't have the data).
-    ///
-    /// Data is interpolated linearly between these two commits.
-    Middle(Commit, Commit),
-}
-
 #[derive(Debug)]
 pub struct Interpolation {
     pub benchmark: String,
     pub run: Option<RunId>,
-    pub from: InterpolationSource,
 }
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
@@ -174,7 +155,7 @@ pub struct InputData {
 
     pub artifact_data: HashMap<String, ArtifactData>,
 
-    pub commits: Vec<Commit>,
+    pub missing_commits: Vec<(Commit, MissingReason)>,
 
     pub persistent: Mutex<Persistent>,
 
@@ -327,10 +308,6 @@ impl InputData {
         }
 
         let last_date = last_date.expect("No dates found");
-        println!("Updating rust.git clone...");
-        let commits = collector::git::get_rust_commits()?;
-        println!("Update of rust.git complete");
-
         let mut data_commits = Vec::with_capacity(data.len());
         let mut commit_map = HashMap::with_capacity(data.len());
         for (idx, commit) in data.iter().map(|cd| cd.commit).enumerate() {
@@ -373,28 +350,17 @@ impl InputData {
         );
         latest_section_start = ::std::time::Instant::now();
 
-        let mut last_commit = Vec::with_capacity(data_next.len());
-        let mut next_commit = Vec::with_capacity(data_next.len());
-
-        let mut last_seen = HashMap::new();
+        let mut present_commits = HashMap::new();
         for (idx, collected) in data_real.iter().enumerate() {
             for (name, value) in &collected.benchmarks {
                 if value.is_ok() {
-                    last_seen.insert(name.as_str(), idx);
+                    present_commits
+                        .entry(name.as_str())
+                        .or_insert_with(Vec::new)
+                        .push(idx);
                 }
             }
-            last_commit.push(last_seen.clone());
         }
-        last_seen.clear();
-        for (idx, collected) in data_real.iter().enumerate().rev() {
-            for (name, value) in &collected.benchmarks {
-                if value.is_ok() {
-                    last_seen.insert(name.as_str(), idx);
-                }
-            }
-            next_commit.push(last_seen.clone());
-        }
-        next_commit.reverse();
 
         trace!(
             "computed start/ends of benchmark holes in {:?}",
@@ -460,8 +426,7 @@ impl InputData {
                     commits: &data_commits,
                     commit_map: &commit_map,
                     interpolated: &mut interpolated,
-                    last_seen_commit: &last_commit,
-                    next_seen_commit: &next_commit,
+                    present_commits: &present_commits,
                     last_seen_run: &last_run,
                     next_seen_run: &next_run,
                     dur: &mut dur,
@@ -530,37 +495,44 @@ impl InputData {
         );
         let data = data_next;
 
+        let persistent = Persistent::load();
         Ok(InputData {
+            missing_commits: Self::missing_commits(&data, &config, &persistent).unwrap(),
             stats_list: stats_list.into_iter().collect(),
             interpolated,
             last_date: last_date,
             data_real: data_real,
             data: data,
+            persistent: Mutex::new(persistent),
             artifact_data,
-            commits,
-            persistent: Mutex::new(Persistent::load()),
             config,
         })
     }
 
-    pub fn missing_commits(&self) -> anyhow::Result<Vec<(Commit, MissingReason)>> {
-        let known_benchmarks = self
-            .data
+    fn missing_commits(
+        data: &Vec<Arc<CommitData>>,
+        config: &Config,
+        persistent: &Persistent,
+    ) -> anyhow::Result<Vec<(Commit, MissingReason)>> {
+        println!("Updating rust.git clone...");
+        let commits = collector::git::get_rust_commits()?;
+        println!("Update of rust.git complete");
+
+        let known_benchmarks = data
             .iter()
             .rev()
             .take(10)
             .flat_map(|v| v.benchmarks.keys())
             .collect::<HashSet<_>>();
-        let have = self
-            .data
+        let have = data
             .iter()
             .map(|value| (value.commit.sha.clone(), value))
             .collect::<HashMap<_, _>>();
-        let mut missing = self
-            .commits
+        let now = Utc::now();
+        let mut missing = commits
             .iter()
             .cloned()
-            .filter(|c| Utc::now().signed_duration_since(c.date.0) < Duration::days(29))
+            .filter(|c| now.signed_duration_since(c.date.0) < Duration::days(29))
             .filter_map(|c| {
                 if let Some(cd) = have.get(&c.sha) {
                     // If we've missed any benchmark, we also want this commit
@@ -574,7 +546,7 @@ impl InputData {
                     } else {
                         None
                     }
-                } else if self.config.skip.contains(&c.sha) {
+                } else if config.skip.contains(&c.sha) {
                     None
                 } else {
                     Some((c, MissingReason::Sha))
@@ -583,9 +555,7 @@ impl InputData {
             .collect::<Vec<_>>();
         missing.reverse();
 
-        let mut commits = self
-            .persistent
-            .lock()
+        let mut commits = persistent
             .try_commits
             .iter()
             .flat_map(
@@ -600,9 +570,7 @@ impl InputData {
                         },
                         MissingReason::TryCommit,
                     ));
-                    if let Some(commit) =
-                        self.commits.iter().find(|c| c.sha == *parent_sha.as_str())
-                    {
+                    if let Some(commit) = commits.iter().find(|c| c.sha == *parent_sha.as_str()) {
                         ret.push((commit.clone(), MissingReason::TryParent));
                     } else {
                         // could not find parent SHA
@@ -645,9 +613,9 @@ struct AssociatedData<'a> {
     commit_map: &'a HashMap<Commit, usize>,
     interpolated: &'a mut HashMap<Sha, Vec<Interpolation>>,
 
-    // By benchmark name, mapping to the index in the data vector
-    last_seen_commit: &'a [HashMap<&'a str, usize>],
-    next_seen_commit: &'a [HashMap<&'a str, usize>],
+    // By benchmark name, mapping to a list of indices at which the data exists,
+    // sorted from least to greatest
+    present_commits: &'a HashMap<&'a str, Vec<usize>>,
 
     last_seen_run: &'a [HashMap<&'a str, HashMap<RunId, (usize, &'a Run)>>],
     next_seen_run: &'a [HashMap<&'a str, HashMap<RunId, (usize, &'a Run)>>],
@@ -689,26 +657,26 @@ fn fill_benchmark_runs(
                 let interpolated_stats = interpolate_stats(&srun.1, &erun.1, distance, from_start);
                 let mut interpolated_run = srun.1.clone();
                 interpolated_run.stats = interpolated_stats;
+                // InterpolationSource::Middle(start_commit.unwrap(), end_commit.unwrap()),
                 interpolations.push(Interpolation {
                     benchmark: benchmark.name.clone(),
                     run: Some(missing_run.clone()),
-                    from: InterpolationSource::Middle(start_commit.unwrap(), end_commit.unwrap()),
                 });
                 interpolated_run
             }
             (Some(srun), None) => {
+                // InterpolationSource::First(start_commit.unwrap()),
                 interpolations.push(Interpolation {
                     benchmark: benchmark.name.clone(),
                     run: Some(missing_run.clone()),
-                    from: InterpolationSource::First(start_commit.unwrap()),
                 });
                 srun.1.clone()
             }
             (None, Some(erun)) => {
+                // InterpolationSource::Last(end_commit.unwrap()),
                 interpolations.push(Interpolation {
                     benchmark: benchmark.name.clone(),
                     run: Some(missing_run.clone()),
-                    from: InterpolationSource::Last(end_commit.unwrap()),
                 });
                 erun.1.clone()
             }
@@ -728,17 +696,34 @@ fn fill_benchmark_data(benchmark_name: &str, data: &mut AssociatedData<'_>) -> O
         .entry(data.commit.sha)
         .or_insert_with(Vec::new);
 
-    let start = if let Some(&needle) = data.last_seen_commit[commit_idx].get(benchmark_name) {
-        let cd = &data.data[needle];
-        let bench = cd.benchmarks[benchmark_name].as_ref().unwrap().clone();
-        Some((cd.commit.clone(), bench))
+    let start = if let Some(commit_indices) = data.present_commits.get(benchmark_name) {
+        let needle = commit_indices
+            .iter()
+            .filter(|idx| **idx <= commit_idx)
+            .last();
+        if let Some(needle) = needle {
+            let cd = &data.data[*needle];
+            let bench = cd.benchmarks[benchmark_name].as_ref().unwrap().clone();
+            Some((cd.commit.clone(), bench))
+        } else {
+            None
+        }
     } else {
         None
     };
-    let end = if let Some(&needle) = data.next_seen_commit[commit_idx].get(benchmark_name) {
-        let cd = &data.data[needle];
-        let bench = cd.benchmarks[benchmark_name].as_ref().unwrap().clone();
-        Some((cd.commit.clone(), bench))
+    let end = if let Some(commit_indices) = data.present_commits.get(benchmark_name) {
+        let needle = commit_indices
+            .iter()
+            .rev()
+            .filter(|idx| **idx >= commit_idx)
+            .last();
+        if let Some(needle) = needle {
+            let cd = &data.data[*needle];
+            let bench = cd.benchmarks[benchmark_name].as_ref().unwrap().clone();
+            Some((cd.commit.clone(), bench))
+        } else {
+            None
+        }
     } else {
         None
     };
@@ -771,10 +756,10 @@ fn fill_benchmark_data(benchmark_name: &str, data: &mut AssociatedData<'_>) -> O
                 }
             }
 
+            // InterpolationSource::Middle(start.0, end.0),
             interpolation_entry.push(Interpolation {
                 benchmark: benchmark_name.to_owned(),
                 run: None,
-                from: InterpolationSource::Middle(start.0, end.0),
             });
             return Some(interpolated_runs);
         }
@@ -783,10 +768,10 @@ fn fill_benchmark_data(benchmark_name: &str, data: &mut AssociatedData<'_>) -> O
         // fill in directly with data from the
         // left.
         (Some(start), None) => {
+            // InterpolationSource::Last(start.0),
             interpolation_entry.push(Interpolation {
                 benchmark: benchmark_name.to_owned(),
                 run: None,
-                from: InterpolationSource::Last(start.0),
             });
             return Some(start.1.runs);
         }
@@ -795,10 +780,10 @@ fn fill_benchmark_data(benchmark_name: &str, data: &mut AssociatedData<'_>) -> O
         // fill in directly with data from the
         // right.
         (None, Some(end)) => {
+            // InterpolationSource::First(end.0),
             interpolation_entry.push(Interpolation {
                 benchmark: benchmark_name.to_owned(),
                 run: None,
-                from: InterpolationSource::First(end.0),
             });
             return Some(end.1.runs);
         }
