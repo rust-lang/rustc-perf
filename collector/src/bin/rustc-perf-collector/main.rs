@@ -325,7 +325,6 @@ fn bench_commit(
 
     CommitData {
         commit: commit.clone(),
-        triple: compiler.triple.to_string(),
         benchmarks: results,
     }
 }

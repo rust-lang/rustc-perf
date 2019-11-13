@@ -632,7 +632,6 @@ pub struct CommitData {
     pub commit: Commit,
     // String in Result is the output of the command that failed
     pub benchmarks: BTreeMap<String, Result<Benchmark, String>>,
-    pub triple: String,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Serialize, Deserialize)]

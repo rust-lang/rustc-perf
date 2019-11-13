@@ -163,9 +163,10 @@ impl Repo {
 
     pub fn add_commit_data(&self, data: &CommitData) -> anyhow::Result<()> {
         let commit = &data.commit;
-        let filepath = self
-            .times()
-            .join(format!("commit-{}-{}.json.sz", commit.sha, data.triple));
+        let filepath = self.times().join(format!(
+            "commit-{}-x86_64-unknown-linux-gnu.json.sz",
+            commit.sha
+        ));
         info!("creating file {}", filepath.display());
         let mut v = snap::Writer::new(Vec::new());
         serde_json::to_writer(&mut v, &data)?;
