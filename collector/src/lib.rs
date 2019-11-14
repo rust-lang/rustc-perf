@@ -14,7 +14,10 @@ use serde::{Deserialize, Serialize};
 
 pub mod api;
 pub mod git;
+mod intern;
 pub mod self_profile;
+
+pub use intern::intern;
 
 pub use self_profile::{QueryData, SelfProfile};
 
