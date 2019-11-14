@@ -21,6 +21,12 @@ macro_rules! intern {
             }
         }
 
+        impl std::fmt::Display for $for_ty {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{}", self.0)
+            }
+        }
+
         impl<'a> From<&'a str> for $for_ty {
             fn from(s: &'a str) -> Self {
                 $crate::intern::intern::<$for_ty>(s)

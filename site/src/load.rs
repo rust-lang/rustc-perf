@@ -26,7 +26,8 @@ use collector::Date;
 use crate::api::github;
 use collector;
 pub use collector::{
-    ArtifactData, Benchmark, Commit, CommitData, Patch, Run, RunId, Sha, StatId, Stats,
+    ArtifactData, Benchmark, BenchmarkName, Commit, CommitData, Patch, Run, RunId, Sha, StatId,
+    Stats,
 };
 use log::{error, info, trace, warn};
 
@@ -42,7 +43,7 @@ pub enum MissingReason {
 
 #[derive(Debug)]
 pub struct Interpolation {
-    pub benchmark: String,
+    pub benchmark: BenchmarkName,
     pub run: Option<RunId>,
 }
 
@@ -333,11 +334,11 @@ impl InputData {
             .into_iter()
             .collect::<Vec<_>>();
 
-        let mut known_runs: HashMap<String, HashSet<RunId>> = HashMap::new();
+        let mut known_runs: HashMap<BenchmarkName, HashSet<RunId>> = HashMap::new();
         for cd in data_real.iter().rev().take(20) {
             for (name, benchmark) in &cd.benchmarks {
                 if let Ok(benchmark) = benchmark {
-                    let entry = known_runs.entry(name.clone()).or_insert_with(HashSet::new);
+                    let entry = known_runs.entry(*name).or_insert_with(HashSet::new);
                     for run in &benchmark.runs {
                         entry.insert(run.id());
                     }
@@ -355,7 +356,7 @@ impl InputData {
             for (name, value) in &collected.benchmarks {
                 if value.is_ok() {
                     present_commits
-                        .entry(name.as_str())
+                        .entry(*name)
                         .or_insert_with(Vec::new)
                         .push(idx);
                 }
@@ -378,7 +379,7 @@ impl InputData {
         for (idx, collected) in data_real.iter().enumerate() {
             for (name, value) in &collected.benchmarks {
                 if let Ok(bench) = value {
-                    let e = last_seen.entry(name.as_str()).or_insert_with(HashMap::new);
+                    let e = last_seen.entry(*name).or_insert_with(HashMap::new);
                     for run in bench.runs.iter() {
                         e.insert(run.id(), (idx, run));
                     }
@@ -390,7 +391,7 @@ impl InputData {
         for (idx, collected) in data_real.iter().enumerate().rev() {
             for (name, value) in &collected.benchmarks {
                 if let Ok(bench) = value {
-                    let e = last_seen.entry(name.as_str()).or_insert_with(HashMap::new);
+                    let e = last_seen.entry(*name).or_insert_with(HashMap::new);
                     for run in bench.runs.iter() {
                         e.insert(run.id(), (idx, run));
                     }
@@ -436,10 +437,10 @@ impl InputData {
                 // or benchmark did not attempt to run at this commit
                 if cd
                     .benchmarks
-                    .get(benchmark_name.as_str())
+                    .get(benchmark_name)
                     .map_or(true, |c| c.is_err())
                 {
-                    let runs = fill_benchmark_data(benchmark_name, &mut assoc);
+                    let runs = fill_benchmark_data(*benchmark_name, &mut assoc);
                     // If we couldn't do this then do nothing
                     if let Some(runs) = runs {
                         Arc::make_mut(cd).benchmarks.insert(
@@ -453,11 +454,11 @@ impl InputData {
                 }
 
                 // benchmark exists, but might have runs missing
-                if let Some(Ok(benchmark)) = cd.benchmarks.get(benchmark_name.as_str()) {
+                if let Some(Ok(benchmark)) = cd.benchmarks.get(&benchmark_name) {
                     // If we've not had a benchmark at all in the last few
                     // commits then just skip run interpolation for it; the
                     // benchmark should get total-benchmark interpolated.
-                    if let Some(known_runs) = known_runs.get(benchmark_name) {
+                    if let Some(known_runs) = known_runs.get(&benchmark_name) {
                         let missing_runs = known_runs
                             .iter()
                             .filter(|rname| !benchmark.runs.iter().any(|r| *r == **rname))
@@ -466,7 +467,7 @@ impl InputData {
                             let before = benchmark.runs.len();
                             let benchmark = Arc::make_mut(cd)
                                 .benchmarks
-                                .get_mut(benchmark_name.as_str())
+                                .get_mut(&benchmark_name)
                                 .unwrap()
                                 .as_mut()
                                 .unwrap();
@@ -615,10 +616,10 @@ struct AssociatedData<'a> {
 
     // By benchmark name, mapping to a list of indices at which the data exists,
     // sorted from least to greatest
-    present_commits: &'a HashMap<&'a str, Vec<usize>>,
+    present_commits: &'a HashMap<BenchmarkName, Vec<usize>>,
 
-    last_seen_run: &'a [HashMap<&'a str, HashMap<RunId, (usize, &'a Run)>>],
-    next_seen_run: &'a [HashMap<&'a str, HashMap<RunId, (usize, &'a Run)>>],
+    last_seen_run: &'a [HashMap<BenchmarkName, HashMap<RunId, (usize, &'a Run)>>],
+    next_seen_run: &'a [HashMap<BenchmarkName, HashMap<RunId, (usize, &'a Run)>>],
 
     dur: &'a mut ::std::time::Duration,
 }
@@ -634,10 +635,10 @@ fn fill_benchmark_runs(
     for missing_run in missing_runs {
         let time_start = ::std::time::Instant::now();
         let start = data.last_seen_run[commit_idx]
-            .get(benchmark.name.as_str())
+            .get(&benchmark.name)
             .and_then(|b| b.get(missing_run));
         let end = data.next_seen_run[commit_idx]
-            .get(benchmark.name.as_str())
+            .get(&benchmark.name)
             .and_then(|b| b.get(missing_run));
         let start_commit = start.map(|(idx, _)| data.commits[*idx].clone());
         let end_commit = end.map(|(idx, _)| data.commits[*idx].clone());
@@ -689,21 +690,24 @@ fn fill_benchmark_runs(
     }
 }
 
-fn fill_benchmark_data(benchmark_name: &str, data: &mut AssociatedData<'_>) -> Option<Vec<Run>> {
+fn fill_benchmark_data(
+    benchmark_name: BenchmarkName,
+    data: &mut AssociatedData<'_>,
+) -> Option<Vec<Run>> {
     let commit_idx = data.commit_idx;
     let interpolation_entry = data
         .interpolated
         .entry(data.commit.sha)
         .or_insert_with(Vec::new);
 
-    let start = if let Some(commit_indices) = data.present_commits.get(benchmark_name) {
+    let start = if let Some(commit_indices) = data.present_commits.get(&benchmark_name) {
         let needle = commit_indices
             .iter()
             .filter(|idx| **idx <= commit_idx)
             .last();
         if let Some(needle) = needle {
             let cd = &data.data[*needle];
-            let bench = cd.benchmarks[benchmark_name].as_ref().unwrap().clone();
+            let bench = cd.benchmarks[&benchmark_name].as_ref().unwrap().clone();
             Some((cd.commit.clone(), bench))
         } else {
             None
@@ -711,7 +715,7 @@ fn fill_benchmark_data(benchmark_name: &str, data: &mut AssociatedData<'_>) -> O
     } else {
         None
     };
-    let end = if let Some(commit_indices) = data.present_commits.get(benchmark_name) {
+    let end = if let Some(commit_indices) = data.present_commits.get(&benchmark_name) {
         let needle = commit_indices
             .iter()
             .rev()
@@ -719,7 +723,7 @@ fn fill_benchmark_data(benchmark_name: &str, data: &mut AssociatedData<'_>) -> O
             .last();
         if let Some(needle) = needle {
             let cd = &data.data[*needle];
-            let bench = cd.benchmarks[benchmark_name].as_ref().unwrap().clone();
+            let bench = cd.benchmarks[&benchmark_name].as_ref().unwrap().clone();
             Some((cd.commit.clone(), bench))
         } else {
             None

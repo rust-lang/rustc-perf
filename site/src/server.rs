@@ -42,7 +42,7 @@ type Response = http::Response<hyper::Body>;
 
 pub use crate::api::{
     self, dashboard, data, days, github, graph, info, self_profile, status, CommitResponse,
-    DateData, ServerResult,
+    DateData, ServerResult, Style, StyledBenchmarkName,
 };
 use crate::git;
 use crate::github::post_comment;
@@ -51,6 +51,7 @@ use crate::load::{Config, InputData};
 use crate::util::{self, get_repo_path, Interpolate};
 use collector::api::collected;
 use collector::version_supports_incremental;
+use collector::BenchmarkName;
 use collector::CommitData;
 use collector::Sha;
 use collector::StatId;
@@ -250,7 +251,7 @@ pub fn handle_status_page(data: &InputData) -> status::Response {
                 None
             };
             status::BenchmarkStatus {
-                name: name.clone(),
+                name: *name,
                 success: res.is_ok(),
                 error: msg,
             }
@@ -360,7 +361,7 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
                         .get(&commit)
                         .filter(|c| {
                             c.iter().any(|interpolation| {
-                                if !bench_name.starts_with(&interpolation.benchmark) {
+                                if bench_name.name != interpolation.benchmark {
                                     return false;
                                 }
                                 if let Some(run_name) = &interpolation.run {
@@ -400,15 +401,18 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
             }
         }
         for ((release, check, state), values) in summary_points {
-            let appendix = if release {
-                "-opt"
+            let style = if release {
+                Style::Opt
             } else if check {
-                "-check"
+                Style::Check
             } else {
-                "-debug"
+                Style::Debug
             };
             let summary: &mut HashMap<Cow<'_, str>, _> = result
-                .entry((String::from("Summary") + appendix).into())
+                .entry(StyledBenchmarkName {
+                    name: "Summary".into(),
+                    style,
+                })
                 .or_insert_with(HashMap::new);
             let entry = summary.entry(state.name()).or_insert_with(Vec::new);
             let value = (values.iter().sum::<f64>() as f32) / (values.len() as f32);
@@ -434,8 +438,8 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
                     .get(&commit)
                     .filter(|c| {
                         c.iter().any(|interpolation| {
-                            if let Some(run) = &interpolation.run {
-                                *run.name() == (state.name() + appendix)
+                            if let Some(_) = &interpolation.run {
+                                false
                             } else {
                                 true
                             }
@@ -449,10 +453,7 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
 
     let mut maxes = HashMap::with_capacity(result.len());
     for (ref crate_name, ref benchmarks) in &result {
-        let name = crate_name
-            .replace("-check", "")
-            .replace("-debug", "")
-            .replace("-opt", "");
+        let name = crate_name.name;
         let mut max = 0.0f32;
         for points in benchmarks.values() {
             for point in points {
@@ -611,13 +612,13 @@ pub async fn handle_collected(
 fn get_self_profile_data(
     commit: &CommitData,
     bench_ty: &str,
-    bench_name: &str,
+    bench_name: BenchmarkName,
     run_name: &str,
     sort_idx: Option<i32>,
 ) -> ServerResult<self_profile::SelfProfile> {
     let benchmark = commit
         .benchmarks
-        .get(bench_name)
+        .get(&bench_name)
         .ok_or(format!("No benchmark with name {}", bench_name))?;
     let benchmark = benchmark.as_ref().map_err(|_| {
         format!(
@@ -742,7 +743,7 @@ pub async fn handle_self_profile(
 ) -> ServerResult<self_profile::Response> {
     let mut it = body.benchmark.rsplitn(2, '-');
     let bench_ty = it.next().ok_or(format!("no benchmark type"))?;
-    let bench_name = it.next().ok_or(format!("no benchmark name"))?;
+    let bench_name = it.next().ok_or(format!("no benchmark name"))?.into();
 
     let sort_idx = body
         .sort_idx

@@ -388,7 +388,7 @@ impl BenchmarkState {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Benchmark {
     pub runs: Vec<Run>,
-    pub name: String,
+    pub name: BenchmarkName,
 }
 
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
@@ -627,14 +627,16 @@ impl Run {
 pub struct ArtifactData {
     pub id: String,
     // String in Result is the output of the command that failed
-    pub benchmarks: BTreeMap<String, Result<Benchmark, String>>,
+    pub benchmarks: BTreeMap<BenchmarkName, Result<Benchmark, String>>,
 }
+
+crate::intern!(pub struct BenchmarkName);
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CommitData {
     pub commit: Commit,
     // String in Result is the output of the command that failed
-    pub benchmarks: BTreeMap<String, Result<Benchmark, String>>,
+    pub benchmarks: BTreeMap<BenchmarkName, Result<Benchmark, String>>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Serialize, Deserialize)]

@@ -14,17 +14,60 @@
 //! The responses are calculated in the server.rs file.
 
 use crate::load::CommitData;
-use collector::{Date, Run, Sha, StatId};
+use collector::{BenchmarkName, Date, Run, Sha, StatId};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
+use std::fmt;
 use std::result::Result as StdResult;
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum Style {
+    Check,
+    Opt,
+    Debug,
+}
+
+impl fmt::Display for Style {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Style::Check => "check",
+                Style::Opt => "opt",
+                Style::Debug => "debug",
+            }
+        )
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct StyledBenchmarkName {
+    pub name: BenchmarkName,
+    pub style: Style,
+}
+
+impl fmt::Display for StyledBenchmarkName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}-{}", self.name, self.style)
+    }
+}
+
+impl Serialize for StyledBenchmarkName {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        serializer.collect_str(&self)
+    }
+}
+
 /// Data associated with a specific date
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct DateData {
     pub date: Date,
     pub commit: Sha,
-    pub data: HashMap<String, Vec<(String, Run, f64)>>,
+    pub data: HashMap<StyledBenchmarkName, Vec<(String, Run, f64)>>,
 }
 
 impl DateData {
@@ -52,13 +95,31 @@ impl DateData {
                 }
             }
             if !runs_opt.is_empty() {
-                out.insert(benchmark.name.clone() + "-opt", runs_opt);
+                out.insert(
+                    StyledBenchmarkName {
+                        name: benchmark.name,
+                        style: Style::Opt,
+                    },
+                    runs_opt,
+                );
             }
             if !runs_check.is_empty() {
-                out.insert(benchmark.name.clone() + "-check", runs_check);
+                out.insert(
+                    StyledBenchmarkName {
+                        name: benchmark.name,
+                        style: Style::Check,
+                    },
+                    runs_check,
+                );
             }
             if !runs_debug.is_empty() {
-                out.insert(benchmark.name.clone() + "-debug", runs_debug);
+                out.insert(
+                    StyledBenchmarkName {
+                        name: benchmark.name,
+                        style: Style::Debug,
+                    },
+                    runs_debug,
+                );
             }
         }
 
@@ -154,12 +215,13 @@ pub mod data {
     }
 
     /// List of DateData's from oldest to newest
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize)]
     pub struct Response(pub Vec<DateData>);
 }
 
 pub mod graph {
-    use collector::{Bound, Sha};
+    use super::StyledBenchmarkName;
+    use collector::{BenchmarkName, Bound, Sha};
     use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
 
@@ -182,11 +244,11 @@ pub mod graph {
         pub is_interpolated: bool,
     }
 
-    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+    #[derive(Debug, PartialEq, Clone, Serialize)]
     pub struct Response {
         /// Crate -> Benchmark -> [GraphData]
-        pub benchmarks: HashMap<String, HashMap<String, Vec<GraphData>>>,
-        pub max: HashMap<String, f32>,
+        pub benchmarks: HashMap<StyledBenchmarkName, HashMap<String, Vec<GraphData>>>,
+        pub max: HashMap<BenchmarkName, f32>,
         pub colors: Vec<String>,
         pub commits: Vec<Sha>,
     }
@@ -205,7 +267,7 @@ pub mod days {
         pub stat: String,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize)]
     pub struct Response {
         pub a: DateData,
         pub b: DateData,
@@ -214,12 +276,12 @@ pub mod days {
 
 pub mod status {
     use crate::load::{CurrentState, MissingReason};
-    use collector::Commit;
+    use collector::{BenchmarkName, Commit};
     use serde::{Deserialize, Serialize};
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct BenchmarkStatus {
-        pub name: String,
+        pub name: BenchmarkName,
         pub success: bool,
         pub error: Option<String>,
     }
