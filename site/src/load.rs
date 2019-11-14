@@ -312,10 +312,8 @@ impl InputData {
 
         let last_date = last_date.expect("No dates found");
         let mut data_commits = Vec::with_capacity(data.len());
-        let mut commit_map = HashMap::with_capacity(data.len());
-        for (idx, commit) in data.iter().map(|cd| cd.commit).enumerate() {
-            data_commits.push(commit);
-            commit_map.insert(commit, idx);
+        for cd in data.iter() {
+            data_commits.push(cd.commit);
         }
 
         eprintln!("Starting interpolation...");
@@ -427,7 +425,6 @@ impl InputData {
                     commit: cd.commit,
                     data: &data_real,
                     commits: &data_commits,
-                    commit_map: &commit_map,
                     interpolated: &mut interpolated,
                     present_commits: &present_commits,
                     last_seen_run: &last_run,
@@ -613,7 +610,6 @@ struct AssociatedData<'a> {
     commit: Commit,
     data: &'a [Arc<CommitData>],
     commits: &'a [Commit],
-    commit_map: &'a HashMap<Commit, usize>,
     interpolated: &'a mut HashMap<Sha, Vec<Interpolation>>,
 
     // By benchmark name, mapping to a list of indices at which the data exists,
@@ -710,7 +706,7 @@ fn fill_benchmark_data(
         if let Some(needle) = needle {
             let cd = &data.data[*needle];
             let bench = cd.benchmarks[&benchmark_name].as_ref().unwrap().clone();
-            Some((cd.commit.clone(), bench))
+            Some((cd.commit, bench, *needle))
         } else {
             None
         }
@@ -726,7 +722,7 @@ fn fill_benchmark_data(
         if let Some(needle) = needle {
             let cd = &data.data[*needle];
             let bench = cd.benchmarks[&benchmark_name].as_ref().unwrap().clone();
-            Some((cd.commit.clone(), bench))
+            Some((cd.commit, bench, *needle))
         } else {
             None
         }
@@ -742,8 +738,8 @@ fn fill_benchmark_data(
         // This code ignores the case where a run is
         // absent in start or end. This is handled later.
         (Some(start), Some(end)) => {
-            let distance = data.commit_map[&end.0] - data.commit_map[&start.0];
-            let from_start = commit_idx - data.commit_map[&start.0];
+            let distance = end.2 - start.2;
+            let from_start = commit_idx - start.2;
             let start_runs = &start.1.runs;
             let end_runs = &end.1.runs;
 
