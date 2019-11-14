@@ -1,4 +1,5 @@
 pub mod collected {
+    use crate::BenchmarkName;
     use crate::Commit;
 
     #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
@@ -6,11 +7,11 @@ pub mod collected {
         // Will benchmark commit with these benchmarks
         BenchmarkCommit {
             commit: Commit,
-            benchmarks: Vec<String>,
+            benchmarks: Vec<BenchmarkName>,
         },
         // benchmark finished for this benchmark/commit
         BenchmarkDone {
-            benchmark: String,
+            benchmark: BenchmarkName,
             commit: Commit,
         },
     }

@@ -9,7 +9,9 @@ use std::str;
 
 use tempfile::TempDir;
 
-use collector::{command_output, BenchmarkState, Patch, Run, SelfProfile, StatId, Stats};
+use collector::{
+    command_output, BenchmarkName, BenchmarkState, Patch, Run, SelfProfile, StatId, Stats,
+};
 
 use anyhow::{bail, Context};
 
@@ -62,7 +64,7 @@ impl Default for BenchmarkConfig {
 }
 
 pub struct Benchmark {
-    pub name: String,
+    pub name: BenchmarkName,
     pub path: PathBuf,
     patches: Vec<Patch>,
     config: BenchmarkConfig,
@@ -134,7 +136,7 @@ struct CargoProcess<'a> {
     build_kind: BuildKind,
     incremental: bool,
     processor_etc: Option<(&'a mut dyn Processor, RunKind, &'a str, Option<&'a Patch>)>,
-    processor_name: &'a str,
+    processor_name: BenchmarkName,
     manifest_path: String,
     cargo_args: Vec<String>,
     rustc_args: Vec<String>,
@@ -267,7 +269,7 @@ pub enum Retry {
 }
 
 pub struct ProcessOutputData<'a> {
-    name: &'a str,
+    name: BenchmarkName,
     cwd: &'a Path,
     build_kind: BuildKind,
     run_kind: RunKind,
@@ -668,7 +670,7 @@ impl Benchmark {
         };
 
         Ok(Benchmark {
-            name,
+            name: name.as_str().into(),
             path,
             patches,
             config,
@@ -714,7 +716,7 @@ impl Benchmark {
 
         CargoProcess {
             compiler,
-            processor_name: &self.name,
+            processor_name: self.name,
             cwd: cwd,
             build_kind: build_kind,
             incremental: false,

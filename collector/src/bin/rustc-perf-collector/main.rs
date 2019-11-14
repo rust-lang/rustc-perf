@@ -28,6 +28,7 @@ mod sysroot;
 
 use background_worker::send_home;
 use collector::Benchmark as CollectedBenchmark;
+use collector::BenchmarkName;
 use execute::{Benchmark, Profiler};
 use sysroot::Sysroot;
 
@@ -264,7 +265,7 @@ fn bench_commit(
     if call_home {
         send_home(collected::Request::BenchmarkCommit {
             commit: commit.clone(),
-            benchmarks: benchmarks.iter().map(|b| b.name.clone()).collect(),
+            benchmarks: benchmarks.iter().map(|b| b.name).collect(),
         });
     }
     let existing_data = repo.and_then(|r| r.load_commit_data(&commit, &compiler.triple).ok());
@@ -303,7 +304,7 @@ fn bench_commit(
             benchmark.measure(&mut processor, build_kinds, run_kinds, compiler, iterations);
         let result = match result {
             Ok(runs) => Ok(CollectedBenchmark {
-                name: benchmark.name.to_string(),
+                name: benchmark.name,
                 runs,
             }),
             Err(ref s) => {
@@ -575,12 +576,12 @@ fn main_result() -> anyhow::Result<i32> {
         }
 
         ("remove_benchmark", Some(sub_m)) => {
-            let benchmark = sub_m.value_of("BENCHMARK").unwrap();
+            let benchmark: BenchmarkName = sub_m.value_of("BENCHMARK").unwrap().into();
             let out_repo = get_out_repo(false)?;
             for commit in &get_commits()? {
                 if let Ok(mut data) = out_repo.load_commit_data(&commit, "x86_64-unknown-linux-gnu")
                 {
-                    if data.benchmarks.remove(&*benchmark).is_none() {
+                    if data.benchmarks.remove(&benchmark).is_none() {
                         warn!("could not remove {} from {}", benchmark, commit.sha);
                     }
                     out_repo.add_commit_data(&data)?;

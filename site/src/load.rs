@@ -51,7 +51,7 @@ pub struct Interpolation {
 pub struct CurrentState {
     pub commit: Commit,
     pub issue: Option<github::Issue>,
-    pub benchmarks: Vec<String>,
+    pub benchmarks: Vec<BenchmarkName>,
 }
 
 #[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq)]
