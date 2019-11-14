@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use hashbrown::HashSet;
 use std::sync::Mutex;
 
 pub trait InternString {
