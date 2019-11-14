@@ -219,17 +219,18 @@ impl InputData {
             let c;
             let file_contents = if filename.ends_with(".sz") {
                 use std::io::Read;
-                let mut out = Vec::with_capacity(snap::decompress_len(&file_contents).unwrap_or(0));
+                let mut out =
+                    String::with_capacity(snap::decompress_len(&file_contents).unwrap_or(0));
                 let mut szip_reader = snap::Reader::new(&file_contents[..]);
-                szip_reader.read_to_end(&mut out).unwrap();
+                szip_reader.read_to_string(&mut out).unwrap();
                 c = out;
-                &c
+                c.as_str()
             } else {
-                &file_contents
+                std::str::from_utf8(&file_contents).unwrap()
             };
 
             if filename.starts_with("artifact-") {
-                let contents: ArtifactData = match serde_json::from_slice(&file_contents) {
+                let contents: ArtifactData = match serde_json::from_str(&file_contents) {
                     Ok(j) => j,
                     Err(err) => {
                         error!("Failed to parse JSON for {}: {:?}", filename, err);
@@ -245,7 +246,7 @@ impl InputData {
 
                 artifact_data.insert(contents.id.clone(), contents);
             } else {
-                let contents: CommitData = match serde_json::from_slice(&file_contents) {
+                let contents: CommitData = match serde_json::from_str(&file_contents) {
                     Ok(json) => json,
                     Err(err) => {
                         error!("Failed to parse JSON for {}: {:?}", filename, err);
