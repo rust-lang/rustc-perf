@@ -271,9 +271,11 @@ impl Ord for Commit {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Patch {
     index: usize,
-    pub name: String,
+    pub name: PatchName,
     path: PathBuf,
 }
+
+crate::intern!(pub struct PatchName);
 
 impl PartialEq for Patch {
     fn eq(&self, other: &Self) -> bool {
@@ -317,7 +319,7 @@ impl Patch {
         Patch {
             path: PathBuf::from(path.file_name().unwrap()),
             index,
-            name,
+            name: name.as_str().into(),
         }
     }
 
@@ -599,7 +601,7 @@ impl Run {
 
     pub fn is_println_incr(&self) -> bool {
         if let BenchmarkState::IncrementalPatched(ref patch) = self.state {
-            return patch.name == "println";
+            return patch.name == *"println";
         }
         false
     }

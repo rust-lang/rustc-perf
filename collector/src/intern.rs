@@ -21,6 +21,12 @@ macro_rules! intern {
             }
         }
 
+        impl std::cmp::PartialEq<str> for $for_ty {
+            fn eq(&self, other: &str) -> bool {
+                self.0 == other
+            }
+        }
+
         impl std::fmt::Display for $for_ty {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 write!(f, "{}", self.0)
