@@ -264,9 +264,9 @@ pub mod self_profile {
         pub label: String,
         pub self_time: Duration,
         pub percent_total_time: f32,
-        pub number_of_cache_misses: usize,
-        pub number_of_cache_hits: usize,
-        pub invocation_count: usize,
+        pub number_of_cache_misses: u32,
+        pub number_of_cache_hits: u32,
+        pub invocation_count: u32,
         pub blocked_time: Duration,
         pub incremental_load_time: Duration,
     }
