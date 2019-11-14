@@ -8,7 +8,7 @@ pub struct SelfProfile {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct QueryData {
-    pub label: String,
+    pub label: QueryLabel,
     pub self_time: Duration,
     pub number_of_cache_misses: u32,
     pub number_of_cache_hits: u32,
@@ -16,3 +16,5 @@ pub struct QueryData {
     pub blocked_time: Duration,
     pub incremental_load_time: Duration,
 }
+
+crate::intern!(pub struct QueryLabel);

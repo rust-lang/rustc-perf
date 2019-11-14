@@ -234,6 +234,7 @@ pub mod status {
 }
 
 pub mod self_profile {
+    use collector::self_profile::QueryLabel;
     use serde::{Deserialize, Serialize};
     use std::time::Duration;
 
@@ -261,7 +262,7 @@ pub mod self_profile {
 
     #[derive(Serialize, Deserialize, Clone, Debug)]
     pub struct QueryData {
-        pub label: String,
+        pub label: QueryLabel,
         pub self_time: Duration,
         pub percent_total_time: f32,
         pub number_of_cache_misses: u32,

@@ -644,7 +644,7 @@ fn get_self_profile_data(
         .clone();
     let total_time = profile.query_data.iter().map(|qd| qd.self_time).sum();
     let totals = self_profile::QueryData {
-        label: String::from("Totals"),
+        label: "Totals".into(),
         self_time: total_time,
         // TODO: check against wall-time from perf stats
         percent_total_time: run
