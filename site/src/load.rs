@@ -215,7 +215,8 @@ impl InputData {
         trace!("read directory");
 
         data.reserve(files.len());
-        for (filename, file_contents) in &files {
+        let files_count = files.len();
+        for (filename, file_contents) in files {
             let c;
             let file_contents = if filename.ends_with(".sz") {
                 use std::io::Read;
@@ -266,7 +267,7 @@ impl InputData {
             }
         }
 
-        info!("{} total files", files.len());
+        info!("{} total files", files_count);
         info!("{} skipped files", skipped);
         info!("{} measured", data.len());
 
