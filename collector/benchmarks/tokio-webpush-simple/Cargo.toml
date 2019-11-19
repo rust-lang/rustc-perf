@@ -17,3 +17,6 @@ tokio-service = "0.1"
 tokio-tungstenite = "0.2"
 tungstenite = "0.2"
 uuid = { version = "0.5", features = ["serde", "v4"] }
+
+[patch.crates-io]
+native-tls = { path = "./native-tls-0.1.5" }

@@ -344,7 +344,12 @@ fn get_benchmarks(
             Err(e) => bail!("non-utf8 benchmark name: {:?}", e),
         };
 
-        if path.ends_with(".git") || path.ends_with("scripts") || !entry.file_type()?.is_dir() {
+        if path.ends_with(".git")
+            || path.ends_with("scripts")
+            || !entry.file_type()?.is_dir()
+            || path.ends_with("native-tls-0.1.5")
+            || path.ends_with("native-tls-0.2.3")
+        {
             debug!("benchmark {} - ignored", name);
             continue;
         }
