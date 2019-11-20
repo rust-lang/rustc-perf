@@ -1,1 +1,0 @@
-ALTER TABLE dependencies DROP COLUMN kind;

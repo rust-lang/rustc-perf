@@ -1,1 +1,0 @@
-ALTER TABLE crate_owners RENAME owner_id TO user_id;

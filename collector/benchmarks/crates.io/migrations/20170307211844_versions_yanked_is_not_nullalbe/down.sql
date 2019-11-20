@@ -1,1 +1,0 @@
-ALTER TABLE versions ALTER COLUMN yanked DROP NOT NULL;

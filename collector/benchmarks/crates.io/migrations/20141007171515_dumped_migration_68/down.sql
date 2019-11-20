@@ -1,1 +1,0 @@
-ALTER TABLE crates DROP COLUMN description;

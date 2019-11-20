@@ -1,1 +1,0 @@
-ALTER TABLE crates_keywords DROP CONSTRAINT fk_crates_keywords_keyword_id;

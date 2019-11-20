@@ -1,1 +1,0 @@
-DROP INDEX index_dependencies_crate_id;

@@ -1,1 +1,0 @@
-ALTER TABLE packages ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT now();

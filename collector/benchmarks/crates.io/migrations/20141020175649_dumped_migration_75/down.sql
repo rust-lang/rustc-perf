@@ -1,1 +1,0 @@
-DROP INDEX index_crates_name_search;

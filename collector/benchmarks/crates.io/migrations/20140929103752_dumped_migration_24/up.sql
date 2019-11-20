@@ -1,1 +1,0 @@
-CREATE INDEX index_version_crate_id ON versions (crate_id);

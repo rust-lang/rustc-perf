@@ -1,1 +1,0 @@
-CREATE INDEX index_crate_created_at ON crates (created_at);

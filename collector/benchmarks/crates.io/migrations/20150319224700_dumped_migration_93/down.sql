@@ -1,1 +1,0 @@
-DROP FUNCTION canon_crate_name(text);

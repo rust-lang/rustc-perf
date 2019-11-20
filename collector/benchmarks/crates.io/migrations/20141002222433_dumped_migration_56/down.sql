@@ -1,1 +1,0 @@
-ALTER TABLE follows DROP CONSTRAINT fk_follows_user_id;

@@ -1,1 +1,0 @@
-CREATE INDEX index_version_num ON versions (num);

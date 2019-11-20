@@ -1,1 +1,0 @@
-ALTER TABLE crates DROP CONSTRAINT fk_crates_user_id;

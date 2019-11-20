@@ -1,1 +1,0 @@
-ALTER TABLE crates ADD COLUMN keywords varchar;

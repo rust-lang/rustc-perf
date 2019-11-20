@@ -1,1 +1,0 @@
-DROP INDEX index_keywords_lower_keyword;
