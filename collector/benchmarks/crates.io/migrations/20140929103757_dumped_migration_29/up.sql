@@ -1,1 +1,0 @@
-CREATE INDEX index_crate_downloads_crate_id ON crate_downloads (crate_id);

@@ -1,1 +1,0 @@
-CREATE INDEX index_crate_downloads_date ON crate_downloads (date(date));

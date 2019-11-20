@@ -1,1 +1,0 @@
-CREATE INDEX index_version_downloads_version_id ON version_downloads (version_id);

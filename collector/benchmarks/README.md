@@ -13,11 +13,10 @@ These are real programs that are important in some way, and worth tracking.
   programs.
 - **cranelift-codegen**: The largest crate from a code generator. Used by
   Firefox.
-- **crates.io**: Source code for `crates.io`. An important site in the
-  Rust ecosystem.
 - **futures**: A futures implementation. Used by many Rust programs.
 - **helloworld**: A trivial program. Gives a lower bound on compile time.
-- **hyper**: An HTTP library. An important part of the Rust ecosystem.
+- **hyper-2**: A fairly large crate. Utilizes async/await, and used by
+  many Rust programs.
 - **piston-image**: A modular game engine. An interesting Rust program.
 - **regex**: A regular expression parser. Used by many Rust programs.
 - **ripgrep**: A line-oriented search tool. A widely-used utility.
@@ -45,9 +44,6 @@ ways.
   and basic blocks.
 - **packed-simd**: Portable packed SIMD vectors. Exercises SIMD features
   heavily, and uses a compiler plugin.
-- **sentry-cli**: A command line utility.
-  [Reported](https://github.com/rust-lang-nursery/rustc-perf/issues/232#issuecomment-391439420)
-  as being slow to compile.
 - **ucd**: A Unicode crate. Contains large statics that
   [stress](https://github.com/rust-lang/rust/issues/53643) the borrow checker's
   implementation of NLL.

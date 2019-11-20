@@ -1,1 +1,0 @@
-ALTER TABLE crate_owners DROP COLUMN deleted;

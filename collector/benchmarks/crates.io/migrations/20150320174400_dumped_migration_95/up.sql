@@ -1,1 +1,0 @@
-CREATE INDEX index_keywords_lower_keyword ON keywords (lower(keyword));

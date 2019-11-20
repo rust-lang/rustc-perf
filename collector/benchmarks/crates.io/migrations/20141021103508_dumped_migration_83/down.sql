@@ -1,1 +1,0 @@
-DROP INDEX index_crates_keywords_keyword_id;

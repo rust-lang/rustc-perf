@@ -1,1 +1,0 @@
-CREATE INDEX index_dependencies_version_id ON dependencies (version_id);

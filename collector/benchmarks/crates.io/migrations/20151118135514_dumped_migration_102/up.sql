@@ -1,1 +1,0 @@
-ALTER TABLE crates ADD COLUMN max_upload_size INTEGER;

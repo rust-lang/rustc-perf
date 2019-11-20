@@ -1,0 +1,92 @@
+[package]
+name = "hyper"
+version = "0.13.0-alpha.4" # don't forget to update html_root_url
+description = "A fast and correct HTTP library."
+readme = "README.md"
+homepage = "https://hyper.rs"
+documentation = "https://docs.rs/hyper"
+repository = "https://github.com/hyperium/hyper"
+license = "MIT"
+authors = ["Sean McArthur <sean@seanmonstar.com>"]
+keywords = ["http", "hyper", "hyperium"]
+categories = ["network-programming", "web-programming::http-client", "web-programming::http-server"]
+edition = "2018"
+
+include = [
+  "Cargo.toml",
+  "LICENSE",
+  "src/**/*",
+  #"build.rs",
+]
+
+[dependencies]
+bytes = "0.4.6"
+futures-core = "0.3.1"
+futures-channel = "0.3.1"
+futures-util = "0.3.1"
+http = "0.1.15"
+http-body = "=0.2.0-alpha.3"
+httparse = "1.0"
+h2 = "=0.2.0-alpha.3"
+iovec = "0.1"
+itoa = "0.4.1"
+log = "0.4"
+pin-project = "0.4"
+time = "0.1"
+tower-service = "=0.3.0-alpha.2"
+tokio-executor = "=0.2.0-alpha.6"
+tokio-io = "=0.2.0-alpha.6"
+tokio-sync = "=0.2.0-alpha.6"
+want = "0.3"
+
+# Optional
+
+net2 = { version = "0.2.32", optional = true }
+tokio = { version = "=0.2.0-alpha.6", optional = true, default-features = false, features = ["rt-full"] }
+tokio-net = { version = "=0.2.0-alpha.6", optional = true, features = ["tcp"] }
+tokio-timer = { version = "=0.3.0-alpha.6", optional = true }
+
+
+[dev-dependencies]
+futures-util-a19 = { version = "=0.3.0-alpha.19", package = "futures-util-preview" }
+matches = "0.1"
+num_cpus = "1.0"
+pretty_env_logger = "0.3"
+spmc = "0.3"
+serde = "1.0"
+serde_derive = "1.0"
+serde_json = "1.0"
+tokio = "=0.2.0-alpha.6" # using #[tokio::test] attributes
+tokio-fs = "=0.2.0-alpha.6"
+tokio-test = "=0.2.0-alpha.6"
+url = "1.0"
+
+[features]
+default = [
+    "__internal_flaky_tests",
+    "runtime",
+]
+runtime = [
+    "tcp",
+    "tokio",
+]
+tcp = [
+    "net2",
+    "tokio-executor/blocking",
+    "tokio-net",
+    "tokio-timer",
+]
+
+# unstable features
+unstable-stream = []
+
+# internal features used in CI
+nightly = []
+__internal_flaky_tests = []
+__internal_happy_eyeballs_tests = []
+
+[package.metadata.docs.rs]
+features = [
+    "runtime",
+    "unstable-stream",
+]

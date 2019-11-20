@@ -1,1 +1,0 @@
-ALTER TABLE crate_owners ADD CONSTRAINT crate_owners_unique_user_per_crate UNIQUE (user_id, crate_id);

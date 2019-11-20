@@ -1,1 +1,0 @@
-ALTER TABLE crate_downloads DROP CONSTRAINT fk_crate_downloads_crate_id;

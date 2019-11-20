@@ -1,1 +1,0 @@
-ALTER TABLE dependencies ADD COLUMN kind INTEGER;

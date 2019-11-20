@@ -1,6 +1,0 @@
-target
-.DS_Store
-.sentryclirc
-.cargo
-node_modules
-bin/sentry-cli.exe

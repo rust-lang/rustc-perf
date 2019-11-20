@@ -1,1 +1,0 @@
-ALTER TABLE dependencies DROP CONSTRAINT fk_dependencies_crate_id;

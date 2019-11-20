@@ -1,1 +1,0 @@
-INSERT INTO metadata (total_downloads) VALUES (0);

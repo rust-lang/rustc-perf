@@ -1,1 +1,0 @@
-ALTER TABLE versions DROP CONSTRAINT fk_versions_crate_id;

@@ -688,7 +688,7 @@ impl Benchmark {
         base_dot.push(".");
         let tmp_dir = TempDir::new()?;
         let mut cmd = Command::new("cp");
-        cmd.arg("-R").arg(base_dot).arg(tmp_dir.path());
+        cmd.arg("-LR").arg(base_dot).arg(tmp_dir.path());
         command_output(&mut cmd).with_context(|| format!("copying {} to tmp dir", self.name))?;
         Ok(tmp_dir)
     }

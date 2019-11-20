@@ -1,1 +1,0 @@
-ALTER TABLE crate_owners ALTER owner_kind SET DEFAULT 0;

@@ -1,1 +1,0 @@
-ALTER TABLE versions DROP COLUMN created_at;
