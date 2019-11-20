@@ -15,6 +15,8 @@ These are real programs that are important in some way, and worth tracking.
   Firefox.
 - **futures**: A futures implementation. Used by many Rust programs.
 - **helloworld**: A trivial program. Gives a lower bound on compile time.
+- **hyper-2**: A fairly large crate. Utilizes async/await, and used by
+  many Rust programs.
 - **piston-image**: A modular game engine. An interesting Rust program.
 - **regex**: A regular expression parser. Used by many Rust programs.
 - **ripgrep**: A line-oriented search tool. A widely-used utility.
