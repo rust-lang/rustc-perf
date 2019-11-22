@@ -1620,7 +1620,6 @@ dependencies = [
  "ref_slice 1.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "regex 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "script_layout_interface 0.0.1",
- "script_plugins 0.0.1",
  "script_traits 0.0.1",
  "selectors 0.19.0",
  "serde 1.0.17 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1677,10 +1676,6 @@ dependencies = [
  "style 0.0.1",
  "webrender_api 0.53.1 (git+https://github.com/servo/webrender)",
 ]
-
-[[package]]
-name = "script_plugins"
-version = "0.0.1"
 
 [[package]]
 name = "script_traits"
