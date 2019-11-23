@@ -189,7 +189,7 @@ impl InputData {
                 &env::current_dir()?,
                 &[
                     "clone",
-                    "https://github.com/rust-lang-nursery/rustc-timing.git",
+                    "https://github.com/rust-lang/rustc-timing.git",
                     repo_loc.to_str().unwrap(),
                 ],
             )?;

@@ -188,7 +188,7 @@ To benchmark builds from a rustc repository:
 ```
 
 `$RUSTC_TIMING` is a path (relative or absolute) to a clone of the
-`https://github.com/rust-lang-nursery/rustc-timing` repository, in which the
+`https://github.com/rust-lang/rustc-timing` repository, in which the
 output data will be placed and committed.
 
 ## Profiling
@@ -214,7 +214,7 @@ RUST_LOG=info ./target/release/collector --output-repo $OUTPUT_DIR \
 
 All the parts of this command are the same as for the `bench_local` subcommand,
 except that `$PROFILER` is one of the following.
-- `time-passes`: Profile with rustc's `-Ztime-passes`. 
+- `time-passes`: Profile with rustc's `-Ztime-passes`.
   - **Purpose**. This gives a high-level indication of compiler performance by
     showing how long each compilation pass takes.
   - **Slowdown**. None.
@@ -344,4 +344,3 @@ except that `$PROFILER` is one of the following.
 ### Profiling options
 
 These are the same as the benchmarking options above.
-

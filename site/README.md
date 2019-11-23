@@ -7,7 +7,7 @@ which displays graphs to the user.
 
 This also contains a GitHub bot to trigger on-demand benchmarking.
 
-https://github.com/rust-lang-nursery/rustc-timing contains the raw data
+https://github.com/rust-lang/rustc-timing contains the raw data
 from which rustc-perf pulls.
 
 Setup
@@ -20,7 +20,7 @@ either port 2346, or the port given by the environment variable `PORT`.
 sudo apt-get install apache2 git
 git clone https://github.com/rust-lang-nursery/rustc-perf.git /var/www/html/
 cd /var/www/html/rustc-perf
-git clone https://github.com/rust-lang-nursery/rustc-timing.git data
+git clone https://github.com/rust-lang/rustc-timing.git data
 ```
 
 The following lines in `/etc/apache2/sites-enabled/000-default.conf` allow the
@@ -52,4 +52,3 @@ The release flag is on purpose, reducing startup time ~80%.
 The first time you do this the Rust repo is cloned, so it will take a minute or
 two (or more if you have a slow internet connection) before the web server
 starts up.
-
