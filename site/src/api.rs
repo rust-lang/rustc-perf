@@ -178,7 +178,7 @@ pub mod info {
 
 pub mod dashboard {
     use serde::{Deserialize, Serialize};
-    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct Cases {
         pub clean_averages: Vec<f64>,
         pub base_incr_averages: Vec<f64>,
@@ -186,7 +186,7 @@ pub mod dashboard {
         pub println_incr_averages: Vec<f64>,
     }
 
-    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct Response {
         pub versions: Vec<String>,
         pub check: Cases,

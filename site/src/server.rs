@@ -71,6 +71,10 @@ fn average(v: &[f64]) -> f64 {
 }
 
 pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
+    if data.artifact_data.is_empty() {
+        return dashboard::Response::default();
+    }
+
     let mut versions = data.artifact_data.keys().cloned().collect::<Vec<_>>();
     versions.sort_by(
         |a, b| match (a.parse::<Version>().ok(), b.parse::<Version>().ok()) {
