@@ -37,8 +37,6 @@ pub enum MissingReason {
     Sha,
     TryParent,
     TryCommit,
-    Benchmarks(Vec<String>),
-    Other,
 }
 
 #[derive(Debug)]
@@ -518,12 +516,6 @@ impl InputData {
         let commits = collector::git::get_rust_commits()?;
         println!("Update of rust.git complete");
 
-        let known_benchmarks = data
-            .iter()
-            .rev()
-            .take(10)
-            .flat_map(|v| v.benchmarks.keys())
-            .collect::<HashSet<_>>();
         let have = data
             .iter()
             .map(|value| (value.commit.sha.clone(), value))
@@ -534,19 +526,7 @@ impl InputData {
             .cloned()
             .filter(|c| now.signed_duration_since(c.date.0) < Duration::days(29))
             .filter_map(|c| {
-                if let Some(cd) = have.get(&c.sha) {
-                    // If we've missed any benchmark, we also want this commit
-                    let m = known_benchmarks
-                        .iter()
-                        .filter(|b| !cd.benchmarks.contains_key(&***b))
-                        .map(|b| b.to_string())
-                        .collect::<Vec<String>>();
-                    if !m.is_empty() {
-                        Some((c, MissingReason::Benchmarks(m)))
-                    } else {
-                        None
-                    }
-                } else if config.skip.contains(&c.sha) {
+                if have.contains_key(&c.sha) || config.skip.contains(&c.sha) {
                     None
                 } else {
                     Some((c, MissingReason::Sha))
