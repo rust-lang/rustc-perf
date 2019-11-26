@@ -90,3 +90,6 @@ programs.
   behavior](https://github.com/rust-lang/rust/pull/32062) in the past.
 - **unused-warnings**: Contains many unused imports, which caused [quadratic
   behavior](https://github.com/rust-lang/rust/issues/43572) in the past.
+- **wf-projection-stress-65510**: A stress test which showcases [quadratic
+  behavior](https://github.com/rust-lang/rust/issues/65510) (in the number of
+  associated type bounds).
