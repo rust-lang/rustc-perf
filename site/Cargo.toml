@@ -28,7 +28,7 @@ toml = "0.5"
 jemallocator = "0.3"
 jemalloc-ctl = "0.3"
 rust_team_data = { git = "https://github.com/rust-lang/team" }
-parking_lot = "0.9"
+parking_lot = "0.10"
 snap = "0.2.5"
 
 [dependencies.collector]
