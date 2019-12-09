@@ -57,9 +57,7 @@
                     <th data-sort-idx="2" data-default-sort-dir="-1">Time</th>
                     <th data-sort-idx="10" data-default-sort-dir="-1">% Total Time</th>
                     <th class="delta">Δ</th>
-                    <th data-sort-idx="5" data-default-sort-dir="-1">Invocations</th>
-                    <th class="delta">Δ</th>
-                    <th data-sort-idx="3" data-default-sort-dir="-1">Cache Misses</th>
+                    <th data-sort-idx="5" data-default-sort-dir="-1">Full Executions</th>
                     <th class="delta">Δ</th>
                     <th data-sort-idx="7" data-default-sort-dir="-1" title="Incremental loading time">Loading</th>
                     <th class="delta">Δ</th>
@@ -191,12 +189,6 @@
                 } else {
                     td(row, "-", true);
                 }
-                td(row, cur.cache_misses);
-                if (prev) {
-                    td(row, fmt_delta(prev.cache_misses, cur.cache_misses), true);
-                } else {
-                    td(row, "-", true);
-                }
                 td(row, to_seconds(cur.incremental_load_time).toFixed(3));
                 if (prev) {
                     td(row,
@@ -228,7 +220,7 @@
                 ];
             }
             let [
-                label, self_time, percent_total_time, cache_misses,
+                label, self_time, percent_total_time, _cache_misses,
                 _cache_hits, invocation_count, _blocked_time,
                 incremental_load_time
             ] = element;
@@ -236,7 +228,6 @@
                 label,
                 self_time,
                 percent_total_time,
-                cache_misses,
                 invocation_count,
                 incremental_load_time,
             };
