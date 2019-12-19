@@ -543,13 +543,9 @@ impl InputData {
                      sha, parent_sha, ..
                  }| {
                     let mut ret = Vec::new();
-                    ret.push((
-                        Commit {
-                            sha: sha.as_str().into(),
-                            date: Date::ymd_hms(2001, 01, 01, 0, 0, 0),
-                        },
-                        MissingReason::TryCommit,
-                    ));
+                    // Enqueue the `TryParent` commit before the `TryCommit` itself, so that
+                    // all of the `try` run's data is complete when the benchmark results
+                    // of that commit are available.
                     if let Some(commit) = commits.iter().find(|c| c.sha == *parent_sha.as_str()) {
                         ret.push((commit.clone(), MissingReason::TryParent));
                     } else {
@@ -558,6 +554,13 @@ impl InputData {
                         // days for the most part so we don't have artifacts for it anymore anyway;
                         // in that case, just ignore this "error".
                     }
+                    ret.push((
+                        Commit {
+                            sha: sha.as_str().into(),
+                            date: Date::ymd_hms(2001, 01, 01, 0, 0, 0),
+                        },
+                        MissingReason::TryCommit,
+                    ));
                     ret
                 },
             )
