@@ -1,4 +1,5 @@
 use std::env;
+use std::path::Path;
 use std::process::Command;
 use std::time::{Duration, Instant};
 
@@ -82,26 +83,9 @@ fn main() {
                         }
                     }
                     let prefix = prefix.expect(&format!("found prefix {:?}", prof_out_dir));
-                    // FIXME: it'd be great to have a less generic name for this;
-                    // we should think about renaming the binary in measureme to measureme, such
-                    // that the command is `measureme summarize ...`.
-                    let mut cmd = Command::new("summarize");
-                    cmd.current_dir(&prof_out_dir);
-                    cmd.arg("summarize").arg("--json");
-                    cmd.arg(&prefix);
-                    let status = cmd.status().expect(&format!(
-                        "summarize spawned successfully in {:?}",
-                        prof_out_dir
-                    ));
-                    assert!(
-                        status.success(),
-                        "summarize failed in {:?}; prefix is {:?}",
-                        prof_out_dir,
-                        prefix
-                    );
-                    let json =
-                        std::fs::read_to_string(prof_out_dir.join(&format!("{}.json", prefix)))
-                            .expect("able to read JSON output");
+                    let json = run_summarize("summarize", &prof_out_dir, &prefix)
+                        .or_else(|_| run_summarize("summarize-0.7", &prof_out_dir, &prefix))
+                        .expect("able to run summarize or summarize-0.7");
                     println!("!self-profile-output:{}", json);
                 }
             }
@@ -280,6 +264,21 @@ fn print_time(dur: Duration) {
         dur.as_secs(),
         dur.subsec_nanos()
     );
+}
+
+fn run_summarize(name: &str, prof_out_dir: &Path, prefix: &str) -> std::io::Result<String> {
+    let mut cmd = Command::new(name);
+    cmd.current_dir(&prof_out_dir);
+    cmd.arg("summarize").arg("--json");
+    cmd.arg(&prefix);
+    let status = cmd.status()?;
+    if !status.success() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Failed to run successfully",
+        ));
+    }
+    std::fs::read_to_string(prof_out_dir.join(&format!("{}.json", prefix)))
 }
 
 #[cfg(windows)]
