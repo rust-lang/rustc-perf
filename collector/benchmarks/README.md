@@ -67,6 +67,9 @@ programs.
 - **coercions**: Contains a static array with 65,536 string literals, which
   caused [poor performance](https://github.com/rust-lang/rust/issues/32278) in
   the past.
+- **combine**: Contains a small `combine`-based parser that caused a [large
+  performance regression](https://github.com/rust-lang/rust/issues/67454) in
+  the past.
 - **ctfe-stress-4**: A stress test for compile-time function evaluation.
 - **deeply-nested**: A small program that caused [exponential
   behavior](https://github.com/rust-lang/rust/issues/38528) in the past.

@@ -1,0 +1,9 @@
+[package]
+name = "combine-bench"
+license = "MIT"
+version = "0.1.0"
+authors = ["Sebastian Dröge <sebastian@centricular.com>", "François Laignel <fengalin@free.fr>"]
+edition = "2018"
+
+[dependencies]
+combine = "3.8"
