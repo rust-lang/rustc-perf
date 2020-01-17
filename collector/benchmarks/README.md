@@ -30,6 +30,8 @@ These are real programs that are important in some way, and worth tracking.
 - **tokio-webpush-simple**: A simple web server built with tokio. Uses futures
   a lot.
 - **webrender**: A web renderer. Used by Firefox and Servo.
+- **webrender-wrench**: WebRender's test bench. An executable pulling in large
+  dependencies.
 
 ## Real programs that stress the compiler
 

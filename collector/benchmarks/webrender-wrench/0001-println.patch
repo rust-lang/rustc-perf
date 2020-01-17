@@ -1,0 +1,24 @@
+From cc42549b8cae570c1dcdef560f22937158324ce7 Mon Sep 17 00:00:00 2001
+From: Michael Woerister <michaelwoerister@posteo>
+Date: Fri, 17 Jan 2020 13:47:55 +0100
+Subject: [PATCH 1/2] println
+
+---
+ wrench/src/wrench.rs | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/wrench/src/wrench.rs b/wrench/src/wrench.rs
+index c5775e97..a66bbefd 100644
+--- a/wrench/src/wrench.rs
++++ b/wrench/src/wrench.rs
+@@ -311,6 +311,7 @@ impl Wrench {
+         origin: LayoutPoint,
+         flags: FontInstanceFlags,
+     ) -> (Vec<u32>, Vec<LayoutPoint>, LayoutRect) {
++        println!("test");
+         // Map the string codepoints to glyph indices in this font.
+         // Just drop any glyph that isn't present in this font.
+         let indices: Vec<u32> = self.api
+-- 
+2.21.0
+
