@@ -38,7 +38,6 @@ impl SceneProperties {
 
     /// Set the current property list for this display list.
     pub fn set_properties(&mut self, properties: DynamicProperties) {
-        println!("testing");
         self.pending_properties = Some(properties);
     }
 
