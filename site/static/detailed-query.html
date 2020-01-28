@@ -94,7 +94,7 @@
                 if (Math.abs(delta) <= 0.05) {
                     classes = "neutral";
                 }
-                return `<span class="${classes}" title="${from.toFixed(3)} to ${to.toFixed(3)} ≈ ${delta.toFixed(3)}">${pct.toFixed(1)}%</span>`;
+                return `<span class="${classes}" title="${from.toFixed(3)} to ${to.toFixed(3)} ≈ ${delta.toFixed(3)}">${pct.toFixed(1)}% (${delta.toFixed(3)})</span>`;
             } else {
                 return `<span title="error pct=${pct}" style="color: orange;">-</span>`;
             }
