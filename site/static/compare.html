@@ -115,8 +115,16 @@
         {
             let filter = document.querySelector("#filter").value;
             let test_names = unique([...Object.keys(data.a.data), ...Object.keys(data.b.data)]);
+            let is_copied = false;
             for (let name of test_names) {
                 if (!name.includes(filter)) {
+                    if (!is_copied) {
+                        // Copying data is very expensive
+                        // This branch ensures that we avoid copying
+                        // if there are no filters (which is the most common case)
+                        data = JSON.parse(JSON.stringify(DATA)); // deep copy
+                        is_copied = true;
+                    }
                     delete data.a.data[name];
                     delete data.b.data[name];
                 }
@@ -331,7 +339,6 @@
         }, state);
         make_request("/get", values).then(function(data) {
             DATA = data;
-            data = JSON.parse(JSON.stringify(DATA)); // deep copy
             populate_data(data);
         });
     }
@@ -350,8 +357,7 @@
     load_state(make_data);
 
     function rerender() {
-        let data = JSON.parse(JSON.stringify(DATA)); // deep copy
-        populate_data(data);
+        populate_data(DATA);
     }
 
     document.querySelector("#filter").addEventListener("change", rerender);
