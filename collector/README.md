@@ -229,7 +229,8 @@ except that `$PROFILER` is one of the following.
     where execution time is spent and finding hot functions.
   - **Slowdown**. Negligible.
   - **Output**. Binary output is written to files with a `perf` prefix. Those
-    files can be read with `perf-report` and other similar `perf` commands.
+    files can be read with `perf-report` and other similar `perf` commands, or
+    with the excellent [Hotspot](https://github.com/KDAB/hotspot) viewer.
 - `oprofile`: Profile with [OProfile](http://oprofile.sourceforge.net/), a
   sampling profiler.
   - **Purpose**. OProfile is a general-purpose profiler, good for seeing

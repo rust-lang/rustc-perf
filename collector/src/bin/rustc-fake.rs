@@ -104,7 +104,8 @@ fn main() {
                 cmd.arg("record")
                     .arg("--call-graph=dwarf")
                     .arg("--output=perf")
-                    .arg("--freq=99")
+                    .arg("--freq=299")
+                    .arg("--event=cycles:u,instructions:u")
                     .arg(&rustc)
                     .args(&args);
 
