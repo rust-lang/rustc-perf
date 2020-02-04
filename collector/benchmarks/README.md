@@ -95,3 +95,4 @@ programs.
 - **wf-projection-stress-65510**: A stress test which showcases [quadratic
   behavior](https://github.com/rust-lang/rust/issues/65510) (in the number of
   associated type bounds).
+- **trait-stress-68666**: A stress test which constructs a parser in the same manner that `combine` does. Showcases [exponential behavior](https://github.com/rust-lang/rust/issues/68666) in trait selection.
