@@ -19,11 +19,7 @@ use std::str;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::sync::Arc;
 
-use futures::{
-    compat::{Future01CompatExt, Stream01CompatExt},
-    future::{FutureExt, TryFutureExt},
-    stream::StreamExt,
-};
+use futures::{future::FutureExt, stream::StreamExt};
 
 use headers::CacheControl;
 use headers::Header;
@@ -836,15 +832,15 @@ macro_rules! check_http_method {
 }
 
 trait ResponseHeaders {
-    fn header_typed<T: headers::Header>(&mut self, h: T) -> &mut Self;
+    fn header_typed<T: headers::Header>(self, h: T) -> Self;
 }
 
 impl ResponseHeaders for http::response::Builder {
-    fn header_typed<T: headers::Header>(&mut self, h: T) -> &mut Self {
+    fn header_typed<T: headers::Header>(mut self, h: T) -> Self {
         let mut v = vec![];
         h.encode(&mut v);
         for value in v {
-            self.header(T::name(), value);
+            self = self.header(T::name(), value);
         }
         self
     }
@@ -981,13 +977,12 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
         return Ok(ctx.handle_push(req).await);
     }
 
-    let (req, body_stream) = req.into_parts();
+    let (req, mut body_stream) = req.into_parts();
     let p = req.uri.path();
     check_http_method!(req.method, http::Method::POST);
     let data: Arc<InputData> = ctx.data.read().as_ref().unwrap().clone();
-    let mut c = body_stream.compat();
     let mut body = Vec::new();
-    while let Some(chunk) = c.next().await {
+    while let Some(chunk) = body_stream.next().await {
         let chunk = match chunk {
             Ok(c) => c,
             Err(e) => {
@@ -1109,8 +1104,7 @@ where
 {
     match result {
         Ok(result) => {
-            let mut response = http::Response::builder();
-            response
+            let response = http::Response::builder()
                 .header_typed(ContentType::octet_stream())
                 .header_typed(CacheControl::new().with_no_cache().with_no_store());
             let body = rmp_serde::to_vec_named(&result).unwrap();
@@ -1130,33 +1124,27 @@ async fn run_server(data: Arc<RwLock<Option<Arc<InputData>>>>, addr: SocketAddr)
         data,
         updating: UpdatingStatus::new(),
     });
-    let server = hyper::Server::bind(&addr).serve(move || {
+    let svc = hyper::service::make_service_fn(move |_conn| {
         let ctx = ctx.clone();
-        hyper::service::service_fn(move |req| {
-            let start = std::time::Instant::now();
-            let desc = format!("{} {}", req.method(), req.uri());
-            serve_req(ctx.clone(), req)
-                .inspect(move |r| {
+        async move {
+            Ok::<_, hyper::Error>(hyper::service::service_fn(move |req| {
+                let start = std::time::Instant::now();
+                let desc = format!("{} {}", req.method(), req.uri());
+                serve_req(ctx.clone(), req).inspect(move |r| {
                     let dur = start.elapsed();
                     info!("{}: {:?} {:?}", desc, r.as_ref().map(|r| r.status()), dur)
                 })
-                .boxed()
-                .compat()
-        })
+            }))
+        }
     });
-
-    if let Err(e) = server.compat().await {
+    let server = hyper::Server::bind(&addr).serve(svc);
+    if let Err(e) = server.await {
         eprintln!("server error: {:?}", e);
     }
 }
 
-pub fn start(data: Arc<RwLock<Option<Arc<InputData>>>>, port: u16) {
+pub async fn start(data: Arc<RwLock<Option<Arc<InputData>>>>, port: u16) {
     let mut server_address: SocketAddr = "0.0.0.0:2346".parse().unwrap();
     server_address.set_port(port);
-    hyper::rt::run(
-        run_server(data, server_address)
-            .unit_error()
-            .boxed()
-            .compat(),
-    );
+    run_server(data, server_address).await;
 }

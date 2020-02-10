@@ -17,7 +17,8 @@ use std::sync::Arc;
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     env_logger::init();
     let _ = jemalloc_ctl::background_thread::write(true);
 
@@ -33,5 +34,5 @@ fn main() {
         .and_then(|x| x.parse().ok())
         .unwrap_or(2346);
     println!("Starting server with port={:?}", port);
-    site::server::start(data, port);
+    site::server::start(data, port).await;
 }
