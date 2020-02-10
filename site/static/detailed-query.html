@@ -150,7 +150,7 @@
                 let cur = to_object(element);
                 let prev = null;
                 if (data.base_profile) {
-                    for (let prev_el of [data.base_profile[0], ...data.base_profile[1]]) {
+                    for (let prev_el of [data.base_profile.totals, ...data.base_profile.query_data]) {
                         if (to_object(prev_el).label == cur.label) {
                             prev = to_object(prev_el);
                             break;
