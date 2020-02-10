@@ -8,7 +8,7 @@ edition = '2018'
 env_logger = "0.7"
 anyhow = "1"
 thiserror = "1"
-futures-preview = { version = "0.3.0-alpha.19", features = ["compat"] }
+futures = { version = "0.3", features = ["compat"] }
 log = "0.4"
 serde = "1"
 serde_derive = "1"
