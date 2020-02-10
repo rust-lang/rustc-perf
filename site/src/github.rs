@@ -1,6 +1,5 @@
 use crate::api::{github, ServerResult};
 use crate::load::{Config, InputData, TryCommit};
-use futures::compat::Future01CompatExt;
 use serde::Deserialize;
 
 use regex::Regex;
@@ -15,17 +14,15 @@ lazy_static::lazy_static! {
 
 async fn get_authorized_users() -> ServerResult<Vec<usize>> {
     let url = format!("{}/permissions/perf.json", ::rust_team_data::v1::BASE_URL);
-    let client = reqwest::r#async::Client::new();
+    let client = reqwest::Client::new();
     client
         .get(&url)
         .send()
-        .compat()
         .await
         .map_err(|err| format!("failed to fetch authorized users: {}", err))?
         .error_for_status()
         .map_err(|err| format!("failed to fetch authorized users: {}", err))?
         .json::<rust_team_data::v1::Permission>()
-        .compat()
         .await
         .map_err(|err| format!("failed to fetch authorized users: {}", err))
         .map(|perms| perms.github_ids)
@@ -90,15 +87,14 @@ async fn enqueue_sha(
     data: &InputData,
     commit: String,
 ) -> ServerResult<github::Response> {
-    let client = reqwest::r#async::Client::new();
+    let client = reqwest::Client::new();
     let url = format!("{}/commits/{}", request.issue.repository_url, commit);
-    let mut commit_response = client
+    let commit_response = client
         .get(&url)
         .send()
-        .compat()
         .await
         .map_err(|_| String::from("cannot get commit"))?;
-    let commit_response = commit_response.json::<github::Commit>().compat().await;
+    let commit_response = commit_response.json::<github::Commit>().await;
     let commit_response = match commit_response {
         Err(e) => return Err(format!("cannot deserialize commit: {:?}", e)),
         Ok(c) => c,
@@ -188,7 +184,7 @@ where
 {
     let body = body.into();
     let timer_token = cfg.keys.github.clone().expect("needs rust-timer token");
-    let client = reqwest::r#async::Client::new();
+    let client = reqwest::Client::new();
     let req = client
         .post(&issue.comments_url)
         .json(&github::PostComment {
@@ -197,7 +193,7 @@ where
         .header(USER_AGENT, "perf-rust-lang-org-server")
         .basic_auth("rust-timer", Some(timer_token));
 
-    if let Err(e) = req.send().compat().await {
+    if let Err(e) = req.send().await {
         eprintln!("failed to post comment: {:?}", e);
     }
 }
