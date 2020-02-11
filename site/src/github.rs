@@ -87,17 +87,27 @@ async fn enqueue_sha(
     data: &InputData,
     commit: String,
 ) -> ServerResult<github::Response> {
+    let timer_token = data.config.keys.github.clone().expect("needs rust-timer token");
     let client = reqwest::Client::new();
     let url = format!("{}/commits/{}", request.issue.repository_url, commit);
     let commit_response = client
         .get(&url)
+        .header(USER_AGENT, "perf-rust-lang-org-server")
+        .basic_auth("rust-timer", Some(timer_token))
         .send()
         .await
         .map_err(|_| String::from("cannot get commit"))?;
-    let commit_response = commit_response.json::<github::Commit>().await;
-    let commit_response = match commit_response {
-        Err(e) => return Err(format!("cannot deserialize commit: {:?}", e)),
+    let commit_response = match commit_response.text().await {
         Ok(c) => c,
+        Err(err) => {
+            return Err(format!("Failed to decode response for {}: {:?}", url, err));
+        }
+    };
+    let commit_response: github::Commit = match serde_json::from_str(&commit_response) {
+        Ok(c) => c,
+        Err(e) => {
+            return Err(format!("cannot deserialize commit ({:?}): {:?}", commit_response, e));
+        }
     };
     if commit_response.parents.len() != 2 {
         let msg = format!(
