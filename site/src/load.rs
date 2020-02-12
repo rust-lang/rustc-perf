@@ -17,6 +17,7 @@ use anyhow::Context;
 use chrono::{Duration, Utc};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
+use reqwest::Client;
 
 use crate::git;
 use crate::util;
@@ -170,7 +171,7 @@ impl InputData {
     }
 
     /// Initialize `InputData from the file system.
-    pub fn from_fs(repo_loc: &str) -> anyhow::Result<InputData> {
+    pub async fn from_fs(repo_loc: &str) -> anyhow::Result<InputData> {
         let repo_loc = PathBuf::from(repo_loc);
         let mut skipped = 0;
         let mut artifact_data = HashMap::new();
@@ -279,10 +280,10 @@ impl InputData {
         };
 
         data.sort_unstable_by_key(|d| d.commit.clone());
-        InputData::new(data, artifact_data, config)
+        InputData::new(data, artifact_data, config).await
     }
 
-    pub fn new(
+    pub async fn new(
         data: Vec<Arc<CommitData>>,
         artifact_data: HashMap<String, ArtifactData>,
         config: Config,
@@ -495,7 +496,7 @@ impl InputData {
 
         let persistent = Persistent::load();
         Ok(InputData {
-            missing_commits: Self::missing_commits(&data, &config, &persistent).unwrap(),
+            missing_commits: Self::missing_commits(&data, &config, &persistent).await.unwrap(),
             stats_list: stats_list.into_iter().collect(),
             interpolated,
             last_date: last_date,
@@ -507,13 +508,16 @@ impl InputData {
         })
     }
 
-    fn missing_commits(
+    async fn missing_commits(
         data: &Vec<Arc<CommitData>>,
         config: &Config,
         persistent: &Persistent,
     ) -> anyhow::Result<Vec<(Commit, MissingReason)>> {
         println!("Updating rust.git clone...");
-        let commits = collector::git::get_rust_commits()?;
+        let commits = rustc_artifacts::master_commits(
+            &Client::new(),
+            Some(config.keys.github.as_deref().expect("needs rust-timer token")),
+        ).await.map_err(|e| anyhow::anyhow!("{:?}", e)).context("getting master commit list")?;
         println!("Update of rust.git complete");
 
         let have = data
@@ -524,9 +528,10 @@ impl InputData {
         let mut missing = commits
             .iter()
             .cloned()
-            .filter(|c| now.signed_duration_since(c.date.0) < Duration::days(29))
+            .filter(|c| now.signed_duration_since(c.date) < Duration::days(29))
             .filter_map(|c| {
-                if have.contains_key(&c.sha) || config.skip.contains(&c.sha) {
+                let sha = c.sha.as_str().into();
+                if have.contains_key(&sha) || config.skip.contains(&sha) {
                     None
                 } else {
                     Some((c, MissingReason::Sha))
@@ -555,16 +560,16 @@ impl InputData {
                         // in that case, just ignore this "error".
                     }
                     ret.push((
-                        Commit {
-                            sha: sha.as_str().into(),
-                            date: Date::ymd_hms(2001, 01, 01, 0, 0, 0),
+                        rustc_artifacts::Commit {
+                            sha: sha.to_string(),
+                            date: Date::ymd_hms(2001, 01, 01, 0, 0, 0).0,
                         },
                         MissingReason::TryCommit,
                     ));
                     ret
                 },
             )
-            .filter(|c| !have.contains_key(&c.0.sha)) // we may have not updated the try-commits file
+            .filter(|c| !have.contains_key(&c.0.sha.as_str().into())) // we may have not updated the try-commits file
             .chain(missing)
             .collect::<Vec<_>>();
 
@@ -580,7 +585,12 @@ impl InputData {
             }
         }
 
-        Ok(commits)
+        Ok(commits.into_iter().map(|(c, mr)| {
+            (Commit {
+                sha: c.sha.as_str().into(),
+                date: Date(c.date),
+            }, mr)
+        }).collect())
     }
 }
 

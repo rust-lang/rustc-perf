@@ -902,25 +902,21 @@ impl Server {
 
         let rwlock = self.data.clone();
         let updating = self.updating.release_on_drop();
-        let _ = std::thread::spawn(move || {
+        let _detach = tokio::spawn(tokio::task::spawn_blocking(move || async move {
             let repo_path = get_repo_path().unwrap();
             git::update_repo(&repo_path).unwrap();
 
-            // Acquire the lock. We're not returning data via HTTP already anyway, as we've cleared
-            let mut handle = rwlock.write();
-
-            // Erase old data
-            *handle = None;
+            *rwlock.write() = None;
 
             info!("updating from filesystem...");
-            let new_data = Arc::new(InputData::from_fs(&repo_path).unwrap());
+            let new_data = Arc::new(InputData::from_fs(&repo_path).await.unwrap());
             debug!("last date = {:?}", new_data.last_date);
 
             // Write the new data back into the request
-            *handle = Some(new_data);
+            *rwlock.write() = Some(new_data);
 
             std::mem::drop(updating);
-        });
+        }).await.unwrap());
 
         Response::new(hyper::Body::from("Queued update"))
     }

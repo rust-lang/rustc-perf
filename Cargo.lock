@@ -295,6 +295,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "num-integer 0.1.41 (registry+https://github.com/rust-lang/crates.io-index)",
  "num-traits 0.2.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
  "time 0.1.42 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -2090,6 +2091,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustc-artifacts"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "chrono 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "reqwest 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_derive 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_json 1.0.46 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "rustc-demangle"
 version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2320,6 +2334,7 @@ dependencies = [
  "ring 0.16.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "rmp-serde 0.14.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "rust_team_data 1.0.0 (git+https://github.com/rust-lang/team)",
+ "rustc-artifacts 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "semver 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -3293,6 +3308,7 @@ dependencies = [
 "checksum rs_tracing 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)" = "92b10cbf58a21be5d96a9c0336bd06b50f581dcb735f66ff69781a12336ac03b"
 "checksum rsa 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "6ed8692d8e0ea3baae03f0f32ecfc13a6c6f1f85fcd6d9fdefcdf364e70f4df9"
 "checksum rust_team_data 1.0.0 (git+https://github.com/rust-lang/team)" = "<none>"
+"checksum rustc-artifacts 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "03be4365e01addc0593ba51a1dd8edb71653bd2dd12cbdc9873897841969778d"
 "checksum rustc-demangle 0.1.15 (registry+https://github.com/rust-lang/crates.io-index)" = "a7f4dccf6f4891ebcc0c39f9b6eb1a83b9bf5d747cb439ec6fba4f3b977038af"
 "checksum rustc_version 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "138e3e0acb6c9fb258b19b67cb8abd63c00679d2851805ea151465464fe9030a"
 "checksum rustup 1.21.1 (git+https://github.com/rust-lang-nursery/rustup.rs.git)" = "<none>"
