@@ -110,7 +110,7 @@
                     name,
                     animation: false,
                     allowPointSelect: true,
-                    data: data.map(([commit, prev_commit, absolute, percent, y, x, is_interpolated]) => ({
+                    data: data.map(({commit, prev_commit, absolute, percent, y, x, is_interpolated}) => ({
                         commit: response.commits[commit],
                         prev_commit: commit == 0 ? null : response.commits[prev_commit],
                         absolute, percent, y, x, color: response.colors[is_interpolated ? 1 : 0],
