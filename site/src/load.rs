@@ -173,7 +173,6 @@ impl InputData {
     /// Initialize `InputData from the file system.
     pub async fn from_fs(repo_loc: &str) -> anyhow::Result<InputData> {
         let repo_loc = PathBuf::from(repo_loc);
-        let mut skipped = 0;
         let mut artifact_data = HashMap::new();
         let mut data = Vec::new();
         let mut commits = HashSet::new();
@@ -197,7 +196,6 @@ impl InputData {
         trace!("loading files from directory");
 
         // Read all files from repo_loc/processed
-        let mut files = Vec::new();
         for entry in fs::read_dir(repo_loc.join("times"))? {
             let entry = entry?;
             if entry.file_type()?.is_dir() {
@@ -207,15 +205,6 @@ impl InputData {
             let filename = filename.to_str().unwrap();
             let file_contents =
                 fs::read(entry.path()).with_context(|| format!("Failed to read {}", filename))?;
-
-            files.push((filename.to_owned(), file_contents));
-        }
-
-        trace!("read directory");
-
-        data.reserve(files.len());
-        let files_count = files.len();
-        for (filename, file_contents) in files {
             let c;
             let file_contents = if filename.ends_with(".sz") {
                 use std::io::Read;
@@ -234,13 +223,11 @@ impl InputData {
                     Ok(j) => j,
                     Err(err) => {
                         error!("Failed to parse JSON for {}: {:?}", filename, err);
-                        skipped += 1;
                         continue;
                     }
                 };
                 if contents.benchmarks.is_empty() {
                     warn!("empty benchmarks hash for {}", filename);
-                    skipped += 1;
                     continue;
                 }
 
@@ -250,13 +237,11 @@ impl InputData {
                     Ok(json) => json,
                     Err(err) => {
                         error!("Failed to parse JSON for {}: {:?}", filename, err);
-                        skipped += 1;
                         continue;
                     }
                 };
                 if contents.benchmarks.is_empty() {
                     warn!("empty benchmarks hash for {}", filename);
-                    skipped += 1;
                     continue;
                 }
 
@@ -266,8 +251,6 @@ impl InputData {
             }
         }
 
-        info!("{} total files", files_count);
-        info!("{} skipped files", skipped);
         info!("{} measured", data.len());
 
         let config = if let Ok(s) = fs::read_to_string("site-config.toml") {
