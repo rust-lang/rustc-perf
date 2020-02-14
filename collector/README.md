@@ -276,31 +276,8 @@ except that `$PROFILER` is one of the following.
     text output is also written to files with a `clgann` prefix; this output is
     much the same as the `cgann`-prefixed files produced by Cachegrind, but
     with extra annotations showing function call counts.
-- `exp-dhat`: Profile with [ExpDHAT](http://valgrind.org/docs/manual/dh-manual.html),
-  an experimental heap profiler that came with Valgrind (`--tool=exp-dhat`)
-  prior to version 3.15.
-  - **Purpose**. ExpDHAT is good for finding which parts of the code are
-    causing a lot of allocations. This is relevant if another profiler such as
-    `perf-record` or Cachegrind tell you that `malloc` and `free` are hot
-    functions (as they often are).
-  - **Slowdown**. Roughly 5--20x.
-  - **Prerequisites**. ExpDHAT may require a rustc configured with `jemalloc =
-    false` to work well.
-  - **Configuration**. ExpDHAT is configured within `profile` to run with the
-    non-default `--tot-blocks-allocd` option, so that it sorts its output by
-    the number of blocks allocated rather than the number of bytes allocated.
-    This is because the number of allocations typically has a greater effect on
-    speed than the size of those allocations; many small allocations will
-    typically be slower than a few large allocations.
-  - **Output**. Human-readable text output is written to files with a `dhat`
-    prefix. This file includes summary statistics followed by numerous records,
-    each of which aggregates data about all the allocations associated with a
-    particular stack trace: the number of allocations, their average size, and
-    how often they are read from and written to.
 - `dhat`: Profile with [DHAT](http://valgrind.org/docs/manual/dh-manual.html),
-  a heap profiler that comes with Valgrind (`--tool=dhat`) in versions 3.15
-  and later. It has the same purpose as ExpDHAT, but is significantly more
-  powerful.
+  a heap profiler. Requires Valgrind 3.15 or later.
   - **Purpose**. DHAT is good for finding which parts of the code are causing a
     lot of allocations. This is relevant if another profiler such as
     `perf-record` or Cachegrind tell you that `malloc` and `free` are hot

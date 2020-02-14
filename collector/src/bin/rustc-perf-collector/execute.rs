@@ -79,7 +79,6 @@ pub enum Profiler {
     OProfile,
     Cachegrind,
     Callgrind,
-    ExpDHAT,
     DHAT,
     Massif,
     Eprintln,
@@ -105,7 +104,6 @@ impl Profiler {
             "oprofile" => Ok(Profiler::OProfile),
             "cachegrind" => Ok(Profiler::Cachegrind),
             "callgrind" => Ok(Profiler::Callgrind),
-            "exp-dhat" => Ok(Profiler::ExpDHAT),
             "dhat" => Ok(Profiler::DHAT),
             "massif" => Ok(Profiler::Massif),
             "eprintln" => Ok(Profiler::Eprintln),
@@ -122,7 +120,6 @@ impl Profiler {
             Profiler::OProfile => "oprofile",
             Profiler::Cachegrind => "cachegrind",
             Profiler::Callgrind => "callgrind",
-            Profiler::ExpDHAT => "exp-dhat",
             Profiler::DHAT => "dhat",
             Profiler::Massif => "massif",
             Profiler::Eprintln => "eprintln",
@@ -605,14 +602,6 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 let output = clg_annotate_cmd.output()?;
 
                 fs::write(clgann_file, &output.stdout)?;
-            }
-
-            // ExpDHAT writes its output to stderr. We copy that output into a
-            // file in the output dir.
-            Profiler::ExpDHAT => {
-                let exp_dhat_file = filepath(self.output_dir, &out_file("exp-dhat"));
-
-                fs::write(exp_dhat_file, &output.stderr)?;
             }
 
             // DHAT produces (via rustc-fake) a data file called 'dhout'. We

@@ -155,20 +155,6 @@ fn main() {
                 assert!(cmd.status().expect("failed to spawn").success());
             }
 
-            "exp-dhat" => {
-                let mut cmd = Command::new("valgrind");
-                let has_valgrind = cmd.output().is_ok();
-                assert!(has_valgrind);
-                cmd.arg("--tool=exp-dhat")
-                    .arg("--show-top-n=500")
-                    .arg("--num-callers=4")
-                    .arg("--sort-by=tot-blocks-allocd")
-                    .arg(&rustc)
-                    .args(&args);
-
-                assert!(cmd.status().expect("failed to spawn").success());
-            }
-
             "dhat" => {
                 let mut cmd = Command::new("valgrind");
                 let has_valgrind = cmd.output().is_ok();
