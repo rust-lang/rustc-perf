@@ -577,7 +577,10 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 fs::copy(&tmp_cgout_file, &cgout_file)?;
 
                 let mut cg_annotate_cmd = Command::new("cg_annotate");
-                cg_annotate_cmd.arg("--auto=yes").arg(&cgout_file);
+                cg_annotate_cmd
+                    .arg("--auto=yes")
+                    .arg("--show-percs=yes")
+                    .arg(&cgout_file);
                 let output = cg_annotate_cmd.output()?;
 
                 fs::write(cgann_file, &output.stdout)?;
@@ -595,7 +598,10 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 fs::copy(&tmp_clgout_file, &clgout_file)?;
 
                 let mut clg_annotate_cmd = Command::new("callgrind_annotate");
-                clg_annotate_cmd.arg("--auto=yes").arg(&clgout_file);
+                clg_annotate_cmd
+                    .arg("--auto=yes")
+                    .arg("--show-percs=yes")
+                    .arg(&clgout_file);
                 let output = clg_annotate_cmd.output()?;
 
                 fs::write(clgann_file, &output.stdout)?;

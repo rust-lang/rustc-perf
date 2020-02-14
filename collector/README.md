@@ -244,7 +244,7 @@ except that `$PROFILER` is one of the following.
     often results in success.
 - `cachegrind`: Profile with
   [Cachegrind](http://valgrind.org/docs/manual/cg-manual.html), a tracing
-  profiler.
+  profiler. Requires Valgrind 3.15 or later.
   - **Purpose**. Cachegrind provides global, per-function, and per-source-line
     instruction counts. This fine-grained information can be extremely useful.
     Cachegrind's results are almost deterministic, which eases comparisons
@@ -263,7 +263,7 @@ except that `$PROFILER` is one of the following.
     `--mod-filename='s/rust[01]/rustN/g'` to eliminate path differences.
 - `callgrind`: Profile with
     [Callgrind](http://valgrind.org/docs/manual/cl-manual.html), a tracing
-    profiler.
+    profiler. Requires Valgrind 3.15 or later.
   - **Purpose**. Callgrind collects the same information as Cachegrind, plus
     function call information. So it can be used like either Cachegrind or
     `perf-record`. However, it cannot perform diffs between profiles.
