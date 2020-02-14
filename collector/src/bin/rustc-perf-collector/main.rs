@@ -192,6 +192,13 @@ fn process_commits(
         }
     }
 
+    client
+        .post(&format!(
+            "{}/perf/onpush",
+            env::var("SITE_URL").expect("SITE_URL defined")
+        ))
+        .send()?;
+
     Ok(())
 }
 
