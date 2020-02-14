@@ -7,6 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use parking_lot::Mutex;
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -18,6 +19,7 @@ use std::path::Path;
 use std::str;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::sync::Arc;
+use std::time::Instant;
 
 use futures::{future::FutureExt, stream::StreamExt};
 
@@ -883,6 +885,27 @@ impl Server {
     }
 
     async fn handle_push(&self, _req: Request) -> Response {
+        lazy_static::lazy_static! {
+            static ref LAST_UPDATE: Mutex<Option<Instant>> = Mutex::new(None);
+        }
+
+        let last = LAST_UPDATE.lock().clone();
+        if let Some(last) = last {
+            let min = 60 * 5; // 5 minutes
+            let elapsed = last.elapsed();
+            if elapsed < std::time::Duration::from_secs(min) {
+                return http::Response::builder()
+                    .status(StatusCode::OK)
+                    .header_typed(ContentType::text_utf8())
+                    .body(hyper::Body::from(format!(
+                        "Refreshed too recently ({:?} ago). Please wait.",
+                        elapsed
+                    )))
+                    .unwrap();
+            }
+        }
+        *LAST_UPDATE.lock() = Some(Instant::now());
+
         // set to updating
         let was_updating = self.updating.set_updating();
 
@@ -902,21 +925,27 @@ impl Server {
 
         let rwlock = self.data.clone();
         let updating = self.updating.release_on_drop();
-        let _detach = tokio::spawn(tokio::task::spawn_blocking(move || async move {
-            let repo_path = get_repo_path().unwrap();
-            git::update_repo(&repo_path).unwrap();
+        let _detach = tokio::spawn(
+            tokio::task::spawn_blocking(move || {
+                async move {
+                    let repo_path = get_repo_path().unwrap();
+                    git::update_repo(&repo_path).unwrap();
 
-            *rwlock.write() = None;
+                    *rwlock.write() = None;
 
-            info!("updating from filesystem...");
-            let new_data = Arc::new(InputData::from_fs(&repo_path).await.unwrap());
-            debug!("last date = {:?}", new_data.last_date);
+                    info!("updating from filesystem...");
+                    let new_data = Arc::new(InputData::from_fs(&repo_path).await.unwrap());
+                    debug!("last date = {:?}", new_data.last_date);
 
-            // Write the new data back into the request
-            *rwlock.write() = Some(new_data);
+                    // Write the new data back into the request
+                    *rwlock.write() = Some(new_data);
 
-            std::mem::drop(updating);
-        }).await.unwrap());
+                    std::mem::drop(updating);
+                }
+            })
+            .await
+            .unwrap(),
+        );
 
         Response::new(hyper::Body::from("Queued update"))
     }
