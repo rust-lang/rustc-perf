@@ -27,7 +27,7 @@ snap = "0.2.5"
 hashbrown = "0.7.0"
 
 [dependencies.rustup]
-git = "https://github.com/rust-lang-nursery/rustup.rs.git"
+git = "https://github.com/rust-lang/rustup.git"
 optional = false
 
 [[bin]]
