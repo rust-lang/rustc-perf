@@ -139,9 +139,7 @@ pub struct InputData {
     /// All known statistics gathered for crates
     pub stats_list: Vec<&'static str>,
 
-    /// The last date that was seen while loading files. The DateTime variant is
-    /// used here since the date may or may not contain a time. Since the
-    /// timezone is not important, it isn't stored, hence the Naive variant.
+    /// The last date that was seen while loading files.
     pub last_date: Date,
 
     /// `data_real` is as-is, `data` has been interpolated.
