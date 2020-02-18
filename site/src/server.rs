@@ -49,8 +49,6 @@ use crate::load::{Config, InputData};
 use crate::util::{self, get_repo_path, Interpolate};
 use collector::api::collected;
 use collector::version_supports_incremental;
-use collector::BenchmarkName;
-use collector::CommitData;
 use collector::Sha;
 use collector::StatId;
 use parking_lot::RwLock;
@@ -612,23 +610,11 @@ pub async fn handle_collected(
 }
 
 fn get_self_profile_data(
-    commit: &CommitData,
+    benchmark: &collector::Benchmark,
     bench_ty: &str,
-    bench_name: BenchmarkName,
     run_name: &str,
     sort_idx: Option<i32>,
 ) -> ServerResult<self_profile::SelfProfile> {
-    let benchmark = commit
-        .benchmarks
-        .get(&bench_name)
-        .ok_or(format!("No benchmark with name {}", bench_name))?;
-    let benchmark = benchmark.as_ref().map_err(|_| {
-        format!(
-            "Benchmark {} did not compile successfully at this commit",
-            bench_name
-        )
-    })?;
-
     let run = benchmark
         .runs
         .iter()
@@ -753,28 +739,15 @@ pub async fn handle_self_profile(
         .ok()
         .ok_or(format!("sort_idx needs to be i32"))?;
 
-    let commit = data
-        .data(Interpolate::No)
-        .iter()
-        .find(|cd| cd.commit.sha == *body.commit)
-        .ok_or(format!("could not find commit {}", body.commit))?;
-    let profile = get_self_profile_data(
-        &commit,
-        bench_ty,
-        bench_name,
-        &body.run_name,
-        Some(sort_idx),
-    )?;
+    let benchmark =
+        data.benchmark_data(Interpolate::No, body.commit.as_str().into(), bench_name)?;
+    let profile = get_self_profile_data(&benchmark, bench_ty, &body.run_name, Some(sort_idx))?;
     let base_profile = if let Some(bc) = body.base_commit {
-        let base_commit = data
-            .data(Interpolate::No)
-            .iter()
-            .find(|cd| cd.commit.sha == *bc)
-            .ok_or(format!("could not find commit {}", bc))?;
+        let base_benchmark =
+            data.benchmark_data(Interpolate::No, bc.as_str().into(), bench_name)?;
         Some(get_self_profile_data(
-            &base_commit,
+            &base_benchmark,
             bench_ty,
-            bench_name,
             &body.run_name,
             None,
         )?)

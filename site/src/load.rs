@@ -163,6 +163,27 @@ pub struct InputData {
 }
 
 impl InputData {
+    pub fn benchmark_data(
+        &self,
+        interpolate: Interpolate,
+        sha: Sha,
+        name: BenchmarkName,
+    ) -> Result<&'_ Benchmark, String> {
+        let data = match interpolate {
+            Interpolate::Yes => &self.data,
+            Interpolate::No => &self.data_real,
+        };
+        if let Some(e) = data.iter().find(|e| e.commit.sha == sha) {
+            e.benchmarks
+                .get(&name)
+                .ok_or_else(|| format!("benchmark {} does not exist at commit {}", name, sha))?
+                .as_ref()
+                .map_err(|_| format!("benchmark {} failed to compile for commit {}", name, sha))
+        } else {
+            return Err(format!("could not find commit {}", sha));
+        }
+    }
+
     pub fn data(&self, interpolate: Interpolate) -> &[Arc<CommitData>] {
         match interpolate {
             Interpolate::Yes => &self.data,
