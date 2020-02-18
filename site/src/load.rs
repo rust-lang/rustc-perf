@@ -16,8 +16,8 @@ use std::sync::Arc;
 use anyhow::Context;
 use chrono::{Duration, Utc};
 use parking_lot::Mutex;
-use serde::{Deserialize, Serialize};
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 
 use crate::git;
 use crate::util;
@@ -479,7 +479,9 @@ impl InputData {
 
         let persistent = Persistent::load();
         Ok(InputData {
-            missing_commits: Self::missing_commits(&data, &config, &persistent).await.unwrap(),
+            missing_commits: Self::missing_commits(&data, &config, &persistent)
+                .await
+                .unwrap(),
             stats_list: stats_list.into_iter().collect(),
             interpolated,
             last_date: last_date,
@@ -496,11 +498,18 @@ impl InputData {
         config: &Config,
         persistent: &Persistent,
     ) -> anyhow::Result<Vec<(Commit, MissingReason)>> {
+        let github_token = match config.keys.github.as_deref() {
+            Some(token) => token,
+            None => {
+                println!("Skipping collection of missing commits, no github token configured");
+                return Ok(Vec::new());
+            }
+        };
         println!("Updating rust.git clone...");
-        let commits = rustc_artifacts::master_commits(
-            &Client::new(),
-            Some(config.keys.github.as_deref().expect("needs rust-timer token")),
-        ).await.map_err(|e| anyhow::anyhow!("{:?}", e)).context("getting master commit list")?;
+        let commits = rustc_artifacts::master_commits(&Client::new(), Some(github_token))
+            .await
+            .map_err(|e| anyhow::anyhow!("{:?}", e))
+            .context("getting master commit list")?;
         println!("Update of rust.git complete");
 
         let have = data
@@ -568,12 +577,18 @@ impl InputData {
             }
         }
 
-        Ok(commits.into_iter().map(|(c, mr)| {
-            (Commit {
-                sha: c.sha.as_str().into(),
-                date: Date(c.date),
-            }, mr)
-        }).collect())
+        Ok(commits
+            .into_iter()
+            .map(|(c, mr)| {
+                (
+                    Commit {
+                        sha: c.sha.as_str().into(),
+                        date: Date(c.date),
+                    },
+                    mr,
+                )
+            })
+            .collect())
     }
 }
 
