@@ -77,6 +77,9 @@ programs.
   the past.
 - **issue-46449**: A small program that caused [poor
   performance](https://github.com/rust-lang/rust/issues/46449) in the past.
+- **many-assoc-items**: Contains a struct with many associated items, which
+  caused [quadratic behavior](https://github.com/rust-lang/rust/issues/68957)
+  in the past.
 - **regression-31157**: A small program that caused a [large performance
   regression](https://github.com/rust-lang/rust/issues/31157) from the past.
 - **token-stream-stress**: Constructs a long token stream much like the `quote`
