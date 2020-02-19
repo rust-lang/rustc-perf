@@ -268,7 +268,7 @@ pub fn handle_status_page(data: &InputData) -> status::Response {
         last_commit: last_commit.commit.clone(),
         benchmarks: benchmark_state,
         missing,
-        current: current,
+        current,
     }
 }
 
@@ -365,7 +365,7 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
                 entry.push(graph::GraphData {
                     commit: cc.lookup(commit),
                     absolute: value,
-                    percent: percent,
+                    percent,
                     y: if body.absolute { value } else { percent },
                     x: date_data.date.0.timestamp() as u64 * 1000, // all dates are since 1970
                     is_interpolated: data
@@ -448,7 +448,7 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
             entry.push(graph::GraphData {
                 commit: cc.lookup(commit),
                 absolute: value,
-                percent: percent,
+                percent,
                 y: if body.absolute { value } else { percent },
                 x: date_data.date.0.timestamp() as u64 * 1000, // all dates are since 1970
                 is_interpolated: data
