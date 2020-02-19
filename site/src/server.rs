@@ -11,7 +11,7 @@ use parking_lot::Mutex;
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::convert::TryFrom;
+use std::convert::TryInto;
 use std::fmt;
 use std::fs;
 use std::net::SocketAddr;
@@ -279,29 +279,36 @@ pub fn handle_next_commit(data: &InputData) -> Option<String> {
         .map(|c| c.0.sha.to_string())
 }
 
-struct CommitCache {
-    commits_cache: Vec<Sha>,
-    commit_in_cache: HashMap<Sha, usize>,
+struct CommitIdxCache {
+    commit_idx: HashMap<Sha, u16>,
+    commits: Vec<Sha>,
 }
 
-impl CommitCache {
-    fn new() -> Self {
+impl CommitIdxCache {
+    fn new(data: &[DateData]) -> Self {
+        let mut commit_idx = HashMap::with_capacity(data.len());
+        let mut commits = Vec::with_capacity(data.len());
+        for (idx, cd) in data.iter().enumerate() {
+            commit_idx.insert(
+                cd.commit.clone(),
+                idx.try_into().unwrap_or_else(|_| {
+                    panic!("{} too big", idx);
+                }),
+            );
+            commits.push(cd.commit.clone());
+        }
         Self {
-            commits_cache: Vec::new(),
-            commit_in_cache: HashMap::new(),
+            commit_idx,
+            commits,
         }
     }
 
-    fn insert(&mut self, commit: Sha) -> u32 {
-        let idx = if let Some(idx) = self.commit_in_cache.get(&commit) {
+    fn lookup(&self, commit: Sha) -> u16 {
+        if let Some(idx) = self.commit_idx.get(&commit) {
             *idx
         } else {
-            let idx = self.commits_cache.len();
-            self.commits_cache.push(commit);
-            self.commit_in_cache.insert(commit, idx);
-            idx
-        };
-        u32::try_from(idx).unwrap_or_else(|_| panic!("{} did not fit into u32", idx))
+            panic!("unknown commit {}", commit)
+        }
     }
 }
 
@@ -324,7 +331,7 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
     let mut initial_check_base_compile = None;
     let mut initial_release_base_compile = None;
 
-    let mut cc = CommitCache::new();
+    let cc = CommitIdxCache::new(&out);
 
     for date_data in out {
         let commit = date_data.commit;
@@ -349,9 +356,14 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
                     .or_insert_with(|| Vec::<graph::GraphData>::with_capacity(elements));
                 let first = entry.first().map(|d| d.absolute as f32);
                 let percent = first.map_or(0.0, |f| (value - f) / f * 100.0);
+                // Assert that the previous commit is always, well, the
+                // previous one. This should always be true, in which
+                // just a boolean exists.
+                if let Some(prev_commit) = last_commit.map(|l| cc.lookup(l)) {
+                    assert_eq!(cc.lookup(commit).checked_sub(1), Some(prev_commit));
+                }
                 entry.push(graph::GraphData {
-                    commit: cc.insert(commit),
-                    prev_commit: last_commit.map(|l| cc.insert(l)),
+                    commit: cc.lookup(commit),
                     absolute: value,
                     percent: percent,
                     y: if body.absolute { value } else { percent },
@@ -426,9 +438,15 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
                 };
             let first = entry.first().map(|d: &graph::GraphData| d.absolute as f32);
             let percent = first.map_or(0.0, |f| (value - f) / f * 100.0);
+
+            // Assert that the previous commit is always, well, the
+            // previous one. This should always be true, in which
+            // just a boolean exists.
+            if let Some(prev_commit) = last_commit.map(|l| cc.lookup(l)) {
+                assert_eq!(cc.lookup(commit).checked_sub(1), Some(prev_commit));
+            }
             entry.push(graph::GraphData {
-                commit: cc.insert(commit),
-                prev_commit: last_commit.map(|l| cc.insert(l)),
+                commit: cc.lookup(commit),
                 absolute: value,
                 percent: percent,
                 y: if body.absolute { value } else { percent },
@@ -471,7 +489,7 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
             .map(|(k, v)| (k, v.into_iter().map(|(k, v)| (k.into_owned(), v)).collect()))
             .collect(),
         colors: vec![String::new(), String::from(INTERPOLATED_COLOR)],
-        commits: cc.commits_cache,
+        commits: cc.commits,
     })
 }
 

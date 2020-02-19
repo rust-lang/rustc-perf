@@ -235,8 +235,7 @@ pub mod graph {
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct GraphData {
-        pub commit: u32,
-        pub prev_commit: Option<u32>,
+        pub commit: u16,
         pub absolute: f32,
         pub percent: f32,
         pub y: f32,
