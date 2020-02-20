@@ -371,7 +371,7 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
                     is_interpolated: data
                         .interpolated
                         .get(&commit)
-                        .filter(|c| {
+                        .map(|c| {
                             c.iter().any(|interpolation| {
                                 if bench_name.name != interpolation.benchmark {
                                     return false;
@@ -383,7 +383,7 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
                                 }
                             })
                         })
-                        .is_some(),
+                        .unwrap_or(false),
                 });
             }
             if base_compile && is_println_incr {
