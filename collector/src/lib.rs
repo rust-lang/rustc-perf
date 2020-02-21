@@ -162,10 +162,11 @@ impl Ord for Commit {
 pub struct Patch {
     index: usize,
     pub name: PatchName,
-    path: PathBuf,
+    path: PatchPath,
 }
 
 crate::intern!(pub struct PatchName);
+crate::intern!(pub struct PatchPath);
 
 impl PartialEq for Patch {
     fn eq(&self, other: &Self) -> bool {
@@ -207,7 +208,7 @@ impl Patch {
         };
 
         Patch {
-            path: PathBuf::from(path.file_name().unwrap()),
+            path: PatchPath::from(path.file_name().unwrap().to_str().unwrap()),
             index,
             name: name.as_str().into(),
         }
@@ -216,7 +217,7 @@ impl Patch {
     pub fn apply(&self, dir: &Path) -> Result<(), String> {
         log::debug!("applying {} to {:?}", self.name, dir);
         let mut cmd = process::Command::new("patch");
-        cmd.current_dir(dir).args(&["-Np1", "-i"]).arg(&self.path);
+        cmd.current_dir(dir).args(&["-Np1", "-i"]).arg(&*self.path);
         cmd.stdout(Stdio::null());
         if cmd.status().map(|s| !s.success()).unwrap_or(false) {
             return Err(format!("could not execute {:?}.", cmd));
@@ -269,7 +270,7 @@ impl BenchmarkState {
         match &mut self {
             BenchmarkState::IncrementalPatched(patch) => {
                 patch.index = 0;
-                patch.path = PathBuf::new();
+                patch.path = PatchPath::from("");
             }
             _ => {}
         }

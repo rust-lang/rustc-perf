@@ -30,7 +30,7 @@ jemallocator = "0.3"
 jemalloc-ctl = "0.3"
 rust_team_data = { git = "https://github.com/rust-lang/team" }
 parking_lot = "0.10"
-snap = "0.2.5"
+snap = "1"
 rustc-artifacts = "0.1.1"
 
 [dependencies.collector]
