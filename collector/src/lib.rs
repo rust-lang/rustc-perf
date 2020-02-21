@@ -75,8 +75,24 @@ impl<'de> Deserialize<'de> for Sha {
     where
         D: serde::de::Deserializer<'de>,
     {
-        let s: &'de str = <&'de str>::deserialize(deserializer)?;
-        Ok(s.into())
+        use serde::de::Visitor;
+        struct ShaVisitor;
+        impl<'de> Visitor<'de> for ShaVisitor {
+            type Value = Sha;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("a string")
+            }
+
+            fn visit_str<E>(self, s: &str) -> Result<Sha, E> {
+                Ok(s.into())
+            }
+
+            fn visit_borrowed_str<E>(self, s: &'de str) -> Result<Sha, E> {
+                Ok(s.into())
+            }
+        }
+        deserializer.deserialize_str(ShaVisitor)
     }
 }
 
