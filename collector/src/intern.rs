@@ -1,3 +1,4 @@
+use bumpalo::Bump;
 use hashbrown::HashSet;
 use std::sync::Mutex;
 
@@ -16,8 +17,25 @@ macro_rules! intern {
             where
                 D: serde::de::Deserializer<'de>,
             {
-                let s: &'de str = <&'de str>::deserialize(deserializer)?;
-                Ok($crate::intern::intern::<$for_ty>(s))
+                use serde::de::Visitor;
+                use std::fmt;
+                struct InternVisitor;
+                impl<'de> Visitor<'de> for InternVisitor {
+                    type Value = $for_ty;
+
+                    fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                        f.write_str(concat!("a string (", stringify!($for_ty), ")"))
+                    }
+
+                    fn visit_str<E>(self, s: &str) -> Result<$for_ty, E> {
+                        Ok($crate::intern::intern::<$for_ty>(s))
+                    }
+
+                    fn visit_borrowed_str<E>(self, s: &'de str) -> Result<$for_ty, E> {
+                        Ok($crate::intern::intern::<$for_ty>(s))
+                    }
+                }
+                deserializer.deserialize_str(InternVisitor)
             }
         }
 
@@ -48,18 +66,15 @@ macro_rules! intern {
 }
 
 lazy_static::lazy_static! {
-    static ref INTERNED: Mutex<HashSet<&'static str>>
-        = Mutex::new(HashSet::new());
+    static ref INTERNED: Mutex<(HashSet<&'static str>, Bump)>
+        = Mutex::new((HashSet::new(), Bump::new()));
 }
 
 pub fn intern<T: InternString>(value: &str) -> T {
-    let mut set = INTERNED.lock().unwrap();
+    let mut guard = INTERNED.lock().unwrap();
 
-    if let Some(interned) = set.get(value) {
-        T::to_interned(interned)
-    } else {
-        let v: &'static str = Box::leak(value.to_owned().into_boxed_str());
-        set.insert(v);
-        T::to_interned(v)
-    }
+    let (ref mut set, ref arena) = &mut *guard;
+    T::to_interned(set.get_or_insert_with(value, |_| -> &'static str {
+        unsafe { std::mem::transmute::<&str, &'static str>(arena.alloc_str(value)) }
+    }))
 }

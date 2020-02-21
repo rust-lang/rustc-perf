@@ -25,6 +25,7 @@ crossbeam-channel = "0.3.8"
 bincode = "1"
 snap = "0.2.5"
 hashbrown = "0.7.0"
+bumpalo = "3.2"
 
 [dependencies.rustup]
 git = "https://github.com/rust-lang/rustup.git"
