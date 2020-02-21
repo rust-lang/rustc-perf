@@ -215,6 +215,7 @@ impl InputData {
         trace!("loading files from directory");
 
         // Read all files from repo_loc/processed
+        let latest_section_start = ::std::time::Instant::now();
         for entry in fs::read_dir(repo_loc.join("times"))? {
             let entry = entry?;
             if entry.file_type()?.is_dir() {
@@ -270,7 +271,11 @@ impl InputData {
             }
         }
 
-        info!("{} measured", data.len());
+        info!(
+            "{} commits/artifacts loaded in {:?}",
+            data.len(),
+            latest_section_start.elapsed()
+        );
 
         let config = if let Ok(s) = fs::read_to_string("site-config.toml") {
             toml::from_str(&s)?
