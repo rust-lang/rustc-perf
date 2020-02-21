@@ -9,8 +9,22 @@ pub trait InternString {
 #[macro_export]
 macro_rules! intern {
     (pub struct $for_ty:ident) => {
-        #[derive(Serialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Copy, Clone)]
+        #[derive(Serialize, Debug, PartialOrd, Ord, Copy, Clone)]
         pub struct $for_ty(&'static str);
+
+        impl std::cmp::PartialEq for $for_ty {
+            fn eq(&self, other: &Self) -> bool {
+                std::ptr::eq(self.0.as_ptr(), other.0.as_ptr())
+            }
+        }
+
+        impl std::cmp::Eq for $for_ty {}
+
+        impl std::hash::Hash for $for_ty {
+            fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+                state.write_usize(self.0.as_ptr() as usize);
+            }
+        }
 
         impl<'de> serde::de::Deserialize<'de> for $for_ty {
             fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -54,6 +68,13 @@ macro_rules! intern {
         impl<'a> From<&'a str> for $for_ty {
             fn from(s: &'a str) -> Self {
                 $crate::intern::intern::<$for_ty>(s)
+            }
+        }
+
+        impl std::ops::Deref for $for_ty {
+            type Target = str;
+            fn deref(&self) -> &str {
+                self.0
             }
         }
 
