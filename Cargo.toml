@@ -2,5 +2,8 @@
 members = ["collector", "site"]
 exclude = ["collector/benchmarks"]
 
-[profile.release]
+[profile.release.package.site]
+debug = 1
+
+[profile.release.package.collector]
 debug = 1
