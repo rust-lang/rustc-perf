@@ -74,6 +74,7 @@ pub struct Benchmark {
 pub enum Profiler {
     PerfStat,
     PerfStatSelfProfile,
+    SelfProfile,
     TimePasses,
     PerfRecord,
     OProfile,
@@ -99,6 +100,7 @@ impl Profiler {
             // is rejected because it can't be used with the `profiler`
             // subcommand. (It's used with `bench_local` instead.)
             "perf-stat" => Err(FromNameError::PerfStat),
+            "self-profile" => Ok(Profiler::SelfProfile),
             "time-passes" => Ok(Profiler::TimePasses),
             "perf-record" => Ok(Profiler::PerfRecord),
             "oprofile" => Ok(Profiler::OProfile),
@@ -115,6 +117,7 @@ impl Profiler {
         match self {
             Profiler::PerfStat => "perf-stat",
             Profiler::PerfStatSelfProfile => "perf-stat-self-profile",
+            Profiler::SelfProfile => "self-profile",
             Profiler::TimePasses => "time-passes",
             Profiler::PerfRecord => "perf-record",
             Profiler::OProfile => "oprofile",
@@ -500,6 +503,66 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 panic!("unexpected profiler");
             }
 
+            // -Zself-profile produces (via rustc-fake) a data directory called
+            // 'Zsp' containing three files with names of the form
+            // `$BENCHMARK-$PID.{events,string_data,string_index}`. We copy it
+            // from the temp dir to the output dir, renaming the files within
+            // as `Zsp.{events,string_data,string_index}` in the process, then
+            // post-process them with `summarize`, `flamegraph`, and `crox` to
+            // produce several data files in the output dir.
+            Profiler::SelfProfile => {
+                let tmp_zsp_dir = filepath(data.cwd.as_ref(), "Zsp");
+                let zsp_dir = filepath(self.output_dir, &out_file("Zsp"));
+                let zsp_files_prefix = filepath(&zsp_dir, "Zsp");
+                let summarize_file = filepath(self.output_dir, &out_file("summarize"));
+                let flamegraph_file = filepath(self.output_dir, &out_file("flamegraph"));
+                let crox_file = filepath(self.output_dir, &out_file("crox"));
+
+                // Move the directory.
+                if zsp_dir.exists() {
+                    fs::remove_dir_all(&zsp_dir)?;
+                }
+                fs::rename(&tmp_zsp_dir, &zsp_dir)?;
+
+                // Rename the data files.
+                for entry in fs::read_dir(&zsp_dir).unwrap() {
+                    let filename = entry.unwrap().file_name();
+                    let filename_str = filename.to_str().unwrap();
+                    let path = filepath(&zsp_dir, filename_str);
+                    if filename_str.ends_with(".events") {
+                        fs::rename(path, filepath(&zsp_dir, "Zsp.events"))?;
+                    } else if filename_str.ends_with(".string_data") {
+                        fs::rename(path, filepath(&zsp_dir, "Zsp.string_data"))?;
+                    } else if filename_str.ends_with(".string_index") {
+                        fs::rename(path, filepath(&zsp_dir, "Zsp.string_index"))?;
+                    } else {
+                        panic!("unexpected file {:?}", path);
+                    }
+                }
+
+                // Run `summarize`.
+                let mut summarize_cmd = Command::new("summarize");
+                summarize_cmd
+                    .arg("summarize")
+                    .arg(&zsp_files_prefix);
+                let output = summarize_cmd.output()?;
+                fs::write(&summarize_file, &output.stdout)?;
+
+                // Run `flamegraph`.
+                let mut flamegraph_cmd = Command::new("flamegraph");
+                flamegraph_cmd.arg(&zsp_files_prefix);
+                flamegraph_cmd.status()?;
+                fs::write(&summarize_file, &output.stdout)?;
+                fs::rename("rustc.svg", flamegraph_file)?;
+
+                // Run `crox`.
+                let mut crox_cmd = Command::new("crox");
+                crox_cmd.arg(&zsp_files_prefix);
+                crox_cmd.status()?;
+                fs::write(&summarize_file, &output.stdout)?;
+                fs::rename("chrome_profiler.json", crox_file)?;
+            }
+
             // -Ztime-passes writes its output to stdout. We copy that output
             // into a file in the output dir.
             Profiler::TimePasses => {
@@ -528,7 +591,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 let oprep_file = filepath(self.output_dir, &out_file("oprep"));
                 let opann_file = filepath(self.output_dir, &out_file("opann"));
 
-                // Remove the directory if it exists.
+                // Move the directory.
                 if opout_dir.exists() {
                     fs::remove_dir_all(&opout_dir)?;
                 }
@@ -547,7 +610,6 @@ impl<'a> Processor for ProfileProcessor<'a> {
                     .arg("0.5")
                     .arg(&session_dir_arg);
                 let output = op_report_cmd.output()?;
-
                 fs::write(oprep_file, &output.stdout)?;
 
                 let mut op_annotate_cmd = Command::new("opannotate");
@@ -558,7 +620,6 @@ impl<'a> Processor for ProfileProcessor<'a> {
                     .arg("0.5")
                     .arg(&session_dir_arg);
                 let output = op_annotate_cmd.output()?;
-
                 fs::write(opann_file, &output.stdout)?;
             }
 
@@ -579,7 +640,6 @@ impl<'a> Processor for ProfileProcessor<'a> {
                     .arg("--show-percs=yes")
                     .arg(&cgout_file);
                 let output = cg_annotate_cmd.output()?;
-
                 fs::write(cgann_file, &output.stdout)?;
             }
 
@@ -600,7 +660,6 @@ impl<'a> Processor for ProfileProcessor<'a> {
                     .arg("--show-percs=yes")
                     .arg(&clgout_file);
                 let output = clg_annotate_cmd.output()?;
-
                 fs::write(clgann_file, &output.stdout)?;
             }
 

@@ -214,6 +214,18 @@ RUST_LOG=info ./target/release/collector --output-repo $OUTPUT_DIR \
 
 All the parts of this command are the same as for the `bench_local` subcommand,
 except that `$PROFILER` is one of the following.
+- `self-profile`: Profile with rustc's `-Zself-profile`.
+  - **Purpose**. This gives multiple high-level views of compiler performance,
+    in both tabular and graphical form.
+  - **Slowdown**. Minimal.
+  - **Output**. Raw output is written to a directory with a `Zsp` prefix.
+    The files in that directory can be processed with various
+    [`measureme`](https://github.com/rust-lang/measureme/) tools.
+    Human-readable output from `summarize` is written to a file with a
+    `summarize` prefix. Output from `flamegraph`, viewable with a web browser,
+    is written to a file with a `flamegraph` prefix. Output from `crox`,
+    viewable with Chromium's profiler, is written to a file with a `crox`
+    prefix.
 - `time-passes`: Profile with rustc's `-Ztime-passes`.
   - **Purpose**. This gives a high-level indication of compiler performance by
     showing how long each compilation pass takes.
