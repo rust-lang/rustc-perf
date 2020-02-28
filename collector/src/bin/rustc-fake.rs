@@ -90,6 +90,13 @@ fn main() {
                 }
             }
 
+            "self-profile" => {
+                let mut cmd = Command::new(&rustc);
+                cmd.arg("-Zself-profile=Zsp").args(&args);
+
+                assert!(cmd.status().expect("failed to spawn").success());
+            }
+
             "time-passes" => {
                 let mut cmd = Command::new(&rustc);
                 cmd.arg("-Ztime-passes").args(&args);

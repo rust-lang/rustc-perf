@@ -446,8 +446,8 @@ fn main_result() -> anyhow::Result<i32> {
             "One or more (comma-separated) of: 'Clean',\n\
             'BaseIncr', 'CleanIncr', 'PatchedIncrs', 'All'")
            (@arg PROFILER: +required +takes_value
-            "One of: 'time-passes', 'perf-record', 'cachegrind',\n\
-            'callgrind', ''dhat', 'massif', 'eprintln'")
+            "One of: 'self-profile', 'time-passes', 'perf-record',\n\
+            'cachegrind', 'callgrind', ''dhat', 'massif', 'eprintln'")
            (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
        )
        (@subcommand remove_benchmark =>
