@@ -688,7 +688,7 @@ fn get_self_profile_data(
     let mut profile = self_profile::SelfProfile {
         query_data: profile
             .query_data
-            .into_iter()
+            .iter()
             .map(|qd| self_profile::QueryData {
                 label: qd.label,
                 self_time: qd.self_time,

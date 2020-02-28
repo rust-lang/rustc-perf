@@ -1,12 +1,13 @@
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
+use std::sync::Arc;
 use std::time::Duration;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(into = "InternalSelfProfile")]
 #[serde(from = "InternalSelfProfile")]
 pub struct SelfProfile {
-    pub query_data: Vec<QueryData>,
+    pub query_data: Arc<Vec<QueryData>>,
 }
 
 impl Into<InternalSelfProfile> for SelfProfile {
@@ -42,7 +43,12 @@ impl Into<InternalSelfProfile> for SelfProfile {
 impl From<InternalSelfProfile> for SelfProfile {
     fn from(profile: InternalSelfProfile) -> SelfProfile {
         match profile {
-            InternalSelfProfile::Rustc { query_data } => SelfProfile { query_data },
+            InternalSelfProfile::Rustc { mut query_data } => {
+                query_data.shrink_to_fit();
+                SelfProfile {
+                    query_data: Arc::new(query_data),
+                }
+            }
             InternalSelfProfile::Perf {
                 label,
                 self_time,
@@ -73,7 +79,10 @@ impl From<InternalSelfProfile> for SelfProfile {
                         incremental_load_time: incremental_load_time.next().unwrap(),
                     });
                 }
-                SelfProfile { query_data }
+                query_data.shrink_to_fit();
+                SelfProfile {
+                    query_data: Arc::new(query_data),
+                }
             }
         }
     }
