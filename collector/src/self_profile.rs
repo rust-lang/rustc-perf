@@ -1,3 +1,4 @@
+use serde::de::Deserializer;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -15,22 +16,16 @@ impl Into<InternalSelfProfile> for SelfProfile {
         let query_data = self.query_data;
         InternalSelfProfile::Perf {
             label: query_data.iter().map(|qd| qd.label.clone()).collect(),
-            self_time: query_data
-                .iter()
-                .map(|qd| u64::try_from(qd.self_time.as_nanos()).unwrap())
-                .collect(),
+            self_time: query_data.iter().map(|qd| qd.self_time).collect(),
             number_of_cache_hits: query_data
                 .iter()
                 .map(|qd| qd.number_of_cache_hits)
                 .collect(),
             invocation_count: query_data.iter().map(|qd| qd.invocation_count).collect(),
-            blocked_time: query_data
-                .iter()
-                .map(|qd| u64::try_from(qd.blocked_time.as_nanos()).unwrap())
-                .collect(),
+            blocked_time: query_data.iter().map(|qd| qd.blocked_time).collect(),
             incremental_load_time: query_data
                 .iter()
-                .map(|qd| u64::try_from(qd.incremental_load_time.as_nanos()).unwrap())
+                .map(|qd| qd.incremental_load_time)
                 .collect(),
         }
     }
@@ -55,13 +50,11 @@ impl From<InternalSelfProfile> for SelfProfile {
             } => {
                 let mut query_data = Vec::with_capacity(label.len());
                 let label = label.into_iter();
-                let mut self_time = self_time.into_iter().map(from_nanoseconds_to_duration);
+                let mut self_time = self_time.into_iter();
                 let mut number_of_cache_hits = number_of_cache_hits.into_iter();
                 let mut invocation_count = invocation_count.into_iter();
-                let mut blocked_time = blocked_time.into_iter().map(from_nanoseconds_to_duration);
-                let mut incremental_load_time = incremental_load_time
-                    .into_iter()
-                    .map(from_nanoseconds_to_duration);
+                let mut blocked_time = blocked_time.into_iter();
+                let mut incremental_load_time = incremental_load_time.into_iter();
                 for label in label {
                     query_data.push(QueryData {
                         label,
@@ -72,6 +65,7 @@ impl From<InternalSelfProfile> for SelfProfile {
                         incremental_load_time: incremental_load_time.next().unwrap(),
                     });
                 }
+                assert_eq!(query_data.capacity(), query_data.len());
                 query_data.shrink_to_fit();
                 SelfProfile {
                     query_data: Arc::new(query_data),
@@ -101,28 +95,49 @@ enum InternalSelfProfile {
     },
 }
 
-// FIXME: We would prefer to store the nanoseconds as u128, which is lossless,
-// but serde's untagged enum representation (and the internal buffering API it
-// uses) do not support this yet.
-fn from_nanoseconds_to_duration(nanos: u64) -> Duration {
-    const NANOS_PER_SEC: u64 = 1_000_000_000;
-    Duration::new(
-        u64::try_from(nanos / NANOS_PER_SEC).unwrap(),
-        u32::try_from(nanos % NANOS_PER_SEC).unwrap(),
-    )
-}
-
 #[derive(Deserialize, Clone, Debug)]
 pub struct QueryData {
     pub label: QueryLabel,
-    pub self_time: Duration,
+    #[serde(deserialize_with = "SerdeDuration::into_nanos")]
+    self_time: u64,
     pub number_of_cache_hits: u32,
     pub invocation_count: u32,
-    pub blocked_time: Duration,
-    pub incremental_load_time: Duration,
+    blocked_time: u64,
+    incremental_load_time: u64,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum SerdeDuration {
+    Nanoseconds(u64),
+    Duration(Duration),
+}
+
+impl SerdeDuration {
+    fn into_nanos<'de, D>(deserializer: D) -> Result<u64, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        match SerdeDuration::deserialize(deserializer)? {
+            SerdeDuration::Nanoseconds(v) => Ok(v),
+            SerdeDuration::Duration(d) => Ok(u64::try_from(d.as_nanos()).unwrap()),
+        }
+    }
 }
 
 impl QueryData {
+    pub fn self_time(&self) -> Duration {
+        Duration::from_nanos(self.self_time)
+    }
+
+    pub fn blocked_time(&self) -> Duration {
+        Duration::from_nanos(self.blocked_time)
+    }
+
+    pub fn incremental_load_time(&self) -> Duration {
+        Duration::from_nanos(self.incremental_load_time)
+    }
+
     pub fn number_of_cache_misses(&self) -> u32 {
         self.invocation_count - self.number_of_cache_hits
     }

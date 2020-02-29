@@ -649,7 +649,7 @@ fn get_self_profile_data(
         .as_ref()
         .ok_or(format!("No self profile results for this commit"))?
         .clone();
-    let total_time = profile.query_data.iter().map(|qd| qd.self_time).sum();
+    let total_time = profile.query_data.iter().map(|qd| qd.self_time()).sum();
     let totals = self_profile::QueryData {
         label: "Totals".into(),
         self_time: total_time,
@@ -678,11 +678,11 @@ fn get_self_profile_data(
             .iter()
             .map(|qd| qd.invocation_count)
             .sum(),
-        blocked_time: profile.query_data.iter().map(|qd| qd.blocked_time).sum(),
+        blocked_time: profile.query_data.iter().map(|qd| qd.blocked_time()).sum(),
         incremental_load_time: profile
             .query_data
             .iter()
-            .map(|qd| qd.incremental_load_time)
+            .map(|qd| qd.incremental_load_time())
             .sum(),
     };
     let mut profile = self_profile::SelfProfile {
@@ -691,15 +691,15 @@ fn get_self_profile_data(
             .iter()
             .map(|qd| self_profile::QueryData {
                 label: qd.label,
-                self_time: qd.self_time,
-                percent_total_time: ((qd.self_time.as_nanos() as f64
+                self_time: qd.self_time(),
+                percent_total_time: ((qd.self_time().as_nanos() as f64
                     / totals.self_time.as_nanos() as f64)
                     * 100.0) as f32,
                 number_of_cache_misses: qd.number_of_cache_misses(),
                 number_of_cache_hits: qd.number_of_cache_hits,
                 invocation_count: qd.invocation_count,
-                blocked_time: qd.blocked_time,
-                incremental_load_time: qd.incremental_load_time,
+                blocked_time: qd.blocked_time(),
+                incremental_load_time: qd.incremental_load_time(),
             })
             .collect(),
         totals,
