@@ -666,7 +666,7 @@ fn get_self_profile_data(
         number_of_cache_misses: profile
             .query_data
             .iter()
-            .map(|qd| qd.number_of_cache_misses)
+            .map(|qd| qd.number_of_cache_misses())
             .sum(),
         number_of_cache_hits: profile
             .query_data
@@ -695,7 +695,7 @@ fn get_self_profile_data(
                 percent_total_time: ((qd.self_time.as_nanos() as f64
                     / totals.self_time.as_nanos() as f64)
                     * 100.0) as f32,
-                number_of_cache_misses: qd.number_of_cache_misses,
+                number_of_cache_misses: qd.number_of_cache_misses(),
                 number_of_cache_hits: qd.number_of_cache_hits,
                 invocation_count: qd.invocation_count,
                 blocked_time: qd.blocked_time,

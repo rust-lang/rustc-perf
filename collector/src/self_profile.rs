@@ -19,10 +19,6 @@ impl Into<InternalSelfProfile> for SelfProfile {
                 .iter()
                 .map(|qd| u64::try_from(qd.self_time.as_nanos()).unwrap())
                 .collect(),
-            number_of_cache_misses: query_data
-                .iter()
-                .map(|qd| qd.number_of_cache_misses)
-                .collect(),
             number_of_cache_hits: query_data
                 .iter()
                 .map(|qd| qd.number_of_cache_hits)
@@ -52,7 +48,6 @@ impl From<InternalSelfProfile> for SelfProfile {
             InternalSelfProfile::Perf {
                 label,
                 self_time,
-                number_of_cache_misses,
                 number_of_cache_hits,
                 invocation_count,
                 blocked_time,
@@ -61,7 +56,6 @@ impl From<InternalSelfProfile> for SelfProfile {
                 let mut query_data = Vec::with_capacity(label.len());
                 let label = label.into_iter();
                 let mut self_time = self_time.into_iter().map(from_nanoseconds_to_duration);
-                let mut number_of_cache_misses = number_of_cache_misses.into_iter();
                 let mut number_of_cache_hits = number_of_cache_hits.into_iter();
                 let mut invocation_count = invocation_count.into_iter();
                 let mut blocked_time = blocked_time.into_iter().map(from_nanoseconds_to_duration);
@@ -72,7 +66,6 @@ impl From<InternalSelfProfile> for SelfProfile {
                     query_data.push(QueryData {
                         label,
                         self_time: self_time.next().unwrap(),
-                        number_of_cache_misses: number_of_cache_misses.next().unwrap(),
                         number_of_cache_hits: number_of_cache_hits.next().unwrap(),
                         invocation_count: invocation_count.next().unwrap(),
                         blocked_time: blocked_time.next().unwrap(),
@@ -91,14 +84,14 @@ impl From<InternalSelfProfile> for SelfProfile {
 #[derive(Serialize, Deserialize)]
 #[serde(untagged)]
 enum InternalSelfProfile {
-    Rustc {
-        query_data: Vec<QueryData>,
-    },
+    // We don't want to serialize in the verbose format,
+    // it's too big.
+    #[serde(skip_serializing)]
+    Rustc { query_data: Vec<QueryData> },
     Perf {
         label: Vec<QueryLabel>,
         // nanos
         self_time: Vec<u64>,
-        number_of_cache_misses: Vec<u32>,
         number_of_cache_hits: Vec<u32>,
         invocation_count: Vec<u32>,
         // nanos
@@ -119,15 +112,20 @@ fn from_nanoseconds_to_duration(nanos: u64) -> Duration {
     )
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct QueryData {
     pub label: QueryLabel,
     pub self_time: Duration,
-    pub number_of_cache_misses: u32,
     pub number_of_cache_hits: u32,
     pub invocation_count: u32,
     pub blocked_time: Duration,
     pub incremental_load_time: Duration,
+}
+
+impl QueryData {
+    pub fn number_of_cache_misses(&self) -> u32 {
+        self.invocation_count - self.number_of_cache_hits
+    }
 }
 
 crate::intern!(pub struct QueryLabel);
