@@ -102,11 +102,13 @@ pub struct QueryData {
     self_time: u64,
     pub number_of_cache_hits: u32,
     pub invocation_count: u32,
+    #[serde(deserialize_with = "SerdeDuration::into_nanos")]
     blocked_time: u64,
+    #[serde(deserialize_with = "SerdeDuration::into_nanos")]
     incremental_load_time: u64,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum SerdeDuration {
     Nanoseconds(u64),
