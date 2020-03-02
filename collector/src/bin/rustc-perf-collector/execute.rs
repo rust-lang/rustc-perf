@@ -524,8 +524,10 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 }
                 fs::rename(&tmp_zsp_dir, &zsp_dir)?;
 
-                // Rename the data files.
+                // Rename the data files. There should be exactly three.
+                let mut num_files = 0;
                 for entry in fs::read_dir(&zsp_dir).unwrap() {
+                    num_files += 1;
                     let filename = entry.unwrap().file_name();
                     let filename_str = filename.to_str().unwrap();
                     let path = filepath(&zsp_dir, filename_str);
@@ -539,6 +541,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
                         panic!("unexpected file {:?}", path);
                     }
                 }
+                assert_eq!(num_files, 3);
 
                 // Run `summarize`.
                 let mut summarize_cmd = Command::new("summarize");
