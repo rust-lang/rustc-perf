@@ -680,7 +680,7 @@ dependencies = [
 [[package]]
 name = "download"
 version = "0.6.5"
-source = "git+https://github.com/rust-lang/rustup.git#8e03e74ed01fa659e1f7b908e93216434aa34d17"
+source = "git+https://github.com/rust-lang/rustup.git#ed6f7195f1d39facedbfa9b225a340259c8f9e2e"
 dependencies = [
  "curl",
  "env_proxy",
@@ -706,6 +706,18 @@ dependencies = [
  "curve25519-dalek",
  "rand 0.7.3",
  "sha2",
+]
+
+[[package]]
+name = "effective-limits"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0a9f83f5e74da97619a9c13722c22609ab82ee797a2d9985b2b3405c69f03cd7"
+dependencies = [
+ "error-chain",
+ "libc",
+ "sys-info",
+ "winapi 0.3.8",
 ]
 
 [[package]]
@@ -748,12 +760,12 @@ dependencies = [
 
 [[package]]
 name = "error-chain"
-version = "0.12.1"
+version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ab49e9dcb602294bc42f9a7dfc9bc6e936fca4418ea300dbfb84fe16de0b7d9"
+checksum = "d371106cc88ffdfb1eabd7111e432da544f16f3e2d7bf1dfe8bf575f1df045cd"
 dependencies = [
  "backtrace",
- "version_check 0.1.5",
+ "version_check 0.9.1",
 ]
 
 [[package]]
@@ -2320,12 +2332,13 @@ dependencies = [
 [[package]]
 name = "rustup"
 version = "1.21.1"
-source = "git+https://github.com/rust-lang/rustup.git#8e03e74ed01fa659e1f7b908e93216434aa34d17"
+source = "git+https://github.com/rust-lang/rustup.git#ed6f7195f1d39facedbfa9b225a340259c8f9e2e"
 dependencies = [
  "cc",
  "chrono",
  "clap",
  "download",
+ "effective-limits",
  "error-chain",
  "flate2",
  "git-testament",
@@ -2676,6 +2689,16 @@ dependencies = [
  "quote",
  "syn",
  "unicode-xid",
+]
+
+[[package]]
+name = "sys-info"
+version = "0.5.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0079fe39cec2c8215e21b0bc4ccec9031004c160b88358f531b601e96b77f0df"
+dependencies = [
+ "cc",
+ "libc",
 ]
 
 [[package]]
