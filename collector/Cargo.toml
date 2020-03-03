@@ -23,7 +23,7 @@ xz2 = "0.1.3"
 tar = "0.4"
 crossbeam-channel = "0.3.8"
 bincode = "1"
-snap = "0.2.5"
+snap = "1.0.0"
 hashbrown = "0.7.0"
 bumpalo = "3.2"
 
