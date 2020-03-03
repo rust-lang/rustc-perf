@@ -21,7 +21,7 @@ chrono = "0.4"
 rmp-serde = "0.14.2"
 semver = "0.9"
 ring = "0.16.10"
-hex = "0.4.0"
+hex = "0.4.2"
 regex = "1"
 lazy_static = "1"
 reqwest = { version = "0.10", features = ["json"] }
