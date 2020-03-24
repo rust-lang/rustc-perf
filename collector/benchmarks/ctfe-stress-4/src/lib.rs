@@ -1,4 +1,5 @@
-#![feature(const_fn, const_let)]
+#![feature(const_fn, const_eval_limit)]
+#![const_eval_limit = "1000000"]
 use std::mem::MaybeUninit;
 
 // Try to make CTFE actually do a lot of computation, without producing a big result.
