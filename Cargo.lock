@@ -368,7 +368,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
- "snap 0.2.5",
+ "snap",
  "tar",
  "tempfile",
  "thiserror",
@@ -2119,7 +2119,7 @@ dependencies = [
  "serde",
  "serde_derive",
  "serde_json",
- "snap 1.0.0",
+ "snap",
  "thiserror",
  "tokio",
  "toml",
@@ -2136,16 +2136,6 @@ name = "smallvec"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c2fb2ec9bcd216a5b0d0ccf31ab17b5ed1d627960edff65bbe95d3ce221cefc"
-
-[[package]]
-name = "snap"
-version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95d697d63d44ad8b78b8d235bf85b34022a78af292c8918527c5f0cffdde7f43"
-dependencies = [
- "byteorder",
- "lazy_static",
-]
 
 [[package]]
 name = "snap"

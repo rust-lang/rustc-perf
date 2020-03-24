@@ -14,8 +14,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if filename.starts_with("commit-") && filename.ends_with(".sz") {
             eprintln!("{:?}", filename);
             use std::io::Read;
-            let mut out = String::with_capacity(snap::decompress_len(&file_contents).unwrap_or(0));
-            let mut szip_reader = snap::Reader::new(&file_contents[..]);
+            let mut out =
+                String::with_capacity(snap::raw::decompress_len(&file_contents).unwrap_or(0));
+            let mut szip_reader = snap::read::FrameDecoder::new(&file_contents[..]);
             szip_reader.read_to_string(&mut out).unwrap();
             let file_contents = out.as_str();
 
@@ -26,7 +27,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     continue;
                 }
             };
-            let mut v = snap::Writer::new(Vec::new());
+            let mut v = snap::write::FrameEncoder::new(Vec::new());
             serde_json::to_writer(&mut v, &contents)?;
             fs::write(entry.path(), v.into_inner()?)?;
         }
