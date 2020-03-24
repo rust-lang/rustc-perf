@@ -11,7 +11,7 @@ lazy_static::lazy_static! {
         RwLock::new(Some(start_bg_thread()));
 }
 
-fn call_home(client: &reqwest::Client, request: &collected::Request) -> anyhow::Result<()> {
+fn call_home(client: &reqwest::blocking::Client, request: &collected::Request) -> anyhow::Result<()> {
     let resp = client
         .post(&format!(
             "{}/perf/collected",
@@ -28,7 +28,7 @@ fn call_home(client: &reqwest::Client, request: &collected::Request) -> anyhow::
 
 fn start_bg_thread() -> (Sender<collected::Request>, thread::JoinHandle<()>) {
     let (sender, receiver): (_, Receiver<collected::Request>) = unbounded();
-    let client = reqwest::Client::new();
+    let client = reqwest::blocking::Client::new();
     let handle = thread::spawn(move || {
         for request in receiver {
             while let Err(err) = call_home(&client, &request) {

@@ -154,7 +154,7 @@ fn process_commits(
     self_profile: bool,
 ) -> anyhow::Result<()> {
     println!("processing commits");
-    let client = reqwest::Client::new();
+    let client = reqwest::blocking::Client::new();
     let commit: Option<String> = client
         .get(&format!(
             "{}/perf/next_commit",

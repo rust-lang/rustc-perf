@@ -155,7 +155,7 @@ impl SysrootDownload {
 
         let url = variant.url(self, &self.triple);
         log::debug!("requesting: {}", url);
-        let resp = reqwest::get(&url)?;
+        let resp = reqwest::blocking::get(&url)?;
         log::debug!("{}", resp.status());
         if resp.status().is_success() {
             let reader = XzDecoder::new(BufReader::new(resp));
