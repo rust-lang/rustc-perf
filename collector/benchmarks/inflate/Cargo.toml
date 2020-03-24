@@ -9,3 +9,5 @@ keywords = ["deflate", "decompression", "compression", "piston"]
 
 [features]
 default = []
+
+[workspace]

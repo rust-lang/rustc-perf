@@ -43,3 +43,5 @@ simd-accel = ["simd"]
 [lib]
 # There are no benchmarks in the library code itself
 bench = false
+
+[workspace]

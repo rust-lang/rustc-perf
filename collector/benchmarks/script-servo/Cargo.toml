@@ -6,3 +6,5 @@ cssparser = { path = "./rust-cssparser" }
 
 [patch.'https://github.com/servo/rust-mozjs']
 js = { path = "./rust-mozjs" }
+
+[workspace]

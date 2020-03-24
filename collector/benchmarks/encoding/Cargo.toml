@@ -57,3 +57,5 @@ path = "src/index/tradchinese"
 
 [dev-dependencies]
 getopts = "*" # for examples
+
+[workspace]

@@ -90,3 +90,5 @@ features = [
     "runtime",
     "unstable-stream",
 ]
+
+[workspace]

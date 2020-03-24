@@ -7,3 +7,5 @@ authors = ["White-Oak <lpzhelud@gmail.com>"]
 
 [dependencies.peruse]
 git = "https://github.com/DanSimon/peruse.git"
+
+[workspace]

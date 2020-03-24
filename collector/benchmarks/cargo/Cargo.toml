@@ -91,3 +91,5 @@ bufstream = "0.1"
 name = "cargo"
 test = false
 doc = false
+
+[workspace]

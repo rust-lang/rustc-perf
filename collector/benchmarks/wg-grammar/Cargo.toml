@@ -5,3 +5,5 @@ authors = ["The Rust Project Developers"]
 
 [dependencies]
 gll = { git = "https://github.com/rust-lang-nursery/gll" }
+
+[workspace] 
