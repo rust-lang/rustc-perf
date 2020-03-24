@@ -19,3 +19,5 @@ Unicode Standard Annex #15.
 """
 
 exclude = [ "target/*", "Cargo.lock", "scripts/tmp", "*.txt" ]
+
+[workspace]

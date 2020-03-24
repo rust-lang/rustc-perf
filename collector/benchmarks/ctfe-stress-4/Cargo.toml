@@ -1,6 +1,6 @@
-[workspace]
-
 [package]
 name = "ctfe-stress-4"
 version = "0.1.0"
 authors = ["Ralf Jung <post@ralfj.de>"]
+
+[workspace]

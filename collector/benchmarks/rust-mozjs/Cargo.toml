@@ -16,3 +16,5 @@ lazy_static = "0.2.1"
 libc = "0.2"
 log = "0.3"
 num-traits = "0.1.32"
+
+[workspace]

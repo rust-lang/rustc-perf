@@ -18,3 +18,5 @@ most notably character names.
 exclude = ["tests/*", "data/*"]
 
 [dependencies]
+
+[workspace]

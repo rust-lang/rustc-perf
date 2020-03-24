@@ -90,3 +90,5 @@ codegen-units = 4
 
 [package.metadata.docs.rs]
 features = ["doc"]
+
+[workspace]

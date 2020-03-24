@@ -11,3 +11,5 @@ proc-macro = true
 [[bin]]
 name = "token-stream-stress"
 path = "src/main.rs"
+
+[workspace]
