@@ -66,10 +66,7 @@ impl Repo {
     }
 
     pub fn open(path: PathBuf, allow_new_dir: bool, use_remote: bool) -> anyhow::Result<Self> {
-        let result = Repo {
-            path: path,
-            use_remote,
-        };
+        let result = Repo { path, use_remote };
 
         // Don't nuke random repositories, unless specifically requested.
         if !allow_new_dir && !result.perf_file().exists() {
@@ -126,8 +123,8 @@ impl Repo {
         let c;
         let contents = if filepath.to_str().map_or(false, |s| s.ends_with(".sz")) {
             use std::io::Read;
-            let mut out = Vec::with_capacity(snap::decompress_len(&contents).unwrap_or(0));
-            let mut szip_reader = snap::Reader::new(&contents[..]);
+            let mut out = Vec::with_capacity(snap::raw::decompress_len(&contents).unwrap_or(0));
+            let mut szip_reader = snap::read::FrameDecoder::new(&contents[..]);
             szip_reader.read_to_end(&mut out).unwrap();
             c = out;
             &c
@@ -168,7 +165,7 @@ impl Repo {
             commit.sha
         ));
         info!("creating file {}", filepath.display());
-        let mut v = snap::Writer::new(Vec::new());
+        let mut v = snap::write::FrameEncoder::new(Vec::new());
         serde_json::to_writer(&mut v, &data)?;
         fs::write(&filepath, v.into_inner()?)?;
         Ok(())

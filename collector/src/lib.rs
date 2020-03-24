@@ -237,19 +237,11 @@ pub enum BenchmarkState {
 
 impl BenchmarkState {
     pub fn is_base_compile(&self) -> bool {
-        if let BenchmarkState::Clean = *self {
-            true
-        } else {
-            false
-        }
+        matches!(*self, BenchmarkState::Clean)
     }
 
     pub fn is_patch(&self) -> bool {
-        if let BenchmarkState::IncrementalPatched(_) = *self {
-            true
-        } else {
-            false
-        }
+        matches!(*self, BenchmarkState::IncrementalPatched(_))
     }
 
     pub fn name(&self) -> Cow<'static, str> {
