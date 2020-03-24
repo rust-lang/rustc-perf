@@ -14,7 +14,7 @@ impl<T> Future for Dummy<T> {
     }
 }
 
-pub fn run() -> Box<Future<Item = (), Error = Error>> {
+pub fn run() -> Box<dyn Future<Item = (), Error = Error>> {
     let c2s = Dummy([0u8; BUFFER_SIZE]).then(move |_| Ok(0));
     let s2c = Dummy(()).then(move |_| Ok(0));
     let fut = c2s.select(s2c)
