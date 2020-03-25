@@ -77,8 +77,6 @@ programs.
   the past.
 - **issue-46449**: A small program that caused [poor
   performance](https://github.com/rust-lang/rust/issues/46449) in the past.
-- **issue-58319**: A small program that caused [poor
-  performance](https://github.com/rust-lang/rust/issues/58319) in the past.
 - **many-assoc-items**: Contains a struct with many associated items, which
   caused [quadratic behavior](https://github.com/rust-lang/rust/issues/68957)
   in the past.
