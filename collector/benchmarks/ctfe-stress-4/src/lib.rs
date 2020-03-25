@@ -1,5 +1,6 @@
+#![allow(dead_code)]
 #![feature(const_fn, const_eval_limit)]
-#![const_eval_limit = "1000000"]
+#![const_eval_limit = "10000000"]
 use std::mem::MaybeUninit;
 
 // Try to make CTFE actually do a lot of computation, without producing a big result.
@@ -63,7 +64,7 @@ expensive_static!(CHECKED_INDEX: u8 = b"foomp"[3]; [8 16 16 16 16]);
 expensive_static!(OPS: i32 = ((((10 >> 1) + 3) * 7) / 2 - 12) << 4; [4 16 16 16 16]);
 expensive_static!(RELOCATIONS : &'static str = "hello"; [8 16 16 16 16]);
 expensive_static!(UNSIZE_SLICE: &'static [u8] = b"foo"; [4 16 16 16 16 16]);
-expensive_static!(UNSIZE_TRAIT: &'static Trait = &42u32; [4 16 16 16 16 16]);
+expensive_static!(UNSIZE_TRAIT: &'static dyn Trait = &42u32; [4 16 16 16 16 16]);
 
 // copying all these zeros and the corresponding definedness bits can be expensive and is probably
 // prone to regressions.
