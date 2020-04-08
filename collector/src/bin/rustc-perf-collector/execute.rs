@@ -160,7 +160,7 @@ impl<'a> CargoProcess<'a> {
     }
 
     fn base_command(&self, cwd: &Path, subcommand: &str) -> Command {
-        let mut cmd = Command::new(Path::new("cargo"));
+        let mut cmd = Command::new(Path::new(self.compiler.cargo));
         cmd
             // Not all cargo invocations (e.g. `cargo clean`) need all of these
             // env vars set, but it doesn't hurt to have them.
@@ -177,7 +177,6 @@ impl<'a> CargoProcess<'a> {
             )
             .env("RUSTC", &*FAKE_RUSTC)
             .env("RUSTC_REAL", &self.compiler.rustc)
-            .env("CARGO", &self.compiler.cargo)
             .env(
                 "CARGO_INCREMENTAL",
                 &format!("{}", self.incremental as usize),
