@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Context};
-use chrono::{DateTime, TimeZone, Utc};
+use chrono::{DateTime, Utc};
 use collector::Sha;
 use std::ffi::OsStr;
 use std::fmt;
@@ -30,8 +30,6 @@ impl Sysroot {
             date,
         };
         let unpack_into = "cache";
-        // Versions of rustc older than Mar 20 have bugs in their cargo.
-        let download_cargo = commit.date >= Utc.ymd(2017, 3, 20).and_hms(0, 0, 0);
 
         fs::create_dir_all(&unpack_into)?;
 
@@ -43,11 +41,9 @@ impl Sysroot {
 
         download.get_and_extract(ModuleVariant::Rustc)?;
         download.get_and_extract(ModuleVariant::Std)?;
-        if download_cargo {
-            download.get_and_extract(ModuleVariant::Cargo)?;
-        }
+        download.get_and_extract(ModuleVariant::Cargo)?;
 
-        download.into_sysroot(download_cargo)
+        download.into_sysroot()
     }
 }
 
@@ -100,7 +96,7 @@ impl ModuleVariant {
 }
 
 impl SysrootDownload {
-    fn into_sysroot(self, download_cargo: bool) -> anyhow::Result<Sysroot> {
+    fn into_sysroot(self) -> anyhow::Result<Sysroot> {
         Ok(Sysroot {
             rustc: self
                 .directory
@@ -118,10 +114,7 @@ impl SysrootDownload {
                 .with_context(|| {
                     format!("failed to canonicalize rustdoc path for {}", self.rust_sha)
                 })?,
-            cargo: if !download_cargo {
-                // go with cargo present in environment if we need to fallback
-                PathBuf::from("cargo")
-            } else {
+            cargo: {
                 let path = self.directory.join(&self.rust_sha).join("cargo/bin/cargo");
                 path.canonicalize().with_context(|| {
                     format!(
