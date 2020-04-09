@@ -1,11 +1,10 @@
 use anyhow::{anyhow, Context};
 use chrono::{DateTime, Utc};
 use collector::Sha;
-use std::ffi::OsStr;
 use std::fmt;
 use std::fs::{self, File};
 use std::io::{BufReader, Read};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use tar::Archive;
 use xz2::bufread::XzDecoder;
 
@@ -42,6 +41,7 @@ impl Sysroot {
         download.get_and_extract(ModuleVariant::Rustc)?;
         download.get_and_extract(ModuleVariant::Std)?;
         download.get_and_extract(ModuleVariant::Cargo)?;
+        download.get_and_extract(ModuleVariant::RustSrc)?;
 
         download.into_sysroot()
     }
@@ -66,14 +66,15 @@ struct SysrootDownload {
     triple: String,
 }
 
-const MODULE_URL: &str =
-    "https://rust-lang-ci2.s3.amazonaws.com/rustc-builds/@SHA@/@MODULE@-nightly-@TRIPLE@.tar.xz";
+const BASE_URL: &str = "https://rust-lang-ci2.s3.amazonaws.com/rustc-builds";
 
+// FIXME(eddyb) rename to just `Component`.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum ModuleVariant {
     Cargo,
     Rustc,
     Std,
+    RustSrc,
 }
 
 impl fmt::Display for ModuleVariant {
@@ -82,47 +83,45 @@ impl fmt::Display for ModuleVariant {
             ModuleVariant::Cargo => write!(f, "cargo"),
             ModuleVariant::Rustc => write!(f, "rustc"),
             ModuleVariant::Std => write!(f, "rust-std"),
+            ModuleVariant::RustSrc => write!(f, "rust-src"),
         }
     }
 }
 
 impl ModuleVariant {
     fn url(&self, sysroot: &SysrootDownload, triple: &str) -> String {
-        MODULE_URL
-            .replace("@MODULE@", &self.to_string())
-            .replace("@SHA@", &sysroot.rust_sha)
-            .replace("@TRIPLE@", triple)
+        let suffix = if *self == ModuleVariant::RustSrc {
+            String::new()
+        } else {
+            format!("-{}", triple)
+        };
+        format!(
+            "{base}/{sha}/{module}-nightly{suffix}.tar.xz",
+            base = BASE_URL,
+            module = self,
+            sha = sysroot.rust_sha,
+            suffix = suffix,
+        )
     }
 }
 
 impl SysrootDownload {
     fn into_sysroot(self) -> anyhow::Result<Sysroot> {
+        let sysroot_bin_dir = self.directory.join(&self.rust_sha).join("bin");
+        let sysroot_bin = |name| {
+            let path = sysroot_bin_dir.join(name);
+            path.canonicalize().with_context(|| {
+                format!(
+                    "failed to canonicalize {} path for {}: {:?}",
+                    name, self.rust_sha, path
+                )
+            })
+        };
+
         Ok(Sysroot {
-            rustc: self
-                .directory
-                .join(&self.rust_sha)
-                .join("rustc/bin/rustc")
-                .canonicalize()
-                .with_context(|| {
-                    format!("failed to canonicalize rustc path for {}", self.rust_sha)
-                })?,
-            rustdoc: self
-                .directory
-                .join(&self.rust_sha)
-                .join("rustc/bin/rustdoc")
-                .canonicalize()
-                .with_context(|| {
-                    format!("failed to canonicalize rustdoc path for {}", self.rust_sha)
-                })?,
-            cargo: {
-                let path = self.directory.join(&self.rust_sha).join("cargo/bin/cargo");
-                path.canonicalize().with_context(|| {
-                    format!(
-                        "failed to canonicalize cargo path for {}: {:?}",
-                        self.rust_sha, path
-                    )
-                })?
-            },
+            rustc: sysroot_bin("rustc")?,
+            rustdoc: sysroot_bin("rustdoc")?,
+            cargo: sysroot_bin("cargo")?,
             sha: self.rust_sha,
             triple: self.triple,
         })
@@ -161,19 +160,21 @@ impl SysrootDownload {
         }
 
         return Err(anyhow!(
-            "unable to download sha {} triple {} module {}",
+            "unable to download sha {} triple {} module {} from {}",
             self.rust_sha,
             self.triple,
-            variant
+            variant,
+            url
         ));
     }
 
     fn extract<T: Read>(&self, variant: ModuleVariant, reader: T) -> anyhow::Result<()> {
-        let is_std = variant == ModuleVariant::Std;
         let mut archive = Archive::new(reader);
-        let std_prefix = format!("rust-std-{}/lib/rustlib", self.triple);
-
-        let mut to_link = Vec::new();
+        let prefix = if variant == ModuleVariant::Std {
+            format!("rust-std-{}", self.triple)
+        } else {
+            variant.to_string()
+        };
 
         let unpack_into = self.directory.join(&self.rust_sha);
 
@@ -184,21 +185,11 @@ impl SysrootDownload {
             assert!(components.next().is_some(), "strip container directory");
             let path = components.as_path();
 
-            let path = if is_std {
-                if let Ok(path) = path.strip_prefix(&std_prefix) {
-                    if path.extension() == Some(OsStr::new("dylib")) {
-                        to_link.push(path.to_owned());
-                        continue;
-                    } else {
-                        Path::new("rustc/lib/rustlib").join(path)
-                    }
-                } else {
-                    continue;
-                }
+            let path = if let Ok(path) = path.strip_prefix(&prefix) {
+                unpack_into.join(path)
             } else {
-                path.into()
+                continue;
             };
-            let path = unpack_into.join(path);
             fs::create_dir_all(&path.parent().unwrap()).with_context(|| {
                 format!(
                     "could not create intermediate directories for {}",
@@ -206,24 +197,6 @@ impl SysrootDownload {
                 )
             })?;
             entry.unpack(path)?;
-        }
-
-        let link_dst_prefix = unpack_into.join(format!("rustc/lib/rustlib/{}/lib", self.triple));
-        let link_src_prefix = format!("{}/lib", self.triple);
-        for path in to_link {
-            let src = unpack_into.join("rustc/lib").join(
-                path.strip_prefix(&link_src_prefix)
-                    .with_context(|| format!("stripping prefix from: {:?}", path))?,
-            );
-            let dst = link_dst_prefix.join(&path);
-            fs::create_dir_all(&dst.parent().unwrap()).with_context(|| {
-                format!(
-                    "could not create intermediate directories for {}",
-                    dst.display()
-                )
-            })?;
-            log::trace!("linking {} to {}", src.display(), dst.display());
-            fs::hard_link(src, dst)?;
         }
 
         Ok(())
