@@ -10,10 +10,6 @@ members = [
 
 [profile.release]
 debug = true
-panic = "abort"
-
-[profile.dev]
-panic = "abort"
 
 # Running wrench on android built with master cargo-apk results in a crash
 # due to a mismatched version of android_glue (a dependency of winit).
