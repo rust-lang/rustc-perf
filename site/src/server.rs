@@ -787,11 +787,16 @@ struct Server {
 
 struct UpdatingStatus(Arc<AtomicBool>);
 
-struct IsUpdating(Arc<AtomicBool>);
+struct IsUpdating(Arc<AtomicBool>, hyper::body::Sender);
 
 impl Drop for IsUpdating {
     fn drop(&mut self) {
         self.0.store(false, AtomicOrdering::SeqCst);
+        if std::thread::panicking() {
+            let _ = self.1.try_send_data("panicked, try again".into());
+        } else {
+            let _ = self.1.try_send_data("done".into());
+        }
     }
 }
 
@@ -805,8 +810,8 @@ impl UpdatingStatus {
         self.0.compare_and_swap(false, true, AtomicOrdering::SeqCst)
     }
 
-    fn release_on_drop(&self) -> IsUpdating {
-        IsUpdating(self.0.clone())
+    fn release_on_drop(&self, channel: hyper::body::Sender) -> IsUpdating {
+        IsUpdating(self.0.clone(), channel)
     }
 }
 
@@ -931,8 +936,10 @@ impl Server {
 
         debug!("received onpush hook");
 
+        let (channel, body) = hyper::Body::channel();
+
         let rwlock = self.data.clone();
-        let updating = self.updating.release_on_drop();
+        let updating = self.updating.release_on_drop(channel);
         std::thread::spawn(move || {
             let repo_path = get_repo_path().unwrap();
             git::update_repo(&repo_path).unwrap();
@@ -947,7 +954,7 @@ impl Server {
             std::mem::drop(updating);
         });
 
-        Response::new(hyper::Body::from("Queued update"))
+        Response::new(body)
     }
 }
 
