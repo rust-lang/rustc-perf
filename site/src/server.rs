@@ -238,7 +238,7 @@ fn prettify_log(log: &str) -> Option<String> {
     Some(log.replace("\\n", "\n"))
 }
 
-pub fn handle_status_page(data: &InputData) -> status::Response {
+pub async fn handle_status_page(data: Arc<InputData>) -> status::Response {
     let last_commit = data.data(Interpolate::No).iter().next_back().unwrap();
 
     let mut benchmark_state = last_commit
@@ -261,7 +261,7 @@ pub fn handle_status_page(data: &InputData) -> status::Response {
     benchmark_state.sort_by_key(|s| s.error.is_some());
     benchmark_state.reverse();
 
-    let missing = data.missing_commits.clone();
+    let missing = data.missing_commits().await;
     let current = data.persistent.lock().current.clone();
 
     status::Response {
@@ -272,8 +272,9 @@ pub fn handle_status_page(data: &InputData) -> status::Response {
     }
 }
 
-pub fn handle_next_commit(data: &InputData) -> Option<String> {
-    data.missing_commits
+pub async fn handle_next_commit(data: Arc<InputData>) -> Option<String> {
+    data.missing_commits()
+        .await
         .iter()
         .next()
         .map(|c| c.0.sha.to_string())
@@ -804,10 +805,6 @@ impl UpdatingStatus {
         self.0.compare_and_swap(false, true, AtomicOrdering::SeqCst)
     }
 
-    fn is_updating(&self) -> bool {
-        self.0.load(AtomicOrdering::SeqCst)
-    }
-
     fn release_on_drop(&self) -> IsUpdating {
         IsUpdating(self.0.clone())
     }
@@ -850,6 +847,26 @@ impl Server {
         let data = data.read();
         let data = data.as_ref().unwrap();
         let result = handler(&data);
+        Ok(http::Response::builder()
+            .header_typed(ContentType::json())
+            .body(hyper::Body::from(serde_json::to_string(&result).unwrap()))
+            .unwrap())
+    }
+
+    async fn handle_get_async<F, R, S>(
+        &self,
+        req: &Request,
+        handler: F,
+    ) -> Result<Response, ServerError>
+    where
+        F: FnOnce(Arc<InputData>) -> R,
+        R: std::future::Future<Output = S> + Send,
+        S: Serialize,
+    {
+        check_http_method!(*req.method(), http::Method::GET);
+        let data = self.data.clone();
+        let data = data.read().as_ref().unwrap().clone();
+        let result = handler(data).await;
         Ok(http::Response::builder()
             .header_typed(ContentType::json())
             .body(hyper::Body::from(serde_json::to_string(&result).unwrap()))
@@ -916,27 +933,19 @@ impl Server {
 
         let rwlock = self.data.clone();
         let updating = self.updating.release_on_drop();
-        let _detach = tokio::spawn(
-            tokio::task::spawn_blocking(move || {
-                async move {
-                    let repo_path = get_repo_path().unwrap();
-                    git::update_repo(&repo_path).unwrap();
+        std::thread::spawn(move || {
+            let repo_path = get_repo_path().unwrap();
+            git::update_repo(&repo_path).unwrap();
 
-                    *rwlock.write() = None;
+            info!("updating from filesystem...");
+            let new_data = Arc::new(InputData::from_fs(&repo_path).unwrap());
+            debug!("last date = {:?}", new_data.last_date);
 
-                    info!("updating from filesystem...");
-                    let new_data = Arc::new(InputData::from_fs(&repo_path).await.unwrap());
-                    debug!("last date = {:?}", new_data.last_date);
+            // Write the new data back into the request
+            *rwlock.write() = Some(new_data);
 
-                    // Write the new data back into the request
-                    *rwlock.write() = Some(new_data);
-
-                    std::mem::drop(updating);
-                }
-            })
-            .await
-            .unwrap(),
-        );
+            std::mem::drop(updating);
+        });
 
         Response::new(hyper::Body::from("Queued update"))
     }
@@ -955,7 +964,7 @@ impl std::error::Error for ServerError {}
 
 async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerError> {
     // Don't attempt to get lock if we're updating
-    if ctx.updating.is_updating() || ctx.data.read().is_none() {
+    if ctx.data.read().is_none() {
         return Ok(Response::new(hyper::Body::from("no data yet, please wait")));
     }
 
@@ -984,8 +993,14 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
     match req.uri().path() {
         "/perf/info" => return ctx.handle_get(&req, handle_info),
         "/perf/dashboard" => return ctx.handle_get(&req, handle_dashboard),
-        "/perf/status_page" => return ctx.handle_get(&req, handle_status_page),
-        "/perf/next_commit" => return ctx.handle_get(&req, handle_next_commit),
+        "/perf/status_page" => {
+            let ret = ctx.handle_get_async(&req, |c| handle_status_page(c));
+            return ret.await;
+        }
+        "/perf/next_commit" => {
+            let ret = ctx.handle_get_async(&req, |c| handle_next_commit(c));
+            return ret.await;
+        }
         _ => {}
     }
 

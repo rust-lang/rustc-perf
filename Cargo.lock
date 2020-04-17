@@ -1885,16 +1885,14 @@ dependencies = [
 
 [[package]]
 name = "rustc-artifacts"
-version = "0.1.1"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03be4365e01addc0593ba51a1dd8edb71653bd2dd12cbdc9873897841969778d"
+checksum = "7a94e0f71951f2496aa6d172a263487c036317df9ceb394635b5ebec1caa96f8"
 dependencies = [
  "chrono",
- "log",
  "reqwest",
  "serde",
  "serde_derive",
- "serde_json",
 ]
 
 [[package]]

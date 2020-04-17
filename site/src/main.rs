@@ -25,12 +25,11 @@ async fn main() {
 
     let data: Arc<RwLock<Option<Arc<load::InputData>>>> = Arc::new(RwLock::new(None));
     let data_ = data.clone();
-    let fut = tokio::task::spawn(async move {
-        *data_.write() = Some(Arc::new(
-            load::InputData::from_fs(&util::get_repo_path().unwrap())
-                .await
-                .unwrap(),
+    let fut = tokio::task::spawn_blocking(move || {
+        let res = Some(Arc::new(
+            load::InputData::from_fs(&util::get_repo_path().unwrap()).unwrap(),
         ));
+        *data_.write() = res;
     })
     .fuse();
     let port = env::var("PORT")

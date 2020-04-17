@@ -17,7 +17,6 @@ use std::sync::Arc;
 use anyhow::Context;
 use chrono::{Duration, Utc};
 use parking_lot::Mutex;
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 use crate::git;
@@ -154,8 +153,6 @@ pub struct InputData {
 
     pub artifact_data: HashMap<String, ArtifactData>,
 
-    pub missing_commits: Vec<(Commit, MissingReason)>,
-
     pub persistent: Mutex<Persistent>,
 
     pub config: Config,
@@ -191,7 +188,7 @@ impl InputData {
     }
 
     /// Initialize `InputData from the file system.
-    pub async fn from_fs(repo_loc: &str) -> anyhow::Result<InputData> {
+    pub fn from_fs(repo_loc: &str) -> anyhow::Result<InputData> {
         let repo_loc = PathBuf::from(repo_loc);
         let mut artifact_data = HashMap::new();
         let mut data = Vec::new();
@@ -289,10 +286,10 @@ impl InputData {
         };
 
         data.sort_unstable_by_key(|d| d.commit.clone());
-        InputData::new(data, artifact_data, config).await
+        InputData::new(data, artifact_data, config)
     }
 
-    pub async fn new(
+    pub fn new(
         data: Vec<Arc<CommitData>>,
         artifact_data: HashMap<String, ArtifactData>,
         config: Config,
@@ -505,9 +502,6 @@ impl InputData {
 
         let persistent = Persistent::load();
         Ok(InputData {
-            missing_commits: Self::missing_commits(&data, &config, &persistent)
-                .await
-                .unwrap(),
             stats_list: stats_list.into_iter().collect(),
             interpolated,
             last_date: last_date,
@@ -519,46 +513,40 @@ impl InputData {
         })
     }
 
-    async fn missing_commits(
-        data: &Vec<Arc<CommitData>>,
-        config: &Config,
-        persistent: &Persistent,
-    ) -> anyhow::Result<Vec<(Commit, MissingReason)>> {
-        let github_token = match config.keys.github.as_deref() {
-            Some(token) => token,
-            None => {
-                println!("Skipping collection of missing commits, no github token configured");
-                return Ok(Vec::new());
-            }
-        };
-        println!("Updating rust.git clone...");
-        let commits = rustc_artifacts::master_commits(&Client::new(), Some(github_token))
+    pub async fn missing_commits(&self) -> Vec<(Commit, MissingReason)> {
+        if self.config.keys.github.is_none() {
+            println!("Skipping collection of missing commits, no github token configured");
+            return Vec::new();
+        }
+        let commits = rustc_artifacts::master_commits()
             .await
             .map_err(|e| anyhow::anyhow!("{:?}", e))
-            .context("getting master commit list")?;
-        println!("Update of rust.git complete");
+            .context("getting master commit list")
+            .unwrap();
 
-        let have = data
+        let have = self
+            .data_real
             .iter()
             .map(|value| (value.commit.sha.clone(), value))
             .collect::<HashMap<_, _>>();
         let now = Utc::now();
-        let mut missing = commits
+        let missing = commits
             .iter()
             .cloned()
-            .filter(|c| now.signed_duration_since(c.date) < Duration::days(29))
+            .filter(|c| now.signed_duration_since(c.time) < Duration::days(29))
             .filter_map(|c| {
                 let sha = c.sha.as_str().into();
-                if have.contains_key(&sha) || config.skip.contains(&sha) {
+                if have.contains_key(&sha) || self.config.skip.contains(&sha) {
                     None
                 } else {
                     Some((c, MissingReason::Sha))
                 }
             })
             .collect::<Vec<_>>();
-        missing.reverse();
 
-        let mut commits = persistent
+        let mut commits = self
+            .persistent
+            .lock()
             .try_commits
             .iter()
             .flat_map(
@@ -580,7 +568,7 @@ impl InputData {
                     ret.push((
                         rustc_artifacts::Commit {
                             sha: sha.to_string(),
-                            date: Date::ymd_hms(2001, 01, 01, 0, 0, 0).0,
+                            time: Date::ymd_hms(2001, 01, 01, 0, 0, 0).0,
                         },
                         MissingReason::TryCommit,
                     ));
@@ -603,18 +591,18 @@ impl InputData {
             }
         }
 
-        Ok(commits
+        commits
             .into_iter()
             .map(|(c, mr)| {
                 (
                     Commit {
                         sha: c.sha.as_str().into(),
-                        date: Date(c.date),
+                        date: Date(c.time),
                     },
                     mr,
                 )
             })
-            .collect())
+            .collect()
     }
 }
 
