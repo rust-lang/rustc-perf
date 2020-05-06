@@ -139,7 +139,7 @@ pub struct InputData {
     /// All known statistics gathered for crates
     pub stats_list: Vec<&'static str>,
 
-    pub all_series: Vec<crate::db::Series>,
+    pub all_series: Vec<crate::db::Series<'static>>,
 
     /// The last date that was seen while loading files.
     pub last_date: Date,
@@ -153,7 +153,7 @@ pub struct InputData {
     /// Not all commits are in this map.
     pub interpolated: HashMap<Sha, Vec<Interpolation>>,
 
-    pub artifact_data: HashMap<String, ArtifactData>,
+    pub artifact_data: Vec<ArtifactData>,
 
     pub persistent: Mutex<Persistent>,
 
@@ -180,6 +180,25 @@ impl InputData {
         } else {
             return Err(format!("could not find commit {}", sha));
         }
+    }
+
+    pub fn summary_series(&self) -> Vec<crate::db::Series<'static>> {
+        self.all_series
+            .iter()
+            .map(|s| crate::db::Series {
+                krate: crate::db::CrateSelector::All,
+                profile: s.profile,
+                cache: s.cache,
+            })
+            .filter(|s| match s.cache {
+                crate::db::Cache::Empty => true,
+                crate::db::Cache::IncrementalEmpty => true,
+                crate::db::Cache::IncrementalFresh => true,
+                crate::db::Cache::IncrementalPatch(n) => n == *"println",
+            })
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect()
     }
 
     pub fn data(&self, interpolate: Interpolate) -> &[Arc<CommitData>] {
@@ -293,7 +312,7 @@ impl InputData {
 
     pub fn new(
         data: Vec<Arc<CommitData>>,
-        artifact_data: HashMap<String, ArtifactData>,
+        mut artifact_data: HashMap<String, ArtifactData>,
         config: Config,
     ) -> anyhow::Result<InputData> {
         let mut last_date = None;
@@ -502,6 +521,30 @@ impl InputData {
         );
         let data = data_next;
 
+        let mut versions = artifact_data.keys().cloned().collect::<Vec<_>>();
+        versions.sort_by(|a, b| {
+            match (
+                a.parse::<semver::Version>().ok(),
+                b.parse::<semver::Version>().ok(),
+            ) {
+                (Some(a), Some(b)) => a.cmp(&b),
+                (_, _) => {
+                    if a == "beta" {
+                        std::cmp::Ordering::Greater
+                    } else if b == "beta" {
+                        std::cmp::Ordering::Less
+                    } else {
+                        panic!("unexpected version")
+                    }
+                }
+            }
+        });
+
+        let artifact_data = versions
+            .into_iter()
+            .map(|v| artifact_data.remove(&v).unwrap())
+            .collect::<Vec<_>>();
+
         let persistent = Persistent::load();
         Ok(InputData {
             stats_list: stats_list.into_iter().collect(),
@@ -516,7 +559,7 @@ impl InputData {
                                 use crate::db::Cache;
                                 use collector::BenchmarkState;
                                 Some(crate::db::Series {
-                                    krate: Some(bench.name),
+                                    krate: crate::db::CrateSelector::Specific(bench.name),
                                     profile: if r.check {
                                         crate::db::Profile::Check
                                     } else if r.release {

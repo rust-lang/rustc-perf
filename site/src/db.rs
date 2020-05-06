@@ -1,4 +1,7 @@
-use collector::{BenchmarkName as Crate, Bound, Commit, CommitData, PatchName, RunId, StatId};
+use collector::{
+    ArtifactData, BenchmarkName as Crate, Bound, Commit, CommitData, PatchName, RunId, StatId,
+};
+use std::collections::BTreeMap;
 use std::ops::RangeInclusive;
 use std::sync::Arc;
 
@@ -109,42 +112,102 @@ impl PartialOrd for Cache {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Series {
+pub enum CrateSelector<'a> {
+    Specific(Crate),
+    All,
+    Set(&'a [Crate]),
+}
+
+impl CrateSelector<'_> {
+    fn test(self, c: Crate) -> bool {
+        match self {
+            CrateSelector::All => true,
+            CrateSelector::Specific(filter) => filter == c,
+            CrateSelector::Set(set) => set.contains(&c),
+        }
+    }
+
+    pub fn is_specific(self) -> bool {
+        self.as_specific().is_some()
+    }
+
+    pub fn as_specific(self) -> Option<Crate> {
+        match self {
+            CrateSelector::Specific(filter) => Some(filter),
+            CrateSelector::All | CrateSelector::Set(_) => None,
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Series<'a> {
     /// The krate of this series.
     ///
     /// If None, then we are summarizing across crates.
-    pub krate: Option<Crate>,
+    pub krate: CrateSelector<'a>,
     pub profile: Profile,
     pub cache: Cache,
 }
 
-pub struct SeriesIterator<'a> {
-    data: std::slice::Iter<'a, Arc<CommitData>>,
-    series: Series,
+pub struct SeriesIterator<'a, I> {
+    data: I,
+    series: Series<'a>,
     stat: StatId,
 }
 
-impl Series {
+impl<'b> Series<'b> {
     pub fn iterate<'a>(
         self,
         data: &'a [Arc<CommitData>],
         range: RangeInclusive<Bound>,
         stat: StatId,
-    ) -> SeriesIterator<'a> {
+    ) -> SeriesIterator<
+        'b,
+        impl Iterator<
+            Item = (
+                Commit,
+                &'a BTreeMap<Crate, Result<collector::Benchmark, String>>,
+            ),
+        >,
+    > {
         SeriesIterator {
-            data: range_subset(data, range).iter(),
+            data: range_subset(data, range)
+                .iter()
+                .map(|cd| (cd.commit, &cd.benchmarks)),
+            series: self,
+            stat,
+        }
+    }
+
+    pub fn iterate_artifacts<'a>(
+        self,
+        artifacts: &'a [ArtifactData],
+        stat: StatId,
+    ) -> SeriesIterator<
+        'b,
+        impl Iterator<
+            Item = (
+                String,
+                &'a BTreeMap<Crate, Result<collector::Benchmark, String>>,
+            ),
+        >,
+    > {
+        SeriesIterator {
+            data: artifacts.iter().map(|ad| (ad.id.clone(), &ad.benchmarks)),
             series: self,
             stat,
         }
     }
 }
 
-impl<'a> Iterator for SeriesIterator<'a> {
-    type Item = (Commit, Option<f64>);
+impl<'b, 'a, I, T> Iterator for SeriesIterator<'b, I>
+where
+    I: Iterator<Item = (T, &'a BTreeMap<Crate, Result<collector::Benchmark, String>>)>,
+{
+    type Item = (T, Option<f64>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let cd = self.data.next()?;
-        let commit = cd.commit;
+        let (commit, benchmarks) = self.data.next()?;
 
         let get_stat = |res: Option<&Result<collector::Benchmark, String>>| {
             res.and_then(|res| res.as_ref().ok())
@@ -158,11 +221,14 @@ impl<'a> Iterator for SeriesIterator<'a> {
         };
 
         match self.series.krate {
-            Some(krate) => Some((commit, get_stat(cd.benchmarks.get(&krate)))),
-            None => {
+            CrateSelector::Specific(krate) => Some((commit, get_stat(benchmarks.get(&krate)))),
+            CrateSelector::All | CrateSelector::Set(_) => {
                 let mut count = 0;
                 let mut total = 0.0;
-                for bench in cd.benchmarks.values() {
+                for (name, bench) in benchmarks.iter() {
+                    if !self.series.krate.test(*name) {
+                        continue;
+                    }
                     if let Some(stat) = get_stat(Some(bench)) {
                         total += stat;
                         count += 1;

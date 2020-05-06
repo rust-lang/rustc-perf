@@ -9,7 +9,6 @@
 
 use parking_lot::Mutex;
 use std::cell::RefCell;
-use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
@@ -30,7 +29,6 @@ use hyper::StatusCode;
 use log::{debug, error, info};
 use ring::hmac;
 use rmp_serde;
-use semver::Version;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json;
@@ -49,7 +47,6 @@ use crate::load::CurrentState;
 use crate::load::{Config, InputData};
 use crate::util::{self, get_repo_path, Interpolate};
 use collector::api::collected;
-use collector::version_supports_incremental;
 use collector::Sha;
 use collector::StatId;
 use parking_lot::RwLock;
@@ -63,171 +60,102 @@ pub fn handle_info(data: &InputData) -> info::Response {
     }
 }
 
-fn average(v: &[f64]) -> f64 {
-    (v.iter().sum::<f64>() / v.len() as f64 * 10.0).round() / 10.0
-}
-
 pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
     if data.artifact_data.is_empty() {
         return dashboard::Response::default();
     }
 
-    let mut versions = data.artifact_data.keys().cloned().collect::<Vec<_>>();
-    versions.sort_by(
-        |a, b| match (a.parse::<Version>().ok(), b.parse::<Version>().ok()) {
-            (Some(a), Some(b)) => a.cmp(&b),
-            (_, _) => {
-                if a == "beta" {
-                    Ordering::Greater
-                } else if b == "beta" {
-                    Ordering::Less
-                } else {
-                    panic!("unexpected version")
-                }
-            }
-        },
-    );
+    let series = data.summary_series().into_iter().map(|series| {
+        (
+            series,
+            series
+                .iterate_artifacts(&data.artifact_data, StatId::WallTime)
+                .map(|(_id, point)| (point.unwrap() * 10.0).round() / 10.0)
+                .collect::<Vec<_>>(),
+        )
+    });
 
-    versions.push(format!(
-        "master: {}",
-        &data
-            .data(Interpolate::Yes)
-            .iter()
-            .last()
-            .unwrap()
-            .commit
-            .sha
-            .to_string()[0..8]
-    ));
-
-    let mut check_clean_average = Vec::new();
-    let mut check_base_incr_average = Vec::new();
-    let mut check_clean_incr_average = Vec::new();
-    let mut check_println_incr_average = Vec::new();
-    let mut debug_clean_average = Vec::new();
-    let mut debug_base_incr_average = Vec::new();
-    let mut debug_clean_incr_average = Vec::new();
-    let mut debug_println_incr_average = Vec::new();
-    let mut opt_clean_average = Vec::new();
-    let mut opt_base_incr_average = Vec::new();
-    let mut opt_clean_incr_average = Vec::new();
-    let mut opt_println_incr_average = Vec::new();
-
-    let benchmark_names = data.artifact_data["beta"]
+    let benchmark_names = data
+        .artifact_data
+        .iter()
+        .find(|ad| ad.id == "beta")
+        .unwrap()
+        .benchmarks
+        .iter()
+        .filter(|(_, v)| v.is_ok())
+        .map(|(k, _)| k)
+        .collect::<Vec<_>>();
+    let cd = data.data(Interpolate::Yes).iter().last().unwrap();
+    let benches = cd
         .benchmarks
         .keys()
-        .filter(|key| data.artifact_data["beta"].benchmarks[*key].is_ok())
+        .cloned()
+        .filter(|name| benchmark_names.contains(&name))
         .collect::<Vec<_>>();
-    for version in &versions {
-        let mut check_clean_points = Vec::new();
-        let mut check_base_incr_points = Vec::new();
-        let mut check_clean_incr_points = Vec::new();
-        let mut check_println_incr_points = Vec::new();
-        let mut debug_clean_points = Vec::new();
-        let mut debug_base_incr_points = Vec::new();
-        let mut debug_clean_incr_points = Vec::new();
-        let mut debug_println_incr_points = Vec::new();
-        let mut opt_clean_points = Vec::new();
-        let mut opt_base_incr_points = Vec::new();
-        let mut opt_clean_incr_points = Vec::new();
-        let mut opt_println_incr_points = Vec::new();
+    assert_eq!(benches.len(), benchmark_names.len());
 
-        let benches = if version.starts_with("master") {
-            let data = &data.data(Interpolate::Yes).iter().last().unwrap();
-            let benches = data
-                .benchmarks
-                .iter()
-                .filter(|(name, _)| benchmark_names.contains(name))
-                .collect::<Vec<_>>();
-            assert_eq!(benches.len(), benchmark_names.len());
-            benches
-        } else {
-            data.artifact_data[version]
-                .benchmarks
-                .iter()
-                .collect::<Vec<_>>()
+    // Just replace the CrateSelector::All with CrateSelector::Set.
+    let series = series.chain(
+        data.summary_series()
+            .into_iter()
+            .map(|series| Series {
+                krate: CrateSelector::Set(&benches),
+                profile: series.profile,
+                cache: series.cache,
+            })
+            .map(|series| {
+                (
+                    series,
+                    series
+                        .iterate(
+                            &[cd.clone()],
+                            collector::Bound::None..=collector::Bound::None,
+                            StatId::WallTime,
+                        )
+                        .map(|(_id, point)| (point.unwrap() * 10.0).round() / 10.0)
+                        .collect::<Vec<_>>(),
+                )
+            }),
+    );
+
+    let mut check = dashboard::Cases::default();
+    let mut debug = dashboard::Cases::default();
+    let mut opt = dashboard::Cases::default();
+    for (series, points) in series {
+        let cases = match series.profile {
+            Profile::Check => &mut check,
+            Profile::Debug => &mut debug,
+            Profile::Opt => &mut opt,
         };
-        for (_, bench) in benches {
-            let bench = match bench {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
 
-            macro_rules! extend {
-                ($v:ident, $r: ident, $cond: expr) => {
-                    let run = bench.runs.iter().find(|$r| $cond);
-                    if let Some(stat) = run.and_then(|r| r.get_stat(StatId::WallTime)) {
-                        $v.push(stat);
-                    }
-                };
-            }
-
-            extend!(check_clean_points, r, r.is_clean() && r.check);
-            extend!(
-                debug_clean_points,
-                r,
-                r.is_clean() && !r.check && !r.release
-            );
-            extend!(opt_clean_points, r, r.is_clean() && r.release);
-            if version_supports_incremental(version) {
-                extend!(check_base_incr_points, r, r.is_base_incr() && r.check);
-                extend!(check_clean_incr_points, r, r.is_clean_incr() && r.check);
-                extend!(check_println_incr_points, r, r.is_println_incr() && r.check);
-                extend!(
-                    debug_base_incr_points,
-                    r,
-                    r.is_base_incr() && !r.check && !r.release
-                );
-                extend!(
-                    debug_clean_incr_points,
-                    r,
-                    r.is_clean_incr() && !r.check && !r.release
-                );
-                extend!(
-                    debug_println_incr_points,
-                    r,
-                    r.is_println_incr() && !r.check && !r.release
-                );
-                extend!(opt_base_incr_points, r, r.is_base_incr() && r.release);
-                extend!(opt_clean_incr_points, r, r.is_clean_incr() && r.release);
-                extend!(opt_println_incr_points, r, r.is_println_incr() && r.release);
-            }
+        match series.cache {
+            Cache::Empty => cases.clean_averages.extend(points),
+            Cache::IncrementalEmpty => cases.base_incr_averages.extend(points),
+            Cache::IncrementalFresh => cases.clean_incr_averages.extend(points),
+            // we only have println patches here
+            Cache::IncrementalPatch(_) => cases.println_incr_averages.extend(points),
         }
-
-        check_clean_average.push(average(&check_clean_points));
-        check_base_incr_average.push(average(&check_base_incr_points));
-        check_clean_incr_average.push(average(&check_clean_incr_points));
-        check_println_incr_average.push(average(&check_println_incr_points));
-        debug_clean_average.push(average(&debug_clean_points));
-        debug_base_incr_average.push(average(&debug_base_incr_points));
-        debug_clean_incr_average.push(average(&debug_clean_incr_points));
-        debug_println_incr_average.push(average(&debug_println_incr_points));
-        opt_clean_average.push(average(&opt_clean_points));
-        opt_base_incr_average.push(average(&opt_base_incr_points));
-        opt_clean_incr_average.push(average(&opt_clean_incr_points));
-        opt_println_incr_average.push(average(&opt_println_incr_points));
     }
-
     dashboard::Response {
-        versions,
-        check: dashboard::Cases {
-            clean_averages: check_clean_average,
-            base_incr_averages: check_base_incr_average,
-            clean_incr_averages: check_clean_incr_average,
-            println_incr_averages: check_println_incr_average,
-        },
-        debug: dashboard::Cases {
-            clean_averages: debug_clean_average,
-            base_incr_averages: debug_base_incr_average,
-            clean_incr_averages: debug_clean_incr_average,
-            println_incr_averages: debug_println_incr_average,
-        },
-        opt: dashboard::Cases {
-            clean_averages: opt_clean_average,
-            base_incr_averages: opt_base_incr_average,
-            clean_incr_averages: opt_clean_incr_average,
-            println_incr_averages: opt_println_incr_average,
-        },
+        versions: data
+            .artifact_data
+            .iter()
+            .map(|ad| ad.id.clone())
+            .chain(std::iter::once(format!(
+                "master: {}",
+                &data
+                    .data(Interpolate::Yes)
+                    .iter()
+                    .last()
+                    .unwrap()
+                    .commit
+                    .sha
+                    .to_string()[0..8]
+            )))
+            .collect::<Vec<_>>(),
+        check,
+        debug,
+        opt,
     }
 }
 
@@ -316,17 +244,17 @@ impl CommitIdxCache {
 fn to_graph_data<'a>(
     data: &'a InputData,
     cc: &'a CommitIdxCache,
-    series: crate::db::Series,
+    series: Series<'static>,
     is_absolute: bool,
     baseline_first: f64,
     points: impl Iterator<Item = (collector::Commit, f64)> + 'a,
 ) -> impl Iterator<Item = graph::GraphData> + 'a {
     let mut first = None;
     points.map(move |(commit, point)| {
-        let point = if series.krate.is_none() {
-            point / baseline_first
-        } else {
+        let point = if series.krate.is_specific() {
             point
+        } else {
+            point / baseline_first
         };
         first = Some(first.unwrap_or(point));
         let first = first.unwrap();
@@ -346,7 +274,7 @@ fn to_graph_data<'a>(
                 .get(&commit.sha)
                 .filter(|c| {
                     c.iter().any(|interpolation| {
-                        if let Some(krate) = series.krate {
+                        if let CrateSelector::Specific(krate) = series.krate {
                             if krate != interpolation.benchmark {
                                 return false;
                             }
@@ -367,26 +295,11 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
     let stat_id = StatId::from_str(&body.stat)?;
     let cc = CommitIdxCache::new();
 
-    let mut series = data.all_series.clone();
-    series.extend(
-        data.all_series
-            .iter()
-            .map(|s| crate::db::Series {
-                krate: None,
-                profile: s.profile,
-                cache: s.cache,
-            })
-            .filter(|s| match s.cache {
-                crate::db::Cache::Empty => true,
-                crate::db::Cache::IncrementalEmpty => true,
-                crate::db::Cache::IncrementalFresh => true,
-                crate::db::Cache::IncrementalPatch(n) => n == *"println",
-            })
-            .collect::<std::collections::BTreeSet<_>>(),
-    );
-    let series = series.iter().map(|series| {
-        let baseline_first = crate::db::Series {
-            krate: None,
+    let mut series: Vec<Series<'static>> = data.all_series.clone();
+    series.extend(data.summary_series());
+    let series = series.into_iter().map(|series| {
+        let baseline_first = Series {
+            krate: CrateSelector::All,
             profile: series.profile,
             cache: Cache::Empty,
         }
@@ -399,11 +312,11 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
         .next()
         .map_or(0.0, |(_c, d)| d);
         (
-            *series,
+            series,
             to_graph_data(
                 data,
                 &cc,
-                *series,
+                series,
                 body.absolute,
                 baseline_first,
                 series
@@ -423,11 +336,11 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
     let summary_crate = collector::BenchmarkName::from("Summary");
     for (series, points) in series {
         let max = by_krate_max
-            .entry(series.krate.unwrap_or(summary_crate))
+            .entry(series.krate.as_specific().unwrap_or(summary_crate))
             .or_insert(f32::MIN);
         *max = points.iter().map(|p| p.y).fold(*max, |max, p| max.max(p));
         by_krate
-            .entry(series.krate.unwrap_or(summary_crate))
+            .entry(series.krate.as_specific().unwrap_or(summary_crate))
             .or_insert_with(HashMap::new)
             .entry(match series.profile {
                 Profile::Opt => "opt",
