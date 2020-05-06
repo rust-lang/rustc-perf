@@ -1,7 +1,7 @@
-use collector::{
-    ArtifactData, BenchmarkName as Crate, Bound, Commit, CommitData, PatchName, RunId, StatId,
-};
+use collector::{ArtifactData, BenchmarkName as Crate, Bound, Commit, CommitData, PatchName};
+use collector::{RunId, StatId};
 use std::collections::BTreeMap;
+use std::fmt;
 use std::ops::RangeInclusive;
 use std::sync::Arc;
 
@@ -57,6 +57,17 @@ pub enum Cache {
     IncrementalFresh,
     #[serde(rename = "patched incremental")]
     IncrementalPatch(PatchName),
+}
+
+impl fmt::Display for Cache {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Cache::Empty => write!(f, "clean"),
+            Cache::IncrementalEmpty => write!(f, "baseline incremental"),
+            Cache::IncrementalFresh => write!(f, "clean incremental"),
+            Cache::IncrementalPatch(name) => write!(f, "patched incremental: {}", name),
+        }
+    }
 }
 
 impl Cache {

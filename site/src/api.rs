@@ -13,8 +13,7 @@
 //!
 //! The responses are calculated in the server.rs file.
 
-use crate::load::CommitData;
-use collector::{BenchmarkName, Date, Run, Sha, StatId};
+use collector::{BenchmarkName, Date, Sha};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
 use std::fmt;
@@ -67,68 +66,7 @@ impl Serialize for StyledBenchmarkName {
 pub struct DateData {
     pub date: Date,
     pub commit: Sha,
-    pub data: HashMap<StyledBenchmarkName, Vec<(String, Run, f64)>>,
-}
-
-impl DateData {
-    pub fn for_day(commit: &CommitData, stat: StatId) -> DateData {
-        let benchmarks = commit.benchmarks.values().filter_map(|v| v.as_ref().ok());
-        let mut out = HashMap::with_capacity(commit.benchmarks.len() * 3);
-        for benchmark in benchmarks {
-            let mut runs_check = Vec::with_capacity(benchmark.runs.len() / 3);
-            let mut runs_opt = Vec::with_capacity(benchmark.runs.len() / 3);
-            let mut runs_debug = Vec::with_capacity(benchmark.runs.len() / 3);
-            for run in &benchmark.runs {
-                let v = if run.release {
-                    &mut runs_opt
-                } else if run.check {
-                    &mut runs_check
-                } else {
-                    &mut runs_debug
-                };
-                if let Some(mut value) = run.get_stat(stat) {
-                    if stat == StatId::CpuClock || stat == StatId::CpuClockUser {
-                        // convert to seconds; perf records it in milliseconds
-                        value /= 1000.0;
-                    }
-                    v.push((run.name(), run.clone(), value));
-                }
-            }
-            if !runs_opt.is_empty() {
-                out.insert(
-                    StyledBenchmarkName {
-                        name: benchmark.name,
-                        style: Style::Opt,
-                    },
-                    runs_opt,
-                );
-            }
-            if !runs_check.is_empty() {
-                out.insert(
-                    StyledBenchmarkName {
-                        name: benchmark.name,
-                        style: Style::Check,
-                    },
-                    runs_check,
-                );
-            }
-            if !runs_debug.is_empty() {
-                out.insert(
-                    StyledBenchmarkName {
-                        name: benchmark.name,
-                        style: Style::Debug,
-                    },
-                    runs_debug,
-                );
-            }
-        }
-
-        DateData {
-            date: commit.commit.date,
-            commit: commit.commit.sha.clone(),
-            data: out,
-        }
-    }
+    pub data: HashMap<StyledBenchmarkName, Vec<(String, f64)>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

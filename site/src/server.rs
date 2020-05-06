@@ -45,7 +45,7 @@ use crate::git;
 use crate::github::post_comment;
 use crate::load::CurrentState;
 use crate::load::{Config, InputData};
-use crate::util::{self, get_repo_path, Interpolate};
+use crate::util::{get_repo_path, Interpolate};
 use collector::api::collected;
 use collector::Sha;
 use collector::StatId;
@@ -354,12 +354,65 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
 }
 
 pub async fn handle_days(body: days::Request, data: &InputData) -> ServerResult<days::Response> {
-    let a = util::find_commit(data, &body.start, true, Interpolate::No)?;
-    let b = util::find_commit(data, &body.end, false, Interpolate::No)?;
+    let range = data.data_range(Interpolate::No, body.start.clone()..=body.end.clone());
+    let a = range.first().ok_or(format!(
+        "could not find start commit for bound {:?}",
+        body.start
+    ))?;
+    let b = range.last().ok_or(format!(
+        "could not find end commit for bound {:?}",
+        body.end
+    ))?;
+    let stat_id = StatId::from_str(&body.stat)?;
     Ok(days::Response {
-        a: DateData::for_day(&a, StatId::from_str(&body.stat)?),
-        b: DateData::for_day(&b, StatId::from_str(&body.stat)?),
+        a: DateData::for_day(&a, stat_id, &data.all_series),
+        b: DateData::for_day(&b, stat_id, &data.all_series),
     })
+}
+
+impl DateData {
+    fn for_day(
+        commit: &Arc<collector::CommitData>,
+        stat: StatId,
+        series: &[crate::db::Series],
+    ) -> DateData {
+        let mut data = HashMap::new();
+
+        for series in series {
+            let point = series
+                .iterate(std::slice::from_ref(commit), stat)
+                .next()
+                .and_then(|(_, p)| p);
+            let mut point = if let Some(pt) = point {
+                pt
+            } else {
+                continue;
+            };
+            if stat == StatId::CpuClock || stat == StatId::CpuClockUser {
+                // convert to seconds; perf records it in milliseconds
+                point /= 1000.0;
+            }
+            data.entry(StyledBenchmarkName {
+                name: series
+                    .krate
+                    .as_specific()
+                    .expect("all series contains only specific crates"),
+                style: match series.profile {
+                    Profile::Check => Style::Check,
+                    Profile::Opt => Style::Opt,
+                    Profile::Debug => Style::Debug,
+                },
+            })
+            .or_insert_with(Vec::new)
+            .push((series.cache.to_string(), point));
+        }
+
+        DateData {
+            date: commit.commit.date,
+            commit: commit.commit.sha.clone(),
+            data,
+        }
+    }
 }
 
 pub async fn handle_github(

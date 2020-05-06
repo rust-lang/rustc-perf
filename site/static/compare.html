@@ -207,12 +207,12 @@
                 let datum_a = null;
                 let datum_b = null;
                 if (a_idx != undefined && b_idx != undefined) {
-                    datum_a = data.a.data[name][a_idx][2];
-                    datum_b = data.b.data[name][b_idx][2];
+                    datum_a = data.a.data[name][a_idx][1];
+                    datum_b = data.b.data[name][b_idx][1];
                 } else if (a_idx != undefined) {
-                    datum_a = data.a.data[name][a_idx][2];
+                    datum_a = data.a.data[name][a_idx][1];
                 } else if (b_idx != undefined) {
-                    datum_b = data.b.data[name][b_idx][2];
+                    datum_b = data.b.data[name][b_idx][1];
                 } else {
                     // should be unreachable
                 }
