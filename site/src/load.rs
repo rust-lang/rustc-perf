@@ -11,6 +11,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::io::Read;
+use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -22,7 +23,7 @@ use serde::{Deserialize, Serialize};
 use crate::git;
 use crate::util;
 use crate::util::Interpolate;
-use collector::Date;
+use collector::{Bound, Date};
 
 use crate::api::github;
 use collector;
@@ -206,6 +207,14 @@ impl InputData {
             Interpolate::Yes => &self.data,
             Interpolate::No => &self.data_real,
         }
+    }
+
+    pub fn data_range(
+        &self,
+        interpolate: Interpolate,
+        range: RangeInclusive<Bound>,
+    ) -> &[Arc<CommitData>] {
+        crate::db::range_subset(self.data(interpolate), range)
     }
 
     /// Initialize `InputData from the file system.

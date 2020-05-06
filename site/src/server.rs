@@ -107,11 +107,7 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
                 (
                     series,
                     series
-                        .iterate(
-                            &[cd.clone()],
-                            collector::Bound::None..=collector::Bound::None,
-                            StatId::WallTime,
-                        )
+                        .iterate(&[cd.clone()], StatId::WallTime)
                         .map(|(_id, point)| (point.unwrap() * 10.0).round() / 10.0)
                         .collect::<Vec<_>>(),
                 )
@@ -304,8 +300,7 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
             cache: Cache::Empty,
         }
         .iterate(
-            data.data(Interpolate::Yes),
-            body.start.clone()..=body.end.clone(),
+            data.data_range(Interpolate::Yes, body.start.clone()..=body.end.clone()),
             stat_id,
         )
         .filter_map(|(commit, point)| point.map(|p| (commit, p)))
@@ -321,8 +316,7 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
                 baseline_first,
                 series
                     .iterate(
-                        data.data(Interpolate::Yes),
-                        body.start.clone()..=body.end.clone(),
+                        data.data_range(Interpolate::Yes, body.start.clone()..=body.end.clone()),
                         stat_id,
                     )
                     .filter_map(|(commit, point)| point.map(|p| (commit, p))),

@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::ops::RangeInclusive;
 use std::sync::Arc;
 
-fn range_subset(data: &[Arc<CommitData>], range: RangeInclusive<Bound>) -> &[Arc<CommitData>] {
+pub fn range_subset(data: &[Arc<CommitData>], range: RangeInclusive<Bound>) -> &[Arc<CommitData>] {
     let (a, b) = range.into_inner();
 
     let last_month =
@@ -159,7 +159,6 @@ impl<'b> Series<'b> {
     pub fn iterate<'a>(
         self,
         data: &'a [Arc<CommitData>],
-        range: RangeInclusive<Bound>,
         stat: StatId,
     ) -> SeriesIterator<
         'b,
@@ -171,9 +170,7 @@ impl<'b> Series<'b> {
         >,
     > {
         SeriesIterator {
-            data: range_subset(data, range)
-                .iter()
-                .map(|cd| (cd.commit, &cd.benchmarks)),
+            data: data.iter().map(|cd| (cd.commit, &cd.benchmarks)),
             series: self,
             stat,
         }
