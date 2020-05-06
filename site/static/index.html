@@ -68,28 +68,23 @@
             return false;
         }
 
-        let by_crate = {};
         for (let crate_name of sorted_names) {
-            let key = crate_name.replace("-check", "").replace("-debug", "").replace("-opt", "");
-            if (!by_crate[key]) by_crate[key] = [];
-            by_crate[key].push(crate_name);
-        }
-        for (let crate_names of Object.values(by_crate)) {
             let wrapper = document.createElement("table");
             let row = document.createElement("tr");
             wrapper.appendChild(row);
-            for (let crate_name of crate_names) {
+            for (let profile of ["check", "debug", "opt"]) {
+                let crate_name_with_profile = `${crate_name}-${profile}`;
                 let element = document.createElement("td");
                 let element_1 = document.createElement("div");
                 let element_2 = document.createElement("div");
                 element_1.style.position = "absolute";
                 element_1.style.width = "100%";
-                element_1.id = "chart-container-" + crate_name;
+                element_1.id = "chart-container-" + crate_name_with_profile;
                 element_2.style.position = "relative";
                 element_2.style.width = "100%";
                 element_2.style.height = "450px";
                 element_2.appendChild(element_1);
-                element.id = "chart-top-outer-container-" + crate_name;
+                element.id = "chart-top-outer-container-" + crate_name_with_profile;
                 element.style.width = "33%";
                 element.appendChild(element_2);
                 row.appendChild(element);
@@ -100,86 +95,92 @@
         }
         let graphs = [];
         for (let crate_name of sorted_names) {
-            graphs.push(() => {
-            let benchmark_names = Object.keys(response.benchmarks[crate_name]);
-            benchmark_names.sort();
-            let datasets = [];
-            let max = response.max[crate_name.replace("-check", "").replace("-debug", "").replace("-opt", "")];
-            for (let name of benchmark_names) {
-                let data = response.benchmarks[crate_name][name];
-                datasets.push({
-                    name,
-                    animation: false,
-                    allowPointSelect: true,
-                    data: data.map(({commit, absolute, percent, y, x, is_interpolated}) => ({
-                        commit: response.commits[commit],
-                        prev_commit: commit == 0 ? null : response.commits[commit - 1],
-                        absolute, percent, y, x, color: response.colors[is_interpolated ? 1 : 0],
-                    })),
-                    marker: {
-                        enabled: true
-                    },
-                });
-            }
-
-            let id = "chart-container-" + crate_name;
-            let element = document.getElementById(id);
-            let chart = new Highcharts.chart(element, {
-                chart: {
-                    zoomType: "xy",
-                    renderTo: element,
-                    type: "line",
-                },
-                title: {
-                    text: crate_name + "<br>" + title,
-                },
-                rangeSelector: {
-                    selected: 1,
-                },
-                series: datasets,
-                tooltip: {
-                    crosshairs: [true],
-                    formatter: function formatter() {
-                        let date = new Date(this.x);
-                        let commit = this.point.commit.substr(0, 10);
-                        let y_axis = crate_name.startsWith("Summary") ? summaryYAxis : yAxis;
-                        return "<b>" + date.toLocaleString() + " - " + commit + "</b>" +
-                            "<br>" + this.series.name + ": " +
-                            this.point.absolute.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) +
-                            " " + y_axis.toLowerCase() + " (" +
-                            this.point.percent.toFixed(2) + "% from start)";
-                    },
-                },
-                xAxis: {
-                    type: "datetime",
-                },
-                yAxis: absolute ? {
-                    // Only the leftmost one ("-check") has its y-axis titled.
-                    title: (crate_name.includes("-opt") || crate_name.includes("-debug")) ?
-                           { text: "" } :
-                           { text: crate_name.startsWith("Summary") ? summaryYAxis : yAxis },
-                    min: 0,
-                    ceiling: max * 1.05,
-                    floor: 0,
-                } : {
-                    max: max * 1.05,
-                    softMin: -5,
-                    minRange: 0.1,
-                    title: {
-                        text: "% change",
+            for (let profile of ["check", "debug", "opt"]) {
+                graphs.push(() => {
+                    let cache_states =
+                        response.benchmarks[crate_name][profile];
+                    let datasets = [];
+                    let max = response.max[crate_name.replace("-check", "").replace("-debug", "").replace("-opt", "")];
+                    for (let state of cache_states) {
+                        let tag = state[0]["variant"];
+                        let value = state[0]["name"];
+                        let cache_name = tag + (value ? `: ${value}`: "");
+                        let data = state[1];
+                        datasets.push({
+                            name: cache_name,
+                            animation: false,
+                            allowPointSelect: true,
+                            data: data.map(({commit, absolute, percent, y, x, is_interpolated}) => ({
+                                commit: response.commits[commit],
+                                prev_commit: commit == 0 ? null : response.commits[commit - 1],
+                                absolute, percent, y, x, color: response.colors[is_interpolated ? 1 : 0],
+                            })),
+                            marker: {
+                                enabled: true
+                            },
+                        });
                     }
-                },
-                plotOptions: {
-                    line: {
-                        point: {
-                            events: {
-                                click: clickHandler,
+
+                    let id = "chart-container-" + crate_name + "-" + profile;
+                    let element = document.getElementById(id);
+                    let chart = new Highcharts.chart(element, {
+                        chart: {
+                            zoomType: "xy",
+                            renderTo: element,
+                            type: "line",
+                        },
+                        title: {
+                            text: crate_name + "-" + profile + "<br>" + title,
+                        },
+                        rangeSelector: {
+                            selected: 1,
+                        },
+                        series: datasets,
+                        tooltip: {
+                            crosshairs: [true],
+                            formatter: function formatter() {
+                                let date = new Date(this.x);
+                                let commit = this.point.commit.substr(0, 10);
+                                let y_axis = crate_name.startsWith("Summary") ? summaryYAxis : yAxis;
+                                return "<b>" + date.toLocaleString() + " - " + commit + "</b>" +
+                                    "<br>" + this.series.name + ": " +
+                                    this.point.absolute.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) +
+                                    " " + y_axis.toLowerCase() + " (" +
+                                    this.point.percent.toFixed(2) + "% from start)";
+                            },
+                        },
+                        xAxis: {
+                            type: "datetime",
+                        },
+                        yAxis: absolute ? {
+                            // Only the leftmost one ("-check") has its y-axis titled.
+                            title: profile == "check" ?
+                                { text: crate_name.startsWith("Summary") ?
+                                    summaryYAxis : yAxis } :
+                                { text: "" },
+                            min: 0,
+                            ceiling: max * 1.05,
+                            floor: 0,
+                        } : {
+                            max: max * 1.05,
+                            softMin: -5,
+                            minRange: 0.1,
+                            title: {
+                                text: "% change",
+                            }
+                        },
+                        plotOptions: {
+                            line: {
+                                point: {
+                                    events: {
+                                        click: clickHandler,
+                                    }
+                                }
                             }
                         }
-                    }
-                }
-            });
-            });
+                    });
+                });
+            }
         }
         processGraphs(graphs);
         document.getElementById("charts").style.display = "block";

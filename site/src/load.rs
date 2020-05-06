@@ -139,6 +139,8 @@ pub struct InputData {
     /// All known statistics gathered for crates
     pub stats_list: Vec<&'static str>,
 
+    pub all_series: Vec<crate::db::Series>,
+
     /// The last date that was seen while loading files.
     pub last_date: Date,
 
@@ -503,6 +505,41 @@ impl InputData {
         let persistent = Persistent::load();
         Ok(InputData {
             stats_list: stats_list.into_iter().collect(),
+            all_series: data_real
+                .iter()
+                .flat_map(|cd| {
+                    cd.benchmarks
+                        .values()
+                        .filter_map(|b| b.as_ref().ok())
+                        .flat_map(|bench| {
+                            bench.runs.iter().filter_map(move |r| {
+                                use crate::db::Cache;
+                                use collector::BenchmarkState;
+                                Some(crate::db::Series {
+                                    krate: Some(bench.name),
+                                    profile: if r.check {
+                                        crate::db::Profile::Check
+                                    } else if r.release {
+                                        crate::db::Profile::Opt
+                                    } else {
+                                        crate::db::Profile::Debug
+                                    },
+                                    cache: match &r.state {
+                                        BenchmarkState::Clean => Cache::Empty,
+                                        BenchmarkState::Nll => return None,
+                                        BenchmarkState::IncrementalStart => Cache::IncrementalEmpty,
+                                        BenchmarkState::IncrementalClean => Cache::IncrementalFresh,
+                                        BenchmarkState::IncrementalPatched(p) => {
+                                            Cache::IncrementalPatch(p.name)
+                                        }
+                                    },
+                                })
+                            })
+                        })
+                })
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect(),
             interpolated,
             last_date: last_date,
             data_real: data_real,

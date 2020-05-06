@@ -8,7 +8,7 @@
 // except according to those terms.
 
 use parking_lot::Mutex;
-use std::borrow::Cow;
+use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -42,6 +42,7 @@ pub use crate::api::{
     self, dashboard, data, days, github, graph, info, self_profile, status, CommitResponse,
     DateData, ServerResult, Style, StyledBenchmarkName,
 };
+use crate::db::{Cache, CrateSelector, Profile, Series};
 use crate::git;
 use crate::github::post_comment;
 use crate::load::CurrentState;
@@ -281,249 +282,168 @@ pub async fn handle_next_commit(data: Arc<InputData>) -> Option<String> {
 }
 
 struct CommitIdxCache {
-    commit_idx: HashMap<Sha, u16>,
-    commits: Vec<Sha>,
+    commit_idx: RefCell<HashMap<Sha, u16>>,
+    commits: RefCell<Vec<Sha>>,
 }
 
 impl CommitIdxCache {
-    fn new(data: &[DateData]) -> Self {
-        let mut commit_idx = HashMap::with_capacity(data.len());
-        let mut commits = Vec::with_capacity(data.len());
-        for (idx, cd) in data.iter().enumerate() {
-            commit_idx.insert(
-                cd.commit.clone(),
-                idx.try_into().unwrap_or_else(|_| {
-                    panic!("{} too big", idx);
-                }),
-            );
-            commits.push(cd.commit.clone());
-        }
+    fn new() -> Self {
         Self {
-            commit_idx,
-            commits,
+            commit_idx: RefCell::new(HashMap::new()),
+            commits: RefCell::new(Vec::new()),
         }
+    }
+
+    fn into_commits(self) -> Vec<Sha> {
+        std::mem::take(&mut *self.commits.borrow_mut())
     }
 
     fn lookup(&self, commit: Sha) -> u16 {
-        if let Some(idx) = self.commit_idx.get(&commit) {
-            *idx
-        } else {
-            panic!("unknown commit {}", commit)
-        }
+        *self
+            .commit_idx
+            .borrow_mut()
+            .entry(commit)
+            .or_insert_with(|| {
+                let idx = self.commits.borrow().len();
+                self.commits.borrow_mut().push(commit);
+                idx.try_into().unwrap_or_else(|_| {
+                    panic!("{} too big", idx);
+                })
+            })
     }
 }
 
-pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<graph::Response> {
-    let out = handle_data(
-        data::Request {
-            start: body.start.clone(),
-            end: body.end.clone(),
-            stat: body.stat.clone(),
-        },
-        data,
-    )?
-    .0;
-
-    // crate list * 3 because we have check, debug, and opt variants.
-    let mut result: HashMap<_, HashMap<Cow<'_, str>, _>> = HashMap::new();
-    let elements = out.len();
-    let mut last_commit = None::<Sha>;
-    let mut initial_debug_base_compile = None;
-    let mut initial_check_base_compile = None;
-    let mut initial_release_base_compile = None;
-
-    let cc = CommitIdxCache::new(&out);
-
-    for date_data in out {
-        let commit = date_data.commit;
-        let mut summary_points = HashMap::new();
-        for (name, runs) in date_data.data {
-            let bench_name = name.clone();
-            let entry = result
-                .entry(name.clone())
-                .or_insert_with(|| HashMap::with_capacity(runs.len()));
-            let mut base_compile = false;
-            let mut is_println_incr = false;
-            for (name, run, value) in runs.clone() {
-                let value = value as f32;
-                if run.state.is_base_compile() {
-                    base_compile = true;
-                } else if run.is_println_incr() {
-                    is_println_incr = true;
-                }
-
-                let entry = entry
-                    .entry(name.into())
-                    .or_insert_with(|| Vec::<graph::GraphData>::with_capacity(elements));
-                let first = entry.first().map(|d| d.absolute as f32);
-                let percent = first.map_or(0.0, |f| (value - f) / f * 100.0);
-                // Assert that the previous commit is always, well, the
-                // previous one. This should always be true, in which
-                // just a boolean exists.
-                if let Some(prev_commit) = last_commit.map(|l| cc.lookup(l)) {
-                    assert_eq!(cc.lookup(commit).checked_sub(1), Some(prev_commit));
-                }
-                entry.push(graph::GraphData {
-                    commit: cc.lookup(commit),
-                    absolute: value,
-                    percent,
-                    y: if body.absolute { value } else { percent },
-                    x: date_data.date.0.timestamp() as u64 * 1000, // all dates are since 1970
-                    is_interpolated: data
-                        .interpolated
-                        .get(&commit)
-                        .map(|c| {
-                            c.iter().any(|interpolation| {
-                                if bench_name.name != interpolation.benchmark {
-                                    return false;
-                                }
-                                if let Some(run_name) = &interpolation.run {
-                                    run == *run_name
-                                } else {
-                                    true
-                                }
-                            })
-                        })
-                        .unwrap_or(false),
-                });
-            }
-            if base_compile && is_println_incr {
-                for (_, run, value) in runs {
-                    // TODO: Come up with a way to summarize non-standard patches
-                    if run.state.is_patch() && !run.is_println_incr() {
-                        continue;
-                    }
-                    summary_points
-                        .entry((run.release, run.check, run.state.erase_path()))
-                        .or_insert_with(Vec::new)
-                        .push(value);
-                }
-            }
-        }
-        for (&(release, check, ref state), values) in &summary_points {
-            let value = (values.iter().sum::<f64>() as f32) / (values.len() as f32);
-            if !release && !check && state.is_base_compile() && initial_debug_base_compile.is_none()
-            {
-                initial_debug_base_compile = Some(value);
-            }
-            if check && state.is_base_compile() && initial_check_base_compile.is_none() {
-                initial_check_base_compile = Some(value);
-            }
-            if release && state.is_base_compile() && initial_release_base_compile.is_none() {
-                initial_release_base_compile = Some(value);
-            }
-        }
-        for ((release, check, state), values) in summary_points {
-            let style = if release {
-                Style::Opt
-            } else if check {
-                Style::Check
+fn to_graph_data<'a>(
+    data: &'a InputData,
+    cc: &'a CommitIdxCache,
+    series: crate::db::Series,
+    is_absolute: bool,
+    baseline_first: f64,
+    points: impl Iterator<Item = (collector::Commit, f64)> + 'a,
+) -> impl Iterator<Item = graph::GraphData> + 'a {
+    let mut first = None;
+    points.map(move |(commit, point)| {
+        let point = if series.krate.is_none() {
+            point / baseline_first
+        } else {
+            point
+        };
+        first = Some(first.unwrap_or(point));
+        let first = first.unwrap();
+        let percent = (point - first) / first * 100.0;
+        graph::GraphData {
+            commit: cc.lookup(commit.sha),
+            absolute: point as f32,
+            percent: percent as f32,
+            y: if is_absolute {
+                point as f32
             } else {
-                Style::Debug
-            };
-            let summary: &mut HashMap<Cow<'_, str>, _> = result
-                .entry(StyledBenchmarkName {
-                    name: "Summary".into(),
-                    style,
-                })
-                .or_insert_with(HashMap::new);
-            let entry = summary.entry(state.name()).or_insert_with(Vec::new);
-            let value = (values.iter().sum::<f64>() as f32) / (values.len() as f32);
-            let value = value
-                / if release {
-                    initial_release_base_compile.unwrap()
-                } else if check {
-                    initial_check_base_compile.unwrap()
-                } else {
-                    initial_debug_base_compile.unwrap()
-                };
-            let first = entry.first().map(|d: &graph::GraphData| d.absolute as f32);
-            let percent = first.map_or(0.0, |f| (value - f) / f * 100.0);
-
-            // Assert that the previous commit is always, well, the
-            // previous one. This should always be true, in which
-            // just a boolean exists.
-            if let Some(prev_commit) = last_commit.map(|l| cc.lookup(l)) {
-                assert_eq!(cc.lookup(commit).checked_sub(1), Some(prev_commit));
-            }
-            entry.push(graph::GraphData {
-                commit: cc.lookup(commit),
-                absolute: value,
-                percent,
-                y: if body.absolute { value } else { percent },
-                x: date_data.date.0.timestamp() as u64 * 1000, // all dates are since 1970
-                is_interpolated: data
-                    .interpolated
-                    .get(&commit)
-                    .filter(|c| {
-                        c.iter().any(|interpolation| {
-                            if let Some(_) = &interpolation.run {
-                                false
-                            } else {
-                                true
+                percent as f32
+            },
+            x: commit.date.0.timestamp() as u64 * 1000, // all dates are since 1970
+            is_interpolated: data
+                .interpolated
+                .get(&commit.sha)
+                .filter(|c| {
+                    c.iter().any(|interpolation| {
+                        if let Some(krate) = series.krate {
+                            if krate != interpolation.benchmark {
+                                return false;
                             }
-                        })
+                        }
+                        if let Some(r) = &interpolation.run {
+                            series.profile.matches_run(r) && series.cache.matches_run(r)
+                        } else {
+                            true
+                        }
                     })
-                    .is_some(),
-            });
+                })
+                .is_some(),
         }
-        last_commit = Some(commit);
-    }
-
-    let mut maxes = HashMap::with_capacity(result.len());
-    for (ref crate_name, ref benchmarks) in &result {
-        let name = crate_name.name;
-        let mut max = 0.0f32;
-        for points in benchmarks.values() {
-            for point in points {
-                max = max.max(point.y);
-            }
-        }
-        let max = maxes.get(&name).cloned().unwrap_or(0.0f32).max(max);
-        maxes.insert(name, max);
-    }
-
-    Ok(graph::Response {
-        max: maxes,
-        benchmarks: result
-            .into_iter()
-            .map(|(k, v)| (k, v.into_iter().map(|(k, v)| (k.into_owned(), v)).collect()))
-            .collect(),
-        colors: vec![String::new(), String::from(INTERPOLATED_COLOR)],
-        commits: cc.commits,
     })
 }
 
-fn handle_data(body: data::Request, data: &InputData) -> ServerResult<data::Response> {
-    debug!(
-        "handle_data: start = {:?}, end = {:?}",
-        body.start, body.end
-    );
-    let range = util::data_range(&data, &body.start, &body.end, Interpolate::Yes)?;
-    let mut result = range
-        .into_iter()
-        .map(|day| Ok(DateData::for_day(day, StatId::from_str(&body.stat)?)))
-        .collect::<ServerResult<Vec<_>>>()?;
+pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<graph::Response> {
+    let stat_id = StatId::from_str(&body.stat)?;
+    let cc = CommitIdxCache::new();
 
-    if result.is_empty() {
-        return Err(format!(
-            "empty range: {:?} to {:?} contained no commits",
-            body.start, body.end
-        ));
+    let mut series = data.all_series.clone();
+    series.extend(
+        data.all_series
+            .iter()
+            .map(|s| crate::db::Series {
+                krate: None,
+                profile: s.profile,
+                cache: s.cache,
+            })
+            .filter(|s| match s.cache {
+                crate::db::Cache::Empty => true,
+                crate::db::Cache::IncrementalEmpty => true,
+                crate::db::Cache::IncrementalFresh => true,
+                crate::db::Cache::IncrementalPatch(n) => n == *"println",
+            })
+            .collect::<std::collections::BTreeSet<_>>(),
+    );
+    let series = series.iter().map(|series| {
+        let baseline_first = crate::db::Series {
+            krate: None,
+            profile: series.profile,
+            cache: Cache::Empty,
+        }
+        .iterate(
+            data.data(Interpolate::Yes),
+            body.start.clone()..=body.end.clone(),
+            stat_id,
+        )
+        .filter_map(|(commit, point)| point.map(|p| (commit, p)))
+        .next()
+        .map_or(0.0, |(_c, d)| d);
+        (
+            *series,
+            to_graph_data(
+                data,
+                &cc,
+                *series,
+                body.absolute,
+                baseline_first,
+                series
+                    .iterate(
+                        data.data(Interpolate::Yes),
+                        body.start.clone()..=body.end.clone(),
+                        stat_id,
+                    )
+                    .filter_map(|(commit, point)| point.map(|p| (commit, p))),
+            )
+            .collect::<Vec<_>>(),
+        )
+    });
+
+    let mut by_krate = HashMap::new();
+    let mut by_krate_max = HashMap::new();
+    let summary_crate = collector::BenchmarkName::from("Summary");
+    for (series, points) in series {
+        let max = by_krate_max
+            .entry(series.krate.unwrap_or(summary_crate))
+            .or_insert(f32::MIN);
+        *max = points.iter().map(|p| p.y).fold(*max, |max, p| max.max(p));
+        by_krate
+            .entry(series.krate.unwrap_or(summary_crate))
+            .or_insert_with(HashMap::new)
+            .entry(match series.profile {
+                Profile::Opt => "opt",
+                Profile::Check => "check",
+                Profile::Debug => "debug",
+            })
+            .or_insert_with(Vec::new)
+            .push((series.cache, points));
     }
 
-    // Return everything from the first non-empty data to the last non-empty data.
-    // Data may contain "holes" of empty data.
-    let first_idx = result
-        .iter()
-        .position(|day| !day.data.is_empty())
-        .unwrap_or(0);
-    let last_idx = result
-        .iter()
-        .rposition(|day| !day.data.is_empty())
-        .unwrap_or(0);
-    let result = result.drain(first_idx..(last_idx + 1)).collect();
-    Ok(data::Response(result))
+    Ok(graph::Response {
+        max: by_krate_max,
+        benchmarks: by_krate,
+        colors: vec![String::new(), String::from(INTERPOLATED_COLOR)],
+        commits: cc.into_commits(),
+    })
 }
 
 pub async fn handle_days(body: days::Request, data: &InputData) -> ServerResult<days::Response> {

@@ -19,6 +19,7 @@ mod git;
 mod github;
 
 pub mod api;
+pub mod db;
 pub mod load;
 pub mod server;
 pub mod util;
