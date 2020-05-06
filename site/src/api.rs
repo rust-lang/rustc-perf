@@ -15,40 +15,19 @@
 
 use collector::{BenchmarkName, Date, Sha};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 use std::fmt;
 use std::result::Result as StdResult;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub enum Style {
-    Check,
-    Opt,
-    Debug,
-}
-
-impl fmt::Display for Style {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Style::Check => "check",
-                Style::Opt => "opt",
-                Style::Debug => "debug",
-            }
-        )
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct StyledBenchmarkName {
     pub name: BenchmarkName,
-    pub style: Style,
+    pub profile: crate::db::Profile,
 }
 
 impl fmt::Display for StyledBenchmarkName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}-{}", self.name, self.style)
+        write!(f, "{}-{}", self.name, self.profile)
     }
 }
 
@@ -67,35 +46,6 @@ pub struct DateData {
     pub date: Date,
     pub commit: Sha,
     pub data: HashMap<StyledBenchmarkName, Vec<(String, f64)>>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "list", content = "content")]
-pub enum List {
-    All,
-    List(BTreeSet<String>),
-}
-
-impl From<Vec<String>> for List {
-    fn from(s: Vec<String>) -> List {
-        List::List(s.into_iter().collect())
-    }
-}
-
-impl List {
-    pub fn contains(&self, item: &str) -> bool {
-        match *self {
-            List::All => true,
-            List::List(ref x) => x.contains(item),
-        }
-    }
-
-    pub fn into_set(&self, all: &BTreeSet<String>) -> BTreeSet<String> {
-        match *self {
-            List::All => all.clone(),
-            List::List(ref x) => x.clone(),
-        }
-    }
 }
 
 pub type ServerResult<T> = StdResult<T, String>;

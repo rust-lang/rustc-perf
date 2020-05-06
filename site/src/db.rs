@@ -36,6 +36,20 @@ pub enum Profile {
     Opt,
 }
 
+impl fmt::Display for Profile {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Profile::Check => "check",
+                Profile::Opt => "opt",
+                Profile::Debug => "debug",
+            }
+        )
+    }
+}
+
 impl Profile {
     pub fn matches_run(self, run: &RunId) -> bool {
         match self {

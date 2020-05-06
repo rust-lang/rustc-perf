@@ -38,7 +38,7 @@ type Response = http::Response<hyper::Body>;
 
 pub use crate::api::{
     self, dashboard, data, days, github, graph, info, self_profile, status, CommitResponse,
-    DateData, ServerResult, Style, StyledBenchmarkName,
+    DateData, ServerResult, StyledBenchmarkName,
 };
 use crate::db::{Cache, CrateSelector, Profile, Series};
 use crate::git;
@@ -397,11 +397,7 @@ impl DateData {
                     .krate
                     .as_specific()
                     .expect("all series contains only specific crates"),
-                style: match series.profile {
-                    Profile::Check => Style::Check,
-                    Profile::Opt => Style::Opt,
-                    Profile::Debug => Style::Debug,
-                },
+                profile: series.profile,
             })
             .or_insert_with(Vec::new)
             .push((series.cache.to_string(), point));
