@@ -9,90 +9,10 @@
 
 use std::env;
 
-use crate::load::{CommitData, InputData};
-use collector::Bound;
-
-use chrono::Duration;
-
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Interpolate {
     Yes,
     No,
-}
-
-pub fn find_commit<'a>(
-    data: &'a InputData,
-    idx: &Bound,
-    left: bool,
-    interpolate: Interpolate,
-) -> Result<&'a CommitData, String> {
-    let last_month = data.last_date.0.naive_utc().date() - Duration::days(30);
-    for element in data.data(interpolate) {
-        let commit = &element.commit;
-        let found = match *idx {
-            Bound::Commit(ref sha) => commit.sha == **sha,
-            Bound::Date(ref date) => {
-                if left {
-                    commit.date.0.naive_utc().date() == *date
-                } else {
-                    // if the commit date is equal to the next date (after the bound) then we want
-                    // to stop, since this is an inclusive range.
-                    commit.date.0.naive_utc().date() == date.succ()
-                }
-            }
-            Bound::None => {
-                if left {
-                    last_month <= commit.date.0.naive_utc().date()
-                } else {
-                    // all the data
-                    false
-                }
-            }
-        };
-        if found {
-            return Ok(&**element);
-        }
-    }
-
-    if !left && *idx == Bound::None {
-        return data
-            .data(interpolate)
-            .iter()
-            .last()
-            .map(|c| &**c)
-            .ok_or_else(|| format!("at least one commit"));
-    }
-
-    Err(format!(
-        "could not find commit by bound {:?}, start={:?}",
-        idx, left
-    ))
-}
-
-pub fn data_range<'a>(
-    data: &'a InputData,
-    a: &Bound,
-    b: &Bound,
-    interpolate: Interpolate,
-) -> Result<Vec<&'a CommitData>, String> {
-    let mut ret = Vec::new();
-    let mut in_range = false;
-    let left_bound = &find_commit(data, a, true, interpolate)?.commit;
-    let right_bound = &find_commit(data, b, false, interpolate)?.commit;
-    for cd in data.data(interpolate) {
-        let commit = &cd.commit;
-        if commit.sha == left_bound.sha {
-            in_range = true;
-        }
-        if in_range {
-            ret.push(&**cd);
-        }
-        if commit.sha == right_bound.sha {
-            break;
-        }
-    }
-
-    Ok(ret)
 }
 
 /// Reads the repository path from the arguments passed to main()
