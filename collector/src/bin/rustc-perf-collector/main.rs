@@ -588,38 +588,6 @@ fn main_result() -> anyhow::Result<i32> {
             Ok(0)
         }
 
-        ("remove_benchmark", Some(sub_m)) => {
-            let benchmark: BenchmarkName = sub_m.value_of("BENCHMARK").unwrap().into();
-            let out_repo = get_out_repo(false)?;
-            for commit in &get_commits()? {
-                if let Ok(mut data) = out_repo.load_commit_data(&commit, "x86_64-unknown-linux-gnu")
-                {
-                    if data.benchmarks.remove(&benchmark).is_none() {
-                        warn!("could not remove {} from {}", benchmark, commit.sha);
-                    }
-                    out_repo.add_commit_data(&data)?;
-                }
-            }
-            Ok(0)
-        }
-
-        ("remove_errs", Some(_)) => {
-            for commit in &get_commits()? {
-                let out_repo = get_out_repo(false)?;
-                if let Ok(mut data) = out_repo.load_commit_data(&commit, "x86_64-unknown-linux-gnu")
-                {
-                    let benchmarks = data
-                        .benchmarks
-                        .into_iter()
-                        .filter(|&(_, ref v)| v.is_ok())
-                        .collect();
-                    data.benchmarks = benchmarks;
-                    out_repo.add_commit_data(&data)?;
-                }
-            }
-            Ok(0)
-        }
-
         ("test_benchmarks", Some(_)) => {
             if let Some(commit) = get_commits()?.last() {
                 let sysroot =
