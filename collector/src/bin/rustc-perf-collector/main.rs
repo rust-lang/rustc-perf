@@ -9,7 +9,7 @@ use collector::api::collected;
 use collector::git::get_commit_or_fake_it;
 use collector::git::get_rust_commits as get_commits;
 use collector::{ArtifactData, Commit, CommitData, Date, Sha};
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::env;
@@ -28,7 +28,6 @@ mod sysroot;
 
 use background_worker::send_home;
 use collector::Benchmark as CollectedBenchmark;
-use collector::BenchmarkName;
 use execute::{Benchmark, Profiler};
 use sysroot::Sysroot;
 
@@ -170,7 +169,7 @@ fn process_commits(
     };
 
     let commit = get_commit_or_fake_it(&commit)?;
-    match Sysroot::install(&commit.sha, commit.date.0, "x86_64-unknown-linux-gnu") {
+    match Sysroot::install(&commit.sha, "x86_64-unknown-linux-gnu") {
         Ok(sysroot) => {
             let result = out_repo.success(&bench_commit(
                 Some(&out_repo),
@@ -484,7 +483,7 @@ fn main_result() -> anyhow::Result<i32> {
             let commit = sub_m.value_of("COMMIT").unwrap();
             let commit = get_commit_or_fake_it(&commit)?;
             let out_repo = get_out_repo(false)?;
-            let sysroot = Sysroot::install(&commit.sha, commit.date.0, "x86_64-unknown-linux-gnu")?;
+            let sysroot = Sysroot::install(&commit.sha, "x86_64-unknown-linux-gnu")?;
             let build_kinds = &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt];
             let run_kinds = RunKind::all();
             out_repo.success(&bench_commit(
@@ -590,8 +589,7 @@ fn main_result() -> anyhow::Result<i32> {
 
         ("test_benchmarks", Some(_)) => {
             if let Some(commit) = get_commits()?.last() {
-                let sysroot =
-                    Sysroot::install(&commit.sha, commit.date.0, "x86_64-unknown-linux-gnu")?;
+                let sysroot = Sysroot::install(&commit.sha, "x86_64-unknown-linux-gnu")?;
                 // filter out servo benchmarks as they simply take too long
                 bench_commit(
                     None,

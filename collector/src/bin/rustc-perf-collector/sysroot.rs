@@ -23,18 +23,14 @@ pub struct Sysroot {
 }
 
 impl Sysroot {
-    pub fn install(sha: &Sha, date: DateTime<Utc>, triple: &str) -> anyhow::Result<Self> {
-        let commit = Commit {
-            sha: sha.to_string(),
-            date,
-        };
+    pub fn install(sha: &Sha, triple: &str) -> anyhow::Result<Self> {
         let unpack_into = "cache";
 
         fs::create_dir_all(&unpack_into)?;
 
         let download = SysrootDownload {
             directory: unpack_into.into(),
-            rust_sha: commit.sha.clone(),
+            rust_sha: sha.to_string(),
             triple: triple.to_owned(),
         };
 
