@@ -107,7 +107,7 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
                 (
                     series,
                     series
-                        .iterate(&[cd.clone()], StatId::WallTime)
+                        .iterate(std::slice::from_ref(cd), StatId::WallTime)
                         .map(|(_id, point)| (point.unwrap() * 10.0).round() / 10.0)
                         .collect::<Vec<_>>(),
                 )
