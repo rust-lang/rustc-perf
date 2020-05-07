@@ -481,7 +481,7 @@ impl InputData {
                             benchmark_name.to_owned(),
                             Ok(Benchmark {
                                 name: benchmark_name.to_owned(),
-                                runs: runs,
+                                runs,
                             }),
                         );
                     }
@@ -554,50 +554,52 @@ impl InputData {
             .map(|v| artifact_data.remove(&v).unwrap())
             .collect::<Vec<_>>();
 
+        let all_series = data_real
+            .iter()
+            .flat_map(|cd| {
+                cd.benchmarks
+                    .values()
+                    .filter_map(|b| b.as_ref().ok())
+                    .flat_map(|bench| {
+                        bench.runs.iter().filter_map(move |r| {
+                            use crate::db::Cache;
+                            use collector::BenchmarkState;
+                            Some(crate::db::Series {
+                                krate: crate::db::CrateSelector::Specific(bench.name),
+                                profile: if r.check {
+                                    crate::db::Profile::Check
+                                } else if r.release {
+                                    crate::db::Profile::Opt
+                                } else {
+                                    crate::db::Profile::Debug
+                                },
+                                cache: match &r.state {
+                                    BenchmarkState::Clean => Cache::Empty,
+                                    BenchmarkState::Nll => return None,
+                                    BenchmarkState::IncrementalStart => Cache::IncrementalEmpty,
+                                    BenchmarkState::IncrementalClean => Cache::IncrementalFresh,
+                                    BenchmarkState::IncrementalPatched(p) => {
+                                        Cache::IncrementalPatch(p.name)
+                                    }
+                                },
+                            })
+                        })
+                    })
+            })
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+
         let persistent = Persistent::load();
         Ok(InputData {
             stats_list: stats_list.into_iter().collect(),
-            all_series: data_real
-                .iter()
-                .flat_map(|cd| {
-                    cd.benchmarks
-                        .values()
-                        .filter_map(|b| b.as_ref().ok())
-                        .flat_map(|bench| {
-                            bench.runs.iter().filter_map(move |r| {
-                                use crate::db::Cache;
-                                use collector::BenchmarkState;
-                                Some(crate::db::Series {
-                                    krate: crate::db::CrateSelector::Specific(bench.name),
-                                    profile: if r.check {
-                                        crate::db::Profile::Check
-                                    } else if r.release {
-                                        crate::db::Profile::Opt
-                                    } else {
-                                        crate::db::Profile::Debug
-                                    },
-                                    cache: match &r.state {
-                                        BenchmarkState::Clean => Cache::Empty,
-                                        BenchmarkState::Nll => return None,
-                                        BenchmarkState::IncrementalStart => Cache::IncrementalEmpty,
-                                        BenchmarkState::IncrementalClean => Cache::IncrementalFresh,
-                                        BenchmarkState::IncrementalPatched(p) => {
-                                            Cache::IncrementalPatch(p.name)
-                                        }
-                                    },
-                                })
-                            })
-                        })
-                })
-                .collect::<BTreeSet<_>>()
-                .into_iter()
-                .collect(),
+            all_series,
+            last_date,
+            data_real,
+            data,
             interpolated,
-            last_date: last_date,
-            data_real: data_real,
-            data: data,
-            persistent: Mutex::new(persistent),
             artifact_data,
+            persistent: Mutex::new(persistent),
             config,
         })
     }
