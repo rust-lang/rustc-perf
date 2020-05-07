@@ -5,6 +5,28 @@ use std::fmt;
 use std::ops::RangeInclusive;
 use std::sync::Arc;
 
+pub fn data_for(data: &[Arc<CommitData>], is_left: bool, query: Bound) -> Option<Arc<CommitData>> {
+    if is_left {
+        let last_month =
+            data.last().unwrap().commit.date.0.naive_utc().date() - chrono::Duration::days(30);
+        data.iter()
+            .find(|cd| match &query {
+                Bound::Commit(sha) => cd.commit.sha == **sha,
+                Bound::Date(date) => cd.commit.date.0.naive_utc().date() == *date,
+                Bound::None => last_month <= cd.commit.date.0.naive_utc().date(),
+            })
+            .cloned()
+    } else {
+        data.iter()
+            .rfind(|cd| match &query {
+                Bound::Commit(sha) => cd.commit.sha == **sha,
+                Bound::Date(date) => cd.commit.date.0.date().naive_utc() == *date,
+                Bound::None => true,
+            })
+            .cloned()
+    }
+}
+
 pub fn range_subset(data: &[Arc<CommitData>], range: RangeInclusive<Bound>) -> &[Arc<CommitData>] {
     let (a, b) = range.into_inner();
 
@@ -23,7 +45,14 @@ pub fn range_subset(data: &[Arc<CommitData>], range: RangeInclusive<Bound>) -> &
     });
 
     if let (Some(left), Some(right)) = (left_idx, right_idx) {
-        &data[left..=right]
+        data.get(left..=right).unwrap_or_else(|| {
+            log::error!(
+                "Failed to compute left/right indices from {:?}..={:?}",
+                a,
+                b
+            );
+            &[]
+        })
     } else {
         &[]
     }

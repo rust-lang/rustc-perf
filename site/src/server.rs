@@ -354,15 +354,18 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
 }
 
 pub async fn handle_days(body: days::Request, data: &InputData) -> ServerResult<days::Response> {
-    let range = data.data_range(Interpolate::No, body.start.clone()..=body.end.clone());
-    let a = range.first().ok_or(format!(
-        "could not find start commit for bound {:?}",
-        body.start
-    ))?;
-    let b = range.last().ok_or(format!(
-        "could not find end commit for bound {:?}",
-        body.end
-    ))?;
+    let a = data
+        .data_for(Interpolate::No, true, body.start.clone())
+        .ok_or(format!(
+            "could not find start commit for bound {:?}",
+            body.start
+        ))?;
+    let b = data
+        .data_for(Interpolate::No, false, body.end.clone())
+        .ok_or(format!(
+            "could not find end commit for bound {:?}",
+            body.end
+        ))?;
     let stat_id = StatId::from_str(&body.stat)?;
     Ok(days::Response {
         a: DateData::for_day(&a, stat_id, &data.all_series),

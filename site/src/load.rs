@@ -217,6 +217,15 @@ impl InputData {
         }
     }
 
+    pub fn data_for(
+        &self,
+        interpolate: Interpolate,
+        is_left: bool,
+        query: Bound,
+    ) -> Option<Arc<CommitData>> {
+        crate::db::data_for(self.data(interpolate), is_left, query)
+    }
+
     pub fn data_range(
         &self,
         interpolate: Interpolate,
