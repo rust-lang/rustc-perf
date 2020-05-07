@@ -20,6 +20,7 @@ mod github;
 
 pub mod api;
 pub mod db;
+mod interpolate;
 pub mod load;
 pub mod server;
 pub mod util;

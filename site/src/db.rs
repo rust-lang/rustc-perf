@@ -296,6 +296,15 @@ impl<'b> Series<'b> {
     }
 }
 
+impl<'a, 'b, I, T> SeriesIterator<'b, I>
+where
+    I: Iterator<Item = (T, &'a BTreeMap<Crate, Result<Benchmark, String>>)>,
+{
+    pub fn interpolate(self) -> crate::interpolate::Interpolate<Self, T> {
+        crate::interpolate::Interpolate::new(self)
+    }
+}
+
 impl<'b, 'a, I, T> Iterator for SeriesIterator<'b, I>
 where
     I: Iterator<Item = (T, &'a BTreeMap<Crate, Result<Benchmark, String>>)>,

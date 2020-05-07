@@ -85,7 +85,7 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
         .filter(|(_, v)| v.is_ok())
         .map(|(k, _)| k)
         .collect::<Vec<_>>();
-    let cd = data.data(Interpolate::Yes).iter().last().unwrap();
+    let cd = data.data(Interpolate::No).iter().last().unwrap();
     let benches = cd
         .benchmarks
         .keys()
@@ -108,7 +108,8 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
                     series,
                     series
                         .iterate(std::slice::from_ref(cd), StatId::WallTime)
-                        .map(|(_id, point)| (point.unwrap() * 10.0).round() / 10.0)
+                        .interpolate()
+                        .map(|(_id, point)| (point * 10.0).round() / 10.0)
                         .collect::<Vec<_>>(),
                 )
             }),
@@ -293,10 +294,10 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
             cache: Cache::Empty,
         }
         .iterate(
-            data.data_range(Interpolate::Yes, body.start.clone()..=body.end.clone()),
+            data.data_range(Interpolate::No, body.start.clone()..=body.end.clone()),
             stat_id,
         )
-        .filter_map(|(commit, point)| point.map(|p| (commit, p)))
+        .interpolate()
         .next()
         .map_or(0.0, |(_c, d)| d);
         (
@@ -309,10 +310,10 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
                 baseline_first,
                 series
                     .iterate(
-                        data.data_range(Interpolate::Yes, body.start.clone()..=body.end.clone()),
+                        data.data_range(Interpolate::No, body.start.clone()..=body.end.clone()),
                         stat_id,
                     )
-                    .filter_map(|(commit, point)| point.map(|p| (commit, p))),
+                    .interpolate(),
             )
             .collect::<Vec<_>>(),
         )
