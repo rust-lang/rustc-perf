@@ -229,7 +229,6 @@ impl Patch {
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Deserialize, Serialize)]
 pub enum BenchmarkState {
     Clean,
-    Nll,
     IncrementalStart,
     IncrementalClean,
     IncrementalPatched(Patch),
@@ -247,7 +246,6 @@ impl BenchmarkState {
     pub fn name(&self) -> Cow<'static, str> {
         match *self {
             BenchmarkState::Clean => "clean".into(),
-            BenchmarkState::Nll => "nll".into(),
             BenchmarkState::IncrementalStart => "baseline incremental".into(),
             BenchmarkState::IncrementalClean => "clean incremental".into(),
             BenchmarkState::IncrementalPatched(ref patch) => {

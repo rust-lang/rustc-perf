@@ -1,32 +1,23 @@
+use collector::StatId;
 use collector::{BenchmarkName as Crate, Bound, Commit, PatchName};
-use collector::{RunId, StatId};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::ops::RangeInclusive;
 use std::sync::Arc;
 
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct RunId {
+    pub profile: Profile,
+    pub state: Cache,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
 #[serde(from = "collector::Run")]
 pub struct Run {
     pub stats: collector::Stats,
-    #[serde(default)]
     pub self_profile: Option<collector::SelfProfile>,
-    #[serde(default)]
-    pub check: bool,
-    pub release: bool,
-    pub state: collector::BenchmarkState,
-}
-
-impl PartialEq for Run {
-    fn eq(&self, other: &Self) -> bool {
-        self.release == other.release && self.check == other.check && self.state == other.state
-    }
-}
-
-impl PartialEq<RunId> for Run {
-    fn eq(&self, other: &RunId) -> bool {
-        self.release == other.release && self.check == other.check && self.state == other.state
-    }
+    pub profile: Profile,
+    pub state: Cache,
 }
 
 impl Run {
@@ -34,13 +25,10 @@ impl Run {
         self.stats.get(stat)
     }
 
-    pub fn id(&self) -> collector::RunId {
-        let state = self.state.clone();
-        let state = state.erase_path();
+    pub fn id(&self) -> RunId {
         RunId {
-            check: self.check,
-            release: self.release,
-            state,
+            profile: self.profile,
+            state: self.state,
         }
     }
 }
@@ -50,27 +38,37 @@ impl From<collector::Run> for Run {
         Run {
             stats: c.stats,
             self_profile: c.self_profile,
-            check: c.check,
-            release: c.release,
-            state: c.state,
+            profile: if c.check {
+                Profile::Check
+            } else if c.release {
+                Profile::Opt
+            } else {
+                Profile::Debug
+            },
+            state: match c.state {
+                collector::BenchmarkState::Clean => Cache::Empty,
+                collector::BenchmarkState::IncrementalStart => Cache::IncrementalEmpty,
+                collector::BenchmarkState::IncrementalClean => Cache::IncrementalFresh,
+                collector::BenchmarkState::IncrementalPatched(p) => Cache::IncrementalPatch(p.name),
+            },
         }
     }
 }
 
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, serde::Deserialize)]
 pub struct Benchmark {
     pub runs: Vec<Run>,
     pub name: Crate,
 }
 
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, serde::Deserialize)]
 pub struct CommitData {
     pub commit: Commit,
     // String in Result is the output of the command that failed
     pub benchmarks: BTreeMap<Crate, Result<Benchmark, String>>,
 }
 
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, serde::Deserialize)]
 pub struct ArtifactData {
     pub id: String,
     // String in Result is the output of the command that failed
@@ -153,11 +151,7 @@ impl fmt::Display for Profile {
 
 impl Profile {
     pub fn matches_run(self, run: &RunId) -> bool {
-        match self {
-            Profile::Check => run.check == true,
-            Profile::Opt => run.release == true,
-            Profile::Debug => run.release == false && run.check == false,
-        }
+        run.profile == self
     }
 }
 
@@ -187,18 +181,7 @@ impl fmt::Display for Cache {
 
 impl Cache {
     pub fn matches_run(self, r: &RunId) -> bool {
-        match self {
-            Cache::Empty => r.state == collector::BenchmarkState::Clean,
-            Cache::IncrementalEmpty => r.state == collector::BenchmarkState::IncrementalStart,
-            Cache::IncrementalFresh => r.state == collector::BenchmarkState::IncrementalClean,
-            Cache::IncrementalPatch(name) => {
-                if let collector::BenchmarkState::IncrementalPatched(ref p) = r.state {
-                    p.name == name
-                } else {
-                    false
-                }
-            }
-        }
+        r.state == self
     }
 }
 

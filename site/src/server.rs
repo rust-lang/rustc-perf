@@ -514,9 +514,9 @@ fn get_self_profile_data(
         .iter()
         .find(|r| {
             let id = r.id();
-            id.check == (bench_ty == "check")
-                && id.release == (bench_ty == "opt")
-                && id.state.name() == run_name
+            (id.profile == Profile::Check) == (bench_ty == "check")
+                && (id.profile == Profile::Opt) == (bench_ty == "opt")
+                && id.state.to_string() == run_name
         })
         .ok_or(format!("No such run"))?;
 

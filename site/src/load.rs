@@ -26,9 +26,9 @@ use crate::util::Interpolate;
 use collector::{Bound, Date};
 
 use crate::api::github;
-use crate::db::{ArtifactData, Benchmark, CommitData, Run};
+use crate::db::{ArtifactData, Benchmark, CommitData, Run, RunId};
 use collector;
-pub use collector::{BenchmarkName, Commit, Patch, RunId, Sha, StatId, Stats};
+pub use collector::{BenchmarkName, Commit, Patch, Sha, StatId, Stats};
 use log::{error, info, trace, warn};
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
@@ -518,7 +518,7 @@ impl InputData {
                     if let Some(known_runs) = known_runs.get(&benchmark_name) {
                         let missing_runs = known_runs
                             .iter()
-                            .filter(|rname| !benchmark.runs.iter().any(|r| *r == **rname))
+                            .filter(|rname| !benchmark.runs.iter().any(|r| r.id() == **rname))
                             .collect::<Vec<_>>();
                         if !missing_runs.is_empty() {
                             let before = benchmark.runs.len();
@@ -585,26 +585,10 @@ impl InputData {
                     .filter_map(|b| b.as_ref().ok())
                     .flat_map(|bench| {
                         bench.runs.iter().filter_map(move |r| {
-                            use crate::db::Cache;
-                            use collector::BenchmarkState;
                             Some(crate::db::Series {
                                 krate: crate::db::CrateSelector::Specific(bench.name),
-                                profile: if r.check {
-                                    crate::db::Profile::Check
-                                } else if r.release {
-                                    crate::db::Profile::Opt
-                                } else {
-                                    crate::db::Profile::Debug
-                                },
-                                cache: match &r.state {
-                                    BenchmarkState::Clean => Cache::Empty,
-                                    BenchmarkState::Nll => return None,
-                                    BenchmarkState::IncrementalStart => Cache::IncrementalEmpty,
-                                    BenchmarkState::IncrementalClean => Cache::IncrementalFresh,
-                                    BenchmarkState::IncrementalPatched(p) => {
-                                        Cache::IncrementalPatch(p.name)
-                                    }
-                                },
+                                profile: r.profile,
+                                cache: r.state,
                             })
                         })
                     })
@@ -802,7 +786,7 @@ fn fill_benchmark_runs(
             }
             (None, None) => unreachable!(
                 "{} run in benchmark {} has no entries, but it's missing!",
-                missing_run, benchmark.name
+                missing_run.state, benchmark.name
             ),
         };
         benchmark.runs.push(run);
@@ -869,7 +853,7 @@ fn fill_benchmark_data(
             for srun in start_runs {
                 for erun in end_runs {
                     // Found pair
-                    if srun == erun {
+                    if srun.id() == erun.id() {
                         let interpolated_stats =
                             interpolate_stats(&srun, &erun, distance, from_start);
                         let mut interpolated_run = srun.clone();

@@ -66,7 +66,6 @@ impl From<InternalSelfProfile> for SelfProfile {
                     });
                 }
                 assert_eq!(query_data.capacity(), query_data.len());
-                query_data.shrink_to_fit();
                 SelfProfile {
                     query_data: Arc::new(query_data),
                 }
