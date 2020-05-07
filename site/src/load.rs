@@ -149,6 +149,14 @@ pub struct InputData {
     data_real: Vec<Arc<CommitData>>,
     data: Vec<Arc<CommitData>>,
 
+    pub commits: Vec<Commit>,
+
+    /// This is only for the last commit, with Some(..) if the benchmark
+    /// errored.
+    ///
+    /// Names are unique and sorted.
+    pub errors: Vec<(BenchmarkName, Option<String>)>,
+
     /// The benchmarks we interpolated for a given commit.
     ///
     /// Not all commits are in this map.
@@ -324,6 +332,14 @@ impl InputData {
         mut artifact_data: HashMap<String, ArtifactData>,
         config: Config,
     ) -> anyhow::Result<InputData> {
+        let commits = data.iter().map(|cd| cd.commit.clone()).collect::<Vec<_>>();
+        let errors = data
+            .last()
+            .unwrap()
+            .benchmarks
+            .iter()
+            .map(|(name, res)| (*name, res.as_ref().err().cloned()))
+            .collect::<Vec<_>>();
         let mut last_date = None;
         let mut stats_list = BTreeSet::new();
 
@@ -594,6 +610,8 @@ impl InputData {
         Ok(InputData {
             stats_list: stats_list.into_iter().collect(),
             all_series,
+            commits,
+            errors,
             last_date,
             data_real,
             data,

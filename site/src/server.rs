@@ -164,20 +164,20 @@ fn prettify_log(log: &str) -> Option<String> {
 }
 
 pub async fn handle_status_page(data: Arc<InputData>) -> status::Response {
-    let last_commit = data.data(Interpolate::No).iter().next_back().unwrap();
+    let last_commit = *data.commits.last().unwrap();
 
-    let mut benchmark_state = last_commit
-        .benchmarks
+    let mut benchmark_state = data
+        .errors
         .iter()
-        .map(|(name, res)| {
-            let msg = if let Some(error) = res.as_ref().err() {
+        .map(|(name, err)| {
+            let msg = if let Some(error) = err {
                 Some(prettify_log(error).unwrap_or_else(|| error.to_owned()))
             } else {
                 None
             };
             status::BenchmarkStatus {
                 name: *name,
-                success: res.is_ok(),
+                success: err.is_none(),
                 error: msg,
             }
         })
@@ -190,7 +190,7 @@ pub async fn handle_status_page(data: Arc<InputData>) -> status::Response {
     let current = data.persistent.lock().current.clone();
 
     status::Response {
-        last_commit: last_commit.commit.clone(),
+        last_commit,
         benchmarks: benchmark_state,
         missing,
         current,
