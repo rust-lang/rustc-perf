@@ -240,7 +240,7 @@ impl InputData {
             )?;
         }
 
-        trace!("loading files from directory");
+        eprintln!("Loading files from directory...");
 
         // Read all files from repo_loc/processed
         let latest_section_start = ::std::time::Instant::now();
@@ -300,7 +300,7 @@ impl InputData {
         }
         std::mem::drop(file_contents);
 
-        info!(
+        eprintln!(
             "{} commits/artifacts loaded in {:?}",
             data.len(),
             latest_section_start.elapsed()
