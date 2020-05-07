@@ -1,9 +1,81 @@
-use collector::{ArtifactData, BenchmarkName as Crate, Bound, Commit, CommitData, PatchName};
+use collector::{BenchmarkName as Crate, Bound, Commit, PatchName};
 use collector::{RunId, StatId};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::ops::RangeInclusive;
 use std::sync::Arc;
+
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[serde(from = "collector::Run")]
+pub struct Run {
+    pub stats: collector::Stats,
+    #[serde(default)]
+    pub self_profile: Option<collector::SelfProfile>,
+    #[serde(default)]
+    pub check: bool,
+    pub release: bool,
+    pub state: collector::BenchmarkState,
+}
+
+impl PartialEq for Run {
+    fn eq(&self, other: &Self) -> bool {
+        self.release == other.release && self.check == other.check && self.state == other.state
+    }
+}
+
+impl PartialEq<RunId> for Run {
+    fn eq(&self, other: &RunId) -> bool {
+        self.release == other.release && self.check == other.check && self.state == other.state
+    }
+}
+
+impl Run {
+    pub fn get_stat(&self, stat: StatId) -> Option<f64> {
+        self.stats.get(stat)
+    }
+
+    pub fn id(&self) -> collector::RunId {
+        let state = self.state.clone();
+        let state = state.erase_path();
+        RunId {
+            check: self.check,
+            release: self.release,
+            state,
+        }
+    }
+}
+
+impl From<collector::Run> for Run {
+    fn from(c: collector::Run) -> Run {
+        Run {
+            stats: c.stats,
+            self_profile: c.self_profile,
+            check: c.check,
+            release: c.release,
+            state: c.state,
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+pub struct Benchmark {
+    pub runs: Vec<Run>,
+    pub name: Crate,
+}
+
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+pub struct CommitData {
+    pub commit: Commit,
+    // String in Result is the output of the command that failed
+    pub benchmarks: BTreeMap<Crate, Result<Benchmark, String>>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+pub struct ArtifactData {
+    pub id: String,
+    // String in Result is the output of the command that failed
+    pub benchmarks: BTreeMap<Crate, Result<Benchmark, String>>,
+}
 
 pub fn data_for(data: &[Arc<CommitData>], is_left: bool, query: Bound) -> Option<Arc<CommitData>> {
     if is_left {
@@ -216,12 +288,7 @@ impl<'b> Series<'b> {
         stat: StatId,
     ) -> SeriesIterator<
         'b,
-        impl Iterator<
-            Item = (
-                Commit,
-                &'a BTreeMap<Crate, Result<collector::Benchmark, String>>,
-            ),
-        >,
+        impl Iterator<Item = (Commit, &'a BTreeMap<Crate, Result<Benchmark, String>>)>,
     > {
         SeriesIterator {
             data: data.iter().map(|cd| (cd.commit, &cd.benchmarks)),
@@ -236,12 +303,7 @@ impl<'b> Series<'b> {
         stat: StatId,
     ) -> SeriesIterator<
         'b,
-        impl Iterator<
-            Item = (
-                String,
-                &'a BTreeMap<Crate, Result<collector::Benchmark, String>>,
-            ),
-        >,
+        impl Iterator<Item = (String, &'a BTreeMap<Crate, Result<Benchmark, String>>)>,
     > {
         SeriesIterator {
             data: artifacts.iter().map(|ad| (ad.id.clone(), &ad.benchmarks)),
@@ -253,14 +315,14 @@ impl<'b> Series<'b> {
 
 impl<'b, 'a, I, T> Iterator for SeriesIterator<'b, I>
 where
-    I: Iterator<Item = (T, &'a BTreeMap<Crate, Result<collector::Benchmark, String>>)>,
+    I: Iterator<Item = (T, &'a BTreeMap<Crate, Result<Benchmark, String>>)>,
 {
     type Item = (T, Option<f64>);
 
     fn next(&mut self) -> Option<Self::Item> {
         let (commit, benchmarks) = self.data.next()?;
 
-        let get_stat = |res: Option<&Result<collector::Benchmark, String>>| {
+        let get_stat = |res: Option<&Result<Benchmark, String>>| {
             res.and_then(|res| res.as_ref().ok())
                 .and_then(|bd| {
                     bd.runs.iter().find(|r| {

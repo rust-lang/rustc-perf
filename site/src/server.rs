@@ -40,7 +40,7 @@ pub use crate::api::{
     self, dashboard, data, days, github, graph, info, self_profile, status, CommitResponse,
     DateData, ServerResult, StyledBenchmarkName,
 };
-use crate::db::{Cache, CrateSelector, Profile, Series};
+use crate::db::{Cache, CommitData, CrateSelector, Profile, Series};
 use crate::git;
 use crate::github::post_comment;
 use crate::load::CurrentState;
@@ -374,11 +374,7 @@ pub async fn handle_days(body: days::Request, data: &InputData) -> ServerResult<
 }
 
 impl DateData {
-    fn for_day(
-        commit: &Arc<collector::CommitData>,
-        stat: StatId,
-        series: &[crate::db::Series],
-    ) -> DateData {
+    fn for_day(commit: &Arc<CommitData>, stat: StatId, series: &[crate::db::Series]) -> DateData {
         let mut data = HashMap::new();
 
         for series in series {
@@ -508,7 +504,7 @@ pub async fn handle_collected(
 }
 
 fn get_self_profile_data(
-    benchmark: &collector::Benchmark,
+    benchmark: &crate::db::Benchmark,
     bench_ty: &str,
     run_name: &str,
     sort_idx: Option<i32>,

@@ -26,11 +26,9 @@ use crate::util::Interpolate;
 use collector::{Bound, Date};
 
 use crate::api::github;
+use crate::db::{ArtifactData, Benchmark, CommitData, Run};
 use collector;
-pub use collector::{
-    ArtifactData, Benchmark, BenchmarkName, Commit, CommitData, Patch, Run, RunId, Sha, StatId,
-    Stats,
-};
+pub use collector::{BenchmarkName, Commit, Patch, RunId, Sha, StatId, Stats};
 use log::{error, info, trace, warn};
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
