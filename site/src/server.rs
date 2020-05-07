@@ -139,14 +139,7 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
             .map(|ad| ad.id.clone())
             .chain(std::iter::once(format!(
                 "master: {}",
-                &data
-                    .data(Interpolate::Yes)
-                    .iter()
-                    .last()
-                    .unwrap()
-                    .commit
-                    .sha
-                    .to_string()[0..8]
+                &cd.commit.sha.to_string()[0..8]
             )))
             .collect::<Vec<_>>(),
         check,
