@@ -361,6 +361,7 @@ dependencies = [
  "libc",
  "log",
  "reqwest",
+ "rustc-artifacts",
  "rustup",
  "semver",
  "serde",
@@ -369,6 +370,7 @@ dependencies = [
  "tar",
  "tempfile",
  "thiserror",
+ "tokio",
  "xz2",
 ]
 

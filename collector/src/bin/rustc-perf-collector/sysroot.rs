@@ -1,6 +1,5 @@
 use anyhow::{anyhow, Context};
 use chrono::{DateTime, Utc};
-use collector::Sha;
 use std::fmt;
 use std::fs::{self, File};
 use std::io::{BufReader, Read};
@@ -23,14 +22,14 @@ pub struct Sysroot {
 }
 
 impl Sysroot {
-    pub fn install(sha: &Sha, triple: &str) -> anyhow::Result<Self> {
+    pub fn install(sha: String, triple: &str) -> anyhow::Result<Self> {
         let unpack_into = "cache";
 
         fs::create_dir_all(&unpack_into)?;
 
         let download = SysrootDownload {
             directory: unpack_into.into(),
-            rust_sha: sha.to_string(),
+            rust_sha: sha,
             triple: triple.to_owned(),
         };
 
