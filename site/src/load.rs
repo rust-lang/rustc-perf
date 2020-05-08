@@ -136,7 +136,7 @@ pub struct InputData {
     /// The last date that was seen while loading files.
     pub last_date: Date,
 
-    data_real: Vec<Arc<CommitData>>,
+    data: Vec<Arc<CommitData>>,
 
     pub commits: Vec<Commit>,
 
@@ -155,7 +155,7 @@ pub struct InputData {
 
 impl InputData {
     pub fn benchmark_data(&self, sha: Sha, name: BenchmarkName) -> Result<&'_ Benchmark, String> {
-        if let Some(e) = self.data_real.iter().find(|e| e.commit.sha == sha) {
+        if let Some(e) = self.data.iter().find(|e| e.commit.sha == sha) {
             e.benchmarks
                 .get(&name)
                 .ok_or_else(|| format!("benchmark {} does not exist at commit {}", name, sha))?
@@ -195,7 +195,7 @@ impl InputData {
     }
 
     pub fn data(&self) -> &[Arc<CommitData>] {
-        &self.data_real
+        &self.data
     }
 
     pub fn data_for(&self, is_left: bool, query: Bound) -> Option<Arc<CommitData>> {
@@ -399,7 +399,7 @@ impl InputData {
             commits,
             errors,
             last_date,
-            data_real: data,
+            data,
             artifact_data,
             persistent: Mutex::new(persistent),
             config,
@@ -418,7 +418,7 @@ impl InputData {
             .unwrap();
 
         let have = self
-            .data_real
+            .data
             .iter()
             .map(|value| (value.commit.sha.clone(), value))
             .collect::<HashMap<_, _>>();
