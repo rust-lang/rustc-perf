@@ -9,12 +9,6 @@
 
 use std::env;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Interpolate {
-    Yes,
-    No,
-}
-
 /// Reads the repository path from the arguments passed to main()
 pub fn get_repo_path() -> anyhow::Result<String> {
     if let Some(p) = env::args().nth(1) {

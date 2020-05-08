@@ -46,7 +46,7 @@ use crate::github::post_comment;
 use crate::interpolate::Interpolated;
 use crate::load::CurrentState;
 use crate::load::{Config, InputData};
-use crate::util::{get_repo_path, Interpolate};
+use crate::util::get_repo_path;
 use collector::api::collected;
 use collector::Sha;
 use collector::StatId;
@@ -95,7 +95,7 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
         )
     });
 
-    let cd = data.data(Interpolate::No).iter().last().unwrap();
+    let cd = data.data().iter().last().unwrap();
     let benches = cd
         .benchmarks
         .keys()
@@ -277,7 +277,7 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
     let stat_id = StatId::from_str(&body.stat)?;
     let cc = CommitIdxCache::new();
 
-    let range = data.data_range(Interpolate::No, body.start.clone()..=body.end.clone());
+    let range = data.data_range(body.start.clone()..=body.end.clone());
 
     let mut series: Vec<Series<'static>> = data.all_series.clone();
     series.extend(data.summary_series());
@@ -346,18 +346,14 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
 }
 
 pub async fn handle_days(body: days::Request, data: &InputData) -> ServerResult<days::Response> {
-    let a = data
-        .data_for(Interpolate::No, true, body.start.clone())
-        .ok_or(format!(
-            "could not find start commit for bound {:?}",
-            body.start
-        ))?;
-    let b = data
-        .data_for(Interpolate::No, false, body.end.clone())
-        .ok_or(format!(
-            "could not find end commit for bound {:?}",
-            body.end
-        ))?;
+    let a = data.data_for(true, body.start.clone()).ok_or(format!(
+        "could not find start commit for bound {:?}",
+        body.start
+    ))?;
+    let b = data.data_for(false, body.end.clone()).ok_or(format!(
+        "could not find end commit for bound {:?}",
+        body.end
+    ))?;
     let stat_id = StatId::from_str(&body.stat)?;
     Ok(days::Response {
         a: DateData::for_day(&a, stat_id, &data.all_series),
@@ -625,12 +621,10 @@ pub async fn handle_self_profile(
         .ok()
         .ok_or(format!("sort_idx needs to be i32"))?;
 
-    let benchmark =
-        data.benchmark_data(Interpolate::No, body.commit.as_str().into(), bench_name)?;
+    let benchmark = data.benchmark_data(body.commit.as_str().into(), bench_name)?;
     let profile = get_self_profile_data(&benchmark, bench_ty, &body.run_name, Some(sort_idx))?;
     let base_profile = if let Some(bc) = body.base_commit {
-        let base_benchmark =
-            data.benchmark_data(Interpolate::No, bc.as_str().into(), bench_name)?;
+        let base_benchmark = data.benchmark_data(bc.as_str().into(), bench_name)?;
         Some(get_self_profile_data(
             &base_benchmark,
             bench_ty,
