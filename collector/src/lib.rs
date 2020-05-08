@@ -428,7 +428,7 @@ impl StatId {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Run {
     pub stats: Stats,
-    #[serde(default, skip_deserializing)]
+    #[serde(default)]
     pub self_profile: Option<SelfProfile>,
     #[serde(default)]
     pub check: bool,
