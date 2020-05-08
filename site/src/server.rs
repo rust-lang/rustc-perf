@@ -43,6 +43,7 @@ pub use crate::api::{
 use crate::db::{Cache, CommitData, CrateSelector, Profile, Series};
 use crate::git;
 use crate::github::post_comment;
+use crate::interpolate::Interpolated;
 use crate::load::CurrentState;
 use crate::load::{Config, InputData};
 use crate::util::{get_repo_path, Interpolate};
@@ -65,16 +66,6 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
         return dashboard::Response::default();
     }
 
-    let series = data.summary_series().into_iter().map(|series| {
-        (
-            series,
-            series
-                .iterate_artifacts(&data.artifact_data, StatId::WallTime)
-                .map(|(_id, point)| (point.unwrap() * 10.0).round() / 10.0)
-                .collect::<Vec<_>>(),
-        )
-    });
-
     let benchmark_names = data
         .artifact_data
         .iter()
@@ -83,8 +74,27 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
         .benchmarks
         .iter()
         .filter(|(_, v)| v.is_ok())
-        .map(|(k, _)| k)
+        .map(|(k, _)| *k)
         .collect::<Vec<_>>();
+
+    let series = data.summary_series().into_iter().map(|series| {
+        (
+            series,
+            crate::db::average(
+                series
+                    .with_krates(&benchmark_names)
+                    .into_iter()
+                    .map(|s| {
+                        s.iterate_artifacts(&data.artifact_data, StatId::WallTime)
+                            .map(|(id, pt)| (id, pt.expect("always collected for artifacts")))
+                    })
+                    .collect(),
+            )
+            .map(|(_id, point)| (point * 10.0).round() / 10.0)
+            .collect::<Vec<_>>(),
+        )
+    });
+
     let cd = data.data(Interpolate::No).iter().last().unwrap();
     let benches = cd
         .benchmarks
@@ -94,26 +104,25 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
         .collect::<Vec<_>>();
     assert_eq!(benches.len(), benchmark_names.len());
 
-    // Just replace the CrateSelector::All with CrateSelector::Set.
-    let series = series.chain(
-        data.summary_series()
-            .into_iter()
-            .map(|series| Series {
-                krate: CrateSelector::Set(&benches),
-                profile: series.profile,
-                cache: series.cache,
+    let series = series.chain(data.summary_series().into_iter().map(|series| {
+        (
+            series,
+            crate::db::average(
+                series
+                    .with_krates(&benches)
+                    .into_iter()
+                    .map(|s| {
+                        s.iterate(std::slice::from_ref(cd), StatId::WallTime)
+                            .interpolate()
+                    })
+                    .collect::<Vec<_>>(),
+            )
+            .map(|((_id, point), _interpolated)| {
+                (point.expect("interpolated") * 10.0).round() / 10.0
             })
-            .map(|series| {
-                (
-                    series,
-                    series
-                        .iterate(std::slice::from_ref(cd), StatId::WallTime)
-                        .interpolate()
-                        .map(|(_id, point)| (point * 10.0).round() / 10.0)
-                        .collect::<Vec<_>>(),
-                )
-            }),
-    );
+            .collect::<Vec<_>>(),
+        )
+    }));
 
     let mut check = dashboard::Cases::default();
     let mut debug = dashboard::Cases::default();
@@ -232,15 +241,15 @@ impl CommitIdxCache {
 }
 
 fn to_graph_data<'a>(
-    data: &'a InputData,
     cc: &'a CommitIdxCache,
     series: Series<'static>,
     is_absolute: bool,
     baseline_first: f64,
-    points: impl Iterator<Item = (collector::Commit, f64)> + 'a,
+    points: impl Iterator<Item = ((collector::Commit, Option<f64>), Interpolated)> + 'a,
 ) -> impl Iterator<Item = graph::GraphData> + 'a {
     let mut first = None;
-    points.map(move |(commit, point)| {
+    points.map(move |((commit, point), interpolated)| {
+        let point = point.expect("interpolated");
         let point = if series.krate.is_specific() {
             point
         } else {
@@ -259,24 +268,7 @@ fn to_graph_data<'a>(
                 percent as f32
             },
             x: commit.date.0.timestamp() as u64 * 1000, // all dates are since 1970
-            is_interpolated: data
-                .interpolated
-                .get(&commit.sha)
-                .filter(|c| {
-                    c.iter().any(|interpolation| {
-                        if let CrateSelector::Specific(krate) = series.krate {
-                            if krate != interpolation.benchmark {
-                                return false;
-                            }
-                        }
-                        if let Some(r) = &interpolation.run {
-                            series.profile.matches_run(r) && series.cache.matches_run(r)
-                        } else {
-                            true
-                        }
-                    })
-                })
-                .is_some(),
+            is_interpolated: interpolated.is_interpolated(),
         }
     })
 }
@@ -285,38 +277,44 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
     let stat_id = StatId::from_str(&body.stat)?;
     let cc = CommitIdxCache::new();
 
+    let range = data.data_range(Interpolate::No, body.start.clone()..=body.end.clone());
+
     let mut series: Vec<Series<'static>> = data.all_series.clone();
     series.extend(data.summary_series());
     let series = series.into_iter().map(|series| {
-        let baseline_first = Series {
-            krate: CrateSelector::All,
-            profile: series.profile,
-            cache: Cache::Empty,
-        }
-        .iterate(
-            data.data_range(Interpolate::No, body.start.clone()..=body.end.clone()),
-            stat_id,
+        let baseline_first = crate::db::average(
+            Series {
+                krate: CrateSelector::All,
+                profile: series.profile,
+                cache: Cache::Empty,
+            }
+            .with_krates(&data.crates())
+            .into_iter()
+            .map(|s| s.iterate(range, stat_id).interpolate())
+            .collect::<Vec<_>>(),
         )
-        .interpolate()
         .next()
-        .map_or(0.0, |(_c, d)| d);
-        (
+        .map_or(0.0, |((_c, d), _interpolated)| d.expect("interpolated"));
+
+        let ret = (
             series,
             to_graph_data(
-                data,
                 &cc,
                 series,
                 body.absolute,
                 baseline_first,
-                series
-                    .iterate(
-                        data.data_range(Interpolate::No, body.start.clone()..=body.end.clone()),
-                        stat_id,
-                    )
-                    .interpolate(),
+                crate::db::average(
+                    series
+                        .with_krates(&data.crates())
+                        .into_iter()
+                        .map(|s| s.iterate(range, stat_id).interpolate())
+                        .collect::<Vec<_>>(),
+                ),
             )
             .collect::<Vec<_>>(),
-        )
+        );
+
+        ret
     });
 
     let mut by_krate = HashMap::new();

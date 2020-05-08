@@ -6,20 +6,61 @@
 //! points are missing as that's misleading and noisy, and this works well for
 //! that.
 
-pub struct Interpolate<I, T>
+use crate::db::Point;
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum Interpolated {
+    No,
+    Yes,
+}
+
+impl Interpolated {
+    pub fn is_interpolated(self) -> bool {
+        self == Interpolated::Yes
+    }
+}
+
+impl<P> Point for (P, Interpolated)
 where
-    I: Iterator<Item = (T, Option<f64>)>,
+    P: Point,
+{
+    type Key = P::Key;
+
+    fn key(&self) -> &P::Key {
+        self.0.key()
+    }
+    fn set_key(&mut self, key: P::Key) {
+        self.0.set_key(key)
+    }
+    fn value(&self) -> Option<f64> {
+        self.0.value()
+    }
+    fn set_value(&mut self, value: f64) {
+        self.0.set_value(value)
+    }
+    fn interpolated(&self) -> bool {
+        self.1.is_interpolated()
+    }
+    fn set_interpolated(&mut self) {
+        self.1 = Interpolated::Yes;
+    }
+}
+
+pub struct Interpolate<I>
+where
+    I: Iterator,
 {
     iterator: I,
     last_seen: Option<f64>,
 
     // When we need to seek forward at the start, we store things in here.
-    consumed: Vec<T>,
+    consumed: Vec<I::Item>,
 }
 
-impl<I, T> Interpolate<I, T>
+impl<I> Interpolate<I>
 where
-    I: Iterator<Item = (T, Option<f64>)>,
+    I: Iterator,
+    I::Item: Point,
 {
     pub fn new(iterator: I) -> Self {
         Interpolate {
@@ -30,27 +71,30 @@ where
     }
 }
 
-impl<I, T> Iterator for Interpolate<I, T>
+impl<I> Iterator for Interpolate<I>
 where
-    I: Iterator<Item = (T, Option<f64>)>,
+    I: Iterator,
+    I::Item: Point,
 {
-    type Item = (T, f64);
+    type Item = (I::Item, Interpolated);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(item) = self.consumed.pop() {
-            return Some((item, self.last_seen.unwrap()));
+        if let Some(mut item) = self.consumed.pop() {
+            item.set_value(self.last_seen.unwrap());
+            return Some((item, Interpolated::Yes));
         }
 
-        let (item, pt) = self.iterator.next()?;
+        let mut item = self.iterator.next()?;
 
-        match pt {
+        match item.value() {
             Some(pt) => {
                 self.last_seen = Some(pt);
-                return Some((item, pt));
+                return Some((item, Interpolated::No));
             }
             None => {
                 if let Some(last) = self.last_seen {
-                    return Some((item, last));
+                    item.set_value(last);
+                    return Some((item, Interpolated::Yes));
                 }
 
                 // We are at the start of the iterator, and do not currently
@@ -59,16 +103,21 @@ where
 
                 loop {
                     match self.iterator.next() {
-                        Some((item, None)) => self.consumed.push(item),
-                        Some((item, Some(pt))) => {
-                            self.consumed.push(item);
-                            self.last_seen = Some(pt);
-                            // We flip the vector as we want to consume from the
-                            // beginning
-                            self.consumed.reverse();
+                        Some(item) => {
+                            match item.value() {
+                                None => self.consumed.push(item),
+                                Some(pt) => {
+                                    self.consumed.push(item);
+                                    self.last_seen = Some(pt);
+                                    // We flip the vector as we want to consume from the
+                                    // beginning
+                                    self.consumed.reverse();
 
-                            let item = self.consumed.pop().unwrap();
-                            return Some((item, self.last_seen.unwrap()));
+                                    let mut item = self.consumed.pop().unwrap();
+                                    item.set_value(self.last_seen.unwrap());
+                                    return Some((item, Interpolated::Yes));
+                                }
+                            }
                         }
                         None => {
                             // There were no elements in this iterator.

@@ -228,14 +228,6 @@ pub enum CrateSelector<'a> {
 }
 
 impl CrateSelector<'_> {
-    fn test(self, c: Crate) -> bool {
-        match self {
-            CrateSelector::All => true,
-            CrateSelector::Specific(filter) => filter == c,
-            CrateSelector::Set(set) => set.contains(&c),
-        }
-    }
-
     pub fn is_specific(self) -> bool {
         self.as_specific().is_some()
     }
@@ -265,6 +257,28 @@ pub struct SeriesIterator<'a, I> {
 }
 
 impl<'b> Series<'b> {
+    pub fn with_krates(self, crates: &[Crate]) -> Vec<Series<'static>> {
+        let set = match self.krate {
+            CrateSelector::Specific(c) => {
+                return vec![Series {
+                    krate: CrateSelector::Specific(c),
+                    profile: self.profile,
+                    cache: self.cache,
+                }]
+            }
+            CrateSelector::Set(set) => set,
+            CrateSelector::All => crates,
+        };
+        assert!(!set.is_empty());
+        set.iter()
+            .map(|krate| Series {
+                krate: CrateSelector::Specific(*krate),
+                profile: self.profile,
+                cache: self.cache,
+            })
+            .collect::<Vec<_>>()
+    }
+
     pub fn iterate<'a>(
         self,
         data: &'a [Arc<CommitData>],
@@ -273,6 +287,7 @@ impl<'b> Series<'b> {
         'b,
         impl Iterator<Item = (Commit, &'a BTreeMap<Crate, Result<Benchmark, String>>)>,
     > {
+        assert!(self.krate.is_specific());
         SeriesIterator {
             data: data.iter().map(|cd| (cd.commit, &cd.benchmarks)),
             series: self,
@@ -288,6 +303,7 @@ impl<'b> Series<'b> {
         'b,
         impl Iterator<Item = (String, &'a BTreeMap<Crate, Result<Benchmark, String>>)>,
     > {
+        assert!(self.krate.is_specific());
         SeriesIterator {
             data: artifacts.iter().map(|ad| (ad.id.clone(), &ad.benchmarks)),
             series: self,
@@ -296,11 +312,12 @@ impl<'b> Series<'b> {
     }
 }
 
-impl<'a, 'b, I, T> SeriesIterator<'b, I>
+impl<'a, I> SeriesIterator<'a, I>
 where
-    I: Iterator<Item = (T, &'a BTreeMap<Crate, Result<Benchmark, String>>)>,
+    Self: Iterator,
+    <Self as Iterator>::Item: Point,
 {
-    pub fn interpolate(self) -> crate::interpolate::Interpolate<Self, T> {
+    pub fn interpolate(self) -> crate::interpolate::Interpolate<Self> {
         crate::interpolate::Interpolate::new(self)
     }
 }
@@ -308,6 +325,7 @@ where
 impl<'b, 'a, I, T> Iterator for SeriesIterator<'b, I>
 where
     I: Iterator<Item = (T, &'a BTreeMap<Crate, Result<Benchmark, String>>)>,
+    T: fmt::Debug,
 {
     type Item = (T, Option<f64>);
 
@@ -325,29 +343,144 @@ where
                 .and_then(|r| r.stats.get(self.stat))
         };
 
-        match self.series.krate {
-            CrateSelector::Specific(krate) => Some((commit, get_stat(benchmarks.get(&krate)))),
-            CrateSelector::All | CrateSelector::Set(_) => {
-                let mut count = 0;
-                let mut total = 0.0;
-                for (name, bench) in benchmarks.iter() {
-                    if !self.series.krate.test(*name) {
-                        continue;
-                    }
-                    if let Some(stat) = get_stat(Some(bench)) {
-                        total += stat;
-                        count += 1;
+        let krate = self
+            .series
+            .krate
+            .as_specific()
+            .expect("only iterating specifics");
+        let stat = get_stat(benchmarks.get(&krate));
+        Some((commit, stat))
+    }
+}
+
+pub trait Point {
+    type Key: fmt::Debug + PartialEq + Clone;
+
+    fn key(&self) -> &Self::Key;
+    fn set_key(&mut self, key: Self::Key);
+    fn value(&self) -> Option<f64>;
+    fn set_value(&mut self, value: f64);
+    fn interpolated(&self) -> bool;
+    fn set_interpolated(&mut self);
+}
+
+impl<T: Clone + PartialEq + fmt::Debug> Point for (T, Option<f64>) {
+    type Key = T;
+
+    fn key(&self) -> &T {
+        &self.0
+    }
+    fn set_key(&mut self, key: T) {
+        self.0 = key;
+    }
+    fn value(&self) -> Option<f64> {
+        self.1
+    }
+    fn set_value(&mut self, value: f64) {
+        self.1 = Some(value);
+    }
+    fn interpolated(&self) -> bool {
+        false
+    }
+    fn set_interpolated(&mut self) {
+        // no-op
+    }
+}
+
+impl<T: Clone + PartialEq + fmt::Debug> Point for (T, f64) {
+    type Key = T;
+
+    fn key(&self) -> &T {
+        &self.0
+    }
+    fn set_key(&mut self, key: T) {
+        self.0 = key;
+    }
+    fn value(&self) -> Option<f64> {
+        Some(self.1)
+    }
+    fn set_value(&mut self, value: f64) {
+        self.1 = value;
+    }
+    fn interpolated(&self) -> bool {
+        false
+    }
+    fn set_interpolated(&mut self) {
+        // no-op
+    }
+}
+
+/// This aggregates interpolated iterators.
+///
+/// It could support non-interpolated iterators too but that's a bit more work
+/// and not currently used anyway.
+pub fn average<I>(iterators: Vec<I>) -> Average<I>
+where
+    I: Iterator,
+    I::Item: Point,
+{
+    Average {
+        iterators,
+        is_first: true,
+    }
+}
+
+pub struct Average<I> {
+    iterators: Vec<I>,
+    is_first: bool,
+}
+
+impl<I> Iterator for Average<I>
+where
+    I: Iterator,
+    I::Item: Point,
+{
+    type Item = I::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut sum = 0.0;
+        let mut count = 0;
+
+        let mut i = 0;
+        let mut first = None::<I::Item>;
+        let mut removed = false;
+        // replace with drain_filter when it stabilizes
+        while i != self.iterators.len() {
+            match self.iterators[i].next() {
+                None => {
+                    removed = true;
+                    self.iterators.remove(i);
+                }
+                Some(point) => {
+                    count += 1;
+                    sum += point.value().expect("present");
+                    i += 1;
+                    if let Some(t) = &mut first {
+                        if point.interpolated() {
+                            // Interpolated is like a taint
+                            t.set_interpolated();
+                        }
+                        assert_eq!(*t.key(), *point.key());
+                    } else {
+                        first = Some(point);
                     }
                 }
-                Some((
-                    commit,
-                    // Avoid dividing by zero
-                    if count > 0 {
-                        Some(total / count as f64)
-                    } else {
-                        None
-                    },
-                ))
+            }
+        }
+
+        if removed && !self.iterators.is_empty() && !self.is_first {
+            panic!("Not all iterators of the same length");
+        }
+        self.is_first = false;
+
+        match first {
+            None => {
+                assert!(self.iterators.is_empty());
+                None
+            }
+            Some(mut t) => {
+                t.set_value(sum / (count as f64));
+                Some(t)
             }
         }
     }

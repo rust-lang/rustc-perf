@@ -189,6 +189,15 @@ impl InputData {
         }
     }
 
+    pub fn crates(&self) -> Vec<BenchmarkName> {
+        self.all_series
+            .iter()
+            .map(|s| s.krate.as_specific().unwrap())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>()
+    }
+
     pub fn summary_series(&self) -> Vec<crate::db::Series<'static>> {
         self.all_series
             .iter()
