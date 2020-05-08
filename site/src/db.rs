@@ -158,23 +158,23 @@ impl Profile {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize)]
 #[serde(tag = "variant", content = "name")]
 pub enum Cache {
-    #[serde(rename = "clean")]
+    #[serde(rename = "full")]
     Empty,
-    #[serde(rename = "baseline incremental")]
+    #[serde(rename = "incremental full")]
     IncrementalEmpty,
-    #[serde(rename = "clean incremental")]
+    #[serde(rename = "incremental unchanged")]
     IncrementalFresh,
-    #[serde(rename = "patched incremental")]
+    #[serde(rename = "incremental patched")]
     IncrementalPatch(PatchName),
 }
 
 impl fmt::Display for Cache {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Cache::Empty => write!(f, "clean"),
-            Cache::IncrementalEmpty => write!(f, "baseline incremental"),
-            Cache::IncrementalFresh => write!(f, "clean incremental"),
-            Cache::IncrementalPatch(name) => write!(f, "patched incremental: {}", name),
+            Cache::Empty => write!(f, "full"),
+            Cache::IncrementalEmpty => write!(f, "incremental full"),
+            Cache::IncrementalFresh => write!(f, "incremental unchanged"),
+            Cache::IncrementalPatch(name) => write!(f, "incremental patched: {}", name),
         }
     }
 }

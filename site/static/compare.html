@@ -19,10 +19,18 @@
     Filter benchmark builds: <input id="filter" type="text" /><br>
     Include runs:
     <div>
-        <div><input type="checkbox" id="build-clean" checked />Clean</div>
-        <div><input type="checkbox" id="build-baseline-incr" checked />Baseline incremental</div>
-        <div><input type="checkbox" id="build-clean-incr" checked />Clean incremental</div>
-        <div><input type="checkbox" id="build-patch-incr" checked />Patched incremental</div>
+        <div><input type="checkbox" id="build-full" checked />
+            Full (non-incremental, after cargo clean)
+        </div>
+        <div><input type="checkbox" id="build-incremental-full" checked />
+            Incremental full (after cargo clean)
+        </div>
+        <div><input type="checkbox" id="build-incremental-unchanged" checked />
+            Incremental unchanged (touch all rust files, no change to target directory)
+        </div>
+        <div><input type="checkbox" id="build-incremental-patched" checked />
+            Patched incremental (some patch applied, no change to target directory)
+        </div>
     </div>
     <p>See brief explanation at bottom of this page for details on what each run kind means.</p>
     <div id="content" style="display: none"></div>
@@ -43,11 +51,11 @@
         <h3>Brief explanation</h3>
         <p>Most benchmarks have at least 4 "runs"</p>
         <ul>
-            <li>Clean: a non-incremental build</li>
-            <li>Baseline incremental: an incremental build starting with empty cache</li>
-            <li>Clean incremental: an incremental build starting with complete cache, and clean
+            <li>Full: a non-incremental full build</li>
+            <li>Incremental full: an incremental build starting with empty cache</li>
+            <li>Incremental unchanged: an incremental build starting with complete cache, and clean
                 source directory -- the "perfect" scenario for incremental.</li>
-            <li>Patched incremental: an incremental build starting with complete cache, and an
+            <li>Incremental patched: an incremental build starting with complete cache, and an
                 altered source directory. The typical variant of this is "println" which represents
                 the addition of a `println!` macro somewhere in the source code.</li>
         </ul>
@@ -132,14 +140,14 @@
         }
 
         function shouldShowBuild(name) {
-            if (name == "clean") {
-                return document.querySelector("#build-clean").checked;
-            } else if (name == "baseline incremental") {
-                return document.querySelector("#build-baseline-incr").checked;
-            } else if (name == "clean incremental") {
-                return document.querySelector("#build-clean-incr").checked;
-            } else if (name.startsWith("patched incremental")) {
-                return document.querySelector("#build-patch-incr").checked;
+            if (name == "full") {
+                return document.querySelector("#build-full").checked;
+            } else if (name == "incremental full") {
+                return document.querySelector("#build-incremental-full").checked;
+            } else if (name == "incremental unchanged") {
+                return document.querySelector("#build-incremental-unchanged").checked;
+            } else if (name.startsWith("incremental patched")) {
+                return document.querySelector("#build-incremental-patched").checked;
             } else {
                 // Unknown, but by default we should show things
                 return true;
@@ -361,10 +369,10 @@
     }
 
     document.querySelector("#filter").addEventListener("change", rerender);
-    document.querySelector("#build-clean").addEventListener("change", rerender);
-    document.querySelector("#build-baseline-incr").addEventListener("change", rerender);
-    document.querySelector("#build-clean-incr").addEventListener("change", rerender);
-    document.querySelector("#build-patch-incr").addEventListener("change", rerender);
+    document.querySelector("#build-full").addEventListener("change", rerender);
+    document.querySelector("#build-incremental-full").addEventListener("change", rerender);
+    document.querySelector("#build-incremental-unchanged").addEventListener("change", rerender);
+    document.querySelector("#build-incremental-patched").addEventListener("change", rerender);
 
     </script>
 </body>
