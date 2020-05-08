@@ -20,16 +20,16 @@
     Include runs:
     <div>
         <div><input type="checkbox" id="build-full" checked />
-            Full (non-incremental, after cargo clean)
+            full (non-incremental, after cargo clean)
         </div>
         <div><input type="checkbox" id="build-incremental-full" checked />
-            Incremental full (after cargo clean)
+            incr-full (after cargo clean)
         </div>
         <div><input type="checkbox" id="build-incremental-unchanged" checked />
-            Incremental unchanged (touch all rust files, no change to target directory)
+            incr-unchanged (touch all rust files, no change to target directory)
         </div>
         <div><input type="checkbox" id="build-incremental-patched" checked />
-            Patched incremental (some patch applied, no change to target directory)
+            incr-patched (some patch applied, no change to target directory)
         </div>
     </div>
     <p>See brief explanation at bottom of this page for details on what each run kind means.</p>
@@ -51,11 +51,11 @@
         <h3>Brief explanation</h3>
         <p>Most benchmarks have at least 4 "runs"</p>
         <ul>
-            <li>Full: a non-incremental full build</li>
-            <li>Incremental full: an incremental build starting with empty cache</li>
-            <li>Incremental unchanged: an incremental build starting with complete cache, and clean
-                source directory -- the "perfect" scenario for incremental.</li>
-            <li>Incremental patched: an incremental build starting with complete cache, and an
+            <li>full: a non-incremental full build</li>
+            <li>incr-full: an incremental build starting with empty cache</li>
+            <li>incr-unchanged: an incremental build starting with complete
+                cache, and unchanged source directory -- the "perfect" scenario for incremental.</li>
+            <li>incr-patched: an incremental build starting with complete cache, and an
                 altered source directory. The typical variant of this is "println" which represents
                 the addition of a `println!` macro somewhere in the source code.</li>
         </ul>
@@ -142,11 +142,11 @@
         function shouldShowBuild(name) {
             if (name == "full") {
                 return document.querySelector("#build-full").checked;
-            } else if (name == "incremental full") {
+            } else if (name == "incr-full") {
                 return document.querySelector("#build-incremental-full").checked;
-            } else if (name == "incremental unchanged") {
+            } else if (name == "incr-unchanged") {
                 return document.querySelector("#build-incremental-unchanged").checked;
-            } else if (name.startsWith("incremental patched")) {
+            } else if (name.startsWith("incr-patched")) {
                 return document.querySelector("#build-incremental-patched").checked;
             } else {
                 // Unknown, but by default we should show things
@@ -270,10 +270,10 @@
 
         function dodgy_casename_title(name, casename) {
             let variation = 0;
-            if (name.startsWith("coercions") && casename.startsWith("patched incremental")) {
+            if (name.startsWith("coercions") && casename.startsWith("incr-patched")) {
                 variation = 4;
             }
-            if (name.startsWith("style-servo") && casename.startsWith("clean incremental")) {
+            if (name.startsWith("style-servo") && casename.startsWith("incr-full")) {
                 variation = 20;
             }
             if (variation != 0) {

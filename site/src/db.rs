@@ -160,11 +160,11 @@ impl Profile {
 pub enum Cache {
     #[serde(rename = "full")]
     Empty,
-    #[serde(rename = "incremental full")]
+    #[serde(rename = "incr-full")]
     IncrementalEmpty,
-    #[serde(rename = "incremental unchanged")]
+    #[serde(rename = "incr-unchanged")]
     IncrementalFresh,
-    #[serde(rename = "incremental patched")]
+    #[serde(rename = "incr-patched")]
     IncrementalPatch(PatchName),
 }
 
@@ -172,9 +172,9 @@ impl fmt::Display for Cache {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Cache::Empty => write!(f, "full"),
-            Cache::IncrementalEmpty => write!(f, "incremental full"),
-            Cache::IncrementalFresh => write!(f, "incremental unchanged"),
-            Cache::IncrementalPatch(name) => write!(f, "incremental patched: {}", name),
+            Cache::IncrementalEmpty => write!(f, "incr-full"),
+            Cache::IncrementalFresh => write!(f, "incr-unchanged"),
+            Cache::IncrementalPatch(name) => write!(f, "incr-patched: {}", name),
         }
     }
 }
