@@ -131,7 +131,7 @@ pub struct InputData {
     /// All known statistics gathered for crates
     pub stats_list: Vec<&'static str>,
 
-    pub all_series: Vec<crate::db::Series<'static>>,
+    pub all_series: Vec<crate::db::Series>,
 
     /// The last date that was seen while loading files.
     pub last_date: Date,
@@ -175,7 +175,7 @@ impl InputData {
             .collect::<Vec<_>>()
     }
 
-    pub fn summary_series(&self) -> Vec<crate::db::Series<'static>> {
+    pub fn summary_series(&self) -> Vec<crate::db::Series> {
         self.all_series
             .iter()
             .map(|s| crate::db::Series {

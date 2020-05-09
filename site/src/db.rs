@@ -221,13 +221,12 @@ impl PartialOrd for Cache {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum CrateSelector<'a> {
+pub enum CrateSelector {
     Specific(Crate),
     All,
-    Set(&'a [Crate]),
 }
 
-impl CrateSelector<'_> {
+impl CrateSelector {
     pub fn is_specific(self) -> bool {
         self.as_specific().is_some()
     }
@@ -235,29 +234,29 @@ impl CrateSelector<'_> {
     pub fn as_specific(self) -> Option<Crate> {
         match self {
             CrateSelector::Specific(filter) => Some(filter),
-            CrateSelector::All | CrateSelector::Set(_) => None,
+            CrateSelector::All => None,
         }
     }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Series<'a> {
+pub struct Series {
     /// The krate of this series.
     ///
     /// If None, then we are summarizing across crates.
-    pub krate: CrateSelector<'a>,
+    pub krate: CrateSelector,
     pub profile: Profile,
     pub cache: Cache,
 }
 
-pub struct SeriesIterator<'a, I> {
+pub struct SeriesIterator<I> {
     data: I,
-    series: Series<'a>,
+    series: Series,
     stat: StatId,
 }
 
-impl<'b> Series<'b> {
-    pub fn with_krates(self, crates: &[Crate]) -> Vec<Series<'static>> {
+impl Series {
+    pub fn with_krates(self, crates: &[Crate]) -> Vec<Series> {
         let set = match self.krate {
             CrateSelector::Specific(c) => {
                 return vec![Series {
@@ -266,7 +265,6 @@ impl<'b> Series<'b> {
                     cache: self.cache,
                 }]
             }
-            CrateSelector::Set(set) => set,
             CrateSelector::All => crates,
         };
         assert!(!set.is_empty());
@@ -284,7 +282,6 @@ impl<'b> Series<'b> {
         data: &'a [Arc<CommitData>],
         stat: StatId,
     ) -> SeriesIterator<
-        'b,
         impl Iterator<Item = (Commit, &'a BTreeMap<Crate, Result<Benchmark, String>>)>,
     > {
         assert!(self.krate.is_specific());
@@ -300,7 +297,6 @@ impl<'b> Series<'b> {
         artifacts: &'a [ArtifactData],
         stat: StatId,
     ) -> SeriesIterator<
-        'b,
         impl Iterator<Item = (String, &'a BTreeMap<Crate, Result<Benchmark, String>>)>,
     > {
         assert!(self.krate.is_specific());
@@ -312,7 +308,7 @@ impl<'b> Series<'b> {
     }
 }
 
-impl<'a, I> SeriesIterator<'a, I>
+impl<I> SeriesIterator<I>
 where
     Self: Iterator,
     <Self as Iterator>::Item: Point,
@@ -322,7 +318,7 @@ where
     }
 }
 
-impl<'b, 'a, I, T> Iterator for SeriesIterator<'b, I>
+impl<'a, I, T> Iterator for SeriesIterator<I>
 where
     I: Iterator<Item = (T, &'a BTreeMap<Crate, Result<Benchmark, String>>)>,
     T: fmt::Debug,

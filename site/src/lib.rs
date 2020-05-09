@@ -22,5 +22,6 @@ pub mod api;
 pub mod db;
 mod interpolate;
 pub mod load;
+mod selector;
 pub mod server;
 pub mod util;

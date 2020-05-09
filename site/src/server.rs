@@ -242,7 +242,7 @@ impl CommitIdxCache {
 
 fn to_graph_data<'a>(
     cc: &'a CommitIdxCache,
-    series: Series<'static>,
+    series: Series,
     is_absolute: bool,
     baseline_first: f64,
     points: impl Iterator<Item = ((collector::Commit, Option<f64>), Interpolated)> + 'a,
@@ -279,7 +279,7 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
 
     let range = data.data_range(body.start.clone()..=body.end.clone());
 
-    let mut series: Vec<Series<'static>> = data.all_series.clone();
+    let mut series: Vec<Series> = data.all_series.clone();
     series.extend(data.summary_series());
     let series = series.into_iter().map(|series| {
         let baseline_first = crate::db::average(
