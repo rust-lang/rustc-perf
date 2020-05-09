@@ -58,24 +58,24 @@ pub enum BuildKind {
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum RunKind {
-    Clean,
-    BaseIncr,
-    CleanIncr,
-    PatchedIncrs,
+    Full,
+    IncrFull,
+    IncrUnchanged,
+    IncrPatched,
 }
 
 impl RunKind {
     fn all() -> Vec<RunKind> {
         vec![
-            RunKind::Clean,
-            RunKind::BaseIncr,
-            RunKind::CleanIncr,
-            RunKind::PatchedIncrs,
+            RunKind::Full,
+            RunKind::IncrFull,
+            RunKind::IncrUnchanged,
+            RunKind::IncrPatched,
         ]
     }
 
     fn all_non_incr() -> Vec<RunKind> {
-        vec![RunKind::Clean]
+        vec![RunKind::Full]
     }
 }
 
@@ -94,10 +94,10 @@ const STRINGS_AND_BUILD_KINDS: &[(&str, BuildKind)] = &[
 
 // How the --runs arg maps to RunKinds.
 const STRINGS_AND_RUN_KINDS: &[(&str, RunKind)] = &[
-    ("Clean", RunKind::Clean),
-    ("BaseIncr", RunKind::BaseIncr),
-    ("CleanIncr", RunKind::CleanIncr),
-    ("PatchedIncrs", RunKind::PatchedIncrs),
+    ("Full", RunKind::Full),
+    ("IncrFull", RunKind::IncrFull),
+    ("IncrUnchanged", RunKind::IncrUnchanged),
+    ("IncrPatched", RunKind::IncrPatched),
 ];
 
 pub fn build_kinds_from_arg(arg: &Option<&str>) -> Result<Vec<BuildKind>, KindError> {

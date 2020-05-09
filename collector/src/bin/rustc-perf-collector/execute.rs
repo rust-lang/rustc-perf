@@ -361,25 +361,25 @@ impl Processor for MeasureProcessor {
         match process_perf_stat_output(output) {
             Ok((stats, profile)) => {
                 match data.run_kind {
-                    RunKind::Clean => {
+                    RunKind::Full => {
                         self.clean_stats.0.combine_with(stats);
                         if profile.is_some() {
                             self.clean_stats.1 = profile;
                         }
                     }
-                    RunKind::BaseIncr => {
+                    RunKind::IncrFull => {
                         self.base_incr_stats.0.combine_with(stats);
                         if profile.is_some() {
                             self.base_incr_stats.1 = profile;
                         }
                     }
-                    RunKind::CleanIncr => {
+                    RunKind::IncrUnchanged => {
                         self.clean_incr_stats.0.combine_with(stats);
                         if profile.is_some() {
                             self.clean_incr_stats.1 = profile;
                         }
                     }
-                    RunKind::PatchedIncrs => {
+                    RunKind::IncrPatched => {
                         let patch = data.patch.unwrap();
                         if let Some(entry) =
                             self.patched_incr_stats.iter_mut().find(|s| &s.0 == patch)
@@ -544,9 +544,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
 
                 // Run `summarize`.
                 let mut summarize_cmd = Command::new("summarize");
-                summarize_cmd
-                    .arg("summarize")
-                    .arg(&zsp_files_prefix);
+                summarize_cmd.arg("summarize").arg(&zsp_files_prefix);
                 let output = summarize_cmd.output()?;
                 fs::write(&summarize_file, &output.stdout)?;
 
@@ -840,33 +838,33 @@ impl Benchmark {
                 let cwd = timing_dir.path();
 
                 // A full non-incremental build.
-                if run_kinds.contains(&RunKind::Clean) {
+                if run_kinds.contains(&RunKind::Full) {
                     self.mk_cargo_process(compiler, cwd, build_kind)
-                        .processor(processor, RunKind::Clean, "Clean", None)
+                        .processor(processor, RunKind::Full, "Full", None)
                         .run_rustc()?;
                 }
 
                 // An incremental build from scratch (slowest incremental case).
                 // This is required for any subsequent incremental builds.
-                if run_kinds.contains(&RunKind::BaseIncr)
-                    || run_kinds.contains(&RunKind::CleanIncr)
-                    || run_kinds.contains(&RunKind::PatchedIncrs)
+                if run_kinds.contains(&RunKind::IncrFull)
+                    || run_kinds.contains(&RunKind::IncrUnchanged)
+                    || run_kinds.contains(&RunKind::IncrPatched)
                 {
                     self.mk_cargo_process(compiler, cwd, build_kind)
                         .incremental(true)
-                        .processor(processor, RunKind::BaseIncr, "BaseIncr", None)
+                        .processor(processor, RunKind::IncrFull, "IncrFull", None)
                         .run_rustc()?;
                 }
 
                 // An incremental build with no changes (fastest incremental case).
-                if run_kinds.contains(&RunKind::CleanIncr) {
+                if run_kinds.contains(&RunKind::IncrUnchanged) {
                     self.mk_cargo_process(compiler, cwd, build_kind)
                         .incremental(true)
-                        .processor(processor, RunKind::CleanIncr, "CleanIncr", None)
+                        .processor(processor, RunKind::IncrUnchanged, "IncrUnchanged", None)
                         .run_rustc()?;
                 }
 
-                if run_kinds.contains(&RunKind::PatchedIncrs) {
+                if run_kinds.contains(&RunKind::IncrPatched) {
                     for (i, patch) in self.patches.iter().enumerate() {
                         log::debug!("applying patch {}", patch.name);
                         patch.apply(cwd).map_err(|s| anyhow::anyhow!("{}", s))?;
@@ -876,12 +874,7 @@ impl Benchmark {
                         let run_kind_str = format!("PatchedIncr{}", i);
                         self.mk_cargo_process(compiler, cwd, build_kind)
                             .incremental(true)
-                            .processor(
-                                processor,
-                                RunKind::PatchedIncrs,
-                                &run_kind_str,
-                                Some(&patch),
-                            )
+                            .processor(processor, RunKind::IncrPatched, &run_kind_str, Some(&patch))
                             .run_rustc()?;
                     }
                 }
