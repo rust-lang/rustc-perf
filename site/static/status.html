@@ -57,8 +57,9 @@
         let missing_div = document.querySelector("#missing-commits");
         if (data.current !== null) {
             let element = document.createElement("p");
-            element.innerHTML = `Currently benchmarking: ${commit_url(data.current.commit)}; benchmarks \
-            left: ${data.current.benchmarks.join(", ")}.`;
+            element.innerHTML = `Currently benchmarking:
+            ${commit_url(data.current.commit)}<br>${data.current.benchmarks.length} benchmarks \
+            left out of ${data.benchmarks.length} total: ${data.current.benchmarks.join(", ")}.`;
             missing_div.appendChild(element);
         } else {
             let element = document.createElement("p");
