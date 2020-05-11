@@ -283,30 +283,8 @@ impl PartialOrd for Cache {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum CrateSelector {
-    Specific(Crate),
-    All,
-}
-
-impl CrateSelector {
-    pub fn is_specific(self) -> bool {
-        self.as_specific().is_some()
-    }
-
-    pub fn as_specific(self) -> Option<Crate> {
-        match self {
-            CrateSelector::Specific(filter) => Some(filter),
-            CrateSelector::All => None,
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Series {
-    /// The krate of this series.
-    ///
-    /// If None, then we are summarizing across crates.
-    pub krate: CrateSelector,
+    pub krate: Crate,
     pub profile: Profile,
     pub cache: Cache,
 }
@@ -318,27 +296,6 @@ pub struct SeriesIterator<I> {
 }
 
 impl Series {
-    pub fn with_krates(self, crates: &[Crate]) -> Vec<Series> {
-        let set = match self.krate {
-            CrateSelector::Specific(c) => {
-                return vec![Series {
-                    krate: CrateSelector::Specific(c),
-                    profile: self.profile,
-                    cache: self.cache,
-                }]
-            }
-            CrateSelector::All => crates,
-        };
-        assert!(!set.is_empty());
-        set.iter()
-            .map(|krate| Series {
-                krate: CrateSelector::Specific(*krate),
-                profile: self.profile,
-                cache: self.cache,
-            })
-            .collect::<Vec<_>>()
-    }
-
     pub fn iterate<'a>(
         self,
         data: &'a [Arc<CommitData>],
@@ -346,7 +303,6 @@ impl Series {
     ) -> SeriesIterator<
         impl Iterator<Item = (Commit, &'a BTreeMap<Crate, Result<Benchmark, String>>)>,
     > {
-        assert!(self.krate.is_specific());
         SeriesIterator {
             data: data.iter().map(|cd| (cd.commit, &cd.benchmarks)),
             series: self,
@@ -361,7 +317,6 @@ impl Series {
     ) -> SeriesIterator<
         impl Iterator<Item = (String, &'a BTreeMap<Crate, Result<Benchmark, String>>)>,
     > {
-        assert!(self.krate.is_specific());
         SeriesIterator {
             data: artifacts.iter().map(|ad| (ad.id.clone(), &ad.benchmarks)),
             series: self,
@@ -401,11 +356,7 @@ where
                 .and_then(|r| r.stats.get(self.stat))
         };
 
-        let krate = self
-            .series
-            .krate
-            .as_specific()
-            .expect("only iterating specifics");
+        let krate = self.series.krate;
         let stat = get_stat(benchmarks.get(&krate));
         Some((commit, stat))
     }

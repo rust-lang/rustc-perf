@@ -169,7 +169,7 @@ impl InputData {
     pub fn crates(&self) -> Vec<BenchmarkName> {
         self.all_series
             .iter()
-            .map(|s| s.krate.as_specific().unwrap())
+            .map(|s| s.krate)
             .collect::<BTreeSet<_>>()
             .into_iter()
             .collect::<Vec<_>>()
@@ -182,25 +182,6 @@ impl InputData {
             crate::db::Cache::IncrementalFresh,
             crate::db::Cache::IncrementalPatch("println".into()),
         ]
-    }
-
-    pub fn summary_series(&self) -> Vec<crate::db::Series> {
-        self.all_series
-            .iter()
-            .map(|s| crate::db::Series {
-                krate: crate::db::CrateSelector::All,
-                profile: s.profile,
-                cache: s.cache,
-            })
-            .filter(|s| match s.cache {
-                crate::db::Cache::Empty => true,
-                crate::db::Cache::IncrementalEmpty => true,
-                crate::db::Cache::IncrementalFresh => true,
-                crate::db::Cache::IncrementalPatch(n) => n == *"println",
-            })
-            .collect::<std::collections::BTreeSet<_>>()
-            .into_iter()
-            .collect()
     }
 
     pub fn data(&self) -> &[Arc<CommitData>] {
@@ -390,7 +371,7 @@ impl InputData {
                     .flat_map(|bench| {
                         bench.runs.iter().filter_map(move |r| {
                             Some(crate::db::Series {
-                                krate: crate::db::CrateSelector::Specific(bench.name),
+                                krate: bench.name,
                                 profile: r.profile,
                                 cache: r.state,
                             })

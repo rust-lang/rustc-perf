@@ -242,7 +242,7 @@ impl Db {
         self.all_series
             .iter()
             .filter(|s| {
-                let skrate = s.krate.as_specific().unwrap();
+                let skrate = s.krate;
                 match &krate {
                     Selector::One(s) => skrate == *s.as_str(),
                     Selector::Subset(crates) => crates.iter().any(|c| skrate == *c.as_str()),
@@ -271,7 +271,7 @@ impl Db {
                         path: vec![
                             PathComponent {
                                 tag: Tag::Crate,
-                                raw: s.krate.as_specific().unwrap().to_string(),
+                                raw: s.krate.to_string(),
                             },
                             PathComponent {
                                 tag: Tag::Profile,
@@ -287,7 +287,7 @@ impl Db {
                         collection_ids.clone(),
                         Source {
                             db: self,
-                            krate: s.krate.as_specific().unwrap(),
+                            krate: s.krate,
                             profile: s.profile,
                             cache: s.cache,
                         },

@@ -417,10 +417,7 @@ impl DateData {
                 point /= 1000.0;
             }
             data.entry(StyledBenchmarkName {
-                name: series
-                    .krate
-                    .as_specific()
-                    .expect("all series contains only specific crates"),
+                name: series.krate,
                 profile: series.profile,
             })
             .or_insert_with(Vec::new)
