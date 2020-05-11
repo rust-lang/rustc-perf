@@ -22,6 +22,7 @@ mod git;
 mod github;
 
 pub mod api;
+mod average;
 pub mod db;
 mod interpolate;
 pub mod load;
