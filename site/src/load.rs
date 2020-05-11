@@ -396,10 +396,10 @@ impl InputData {
         Ok(InputData {
             stats_list: stats_list.into_iter().collect(),
             all_series,
-            commits,
-            errors,
             last_date,
             data,
+            commits,
+            errors,
             artifact_data,
             persistent: Mutex::new(persistent),
             config,

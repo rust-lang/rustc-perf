@@ -106,9 +106,7 @@
                     let datasets = [];
                     let max = response.max[crate_name.replace("-check", "").replace("-debug", "").replace("-opt", "")];
                     for (let state of cache_states) {
-                        let tag = state[0]["variant"];
-                        let value = state[0]["name"];
-                        let cache_name = tag + (value ? `: ${value}`: "");
+                        let cache_name = state[0];
                         let data = state[1];
                         datasets.push({
                             name: cache_name,

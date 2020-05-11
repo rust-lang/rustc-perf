@@ -40,12 +40,13 @@ pub use crate::api::{
     self, dashboard, data, days, github, graph, info, self_profile, status, CommitResponse,
     DateData, ServerResult, StyledBenchmarkName,
 };
-use crate::db::{Cache, CommitData, CrateSelector, Profile, Series};
+use crate::db::{self, Cache, CommitData, Profile};
 use crate::git;
 use crate::github::post_comment;
 use crate::interpolate::Interpolated;
 use crate::load::CurrentState;
 use crate::load::{Config, InputData};
+use crate::selector::{self, Tag};
 use crate::util::get_repo_path;
 use collector::api::collected;
 use collector::Sha;
@@ -80,7 +81,7 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
     let series = data.summary_series().into_iter().map(|series| {
         (
             series,
-            crate::db::average(
+            db::average(
                 series
                     .with_krates(&benchmark_names)
                     .into_iter()
@@ -107,7 +108,7 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
     let series = series.chain(data.summary_series().into_iter().map(|series| {
         (
             series,
-            crate::db::average(
+            db::average(
                 series
                     .with_krates(&benches)
                     .into_iter()
@@ -242,19 +243,12 @@ impl CommitIdxCache {
 
 fn to_graph_data<'a>(
     cc: &'a CommitIdxCache,
-    series: Series,
     is_absolute: bool,
-    baseline_first: f64,
     points: impl Iterator<Item = ((collector::Commit, Option<f64>), Interpolated)> + 'a,
 ) -> impl Iterator<Item = graph::GraphData> + 'a {
     let mut first = None;
     points.map(move |((commit, point), interpolated)| {
         let point = point.expect("interpolated");
-        let point = if series.krate.is_specific() {
-            point
-        } else {
-            point / baseline_first
-        };
         first = Some(first.unwrap_or(point));
         let first = first.unwrap();
         let percent = (point - first) / first * 100.0;
@@ -273,68 +267,112 @@ fn to_graph_data<'a>(
     })
 }
 
-pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<graph::Response> {
-    let stat_id = StatId::from_str(&body.stat)?;
+fn handle_graph_for_stat<'a, T: selector::Series<'a>>(
+    body: graph::Request,
+    data: &'a InputData,
+) -> ServerResult<graph::Response>
+where
+    T: Iterator<Item = (collector::Commit, Option<f64>)>,
+{
     let cc = CommitIdxCache::new();
-
     let range = data.data_range(body.start.clone()..=body.end.clone());
+    let query = selector::Query::new()
+        .push::<String>(selector::Tag::Crate, selector::Selector::All)
+        .push::<String>(selector::Tag::Profile, selector::Selector::All)
+        .push::<String>(selector::Tag::Cache, selector::Selector::All);
+    let commits: Arc<Vec<_>> = Arc::new(range.iter().map(|cd| cd.commit).collect());
 
-    let mut series: Vec<Series> = data.all_series.clone();
-    series.extend(data.summary_series());
-    let series = series.into_iter().map(|series| {
-        let baseline_first = crate::db::average(
-            Series {
-                krate: CrateSelector::All,
-                profile: series.profile,
-                cache: Cache::Empty,
-            }
-            .with_krates(&data.crates())
+    let series = data.query::<T>(query, commits.clone())?;
+
+    let mut series = series
+        .into_iter()
+        .map(|sr| {
+            sr.interpolate()
+                .map(|series| to_graph_data(&cc, body.absolute, series).collect::<Vec<_>>())
+        })
+        .collect::<Vec<_>>();
+
+    let baselines = crate::db::ByProfile::new(|profile| -> Result<f64, String> {
+        Ok(db::average(
+            data.query::<T>(
+                selector::Query::new()
+                    .push::<String>(selector::Tag::Crate, selector::Selector::All)
+                    .push(selector::Tag::Profile, selector::Selector::One(profile))
+                    .push(selector::Tag::Cache, selector::Selector::One(Cache::Empty)),
+                commits.clone(),
+            )?
             .into_iter()
-            .map(|s| s.iterate(range, stat_id).interpolate())
+            .map(|sr| sr.interpolate().series)
             .collect::<Vec<_>>(),
         )
         .next()
-        .map_or(0.0, |((_c, d), _interpolated)| d.expect("interpolated"));
+        .map_or(0.0, |((_c, d), _interpolated)| d.expect("interpolated")))
+    })?;
 
-        let ret = (
-            series,
-            to_graph_data(
-                &cc,
-                series,
-                body.absolute,
-                baseline_first,
-                crate::db::average(
-                    series
-                        .with_krates(&data.crates())
-                        .into_iter()
-                        .map(|s| s.iterate(range, stat_id).interpolate())
-                        .collect::<Vec<_>>(),
-                ),
-            )
-            .collect::<Vec<_>>(),
-        );
-
-        ret
+    let summary_patches = vec![
+        Cache::Empty,
+        Cache::IncrementalEmpty,
+        Cache::IncrementalFresh,
+        Cache::IncrementalPatch("println".into()),
+    ];
+    let summary_queries = iproduct!(
+        summary_patches,
+        vec![Profile::Check, Profile::Debug, Profile::Opt]
+    )
+    .map(|(cache, profile)| {
+        selector::Query::new()
+            .push::<String>(selector::Tag::Crate, selector::Selector::All)
+            .push(selector::Tag::Profile, selector::Selector::One(profile))
+            .push(selector::Tag::Cache, selector::Selector::One(cache))
     });
+
+    for query in summary_queries {
+        let profile = query
+            .get(Tag::Profile)
+            .unwrap()
+            .raw
+            .assert_one()
+            .parse::<Profile>()
+            .unwrap();
+        let cache = query.get(Tag::Cache).unwrap().raw.assert_one().clone();
+        let baseline = baselines[profile];
+        let graph_data = to_graph_data(
+            &cc,
+            body.absolute,
+            db::average(
+                data.query::<T>(query, commits.clone())?
+                    .into_iter()
+                    .map(|sr| sr.interpolate().series)
+                    .collect(),
+            )
+            .map(|((c, d), i)| ((c, Some(d.expect("interpolated") / baseline)), i)),
+        )
+        .collect::<Vec<_>>();
+        series.push(selector::SeriesResponse {
+            path: selector::Path::new()
+                .set(Tag::Crate, "Summary")
+                .set(Tag::Profile, profile)
+                .set(Tag::Cache, cache),
+            series: graph_data,
+        })
+    }
 
     let mut by_krate = HashMap::new();
     let mut by_krate_max = HashMap::new();
-    let summary_crate = collector::BenchmarkName::from("Summary");
-    for (series, points) in series {
-        let max = by_krate_max
-            .entry(series.krate.as_specific().unwrap_or(summary_crate))
-            .or_insert(f32::MIN);
-        *max = points.iter().map(|p| p.y).fold(*max, |max, p| max.max(p));
+    for sr in series {
+        let krate = sr.path.get(selector::Tag::Crate)?.raw.clone();
+        let max = by_krate_max.entry(krate.clone()).or_insert(f32::MIN);
+        *max = sr
+            .series
+            .iter()
+            .map(|p| p.y)
+            .fold(*max, |max, p| max.max(p));
         by_krate
-            .entry(series.krate.as_specific().unwrap_or(summary_crate))
+            .entry(krate)
             .or_insert_with(HashMap::new)
-            .entry(match series.profile {
-                Profile::Opt => "opt",
-                Profile::Check => "check",
-                Profile::Debug => "debug",
-            })
+            .entry(sr.path.get(selector::Tag::Profile)?.raw.clone())
             .or_insert_with(Vec::new)
-            .push((series.cache, points));
+            .push((sr.path.get(selector::Tag::Cache)?.raw.clone(), sr.series));
     }
 
     Ok(graph::Response {
@@ -343,6 +381,22 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
         colors: vec![String::new(), String::from(INTERPOLATED_COLOR)],
         commits: cc.into_commits(),
     })
+}
+
+pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<graph::Response> {
+    let stat_id = StatId::from_str(&body.stat)?;
+    match stat_id {
+        StatId::CpuClock => handle_graph_for_stat::<selector::CpuClock>(body, data),
+        StatId::CpuClockUser => handle_graph_for_stat::<selector::CpuClockUser>(body, data),
+        StatId::CyclesUser => handle_graph_for_stat::<selector::CyclesUser>(body, data),
+        StatId::Faults => handle_graph_for_stat::<selector::Faults>(body, data),
+        StatId::FaultsUser => handle_graph_for_stat::<selector::FaultsUser>(body, data),
+        StatId::InstructionsUser => handle_graph_for_stat::<selector::InstructionsUser>(body, data),
+        StatId::MaxRss => handle_graph_for_stat::<selector::MaxRss>(body, data),
+        StatId::TaskClock => handle_graph_for_stat::<selector::TaskClock>(body, data),
+        StatId::TaskClockUser => handle_graph_for_stat::<selector::TaskClockUser>(body, data),
+        StatId::WallTime => handle_graph_for_stat::<selector::WallTime>(body, data),
+    }
 }
 
 pub async fn handle_days(body: days::Request, data: &InputData) -> ServerResult<days::Response> {

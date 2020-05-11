@@ -32,6 +32,7 @@ rust_team_data = { git = "https://github.com/rust-lang/team" }
 parking_lot = "0.10"
 snap = "1"
 rustc-artifacts = "0.2"
+itertools = "0.9"
 
 [dependencies.collector]
 path = "../collector"

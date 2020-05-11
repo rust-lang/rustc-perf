@@ -108,8 +108,7 @@ pub mod data {
 }
 
 pub mod graph {
-    use crate::db::Cache;
-    use collector::{BenchmarkName, Bound, Sha};
+    use collector::{Bound, Sha};
     use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
 
@@ -133,9 +132,8 @@ pub mod graph {
 
     #[derive(Debug, PartialEq, Clone, Serialize)]
     pub struct Response {
-        /// Crate -> Benchmark -> [GraphData]
-        pub benchmarks: HashMap<BenchmarkName, HashMap<&'static str, Vec<(Cache, Vec<GraphData>)>>>,
-        pub max: HashMap<BenchmarkName, f32>,
+        pub benchmarks: HashMap<String, HashMap<String, Vec<(String, Vec<GraphData>)>>>,
+        pub max: HashMap<String, f32>,
         pub colors: Vec<String>,
         pub commits: Vec<Sha>,
     }

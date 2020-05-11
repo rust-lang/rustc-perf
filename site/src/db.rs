@@ -1,5 +1,6 @@
+pub use collector::BenchmarkName as Crate;
 use collector::StatId;
-use collector::{BenchmarkName as Crate, Bound, Commit, PatchName};
+use collector::{Bound, Commit, PatchName};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::ops::RangeInclusive;
@@ -128,11 +129,50 @@ pub fn range_subset(data: &[Arc<CommitData>], range: RangeInclusive<Bound>) -> &
     }
 }
 
+pub struct ByProfile<T> {
+    pub check: T,
+    pub debug: T,
+    pub opt: T,
+}
+
+impl<T> ByProfile<T> {
+    pub fn new<E>(mut f: impl FnMut(Profile) -> Result<T, E>) -> Result<Self, E> {
+        Ok(ByProfile {
+            check: f(Profile::Check)?,
+            debug: f(Profile::Debug)?,
+            opt: f(Profile::Opt)?,
+        })
+    }
+}
+
+impl<T> std::ops::Index<Profile> for ByProfile<T> {
+    type Output = T;
+    fn index(&self, index: Profile) -> &Self::Output {
+        match index {
+            Profile::Check => &self.check,
+            Profile::Debug => &self.debug,
+            Profile::Opt => &self.opt,
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize)]
 pub enum Profile {
     Check,
     Debug,
     Opt,
+}
+
+impl std::str::FromStr for Profile {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s.to_ascii_lowercase().as_str() {
+            "check" => Profile::Check,
+            "debug" => Profile::Debug,
+            "opt" => Profile::Opt,
+            _ => return Err(format!("{} is not a profile", s)),
+        })
+    }
 }
 
 impl fmt::Display for Profile {
@@ -166,6 +206,25 @@ pub enum Cache {
     IncrementalFresh,
     #[serde(rename = "incr-patched")]
     IncrementalPatch(PatchName),
+}
+
+impl std::str::FromStr for Cache {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s.to_ascii_lowercase().as_str() {
+            "full" => Cache::Empty,
+            "incr-full" => Cache::IncrementalEmpty,
+            "incr-unchanged" => Cache::IncrementalFresh,
+            _ => {
+                // FIXME: use str::strip_prefix when stabilized
+                if s.starts_with("incr-patched: ") {
+                    Cache::IncrementalPatch(PatchName::from(&s["incr-patched: ".len()..]))
+                } else {
+                    return Err(format!("{} is not a profile", s));
+                }
+            }
+        })
+    }
 }
 
 impl fmt::Display for Cache {
