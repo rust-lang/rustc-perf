@@ -411,41 +411,44 @@ impl<'a> Iterator for SelfProfile<'a> {
         let col_id = self.collection_ids.get(self.idx)?;
         self.idx += 1;
 
-        let get = |res: Option<&Result<Benchmark, String>>| {
-            res.and_then(|res| res.as_ref().ok())
-                .and_then(|bd| {
-                    bd.runs.iter().find(|r| {
-                        let r = r.id();
-                        self.src.profile.matches_run(&r) && self.src.cache.matches_run(&r)
-                    })
-                })
-                .and_then(|r| r.self_profile.clone())
-        };
-
-        let benchmarks = match col_id {
+        let cd;
+        let res = match col_id {
             CollectionId::Commit(commit) => {
-                let idx = self
-                    .src
-                    .db
-                    .data()
-                    .binary_search_by_key(commit, |cd| cd.commit)
-                    .unwrap();
-
-                &self.src.db.data()[idx].benchmarks
+                let get = |res: Option<&Result<collector::Benchmark, String>>| {
+                    res.and_then(|res| res.as_ref().ok())
+                        .and_then(|bd| {
+                            bd.runs.iter().find(|r| {
+                                let r = r.id();
+                                let matches_profile = match self.src.profile {
+                                    Profile::Check => r.check,
+                                    Profile::Opt => r.release,
+                                    Profile::Debug => !r.check && !r.release,
+                                };
+                                let matches_cache = self.src.cache
+                                    == match r.state {
+                                        collector::BenchmarkState::Clean => Cache::Empty,
+                                        collector::BenchmarkState::IncrementalStart => {
+                                            Cache::IncrementalEmpty
+                                        }
+                                        collector::BenchmarkState::IncrementalClean => {
+                                            Cache::IncrementalFresh
+                                        }
+                                        collector::BenchmarkState::IncrementalPatched(p) => {
+                                            Cache::IncrementalPatch(p.name)
+                                        }
+                                    };
+                                matches_profile && matches_cache
+                            })
+                        })
+                        .and_then(|r| r.self_profile.clone())
+                };
+                let path = self.src.db.fs_paths.get(commit).unwrap();
+                cd = crate::load::deserialize_cd(&path);
+                get(cd.benchmarks.get(&self.src.krate))
             }
-
-            CollectionId::Artifact(id) => {
-                &self
-                    .src
-                    .db
-                    .artifact_data
-                    .iter()
-                    .find(|ad| ad.id == *id)
-                    .unwrap()
-                    .benchmarks
-            }
+            CollectionId::Artifact(_) => None,
         };
-        Some((col_id.clone(), get(benchmarks.get(&self.src.krate))))
+        Some((col_id.clone(), res))
     }
 }
 

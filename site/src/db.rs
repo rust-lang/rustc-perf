@@ -12,12 +12,20 @@ pub struct RunId {
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
-#[serde(from = "collector::Run")]
+#[serde(from = "CollectorRun")]
 pub struct Run {
     pub stats: collector::Stats,
-    pub self_profile: Option<collector::SelfProfile>,
     pub profile: Profile,
     pub state: Cache,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct CollectorRun {
+    pub stats: collector::Stats,
+    #[serde(default)]
+    pub check: bool,
+    pub release: bool,
+    pub state: collector::BenchmarkState,
 }
 
 impl Run {
@@ -33,11 +41,10 @@ impl Run {
     }
 }
 
-impl From<collector::Run> for Run {
-    fn from(c: collector::Run) -> Run {
+impl From<CollectorRun> for Run {
+    fn from(c: CollectorRun) -> Run {
         Run {
             stats: c.stats,
-            self_profile: c.self_profile,
             profile: if c.check {
                 Profile::Check
             } else if c.release {

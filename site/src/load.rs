@@ -140,6 +140,8 @@ pub struct InputData {
 
     pub commits: Vec<Commit>,
 
+    pub fs_paths: HashMap<Commit, PathBuf>,
+
     /// This is only for the last commit, with Some(..) if the benchmark
     /// errored.
     ///
@@ -151,6 +153,31 @@ pub struct InputData {
     pub persistent: Mutex<Persistent>,
 
     pub config: Config,
+}
+
+pub fn deserialize_cd(path: &Path) -> collector::CommitData {
+    let mut file = fs::File::open(path)
+        .with_context(|| format!("Failed to open {}", path.display()))
+        .unwrap();
+    let mut file_contents = Vec::new();
+    if path.extension().map_or(false, |e| e == "sz") {
+        let mut szip_reader = snap::read::FrameDecoder::new(std::io::BufReader::new(file));
+        szip_reader
+            .read_to_end(&mut file_contents)
+            .with_context(|| format!("Failed to read {}", path.display()))
+            .unwrap();
+    } else {
+        file.read_to_end(&mut file_contents)
+            .with_context(|| format!("Failed to read {}", path.display()))
+            .unwrap();
+    };
+    let file_contents = std::str::from_utf8(&file_contents).unwrap();
+    match serde_json::from_str(&file_contents) {
+        Ok(json) => json,
+        Err(err) => {
+            panic!("Failed to parse JSON for {}: {:?}", path.display(), err);
+        }
+    }
 }
 
 impl InputData {
@@ -203,6 +230,7 @@ impl InputData {
         // Read all files from repo_loc/processed
         let latest_section_start = ::std::time::Instant::now();
         let mut file_contents = Vec::new();
+        let mut fs_paths = HashMap::new();
         for entry in fs::read_dir(repo_loc.join("times"))? {
             let entry = entry?;
             if entry.file_type()?.is_dir() {
@@ -250,6 +278,10 @@ impl InputData {
                     warn!("empty benchmarks hash for {}", filename);
                     continue;
                 }
+                fs_paths.insert(
+                    contents.commit.clone(),
+                    entry.path().canonicalize().unwrap(),
+                );
 
                 if commits.insert(contents.commit.clone()) {
                     data.push(Arc::new(contents));
@@ -274,13 +306,14 @@ impl InputData {
         };
 
         data.sort_unstable_by_key(|d| d.commit.clone());
-        InputData::new(data, artifact_data, config)
+        InputData::new(data, artifact_data, config, fs_paths)
     }
 
     pub fn new(
         data: Vec<Arc<CommitData>>,
         mut artifact_data: HashMap<String, ArtifactData>,
         config: Config,
+        fs_paths: HashMap<Commit, PathBuf>,
     ) -> anyhow::Result<InputData> {
         let commits = data.iter().map(|cd| cd.commit.clone()).collect::<Vec<_>>();
         let errors = data
@@ -363,6 +396,7 @@ impl InputData {
 
         let persistent = Persistent::load();
         Ok(InputData {
+            fs_paths,
             stats_list: stats_list.into_iter().collect(),
             all_series,
             last_date,
