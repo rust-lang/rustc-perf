@@ -309,20 +309,6 @@ impl Series {
             stat,
         }
     }
-
-    pub fn iterate_artifacts<'a>(
-        self,
-        artifacts: &'a [ArtifactData],
-        stat: StatId,
-    ) -> SeriesIterator<
-        impl Iterator<Item = (String, &'a BTreeMap<Crate, Result<Benchmark, String>>)>,
-    > {
-        SeriesIterator {
-            data: artifacts.iter().map(|ad| (ad.id.clone(), &ad.benchmarks)),
-            series: self,
-            stat,
-        }
-    }
 }
 
 impl<I> SeriesIterator<I>
