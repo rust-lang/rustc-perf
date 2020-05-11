@@ -136,7 +136,10 @@ pub struct ByProfile<T> {
 }
 
 impl<T> ByProfile<T> {
-    pub fn new<E>(mut f: impl FnMut(Profile) -> Result<T, E>) -> Result<Self, E> {
+    pub fn new<E, F>(mut f: F) -> Result<Self, E>
+    where
+        F: FnMut(Profile) -> Result<T, E>,
+    {
         Ok(ByProfile {
             check: f(Profile::Check)?,
             debug: f(Profile::Debug)?,

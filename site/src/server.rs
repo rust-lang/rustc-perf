@@ -78,84 +78,68 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
         .map(|(k, _)| *k)
         .collect::<Vec<_>>();
 
-    let series = data.summary_series().into_iter().map(|series| {
-        (
-            series,
-            db::average(
-                series
-                    .with_krates(&benchmark_names)
-                    .into_iter()
-                    .map(|s| {
-                        s.iterate_artifacts(&data.artifact_data, StatId::WallTime)
-                            .map(|(id, pt)| (id, pt.expect("always collected for artifacts")))
-                    })
-                    .collect(),
-            )
-            .map(|(_id, point)| (point * 10.0).round() / 10.0)
+    let cids = Arc::new(
+        data.artifact_data
+            .iter()
+            .map(|ad| selector::CollectionId::Artifact(ad.id.clone()))
+            .chain(std::iter::once(data.commits.last().unwrap().clone().into()))
             .collect::<Vec<_>>(),
-        )
-    });
+    );
 
-    let cd = data.data().iter().last().unwrap();
-    let benches = cd
-        .benchmarks
-        .keys()
-        .cloned()
-        .filter(|name| benchmark_names.contains(&name))
-        .collect::<Vec<_>>();
-    assert_eq!(benches.len(), benchmark_names.len());
+    let query =
+        selector::Query::new().push(Tag::Crate, selector::Selector::Subset(benchmark_names));
 
-    let series = series.chain(data.summary_series().into_iter().map(|series| {
-        (
-            series,
-            db::average(
-                series
-                    .with_krates(&benches)
+    let summary_patches = data.summary_patches();
+    let by_profile = db::ByProfile::new::<String, _>(|profile| {
+        let query = query
+            .clone()
+            .push(Tag::Profile, selector::Selector::One(profile));
+
+        let mut cases = dashboard::Cases::default();
+        for patch in summary_patches.iter() {
+            let responses = data.query::<selector::WallTime>(
+                query
+                    .clone()
+                    .push(Tag::Cache, selector::Selector::One(patch)),
+                cids.clone(),
+            )?;
+
+            let points = db::average(
+                responses
                     .into_iter()
-                    .map(|s| {
-                        s.iterate(std::slice::from_ref(cd), StatId::WallTime)
-                            .interpolate()
-                    })
+                    .map(|sr| sr.interpolate().series)
                     .collect::<Vec<_>>(),
             )
             .map(|((_id, point), _interpolated)| {
                 (point.expect("interpolated") * 10.0).round() / 10.0
             })
-            .collect::<Vec<_>>(),
-        )
-    }));
+            .collect::<Vec<_>>();
 
-    let mut check = dashboard::Cases::default();
-    let mut debug = dashboard::Cases::default();
-    let mut opt = dashboard::Cases::default();
-    for (series, points) in series {
-        let cases = match series.profile {
-            Profile::Check => &mut check,
-            Profile::Debug => &mut debug,
-            Profile::Opt => &mut opt,
-        };
-
-        match series.cache {
-            Cache::Empty => cases.clean_averages.extend(points),
-            Cache::IncrementalEmpty => cases.base_incr_averages.extend(points),
-            Cache::IncrementalFresh => cases.clean_incr_averages.extend(points),
-            // we only have println patches here
-            Cache::IncrementalPatch(_) => cases.println_incr_averages.extend(points),
+            match patch {
+                Cache::Empty => cases.clean_averages = points,
+                Cache::IncrementalEmpty => cases.base_incr_averages = points,
+                Cache::IncrementalFresh => cases.clean_incr_averages = points,
+                // we only have println patches here
+                Cache::IncrementalPatch(_) => cases.println_incr_averages = points,
+            }
         }
-    }
+        Ok(cases)
+    })
+    .unwrap();
+
     dashboard::Response {
-        versions: data
-            .artifact_data
+        versions: cids
             .iter()
-            .map(|ad| ad.id.clone())
-            .chain(std::iter::once(format!(
-                "master: {}",
-                &cd.commit.sha.to_string()[0..8]
-            )))
+            .map(|cid| match cid {
+                selector::CollectionId::Commit(c) => {
+                    format!("master: {}", &c.sha.to_string()[0..8])
+                }
+                selector::CollectionId::Artifact(aid) => aid.clone(),
+            })
             .collect::<Vec<_>>(),
-        check,
-        debug,
-        opt,
+        check: by_profile.check,
+        debug: by_profile.debug,
+        opt: by_profile.opt,
     }
 }
 
@@ -244,10 +228,15 @@ impl CommitIdxCache {
 fn to_graph_data<'a>(
     cc: &'a CommitIdxCache,
     is_absolute: bool,
-    points: impl Iterator<Item = ((collector::Commit, Option<f64>), Interpolated)> + 'a,
+    points: impl Iterator<Item = ((selector::CollectionId, Option<f64>), Interpolated)> + 'a,
 ) -> impl Iterator<Item = graph::GraphData> + 'a {
     let mut first = None;
-    points.map(move |((commit, point), interpolated)| {
+    points.map(move |((cid, point), interpolated)| {
+        let commit = if let selector::CollectionId::Commit(commit) = cid {
+            commit
+        } else {
+            unimplemented!()
+        };
         let point = point.expect("interpolated");
         first = Some(first.unwrap_or(point));
         let first = first.unwrap();
@@ -272,7 +261,7 @@ fn handle_graph_for_stat<'a, T: selector::Series<'a>>(
     data: &'a InputData,
 ) -> ServerResult<graph::Response>
 where
-    T: Iterator<Item = (collector::Commit, Option<f64>)>,
+    T: Iterator<Item = (selector::CollectionId, Option<f64>)>,
 {
     let cc = CommitIdxCache::new();
     let range = data.data_range(body.start.clone()..=body.end.clone());
@@ -280,7 +269,7 @@ where
         .push::<String>(selector::Tag::Crate, selector::Selector::All)
         .push::<String>(selector::Tag::Profile, selector::Selector::All)
         .push::<String>(selector::Tag::Cache, selector::Selector::All);
-    let commits: Arc<Vec<_>> = Arc::new(range.iter().map(|cd| cd.commit).collect());
+    let commits: Arc<Vec<_>> = Arc::new(range.iter().map(|cd| cd.commit.into()).collect());
 
     let series = data.query::<T>(query, commits.clone())?;
 
@@ -309,14 +298,8 @@ where
         .map_or(0.0, |((_c, d), _interpolated)| d.expect("interpolated")))
     })?;
 
-    let summary_patches = vec![
-        Cache::Empty,
-        Cache::IncrementalEmpty,
-        Cache::IncrementalFresh,
-        Cache::IncrementalPatch("println".into()),
-    ];
     let summary_queries = iproduct!(
-        summary_patches,
+        data.summary_patches(),
         vec![Profile::Check, Profile::Debug, Profile::Opt]
     )
     .map(|(cache, profile)| {

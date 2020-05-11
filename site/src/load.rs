@@ -175,6 +175,15 @@ impl InputData {
             .collect::<Vec<_>>()
     }
 
+    pub fn summary_patches(&self) -> Vec<crate::db::Cache> {
+        vec![
+            crate::db::Cache::Empty,
+            crate::db::Cache::IncrementalEmpty,
+            crate::db::Cache::IncrementalFresh,
+            crate::db::Cache::IncrementalPatch("println".into()),
+        ]
+    }
+
     pub fn summary_series(&self) -> Vec<crate::db::Series> {
         self.all_series
             .iter()

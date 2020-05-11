@@ -110,14 +110,16 @@ impl<T> SeriesResponse<T> {
 
     pub fn interpolate(self) -> SeriesResponse<Interpolate<T>>
     where
-        T: Iterator<Item = (Commit, Option<f64>)>,
+        T: Iterator,
+        T::Item: crate::db::Point,
     {
         self.map(|s| Interpolate::new(s))
     }
 }
 
 pub trait Series<'a>: Sized {
-    fn deserialize(commits: Arc<Vec<Commit>>, src: Source<'a>) -> Result<Self, String>;
+    fn deserialize(collection_ids: Arc<Vec<CollectionId>>, src: Source<'a>)
+        -> Result<Self, String>;
 }
 
 #[derive(Debug)]
@@ -208,17 +210,23 @@ impl Query {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum CollectionId {
     Commit(Commit),
     Artifact(String),
+}
+
+impl From<Commit> for CollectionId {
+    fn from(c: Commit) -> Self {
+        Self::Commit(c)
+    }
 }
 
 impl Db {
     pub fn query<'a, T: Series<'a>>(
         &'a self,
         mut query: Query,
-        commits: Arc<Vec<CollectionId>>,
+        collection_ids: Arc<Vec<CollectionId>>,
     ) -> Result<Vec<SeriesResponse<T>>, String> {
         let krate = query.extract(Tag::Crate)?.raw;
         let profile = query
@@ -276,7 +284,7 @@ impl Db {
                         ],
                     },
                     series: T::deserialize(
-                        commits.clone(),
+                        collection_ids.clone(),
                         Source {
                             db: self,
                             krate: s.krate.as_specific().unwrap(),
@@ -299,16 +307,16 @@ pub struct Source<'a> {
 }
 
 struct PerfStatSeries<'a> {
-    commits: Arc<Vec<Commit>>,
+    collection_ids: Arc<Vec<CollectionId>>,
     idx: usize,
     src: Source<'a>,
     stat: StatId,
 }
 
 impl<'a> Iterator for PerfStatSeries<'a> {
-    type Item = (Commit, Option<f64>);
+    type Item = (CollectionId, Option<f64>);
     fn next(&mut self) -> Option<Self::Item> {
-        let commit = self.commits.get(self.idx)?;
+        let col_id = self.collection_ids.get(self.idx)?;
         self.idx += 1;
 
         let get_stat = |res: Option<&Result<Benchmark, String>>| {
@@ -322,14 +330,30 @@ impl<'a> Iterator for PerfStatSeries<'a> {
                 .and_then(|r| r.stats.get(self.stat))
         };
 
-        let cd_idx = self
-            .src
-            .db
-            .data()
-            .binary_search_by_key(commit, |cd| cd.commit)
-            .unwrap();
-        let cd = &self.src.db.data()[cd_idx];
-        Some((*commit, get_stat(cd.benchmarks.get(&self.src.krate))))
+        let benchmarks = match col_id {
+            CollectionId::Commit(commit) => {
+                let idx = self
+                    .src
+                    .db
+                    .data()
+                    .binary_search_by_key(commit, |cd| cd.commit)
+                    .unwrap();
+
+                &self.src.db.data()[idx].benchmarks
+            }
+
+            CollectionId::Artifact(id) => {
+                &self
+                    .src
+                    .db
+                    .artifact_data
+                    .iter()
+                    .find(|ad| ad.id == *id)
+                    .unwrap()
+                    .benchmarks
+            }
+        };
+        Some((col_id.clone(), get_stat(benchmarks.get(&self.src.krate))))
     }
 }
 
@@ -340,19 +364,22 @@ macro_rules! perf_stat {
         }
 
         impl<'a> Iterator for $structt<'a> {
-            type Item = (Commit, Option<f64>);
+            type Item = (CollectionId, Option<f64>);
             fn next(&mut self) -> Option<Self::Item> {
                 self.series.next()
             }
         }
 
         impl<'a> Series<'a> for $structt<'a> {
-            fn deserialize(commits: Arc<Vec<Commit>>, src: Source<'a>) -> Result<Self, String> {
+            fn deserialize(
+                collection_ids: Arc<Vec<CollectionId>>,
+                src: Source<'a>,
+            ) -> Result<Self, String> {
                 Ok($structt {
                     series: PerfStatSeries {
                         src,
                         idx: 0,
-                        commits,
+                        collection_ids,
                         stat: StatId::$structt,
                     },
                 })
