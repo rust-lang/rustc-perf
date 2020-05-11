@@ -398,3 +398,66 @@ perf_stat!(MaxRss);
 perf_stat!(TaskClock);
 perf_stat!(TaskClockUser);
 perf_stat!(WallTime);
+
+pub struct SelfProfile<'a> {
+    collection_ids: Arc<Vec<CollectionId>>,
+    idx: usize,
+    src: Source<'a>,
+}
+
+impl<'a> Iterator for SelfProfile<'a> {
+    type Item = (CollectionId, Option<collector::SelfProfile>);
+    fn next(&mut self) -> Option<Self::Item> {
+        let col_id = self.collection_ids.get(self.idx)?;
+        self.idx += 1;
+
+        let get = |res: Option<&Result<Benchmark, String>>| {
+            res.and_then(|res| res.as_ref().ok())
+                .and_then(|bd| {
+                    bd.runs.iter().find(|r| {
+                        let r = r.id();
+                        self.src.profile.matches_run(&r) && self.src.cache.matches_run(&r)
+                    })
+                })
+                .and_then(|r| r.self_profile.clone())
+        };
+
+        let benchmarks = match col_id {
+            CollectionId::Commit(commit) => {
+                let idx = self
+                    .src
+                    .db
+                    .data()
+                    .binary_search_by_key(commit, |cd| cd.commit)
+                    .unwrap();
+
+                &self.src.db.data()[idx].benchmarks
+            }
+
+            CollectionId::Artifact(id) => {
+                &self
+                    .src
+                    .db
+                    .artifact_data
+                    .iter()
+                    .find(|ad| ad.id == *id)
+                    .unwrap()
+                    .benchmarks
+            }
+        };
+        Some((col_id.clone(), get(benchmarks.get(&self.src.krate))))
+    }
+}
+
+impl<'a> Series<'a> for SelfProfile<'a> {
+    fn deserialize(
+        collection_ids: Arc<Vec<CollectionId>>,
+        src: Source<'a>,
+    ) -> Result<Self, String> {
+        Ok(SelfProfile {
+            src,
+            idx: 0,
+            collection_ids,
+        })
+    }
+}

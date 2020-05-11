@@ -25,7 +25,7 @@ use crate::util;
 use collector::{Bound, Date};
 
 use crate::api::github;
-use crate::db::{ArtifactData, Benchmark, CommitData};
+use crate::db::{ArtifactData, CommitData};
 use collector;
 pub use collector::{BenchmarkName, Commit, Patch, Sha, StatId, Stats};
 use log::{error, info, warn};
@@ -154,18 +154,6 @@ pub struct InputData {
 }
 
 impl InputData {
-    pub fn benchmark_data(&self, sha: Sha, name: BenchmarkName) -> Result<&'_ Benchmark, String> {
-        if let Some(e) = self.data.iter().find(|e| e.commit.sha == sha) {
-            e.benchmarks
-                .get(&name)
-                .ok_or_else(|| format!("benchmark {} does not exist at commit {}", name, sha))?
-                .as_ref()
-                .map_err(|_| format!("benchmark {} failed to compile for commit {}", name, sha))
-        } else {
-            return Err(format!("could not find commit {}", sha));
-        }
-    }
-
     pub fn summary_patches(&self) -> Vec<crate::db::Cache> {
         vec![
             crate::db::Cache::Empty,

@@ -587,24 +587,11 @@ pub async fn handle_collected(
 }
 
 fn get_self_profile_data(
-    benchmark: &crate::db::Benchmark,
-    bench_ty: &str,
-    run_name: &str,
+    cpu_clock: Option<f64>,
+    self_profile: Option<collector::SelfProfile>,
     sort_idx: Option<i32>,
 ) -> ServerResult<self_profile::SelfProfile> {
-    let run = benchmark
-        .runs
-        .iter()
-        .find(|r| {
-            let id = r.id();
-            (id.profile == Profile::Check) == (bench_ty == "check")
-                && (id.profile == Profile::Opt) == (bench_ty == "opt")
-                && id.state.to_string() == run_name
-        })
-        .ok_or(format!("No such run"))?;
-
-    let profile = run
-        .self_profile
+    let profile = self_profile
         .as_ref()
         .ok_or(format!("No self profile results for this commit"))?
         .clone();
@@ -613,9 +600,7 @@ fn get_self_profile_data(
         label: "Totals".into(),
         self_time: total_time,
         // TODO: check against wall-time from perf stats
-        percent_total_time: run
-            .stats
-            .get(StatId::CpuClock)
+        percent_total_time: cpu_clock
             .map(|w| {
                 // this converts the total_time (a Duration) to the milliseconds in cpu-clock
                 (((total_time.as_nanos() as f64 / 1000000.0) / w) * 100.0) as f32
@@ -708,7 +693,7 @@ pub async fn handle_self_profile(
 ) -> ServerResult<self_profile::Response> {
     let mut it = body.benchmark.rsplitn(2, '-');
     let bench_ty = it.next().ok_or(format!("no benchmark type"))?;
-    let bench_name = it.next().ok_or(format!("no benchmark name"))?.into();
+    let bench_name = it.next().ok_or(format!("no benchmark name"))?;
 
     let sort_idx = body
         .sort_idx
@@ -716,14 +701,48 @@ pub async fn handle_self_profile(
         .ok()
         .ok_or(format!("sort_idx needs to be i32"))?;
 
-    let benchmark = data.benchmark_data(body.commit.as_str().into(), bench_name)?;
-    let profile = get_self_profile_data(&benchmark, bench_ty, &body.run_name, Some(sort_idx))?;
-    let base_profile = if let Some(bc) = body.base_commit {
-        let base_benchmark = data.benchmark_data(bc.as_str().into(), bench_name)?;
+    let query = selector::Query::new()
+        .push(Tag::Crate, selector::Selector::One(bench_name))
+        .push(Tag::Profile, selector::Selector::One(bench_ty))
+        .push(Tag::Cache, selector::Selector::One(body.run_name.clone()));
+
+    let mut commits = vec![data
+        .commits
+        .iter()
+        .find(|c| c.sha == *body.commit.as_str())
+        .cloned()
+        .ok_or(format!("could not find commit {}", body.commit))?
+        .into()];
+
+    if let Some(bc) = &body.base_commit {
+        commits.push(
+            data.commits
+                .iter()
+                .find(|c| c.sha == *bc.as_str())
+                .cloned()
+                .ok_or(format!("could not find base commit {}", body.commit))?
+                .into(),
+        );
+    }
+
+    let commits = Arc::new(commits);
+    let mut sp_responses = data.query::<selector::SelfProfile>(query.clone(), commits.clone())?;
+    assert_eq!(sp_responses.len(), 1, "all selectors are exact");
+    let mut sp_response = sp_responses.remove(0).series;
+
+    let mut cpu_responses = data.query::<selector::CpuClock>(query.clone(), commits.clone())?;
+    assert_eq!(cpu_responses.len(), 1, "all selectors are exact");
+    let mut cpu_response = cpu_responses.remove(0).series;
+
+    let profile = get_self_profile_data(
+        cpu_response.next().unwrap().1,
+        sp_response.next().unwrap().1,
+        Some(sort_idx),
+    )?;
+    let base_profile = if body.base_commit.is_some() {
         Some(get_self_profile_data(
-            &base_benchmark,
-            bench_ty,
-            &body.run_name,
+            cpu_response.next().unwrap().1,
+            sp_response.next().unwrap().1,
             None,
         )?)
     } else {
