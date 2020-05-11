@@ -269,7 +269,7 @@ where
         .push::<String>(selector::Tag::Crate, selector::Selector::All)
         .push::<String>(selector::Tag::Profile, selector::Selector::All)
         .push::<String>(selector::Tag::Cache, selector::Selector::All);
-    let commits: Arc<Vec<_>> = Arc::new(range.iter().map(|cd| cd.commit.into()).collect());
+    let commits: Arc<Vec<_>> = Arc::new(range.iter().map(|&c| c.into()).collect());
 
     let series = data.query::<T>(query, commits.clone())?;
 
@@ -391,7 +391,7 @@ pub async fn handle_days(body: days::Request, data: &InputData) -> ServerResult<
         "could not find end commit for bound {:?}",
         body.end
     ))?;
-    let cids = Arc::new(vec![a.commit.into(), b.commit.into()]);
+    let cids = Arc::new(vec![a.into(), b.into()]);
     let stat_id = StatId::from_str(&body.stat)?;
 
     let query = selector::Query::new()
@@ -400,36 +400,36 @@ pub async fn handle_days(body: days::Request, data: &InputData) -> ServerResult<
         .push::<String>(Tag::Profile, selector::Selector::All);
 
     match stat_id {
-        StatId::CpuClock => handle_days_for_stat::<selector::CpuClock>(
-            data, a.commit, b.commit, query, cids, stat_id,
-        ),
-        StatId::CpuClockUser => handle_days_for_stat::<selector::CpuClockUser>(
-            data, a.commit, b.commit, query, cids, stat_id,
-        ),
-        StatId::CyclesUser => handle_days_for_stat::<selector::CyclesUser>(
-            data, a.commit, b.commit, query, cids, stat_id,
-        ),
+        StatId::CpuClock => {
+            handle_days_for_stat::<selector::CpuClock>(data, a, b, query, cids, stat_id)
+        }
+        StatId::CpuClockUser => {
+            handle_days_for_stat::<selector::CpuClockUser>(data, a, b, query, cids, stat_id)
+        }
+        StatId::CyclesUser => {
+            handle_days_for_stat::<selector::CyclesUser>(data, a, b, query, cids, stat_id)
+        }
         StatId::Faults => {
-            handle_days_for_stat::<selector::Faults>(data, a.commit, b.commit, query, cids, stat_id)
+            handle_days_for_stat::<selector::Faults>(data, a, b, query, cids, stat_id)
         }
-        StatId::FaultsUser => handle_days_for_stat::<selector::FaultsUser>(
-            data, a.commit, b.commit, query, cids, stat_id,
-        ),
-        StatId::InstructionsUser => handle_days_for_stat::<selector::InstructionsUser>(
-            data, a.commit, b.commit, query, cids, stat_id,
-        ),
+        StatId::FaultsUser => {
+            handle_days_for_stat::<selector::FaultsUser>(data, a, b, query, cids, stat_id)
+        }
+        StatId::InstructionsUser => {
+            handle_days_for_stat::<selector::InstructionsUser>(data, a, b, query, cids, stat_id)
+        }
         StatId::MaxRss => {
-            handle_days_for_stat::<selector::MaxRss>(data, a.commit, b.commit, query, cids, stat_id)
+            handle_days_for_stat::<selector::MaxRss>(data, a, b, query, cids, stat_id)
         }
-        StatId::TaskClock => handle_days_for_stat::<selector::TaskClock>(
-            data, a.commit, b.commit, query, cids, stat_id,
-        ),
-        StatId::TaskClockUser => handle_days_for_stat::<selector::TaskClockUser>(
-            data, a.commit, b.commit, query, cids, stat_id,
-        ),
-        StatId::WallTime => handle_days_for_stat::<selector::WallTime>(
-            data, a.commit, b.commit, query, cids, stat_id,
-        ),
+        StatId::TaskClock => {
+            handle_days_for_stat::<selector::TaskClock>(data, a, b, query, cids, stat_id)
+        }
+        StatId::TaskClockUser => {
+            handle_days_for_stat::<selector::TaskClockUser>(data, a, b, query, cids, stat_id)
+        }
+        StatId::WallTime => {
+            handle_days_for_stat::<selector::WallTime>(data, a, b, query, cids, stat_id)
+        }
     }
 }
 

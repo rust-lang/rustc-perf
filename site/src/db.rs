@@ -4,7 +4,6 @@ use collector::{Bound, Commit, PatchName};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::ops::RangeInclusive;
-use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RunId {
@@ -76,42 +75,41 @@ pub struct ArtifactData {
     pub benchmarks: BTreeMap<Crate, Result<Benchmark, String>>,
 }
 
-pub fn data_for(data: &[Arc<CommitData>], is_left: bool, query: Bound) -> Option<Arc<CommitData>> {
+pub fn data_for(data: &[Commit], is_left: bool, query: Bound) -> Option<Commit> {
     if is_left {
         let last_month =
-            data.last().unwrap().commit.date.0.naive_utc().date() - chrono::Duration::days(30);
+            data.last().unwrap().date.0.naive_utc().date() - chrono::Duration::days(30);
         data.iter()
-            .find(|cd| match &query {
-                Bound::Commit(sha) => cd.commit.sha == **sha,
-                Bound::Date(date) => cd.commit.date.0.naive_utc().date() == *date,
-                Bound::None => last_month <= cd.commit.date.0.naive_utc().date(),
+            .find(|commit| match &query {
+                Bound::Commit(sha) => commit.sha == **sha,
+                Bound::Date(date) => commit.date.0.naive_utc().date() == *date,
+                Bound::None => last_month <= commit.date.0.naive_utc().date(),
             })
             .cloned()
     } else {
         data.iter()
-            .rfind(|cd| match &query {
-                Bound::Commit(sha) => cd.commit.sha == **sha,
-                Bound::Date(date) => cd.commit.date.0.date().naive_utc() == *date,
+            .rfind(|commit| match &query {
+                Bound::Commit(sha) => commit.sha == **sha,
+                Bound::Date(date) => commit.date.0.date().naive_utc() == *date,
                 Bound::None => true,
             })
             .cloned()
     }
 }
 
-pub fn range_subset(data: &[Arc<CommitData>], range: RangeInclusive<Bound>) -> &[Arc<CommitData>] {
+pub fn range_subset(data: &[Commit], range: RangeInclusive<Bound>) -> &[Commit] {
     let (a, b) = range.into_inner();
 
-    let last_month =
-        data.last().unwrap().commit.date.0.naive_utc().date() - chrono::Duration::days(30);
-    let left_idx = data.iter().position(|cd| match &a {
-        Bound::Commit(sha) => cd.commit.sha == **sha,
-        Bound::Date(date) => cd.commit.date.0.naive_utc().date() == *date,
-        Bound::None => last_month <= cd.commit.date.0.naive_utc().date(),
+    let last_month = data.last().unwrap().date.0.naive_utc().date() - chrono::Duration::days(30);
+    let left_idx = data.iter().position(|commit| match &a {
+        Bound::Commit(sha) => commit.sha == **sha,
+        Bound::Date(date) => commit.date.0.naive_utc().date() == *date,
+        Bound::None => last_month <= commit.date.0.naive_utc().date(),
     });
 
-    let right_idx = data.iter().rposition(|cd| match &b {
-        Bound::Commit(sha) => cd.commit.sha == **sha,
-        Bound::Date(date) => cd.commit.date.0.date().naive_utc() == *date,
+    let right_idx = data.iter().rposition(|commit| match &b {
+        Bound::Commit(sha) => commit.sha == **sha,
+        Bound::Date(date) => commit.date.0.date().naive_utc() == *date,
         Bound::None => true,
     });
 

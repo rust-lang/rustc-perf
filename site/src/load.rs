@@ -166,15 +166,6 @@ impl InputData {
         }
     }
 
-    pub fn crates(&self) -> Vec<BenchmarkName> {
-        self.all_series
-            .iter()
-            .map(|s| s.krate)
-            .collect::<BTreeSet<_>>()
-            .into_iter()
-            .collect::<Vec<_>>()
-    }
-
     pub fn summary_patches(&self) -> Vec<crate::db::Cache> {
         vec![
             crate::db::Cache::Empty,
@@ -188,12 +179,12 @@ impl InputData {
         &self.data
     }
 
-    pub fn data_for(&self, is_left: bool, query: Bound) -> Option<Arc<CommitData>> {
-        crate::db::data_for(self.data(), is_left, query)
+    pub fn data_for(&self, is_left: bool, query: Bound) -> Option<Commit> {
+        crate::db::data_for(&self.commits, is_left, query)
     }
 
-    pub fn data_range(&self, range: RangeInclusive<Bound>) -> &[Arc<CommitData>] {
-        crate::db::range_subset(self.data(), range)
+    pub fn data_range(&self, range: RangeInclusive<Bound>) -> &[Commit] {
+        crate::db::range_subset(&self.commits, range)
     }
 
     /// Initialize `InputData from the file system.
