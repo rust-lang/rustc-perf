@@ -399,10 +399,10 @@ impl InputData {
             .unwrap();
 
         let have = self
-            .data
+            .commits
             .iter()
-            .map(|value| (value.commit.sha.clone(), value))
-            .collect::<HashMap<_, _>>();
+            .map(|commit| commit.sha.clone())
+            .collect::<HashSet<_>>();
         let now = Utc::now();
         let missing = commits
             .iter()
@@ -410,7 +410,7 @@ impl InputData {
             .filter(|c| now.signed_duration_since(c.time) < Duration::days(29))
             .filter_map(|c| {
                 let sha = c.sha.as_str().into();
-                if have.contains_key(&sha) || self.config.skip.contains(&sha) {
+                if have.contains(&sha) || self.config.skip.contains(&sha) {
                     None
                 } else {
                     Some((c, MissingReason::Sha))
@@ -449,7 +449,7 @@ impl InputData {
                     ret
                 },
             )
-            .filter(|c| !have.contains_key(&c.0.sha.as_str().into())) // we may have not updated the try-commits file
+            .filter(|c| !have.contains(&c.0.sha.as_str().into())) // we may have not updated the try-commits file
             .chain(missing)
             .collect::<Vec<_>>();
 
