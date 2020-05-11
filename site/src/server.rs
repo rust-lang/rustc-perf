@@ -384,7 +384,7 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
     }
 }
 
-pub async fn handle_days(body: days::Request, data: &InputData) -> ServerResult<days::Response> {
+pub async fn handle_compare(body: days::Request, data: &InputData) -> ServerResult<days::Response> {
     let a = data.data_for(true, body.start.clone()).ok_or(format!(
         "could not find start commit for bound {:?}",
         body.start
@@ -403,39 +403,39 @@ pub async fn handle_days(body: days::Request, data: &InputData) -> ServerResult<
 
     match stat_id {
         StatId::CpuClock => {
-            handle_days_for_stat::<selector::CpuClock>(data, a, b, query, cids, stat_id)
+            handle_compare_for_stat::<selector::CpuClock>(data, a, b, query, cids, stat_id)
         }
         StatId::CpuClockUser => {
-            handle_days_for_stat::<selector::CpuClockUser>(data, a, b, query, cids, stat_id)
+            handle_compare_for_stat::<selector::CpuClockUser>(data, a, b, query, cids, stat_id)
         }
         StatId::CyclesUser => {
-            handle_days_for_stat::<selector::CyclesUser>(data, a, b, query, cids, stat_id)
+            handle_compare_for_stat::<selector::CyclesUser>(data, a, b, query, cids, stat_id)
         }
         StatId::Faults => {
-            handle_days_for_stat::<selector::Faults>(data, a, b, query, cids, stat_id)
+            handle_compare_for_stat::<selector::Faults>(data, a, b, query, cids, stat_id)
         }
         StatId::FaultsUser => {
-            handle_days_for_stat::<selector::FaultsUser>(data, a, b, query, cids, stat_id)
+            handle_compare_for_stat::<selector::FaultsUser>(data, a, b, query, cids, stat_id)
         }
         StatId::InstructionsUser => {
-            handle_days_for_stat::<selector::InstructionsUser>(data, a, b, query, cids, stat_id)
+            handle_compare_for_stat::<selector::InstructionsUser>(data, a, b, query, cids, stat_id)
         }
         StatId::MaxRss => {
-            handle_days_for_stat::<selector::MaxRss>(data, a, b, query, cids, stat_id)
+            handle_compare_for_stat::<selector::MaxRss>(data, a, b, query, cids, stat_id)
         }
         StatId::TaskClock => {
-            handle_days_for_stat::<selector::TaskClock>(data, a, b, query, cids, stat_id)
+            handle_compare_for_stat::<selector::TaskClock>(data, a, b, query, cids, stat_id)
         }
         StatId::TaskClockUser => {
-            handle_days_for_stat::<selector::TaskClockUser>(data, a, b, query, cids, stat_id)
+            handle_compare_for_stat::<selector::TaskClockUser>(data, a, b, query, cids, stat_id)
         }
         StatId::WallTime => {
-            handle_days_for_stat::<selector::WallTime>(data, a, b, query, cids, stat_id)
+            handle_compare_for_stat::<selector::WallTime>(data, a, b, query, cids, stat_id)
         }
     }
 }
 
-fn handle_days_for_stat<'a, T: selector::Series<'a>>(
+fn handle_compare_for_stat<'a, T: selector::Series<'a>>(
     data: &'a InputData,
     a: collector::Commit,
     b: collector::Commit,
@@ -1030,7 +1030,7 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
         ))
     } else if p == "/perf/get" {
         Ok(to_response(
-            handle_days(body!(parse_body(&body)), &data).await,
+            handle_compare(body!(parse_body(&body)), &data).await,
         ))
     } else if p == "/perf/collected" {
         if !ctx.check_auth(&req) {
