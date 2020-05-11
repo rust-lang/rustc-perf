@@ -45,7 +45,7 @@ impl Serialize for StyledBenchmarkName {
 pub struct DateData {
     pub date: Date,
     pub commit: Sha,
-    pub data: HashMap<StyledBenchmarkName, Vec<(String, f64)>>,
+    pub data: HashMap<String, Vec<(String, f64)>>,
 }
 
 pub type ServerResult<T> = StdResult<T, String>;

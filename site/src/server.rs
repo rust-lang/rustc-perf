@@ -40,7 +40,7 @@ pub use crate::api::{
     self, dashboard, data, days, github, graph, info, self_profile, status, CommitResponse,
     DateData, ServerResult, StyledBenchmarkName,
 };
-use crate::db::{self, Cache, CommitData, Profile};
+use crate::db::{self, Cache, Profile};
 use crate::git;
 use crate::github::post_comment;
 use crate::interpolate::Interpolated;
@@ -391,22 +391,82 @@ pub async fn handle_days(body: days::Request, data: &InputData) -> ServerResult<
         "could not find end commit for bound {:?}",
         body.end
     ))?;
+    let cids = Arc::new(vec![a.commit.into(), b.commit.into()]);
     let stat_id = StatId::from_str(&body.stat)?;
+
+    let query = selector::Query::new()
+        .push::<String>(Tag::Crate, selector::Selector::All)
+        .push::<String>(Tag::Cache, selector::Selector::All)
+        .push::<String>(Tag::Profile, selector::Selector::All);
+
+    match stat_id {
+        StatId::CpuClock => handle_days_for_stat::<selector::CpuClock>(
+            data, a.commit, b.commit, query, cids, stat_id,
+        ),
+        StatId::CpuClockUser => handle_days_for_stat::<selector::CpuClockUser>(
+            data, a.commit, b.commit, query, cids, stat_id,
+        ),
+        StatId::CyclesUser => handle_days_for_stat::<selector::CyclesUser>(
+            data, a.commit, b.commit, query, cids, stat_id,
+        ),
+        StatId::Faults => {
+            handle_days_for_stat::<selector::Faults>(data, a.commit, b.commit, query, cids, stat_id)
+        }
+        StatId::FaultsUser => handle_days_for_stat::<selector::FaultsUser>(
+            data, a.commit, b.commit, query, cids, stat_id,
+        ),
+        StatId::InstructionsUser => handle_days_for_stat::<selector::InstructionsUser>(
+            data, a.commit, b.commit, query, cids, stat_id,
+        ),
+        StatId::MaxRss => {
+            handle_days_for_stat::<selector::MaxRss>(data, a.commit, b.commit, query, cids, stat_id)
+        }
+        StatId::TaskClock => handle_days_for_stat::<selector::TaskClock>(
+            data, a.commit, b.commit, query, cids, stat_id,
+        ),
+        StatId::TaskClockUser => handle_days_for_stat::<selector::TaskClockUser>(
+            data, a.commit, b.commit, query, cids, stat_id,
+        ),
+        StatId::WallTime => handle_days_for_stat::<selector::WallTime>(
+            data, a.commit, b.commit, query, cids, stat_id,
+        ),
+    }
+}
+
+fn handle_days_for_stat<'a, T: selector::Series<'a>>(
+    data: &'a InputData,
+    a: collector::Commit,
+    b: collector::Commit,
+    query: selector::Query,
+    cids: Arc<Vec<selector::CollectionId>>,
+    stat: StatId,
+) -> ServerResult<days::Response>
+where
+    T: Iterator<Item = (selector::CollectionId, Option<f64>)>,
+{
+    let mut responses = data.query::<T>(query, cids)?;
+
     Ok(days::Response {
-        a: DateData::for_day(&a, stat_id, &data.all_series),
-        b: DateData::for_day(&b, stat_id, &data.all_series),
+        a: DateData::consume_one(a, stat, &mut responses),
+        b: DateData::consume_one(b, stat, &mut responses),
     })
 }
 
 impl DateData {
-    fn for_day(commit: &Arc<CommitData>, stat: StatId, series: &[crate::db::Series]) -> DateData {
+    fn consume_one<T>(
+        commit: collector::Commit,
+        stat: StatId,
+        series: &mut [selector::SeriesResponse<T>],
+    ) -> DateData
+    where
+        T: Iterator<Item = (selector::CollectionId, Option<f64>)>,
+    {
         let mut data = HashMap::new();
 
-        for series in series {
-            let point = series
-                .iterate(std::slice::from_ref(commit), stat)
-                .next()
-                .and_then(|(_, p)| p);
+        for response in series {
+            let (id, point) = response.series.next().expect("must have element");
+            assert_eq!(selector::CollectionId::from(commit), id);
+
             let mut point = if let Some(pt) = point {
                 pt
             } else {
@@ -416,17 +476,18 @@ impl DateData {
                 // convert to seconds; perf records it in milliseconds
                 point /= 1000.0;
             }
-            data.entry(StyledBenchmarkName {
-                name: series.krate,
-                profile: series.profile,
-            })
+            data.entry(format!(
+                "{}-{}",
+                response.path.get(Tag::Crate).unwrap().raw,
+                response.path.get(Tag::Profile).unwrap().raw,
+            ))
             .or_insert_with(Vec::new)
-            .push((series.cache.to_string(), point));
+            .push((response.path.get(Tag::Cache).unwrap().raw.clone(), point));
         }
 
         DateData {
-            date: commit.commit.date,
-            commit: commit.commit.sha.clone(),
+            date: commit.date,
+            commit: commit.sha.clone(),
             data,
         }
     }

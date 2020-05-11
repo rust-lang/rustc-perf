@@ -289,65 +289,6 @@ pub struct Series {
     pub cache: Cache,
 }
 
-pub struct SeriesIterator<I> {
-    data: I,
-    series: Series,
-    stat: StatId,
-}
-
-impl Series {
-    pub fn iterate<'a>(
-        self,
-        data: &'a [Arc<CommitData>],
-        stat: StatId,
-    ) -> SeriesIterator<
-        impl Iterator<Item = (Commit, &'a BTreeMap<Crate, Result<Benchmark, String>>)>,
-    > {
-        SeriesIterator {
-            data: data.iter().map(|cd| (cd.commit, &cd.benchmarks)),
-            series: self,
-            stat,
-        }
-    }
-}
-
-impl<I> SeriesIterator<I>
-where
-    Self: Iterator,
-    <Self as Iterator>::Item: Point,
-{
-    pub fn interpolate(self) -> crate::interpolate::Interpolate<Self> {
-        crate::interpolate::Interpolate::new(self)
-    }
-}
-
-impl<'a, I, T> Iterator for SeriesIterator<I>
-where
-    I: Iterator<Item = (T, &'a BTreeMap<Crate, Result<Benchmark, String>>)>,
-    T: fmt::Debug,
-{
-    type Item = (T, Option<f64>);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let (commit, benchmarks) = self.data.next()?;
-
-        let get_stat = |res: Option<&Result<Benchmark, String>>| {
-            res.and_then(|res| res.as_ref().ok())
-                .and_then(|bd| {
-                    bd.runs.iter().find(|r| {
-                        let r = r.id();
-                        self.series.profile.matches_run(&r) && self.series.cache.matches_run(&r)
-                    })
-                })
-                .and_then(|r| r.stats.get(self.stat))
-        };
-
-        let krate = self.series.krate;
-        let stat = get_stat(benchmarks.get(&krate));
-        Some((commit, stat))
-    }
-}
-
 pub trait Point {
     type Key: fmt::Debug + PartialEq + Clone;
 
