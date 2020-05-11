@@ -13,6 +13,10 @@
         padding-left: 1em;
     }
 
+    body.hide-incr .incr {
+        display: none;
+    }
+
     body.hide-delta .delta {
         display: none;
     }
@@ -50,17 +54,19 @@
         <h3 id="title"></h3>
         <p>Totals row '%total time' is as a comparison to the 'cpu-clock' stat (we do not use
         wall-time as we want to account for parallelism).</p>
+        <p>Executions do not include cached executions.</p>
         <table>
             <thead>
                 <tr id="table-header">
                     <th data-sort-idx="1" data-default-sort-dir="1">Query/Function</th>
-                    <th data-sort-idx="2" data-default-sort-dir="-1">Time</th>
+                    <th data-sort-idx="2" data-default-sort-dir="-1">Time (s)</th>
                     <th data-sort-idx="10" data-default-sort-dir="-1">% Total Time</th>
-                    <th class="delta">Δ</th>
-                    <th data-sort-idx="5" data-default-sort-dir="-1">Full Executions</th>
-                    <th class="delta">Δ</th>
-                    <th data-sort-idx="7" data-default-sort-dir="-1" title="Incremental loading time">Loading</th>
-                    <th class="delta">Δ</th>
+                    <th class="delta">Execution time delta</th>
+                    <th data-sort-idx="5" data-default-sort-dir="-1">Executions</th>
+                    <th class="delta">Executions delta</th>
+                    <th class="incr" data-sort-idx="7"
+                        data-default-sort-dir="-1" title="Incremental loading time">Incremental loading (s)</th>
+                    <th class="incr" class="delta">Incremental loading delta</th>
                 </tr>
             </thead>
             <tbody id="primary-table">
@@ -144,6 +150,13 @@
                 let inner = th.innerHTML;
                 th.innerHTML = `<a href="${query_string_for_state(clickState)}">${inner}</a>`;
             }
+
+            if (!state.run_name.includes("incr-")) {
+                // No need to show incremental columns if not showing
+                // incremental data.
+                document.body.classList.add("hide-incr");
+            }
+
             let table = document.getElementById("primary-table");
             let idx = 0;
             for (let element of [data.profile.totals, ...data.profile.query_data]) {
@@ -189,16 +202,17 @@
                 } else {
                     td(row, "-", true);
                 }
-                td(row, to_seconds(cur.incremental_load_time).toFixed(3));
+                td(row,
+                    to_seconds(cur.incremental_load_time).toFixed(3)).classList.add("incr");
                 if (prev) {
                     td(row,
                         fmt_delta(
                             to_seconds(prev.incremental_load_time),
                             to_seconds(cur.incremental_load_time),
                         ),
-                        true);
+                        true).classList.add("incr");
                 } else {
-                    td(row, "-", true);
+                    td(row, "-", true).classList.add("incr");
                 }
                 table.appendChild(row);
                 idx += 1;
