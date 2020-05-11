@@ -265,13 +265,15 @@ where
 {
     let cc = CommitIdxCache::new();
     let range = data.data_range(body.start.clone()..=body.end.clone());
-    let query = selector::Query::new()
-        .push::<String>(selector::Tag::Crate, selector::Selector::All)
-        .push::<String>(selector::Tag::Profile, selector::Selector::All)
-        .push::<String>(selector::Tag::Cache, selector::Selector::All);
     let commits: Arc<Vec<_>> = Arc::new(range.iter().map(|&c| c.into()).collect());
 
-    let series = data.query::<T>(query, commits.clone())?;
+    let series = data.query::<T>(
+        selector::Query::new()
+            .push::<String>(selector::Tag::Crate, selector::Selector::All)
+            .push::<String>(selector::Tag::Profile, selector::Selector::All)
+            .push::<String>(selector::Tag::Cache, selector::Selector::All),
+        commits.clone(),
+    )?;
 
     let mut series = series
         .into_iter()
