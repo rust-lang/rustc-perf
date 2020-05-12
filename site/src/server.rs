@@ -46,7 +46,7 @@ use crate::github::post_comment;
 use crate::interpolate::Interpolated;
 use crate::load::CurrentState;
 use crate::load::{Config, InputData};
-use crate::selector::{self, Tag};
+use crate::selector::{self, Series, Tag};
 use crate::util::get_repo_path;
 use collector::api::collected;
 use collector::Sha;
@@ -256,13 +256,10 @@ fn to_graph_data<'a>(
     })
 }
 
-fn handle_graph_for_stat<'a, T: selector::Series<'a>>(
+fn handle_graph_for_stat<'a, T: Series<'a, Element = Option<f64>>>(
     body: graph::Request,
     data: &'a InputData,
-) -> ServerResult<graph::Response>
-where
-    T: Iterator<Item = (selector::CollectionId, Option<f64>)>,
-{
+) -> ServerResult<graph::Response> {
     let cc = CommitIdxCache::new();
     let range = data.data_range(body.start.clone()..=body.end.clone());
     let commits: Arc<Vec<_>> = Arc::new(range.iter().map(|&c| c.into()).collect());
@@ -435,17 +432,14 @@ pub async fn handle_compare(body: days::Request, data: &InputData) -> ServerResu
     }
 }
 
-fn handle_compare_for_stat<'a, T: selector::Series<'a>>(
+fn handle_compare_for_stat<'a, T: Series<'a, Element = Option<f64>>>(
     data: &'a InputData,
     a: collector::Commit,
     b: collector::Commit,
     query: selector::Query,
     cids: Arc<Vec<selector::CollectionId>>,
     stat: StatId,
-) -> ServerResult<days::Response>
-where
-    T: Iterator<Item = (selector::CollectionId, Option<f64>)>,
-{
+) -> ServerResult<days::Response> {
     let mut responses = data.query::<T>(query, cids)?;
 
     Ok(days::Response {
@@ -455,13 +449,13 @@ where
 }
 
 impl DateData {
-    fn consume_one<T>(
+    fn consume_one<'a, T>(
         commit: collector::Commit,
         stat: StatId,
         series: &mut [selector::SeriesResponse<T>],
     ) -> DateData
     where
-        T: Iterator<Item = (selector::CollectionId, Option<f64>)>,
+        T: Series<'a, Element = Option<f64>>,
     {
         let mut data = HashMap::new();
 

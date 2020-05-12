@@ -117,7 +117,12 @@ impl<T> SeriesResponse<T> {
     }
 }
 
-pub trait Series<'a>: Sized {
+pub trait Series<'a>: Sized
+where
+    Self: Iterator<Item = (CollectionId, <Self as Series<'a>>::Element)>,
+{
+    type Element: Sized;
+
     fn deserialize(collection_ids: Arc<Vec<CollectionId>>, src: Source<'a>)
         -> Result<Self, String>;
 }
@@ -371,6 +376,7 @@ macro_rules! perf_stat {
         }
 
         impl<'a> Series<'a> for $structt<'a> {
+            type Element = Option<f64>;
             fn deserialize(
                 collection_ids: Arc<Vec<CollectionId>>,
                 src: Source<'a>,
@@ -453,6 +459,7 @@ impl<'a> Iterator for SelfProfile<'a> {
 }
 
 impl<'a> Series<'a> for SelfProfile<'a> {
+    type Element = Option<collector::SelfProfile>;
     fn deserialize(
         collection_ids: Arc<Vec<CollectionId>>,
         src: Source<'a>,
