@@ -325,6 +325,8 @@ impl Stats {
     }
 }
 
+crate::intern!(pub struct ProcessStatistic);
+
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
 pub enum StatId {
     CpuClock,
@@ -407,6 +409,10 @@ impl StatId {
             "wall-time" => StatId::WallTime,
             _ => return Err(format!("unknown stat: {}", s)),
         })
+    }
+
+    pub fn as_pstat(self) -> ProcessStatistic {
+        ProcessStatistic::from(self.as_str())
     }
 
     pub fn as_str(self) -> &'static str {

@@ -34,7 +34,7 @@ use crate::db::{Benchmark, Cache, Profile};
 use crate::interpolate::Interpolate;
 use crate::load::InputData as Db;
 use collector::self_profile::QueryLabel;
-use collector::{BenchmarkName as Crate, Commit, StatId};
+use collector::{BenchmarkName as Crate, Commit, ProcessStatistic};
 use std::fmt;
 use std::sync::Arc;
 
@@ -43,6 +43,7 @@ pub enum Tag {
     Crate,
     Profile,
     Cache,
+    ProcessStatistic,
     SelfProfileQuery,
 }
 
@@ -77,12 +78,22 @@ impl GetValue for Cache {
     }
 }
 
+impl GetValue for ProcessStatistic {
+    fn value(component: &PathComponent) -> Option<&Self> {
+        match component {
+            PathComponent::ProcessStatistic(v) => Some(v),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum PathComponent {
     Crate(Crate),
     Profile(Profile),
     Cache(Cache),
     SelfProfileQuery(QueryLabel),
+    ProcessStatistic(ProcessStatistic),
 }
 
 impl PathComponent {
@@ -91,6 +102,7 @@ impl PathComponent {
             PathComponent::Crate(_) => Tag::Crate,
             PathComponent::Profile(_) => Tag::Profile,
             PathComponent::Cache(_) => Tag::Cache,
+            PathComponent::ProcessStatistic(_) => Tag::ProcessStatistic,
             PathComponent::SelfProfileQuery(_) => Tag::SelfProfileQuery,
         }
     }
@@ -179,11 +191,15 @@ where
 {
     type Element: Sized;
 
-    fn deserialize(collection_ids: Arc<Vec<CollectionId>>, src: Source<'a>)
-        -> Result<Self, String>;
+    fn expand_query(db: &Db, query: Query) -> Result<Vec<Path>, String>;
+    fn deserialize(
+        collection_ids: Arc<Vec<CollectionId>>,
+        db: &'a Db,
+        path: &Path,
+    ) -> Result<Self, String>;
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Path {
     path: Vec<PathComponent>,
 }
@@ -277,9 +293,40 @@ impl From<Commit> for CollectionId {
 impl Db {
     pub fn query<'a, T: Series<'a>>(
         &'a self,
-        mut query: Query,
+        query: Query,
         collection_ids: Arc<Vec<CollectionId>>,
     ) -> Result<Vec<SeriesResponse<T>>, String> {
+        T::expand_query(self, query)?
+            .into_iter()
+            .map(|path| {
+                Ok(SeriesResponse {
+                    series: T::deserialize(collection_ids.clone(), self, &path)?,
+                    path,
+                })
+            })
+            .collect()
+    }
+}
+
+#[derive(Clone)]
+pub struct Source<'a> {
+    db: &'a Db,
+}
+
+pub struct ProcessStatisticSeries<'a> {
+    collection_ids: Arc<Vec<CollectionId>>,
+    idx: usize,
+    db: &'a Db,
+    krate: Crate,
+    profile: Profile,
+    cache: Cache,
+    stat: ProcessStatistic,
+}
+
+impl<'a> Series<'a> for ProcessStatisticSeries<'a> {
+    type Element = Option<f64>;
+
+    fn expand_query(db: &Db, mut query: Query) -> Result<Vec<Path>, String> {
         let krate = query.extract(Tag::Crate)?.raw;
         let profile = query
             .extract(Tag::Profile)?
@@ -289,9 +336,14 @@ impl Db {
             .extract(Tag::Cache)?
             .raw
             .try_map(|p| p.parse::<Cache>())?;
+        let statid = query
+            .extract(Tag::ProcessStatistic)?
+            .raw
+            .try_map(|p| p.parse::<ProcessStatistic>())?;
         query.assert_empty()?;
 
-        self.all_paths
+        Ok(db
+            .all_paths
             .iter()
             .filter(|s| {
                 let skrate = if let Ok(v) = s.get::<Crate>() {
@@ -317,46 +369,37 @@ impl Db {
                 };
                 cache.matches(scache)
             })
-            .map(|s| {
-                Ok(SeriesResponse {
-                    path: Path {
-                        path: vec![
-                            PathComponent::Crate(*s.get().unwrap()),
-                            PathComponent::Profile(*s.get().unwrap()),
-                            PathComponent::Cache(*s.get().unwrap()),
-                        ],
-                    },
-                    series: T::deserialize(
-                        collection_ids.clone(),
-                        Source {
-                            db: self,
-                            krate: *s.get().unwrap(),
-                            profile: *s.get().unwrap(),
-                            cache: *s.get().unwrap(),
-                        },
-                    )?,
-                })
+            .filter(|s| {
+                let sstat = if let Ok(v) = s.get::<ProcessStatistic>() {
+                    *v
+                } else {
+                    return false;
+                };
+                statid.matches(sstat)
             })
-            .collect::<Result<Vec<SeriesResponse<T>>, _>>()
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect())
+    }
+    fn deserialize(
+        collection_ids: Arc<Vec<CollectionId>>,
+        db: &'a Db,
+        path: &Path,
+    ) -> Result<Self, String> {
+        Ok(ProcessStatisticSeries {
+            db,
+            collection_ids,
+            idx: 0,
+            krate: *path.get()?,
+            profile: *path.get()?,
+            cache: *path.get()?,
+            stat: *path.get::<ProcessStatistic>()?,
+        })
     }
 }
 
-#[derive(Clone)]
-pub struct Source<'a> {
-    db: &'a Db,
-    krate: Crate,
-    profile: Profile,
-    cache: Cache,
-}
-
-struct PerfStatSeries<'a> {
-    collection_ids: Arc<Vec<CollectionId>>,
-    idx: usize,
-    src: Source<'a>,
-    stat: StatId,
-}
-
-impl<'a> Iterator for PerfStatSeries<'a> {
+impl<'a> Iterator for ProcessStatisticSeries<'a> {
     type Item = (CollectionId, Option<f64>);
     fn next(&mut self) -> Option<Self::Item> {
         let col_id = self.collection_ids.get(self.idx)?;
@@ -367,27 +410,33 @@ impl<'a> Iterator for PerfStatSeries<'a> {
                 .and_then(|bd| {
                     bd.runs.iter().find(|r| {
                         let r = r.id();
-                        self.src.profile.matches_run(&r) && self.src.cache.matches_run(&r)
+                        self.profile.matches_run(&r) && self.cache.matches_run(&r)
                     })
                 })
-                .and_then(|r| r.stats.get(self.stat))
+                .and_then(|r| {
+                    r.stats.iter().find_map(|(id, v)| {
+                        if self.stat == *id.as_str() {
+                            Some(v)
+                        } else {
+                            None
+                        }
+                    })
+                })
         };
 
         let benchmarks = match col_id {
             CollectionId::Commit(commit) => {
                 let idx = self
-                    .src
                     .db
                     .data()
                     .binary_search_by_key(commit, |cd| cd.commit)
                     .unwrap();
 
-                &self.src.db.data()[idx].benchmarks
+                &self.db.data()[idx].benchmarks
             }
 
             CollectionId::Artifact(id) => {
                 &self
-                    .src
                     .db
                     .artifact_data
                     .iter()
@@ -396,57 +445,17 @@ impl<'a> Iterator for PerfStatSeries<'a> {
                     .benchmarks
             }
         };
-        Some((col_id.clone(), get_stat(benchmarks.get(&self.src.krate))))
+        Some((col_id.clone(), get_stat(benchmarks.get(&self.krate))))
     }
 }
-
-macro_rules! perf_stat {
-    ($structt:ident) => {
-        pub struct $structt<'a> {
-            series: PerfStatSeries<'a>,
-        }
-
-        impl<'a> Iterator for $structt<'a> {
-            type Item = (CollectionId, Option<f64>);
-            fn next(&mut self) -> Option<Self::Item> {
-                self.series.next()
-            }
-        }
-
-        impl<'a> Series<'a> for $structt<'a> {
-            type Element = Option<f64>;
-            fn deserialize(
-                collection_ids: Arc<Vec<CollectionId>>,
-                src: Source<'a>,
-            ) -> Result<Self, String> {
-                Ok($structt {
-                    series: PerfStatSeries {
-                        src,
-                        idx: 0,
-                        collection_ids,
-                        stat: StatId::$structt,
-                    },
-                })
-            }
-        }
-    };
-}
-
-perf_stat!(CpuClock);
-perf_stat!(CpuClockUser);
-perf_stat!(CyclesUser);
-perf_stat!(Faults);
-perf_stat!(FaultsUser);
-perf_stat!(InstructionsUser);
-perf_stat!(MaxRss);
-perf_stat!(TaskClock);
-perf_stat!(TaskClockUser);
-perf_stat!(WallTime);
 
 pub struct SelfProfile<'a> {
     collection_ids: Arc<Vec<CollectionId>>,
     idx: usize,
-    src: Source<'a>,
+    db: &'a Db,
+    krate: Crate,
+    profile: Profile,
+    cache: Cache,
 }
 
 impl<'a> Iterator for SelfProfile<'a> {
@@ -463,12 +472,12 @@ impl<'a> Iterator for SelfProfile<'a> {
                         .and_then(|bd| {
                             bd.runs.iter().find(|r| {
                                 let r = r.id();
-                                let matches_profile = match self.src.profile {
+                                let matches_profile = match self.profile {
                                     Profile::Check => r.check,
                                     Profile::Opt => r.release,
                                     Profile::Debug => !r.check && !r.release,
                                 };
-                                let matches_cache = self.src.cache
+                                let matches_cache = self.cache
                                     == match r.state {
                                         collector::BenchmarkState::Clean => Cache::Empty,
                                         collector::BenchmarkState::IncrementalStart => {
@@ -486,9 +495,9 @@ impl<'a> Iterator for SelfProfile<'a> {
                         })
                         .and_then(|r| r.self_profile.clone())
                 };
-                let path = self.src.db.fs_paths.get(commit).unwrap();
+                let path = self.db.fs_paths.get(commit).unwrap();
                 cd = crate::load::deserialize_cd(&path);
-                get(cd.benchmarks.get(&self.src.krate))
+                get(cd.benchmarks.get(&self.krate))
             }
             CollectionId::Artifact(_) => None,
         };
@@ -498,14 +507,64 @@ impl<'a> Iterator for SelfProfile<'a> {
 
 impl<'a> Series<'a> for SelfProfile<'a> {
     type Element = Option<collector::SelfProfile>;
+
+    fn expand_query(db: &Db, mut query: Query) -> Result<Vec<Path>, String> {
+        let krate = query.extract(Tag::Crate)?.raw;
+        let profile = query
+            .extract(Tag::Profile)?
+            .raw
+            .try_map(|p| p.parse::<Profile>())?;
+        let cache = query
+            .extract(Tag::Cache)?
+            .raw
+            .try_map(|p| p.parse::<Cache>())?;
+        query.assert_empty()?;
+
+        Ok(db
+            .all_paths
+            .iter()
+            .filter(|s| {
+                let skrate = if let Ok(v) = s.get::<Crate>() {
+                    *v
+                } else {
+                    return false;
+                };
+                krate.matches(skrate)
+            })
+            .filter(|s| {
+                let sprofile = if let Ok(v) = s.get::<Profile>() {
+                    *v
+                } else {
+                    return false;
+                };
+                profile.matches(sprofile)
+            })
+            .filter(|s| {
+                let scache = if let Ok(v) = s.get::<Cache>() {
+                    *v
+                } else {
+                    return false;
+                };
+                cache.matches(scache)
+            })
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect())
+    }
+
     fn deserialize(
         collection_ids: Arc<Vec<CollectionId>>,
-        src: Source<'a>,
+        db: &'a Db,
+        path: &Path,
     ) -> Result<Self, String> {
         Ok(SelfProfile {
-            src,
-            idx: 0,
             collection_ids,
+            idx: 0,
+            db,
+            krate: *path.get().unwrap(),
+            profile: *path.get().unwrap(),
+            cache: *path.get().unwrap(),
         })
     }
 }

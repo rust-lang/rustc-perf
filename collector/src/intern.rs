@@ -104,12 +104,31 @@ macro_rules! intern {
                 $for_ty(v)
             }
         }
+
+        impl std::str::FromStr for $for_ty {
+            type Err = String;
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                crate::intern::preloaded(s).ok_or_else(|| {
+                    format!(
+                        "{} does not have `{}` as a valid value",
+                        stringify!($for_ty),
+                        s
+                    )
+                })
+            }
+        }
     };
 }
-
 lazy_static::lazy_static! {
     static ref INTERNED: Mutex<(HashSet<ArenaStr>, Bump)>
         = Mutex::new((HashSet::new(), Bump::new()));
+}
+
+pub fn preloaded<T: InternString>(value: &str) -> Option<T> {
+    let mut guard = INTERNED.lock().unwrap();
+
+    let (ref mut set, _) = &mut *guard;
+    unsafe { Some(T::to_interned(*set.get(value)?)) }
 }
 
 pub fn intern<T: InternString>(value: &str) -> T {

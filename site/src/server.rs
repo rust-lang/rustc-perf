@@ -86,8 +86,12 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
             .collect::<Vec<_>>(),
     );
 
-    let query =
-        selector::Query::new().push(Tag::Crate, selector::Selector::Subset(benchmark_names));
+    let query = selector::Query::new()
+        .push(Tag::Crate, selector::Selector::Subset(benchmark_names))
+        .push(
+            Tag::ProcessStatistic,
+            selector::Selector::One(StatId::WallTime.as_str()),
+        );
 
     let summary_patches = data.summary_patches();
     let by_profile = db::ByProfile::new::<String, _>(|profile| {
@@ -97,7 +101,7 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
 
         let mut cases = dashboard::Cases::default();
         for patch in summary_patches.iter() {
-            let responses = data.query::<selector::WallTime>(
+            let responses = data.query::<selector::ProcessStatisticSeries>(
                 query
                     .clone()
                     .push(Tag::Cache, selector::Selector::One(patch)),
@@ -256,19 +260,22 @@ fn to_graph_data<'a>(
     })
 }
 
-fn handle_graph_for_stat<'a, T: Series<'a, Element = Option<f64>>>(
-    body: graph::Request,
-    data: &'a InputData,
-) -> ServerResult<graph::Response> {
+pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<graph::Response> {
+    let stat_id = StatId::from_str(&body.stat)?;
+
     let cc = CommitIdxCache::new();
     let range = data.data_range(body.start.clone()..=body.end.clone());
     let commits: Arc<Vec<_>> = Arc::new(range.iter().map(|&c| c.into()).collect());
 
-    let series = data.query::<T>(
+    let series = data.query::<selector::ProcessStatisticSeries>(
         selector::Query::new()
             .push::<String>(selector::Tag::Crate, selector::Selector::All)
             .push::<String>(selector::Tag::Profile, selector::Selector::All)
-            .push::<String>(selector::Tag::Cache, selector::Selector::All),
+            .push::<String>(selector::Tag::Cache, selector::Selector::All)
+            .push::<String>(
+                selector::Tag::ProcessStatistic,
+                selector::Selector::One(stat_id.as_pstat().to_string()),
+            ),
         commits.clone(),
     )?;
 
@@ -282,11 +289,15 @@ fn handle_graph_for_stat<'a, T: Series<'a, Element = Option<f64>>>(
 
     let baselines = crate::db::ByProfile::new(|profile| -> Result<f64, String> {
         Ok(db::average(
-            data.query::<T>(
+            data.query::<selector::ProcessStatisticSeries>(
                 selector::Query::new()
                     .push::<String>(selector::Tag::Crate, selector::Selector::All)
                     .push(selector::Tag::Profile, selector::Selector::One(profile))
-                    .push(selector::Tag::Cache, selector::Selector::One(Cache::Empty)),
+                    .push(selector::Tag::Cache, selector::Selector::One(Cache::Empty))
+                    .push(
+                        selector::Tag::ProcessStatistic,
+                        selector::Selector::One(stat_id.as_str()),
+                    ),
                 commits.clone(),
             )?
             .into_iter()
@@ -306,6 +317,10 @@ fn handle_graph_for_stat<'a, T: Series<'a, Element = Option<f64>>>(
             .push::<String>(selector::Tag::Crate, selector::Selector::All)
             .push(selector::Tag::Profile, selector::Selector::One(profile))
             .push(selector::Tag::Cache, selector::Selector::One(cache))
+            .push::<String>(
+                selector::Tag::ProcessStatistic,
+                selector::Selector::One(stat_id.as_pstat().to_string()),
+            )
     });
 
     for query in summary_queries {
@@ -328,7 +343,7 @@ fn handle_graph_for_stat<'a, T: Series<'a, Element = Option<f64>>>(
             &cc,
             body.absolute,
             db::average(
-                data.query::<T>(query, commits.clone())?
+                data.query::<selector::ProcessStatisticSeries>(query, commits.clone())?
                     .into_iter()
                     .map(|sr| sr.interpolate().series)
                     .collect(),
@@ -371,22 +386,6 @@ fn handle_graph_for_stat<'a, T: Series<'a, Element = Option<f64>>>(
     })
 }
 
-pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<graph::Response> {
-    let stat_id = StatId::from_str(&body.stat)?;
-    match stat_id {
-        StatId::CpuClock => handle_graph_for_stat::<selector::CpuClock>(body, data),
-        StatId::CpuClockUser => handle_graph_for_stat::<selector::CpuClockUser>(body, data),
-        StatId::CyclesUser => handle_graph_for_stat::<selector::CyclesUser>(body, data),
-        StatId::Faults => handle_graph_for_stat::<selector::Faults>(body, data),
-        StatId::FaultsUser => handle_graph_for_stat::<selector::FaultsUser>(body, data),
-        StatId::InstructionsUser => handle_graph_for_stat::<selector::InstructionsUser>(body, data),
-        StatId::MaxRss => handle_graph_for_stat::<selector::MaxRss>(body, data),
-        StatId::TaskClock => handle_graph_for_stat::<selector::TaskClock>(body, data),
-        StatId::TaskClockUser => handle_graph_for_stat::<selector::TaskClockUser>(body, data),
-        StatId::WallTime => handle_graph_for_stat::<selector::WallTime>(body, data),
-    }
-}
-
 pub async fn handle_compare(body: days::Request, data: &InputData) -> ServerResult<days::Response> {
     let a = data.data_for(true, body.start.clone()).ok_or(format!(
         "could not find start commit for bound {:?}",
@@ -402,55 +401,17 @@ pub async fn handle_compare(body: days::Request, data: &InputData) -> ServerResu
     let query = selector::Query::new()
         .push::<String>(Tag::Crate, selector::Selector::All)
         .push::<String>(Tag::Cache, selector::Selector::All)
-        .push::<String>(Tag::Profile, selector::Selector::All);
+        .push::<String>(Tag::Profile, selector::Selector::All)
+        .push(
+            Tag::ProcessStatistic,
+            selector::Selector::One(stat_id.as_str()),
+        );
 
-    match stat_id {
-        StatId::CpuClock => {
-            handle_compare_for_stat::<selector::CpuClock>(data, a, b, query, cids, stat_id)
-        }
-        StatId::CpuClockUser => {
-            handle_compare_for_stat::<selector::CpuClockUser>(data, a, b, query, cids, stat_id)
-        }
-        StatId::CyclesUser => {
-            handle_compare_for_stat::<selector::CyclesUser>(data, a, b, query, cids, stat_id)
-        }
-        StatId::Faults => {
-            handle_compare_for_stat::<selector::Faults>(data, a, b, query, cids, stat_id)
-        }
-        StatId::FaultsUser => {
-            handle_compare_for_stat::<selector::FaultsUser>(data, a, b, query, cids, stat_id)
-        }
-        StatId::InstructionsUser => {
-            handle_compare_for_stat::<selector::InstructionsUser>(data, a, b, query, cids, stat_id)
-        }
-        StatId::MaxRss => {
-            handle_compare_for_stat::<selector::MaxRss>(data, a, b, query, cids, stat_id)
-        }
-        StatId::TaskClock => {
-            handle_compare_for_stat::<selector::TaskClock>(data, a, b, query, cids, stat_id)
-        }
-        StatId::TaskClockUser => {
-            handle_compare_for_stat::<selector::TaskClockUser>(data, a, b, query, cids, stat_id)
-        }
-        StatId::WallTime => {
-            handle_compare_for_stat::<selector::WallTime>(data, a, b, query, cids, stat_id)
-        }
-    }
-}
-
-fn handle_compare_for_stat<'a, T: Series<'a, Element = Option<f64>>>(
-    data: &'a InputData,
-    a: collector::Commit,
-    b: collector::Commit,
-    query: selector::Query,
-    cids: Arc<Vec<selector::CollectionId>>,
-    stat: StatId,
-) -> ServerResult<days::Response> {
-    let mut responses = data.query::<T>(query, cids)?;
+    let mut responses = data.query::<selector::ProcessStatisticSeries>(query, cids)?;
 
     Ok(days::Response {
-        a: DateData::consume_one(a, stat, &mut responses),
-        b: DateData::consume_one(b, stat, &mut responses),
+        a: DateData::consume_one(a, stat_id, &mut responses),
+        b: DateData::consume_one(b, stat_id, &mut responses),
     })
 }
 
@@ -732,7 +693,13 @@ pub async fn handle_self_profile(
     assert_eq!(sp_responses.len(), 1, "all selectors are exact");
     let mut sp_response = sp_responses.remove(0).series;
 
-    let mut cpu_responses = data.query::<selector::CpuClock>(query.clone(), commits.clone())?;
+    let mut cpu_responses = data.query::<selector::ProcessStatisticSeries>(
+        query.clone().push(
+            Tag::ProcessStatistic,
+            selector::Selector::One("cpu-clock".to_string()),
+        ),
+        commits.clone(),
+    )?;
     assert_eq!(cpu_responses.len(), 1, "all selectors are exact");
     let mut cpu_response = cpu_responses.remove(0).series;
 

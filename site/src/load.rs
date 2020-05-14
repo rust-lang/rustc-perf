@@ -382,11 +382,22 @@ impl InputData {
                     .values()
                     .filter_map(|b| b.as_ref().ok())
                     .flat_map(|bench| {
-                        bench.runs.iter().map(move |r| {
-                            crate::selector::Path::new()
-                                .set(PathComponent::Crate(bench.name))
-                                .set(PathComponent::Profile(r.profile))
-                                .set(PathComponent::Cache(r.state))
+                        bench.runs.iter().flat_map(move |r| {
+                            r.stats
+                                .iter()
+                                .map(move |(stat, _)| {
+                                    crate::selector::Path::new()
+                                        .set(PathComponent::Crate(bench.name))
+                                        .set(PathComponent::Profile(r.profile))
+                                        .set(PathComponent::Cache(r.state))
+                                        .set(PathComponent::ProcessStatistic(stat.as_pstat()))
+                                })
+                                .chain(std::iter::once(
+                                    crate::selector::Path::new()
+                                        .set(PathComponent::Crate(bench.name))
+                                        .set(PathComponent::Profile(r.profile))
+                                        .set(PathComponent::Cache(r.state)),
+                                ))
                         })
                     })
             })
