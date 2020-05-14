@@ -94,7 +94,7 @@ impl Repo {
 
     pub fn success_artifact(&self, data: &ArtifactData) -> anyhow::Result<()> {
         let filepath = self.times().join(format!("artifact-{}.json", data.id));
-        info!("creating file {}", filepath.display());
+        eprintln!("Creating file {}", filepath.display());
         let serialized = serde_json::to_string(&data)?;
         fs::write(&filepath, &serialized)?;
         self.commit_and_push(&format!("{} - success", data.id))?;
@@ -164,7 +164,7 @@ impl Repo {
             "commit-{}-x86_64-unknown-linux-gnu.json.sz",
             commit.sha
         ));
-        info!("creating file {}", filepath.display());
+        eprintln!("Creating file {}", filepath.display());
         let mut v = snap::write::FrameEncoder::new(Vec::new());
         serde_json::to_writer(&mut v, &data)?;
         fs::write(&filepath, v.into_inner()?)?;

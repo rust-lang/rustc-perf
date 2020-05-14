@@ -8,7 +8,7 @@ use chrono::{Timelike, Utc};
 use collector::api::collected;
 use collector::git::get_commit_or_fake_it;
 use collector::{ArtifactData, Commit, CommitData, Date, Sha};
-use log::{debug, error, info};
+use log::{debug, error};
 use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::env;
@@ -251,6 +251,11 @@ fn bench_published(
     Ok(())
 }
 
+fn n_benchmarks_remaining(n: usize) -> String {
+    let suffix = if n == 1 { "" } else { "s" };
+    format!("{} benchmark{} remaining", n, suffix)
+}
+
 fn bench_commit(
     repo: Option<&outrepo::Repo>,
     commit: &Commit,
@@ -262,8 +267,8 @@ fn bench_commit(
     call_home: bool,
     self_profile: bool,
 ) -> CommitData {
-    info!(
-        "benchmarking commit {} ({}) for triple {}",
+    eprintln!(
+        "Benchmarking commit {} ({}) for triple {}",
         commit.sha, commit.date, compiler.triple
     );
 
@@ -304,6 +309,8 @@ fn bench_commit(
             continue;
         }
 
+        eprintln!("{}", n_benchmarks_remaining(benchmarks.len() - results.len()));
+
         let mut processor = execute::MeasureProcessor::new(self_profile);
         let result =
             benchmark.measure(&mut processor, build_kinds, run_kinds, compiler, iterations);
@@ -313,7 +320,7 @@ fn bench_commit(
                 runs,
             }),
             Err(ref s) => {
-                info!("failed to benchmark {}, recorded: {}", benchmark.name, s);
+                eprintln!("Failed to benchmark {}, recorded: {}", benchmark.name, s);
                 Err(format!("{:?}", s))
             }
         };
@@ -326,7 +333,6 @@ fn bench_commit(
         }
 
         results.insert(benchmark.name.clone(), result);
-        info!("{} benchmarks left", benchmarks.len() - results.len());
     }
 
     CommitData {
@@ -559,7 +565,7 @@ fn main_result() -> anyhow::Result<i32> {
             let profiler = Profiler::from_name(sub_m.value_of("PROFILER").unwrap())?;
             let id = sub_m.value_of("ID").unwrap();
 
-            info!("Profile with {:?}", profiler);
+            eprintln!("Profiling with {:?}", profiler);
 
             let rustc_path = PathBuf::from(rustc).canonicalize()?;
             let cargo_path = PathBuf::from(cargo).canonicalize()?;
@@ -571,17 +577,17 @@ fn main_result() -> anyhow::Result<i32> {
             };
 
             for (i, benchmark) in benchmarks.iter().enumerate() {
+                eprintln!("{}", n_benchmarks_remaining(benchmarks.len() - i));
                 let out_dir = get_out_dir();
                 let mut processor = execute::ProfileProcessor::new(profiler, &out_dir, &id);
                 let result =
                     benchmark.measure(&mut processor, &build_kinds, &run_kinds, compiler, 1);
                 if let Err(ref s) = result {
-                    info!(
-                        "failed to profile {} with {:?}, recorded: {:?}",
+                    eprintln!(
+                        "Failed to profile {} with {:?}, recorded: {:?}",
                         benchmark.name, profiler, s
                     );
                 }
-                info!("{} benchmarks left", benchmarks.len() - i - 1);
             }
             Ok(0)
         }

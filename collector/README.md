@@ -62,15 +62,9 @@ marked with a '?' in the `compare` page.
 
 To benchmark a local build:
 ```
-RUST_LOG=info ./target/release/collector --output-repo $OUTPUT_DIR \
+./target/release/collector --output-repo $OUTPUT_DIR \
     bench_local --rustc $RUSTC --cargo $CARGO $ID
 ```
-
-`RUST_LOG=info` defines an environment variable that enables `info`-level
-logging. This is optional but recommended, because without it there is no
-output and thus no indication of progress. `RUST_LOG=debug` is an alternative
-that enables more verbose logging, which is mostly useful for debugging
-rustc-perf itself.
 
 `$OUTPUT_DIR` is a path (relative or absolute) to a directory, in which the
 timing data will be placed. It will be created if it does not already exist.
@@ -88,7 +82,10 @@ installed Cargo is fine, e.g. ``--cargo `which cargo` ``.
 contents.
 
 The full benchmark suite takes some time to run: tens of minutes or more,
-depending on the speed of your machine.
+depending on the speed of your machine. Progress output is printed to stderr.
+
+`RUST_LOG=debug` can be specified to enable some verbose logging, which is
+useful for debugging rustc-perf itself.
 
 ### Benchmarking options
 
@@ -123,10 +120,10 @@ second that contains a branch of your changes. To compare the two versions, do
 something like this:
 
 ```
-RUST_LOG=info ./target/release/collector --output-repo sep03 \
+./target/release/collector --output-repo sep03 \
     bench_local --rustc $RUST_TIP --cargo `which cargo` Orig
 
-RUST_LOG=info ./target/release/collector --output-repo sep03 \
+./target/release/collector --output-repo sep03 \
     bench_local --rustc $RUST_MODIFIED --cargo `which cargo` Modified
 ```
 
@@ -200,7 +197,7 @@ might be optimized.
 
 To self-profile a local build:
 ```
-RUST_LOG=info ./target/release/collector --output-repo $OUTPUT_DIR --self-profile \
+./target/release/collector --output-repo $OUTPUT_DIR --self-profile \
     bench_local $PROFILER --rustc $RUSTC --cargo $CARGO $ID
 ```
 
@@ -208,7 +205,7 @@ Then view the results the same way as for the `bench_local` subcommand.
 
 To profile a local build with a different profiler:
 ```
-RUST_LOG=info ./target/release/collector --output-repo $OUTPUT_DIR \
+./target/release/collector --output-repo $OUTPUT_DIR \
     profile $PROFILER --rustc $RUSTC --cargo $CARGO $ID
 ```
 
