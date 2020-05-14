@@ -325,9 +325,11 @@ fn handle_results<'a, E>(
 
     ok.ok_or_else(|| {
         format!(
-            "Failed to process query; errors: {}",
+            "Failed to process query; fix one of these errors: {}",
             errs.into_iter().fold(String::new(), |mut acc, err| {
-                acc.push_str(", ");
+                if !acc.is_empty() {
+                    acc.push_str("; or ");
+                }
                 acc.push_str(&err);
                 acc
             })
@@ -566,40 +568,10 @@ impl<'a> Iterator for SelfProfile<'a> {
         let col_id = self.collection_ids.get(self.idx)?;
         self.idx += 1;
 
-        let cd;
         let res = match col_id {
             CollectionId::Commit(commit) => {
-                let get = |res: Option<&Result<collector::Benchmark, String>>| {
-                    res.and_then(|res| res.as_ref().ok())
-                        .and_then(|bd| {
-                            bd.runs.iter().find(|r| {
-                                let r = r.id();
-                                let matches_profile = match self.profile {
-                                    Profile::Check => r.check,
-                                    Profile::Opt => r.release,
-                                    Profile::Debug => !r.check && !r.release,
-                                };
-                                let matches_cache = self.cache
-                                    == match r.state {
-                                        collector::BenchmarkState::Clean => Cache::Empty,
-                                        collector::BenchmarkState::IncrementalStart => {
-                                            Cache::IncrementalEmpty
-                                        }
-                                        collector::BenchmarkState::IncrementalClean => {
-                                            Cache::IncrementalFresh
-                                        }
-                                        collector::BenchmarkState::IncrementalPatched(p) => {
-                                            Cache::IncrementalPatch(p.name)
-                                        }
-                                    };
-                                matches_profile && matches_cache
-                            })
-                        })
-                        .and_then(|r| r.self_profile.clone())
-                };
                 let path = self.db.fs_paths.get(commit).unwrap();
-                cd = crate::load::deserialize_cd(&path);
-                get(cd.benchmarks.get(&self.krate))
+                crate::self_profile_load::deserialize(&path, self.krate, self.profile, self.cache)
             }
             CollectionId::Artifact(_) => None,
         };
@@ -653,8 +625,9 @@ impl<'a> Series<'a> for SelfProfile<'a> {
                 };
                 cache.matches(scache)
             })
+            .filter(|p| p.path.len() == 3)
             .cloned()
-            .collect::<std::collections::BTreeSet<_>>()
+            .collect::<std::collections::BTreeSet<Path>>()
             .into_iter()
             .map(|path| SeriesResponse {
                 series: SelfProfile {
@@ -688,49 +661,24 @@ impl<'a> Iterator for SelfProfileQueryTime<'a> {
         let col_id = self.collection_ids.get(self.idx)?;
         self.idx += 1;
 
-        let cd;
         let res = match col_id {
             CollectionId::Commit(commit) => {
-                let get = |res: Option<&Result<collector::Benchmark, String>>| {
-                    res.and_then(|res| res.as_ref().ok())
-                        .and_then(|bd| {
-                            bd.runs.iter().find(|r| {
-                                let r = r.id();
-                                let matches_profile = match self.profile {
-                                    Profile::Check => r.check,
-                                    Profile::Opt => r.release,
-                                    Profile::Debug => !r.check && !r.release,
-                                };
-                                let matches_cache = self.cache
-                                    == match r.state {
-                                        collector::BenchmarkState::Clean => Cache::Empty,
-                                        collector::BenchmarkState::IncrementalStart => {
-                                            Cache::IncrementalEmpty
-                                        }
-                                        collector::BenchmarkState::IncrementalClean => {
-                                            Cache::IncrementalFresh
-                                        }
-                                        collector::BenchmarkState::IncrementalPatched(p) => {
-                                            Cache::IncrementalPatch(p.name)
-                                        }
-                                    };
-                                matches_profile && matches_cache
-                            })
-                        })
-                        .and_then(|r| r.self_profile.clone())
-                        .and_then(|sp| {
-                            sp.query_data.iter().find_map(|qd| {
-                                if qd.label == self.query {
-                                    Some(qd.self_time().as_secs_f64())
-                                } else {
-                                    None
-                                }
-                            })
-                        })
-                };
                 let path = self.db.fs_paths.get(commit).unwrap();
-                cd = crate::load::deserialize_cd(&path);
-                get(cd.benchmarks.get(&self.krate))
+                let sp = crate::self_profile_load::deserialize(
+                    &path,
+                    self.krate,
+                    self.profile,
+                    self.cache,
+                );
+                sp.and_then(|cd| {
+                    cd.query_data.iter().find_map(|qd| {
+                        if qd.label == self.query {
+                            Some(qd.self_time().as_secs_f64())
+                        } else {
+                            None
+                        }
+                    })
+                })
             }
             CollectionId::Artifact(_) => None,
         };
@@ -758,7 +706,7 @@ impl<'a> Series<'a> for SelfProfileQueryTime<'a> {
         let ql = query
             .extract(Tag::QueryLabel)?
             .raw
-            .try_map(|p| p.parse::<QueryLabel>())?;
+            .map(|p| QueryLabel::from(p.as_str()));
         query.assert_empty()?;
 
         Ok(db
@@ -788,10 +736,13 @@ impl<'a> Series<'a> for SelfProfileQueryTime<'a> {
                 };
                 cache.matches(scache)
             })
-            .cloned()
+            .filter(|p| p.path.len() == 3)
+            .map(|path| {
+                path.clone()
+                    .set(PathComponent::QueryLabel(*ql.assert_one()))
+            })
             .collect::<std::collections::BTreeSet<_>>()
             .into_iter()
-            .map(|path| path.set(PathComponent::QueryLabel(*ql.assert_one())))
             .map(move |path| SeriesResponse {
                 series: SelfProfileQueryTime {
                     collection_ids: collection_ids.clone(),
@@ -804,6 +755,6 @@ impl<'a> Series<'a> for SelfProfileQueryTime<'a> {
                 },
                 path,
             })
-            .collect())
+            .collect::<Vec<_>>())
     }
 }

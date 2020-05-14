@@ -156,31 +156,6 @@ pub struct InputData {
     pub config: Config,
 }
 
-pub fn deserialize_cd(path: &Path) -> collector::CommitData {
-    let mut file = fs::File::open(path)
-        .with_context(|| format!("Failed to open {}", path.display()))
-        .unwrap();
-    let mut file_contents = Vec::new();
-    if path.extension().map_or(false, |e| e == "sz") {
-        let mut szip_reader = snap::read::FrameDecoder::new(std::io::BufReader::new(file));
-        szip_reader
-            .read_to_end(&mut file_contents)
-            .with_context(|| format!("Failed to read {}", path.display()))
-            .unwrap();
-    } else {
-        file.read_to_end(&mut file_contents)
-            .with_context(|| format!("Failed to read {}", path.display()))
-            .unwrap();
-    };
-    let file_contents = std::str::from_utf8(&file_contents).unwrap();
-    match serde_json::from_str(&file_contents) {
-        Ok(json) => json,
-        Err(err) => {
-            panic!("Failed to parse JSON for {}: {:?}", path.display(), err);
-        }
-    }
-}
-
 impl InputData {
     pub fn summary_patches(&self) -> Vec<crate::db::Cache> {
         vec![
