@@ -44,7 +44,7 @@ pub enum Tag {
     Profile,
     Cache,
     ProcessStatistic,
-    SelfProfileQuery,
+    QueryLabel,
 }
 
 pub trait GetValue {
@@ -87,12 +87,21 @@ impl GetValue for ProcessStatistic {
     }
 }
 
+impl GetValue for QueryLabel {
+    fn value(component: &PathComponent) -> Option<&Self> {
+        match component {
+            PathComponent::QueryLabel(v) => Some(v),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum PathComponent {
     Crate(Crate),
     Profile(Profile),
     Cache(Cache),
-    SelfProfileQuery(QueryLabel),
+    QueryLabel(QueryLabel),
     ProcessStatistic(ProcessStatistic),
 }
 
@@ -103,7 +112,7 @@ impl PathComponent {
             PathComponent::Profile(_) => Tag::Profile,
             PathComponent::Cache(_) => Tag::Cache,
             PathComponent::ProcessStatistic(_) => Tag::ProcessStatistic,
-            PathComponent::SelfProfileQuery(_) => Tag::SelfProfileQuery,
+            PathComponent::QueryLabel(_) => Tag::QueryLabel,
         }
     }
 }
@@ -191,12 +200,11 @@ where
 {
     type Element: Sized;
 
-    fn expand_query(db: &Db, query: Query) -> Result<Vec<Path>, String>;
-    fn deserialize(
+    fn expand_query(
         collection_ids: Arc<Vec<CollectionId>>,
         db: &'a Db,
-        path: &Path,
-    ) -> Result<Self, String>;
+        query: Query,
+    ) -> Result<Vec<SeriesResponse<Self>>, String>;
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -290,21 +298,106 @@ impl From<Commit> for CollectionId {
     }
 }
 
+pub trait SeriesElement: Sized {
+    fn query<'a>(
+        db: &'a Db,
+        collection_ids: Arc<Vec<CollectionId>>,
+        query: Query,
+    ) -> Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, Self)> + 'a>>>, String>;
+}
+
+fn handle_results<'a, E>(
+    results: Vec<
+        Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, E)> + 'a>>>, String>,
+    >,
+) -> Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, E)> + 'a>>>, String> {
+    let mut ok = None;
+    let mut errs = Vec::new();
+    for res in results {
+        match (res, ok.is_some()) {
+            (Ok(r), false) => {
+                ok = Some(r);
+            }
+            (Ok(_), true) => panic!("two series successfully expanded"),
+            (Err(e), _) => errs.push(e),
+        }
+    }
+
+    ok.ok_or_else(|| {
+        format!(
+            "Failed to process query; errors: {}",
+            errs.into_iter().fold(String::new(), |mut acc, err| {
+                acc.push_str(", ");
+                acc.push_str(&err);
+                acc
+            })
+        )
+    })
+}
+
+impl SeriesElement for Option<collector::self_profile::SelfProfile> {
+    fn query<'a>(
+        db: &'a Db,
+        collection_ids: Arc<Vec<CollectionId>>,
+        query: Query,
+    ) -> Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, Self)> + 'a>>>, String>
+    {
+        let results = vec![
+            SelfProfile::expand_query(collection_ids.clone(), db, query.clone()).map(|sr| {
+                sr.into_iter()
+                    .map(|sr| {
+                        sr.map(|r| Box::new(r) as Box<dyn Iterator<Item = (CollectionId, Self)>>)
+                    })
+                    .collect()
+            }),
+        ];
+        handle_results(results)
+    }
+}
+
+impl SeriesElement for Option<f64> {
+    fn query<'a>(
+        db: &'a Db,
+        collection_ids: Arc<Vec<CollectionId>>,
+        query: Query,
+    ) -> Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, Self)> + 'a>>>, String>
+    {
+        let results = vec![
+            ProcessStatisticSeries::expand_query(collection_ids.clone(), db, query.clone()).map(
+                |sr| {
+                    sr.into_iter()
+                        .map(|sr| {
+                            sr.map(|r| {
+                                Box::new(r) as Box<dyn Iterator<Item = (CollectionId, Self)>>
+                            })
+                        })
+                        .collect()
+                },
+            ),
+            SelfProfileQueryTime::expand_query(collection_ids.clone(), db, query.clone()).map(
+                |sr| {
+                    sr.into_iter()
+                        .map(|sr| {
+                            sr.map(|r| {
+                                Box::new(r) as Box<dyn Iterator<Item = (CollectionId, Self)>>
+                            })
+                        })
+                        .collect()
+                },
+            ),
+        ];
+
+        handle_results(results)
+    }
+}
+
 impl Db {
-    pub fn query<'a, T: Series<'a>>(
+    pub fn query<'a, E: SeriesElement>(
         &'a self,
         query: Query,
         collection_ids: Arc<Vec<CollectionId>>,
-    ) -> Result<Vec<SeriesResponse<T>>, String> {
-        T::expand_query(self, query)?
-            .into_iter()
-            .map(|path| {
-                Ok(SeriesResponse {
-                    series: T::deserialize(collection_ids.clone(), self, &path)?,
-                    path,
-                })
-            })
-            .collect()
+    ) -> Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, E)> + 'a>>>, String> {
+        E::query(self, collection_ids, query)
     }
 }
 
@@ -326,7 +419,11 @@ pub struct ProcessStatisticSeries<'a> {
 impl<'a> Series<'a> for ProcessStatisticSeries<'a> {
     type Element = Option<f64>;
 
-    fn expand_query(db: &Db, mut query: Query) -> Result<Vec<Path>, String> {
+    fn expand_query(
+        collection_ids: Arc<Vec<CollectionId>>,
+        db: &'a Db,
+        mut query: Query,
+    ) -> Result<Vec<SeriesResponse<Self>>, String> {
         let krate = query.extract(Tag::Crate)?.raw;
         let profile = query
             .extract(Tag::Profile)?
@@ -380,22 +477,20 @@ impl<'a> Series<'a> for ProcessStatisticSeries<'a> {
             .cloned()
             .collect::<std::collections::BTreeSet<_>>()
             .into_iter()
+            .map(|path| SeriesResponse {
+                series: ProcessStatisticSeries {
+                    db,
+                    collection_ids: collection_ids.clone(),
+                    idx: 0,
+                    krate: *path.get().unwrap(),
+                    profile: *path.get().unwrap(),
+                    cache: *path.get().unwrap(),
+                    stat: *path.get::<ProcessStatistic>().unwrap(),
+                },
+                path,
+            })
+            .into_iter()
             .collect())
-    }
-    fn deserialize(
-        collection_ids: Arc<Vec<CollectionId>>,
-        db: &'a Db,
-        path: &Path,
-    ) -> Result<Self, String> {
-        Ok(ProcessStatisticSeries {
-            db,
-            collection_ids,
-            idx: 0,
-            krate: *path.get()?,
-            profile: *path.get()?,
-            cache: *path.get()?,
-            stat: *path.get::<ProcessStatistic>()?,
-        })
     }
 }
 
@@ -515,7 +610,11 @@ impl<'a> Iterator for SelfProfile<'a> {
 impl<'a> Series<'a> for SelfProfile<'a> {
     type Element = Option<collector::SelfProfile>;
 
-    fn expand_query(db: &Db, mut query: Query) -> Result<Vec<Path>, String> {
+    fn expand_query(
+        collection_ids: Arc<Vec<CollectionId>>,
+        db: &'a Db,
+        mut query: Query,
+    ) -> Result<Vec<SeriesResponse<Self>>, String> {
         let krate = query.extract(Tag::Crate)?.raw;
         let profile = query
             .extract(Tag::Profile)?
@@ -557,21 +656,154 @@ impl<'a> Series<'a> for SelfProfile<'a> {
             .cloned()
             .collect::<std::collections::BTreeSet<_>>()
             .into_iter()
+            .map(|path| SeriesResponse {
+                series: SelfProfile {
+                    collection_ids: collection_ids.clone(),
+                    idx: 0,
+                    db,
+                    krate: *path.get().unwrap(),
+                    profile: *path.get().unwrap(),
+                    cache: *path.get().unwrap(),
+                },
+                path,
+            })
+            .into_iter()
             .collect())
     }
+}
 
-    fn deserialize(
+pub struct SelfProfileQueryTime<'a> {
+    collection_ids: Arc<Vec<CollectionId>>,
+    idx: usize,
+    db: &'a Db,
+    krate: Crate,
+    profile: Profile,
+    cache: Cache,
+    query: QueryLabel,
+}
+
+impl<'a> Iterator for SelfProfileQueryTime<'a> {
+    type Item = (CollectionId, Option<f64>);
+    fn next(&mut self) -> Option<Self::Item> {
+        let col_id = self.collection_ids.get(self.idx)?;
+        self.idx += 1;
+
+        let cd;
+        let res = match col_id {
+            CollectionId::Commit(commit) => {
+                let get = |res: Option<&Result<collector::Benchmark, String>>| {
+                    res.and_then(|res| res.as_ref().ok())
+                        .and_then(|bd| {
+                            bd.runs.iter().find(|r| {
+                                let r = r.id();
+                                let matches_profile = match self.profile {
+                                    Profile::Check => r.check,
+                                    Profile::Opt => r.release,
+                                    Profile::Debug => !r.check && !r.release,
+                                };
+                                let matches_cache = self.cache
+                                    == match r.state {
+                                        collector::BenchmarkState::Clean => Cache::Empty,
+                                        collector::BenchmarkState::IncrementalStart => {
+                                            Cache::IncrementalEmpty
+                                        }
+                                        collector::BenchmarkState::IncrementalClean => {
+                                            Cache::IncrementalFresh
+                                        }
+                                        collector::BenchmarkState::IncrementalPatched(p) => {
+                                            Cache::IncrementalPatch(p.name)
+                                        }
+                                    };
+                                matches_profile && matches_cache
+                            })
+                        })
+                        .and_then(|r| r.self_profile.clone())
+                        .and_then(|sp| {
+                            sp.query_data.iter().find_map(|qd| {
+                                if qd.label == self.query {
+                                    Some(qd.self_time().as_secs_f64())
+                                } else {
+                                    None
+                                }
+                            })
+                        })
+                };
+                let path = self.db.fs_paths.get(commit).unwrap();
+                cd = crate::load::deserialize_cd(&path);
+                get(cd.benchmarks.get(&self.krate))
+            }
+            CollectionId::Artifact(_) => None,
+        };
+        Some((col_id.clone(), res))
+    }
+}
+
+impl<'a> Series<'a> for SelfProfileQueryTime<'a> {
+    type Element = Option<f64>;
+
+    fn expand_query(
         collection_ids: Arc<Vec<CollectionId>>,
         db: &'a Db,
-        path: &Path,
-    ) -> Result<Self, String> {
-        Ok(SelfProfile {
-            collection_ids,
-            idx: 0,
-            db,
-            krate: *path.get().unwrap(),
-            profile: *path.get().unwrap(),
-            cache: *path.get().unwrap(),
-        })
+        mut query: Query,
+    ) -> Result<Vec<SeriesResponse<Self>>, String> {
+        let krate = query.extract(Tag::Crate)?.raw;
+        let profile = query
+            .extract(Tag::Profile)?
+            .raw
+            .try_map(|p| p.parse::<Profile>())?;
+        let cache = query
+            .extract(Tag::Cache)?
+            .raw
+            .try_map(|p| p.parse::<Cache>())?;
+        let ql = query
+            .extract(Tag::QueryLabel)?
+            .raw
+            .try_map(|p| p.parse::<QueryLabel>())?;
+        query.assert_empty()?;
+
+        Ok(db
+            .all_paths
+            .iter()
+            .filter(|s| {
+                let skrate = if let Ok(v) = s.get::<Crate>() {
+                    *v
+                } else {
+                    return false;
+                };
+                krate.matches(skrate)
+            })
+            .filter(|s| {
+                let sprofile = if let Ok(v) = s.get::<Profile>() {
+                    *v
+                } else {
+                    return false;
+                };
+                profile.matches(sprofile)
+            })
+            .filter(|s| {
+                let scache = if let Ok(v) = s.get::<Cache>() {
+                    *v
+                } else {
+                    return false;
+                };
+                cache.matches(scache)
+            })
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .map(|path| path.set(PathComponent::QueryLabel(*ql.assert_one())))
+            .map(move |path| SeriesResponse {
+                series: SelfProfileQueryTime {
+                    collection_ids: collection_ids.clone(),
+                    idx: 0,
+                    db,
+                    krate: *path.get().unwrap(),
+                    profile: *path.get().unwrap(),
+                    cache: *path.get().unwrap(),
+                    query: *path.get().unwrap(),
+                },
+                path,
+            })
+            .collect())
     }
 }

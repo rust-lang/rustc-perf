@@ -46,7 +46,7 @@ use crate::github::post_comment;
 use crate::interpolate::Interpolated;
 use crate::load::CurrentState;
 use crate::load::{Config, InputData};
-use crate::selector::{self, PathComponent, Series, Tag};
+use crate::selector::{self, PathComponent, Tag};
 use crate::util::get_repo_path;
 use collector::api::collected;
 use collector::Sha;
@@ -101,7 +101,7 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
 
         let mut cases = dashboard::Cases::default();
         for patch in summary_patches.iter() {
-            let responses = data.query::<selector::ProcessStatisticSeries>(
+            let responses = data.query::<Option<f64>>(
                 query
                     .clone()
                     .push(Tag::Cache, selector::Selector::One(patch)),
@@ -267,7 +267,7 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
     let range = data.data_range(body.start.clone()..=body.end.clone());
     let commits: Arc<Vec<_>> = Arc::new(range.iter().map(|&c| c.into()).collect());
 
-    let series = data.query::<selector::ProcessStatisticSeries>(
+    let series = data.query::<Option<f64>>(
         selector::Query::new()
             .push::<String>(selector::Tag::Crate, selector::Selector::All)
             .push::<String>(selector::Tag::Profile, selector::Selector::All)
@@ -289,7 +289,7 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
 
     let baselines = crate::db::ByProfile::new(|profile| -> Result<f64, String> {
         Ok(db::average(
-            data.query::<selector::ProcessStatisticSeries>(
+            data.query::<Option<f64>>(
                 selector::Query::new()
                     .push::<String>(selector::Tag::Crate, selector::Selector::All)
                     .push(selector::Tag::Profile, selector::Selector::One(profile))
@@ -343,7 +343,7 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
             &cc,
             body.absolute,
             db::average(
-                data.query::<selector::ProcessStatisticSeries>(query, commits.clone())?
+                data.query::<Option<f64>>(query, commits.clone())?
                     .into_iter()
                     .map(|sr| sr.interpolate().series)
                     .collect(),
@@ -407,7 +407,7 @@ pub async fn handle_compare(body: days::Request, data: &InputData) -> ServerResu
             selector::Selector::One(stat_id.as_str()),
         );
 
-    let mut responses = data.query::<selector::ProcessStatisticSeries>(query, cids)?;
+    let mut responses = data.query::<Option<f64>>(query, cids)?;
 
     Ok(days::Response {
         a: DateData::consume_one(a, &mut responses),
@@ -421,7 +421,7 @@ impl DateData {
         series: &mut [selector::SeriesResponse<T>],
     ) -> DateData
     where
-        T: Series<'a, Element = Option<f64>>,
+        T: Iterator<Item = (selector::CollectionId, Option<f64>)>,
     {
         let mut data = HashMap::new();
 
@@ -681,11 +681,12 @@ pub async fn handle_self_profile(
     }
 
     let commits = Arc::new(commits);
-    let mut sp_responses = data.query::<selector::SelfProfile>(query.clone(), commits.clone())?;
+    let mut sp_responses =
+        data.query::<Option<collector::self_profile::SelfProfile>>(query.clone(), commits.clone())?;
     assert_eq!(sp_responses.len(), 1, "all selectors are exact");
     let mut sp_response = sp_responses.remove(0).series;
 
-    let mut cpu_responses = data.query::<selector::ProcessStatisticSeries>(
+    let mut cpu_responses = data.query::<Option<f64>>(
         query.clone().push(
             Tag::ProcessStatistic,
             selector::Selector::One("cpu-clock".to_string()),
