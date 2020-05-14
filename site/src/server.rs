@@ -410,15 +410,14 @@ pub async fn handle_compare(body: days::Request, data: &InputData) -> ServerResu
     let mut responses = data.query::<selector::ProcessStatisticSeries>(query, cids)?;
 
     Ok(days::Response {
-        a: DateData::consume_one(a, stat_id, &mut responses),
-        b: DateData::consume_one(b, stat_id, &mut responses),
+        a: DateData::consume_one(a, &mut responses),
+        b: DateData::consume_one(b, &mut responses),
     })
 }
 
 impl DateData {
     fn consume_one<'a, T>(
         commit: collector::Commit,
-        stat: StatId,
         series: &mut [selector::SeriesResponse<T>],
     ) -> DateData
     where
@@ -430,15 +429,11 @@ impl DateData {
             let (id, point) = response.series.next().expect("must have element");
             assert_eq!(selector::CollectionId::from(commit), id);
 
-            let mut point = if let Some(pt) = point {
+            let point = if let Some(pt) = point {
                 pt
             } else {
                 continue;
             };
-            if stat == StatId::CpuClock || stat == StatId::CpuClockUser {
-                // convert to seconds; perf records it in milliseconds
-                point /= 1000.0;
-            }
             data.entry(format!(
                 "{}-{}",
                 response.path.get::<Crate>().unwrap(),
@@ -564,10 +559,7 @@ fn get_self_profile_data(
         self_time: total_time,
         // TODO: check against wall-time from perf stats
         percent_total_time: cpu_clock
-            .map(|w| {
-                // this converts the total_time (a Duration) to the milliseconds in cpu-clock
-                (((total_time.as_nanos() as f64 / 1000000.0) / w) * 100.0) as f32
-            })
+            .map(|w| ((total_time.as_secs_f64() / w) * 100.0) as f32)
             // sentinel "we couldn't compute this time"
             .unwrap_or(-100.0),
         number_of_cache_misses: profile
@@ -599,8 +591,8 @@ fn get_self_profile_data(
             .map(|qd| self_profile::QueryData {
                 label: qd.label,
                 self_time: qd.self_time(),
-                percent_total_time: ((qd.self_time().as_nanos() as f64
-                    / totals.self_time.as_nanos() as f64)
+                percent_total_time: ((qd.self_time().as_secs_f64()
+                    / totals.self_time.as_secs_f64())
                     * 100.0) as f32,
                 number_of_cache_misses: qd.number_of_cache_misses(),
                 number_of_cache_hits: qd.number_of_cache_hits,

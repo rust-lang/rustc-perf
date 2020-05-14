@@ -416,7 +416,14 @@ impl<'a> Iterator for ProcessStatisticSeries<'a> {
                 .and_then(|r| {
                     r.stats.iter().find_map(|(id, v)| {
                         if self.stat == *id.as_str() {
-                            Some(v)
+                            if id == collector::StatId::CpuClock
+                                || id == collector::StatId::CpuClockUser
+                            {
+                                // convert to seconds; perf records it in milliseconds
+                                Some(v / 1000.0)
+                            } else {
+                                Some(v)
+                            }
                         } else {
                             None
                         }
