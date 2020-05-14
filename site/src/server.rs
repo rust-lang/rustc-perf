@@ -87,8 +87,8 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
     );
 
     let query = selector::Query::new()
-        .push(Tag::Crate, selector::Selector::Subset(benchmark_names))
-        .push(
+        .set(Tag::Crate, selector::Selector::Subset(benchmark_names))
+        .set(
             Tag::ProcessStatistic,
             selector::Selector::One(StatId::WallTime.as_str()),
         );
@@ -97,14 +97,14 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
     let by_profile = db::ByProfile::new::<String, _>(|profile| {
         let query = query
             .clone()
-            .push(Tag::Profile, selector::Selector::One(profile));
+            .set(Tag::Profile, selector::Selector::One(profile));
 
         let mut cases = dashboard::Cases::default();
         for patch in summary_patches.iter() {
             let responses = data.query::<Option<f64>>(
                 query
                     .clone()
-                    .push(Tag::Cache, selector::Selector::One(patch)),
+                    .set(Tag::Cache, selector::Selector::One(patch)),
                 cids.clone(),
             )?;
 
@@ -269,10 +269,10 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
 
     let series = data.query::<Option<f64>>(
         selector::Query::new()
-            .push::<String>(selector::Tag::Crate, selector::Selector::All)
-            .push::<String>(selector::Tag::Profile, selector::Selector::All)
-            .push::<String>(selector::Tag::Cache, selector::Selector::All)
-            .push::<String>(
+            .set::<String>(selector::Tag::Crate, selector::Selector::All)
+            .set::<String>(selector::Tag::Profile, selector::Selector::All)
+            .set::<String>(selector::Tag::Cache, selector::Selector::All)
+            .set::<String>(
                 selector::Tag::ProcessStatistic,
                 selector::Selector::One(stat_id.as_pstat().to_string()),
             ),
@@ -291,10 +291,10 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
         Ok(db::average(
             data.query::<Option<f64>>(
                 selector::Query::new()
-                    .push::<String>(selector::Tag::Crate, selector::Selector::All)
-                    .push(selector::Tag::Profile, selector::Selector::One(profile))
-                    .push(selector::Tag::Cache, selector::Selector::One(Cache::Empty))
-                    .push(
+                    .set::<String>(selector::Tag::Crate, selector::Selector::All)
+                    .set(selector::Tag::Profile, selector::Selector::One(profile))
+                    .set(selector::Tag::Cache, selector::Selector::One(Cache::Empty))
+                    .set(
                         selector::Tag::ProcessStatistic,
                         selector::Selector::One(stat_id.as_str()),
                     ),
@@ -314,10 +314,10 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
     )
     .map(|(cache, profile)| {
         selector::Query::new()
-            .push::<String>(selector::Tag::Crate, selector::Selector::All)
-            .push(selector::Tag::Profile, selector::Selector::One(profile))
-            .push(selector::Tag::Cache, selector::Selector::One(cache))
-            .push::<String>(
+            .set::<String>(selector::Tag::Crate, selector::Selector::All)
+            .set(selector::Tag::Profile, selector::Selector::One(profile))
+            .set(selector::Tag::Cache, selector::Selector::One(cache))
+            .set::<String>(
                 selector::Tag::ProcessStatistic,
                 selector::Selector::One(stat_id.as_pstat().to_string()),
             )
@@ -399,10 +399,10 @@ pub async fn handle_compare(body: days::Request, data: &InputData) -> ServerResu
     let stat_id = StatId::from_str(&body.stat)?;
 
     let query = selector::Query::new()
-        .push::<String>(Tag::Crate, selector::Selector::All)
-        .push::<String>(Tag::Cache, selector::Selector::All)
-        .push::<String>(Tag::Profile, selector::Selector::All)
-        .push(
+        .set::<String>(Tag::Crate, selector::Selector::All)
+        .set::<String>(Tag::Cache, selector::Selector::All)
+        .set::<String>(Tag::Profile, selector::Selector::All)
+        .set(
             Tag::ProcessStatistic,
             selector::Selector::One(stat_id.as_str()),
         );
@@ -657,9 +657,9 @@ pub async fn handle_self_profile(
         .ok_or(format!("sort_idx needs to be i32"))?;
 
     let query = selector::Query::new()
-        .push(Tag::Crate, selector::Selector::One(bench_name))
-        .push(Tag::Profile, selector::Selector::One(bench_ty))
-        .push(Tag::Cache, selector::Selector::One(body.run_name.clone()));
+        .set(Tag::Crate, selector::Selector::One(bench_name))
+        .set(Tag::Profile, selector::Selector::One(bench_ty))
+        .set(Tag::Cache, selector::Selector::One(body.run_name.clone()));
 
     let mut commits = vec![data
         .commits
@@ -687,7 +687,7 @@ pub async fn handle_self_profile(
     let mut sp_response = sp_responses.remove(0).series;
 
     let mut cpu_responses = data.query::<Option<f64>>(
-        query.clone().push(
+        query.clone().set(
             Tag::ProcessStatistic,
             selector::Selector::One("cpu-clock".to_string()),
         ),

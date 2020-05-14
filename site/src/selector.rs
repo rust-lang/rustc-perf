@@ -248,7 +248,7 @@ impl Query {
         Self { path: vec![] }
     }
 
-    pub fn push<T>(mut self, tag: Tag, selector: Selector<T>) -> Self
+    pub fn set<T>(mut self, tag: Tag, selector: Selector<T>) -> Self
     where
         T: fmt::Display,
     {
