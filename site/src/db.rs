@@ -287,13 +287,6 @@ impl PartialOrd for Cache {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Series {
-    pub krate: Crate,
-    pub profile: Profile,
-    pub cache: Cache,
-}
-
 pub trait Point {
     type Key: fmt::Debug + PartialEq + Clone;
 

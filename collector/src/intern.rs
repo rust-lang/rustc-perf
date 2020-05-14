@@ -68,6 +68,12 @@ macro_rules! intern {
             }
         }
 
+        impl std::cmp::PartialEq<String> for $for_ty {
+            fn eq(&self, other: &String) -> bool {
+                self.0.as_str() == other.as_str()
+            }
+        }
+
         impl std::cmp::PartialEq<str> for $for_ty {
             fn eq(&self, other: &str) -> bool {
                 self.0.as_str() == other

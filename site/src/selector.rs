@@ -33,6 +33,7 @@
 use crate::db::{Benchmark, Cache, Profile};
 use crate::interpolate::Interpolate;
 use crate::load::InputData as Db;
+use collector::self_profile::QueryLabel;
 use collector::{BenchmarkName as Crate, Commit, StatId};
 use std::fmt;
 use std::sync::Arc;
@@ -45,10 +46,54 @@ pub enum Tag {
     SelfProfileQuery,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct PathComponent {
-    pub tag: Tag,
-    pub raw: String,
+pub trait GetValue {
+    fn value(component: &PathComponent) -> Option<&Self>;
+}
+
+impl GetValue for Crate {
+    fn value(component: &PathComponent) -> Option<&Self> {
+        match component {
+            PathComponent::Crate(v) => Some(v),
+            _ => None,
+        }
+    }
+}
+
+impl GetValue for Profile {
+    fn value(component: &PathComponent) -> Option<&Self> {
+        match component {
+            PathComponent::Profile(v) => Some(v),
+            _ => None,
+        }
+    }
+}
+
+impl GetValue for Cache {
+    fn value(component: &PathComponent) -> Option<&Self> {
+        match component {
+            PathComponent::Cache(v) => Some(v),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
+pub enum PathComponent {
+    Crate(Crate),
+    Profile(Profile),
+    Cache(Cache),
+    SelfProfileQuery(QueryLabel),
+}
+
+impl PathComponent {
+    pub fn as_tag(&self) -> Tag {
+        match self {
+            PathComponent::Crate(_) => Tag::Crate,
+            PathComponent::Profile(_) => Tag::Profile,
+            PathComponent::Cache(_) => Tag::Cache,
+            PathComponent::SelfProfileQuery(_) => Tag::SelfProfileQuery,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -80,6 +125,17 @@ impl<T> Selector<T> {
             }
             Selector::One(o) => Selector::One(f(o)?),
         })
+    }
+
+    fn matches<U>(&self, other: U) -> bool
+    where
+        U: PartialEq<T>,
+    {
+        match self {
+            Selector::One(c) => other == *c,
+            Selector::Subset(subset) => subset.iter().any(|c| other == *c),
+            Selector::All => true,
+        }
     }
 
     pub fn assert_one(&self) -> &T
@@ -127,7 +183,7 @@ where
         -> Result<Self, String>;
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Path {
     path: Vec<PathComponent>,
 }
@@ -137,33 +193,24 @@ impl Path {
         Self { path: vec![] }
     }
 
-    pub fn set<T>(mut self, tag: Tag, raw: T) -> Self
-    where
-        T: fmt::Display,
-    {
-        // Remove this tag if previously present
-        let _ = self.extract(tag);
-        self.path.push(PathComponent {
-            tag,
-            raw: raw.to_string(),
-        });
+    pub fn set(mut self, component: PathComponent) -> Self {
+        if let Some(idx) = self
+            .path
+            .iter()
+            .position(|c| c.as_tag() == component.as_tag())
+        {
+            self.path[idx] = component;
+        } else {
+            self.path.push(component);
+        }
         self
     }
 
-    fn extract(&mut self, tag: Tag) -> Result<PathComponent, String> {
-        if let Some(idx) = self.path.iter().position(|pc| pc.tag == tag) {
-            Ok(self.path.swap_remove(idx))
-        } else {
-            Err(format!("query must have {:?} selector", tag))
-        }
-    }
-
-    pub fn get(&self, tag: Tag) -> Result<&PathComponent, String> {
-        if let Some(idx) = self.path.iter().position(|pc| pc.tag == tag) {
-            Ok(&self.path[idx])
-        } else {
-            Err(format!("query must have {:?} selector", tag))
-        }
+    pub fn get<V: 'static + GetValue>(&self) -> Result<&V, String> {
+        self.path
+            .iter()
+            .find_map(V::value)
+            .ok_or_else(|| format!("query must have {:?} selector", std::any::type_name::<V>()))
     }
 }
 
@@ -244,57 +291,48 @@ impl Db {
             .try_map(|p| p.parse::<Cache>())?;
         query.assert_empty()?;
 
-        self.all_series
+        self.all_paths
             .iter()
             .filter(|s| {
-                let skrate = s.krate;
-                match &krate {
-                    Selector::One(s) => skrate == *s.as_str(),
-                    Selector::Subset(crates) => crates.iter().any(|c| skrate == *c.as_str()),
-                    Selector::All => true,
-                }
+                let skrate = if let Ok(v) = s.get::<Crate>() {
+                    *v
+                } else {
+                    return false;
+                };
+                krate.matches(skrate)
             })
             .filter(|s| {
-                let sprofile = s.profile;
-                match &profile {
-                    Selector::One(p) => sprofile == *p,
-                    Selector::Subset(profiles) => profiles.iter().any(|p| sprofile == *p),
-                    Selector::All => true,
-                }
+                let sprofile = if let Ok(v) = s.get::<Profile>() {
+                    *v
+                } else {
+                    return false;
+                };
+                profile.matches(sprofile)
             })
             .filter(|s| {
-                let scache = s.cache;
-                match &cache {
-                    Selector::One(c) => scache == *c,
-                    Selector::Subset(caches) => caches.iter().any(|c| scache == *c),
-                    Selector::All => true,
-                }
+                let scache = if let Ok(v) = s.get::<Cache>() {
+                    *v
+                } else {
+                    return false;
+                };
+                cache.matches(scache)
             })
             .map(|s| {
                 Ok(SeriesResponse {
                     path: Path {
                         path: vec![
-                            PathComponent {
-                                tag: Tag::Crate,
-                                raw: s.krate.to_string(),
-                            },
-                            PathComponent {
-                                tag: Tag::Profile,
-                                raw: s.profile.to_string(),
-                            },
-                            PathComponent {
-                                tag: Tag::Cache,
-                                raw: s.cache.to_string(),
-                            },
+                            PathComponent::Crate(*s.get().unwrap()),
+                            PathComponent::Profile(*s.get().unwrap()),
+                            PathComponent::Cache(*s.get().unwrap()),
                         ],
                     },
                     series: T::deserialize(
                         collection_ids.clone(),
                         Source {
                             db: self,
-                            krate: s.krate,
-                            profile: s.profile,
-                            cache: s.cache,
+                            krate: *s.get().unwrap(),
+                            profile: *s.get().unwrap(),
+                            cache: *s.get().unwrap(),
                         },
                     )?,
                 })

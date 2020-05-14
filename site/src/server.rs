@@ -40,13 +40,13 @@ pub use crate::api::{
     self, dashboard, data, days, github, graph, info, self_profile, status, CommitResponse,
     DateData, ServerResult, StyledBenchmarkName,
 };
-use crate::db::{self, Cache, Profile};
+use crate::db::{self, Cache, Crate, Profile};
 use crate::git;
 use crate::github::post_comment;
 use crate::interpolate::Interpolated;
 use crate::load::CurrentState;
 use crate::load::{Config, InputData};
-use crate::selector::{self, Series, Tag};
+use crate::selector::{self, PathComponent, Series, Tag};
 use crate::util::get_repo_path;
 use collector::api::collected;
 use collector::Sha;
@@ -316,7 +316,13 @@ fn handle_graph_for_stat<'a, T: Series<'a, Element = Option<f64>>>(
             .assert_one()
             .parse::<Profile>()
             .unwrap();
-        let cache = query.get(Tag::Cache).unwrap().raw.assert_one().clone();
+        let cache = query
+            .get(Tag::Cache)
+            .unwrap()
+            .raw
+            .assert_one()
+            .parse::<Cache>()
+            .unwrap();
         let baseline = baselines[profile];
         let graph_data = to_graph_data(
             &cc,
@@ -332,9 +338,9 @@ fn handle_graph_for_stat<'a, T: Series<'a, Element = Option<f64>>>(
         .collect::<Vec<_>>();
         series.push(selector::SeriesResponse {
             path: selector::Path::new()
-                .set(Tag::Crate, "Summary")
-                .set(Tag::Profile, profile)
-                .set(Tag::Cache, cache),
+                .set(PathComponent::Crate("Summary".into()))
+                .set(PathComponent::Profile(profile))
+                .set(PathComponent::Cache(cache)),
             series: graph_data,
         })
     }
@@ -342,7 +348,7 @@ fn handle_graph_for_stat<'a, T: Series<'a, Element = Option<f64>>>(
     let mut by_krate = HashMap::new();
     let mut by_krate_max = HashMap::new();
     for sr in series {
-        let krate = sr.path.get(selector::Tag::Crate)?.raw.clone();
+        let krate = sr.path.get::<Crate>()?.to_string();
         let max = by_krate_max.entry(krate.clone()).or_insert(f32::MIN);
         *max = sr
             .series
@@ -352,9 +358,9 @@ fn handle_graph_for_stat<'a, T: Series<'a, Element = Option<f64>>>(
         by_krate
             .entry(krate)
             .or_insert_with(HashMap::new)
-            .entry(sr.path.get(selector::Tag::Profile)?.raw.clone())
+            .entry(sr.path.get::<Profile>()?.to_string())
             .or_insert_with(Vec::new)
-            .push((sr.path.get(selector::Tag::Cache)?.raw.clone(), sr.series));
+            .push((sr.path.get::<Cache>()?.to_string(), sr.series));
     }
 
     Ok(graph::Response {
@@ -474,11 +480,11 @@ impl DateData {
             }
             data.entry(format!(
                 "{}-{}",
-                response.path.get(Tag::Crate).unwrap().raw,
-                response.path.get(Tag::Profile).unwrap().raw,
+                response.path.get::<Crate>().unwrap(),
+                response.path.get::<Profile>().unwrap(),
             ))
             .or_insert_with(Vec::new)
-            .push((response.path.get(Tag::Cache).unwrap().raw.clone(), point));
+            .push((response.path.get::<Cache>().unwrap().to_string(), point));
         }
 
         DateData {

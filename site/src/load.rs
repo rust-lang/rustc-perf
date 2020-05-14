@@ -26,6 +26,7 @@ use collector::{Bound, Date};
 
 use crate::api::github;
 use crate::db::{ArtifactData, CommitData};
+use crate::selector::PathComponent;
 use collector;
 pub use collector::{BenchmarkName, Commit, Patch, Sha, StatId, Stats};
 use log::{error, info, warn};
@@ -131,7 +132,7 @@ pub struct InputData {
     /// All known statistics gathered for crates
     pub stats_list: Vec<&'static str>,
 
-    pub all_series: Vec<crate::db::Series>,
+    pub all_paths: Vec<crate::selector::Path>,
 
     /// The last date that was seen while loading files.
     pub last_date: Date,
@@ -374,19 +375,18 @@ impl InputData {
             .map(|v| artifact_data.remove(&v).unwrap())
             .collect::<Vec<_>>();
 
-        let all_series = data
+        let all_paths = data
             .iter()
             .flat_map(|cd| {
                 cd.benchmarks
                     .values()
                     .filter_map(|b| b.as_ref().ok())
                     .flat_map(|bench| {
-                        bench.runs.iter().filter_map(move |r| {
-                            Some(crate::db::Series {
-                                krate: bench.name,
-                                profile: r.profile,
-                                cache: r.state,
-                            })
+                        bench.runs.iter().map(move |r| {
+                            crate::selector::Path::new()
+                                .set(PathComponent::Crate(bench.name))
+                                .set(PathComponent::Profile(r.profile))
+                                .set(PathComponent::Cache(r.state))
                         })
                     })
             })
@@ -398,7 +398,7 @@ impl InputData {
         Ok(InputData {
             fs_paths,
             stats_list: stats_list.into_iter().collect(),
-            all_series,
+            all_paths,
             last_date,
             data,
             commits,
