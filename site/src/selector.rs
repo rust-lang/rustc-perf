@@ -238,7 +238,7 @@ impl Path {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Hash, Eq, PartialEq)]
 pub struct Query {
     path: Vec<QueryComponent>,
 }
@@ -252,12 +252,14 @@ impl Query {
     where
         T: fmt::Display,
     {
-        // Remove this tag if previously present
-        let _ = self.extract(tag);
-        self.path.push(QueryComponent {
-            tag,
-            raw: selector.map(|s| s.to_string()),
-        });
+        if let Some(idx) = self.path.iter().position(|c| c.tag == tag) {
+            self.path[idx].raw = selector.map(|s| s.to_string());
+        } else {
+            self.path.push(QueryComponent {
+                tag,
+                raw: selector.map(|s| s.to_string()),
+            });
+        }
         self
     }
 

@@ -267,15 +267,14 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
     let range = data.data_range(body.start.clone()..=body.end.clone());
     let commits: Arc<Vec<_>> = Arc::new(range.iter().map(|&c| c.into()).collect());
 
+    let stat_selector = selector::Selector::One(stat_id.as_pstat().to_string());
+
     let series = data.query::<Option<f64>>(
         selector::Query::new()
             .set::<String>(selector::Tag::Crate, selector::Selector::All)
             .set::<String>(selector::Tag::Profile, selector::Selector::All)
             .set::<String>(selector::Tag::Cache, selector::Selector::All)
-            .set::<String>(
-                selector::Tag::ProcessStatistic,
-                selector::Selector::One(stat_id.as_pstat().to_string()),
-            ),
+            .set::<String>(selector::Tag::ProcessStatistic, stat_selector.clone()),
         commits.clone(),
     )?;
 
@@ -287,39 +286,36 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
         })
         .collect::<Vec<_>>();
 
-    let baselines = crate::db::ByProfile::new(|profile| -> Result<f64, String> {
-        Ok(db::average(
-            data.query::<Option<f64>>(
-                selector::Query::new()
-                    .set::<String>(selector::Tag::Crate, selector::Selector::All)
-                    .set(selector::Tag::Profile, selector::Selector::One(profile))
-                    .set(selector::Tag::Cache, selector::Selector::One(Cache::Empty))
-                    .set(
-                        selector::Tag::ProcessStatistic,
-                        selector::Selector::One(stat_id.as_str()),
-                    ),
-                commits.clone(),
-            )?
-            .into_iter()
-            .map(|sr| sr.interpolate().series)
-            .collect::<Vec<_>>(),
-        )
-        .next()
-        .map_or(0.0, |((_c, d), _interpolated)| d.expect("interpolated")))
-    })?;
+    let mut baselines = HashMap::new();
+    let c = commits.clone();
+    let mut baseline = move |query: selector::Query| match baselines.entry(query.clone()) {
+        std::collections::hash_map::Entry::Occupied(o) => Ok::<_, String>(*o.get()),
+        std::collections::hash_map::Entry::Vacant(v) => {
+            let value = db::average(
+                data.query::<Option<f64>>(query, c.clone())?
+                    .into_iter()
+                    .map(|sr| sr.interpolate().series)
+                    .collect::<Vec<_>>(),
+            )
+            .next()
+            .map_or(0.0, |((_c, d), _interpolated)| d.expect("interpolated"));
+            Ok(*v.insert(value))
+        }
+    };
 
     let summary_queries = iproduct!(
         data.summary_patches(),
-        vec![Profile::Check, Profile::Debug, Profile::Opt]
+        vec![Profile::Check, Profile::Debug, Profile::Opt],
+        vec!["cpu-clock".to_string(), stat_id.as_pstat().to_string(),]
     )
-    .map(|(cache, profile)| {
+    .map(|(cache, profile, pstat)| {
         selector::Query::new()
             .set::<String>(selector::Tag::Crate, selector::Selector::All)
             .set(selector::Tag::Profile, selector::Selector::One(profile))
             .set(selector::Tag::Cache, selector::Selector::One(cache))
             .set::<String>(
                 selector::Tag::ProcessStatistic,
-                selector::Selector::One(stat_id.as_pstat().to_string()),
+                selector::Selector::One(pstat),
             )
     });
 
@@ -338,24 +334,42 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
             .assert_one()
             .parse::<Cache>()
             .unwrap();
-        let baseline = baselines[profile];
+        let against = baseline(
+            selector::Query::new()
+                .set::<String>(selector::Tag::Crate, selector::Selector::All)
+                .set(selector::Tag::Profile, selector::Selector::One(profile))
+                .set(selector::Tag::Cache, selector::Selector::One(Cache::Empty))
+                .set(
+                    selector::Tag::ProcessStatistic,
+                    query.get(Tag::ProcessStatistic).unwrap().raw.clone(),
+                ),
+        )?;
         let graph_data = to_graph_data(
             &cc,
             body.absolute,
             db::average(
-                data.query::<Option<f64>>(query, commits.clone())?
+                data.query::<Option<f64>>(query.clone(), commits.clone())?
                     .into_iter()
                     .map(|sr| sr.interpolate().series)
                     .collect(),
             )
-            .map(|((c, d), i)| ((c, Some(d.expect("interpolated") / baseline)), i)),
+            .map(|((c, d), i)| ((c, Some(d.expect("interpolated") / against)), i)),
         )
         .collect::<Vec<_>>();
         series.push(selector::SeriesResponse {
             path: selector::Path::new()
                 .set(PathComponent::Crate("Summary".into()))
                 .set(PathComponent::Profile(profile))
-                .set(PathComponent::Cache(cache)),
+                .set(PathComponent::Cache(cache))
+                .set(PathComponent::ProcessStatistic(
+                    query
+                        .get(Tag::ProcessStatistic)
+                        .unwrap()
+                        .raw
+                        .assert_one()
+                        .parse()
+                        .unwrap(),
+                )),
             series: graph_data,
         })
     }
