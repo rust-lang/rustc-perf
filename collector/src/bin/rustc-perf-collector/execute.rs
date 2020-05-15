@@ -804,14 +804,14 @@ impl Benchmark {
         let iterations = cmp::min(iterations, self.config.runs);
 
         if self.config.disabled {
-            eprintln!("skipping {}: disabled", self.name);
+            eprintln!("Skipping {}: disabled", self.name);
             bail!("disabled benchmark");
         }
 
         let mut runs = Vec::new();
 
         for &build_kind in build_kinds {
-            log::info!("Running {}: {:?} + {:?}", self.name, build_kind, run_kinds);
+            eprintln!("Running {}: {:?} + {:?}", self.name, build_kind, run_kinds);
 
             // Build everything, including all dependent crates, in a temp dir.
             // We do this before the iterations so that dependent crates aren't
@@ -940,10 +940,6 @@ fn process_perf_stat_output(
             cnt.parse()
                 .map_err(|e| DeserializeStatError::ParseError(cnt.to_string(), e))?,
         );
-    }
-
-    if profile.is_none() {
-        eprintln!("stdout: {}", stdout);
     }
 
     if stats.is_empty() {
