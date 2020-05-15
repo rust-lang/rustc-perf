@@ -69,6 +69,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7825f6833612eb2414095684fcf6c635becf3ce97fe48cf6421321e93bfbd53c"
 
 [[package]]
+name = "arc-swap"
+version = "0.4.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b585a98a234c46fc563103e9278c9391fde1f4e6850334da895d27edb9580f62"
+
+[[package]]
 name = "async-compression"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -349,6 +355,7 @@ name = "collector"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "arc-swap",
  "bincode",
  "bumpalo",
  "cargo_metadata",
@@ -360,6 +367,7 @@ dependencies = [
  "lazy_static",
  "libc",
  "log",
+ "parking_lot",
  "reqwest",
  "rustc-artifacts",
  "rustup",

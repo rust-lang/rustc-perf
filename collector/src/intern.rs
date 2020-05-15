@@ -1,9 +1,11 @@
+use arc_swap::ArcSwap;
 use bumpalo::Bump;
 use hashbrown::HashSet;
+use parking_lot::Mutex;
 use std::alloc::Layout;
 use std::fmt;
 use std::ptr;
-use std::sync::Mutex;
+use std::sync::Arc;
 
 pub trait InternString {
     unsafe fn to_interned(s: ArenaStr) -> Self;
@@ -119,24 +121,29 @@ macro_rules! intern {
         }
     };
 }
+
 lazy_static::lazy_static! {
-    static ref INTERNED: Mutex<(HashSet<ArenaStr>, Bump)>
-        = Mutex::new((HashSet::new(), Bump::new()));
+    static ref INTERNED: (ArcSwap<HashSet<ArenaStr>>, Mutex<(HashSet<ArenaStr>, Bump)>)
+        = (ArcSwap::new(Arc::new(HashSet::new())), Mutex::new((HashSet::new(), Bump::new())));
 }
 
 pub fn preloaded<T: InternString>(value: &str) -> Option<T> {
-    let mut guard = INTERNED.lock().unwrap();
-
-    let (ref mut set, _) = &mut *guard;
+    let set = INTERNED.0.load();
     unsafe { Some(T::to_interned(*set.get(value)?)) }
 }
 
 pub fn intern<T: InternString>(value: &str) -> T {
-    let mut guard = INTERNED.lock().unwrap();
+    preloaded(value).unwrap_or_else(|| {
+        let mut guard = INTERNED.1.lock();
 
-    let (ref mut set, ref arena) = &mut *guard;
-    unsafe {
-        T::to_interned(*set.get_or_insert_with(value, |_| -> ArenaStr {
+        if let Some(o) = preloaded(value) {
+            return o;
+        }
+
+        let (ref mut set, ref mut arena) = &mut *guard;
+        assert_eq!(set.len(), INTERNED.0.load().len());
+
+        let allocated = unsafe {
             let ptr = arena.alloc_layout(
                 Layout::from_size_align(std::mem::size_of::<usize>() + value.len(), 1).unwrap(),
             );
@@ -146,8 +153,28 @@ pub fn intern<T: InternString>(value: &str) -> T {
             ptr::copy_nonoverlapping(value.as_ptr(), bytes, value.len());
 
             ArenaStr(start_at as *const u8)
-        }))
-    }
+        };
+
+        assert!(set.insert(allocated));
+        let ret = unsafe { T::to_interned(allocated) };
+
+        // We know that we have a Mutex around the arena so we're not worried
+        // about racing here, only one thread can store at a time.
+        let mut old = INTERNED.0.swap(Arc::new(std::mem::take(&mut guard.0)));
+
+        loop {
+            match Arc::try_unwrap(old) {
+                Ok(mut o) => {
+                    o.insert(allocated);
+                    guard.0 = o;
+                    break;
+                }
+                Err(e) => old = e,
+            }
+        }
+
+        ret
+    })
 }
 
 #[derive(serde::Serialize, Copy, Clone, PartialEq, Eq)]

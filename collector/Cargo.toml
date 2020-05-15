@@ -28,6 +28,8 @@ hashbrown = "0.7.0"
 bumpalo = "3.2"
 tokio = { version = "0.2", features = ["rt-core"] }
 rustc-artifacts = "0.2"
+parking_lot = "0.10"
+arc-swap = "0.4"
 
 [dependencies.rustup]
 git = "https://github.com/rust-lang/rustup.git"
