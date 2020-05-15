@@ -97,6 +97,8 @@ where
                     return Some((item, Interpolated::Yes));
                 }
 
+                self.consumed.push(item);
+
                 // We are at the start of the iterator, and do not currently
                 // have a point. We need to seek forward until we hit a point,
                 // and then back-propagate that point.
