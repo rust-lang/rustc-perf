@@ -306,7 +306,7 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
     let summary_queries = iproduct!(
         data.summary_patches(),
         vec![Profile::Check, Profile::Debug, Profile::Opt],
-        vec!["cpu-clock".to_string(), stat_id.as_pstat().to_string(),]
+        vec![stat_id.as_pstat().to_string()]
     )
     .map(|(cache, profile, pstat)| {
         selector::Query::new()
