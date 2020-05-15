@@ -107,10 +107,10 @@ command.
   The possible choices are one or more (comma-separated) of `Check`, `Debug`,
   `Opt`, and `All` (the default).
 - `--runs $RUNS` can be used to select what profiling runs are done for each
-  build. The possible choices are one or more (comma-separated) of `Clean`,
-  `Nll`, `BaseIncr`, `CleanIncr`, `PatchedIncrs`, and `All` (the default). Note
-  that `BaseIncr` is always run (even if not requested) if either of
-  `CleanIncr` or `PatchedIncrs` are run.
+  build. The possible choices are one or more (comma-separated) of `Full`,
+  `IncrFull`, `IncrUnchanged`, `IncrPatched`, and `All` (the default). Note
+  that `IncrFull` is always run (even if not requested) if either of
+  `IncrUnchanged` or `IncrPatched` are run.
 
 ### Comparing different versions on your own machine
 

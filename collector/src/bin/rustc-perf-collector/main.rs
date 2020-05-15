@@ -428,8 +428,8 @@ fn main_result() -> anyhow::Result<i32> {
             "One or more (comma-separated) of: 'Check', 'Debug',\n\
             'Opt', 'All'")
            (@arg RUNS: --runs +takes_value
-            "One or more (comma-separated) of: 'Clean',\n\
-            'BaseIncr', 'CleanIncr', 'PatchedIncrs', 'All'")
+            "One or more (comma-separated) of: 'Full',\n\
+            'IncrFull', 'IncrUnchanged', 'IncrPatched', 'All'")
            (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
        )
        (@subcommand bench_published =>
@@ -447,8 +447,8 @@ fn main_result() -> anyhow::Result<i32> {
             "One or more (comma-separated) of: 'Check', 'Debug',\n\
             'Opt', 'All'")
            (@arg RUNS: --runs +takes_value
-            "One or more (comma-separated) of: 'Clean',\n\
-            'BaseIncr', 'CleanIncr', 'PatchedIncrs', 'All'")
+            "One or more (comma-separated) of: 'Full',\n\
+            'IncrFull', 'IncrUnchanged', 'IncrPatched', 'All'")
            (@arg PROFILER: +required +takes_value
             "One of: 'self-profile', 'time-passes', 'perf-record',\n\
             'cachegrind', 'callgrind', ''dhat', 'massif', 'eprintln'")

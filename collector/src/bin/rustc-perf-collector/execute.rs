@@ -871,7 +871,7 @@ impl Benchmark {
 
                         // An incremental build with some changes (realistic
                         // incremental case).
-                        let run_kind_str = format!("PatchedIncr{}", i);
+                        let run_kind_str = format!("IncrPatched{}", i);
                         self.mk_cargo_process(compiler, cwd, build_kind)
                             .incremental(true)
                             .processor(processor, RunKind::IncrPatched, &run_kind_str, Some(&patch))
