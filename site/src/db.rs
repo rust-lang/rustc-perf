@@ -84,22 +84,10 @@ pub struct ArtifactData {
 
 pub fn data_for(data: &[Commit], is_left: bool, query: Bound) -> Option<Commit> {
     if is_left {
-        let last_month =
-            data.last().unwrap().date.0.naive_utc().date() - chrono::Duration::days(30);
-        data.iter()
-            .find(|commit| match &query {
-                Bound::Commit(sha) => commit.sha == **sha,
-                Bound::Date(date) => commit.date.0.naive_utc().date() == *date,
-                Bound::None => last_month <= commit.date.0.naive_utc().date(),
-            })
-            .cloned()
+        data.iter().find(|commit| query.left_match(commit)).cloned()
     } else {
         data.iter()
-            .rfind(|commit| match &query {
-                Bound::Commit(sha) => commit.sha == **sha,
-                Bound::Date(date) => commit.date.0.date().naive_utc() == *date,
-                Bound::None => true,
-            })
+            .rfind(|commit| query.left_match(commit))
             .cloned()
     }
 }
@@ -107,18 +95,8 @@ pub fn data_for(data: &[Commit], is_left: bool, query: Bound) -> Option<Commit> 
 pub fn range_subset(data: &[Commit], range: RangeInclusive<Bound>) -> &[Commit] {
     let (a, b) = range.into_inner();
 
-    let last_month = data.last().unwrap().date.0.naive_utc().date() - chrono::Duration::days(30);
-    let left_idx = data.iter().position(|commit| match &a {
-        Bound::Commit(sha) => commit.sha == **sha,
-        Bound::Date(date) => commit.date.0.naive_utc().date() == *date,
-        Bound::None => last_month <= commit.date.0.naive_utc().date(),
-    });
-
-    let right_idx = data.iter().rposition(|commit| match &b {
-        Bound::Commit(sha) => commit.sha == **sha,
-        Bound::Date(date) => commit.date.0.date().naive_utc() == *date,
-        Bound::None => true,
-    });
+    let left_idx = data.iter().position(|commit| a.left_match(commit));
+    let right_idx = data.iter().rposition(|commit| b.left_match(commit));
 
     if let (Some(left), Some(right)) = (left_idx, right_idx) {
         data.get(left..=right).unwrap_or_else(|| {
