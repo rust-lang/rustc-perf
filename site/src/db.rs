@@ -52,12 +52,18 @@ impl From<CollectorRun> for Run {
             } else {
                 Profile::Debug
             },
-            state: match c.state {
-                collector::BenchmarkState::Clean => Cache::Empty,
-                collector::BenchmarkState::IncrementalStart => Cache::IncrementalEmpty,
-                collector::BenchmarkState::IncrementalClean => Cache::IncrementalFresh,
-                collector::BenchmarkState::IncrementalPatched(p) => Cache::IncrementalPatch(p.name),
-            },
+            state: (&c.state).into(),
+        }
+    }
+}
+
+impl<'a> From<&'a collector::BenchmarkState> for Cache {
+    fn from(other: &'a collector::BenchmarkState) -> Self {
+        match other {
+            collector::BenchmarkState::Clean => Cache::Empty,
+            collector::BenchmarkState::IncrementalStart => Cache::IncrementalEmpty,
+            collector::BenchmarkState::IncrementalClean => Cache::IncrementalFresh,
+            collector::BenchmarkState::IncrementalPatched(p) => Cache::IncrementalPatch(p.name),
         }
     }
 }
@@ -142,7 +148,9 @@ impl<T> std::ops::Index<Profile> for ByProfile<T> {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize)]
+#[derive(
+    Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Profile {
     Check,
     Debug,
@@ -181,7 +189,7 @@ impl Profile {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "variant", content = "name")]
 pub enum Cache {
     #[serde(rename = "full")]
