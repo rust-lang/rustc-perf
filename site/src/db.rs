@@ -465,10 +465,10 @@ impl SeriesType for QueryDatum {
     fn from_bytes(bytes: &[u8]) -> Self {
         QueryDatum {
             self_time: Duration::from_nanos(u64::from_le_bytes(bytes[..8].try_into().unwrap())),
-            incremental_load_time: Duration::from_nanos(u64::from_le_bytes(
+            blocked_time: Duration::from_nanos(u64::from_le_bytes(
                 bytes[8..16].try_into().unwrap(),
             )),
-            blocked_time: Duration::from_nanos(u64::from_le_bytes(
+            incremental_load_time: Duration::from_nanos(u64::from_le_bytes(
                 bytes[16..24].try_into().unwrap(),
             )),
             number_of_cache_hits: u32::from_le_bytes(bytes[24..28].try_into().unwrap()),

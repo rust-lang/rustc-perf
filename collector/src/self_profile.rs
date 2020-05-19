@@ -98,13 +98,13 @@ enum InternalSelfProfile {
 pub struct QueryData {
     pub label: QueryLabel,
     #[serde(deserialize_with = "SerdeDuration::into_nanos")]
-    self_time: u64,
+    pub self_time: u64,
     pub number_of_cache_hits: u32,
     pub invocation_count: u32,
     #[serde(deserialize_with = "SerdeDuration::into_nanos")]
-    blocked_time: u64,
+    pub blocked_time: u64,
     #[serde(deserialize_with = "SerdeDuration::into_nanos")]
-    incremental_load_time: u64,
+    pub incremental_load_time: u64,
 }
 
 #[derive(Debug, Deserialize)]
