@@ -5,6 +5,7 @@ use parking_lot::Mutex;
 use std::alloc::Layout;
 use std::fmt;
 use std::ptr;
+use std::ptr::NonNull;
 use std::sync::Arc;
 
 pub trait InternString {
@@ -152,7 +153,7 @@ pub fn intern<T: InternString>(value: &str) -> T {
             let bytes = start_at.add(std::mem::size_of::<usize>());
             ptr::copy_nonoverlapping(value.as_ptr(), bytes, value.len());
 
-            ArenaStr(start_at as *const u8)
+            ArenaStr(ptr)
         };
 
         assert!(set.insert(allocated));
@@ -179,7 +180,7 @@ pub fn intern<T: InternString>(value: &str) -> T {
 
 #[derive(serde::Serialize, Copy, Clone, PartialEq, Eq)]
 #[serde(into = "&'static str")]
-pub struct ArenaStr(*const u8);
+pub struct ArenaStr(NonNull<u8>);
 
 impl Into<&'static str> for ArenaStr {
     fn into(self) -> &'static str {
@@ -193,7 +194,7 @@ unsafe impl Sync for ArenaStr {}
 impl ArenaStr {
     pub fn as_str(self) -> &'static str {
         unsafe {
-            let mut ptr = self.0;
+            let mut ptr = self.0.as_ptr();
             let length = usize::from_ne_bytes(ptr::read(ptr as *const _));
             ptr = ptr.add(std::mem::size_of::<usize>());
             std::str::from_utf8_unchecked(std::slice::from_raw_parts(ptr, length))
@@ -201,7 +202,7 @@ impl ArenaStr {
     }
 
     pub fn hash_ptr(self) -> usize {
-        self.0 as usize
+        self.0.as_ptr() as usize
     }
 }
 
