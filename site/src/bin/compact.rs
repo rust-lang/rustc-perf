@@ -4,6 +4,6 @@
 //! runs -- but it's short and easy to keep around, and sometimes useful.
 
 fn main() {
-    let db = site::db::open(&std::env::args().nth(1).expect("db dir"));
+    let db = site::db::open(&std::env::args().nth(1).expect("db dir"), false);
     db.compact_range(None::<&[u8]>, None::<&[u8]>);
 }
