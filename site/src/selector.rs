@@ -27,6 +27,7 @@ use crate::interpolate::Interpolate;
 use crate::load::InputData as Db;
 use collector::self_profile::QueryLabel;
 use collector::{BenchmarkName as Crate, ProcessStatistic};
+use std::convert::TryInto;
 use std::fmt;
 use std::sync::Arc;
 
@@ -550,9 +551,12 @@ impl<'a> Iterator for SelfProfile<'a> {
         if queries.is_empty() {
             Some((col_id.clone(), None))
         } else {
-            Some((col_id.clone(), Some(collector::SelfProfile {
-                query_data: Arc::new(queries),
-            }))
+            Some((
+                col_id.clone(),
+                Some(collector::SelfProfile {
+                    query_data: Arc::new(queries),
+                }),
+            ))
         }
     }
 }

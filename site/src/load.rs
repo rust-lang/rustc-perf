@@ -140,8 +140,6 @@ pub struct InputData {
 
     pub commits: Vec<Commit>,
 
-    pub fs_paths: HashMap<Commit, PathBuf>,
-
     /// This is only for the last commit, with Some(..) if the benchmark
     /// errored.
     ///
@@ -208,7 +206,6 @@ impl InputData {
         // Read all files from repo_loc/processed
         let latest_section_start = ::std::time::Instant::now();
         let mut file_contents = Vec::new();
-        let mut fs_paths = HashMap::new();
         for entry in fs::read_dir(repo_loc.join("times"))? {
             let entry = entry?;
             if entry.file_type()?.is_dir() {
@@ -256,10 +253,6 @@ impl InputData {
                     warn!("empty benchmarks hash for {}", filename);
                     continue;
                 }
-                fs_paths.insert(
-                    contents.commit.clone(),
-                    entry.path().canonicalize().unwrap(),
-                );
 
                 if commits.insert(contents.commit.clone()) {
                     data.push(Arc::new(contents));
@@ -284,14 +277,13 @@ impl InputData {
         };
 
         data.sort_unstable_by_key(|d| d.commit.clone());
-        InputData::new(data, artifact_data, config, fs_paths)
+        InputData::new(data, artifact_data, config)
     }
 
     pub fn new(
         data: Vec<Arc<CommitData>>,
         mut artifact_data: HashMap<String, ArtifactData>,
         config: Config,
-        fs_paths: HashMap<Commit, PathBuf>,
     ) -> anyhow::Result<InputData> {
         let commits = data.iter().map(|cd| cd.commit.clone()).collect::<Vec<_>>();
         let errors = data
@@ -385,7 +377,6 @@ impl InputData {
         let db = crate::db::open("data", false);
         let persistent = Persistent::load();
         Ok(InputData {
-            fs_paths,
             stats_list: stats_list.into_iter().collect(),
             all_paths,
             last_date,
