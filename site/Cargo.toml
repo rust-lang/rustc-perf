@@ -33,6 +33,8 @@ parking_lot = "0.10"
 snap = "1"
 rustc-artifacts = "0.2"
 itertools = "0.9"
+hashbrown = "0.7"
+rocksdb = "0.14"
 
 [dependencies.collector]
 path = "../collector"
