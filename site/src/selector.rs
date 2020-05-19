@@ -3,15 +3,7 @@
 //!
 //! We have the following expected paths:
 //!
-//! * std_download_size (DistributionFileSize)
-//!     => [cid => u64]
 //! * :crate/:profile/:cache_state/:stat_id (Instructions, CpuClock, CpuClockUser, ...)
-//!     => [cid => u64]
-//! * :crate/:profile/:cache_state/memory_usage (Memory)
-//!     => [cid => [u64]]
-//! * :crate/:profile/:cache_state/cpu_util (CpuUtilization)
-//!     => [cid => [u64]]
-//! * :crate/:profile/:cache_state/disk/:file (FileSize)
 //!     => [cid => u64]
 //! * :crate/:profile/:cache_state/:self_profile_query/:stat (SelfProfileTime, SelfProfileCacheHits, ...)
 //!     :stat = time => Duration,
@@ -30,7 +22,7 @@
 //! requests that all are provided. Note that this is a cartesian product if
 //! there are multiple `None`s.
 
-use crate::db::{Benchmark, Cache, CollectionId, Profile};
+use crate::db::{Cache, CollectionId, Profile};
 use crate::interpolate::Interpolate;
 use crate::load::InputData as Db;
 use collector::self_profile::QueryLabel;
@@ -492,54 +484,24 @@ impl<'a> Iterator for ProcessStatisticSeries<'a> {
         let col_id = self.collection_ids.get(self.idx)?;
         self.idx += 1;
 
-        let get_stat = |res: Option<&Result<Benchmark, String>>| {
-            res.and_then(|res| res.as_ref().ok())
-                .and_then(|bd| {
-                    bd.runs.iter().find(|r| {
-                        let r = r.id();
-                        self.profile.matches_run(&r) && self.cache.matches_run(&r)
-                    })
-                })
-                .and_then(|r| {
-                    r.stats.iter().find_map(|(id, v)| {
-                        if self.stat == *id.as_str() {
-                            if id == collector::StatId::CpuClock
-                                || id == collector::StatId::CpuClockUser
-                            {
-                                // convert to seconds; perf records it in milliseconds
-                                Some(v / 1000.0)
-                            } else {
-                                Some(v)
-                            }
-                        } else {
-                            None
-                        }
-                    })
-                })
-        };
+        let mut point = self.db.index.get::<f64>(
+            &self.db.db,
+            &crate::db::DbLabel::ProcessStat {
+                krate: self.krate,
+                profile: self.profile,
+                cache: self.cache,
+                stat: self.stat,
+            },
+            col_id,
+        );
 
-        let benchmarks = match col_id {
-            CollectionId::Commit(commit) => {
-                let idx = self
-                    .db
-                    .data()
-                    .binary_search_by_key(commit, |cd| cd.commit)
-                    .unwrap();
+        if self.stat == *"cpu-clock" {
+            // Convert to seconds -- perf reports this measurement in
+            // milliseconds
+            point = point.map(|d| d / 1000.0);
+        }
 
-                &self.db.data()[idx].benchmarks
-            }
-
-            CollectionId::Artifact(id) => {
-                &self
-                    .db
-                    .artifact_data
-                    .iter()
-                    .find(|ad| ad.id == *id)
-                    .unwrap()
-                    .benchmarks
-            }
-        };
-        Some((col_id.clone(), get_stat(benchmarks.get(&self.krate))))
+        Some((col_id.clone(), point))
     }
 }
 
@@ -558,14 +520,40 @@ impl<'a> Iterator for SelfProfile<'a> {
         let col_id = self.collection_ids.get(self.idx)?;
         self.idx += 1;
 
-        let res = match col_id {
-            CollectionId::Commit(commit) => {
-                let path = self.db.fs_paths.get(commit).unwrap();
-                crate::self_profile_load::deserialize(&path, self.krate, self.profile, self.cache)
+        let mut queries = Vec::new();
+
+        for query in self
+            .db
+            .index
+            .all_queries(self.krate, self.profile, self.cache)
+        {
+            if let Some(qd) = self.db.index.get::<crate::db::QueryDatum>(
+                &self.db.db,
+                &crate::db::DbLabel::SelfProfileQuery {
+                    krate: self.krate,
+                    profile: self.profile,
+                    cache: self.cache,
+                    query,
+                },
+                col_id,
+            ) {
+                queries.push(collector::self_profile::QueryData {
+                    label: query,
+                    self_time: qd.self_time.as_nanos().try_into().unwrap(),
+                    number_of_cache_hits: qd.number_of_cache_hits,
+                    invocation_count: qd.invocation_count,
+                    blocked_time: qd.blocked_time.as_nanos().try_into().unwrap(),
+                    incremental_load_time: qd.incremental_load_time.as_nanos().try_into().unwrap(),
+                });
             }
-            CollectionId::Artifact(_) => None,
-        };
-        Some((col_id.clone(), res))
+        }
+        if queries.is_empty() {
+            Some((col_id.clone(), None))
+        } else {
+            Some((col_id.clone(), Some(collector::SelfProfile {
+                query_data: Arc::new(queries),
+            }))
+        }
     }
 }
 
@@ -651,28 +639,22 @@ impl<'a> Iterator for SelfProfileQueryTime<'a> {
         let col_id = self.collection_ids.get(self.idx)?;
         self.idx += 1;
 
-        let res = match col_id {
-            CollectionId::Commit(commit) => {
-                let path = self.db.fs_paths.get(commit).unwrap();
-                let sp = crate::self_profile_load::deserialize(
-                    &path,
-                    self.krate,
-                    self.profile,
-                    self.cache,
-                );
-                sp.and_then(|cd| {
-                    cd.query_data.iter().find_map(|qd| {
-                        if qd.label == self.query {
-                            Some(qd.self_time().as_secs_f64())
-                        } else {
-                            None
-                        }
-                    })
-                })
-            }
-            CollectionId::Artifact(_) => None,
-        };
-        Some((col_id.clone(), res))
+        let point = self
+            .db
+            .index
+            .get::<crate::db::QueryDatum>(
+                &self.db.db,
+                &crate::db::DbLabel::SelfProfileQuery {
+                    krate: self.krate,
+                    profile: self.profile,
+                    cache: self.cache,
+                    query: self.query,
+                },
+                col_id,
+            )
+            .map(|qd| qd.self_time.as_secs_f64());
+
+        Some((col_id.clone(), point))
     }
 }
 

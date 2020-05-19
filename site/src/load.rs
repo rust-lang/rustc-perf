@@ -127,7 +127,6 @@ pub struct Config {
     pub skip: HashSet<Sha>,
 }
 
-#[derive(Debug)]
 pub struct InputData {
     /// All known statistics gathered for crates
     pub stats_list: Vec<&'static str>,
@@ -154,6 +153,9 @@ pub struct InputData {
     pub persistent: Mutex<Persistent>,
 
     pub config: Config,
+
+    pub index: crate::db::Index,
+    pub db: rocksdb::DB,
 }
 
 impl InputData {
@@ -380,6 +382,7 @@ impl InputData {
             .into_iter()
             .collect();
 
+        let db = crate::db::open("data", false);
         let persistent = Persistent::load();
         Ok(InputData {
             fs_paths,
@@ -392,6 +395,8 @@ impl InputData {
             artifact_data,
             persistent: Mutex::new(persistent),
             config,
+            index: crate::db::Index::load(&db),
+            db,
         })
     }
 
