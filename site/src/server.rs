@@ -81,7 +81,7 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
     let cids = Arc::new(
         data.artifact_data
             .iter()
-            .map(|ad| selector::CollectionId::Artifact(ad.id.clone()))
+            .map(|ad| db::CollectionId::Artifact(ad.id.clone()))
             .chain(std::iter::once(data.commits.last().unwrap().clone().into()))
             .collect::<Vec<_>>(),
     );
@@ -135,10 +135,8 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
         versions: cids
             .iter()
             .map(|cid| match cid {
-                selector::CollectionId::Commit(c) => {
-                    format!("master: {}", &c.sha.to_string()[0..8])
-                }
-                selector::CollectionId::Artifact(aid) => aid.clone(),
+                db::CollectionId::Commit(c) => format!("master: {}", &c.sha.to_string()[0..8]),
+                db::CollectionId::Artifact(aid) => aid.clone(),
             })
             .collect::<Vec<_>>(),
         check: by_profile.check,
@@ -232,11 +230,11 @@ impl CommitIdxCache {
 fn to_graph_data<'a>(
     cc: &'a CommitIdxCache,
     is_absolute: bool,
-    points: impl Iterator<Item = ((selector::CollectionId, Option<f64>), Interpolated)> + 'a,
+    points: impl Iterator<Item = ((db::CollectionId, Option<f64>), Interpolated)> + 'a,
 ) -> impl Iterator<Item = graph::GraphData> + 'a {
     let mut first = None;
     points.map(move |((cid, point), interpolated)| {
-        let commit = if let selector::CollectionId::Commit(commit) = cid {
+        let commit = if let db::CollectionId::Commit(commit) = cid {
             commit
         } else {
             unimplemented!()
@@ -435,13 +433,13 @@ impl DateData {
         series: &mut [selector::SeriesResponse<T>],
     ) -> DateData
     where
-        T: Iterator<Item = (selector::CollectionId, Option<f64>)>,
+        T: Iterator<Item = (db::CollectionId, Option<f64>)>,
     {
         let mut data = HashMap::new();
 
         for response in series {
             let (id, point) = response.series.next().expect("must have element");
-            assert_eq!(selector::CollectionId::from(commit), id);
+            assert_eq!(db::CollectionId::from(commit), id);
 
             let point = if let Some(pt) = point {
                 pt

@@ -30,11 +30,11 @@
 //! requests that all are provided. Note that this is a cartesian product if
 //! there are multiple `None`s.
 
-use crate::db::{Benchmark, Cache, Profile};
+use crate::db::{Benchmark, Cache, CollectionId, Profile};
 use crate::interpolate::Interpolate;
 use crate::load::InputData as Db;
 use collector::self_profile::QueryLabel;
-use collector::{BenchmarkName as Crate, Commit, ProcessStatistic};
+use collector::{BenchmarkName as Crate, ProcessStatistic};
 use std::fmt;
 use std::sync::Arc;
 
@@ -285,18 +285,6 @@ impl Query {
         } else {
             Err(format!("Extra components: {:?}", self.path))
         }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum CollectionId {
-    Commit(Commit),
-    Artifact(String),
-}
-
-impl From<Commit> for CollectionId {
-    fn from(c: Commit) -> Self {
-        Self::Commit(c)
     }
 }
 
