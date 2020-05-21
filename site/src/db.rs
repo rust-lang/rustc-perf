@@ -748,6 +748,10 @@ impl Index {
             .map(|slice| T::from_bytes(&slice))
     }
 
+    pub fn commits(&self) -> Vec<Commit> {
+        self.commits.map.keys().copied().collect()
+    }
+
     // FIXME: in theory this won't scale indefinitely as there's potentially
     // millions of queries and labels and iterating all of them is eventually
     // going to be impractical. But for now it performs quite well, so we'll go

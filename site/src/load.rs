@@ -273,12 +273,10 @@ impl InputData {
         mut artifact_data: HashMap<String, ArtifactData>,
         config: Config,
     ) -> anyhow::Result<InputData> {
-        let commits = data.iter().map(|cd| cd.commit.clone()).collect::<Vec<_>>();
-
-        let mut data_commits = Vec::with_capacity(data.len());
-        for cd in data.iter() {
-            data_commits.push(cd.commit);
-        }
+        let db = crate::db::open("data", false);
+        let index = crate::db::Index::load(&db);
+        let mut commits = index.commits();
+        commits.sort();
 
         let mut versions = artifact_data.keys().cloned().collect::<Vec<_>>();
         versions.sort_by(|a, b| {
@@ -334,7 +332,6 @@ impl InputData {
             .into_iter()
             .collect();
 
-        let db = crate::db::open("data", false);
         let persistent = Persistent::load();
         Ok(InputData {
             all_paths,
@@ -343,7 +340,7 @@ impl InputData {
             artifact_data,
             persistent: Mutex::new(persistent),
             config,
-            index: crate::db::Index::load(&db),
+            index,
             db,
         })
     }
