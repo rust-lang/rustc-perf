@@ -320,6 +320,26 @@ fn handle_results<'a, E>(
     })
 }
 
+impl SeriesElement for Option<String> {
+    fn query<'a>(
+        db: &'a Db,
+        collection_ids: Arc<Vec<CollectionId>>,
+        query: Query,
+    ) -> Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, Self)> + 'a>>>, String>
+    {
+        let results = vec![
+            CompileError::expand_query(collection_ids.clone(), db, query.clone()).map(|sr| {
+                sr.into_iter()
+                    .map(|sr| {
+                        sr.map(|r| Box::new(r) as Box<dyn Iterator<Item = (CollectionId, Self)>>)
+                    })
+                    .collect()
+            }),
+        ];
+        handle_results(results)
+    }
+}
+
 impl SeriesElement for Option<collector::self_profile::SelfProfile> {
     fn query<'a>(
         db: &'a Db,
@@ -728,6 +748,67 @@ impl<'a> Series<'a> for SelfProfileQueryTime<'a> {
                     profile: *path.get().unwrap(),
                     cache: *path.get().unwrap(),
                     query: *path.get().unwrap(),
+                },
+                path,
+            })
+            .collect::<Vec<_>>())
+    }
+}
+
+pub struct CompileError<'a> {
+    collection_ids: Arc<Vec<CollectionId>>,
+    idx: usize,
+    db: &'a Db,
+    krate: Crate,
+}
+
+impl<'a> Iterator for CompileError<'a> {
+    type Item = (CollectionId, Option<String>);
+    fn next(&mut self) -> Option<Self::Item> {
+        let col_id = self.collection_ids.get(self.idx)?;
+        self.idx += 1;
+
+        let point = self.db.index.get::<String>(
+            &self.db.db,
+            &crate::db::DbLabel::Errors { krate: self.krate },
+            col_id,
+        );
+
+        Some((col_id.clone(), point))
+    }
+}
+
+impl<'a> Series<'a> for CompileError<'a> {
+    type Element = Option<String>;
+
+    fn expand_query(
+        collection_ids: Arc<Vec<CollectionId>>,
+        db: &'a Db,
+        mut query: Query,
+    ) -> Result<Vec<SeriesResponse<Self>>, String> {
+        let krate = query.extract(Tag::Crate)?.raw;
+        query.assert_empty()?;
+
+        Ok(db
+            .all_paths
+            .iter()
+            .filter(|s| {
+                let skrate = if let Ok(v) = s.get::<Crate>() {
+                    *v
+                } else {
+                    return false;
+                };
+                krate.matches(skrate)
+            })
+            .map(|path| Path::new().set(PathComponent::Crate(*path.get::<Crate>().unwrap())))
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .map(move |path| SeriesResponse {
+                series: CompileError {
+                    collection_ids: collection_ids.clone(),
+                    idx: 0,
+                    db,
+                    krate: *path.get().unwrap(),
                 },
                 path,
             })

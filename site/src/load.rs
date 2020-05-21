@@ -137,12 +137,6 @@ pub struct InputData {
 
     pub commits: Vec<Commit>,
 
-    /// This is only for the last commit, with Some(..) if the benchmark
-    /// errored.
-    ///
-    /// Names are unique and sorted.
-    pub errors: Vec<(BenchmarkName, Option<String>)>,
-
     pub artifact_data: Vec<ArtifactData>,
 
     pub persistent: Mutex<Persistent>,
@@ -283,13 +277,6 @@ impl InputData {
         config: Config,
     ) -> anyhow::Result<InputData> {
         let commits = data.iter().map(|cd| cd.commit.clone()).collect::<Vec<_>>();
-        let errors = data
-            .last()
-            .unwrap()
-            .benchmarks
-            .iter()
-            .map(|(name, res)| (*name, res.as_ref().err().cloned()))
-            .collect::<Vec<_>>();
         let mut stats_list = BTreeSet::new();
 
         for commit_data in data.iter() {
@@ -372,7 +359,6 @@ impl InputData {
             all_paths,
             data,
             commits,
-            errors,
             artifact_data,
             persistent: Mutex::new(persistent),
             config,

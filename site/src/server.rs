@@ -157,17 +157,22 @@ pub async fn handle_status_page(data: Arc<InputData>) -> status::Response {
     let last_commit = *data.commits.last().unwrap();
 
     let mut benchmark_state = data
-        .errors
-        .iter()
-        .map(|(name, err)| {
-            let msg = if let Some(error) = err {
-                Some(prettify_log(error).unwrap_or_else(|| error.to_owned()))
+        .query::<Option<String>>(
+            selector::Query::new().set::<String>(selector::Tag::Crate, selector::Selector::All),
+            Arc::new(vec![db::CollectionId::Commit(last_commit)]),
+        )
+        .unwrap()
+        .into_iter()
+        .map(|mut sr| {
+            let name = sr.path.get::<Crate>().unwrap();
+            let msg = if let Some(error) = sr.series.next().and_then(|(_, e)| e) {
+                Some(prettify_log(&error).unwrap_or(error))
             } else {
                 None
             };
             status::BenchmarkStatus {
                 name: *name,
-                success: err.is_none(),
+                success: msg.is_none(),
                 error: msg,
             }
         })
