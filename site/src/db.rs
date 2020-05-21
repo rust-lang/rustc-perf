@@ -767,11 +767,35 @@ impl Index {
             .collect()
     }
 
+    pub fn all_errors(&self) -> impl Iterator<Item = Crate> + '_ {
+        self.errors.map.keys().copied()
+    }
+
     // FIXME: in theory this won't scale indefinitely as there's potentially
     // millions of queries and labels and iterating all of them is eventually
     // going to be impractical. But for now it performs quite well, so we'll go
     // for it as keeping indices around would be annoying.
-    pub fn all_queries(
+    pub fn all_pstat_series(
+        &self,
+    ) -> impl Iterator<Item = &'_ (Crate, Profile, Cache, ProcessStatistic)> + '_ {
+        self.pstats.map.keys()
+    }
+
+    // FIXME: in theory this won't scale indefinitely as there's potentially
+    // millions of queries and labels and iterating all of them is eventually
+    // going to be impractical. But for now it performs quite well, so we'll go
+    // for it as keeping indices around would be annoying.
+    pub fn all_query_series(
+        &self,
+    ) -> impl Iterator<Item = &'_ (Crate, Profile, Cache, QueryLabel)> + '_ {
+        self.queries.map.keys()
+    }
+
+    // FIXME: in theory this won't scale indefinitely as there's potentially
+    // millions of queries and labels and iterating all of them is eventually
+    // going to be impractical. But for now it performs quite well, so we'll go
+    // for it as keeping indices around would be annoying.
+    pub fn filtered_queries(
         &self,
         krate: Crate,
         profile: Profile,
