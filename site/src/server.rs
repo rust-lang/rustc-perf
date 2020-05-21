@@ -65,31 +65,55 @@ pub fn handle_info(data: &InputData) -> info::Response {
 }
 
 pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
-    if data.artifact_data.is_empty() {
+    if data.index.artifacts().next().is_none() {
         return dashboard::Response::default();
     }
 
-    let benchmark_names = data
-        .artifact_data
-        .iter()
-        .find(|ad| ad.id == "beta")
-        .unwrap()
-        .benchmarks
-        .iter()
-        .filter(|(_, v)| v.is_ok())
-        .map(|(k, _)| *k)
-        .collect::<Vec<_>>();
+    let mut versions = data.index.artifacts().collect::<Vec<_>>();
+    versions.sort_by(|a, b| {
+        match (
+            a.parse::<semver::Version>().ok(),
+            b.parse::<semver::Version>().ok(),
+        ) {
+            (Some(a), Some(b)) => a.cmp(&b),
+            (_, _) => {
+                if *a == "beta" {
+                    std::cmp::Ordering::Greater
+                } else if *b == "beta" {
+                    std::cmp::Ordering::Less
+                } else {
+                    panic!("unexpected version")
+                }
+            }
+        }
+    });
 
     let cids = Arc::new(
-        data.artifact_data
-            .iter()
-            .map(|ad| db::CollectionId::Artifact(ad.id.clone()))
+        versions
+            .into_iter()
+            .map(|v| db::CollectionId::Artifact(v.to_string()))
             .chain(std::iter::once(data.commits.last().unwrap().clone().into()))
             .collect::<Vec<_>>(),
     );
 
     let query = selector::Query::new()
-        .set(Tag::Crate, selector::Selector::Subset(benchmark_names))
+        // FIXME: don't hardcode the stabilized benchmarks
+        // This list was found via:
+        // `rg supports.stable collector/benchmarks/ -tjson -c --sort path`
+        .set(
+            Tag::Crate,
+            selector::Selector::Subset(vec![
+                "encoding",
+                "futures",
+                "html5ever",
+                "inflate",
+                "piston-image",
+                "regex",
+                "style-servo",
+                "syn",
+                "tokio-webpush-simple",
+            ]),
+        )
         .set(
             Tag::ProcessStatistic,
             selector::Selector::One(StatId::WallTime.as_str()),
@@ -97,15 +121,12 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
 
     let summary_patches = data.summary_patches();
     let by_profile = db::ByProfile::new::<String, _>(|profile| {
-        let query = query
-            .clone()
-            .set(Tag::Profile, selector::Selector::One(profile));
-
         let mut cases = dashboard::Cases::default();
         for patch in summary_patches.iter() {
             let responses = data.query::<Option<f64>>(
                 query
                     .clone()
+                    .set(Tag::Profile, selector::Selector::One(profile))
                     .set(Tag::Cache, selector::Selector::One(patch)),
                 cids.clone(),
             )?;
