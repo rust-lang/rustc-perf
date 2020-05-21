@@ -133,9 +133,6 @@ pub struct InputData {
 
     pub all_paths: Vec<crate::selector::Path>,
 
-    /// The last date that was seen while loading files.
-    pub last_date: Date,
-
     data: Vec<Arc<CommitData>>,
 
     pub commits: Vec<Commit>,
@@ -293,14 +290,9 @@ impl InputData {
             .iter()
             .map(|(name, res)| (*name, res.as_ref().err().cloned()))
             .collect::<Vec<_>>();
-        let mut last_date = None;
         let mut stats_list = BTreeSet::new();
 
         for commit_data in data.iter() {
-            if last_date.is_none() || last_date.as_ref().unwrap() < &commit_data.commit.date {
-                last_date = Some(commit_data.commit.date);
-            }
-
             let benchmarks = commit_data
                 .benchmarks
                 .values()
@@ -314,7 +306,6 @@ impl InputData {
             }
         }
 
-        let last_date = last_date.expect("No dates found");
         let mut data_commits = Vec::with_capacity(data.len());
         for cd in data.iter() {
             data_commits.push(cd.commit);
@@ -379,7 +370,6 @@ impl InputData {
         Ok(InputData {
             stats_list: stats_list.into_iter().collect(),
             all_paths,
-            last_date,
             data,
             commits,
             errors,

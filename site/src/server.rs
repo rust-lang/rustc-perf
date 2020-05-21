@@ -58,7 +58,7 @@ static INTERPOLATED_COLOR: &str = "#fcb0f1";
 pub fn handle_info(data: &InputData) -> info::Response {
     info::Response {
         stats: data.stats_list.clone(),
-        as_of: data.last_date,
+        as_of: data.commits.last().unwrap().date,
     }
 }
 
@@ -895,7 +895,7 @@ impl Server {
 
             info!("updating from filesystem...");
             let new_data = Arc::new(InputData::from_fs(&repo_path).unwrap());
-            debug!("last date = {:?}", new_data.last_date);
+            debug!("done");
 
             // Write the new data back into the request
             *rwlock.write() = Some(new_data);
