@@ -752,6 +752,21 @@ impl Index {
     // millions of queries and labels and iterating all of them is eventually
     // going to be impractical. But for now it performs quite well, so we'll go
     // for it as keeping indices around would be annoying.
+    pub fn stats(&self) -> Vec<String> {
+        self.pstats
+            .map
+            .keys()
+            .map(|path| path.3)
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect()
+    }
+
+    // FIXME: in theory this won't scale indefinitely as there's potentially
+    // millions of queries and labels and iterating all of them is eventually
+    // going to be impractical. But for now it performs quite well, so we'll go
+    // for it as keeping indices around would be annoying.
     pub fn all_queries(
         &self,
         krate: Crate,
