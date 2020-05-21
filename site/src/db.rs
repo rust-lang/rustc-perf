@@ -748,6 +748,10 @@ impl Index {
             .map(|slice| T::from_bytes(&slice))
     }
 
+    pub fn artifacts(&self) -> impl Iterator<Item = &'_ str> + '_ {
+        self.artifacts.map.keys().map(|s| &**s)
+    }
+
     pub fn commits(&self) -> Vec<Commit> {
         self.commits.map.keys().copied().collect()
     }

@@ -7,27 +7,22 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::collections::{HashMap, HashSet};
-use std::env;
+use std::collections::HashSet;
 use std::fs;
-use std::io::Read;
 use std::ops::RangeInclusive;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::Context;
 use chrono::{Duration, Utc};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
-use crate::git;
 use crate::util;
 use collector::{Bound, Date};
 
 use crate::api::github;
-use crate::db::ArtifactData;
 use collector;
 pub use collector::{BenchmarkName, Commit, Patch, Sha, StatId, Stats};
-use log::{error, info, warn};
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum MissingReason {
@@ -128,8 +123,6 @@ pub struct Config {
 pub struct InputData {
     pub commits: Vec<Commit>,
 
-    pub artifact_data: Vec<ArtifactData>,
-
     pub persistent: Mutex<Persistent>,
 
     pub config: Config,
@@ -157,76 +150,7 @@ impl InputData {
     }
 
     /// Initialize `InputData from the file system.
-    pub fn from_fs(repo_loc: &str) -> anyhow::Result<InputData> {
-        let repo_loc = PathBuf::from(repo_loc);
-        let mut artifact_data = HashMap::new();
-
-        if !repo_loc.exists() {
-            // If the repository doesn't yet exist, simplify clone it to the given location.
-            info!(
-                "cloning repository into {}, since it doesn't exist before",
-                repo_loc.display()
-            );
-            git::execute_command(
-                &env::current_dir()?,
-                &[
-                    "clone",
-                    "https://github.com/rust-lang/rustc-timing.git",
-                    repo_loc.to_str().unwrap(),
-                ],
-            )?;
-        }
-
-        eprintln!("Loading files from directory...");
-
-        // Read all files from repo_loc/processed
-        let latest_section_start = std::time::Instant::now();
-        let mut file_contents = Vec::new();
-        for entry in fs::read_dir(repo_loc.join("times"))? {
-            let entry = entry?;
-            if entry.file_type()?.is_dir() {
-                continue;
-            }
-            let filename = entry.file_name();
-            let filename = filename.to_str().unwrap();
-            if filename.starts_with("artifact-") {
-                let mut file = fs::File::open(entry.path())
-                    .with_context(|| format!("Failed to open {}", entry.path().display()))?;
-                file_contents.truncate(0);
-                if filename.ends_with(".sz") {
-                    let mut szip_reader =
-                        snap::read::FrameDecoder::new(std::io::BufReader::new(file));
-                    szip_reader
-                        .read_to_end(&mut file_contents)
-                        .with_context(|| format!("Failed to read {}", entry.path().display()))?;
-                } else {
-                    file.read_to_end(&mut file_contents)
-                        .with_context(|| format!("Failed to read {}", entry.path().display()))?;
-                };
-                let file_contents = std::str::from_utf8(&file_contents).unwrap();
-
-                let contents: ArtifactData = match serde_json::from_str(&file_contents) {
-                    Ok(j) => j,
-                    Err(err) => {
-                        error!("Failed to parse JSON for {}: {:?}", filename, err);
-                        continue;
-                    }
-                };
-                if contents.benchmarks.is_empty() {
-                    warn!("empty benchmarks hash for {}", filename);
-                    continue;
-                }
-
-                artifact_data.insert(contents.id.clone(), contents);
-            }
-        }
-        std::mem::drop(file_contents);
-
-        eprintln!(
-            "Done loading files from disk in {:?}",
-            latest_section_start.elapsed()
-        );
-
+    pub fn from_fs(db: &str) -> anyhow::Result<InputData> {
         let config = if let Ok(s) = fs::read_to_string("site-config.toml") {
             toml::from_str(&s)?
         } else {
@@ -236,46 +160,14 @@ impl InputData {
             }
         };
 
-        InputData::new(artifact_data, config)
-    }
-
-    pub fn new(
-        mut artifact_data: HashMap<String, ArtifactData>,
-        config: Config,
-    ) -> anyhow::Result<InputData> {
-        let db = crate::db::open("data", false);
+        let db = crate::db::open(db, false);
         let index = crate::db::Index::load(&db);
         let mut commits = index.commits();
         commits.sort();
 
-        let mut versions = artifact_data.keys().cloned().collect::<Vec<_>>();
-        versions.sort_by(|a, b| {
-            match (
-                a.parse::<semver::Version>().ok(),
-                b.parse::<semver::Version>().ok(),
-            ) {
-                (Some(a), Some(b)) => a.cmp(&b),
-                (_, _) => {
-                    if a == "beta" {
-                        std::cmp::Ordering::Greater
-                    } else if b == "beta" {
-                        std::cmp::Ordering::Less
-                    } else {
-                        panic!("unexpected version")
-                    }
-                }
-            }
-        });
-
-        let artifact_data = versions
-            .into_iter()
-            .map(|v| artifact_data.remove(&v).unwrap())
-            .collect::<Vec<_>>();
-
         let persistent = Persistent::load();
         Ok(InputData {
             commits,
-            artifact_data,
             persistent: Mutex::new(persistent),
             config,
             index,
