@@ -24,6 +24,7 @@ mod github;
 pub mod api;
 mod average;
 pub mod db;
+pub mod ingest;
 mod interpolate;
 pub mod load;
 mod selector;

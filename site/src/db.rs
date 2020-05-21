@@ -103,23 +103,25 @@ pub fn data_for(data: &[Commit], is_left: bool, query: Bound) -> Option<Commit> 
     }
 }
 
-pub fn range_subset(data: &[Commit], range: RangeInclusive<Bound>) -> &[Commit] {
+pub fn range_subset(data: Vec<Commit>, range: RangeInclusive<Bound>) -> Vec<Commit> {
     let (a, b) = range.into_inner();
 
     let left_idx = data.iter().position(|commit| a.left_match(commit));
     let right_idx = data.iter().rposition(|commit| b.left_match(commit));
 
     if let (Some(left), Some(right)) = (left_idx, right_idx) {
-        data.get(left..=right).unwrap_or_else(|| {
-            log::error!(
-                "Failed to compute left/right indices from {:?}..={:?}",
-                a,
-                b
-            );
-            &[]
-        })
+        data.get(left..=right)
+            .map(|s| s.to_vec())
+            .unwrap_or_else(|| {
+                log::error!(
+                    "Failed to compute left/right indices from {:?}..={:?}",
+                    a,
+                    b
+                );
+                vec![]
+            })
     } else {
-        &[]
+        vec![]
     }
 }
 
@@ -567,7 +569,7 @@ pub fn open(at: &str, ingest: bool) -> DB {
     DB::open_cf_descriptors(&db_opts, &at, descriptors).unwrap()
 }
 
-#[derive(Deserialize, Serialize, Default)]
+#[derive(Clone, Deserialize, Serialize, Default)]
 pub struct Index {
     commits: Indexed<Commit>,
     artifacts: Indexed<Box<str>>,
@@ -577,7 +579,7 @@ pub struct Index {
     queries: Indexed<(Crate, Profile, Cache, QueryLabel)>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 struct Indexed<T> {
     #[serde(with = "index_serde")]
     #[serde(bound = "T: Serialize + serde::de::DeserializeOwned + std::hash::Hash + Eq")]
@@ -753,7 +755,9 @@ impl Index {
     }
 
     pub fn commits(&self) -> Vec<Commit> {
-        self.commits.map.keys().copied().collect()
+        let mut commits = self.commits.map.keys().copied().collect::<Vec<_>>();
+        commits.sort();
+        commits
     }
 
     // FIXME: in theory this won't scale indefinitely as there's potentially

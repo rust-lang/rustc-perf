@@ -47,7 +47,6 @@ use crate::interpolate::Interpolated;
 use crate::load::CurrentState;
 use crate::load::{Config, InputData};
 use crate::selector::{self, PathComponent, Tag};
-use crate::util::get_repo_path;
 use collector::api::collected;
 use collector::Sha;
 use collector::StatId;
@@ -56,20 +55,21 @@ use parking_lot::RwLock;
 static INTERPOLATED_COLOR: &str = "#fcb0f1";
 
 pub fn handle_info(data: &InputData) -> info::Response {
-    let mut stats = data.index.stats();
+    let mut stats = data.index.load().stats();
     stats.sort();
     info::Response {
         stats,
-        as_of: data.commits.last().unwrap().date,
+        as_of: data.index.load().commits().last().unwrap().date,
     }
 }
 
 pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
-    if data.index.artifacts().next().is_none() {
+    let index = data.index.load();
+    if index.artifacts().next().is_none() {
         return dashboard::Response::default();
     }
 
-    let mut versions = data.index.artifacts().collect::<Vec<_>>();
+    let mut versions = index.artifacts().collect::<Vec<_>>();
     versions.sort_by(|a, b| {
         match (
             a.parse::<semver::Version>().ok(),
@@ -92,7 +92,9 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
         versions
             .into_iter()
             .map(|v| db::CollectionId::Artifact(v.to_string()))
-            .chain(std::iter::once(data.commits.last().unwrap().clone().into()))
+            .chain(std::iter::once(
+                data.index.load().commits().last().unwrap().clone().into(),
+            ))
             .collect::<Vec<_>>(),
     );
 
@@ -177,7 +179,7 @@ fn prettify_log(log: &str) -> Option<String> {
 }
 
 pub async fn handle_status_page(data: Arc<InputData>) -> status::Response {
-    let last_commit = *data.commits.last().unwrap();
+    let last_commit = *data.index.load().commits().last().unwrap();
 
     let mut benchmark_state = data
         .query::<Option<String>>(
@@ -702,7 +704,9 @@ pub async fn handle_self_profile(
         .set(Tag::Cache, selector::Selector::One(body.run_name.clone()));
 
     let mut commits = vec![data
-        .commits
+        .index
+        .load()
+        .commits()
         .iter()
         .find(|c| c.sha == *body.commit.as_str())
         .cloned()
@@ -711,7 +715,9 @@ pub async fn handle_self_profile(
 
     if let Some(bc) = &body.base_commit {
         commits.push(
-            data.commits
+            data.index
+                .load()
+                .commits()
                 .iter()
                 .find(|c| c.sha == *bc.as_str())
                 .cloned()
@@ -915,18 +921,29 @@ impl Server {
 
         let (channel, body) = hyper::Body::channel();
 
-        let rwlock = self.data.clone();
+        let data: Arc<InputData> = self.data.read().as_ref().unwrap().clone();
         let updating = self.updating.release_on_drop(channel);
         std::thread::spawn(move || {
-            let repo_path = get_repo_path().unwrap();
-            git::update_repo(&repo_path).unwrap();
+            let path = if let Some(p) = std::env::args().nth(2) {
+                p
+            } else {
+                eprintln!("Please pass the rustc-timing git directory as the second argument to support onpush handling.");
+                std::process::exit(1);
+            };
+            let paths = git::update_repo(&path).unwrap();
 
-            info!("updating from filesystem...");
-            let new_data = Arc::new(InputData::from_fs(&repo_path).unwrap());
-            debug!("done");
+            let start = std::time::Instant::now();
+            eprintln!("ingesting {} paths: {:#?}", paths.len(), paths);
+            let mut index = crate::db::Index::load(&data.db);
 
-            // Write the new data back into the request
-            *rwlock.write() = Some(new_data);
+            for path in paths {
+                crate::ingest::ingest(&data.db, &mut index, &path);
+            }
+
+            // Store back the new index, letting everyone else see the new
+            // value.
+            data.index.store(Arc::new(index));
+            eprintln!("finished updating index in {:?}", start.elapsed());
 
             std::mem::drop(updating);
         });
