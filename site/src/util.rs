@@ -15,7 +15,9 @@ pub fn get_repo_path() -> anyhow::Result<String> {
         Ok(p)
     } else {
         return Err(anyhow::anyhow!(
-            "No argument supplied, needs location of data repo."
+            "Usage: site <database> <rustc-timing?>\n\
+            rustc-timing is required only for automatic \
+            webhook-based updates of the database."
         ));
     }
 }

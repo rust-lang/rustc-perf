@@ -444,8 +444,8 @@ impl<'a> Series<'a> for ProcessStatisticSeries<'a> {
             .try_map(|p| p.parse::<ProcessStatistic>())?;
         query.assert_empty()?;
 
-        let mut series = db
-            .index
+        let index = db.index.load();
+        let mut series = index
             .all_pstat_series()
             .filter(|tup| {
                 krate.matches(tup.0)
@@ -486,7 +486,7 @@ impl<'a> Iterator for ProcessStatisticSeries<'a> {
         let col_id = self.collection_ids.get(self.idx)?;
         self.idx += 1;
 
-        let mut point = self.db.index.get::<f64>(
+        let mut point = self.db.index.load().get::<f64>(
             &self.db.db,
             &crate::db::DbLabel::ProcessStat {
                 krate: self.krate,
@@ -527,9 +527,10 @@ impl<'a> Iterator for SelfProfile<'a> {
         for query in self
             .db
             .index
+            .load()
             .filtered_queries(self.krate, self.profile, self.cache)
         {
-            if let Some(qd) = self.db.index.get::<crate::db::QueryDatum>(
+            if let Some(qd) = self.db.index.load().get::<crate::db::QueryDatum>(
                 &self.db.db,
                 &crate::db::DbLabel::SelfProfileQuery {
                     krate: self.krate,
@@ -583,6 +584,7 @@ impl<'a> Series<'a> for SelfProfile<'a> {
 
         let mut series = db
             .index
+            .load()
             .all_query_series()
             .filter(|tup| krate.matches(tup.0) && profile.matches(tup.1) && cache.matches(tup.2))
             .map(|tup| (tup.0, tup.1, tup.2))
@@ -631,6 +633,7 @@ impl<'a> Iterator for SelfProfileQueryTime<'a> {
         let point = self
             .db
             .index
+            .load()
             .get::<crate::db::QueryDatum>(
                 &self.db.db,
                 &crate::db::DbLabel::SelfProfileQuery {
@@ -670,8 +673,8 @@ impl<'a> Series<'a> for SelfProfileQueryTime<'a> {
             .map(|p| QueryLabel::from(p.as_str()));
         query.assert_empty()?;
 
-        let mut series = db
-            .index
+        let index = db.index.load();
+        let mut series = index
             .all_query_series()
             .filter(|tup| {
                 krate.matches(tup.0)
@@ -718,7 +721,7 @@ impl<'a> Iterator for CompileError<'a> {
         let col_id = self.collection_ids.get(self.idx)?;
         self.idx += 1;
 
-        let point = self.db.index.get::<String>(
+        let point = self.db.index.load().get::<String>(
             &self.db.db,
             &crate::db::DbLabel::Errors { krate: self.krate },
             col_id,
@@ -741,6 +744,7 @@ impl<'a> Series<'a> for CompileError<'a> {
 
         let mut series = db
             .index
+            .load()
             .all_errors()
             .filter(|k| krate.matches(*k))
             .collect::<Vec<_>>();

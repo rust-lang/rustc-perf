@@ -35,6 +35,7 @@ rustc-artifacts = "0.2"
 itertools = "0.9"
 hashbrown = "0.7"
 rocksdb = "0.14"
+arc-swap = "0.4"
 
 [dependencies.collector]
 path = "../collector"

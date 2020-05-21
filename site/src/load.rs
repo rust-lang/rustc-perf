@@ -7,10 +7,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use arc_swap::ArcSwap;
 use std::collections::HashSet;
 use std::fs;
 use std::ops::RangeInclusive;
 use std::path::Path;
+use std::sync::Arc;
 
 use anyhow::Context;
 use chrono::{Duration, Utc};
@@ -121,13 +123,11 @@ pub struct Config {
 }
 
 pub struct InputData {
-    pub commits: Vec<Commit>,
-
     pub persistent: Mutex<Persistent>,
 
     pub config: Config,
 
-    pub index: crate::db::Index,
+    pub index: ArcSwap<crate::db::Index>,
     pub db: rocksdb::DB,
 }
 
@@ -142,11 +142,11 @@ impl InputData {
     }
 
     pub fn data_for(&self, is_left: bool, query: Bound) -> Option<Commit> {
-        crate::db::data_for(&self.commits, is_left, query)
+        crate::db::data_for(&self.index.load().commits(), is_left, query)
     }
 
-    pub fn data_range(&self, range: RangeInclusive<Bound>) -> &[Commit] {
-        crate::db::range_subset(&self.commits, range)
+    pub fn data_range(&self, range: RangeInclusive<Bound>) -> Vec<Commit> {
+        crate::db::range_subset(self.index.load().commits(), range)
     }
 
     /// Initialize `InputData from the file system.
@@ -171,6 +171,9 @@ impl InputData {
             std::process::exit(1);
         }
 
+        let db = crate::db::open(db, false);
+        let index = crate::db::Index::load(&db);
+
         let config = if let Ok(s) = fs::read_to_string("site-config.toml") {
             toml::from_str(&s)?
         } else {
@@ -180,17 +183,11 @@ impl InputData {
             }
         };
 
-        let db = crate::db::open(db, false);
-        let index = crate::db::Index::load(&db);
-        let mut commits = index.commits();
-        commits.sort();
-
         let persistent = Persistent::load();
         Ok(InputData {
-            commits,
             persistent: Mutex::new(persistent),
             config,
-            index,
+            index: ArcSwap::new(Arc::new(index)),
             db,
         })
     }
@@ -207,7 +204,9 @@ impl InputData {
             .unwrap();
 
         let have = self
-            .commits
+            .index
+            .load()
+            .commits()
             .iter()
             .map(|commit| commit.sha.clone())
             .collect::<HashSet<_>>();
