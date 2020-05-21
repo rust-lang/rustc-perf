@@ -56,8 +56,10 @@ use parking_lot::RwLock;
 static INTERPOLATED_COLOR: &str = "#fcb0f1";
 
 pub fn handle_info(data: &InputData) -> info::Response {
+    let mut stats = data.index.stats();
+    stats.sort();
     info::Response {
-        stats: data.stats_list.clone(),
+        stats,
         as_of: data.commits.last().unwrap().date,
     }
 }

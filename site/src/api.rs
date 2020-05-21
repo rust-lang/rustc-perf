@@ -57,7 +57,7 @@ pub mod info {
     #[derive(Debug, Clone, PartialEq, Serialize)]
     pub struct Response {
         /// Sorted list of statistic names known
-        pub stats: Vec<&'static str>,
+        pub stats: Vec<String>,
 
         /// Chronologically last loaded run date.
         pub as_of: Date,

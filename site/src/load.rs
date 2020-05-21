@@ -128,9 +128,6 @@ pub struct Config {
 }
 
 pub struct InputData {
-    /// All known statistics gathered for crates
-    pub stats_list: Vec<&'static str>,
-
     pub all_paths: Vec<crate::selector::Path>,
 
     data: Vec<Arc<CommitData>>,
@@ -277,21 +274,6 @@ impl InputData {
         config: Config,
     ) -> anyhow::Result<InputData> {
         let commits = data.iter().map(|cd| cd.commit.clone()).collect::<Vec<_>>();
-        let mut stats_list = BTreeSet::new();
-
-        for commit_data in data.iter() {
-            let benchmarks = commit_data
-                .benchmarks
-                .values()
-                .filter_map(|v| v.as_ref().ok());
-            for benchmark in benchmarks {
-                for run in &benchmark.runs {
-                    for (stat, _) in run.stats.iter() {
-                        stats_list.insert(stat.as_str());
-                    }
-                }
-            }
-        }
 
         let mut data_commits = Vec::with_capacity(data.len());
         for cd in data.iter() {
@@ -355,7 +337,6 @@ impl InputData {
         let db = crate::db::open("data", false);
         let persistent = Persistent::load();
         Ok(InputData {
-            stats_list: stats_list.into_iter().collect(),
             all_paths,
             data,
             commits,
