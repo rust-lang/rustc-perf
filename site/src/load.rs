@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::io::Read;
@@ -26,7 +26,6 @@ use collector::{Bound, Date};
 
 use crate::api::github;
 use crate::db::{ArtifactData, CommitData};
-use crate::selector::PathComponent;
 use collector;
 pub use collector::{BenchmarkName, Commit, Patch, Sha, StatId, Stats};
 use log::{error, info, warn};
@@ -128,8 +127,6 @@ pub struct Config {
 }
 
 pub struct InputData {
-    pub all_paths: Vec<crate::selector::Path>,
-
     data: Vec<Arc<CommitData>>,
 
     pub commits: Vec<Commit>,
@@ -302,39 +299,8 @@ impl InputData {
             .map(|v| artifact_data.remove(&v).unwrap())
             .collect::<Vec<_>>();
 
-        let all_paths = data
-            .iter()
-            .flat_map(|cd| {
-                cd.benchmarks
-                    .values()
-                    .filter_map(|b| b.as_ref().ok())
-                    .flat_map(|bench| {
-                        bench.runs.iter().flat_map(move |r| {
-                            r.stats
-                                .iter()
-                                .map(move |(stat, _)| {
-                                    crate::selector::Path::new()
-                                        .set(PathComponent::Crate(bench.name))
-                                        .set(PathComponent::Profile(r.profile))
-                                        .set(PathComponent::Cache(r.state))
-                                        .set(PathComponent::ProcessStatistic(stat.as_pstat()))
-                                })
-                                .chain(std::iter::once(
-                                    crate::selector::Path::new()
-                                        .set(PathComponent::Crate(bench.name))
-                                        .set(PathComponent::Profile(r.profile))
-                                        .set(PathComponent::Cache(r.state)),
-                                ))
-                        })
-                    })
-            })
-            .collect::<BTreeSet<_>>()
-            .into_iter()
-            .collect();
-
         let persistent = Persistent::load();
         Ok(InputData {
-            all_paths,
             data,
             commits,
             artifact_data,

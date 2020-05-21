@@ -444,55 +444,36 @@ impl<'a> Series<'a> for ProcessStatisticSeries<'a> {
             .try_map(|p| p.parse::<ProcessStatistic>())?;
         query.assert_empty()?;
 
-        Ok(db
-            .all_paths
-            .iter()
-            .filter(|s| {
-                let skrate = if let Ok(v) = s.get::<Crate>() {
-                    *v
-                } else {
-                    return false;
-                };
-                krate.matches(skrate)
+        let mut series = db
+            .index
+            .all_pstat_series()
+            .filter(|tup| {
+                krate.matches(tup.0)
+                    && profile.matches(tup.1)
+                    && cache.matches(tup.2)
+                    && statid.matches(tup.3)
             })
-            .filter(|s| {
-                let sprofile = if let Ok(v) = s.get::<Profile>() {
-                    *v
-                } else {
-                    return false;
-                };
-                profile.matches(sprofile)
-            })
-            .filter(|s| {
-                let scache = if let Ok(v) = s.get::<Cache>() {
-                    *v
-                } else {
-                    return false;
-                };
-                cache.matches(scache)
-            })
-            .filter(|s| {
-                let sstat = if let Ok(v) = s.get::<ProcessStatistic>() {
-                    *v
-                } else {
-                    return false;
-                };
-                statid.matches(sstat)
-            })
-            .cloned()
-            .collect::<std::collections::BTreeSet<_>>()
+            .collect::<Vec<_>>();
+
+        series.sort_unstable();
+
+        Ok(series
             .into_iter()
             .map(|path| SeriesResponse {
                 series: ProcessStatisticSeries {
                     db,
                     collection_ids: collection_ids.clone(),
                     idx: 0,
-                    krate: *path.get().unwrap(),
-                    profile: *path.get().unwrap(),
-                    cache: *path.get().unwrap(),
-                    stat: *path.get::<ProcessStatistic>().unwrap(),
+                    krate: path.0,
+                    profile: path.1,
+                    cache: path.2,
+                    stat: path.3,
                 },
-                path,
+                path: Path::new()
+                    .set(PathComponent::Crate(path.0))
+                    .set(PathComponent::Profile(path.1))
+                    .set(PathComponent::Cache(path.2))
+                    .set(PathComponent::ProcessStatistic(path.3)),
             })
             .into_iter()
             .collect())
@@ -546,7 +527,7 @@ impl<'a> Iterator for SelfProfile<'a> {
         for query in self
             .db
             .index
-            .all_queries(self.krate, self.profile, self.cache)
+            .filtered_queries(self.krate, self.profile, self.cache)
         {
             if let Some(qd) = self.db.index.get::<crate::db::QueryDatum>(
                 &self.db.db,
@@ -600,47 +581,31 @@ impl<'a> Series<'a> for SelfProfile<'a> {
             .try_map(|p| p.parse::<Cache>())?;
         query.assert_empty()?;
 
-        Ok(db
-            .all_paths
-            .iter()
-            .filter(|s| {
-                let skrate = if let Ok(v) = s.get::<Crate>() {
-                    *v
-                } else {
-                    return false;
-                };
-                krate.matches(skrate)
-            })
-            .filter(|s| {
-                let sprofile = if let Ok(v) = s.get::<Profile>() {
-                    *v
-                } else {
-                    return false;
-                };
-                profile.matches(sprofile)
-            })
-            .filter(|s| {
-                let scache = if let Ok(v) = s.get::<Cache>() {
-                    *v
-                } else {
-                    return false;
-                };
-                cache.matches(scache)
-            })
-            .filter(|p| p.path.len() == 3)
-            .cloned()
-            .collect::<std::collections::BTreeSet<Path>>()
+        let mut series = db
+            .index
+            .all_query_series()
+            .filter(|tup| krate.matches(tup.0) && profile.matches(tup.1) && cache.matches(tup.2))
+            .map(|tup| (tup.0, tup.1, tup.2))
+            .collect::<Vec<_>>();
+
+        series.sort_unstable();
+        series.dedup();
+
+        Ok(series
             .into_iter()
             .map(|path| SeriesResponse {
                 series: SelfProfile {
                     collection_ids: collection_ids.clone(),
                     idx: 0,
                     db,
-                    krate: *path.get().unwrap(),
-                    profile: *path.get().unwrap(),
-                    cache: *path.get().unwrap(),
+                    krate: path.0,
+                    profile: path.1,
+                    cache: path.2,
                 },
-                path,
+                path: Path::new()
+                    .set(PathComponent::Crate(path.0))
+                    .set(PathComponent::Profile(path.1))
+                    .set(PathComponent::Cache(path.2)),
             })
             .into_iter()
             .collect())
@@ -705,51 +670,36 @@ impl<'a> Series<'a> for SelfProfileQueryTime<'a> {
             .map(|p| QueryLabel::from(p.as_str()));
         query.assert_empty()?;
 
-        Ok(db
-            .all_paths
-            .iter()
-            .filter(|s| {
-                let skrate = if let Ok(v) = s.get::<Crate>() {
-                    *v
-                } else {
-                    return false;
-                };
-                krate.matches(skrate)
+        let mut series = db
+            .index
+            .all_query_series()
+            .filter(|tup| {
+                krate.matches(tup.0)
+                    && profile.matches(tup.1)
+                    && cache.matches(tup.2)
+                    && ql.matches(tup.3)
             })
-            .filter(|s| {
-                let sprofile = if let Ok(v) = s.get::<Profile>() {
-                    *v
-                } else {
-                    return false;
-                };
-                profile.matches(sprofile)
-            })
-            .filter(|s| {
-                let scache = if let Ok(v) = s.get::<Cache>() {
-                    *v
-                } else {
-                    return false;
-                };
-                cache.matches(scache)
-            })
-            .filter(|p| p.path.len() == 3)
-            .map(|path| {
-                path.clone()
-                    .set(PathComponent::QueryLabel(*ql.assert_one()))
-            })
-            .collect::<std::collections::BTreeSet<_>>()
+            .collect::<Vec<_>>();
+
+        series.sort_unstable();
+
+        Ok(series
             .into_iter()
             .map(move |path| SeriesResponse {
                 series: SelfProfileQueryTime {
                     collection_ids: collection_ids.clone(),
                     idx: 0,
                     db,
-                    krate: *path.get().unwrap(),
-                    profile: *path.get().unwrap(),
-                    cache: *path.get().unwrap(),
-                    query: *path.get().unwrap(),
+                    krate: path.0,
+                    profile: path.1,
+                    cache: path.2,
+                    query: path.3,
                 },
-                path,
+                path: Path::new()
+                    .set(PathComponent::Crate(path.0))
+                    .set(PathComponent::Profile(path.1))
+                    .set(PathComponent::Cache(path.2))
+                    .set(PathComponent::QueryLabel(path.3)),
             })
             .collect::<Vec<_>>())
     }
@@ -789,28 +739,23 @@ impl<'a> Series<'a> for CompileError<'a> {
         let krate = query.extract(Tag::Crate)?.raw;
         query.assert_empty()?;
 
-        Ok(db
-            .all_paths
-            .iter()
-            .filter(|s| {
-                let skrate = if let Ok(v) = s.get::<Crate>() {
-                    *v
-                } else {
-                    return false;
-                };
-                krate.matches(skrate)
-            })
-            .map(|path| Path::new().set(PathComponent::Crate(*path.get::<Crate>().unwrap())))
-            .collect::<std::collections::BTreeSet<_>>()
+        let mut series = db
+            .index
+            .all_errors()
+            .filter(|k| krate.matches(*k))
+            .collect::<Vec<_>>();
+        series.sort_unstable();
+
+        Ok(series
             .into_iter()
             .map(move |path| SeriesResponse {
                 series: CompileError {
                     collection_ids: collection_ids.clone(),
                     idx: 0,
                     db,
-                    krate: *path.get().unwrap(),
+                    krate: path,
                 },
-                path,
+                path: Path::new().set(PathComponent::Crate(path)),
             })
             .collect::<Vec<_>>())
     }
