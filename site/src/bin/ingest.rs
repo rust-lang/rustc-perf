@@ -43,10 +43,11 @@ fn deserialize_path(path: &Path) -> Res {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let db = site::db::open("data", true);
+    let dir = std::env::args().nth(1).expect("database as first arg");
+    let db = site::db::open(&dir, true);
     let mut index = site::db::Index::load(&db);
 
-    let paths = std::env::args().skip(1).collect::<Vec<_>>();
+    let paths = std::env::args().skip(2).collect::<Vec<_>>();
     let paths_count = paths.len();
     let mut last = std::time::Instant::now();
     for (idx, path) in paths.into_iter().enumerate() {

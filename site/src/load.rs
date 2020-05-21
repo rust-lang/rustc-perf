@@ -151,6 +151,26 @@ impl InputData {
 
     /// Initialize `InputData from the file system.
     pub fn from_fs(db: &str) -> anyhow::Result<InputData> {
+        if std::path::Path::new(db).join("times").exists() {
+            eprintln!("It looks like you're running the site off of the old data format");
+            eprintln!(
+                "Please run the ingestion script pointing at a different directory, like so:"
+            );
+            eprintln!(
+                "    find rustc-timing/times/ -type f | xargs ./target/release/ingest database"
+            );
+            eprintln!();
+            eprintln!("And optionally follow up by shrinking the database:");
+            eprintln!("    ./target/release/compact database");
+            eprintln!("");
+            eprintln!("You can run the ingestion script repeatedly over all the files,");
+            eprintln!("or you can run it on just some newly collected data.");
+            eprintln!(
+                "The ingestion script must not be run in parallel with the site (it should error)."
+            );
+            std::process::exit(1);
+        }
+
         let config = if let Ok(s) = fs::read_to_string("site-config.toml") {
             toml::from_str(&s)?
         } else {
