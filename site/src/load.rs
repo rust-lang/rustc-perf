@@ -13,7 +13,6 @@ use std::fs;
 use std::io::Read;
 use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use anyhow::Context;
 use chrono::{Duration, Utc};
@@ -25,7 +24,7 @@ use crate::util;
 use collector::{Bound, Date};
 
 use crate::api::github;
-use crate::db::{ArtifactData, CommitData};
+use crate::db::ArtifactData;
 use collector;
 pub use collector::{BenchmarkName, Commit, Patch, Sha, StatId, Stats};
 use log::{error, info, warn};
@@ -127,8 +126,6 @@ pub struct Config {
 }
 
 pub struct InputData {
-    data: Vec<Arc<CommitData>>,
-
     pub commits: Vec<Commit>,
 
     pub artifact_data: Vec<ArtifactData>,
@@ -151,10 +148,6 @@ impl InputData {
         ]
     }
 
-    pub fn data(&self) -> &[Arc<CommitData>] {
-        &self.data
-    }
-
     pub fn data_for(&self, is_left: bool, query: Bound) -> Option<Commit> {
         crate::db::data_for(&self.commits, is_left, query)
     }
@@ -167,8 +160,6 @@ impl InputData {
     pub fn from_fs(repo_loc: &str) -> anyhow::Result<InputData> {
         let repo_loc = PathBuf::from(repo_loc);
         let mut artifact_data = HashMap::new();
-        let mut data = Vec::new();
-        let mut commits = HashSet::new();
 
         if !repo_loc.exists() {
             // If the repository doesn't yet exist, simplify clone it to the given location.
@@ -189,7 +180,7 @@ impl InputData {
         eprintln!("Loading files from directory...");
 
         // Read all files from repo_loc/processed
-        let latest_section_start = ::std::time::Instant::now();
+        let latest_section_start = std::time::Instant::now();
         let mut file_contents = Vec::new();
         for entry in fs::read_dir(repo_loc.join("times"))? {
             let entry = entry?;
@@ -198,21 +189,22 @@ impl InputData {
             }
             let filename = entry.file_name();
             let filename = filename.to_str().unwrap();
-            let mut file = fs::File::open(entry.path())
-                .with_context(|| format!("Failed to open {}", entry.path().display()))?;
-            file_contents.truncate(0);
-            if filename.ends_with(".sz") {
-                let mut szip_reader = snap::read::FrameDecoder::new(std::io::BufReader::new(file));
-                szip_reader
-                    .read_to_end(&mut file_contents)
-                    .with_context(|| format!("Failed to read {}", entry.path().display()))?;
-            } else {
-                file.read_to_end(&mut file_contents)
-                    .with_context(|| format!("Failed to read {}", entry.path().display()))?;
-            };
-            let file_contents = std::str::from_utf8(&file_contents).unwrap();
-
             if filename.starts_with("artifact-") {
+                let mut file = fs::File::open(entry.path())
+                    .with_context(|| format!("Failed to open {}", entry.path().display()))?;
+                file_contents.truncate(0);
+                if filename.ends_with(".sz") {
+                    let mut szip_reader =
+                        snap::read::FrameDecoder::new(std::io::BufReader::new(file));
+                    szip_reader
+                        .read_to_end(&mut file_contents)
+                        .with_context(|| format!("Failed to read {}", entry.path().display()))?;
+                } else {
+                    file.read_to_end(&mut file_contents)
+                        .with_context(|| format!("Failed to read {}", entry.path().display()))?;
+                };
+                let file_contents = std::str::from_utf8(&file_contents).unwrap();
+
                 let contents: ArtifactData = match serde_json::from_str(&file_contents) {
                     Ok(j) => j,
                     Err(err) => {
@@ -226,29 +218,12 @@ impl InputData {
                 }
 
                 artifact_data.insert(contents.id.clone(), contents);
-            } else {
-                let contents: CommitData = match serde_json::from_str(&file_contents) {
-                    Ok(json) => json,
-                    Err(err) => {
-                        error!("Failed to parse JSON for {}: {:?}", filename, err);
-                        continue;
-                    }
-                };
-                if contents.benchmarks.is_empty() {
-                    warn!("empty benchmarks hash for {}", filename);
-                    continue;
-                }
-
-                if commits.insert(contents.commit.clone()) {
-                    data.push(Arc::new(contents));
-                }
             }
         }
         std::mem::drop(file_contents);
 
         eprintln!(
-            "{} commits/artifacts loaded in {:?}",
-            data.len(),
+            "Done loading files from disk in {:?}",
             latest_section_start.elapsed()
         );
 
@@ -261,12 +236,10 @@ impl InputData {
             }
         };
 
-        data.sort_unstable_by_key(|d| d.commit.clone());
-        InputData::new(data, artifact_data, config)
+        InputData::new(artifact_data, config)
     }
 
     pub fn new(
-        data: Vec<Arc<CommitData>>,
         mut artifact_data: HashMap<String, ArtifactData>,
         config: Config,
     ) -> anyhow::Result<InputData> {
@@ -301,7 +274,6 @@ impl InputData {
 
         let persistent = Persistent::load();
         Ok(InputData {
-            data,
             commits,
             artifact_data,
             persistent: Mutex::new(persistent),
