@@ -11,7 +11,7 @@ use arc_swap::ArcSwap;
 use std::collections::HashSet;
 use std::fs;
 use std::ops::RangeInclusive;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::Context;
@@ -76,7 +76,9 @@ pub struct Persistent {
 }
 
 lazy_static::lazy_static! {
-    static ref PERSISTENT_PATH: &'static Path = Path::new("persistent.json");
+    static ref PERSISTENT_PATH: PathBuf = std::env::var_os("PERSISTENT_PATH").unwrap_or_else(|| {
+        PathBuf::new("persistent.json")
+    });
 }
 
 impl Persistent {
@@ -151,7 +153,7 @@ impl InputData {
 
     /// Initialize `InputData from the file system.
     pub fn from_fs(db: &str) -> anyhow::Result<InputData> {
-        if std::path::Path::new(db).join("times").exists() {
+        if Path::new(db).join("times").exists() {
             eprintln!("It looks like you're running the site off of the old data format");
             eprintln!(
                 "Please run the ingestion script pointing at a different directory, like so:"
