@@ -180,7 +180,10 @@ impl InputData {
             toml::from_str(&s)?
         } else {
             Config {
-                keys: Keys::default(),
+                keys: Keys {
+                    github: std::env::var("GITHUB_API_TOKEN"),
+                    secret: std::env::var("GITHUB_WEBHOOK_SECRET"),
+                },
                 skip: HashSet::default(),
             }
         };
