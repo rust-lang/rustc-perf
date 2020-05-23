@@ -129,6 +129,7 @@ rustc-std-workspace-std = { path = 'src/tools/rustc-std-workspace-std' }
 
         // Move all of the `rlib` files into the main sysroot.
         let sysroot_target_lib_dir = sysroot_rustlib_dir.join(&self.triple).join("lib");
+        fs::create_dir_all(&sysroot_target_lib_dir)?;
         for entry in fs::read_dir(local_build_target_dir.join("release/deps"))? {
             let entry = entry?;
             let path = entry.path();
