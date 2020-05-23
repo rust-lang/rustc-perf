@@ -76,8 +76,8 @@ pub struct Persistent {
 }
 
 lazy_static::lazy_static! {
-    static ref PERSISTENT_PATH: PathBuf = std::env::var_os("PERSISTENT_PATH").unwrap_or_else(|| {
-        PathBuf::new("persistent.json")
+    static ref PERSISTENT_PATH: PathBuf = std::env::var_os("PERSISTENT_PATH").map(PathBuf::from).unwrap_or_else(|| {
+        PathBuf::from("persistent.json")
     });
 }
 
@@ -181,8 +181,8 @@ impl InputData {
         } else {
             Config {
                 keys: Keys {
-                    github: std::env::var("GITHUB_API_TOKEN"),
-                    secret: std::env::var("GITHUB_WEBHOOK_SECRET"),
+                    github: std::env::var("GITHUB_API_TOKEN").ok(),
+                    secret: std::env::var("GITHUB_WEBHOOK_SECRET").ok(),
                 },
                 skip: HashSet::default(),
             }

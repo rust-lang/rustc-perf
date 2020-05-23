@@ -15,6 +15,23 @@ use crate::CommandFailed;
 
 pub fn update_repo(repo_path: &str) -> anyhow::Result<Vec<PathBuf>> {
     let working_dir = Path::new(repo_path);
+
+    if !working_dir.exists() {
+        // If the repository doesn't yet exist, simplify clone it to the given location.
+        eprintln!(
+            "cloning repository into {}, since it doesn't exist before",
+            working_dir.display()
+        );
+        execute_command(
+            &working_dir.parent().unwrap(),
+            &[
+                "clone",
+                "https://github.com/rust-lang/rustc-timing.git",
+                repo_path,
+            ],
+        )?;
+    }
+
     execute_command(working_dir, &["checkout", "master"])?;
     let original = get_commit_hash(working_dir)?;
     execute_command(working_dir, &["pull"])?;

@@ -936,7 +936,7 @@ impl Server {
             eprintln!("ingesting {} paths: {:#?}", paths.len(), paths);
             let mut index = crate::db::Index::load(&data.db);
 
-            for path in paths {
+            for path in paths.iter() {
                 crate::ingest::ingest(&data.db, &mut index, &path);
             }
 
@@ -944,6 +944,12 @@ impl Server {
             // value.
             data.index.store(Arc::new(index));
             eprintln!("finished updating index in {:?}", start.elapsed());
+
+            if paths.len() > 20 {
+                eprintln!("compacting...");
+                data.db.compact_range(None::<&[u8]>, None::<&[u8]>);
+                eprintln!("done");
+            }
 
             std::mem::drop(updating);
         });
