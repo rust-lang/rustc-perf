@@ -412,6 +412,9 @@ fn main_result() -> anyhow::Result<i32> {
 
        (@subcommand bench_commit =>
            (about: "benchmark a bors merge from AWS")
+           (@arg BUILDS: --builds +takes_value
+            "One or more (comma-separated) of: 'Check', 'Debug',\n\
+            'Opt', 'All'")
            (@arg COMMIT: +required +takes_value "Commit hash to bench")
        )
        (@subcommand bench_local =>
@@ -483,12 +486,12 @@ fn main_result() -> anyhow::Result<i32> {
             let commit = get_commit_or_fake_it(&commit)?;
             let out_repo = get_out_repo(false)?;
             let sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")?;
-            let build_kinds = &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt];
+            let build_kinds = build_kinds_from_arg(&sub_m.value_of("BUILDS"))?;
             let run_kinds = RunKind::all();
             out_repo.success(&bench_commit(
                 Some(&out_repo),
                 &commit,
-                build_kinds,
+                &build_kinds,
                 &run_kinds,
                 Compiler::from_sysroot(&sysroot),
                 &benchmarks,
