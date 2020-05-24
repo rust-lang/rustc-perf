@@ -193,6 +193,19 @@ output data will be placed and committed.
 This section is about profiling rustc, in order to determine how its execution
 might be optimized.
 
+### Preparation
+
+If you are going to use any of the profilers that rely on line numbers
+(OProfile, Cachegrind, Callgrind, DHAT, or Massif) use the following
+`config.toml` file for your local build.
+```
+[llvm]
+release-debuginfo = true
+[rust]
+debuginfo-level = 1
+```
+Without this you won't get useful file names and line numbers in the output.
+
 ### Profiling local builds
 
 To self-profile a local build:
