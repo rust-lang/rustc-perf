@@ -487,7 +487,7 @@ impl<'a> Iterator for ProcessStatisticSeries<'a> {
         self.idx += 1;
 
         let mut point = self.db.index.load().get::<f64>(
-            &self.db.db,
+            &self.db.conn(),
             &crate::db::DbLabel::ProcessStat {
                 krate: self.krate,
                 profile: self.profile,
@@ -531,7 +531,7 @@ impl<'a> Iterator for SelfProfile<'a> {
             .filtered_queries(self.krate, self.profile, self.cache)
         {
             if let Some(qd) = self.db.index.load().get::<crate::db::QueryDatum>(
-                &self.db.db,
+                &self.db.conn(),
                 &crate::db::DbLabel::SelfProfileQuery {
                     krate: self.krate,
                     profile: self.profile,
@@ -635,7 +635,7 @@ impl<'a> Iterator for SelfProfileQueryTime<'a> {
             .index
             .load()
             .get::<crate::db::QueryDatum>(
-                &self.db.db,
+                &self.db.conn(),
                 &crate::db::DbLabel::SelfProfileQuery {
                     krate: self.krate,
                     profile: self.profile,
@@ -722,7 +722,7 @@ impl<'a> Iterator for CompileError<'a> {
         self.idx += 1;
 
         let point = self.db.index.load().get::<String>(
-            &self.db.db,
+            &self.db.conn(),
             &crate::db::DbLabel::Errors { krate: self.krate },
             col_id,
         );

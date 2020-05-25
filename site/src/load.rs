@@ -25,6 +25,8 @@ use collector::{Bound, Date};
 use crate::api::github;
 use collector;
 pub use collector::{BenchmarkName, Commit, Patch, Sha, StatId, Stats};
+use rusqlite::Connection;
+use thread_local::ThreadLocal;
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum MissingReason {
@@ -130,7 +132,8 @@ pub struct InputData {
     pub config: Config,
 
     pub index: ArcSwap<crate::db::Index>,
-    pub db: rocksdb::DB,
+    path: String,
+    pub conn: ThreadLocal<Connection>,
 }
 
 impl InputData {
@@ -159,22 +162,16 @@ impl InputData {
                 "Please run the ingestion script pointing at a different directory, like so:"
             );
             eprintln!(
-                "    find rustc-timing/times/ -type f | xargs ./target/release/ingest database"
+                "    find rustc-timing/times/ -type f | xargs ./target/release/ingest perf-rlo.db"
             );
             eprintln!();
-            eprintln!("And optionally follow up by shrinking the database:");
-            eprintln!("    ./target/release/compact database");
-            eprintln!("");
             eprintln!("You can run the ingestion script repeatedly over all the files,");
             eprintln!("or you can run it on just some newly collected data.");
-            eprintln!(
-                "The ingestion script must not be run in parallel with the site (it should error)."
-            );
             std::process::exit(1);
         }
 
-        let db = crate::db::open(db, false);
-        let index = crate::db::Index::load(&db);
+        let conn = Connection::open(&db).unwrap();
+        let index = crate::db::Index::load(&conn);
 
         let config = if let Ok(s) = fs::read_to_string("site-config.toml") {
             toml::from_str(&s)?
@@ -193,7 +190,16 @@ impl InputData {
             persistent: Mutex::new(persistent),
             config,
             index: ArcSwap::new(Arc::new(index)),
-            db,
+            path: db.to_string(),
+            conn: ThreadLocal::new(),
+        })
+    }
+
+    pub fn conn(&self) -> &Connection {
+        self.conn.get_or(|| {
+            let conn = Connection::open(&self.path).unwrap();
+            conn.pragma_update(None, "cache_size", &-64000).unwrap();
+            conn
         })
     }
 

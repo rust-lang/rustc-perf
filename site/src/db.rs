@@ -2,10 +2,10 @@ use collector::self_profile::{QueryData, QueryLabel};
 pub use collector::BenchmarkName as Crate;
 use collector::{Bound, Commit, PatchName, ProcessStatistic, StatId};
 use hashbrown::HashMap;
-use rocksdb::{ColumnFamilyDescriptor, Options, WriteBatch, DB};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use std::fmt;
 use std::ops::RangeInclusive;
 use std::time::Duration;
@@ -414,6 +414,11 @@ impl From<Commit> for CollectionId {
 pub trait SeriesType {
     fn with_bytes(&self, f: impl FnOnce(&[u8]));
     fn from_bytes(bytes: &[u8]) -> Self;
+
+    fn insert(&self, conn: &Connection, label: LabelId, cid: CollectionIdNumber);
+    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self>
+    where
+        Self: Sized;
 }
 
 impl SeriesType for f64 {
@@ -423,6 +428,23 @@ impl SeriesType for f64 {
 
     fn from_bytes(bytes: &[u8]) -> Self {
         f64::from_bits(u64::from_le_bytes(bytes.try_into().unwrap()))
+    }
+
+    fn insert(&self, conn: &Connection, label: LabelId, cid: CollectionIdNumber) {
+        let cid = u32::from_be_bytes(cid.as_bytes());
+        match label.0 {
+            1 => {
+                conn.prepare_cached("insert into pstat(series, cid, value) VALUES (?, ?, ?)")
+                    .unwrap()
+                    .execute(params![&label.1, &cid, self])
+                    .unwrap();
+            }
+            _ => unreachable!("{}", label.0),
+        }
+    }
+
+    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
+        row.get(0)
     }
 }
 
@@ -477,6 +499,49 @@ impl SeriesType for QueryDatum {
             invocation_count: u32::from_le_bytes(bytes[28..32].try_into().unwrap()),
         }
     }
+
+    fn insert(&self, conn: &Connection, label: LabelId, cid: CollectionIdNumber) {
+        let cid = u32::from_be_bytes(cid.as_bytes());
+        match label.0 {
+            2 => {
+                conn.prepare_cached(
+                    "insert into self_profile_query(
+                        series, cid,
+                        self_time,
+                        blocked_time,
+                        incremental_load_time,
+                        number_of_cache_hits,
+                        invocation_count
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                )
+                .unwrap()
+                .execute(params![
+                    &label.1,
+                    &cid,
+                    &i64::try_from(self.self_time.as_nanos()).unwrap(),
+                    &i64::try_from(self.blocked_time.as_nanos()).unwrap(),
+                    &i64::try_from(self.incremental_load_time.as_nanos()).unwrap(),
+                    self.number_of_cache_hits,
+                    self.invocation_count,
+                ])
+                .unwrap();
+            }
+            _ => unreachable!("{}", label.0),
+        }
+    }
+
+    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
+        let self_time: i64 = row.get(0)?;
+        let blocked_time: i64 = row.get(1)?;
+        let incremental_load_time: i64 = row.get(2)?;
+        Ok(QueryDatum {
+            self_time: Duration::from_nanos(self_time as u64),
+            blocked_time: Duration::from_nanos(blocked_time as u64),
+            incremental_load_time: Duration::from_nanos(incremental_load_time as u64),
+            number_of_cache_hits: row.get(3)?,
+            invocation_count: row.get(4)?,
+        })
+    }
 }
 impl SeriesType for String {
     fn with_bytes(&self, f: impl FnOnce(&[u8])) {
@@ -486,13 +551,35 @@ impl SeriesType for String {
     fn from_bytes(bytes: &[u8]) -> Self {
         std::str::from_utf8(bytes).unwrap().to_string()
     }
+
+    fn insert(&self, conn: &Connection, label: LabelId, cid: CollectionIdNumber) {
+        let cid = u32::from_be_bytes(cid.as_bytes());
+        match label.0 {
+            0 => {
+                conn.prepare_cached(
+                    "insert into errors(
+                        series, cid,
+                        value
+                    ) VALUES (?, ?, ?)",
+                )
+                .unwrap()
+                .execute(params![&label.1, &cid, self,])
+                .unwrap();
+            }
+            _ => unreachable!("{}", label.0),
+        }
+    }
+
+    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
+        row.get(0)
+    }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct LabelId(u8, u32);
+#[derive(Hash, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct LabelId(pub u8, pub u32);
 
 impl LabelId {
-    fn as_bytes(self) -> [u8; 4] {
+    pub fn as_bytes(self) -> [u8; 4] {
         let mut bytes = u32::to_be_bytes(self.1);
         assert_eq!(bytes[0], 0);
         bytes[0] = self.0;
@@ -510,7 +597,7 @@ impl LabelId {
 pub struct CollectionIdNumber(u8, u32);
 
 impl CollectionIdNumber {
-    fn as_bytes(self) -> [u8; 4] {
+    pub fn as_bytes(self) -> [u8; 4] {
         let mut bytes = u32::to_be_bytes(self.1);
         assert_eq!(bytes[0], 0);
         bytes[0] = self.0;
@@ -528,45 +615,19 @@ impl CollectionIdNumber {
 pub struct DatabaseKey(pub LabelId, pub CollectionIdNumber);
 
 impl DatabaseKey {
-    fn as_bytes(&self) -> [u8; 8] {
+    pub fn as_bytes(&self) -> [u8; 8] {
         let mut buf = [0; 8];
         buf[..4].copy_from_slice(&self.0.as_bytes());
         buf[4..].copy_from_slice(&self.1.as_bytes());
         buf
     }
 
-    fn from_bytes(key: &[u8]) -> Self {
+    pub fn from_bytes(key: &[u8]) -> Self {
         Self(
             LabelId::from_bytes(key[..4].try_into().unwrap()),
             CollectionIdNumber::from_bytes(key[4..].try_into().unwrap()),
         )
     }
-}
-
-pub fn open(at: &str, ingest: bool) -> DB {
-    let mut db_opts = Options::default();
-    db_opts.create_if_missing(true);
-    db_opts.create_missing_column_families(true);
-    db_opts.set_max_open_files(625);
-    db_opts.set_keep_log_file_num(3);
-
-    let mut cf_opts = Options::default();
-    cf_opts.optimize_level_style_compaction(256 * 1024 * 1024);
-    cf_opts.set_compression_type(rocksdb::DBCompressionType::Lz4);
-    if ingest {
-        db_opts.set_allow_concurrent_memtable_write(false);
-        cf_opts.set_allow_concurrent_memtable_write(false);
-        cf_opts.set_memtable_factory(rocksdb::MemtableFactory::Vector);
-    }
-    cf_opts.set_comparator("default", |a, b| {
-        DatabaseKey::from_bytes(a).cmp(&DatabaseKey::from_bytes(b))
-    });
-    let descriptors = vec![
-        ColumnFamilyDescriptor::new("default", cf_opts),
-        ColumnFamilyDescriptor::new("indices", Options::default()),
-    ];
-
-    DB::open_cf_descriptors(&db_opts, &at, descriptors).unwrap()
 }
 
 #[derive(Clone, Deserialize, Serialize, Default)]
@@ -707,47 +768,77 @@ pub enum DbLabel {
 }
 
 impl Index {
-    pub fn load(db: &DB) -> Index {
-        let cf = db.cf_handle("indices").unwrap();
-        let indices = db.get_pinned_cf(cf, "index").unwrap();
-        if let Some(pinned) = indices {
-            serde_json::from_slice(&pinned).unwrap()
-        } else {
-            Index::default()
+    pub fn load(conn: &Connection) -> Index {
+        let indices: rusqlite::Result<Option<Vec<u8>>> = conn
+            .query_row(
+                "select value from interned where name = 'index'",
+                params![],
+                |row| row.get(0),
+            )
+            .optional();
+        match indices {
+            Ok(Some(s)) => serde_json::from_slice(&s).unwrap(),
+            Ok(None) => Index::default(),
+            Err(e) => {
+                if e.to_string().contains("no such table: interned") {
+                    Index::default()
+                } else {
+                    panic!("could not load index: {}", e);
+                }
+            }
         }
     }
 
-    pub fn store(&self, db: &DB) {
-        let cf = db.cf_handle("indices").unwrap();
+    pub fn store(&self, conn: &Connection) {
         let serialized = serde_json::to_vec(self).unwrap();
-        db.put_cf(cf, "index", serialized).unwrap();
+        conn.execute(
+            "insert or replace into interned (name, value) VALUES ('index', ?)",
+            params![&serialized],
+        )
+        .unwrap();
     }
 
-    pub fn get<T: SeriesType>(&self, db: &DB, path: &DbLabel, cid: &CollectionId) -> Option<T> {
-        let label_id = match path {
-            DbLabel::Errors { krate } => LabelId(0, self.errors.get(krate)?),
+    pub fn get<T: SeriesType>(
+        &self,
+        db: &Connection,
+        path: &DbLabel,
+        cid: &CollectionId,
+    ) -> Option<T> {
+        let (mut stmt, series) = match path {
+            DbLabel::Errors { krate } => (
+                db.prepare_cached("select value from errors where series = ? and cid = ?;")
+                    .unwrap(),
+                self.errors.get(krate)?,
+            ),
             DbLabel::ProcessStat {
                 krate,
                 profile,
                 cache,
                 stat,
-            } => LabelId(1, self.pstats.get(&(*krate, *profile, *cache, *stat))?),
+            } => (
+                db.prepare_cached("select value from pstat where series = ? and cid = ?;")
+                    .unwrap(),
+                self.pstats.get(&(*krate, *profile, *cache, *stat))?,
+            ),
             DbLabel::SelfProfileQuery {
                 krate,
                 profile,
                 cache,
                 query,
-            } => LabelId(2, self.queries.get(&(*krate, *profile, *cache, *query))?),
+            } => (db.prepare_cached("
+                select self_time, blocked_time, incremental_load_time, number_of_cache_hits, invocation_count
+                    from self_profile_query
+                    where series = ? and cid = ?;").unwrap(), self.queries.get(&(*krate, *profile, *cache, *query))?),
         };
         let cid = match cid {
             CollectionId::Commit(c) => CollectionIdNumber(0, self.commits.get(c)?),
             CollectionId::Artifact(a) => CollectionIdNumber(1, self.artifacts.get(a.as_str())?),
         };
-        let key = DatabaseKey(label_id, cid);
+        let cid = u32::from_be_bytes(cid.as_bytes());
 
-        db.get_pinned(key.as_bytes())
+        stmt.query_row(rusqlite::params![&series, &cid], |row| T::from_row(row))
+            .optional()
             .unwrap()
-            .map(|slice| T::from_bytes(&slice))
     }
 
     pub fn artifacts(&self) -> impl Iterator<Item = &'_ str> + '_ {
@@ -819,15 +910,12 @@ impl Index {
     pub fn insert_labeled<T: SeriesType>(
         &mut self,
         label: &DbLabel,
-        batch: &mut WriteBatch,
+        conn: &Connection,
         cid: CollectionIdNumber,
         point: &T,
     ) {
         let label_id = self.intern_db_label(&label);
-        let key = DatabaseKey(label_id, cid);
-        point.with_bytes(|value| {
-            batch.put(key.as_bytes(), value);
-        });
+        point.insert(conn, label_id, cid);
     }
 
     pub fn intern_db_label(&mut self, label: &DbLabel) -> LabelId {

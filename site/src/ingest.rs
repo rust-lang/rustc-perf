@@ -1,7 +1,7 @@
 use crate::db::{CollectionId, DbLabel, Label, LabelPath, LabelTag, Profile};
 use anyhow::Context as _;
 use collector::{ArtifactData, CommitData};
-use rocksdb::{WriteBatch, DB};
+use rusqlite::Connection;
 use std::io::Read;
 use std::path::Path;
 
@@ -40,7 +40,7 @@ fn deserialize_path(path: &Path) -> Res {
     }
 }
 
-pub fn ingest(db: &DB, index: &mut crate::db::Index, path: &Path) {
+pub fn ingest(conn: &Connection, index: &mut crate::db::Index, path: &Path) {
     let res = deserialize_path(path);
     let (cid, benchmarks) = match res {
         Res::Commit(cd) => (CollectionId::Commit(cd.commit), cd.benchmarks),
@@ -54,16 +54,14 @@ pub fn ingest(db: &DB, index: &mut crate::db::Index, path: &Path) {
         let benchmark = match bres {
             Ok(b) => b,
             Err(e) => {
-                let mut batch = WriteBatch::default();
-                index.insert_labeled(&DbLabel::Errors { krate: name }, &mut batch, cid_num, &e);
-                db.write(batch).unwrap();
+                index.insert_labeled(&DbLabel::Errors { krate: name }, &conn, cid_num, &e);
                 path.remove(LabelTag::Crate);
                 continue;
             }
         };
 
         for run in &benchmark.runs {
-            let mut batch = WriteBatch::default();
+            let conn = conn.unchecked_transaction().unwrap();
             let profile = if run.check {
                 Profile::Check
             } else if run.release {
@@ -84,7 +82,7 @@ pub fn ingest(db: &DB, index: &mut crate::db::Index, path: &Path) {
                         cache: state,
                         stat: sid.as_pstat(),
                     },
-                    &mut batch,
+                    &conn,
                     cid_num,
                     &stat,
                 );
@@ -101,14 +99,14 @@ pub fn ingest(db: &DB, index: &mut crate::db::Index, path: &Path) {
                             cache: state,
                             query: qd.label,
                         },
-                        &mut batch,
+                        &conn,
                         cid_num,
                         &crate::db::QueryDatum::from_query_data(qd),
                     );
                 }
                 path.remove(LabelTag::Query);
             }
-            db.write_without_wal(batch).unwrap();
+            conn.commit().unwrap();
         }
     }
 }

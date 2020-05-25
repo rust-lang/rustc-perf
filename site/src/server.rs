@@ -29,6 +29,7 @@ use hyper::StatusCode;
 use log::{debug, error, info};
 use ring::hmac;
 use rmp_serde;
+use rusqlite::params;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json;
@@ -290,6 +291,7 @@ fn to_graph_data<'a>(
 
 pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<graph::Response> {
     let stat_id = StatId::from_str(&body.stat)?;
+    let tx = data.conn().unchecked_transaction().unwrap();
 
     let cc = CommitIdxCache::new();
     let range = data.data_range(body.start.clone()..=body.end.clone());
@@ -419,6 +421,8 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
             .or_insert_with(Vec::new)
             .push((sr.path.get::<Cache>()?.to_string(), sr.series));
     }
+
+    tx.finish().unwrap();
 
     Ok(graph::Response {
         max: by_krate_max,
@@ -913,10 +917,6 @@ impl Server {
                 .unwrap();
         }
 
-        // FIXME we are throwing everything away and starting again. It would be
-        // better to read just the added files. These should be available in the
-        // body of the request.
-
         debug!("received onpush hook");
 
         let (channel, body) = hyper::Body::channel();
@@ -934,22 +934,67 @@ impl Server {
 
             let start = std::time::Instant::now();
             eprintln!("ingesting {} paths: {:#?}", paths.len(), paths);
-            let mut index = crate::db::Index::load(&data.db);
+            let conn = data.conn();
+
+            conn.execute(
+                "create table if not exists interned(name text primary key, value blob);",
+                params![],
+            )
+            .unwrap();
+            conn.execute(
+                "create table if not exists errors(series integer, cid integer, value text);",
+                params![],
+            )
+            .unwrap();
+            conn.execute(
+                "create table if not exists pstat(series integer, cid integer, value real);",
+                params![],
+            )
+            .unwrap();
+            conn.execute(
+                "create table if not exists self_profile_query(
+                    series integer,
+                    cid integer,
+                    self_time integer,
+                    blocked_time integer,
+                    incremental_load_time integer,
+                    number_of_cache_hits integer,
+                    invocation_count integer
+                );",
+                params![],
+            )
+            .unwrap();
+
+            let mut index = crate::db::Index::load(conn);
 
             for path in paths.iter() {
-                crate::ingest::ingest(&data.db, &mut index, &path);
+                crate::ingest::ingest(conn, &mut index, &path);
             }
 
             // Store back the new index, letting everyone else see the new
             // value.
+            eprintln!("index has {} commits", index.commits().len());
+            index.store(&conn);
             data.index.store(Arc::new(index));
             eprintln!("finished updating index in {:?}", start.elapsed());
 
-            if paths.len() > 20 {
-                eprintln!("compacting...");
-                data.db.compact_range(None::<&[u8]>, None::<&[u8]>);
-                eprintln!("done");
-            }
+            let start = std::time::Instant::now();
+            eprintln!("creating sqlite indices");
+
+            conn.execute(
+                "create index if not exists self_profile_query_sc on self_profile_query(series, cid);",
+                params![],
+            )
+            .unwrap();
+
+            conn.execute(
+                "create index if not exists pstat_sc on pstat(series, cid);",
+                params![],
+            )
+            .unwrap();
+
+            conn.execute("analyze;", params![]).unwrap();
+            eprintln!("done creating sqlite indices in {:?}", start.elapsed());
 
             std::mem::drop(updating);
         });

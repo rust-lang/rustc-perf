@@ -16,7 +16,7 @@ use crate::CommandFailed;
 pub fn update_repo(repo_path: &str) -> anyhow::Result<Vec<PathBuf>> {
     let working_dir = Path::new(repo_path);
 
-    if !working_dir.exists() {
+    let stdout = if !working_dir.exists() {
         // If the repository doesn't yet exist, simplify clone it to the given location.
         eprintln!(
             "cloning repository into {}, since it doesn't exist before",
@@ -30,24 +30,38 @@ pub fn update_repo(repo_path: &str) -> anyhow::Result<Vec<PathBuf>> {
                 repo_path,
             ],
         )?;
-    }
 
-    execute_command(working_dir, &["checkout", "master"])?;
-    let original = get_commit_hash(working_dir)?;
-    execute_command(working_dir, &["pull"])?;
+        let output = Command::new("git")
+            .current_dir(working_dir)
+            .arg("ls-files")
+            .arg("times")
+            .output()?;
+        if !output.status.success() {
+            Err(CommandFailed {
+                command: format!("git ls-files times"),
+            })?
+        }
+        output.stdout
+    } else {
+        execute_command(working_dir, &["checkout", "master"])?;
+        let original = get_commit_hash(working_dir)?;
+        execute_command(working_dir, &["pull"])?;
 
-    let output = Command::new("git")
-        .current_dir(working_dir)
-        .arg("diff")
-        .arg("--name-only")
-        .arg(&original)
-        .output()?;
-    if !output.status.success() {
-        Err(CommandFailed {
-            command: format!("git diff --name-only {}", original),
-        })?
-    }
-    Ok(String::from_utf8(output.stdout)?
+        let output = Command::new("git")
+            .current_dir(working_dir)
+            .arg("diff")
+            .arg("--name-only")
+            .arg(&original)
+            .output()?;
+        if !output.status.success() {
+            Err(CommandFailed {
+                command: format!("git diff --name-only {}", original),
+            })?
+        }
+        output.stdout
+    };
+
+    Ok(String::from_utf8(stdout)?
         .lines()
         .map(|l| PathBuf::from(repo_path).join(l.trim()))
         .collect())

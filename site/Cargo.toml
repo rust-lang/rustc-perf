@@ -34,8 +34,9 @@ snap = "1"
 rustc-artifacts = "0.2"
 itertools = "0.9"
 hashbrown = "0.7"
-rocksdb = "0.14"
 arc-swap = "0.4"
+rusqlite = { version = "0.23", features = ["bundled"] }
+thread_local = "1"
 
 [dependencies.collector]
 path = "../collector"
