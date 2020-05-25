@@ -122,7 +122,7 @@ pub trait Series<'a>: Sized {
         -> Result<Self, String>;
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Path {
     path: Vec<PathComponent>,
 }

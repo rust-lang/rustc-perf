@@ -369,6 +369,156 @@ where
 }
 
 pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<graph::Response> {
+    if body.stat.starts_with("self-profile:") {
+        let mut parts = body.stat.split(':').skip(1);
+        let cache_selector = parts.next().unwrap();
+        let filter = parts.next().ok_or(format!(
+            "expected `:` after `self-profile:{}`",
+            cache_selector
+        ))?;
+        if parts.next().is_some() {
+            return Err(format!(
+                "unexpected `:` after `self-profile:{}:{}`",
+                cache_selector, filter
+            ));
+        }
+        let top_n = if filter.starts_with("top") {
+            let n = &filter[3..];
+            n.parse::<usize>()
+                .map_err(|_| format!("expected unsigned integer, found `{}`", n))?
+        } else {
+            return Err(format!("unknown filter `{}` (try `top10`)", filter));
+        };
+
+        let cc = CommitIdxCache::new();
+        let range = data.data_range(body.start.clone()..=body.end.clone());
+        let commits: Arc<Vec<_>> = Arc::new(range.iter().map(|&c| c.into()).collect());
+
+        let series = data.query::<selector::SelfProfile>(
+            selector::Query::new()
+                .push::<String>(selector::Tag::Crate, selector::Selector::All)
+                .push::<String>(selector::Tag::Profile, selector::Selector::All)
+                .push::<String>(
+                    selector::Tag::Cache,
+                    selector::Selector::One(cache_selector.to_string()),
+                ),
+            commits.clone(),
+        )?;
+
+        let series = series
+            .into_iter()
+            .flat_map(|selector::SeriesResponse { path, series }| {
+                let series = series.collect::<Vec<_>>();
+
+                // Gather the union of the top `top_n` labels (with the largest
+                // self-times) from each collection. This may result in more than
+                // `top_n` label, but the benefit is a guarantee that fluctuations,
+                // in and out of the top `top_n`, will be caught (which may not
+                // be the case for something based on averages, for example).
+                // (the value is the total self-time for that label, for sorting)
+                let mut labels = HashMap::new();
+                for (_, self_profile) in &series {
+                    if let Some(self_profile) = self_profile {
+                        let mut top_n_labels = BTreeSet::new();
+                        let mut smallest = Duration::new(0, 0);
+                        for data in self_profile.query_data.iter() {
+                            if data.self_time() > smallest || top_n_labels.len() < top_n {
+                                top_n_labels.insert((data.self_time(), data.label));
+
+                                // Keep at most `top_n` entries in `top_n_labels`
+                                // and `smallest` equal to the smallest one.
+                                // FIXME(eddyb) this could be cleaner with the new
+                                // `{pop_,}first()` methods but they're unstable.
+                                let &first = top_n_labels.iter().next().unwrap();
+                                if top_n_labels.len() > top_n {
+                                    top_n_labels.remove(&first);
+                                }
+                                smallest = first.0;
+                            }
+                        }
+                        for (self_time, label) in top_n_labels {
+                            *labels.entry(label).or_insert(Duration::new(0, 0)) += self_time;
+                        }
+                    }
+                }
+
+                // Sort the labels to avoid highcharts from reusing colors/markers
+                // when they would show up close together.
+                let mut labels = labels.into_iter().collect::<Vec<_>>();
+                labels.sort_by_key(|&(label, total)| (std::cmp::Reverse(total), label));
+
+                labels
+                    .into_iter()
+                    .map(|(label, _)| {
+                        (
+                            label,
+                            series
+                                .iter()
+                                .map(|(cid, self_profile)| {
+                                    (
+                                        cid.clone(),
+                                        self_profile
+                                            .as_ref()
+                                            .and_then(|self_profile| {
+                                                // FIXME(eddyb) avoid doing an expensive search.
+                                                self_profile
+                                                    .query_data
+                                                    .iter()
+                                                    .find(|data| data.label == label)
+                                            })
+                                            .map(|data| data.self_time().as_secs_f64()),
+                                    )
+                                })
+                                .collect::<Vec<_>>(),
+                        )
+                    })
+                    .map(|(label, series)| {
+                        (
+                            label.to_string(),
+                            selector::SeriesResponse {
+                                path: path.clone(),
+                                series: series.into_iter(),
+                            },
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .map(|(label, sr)| {
+                (
+                    label,
+                    sr.interpolate().map(|series| {
+                        to_graph_data(&cc, body.absolute, series).collect::<Vec<_>>()
+                    }),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        let mut by_krate = HashMap::new();
+        let mut by_krate_max = HashMap::new();
+        for (label, sr) in series {
+            let krate = sr.path.get(selector::Tag::Crate)?.raw.clone();
+            let max = by_krate_max.entry(krate.clone()).or_insert(f32::MIN);
+            *max = sr
+                .series
+                .iter()
+                .map(|p| p.y)
+                .fold(*max, |max, p| max.max(p));
+            by_krate
+                .entry(krate)
+                .or_insert_with(HashMap::new)
+                .entry(sr.path.get(selector::Tag::Profile)?.raw.clone())
+                .or_insert_with(Vec::new)
+                .push((label, sr.series));
+        }
+
+        return Ok(graph::Response {
+            max: by_krate_max,
+            benchmarks: by_krate,
+            colors: vec![String::new(), String::from(INTERPOLATED_COLOR)],
+            commits: cc.into_commits(),
+        });
+    }
+
     let stat_id = StatId::from_str(&body.stat)?;
     match stat_id {
         StatId::CpuClock => handle_graph_for_stat::<selector::CpuClock>(body, data),
