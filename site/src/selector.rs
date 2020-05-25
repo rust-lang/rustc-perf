@@ -31,6 +31,30 @@ use std::convert::TryInto;
 use std::fmt;
 use std::sync::Arc;
 
+struct CollectionIdIter {
+    s: Arc<Vec<CollectionId>>,
+    idx: usize,
+}
+
+impl CollectionIdIter {
+    fn new(cids: Arc<Vec<CollectionId>>) -> CollectionIdIter {
+        CollectionIdIter { s: cids, idx: 0 }
+    }
+}
+
+impl Iterator for CollectionIdIter {
+    type Item = CollectionId;
+    fn next(&mut self) -> Option<Self::Item> {
+        let r = self.s.get(self.idx)?;
+        self.idx += 1;
+        Some(r.clone())
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.s.len(), Some(self.s.len()))
+    }
+}
+
 #[derive(Copy, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Tag {
     Crate,
@@ -411,17 +435,51 @@ pub struct Source<'a> {
     db: &'a Db,
 }
 
-pub struct ProcessStatisticSeries<'a> {
-    collection_ids: Arc<Vec<CollectionId>>,
-    idx: usize,
-    db: &'a Db,
-    krate: Crate,
-    profile: Profile,
-    cache: Cache,
-    stat: ProcessStatistic,
+pub struct ProcessStatisticSeries {
+    cids: CollectionIdIter,
+    points: std::vec::IntoIter<Option<f64>>,
 }
 
-impl<'a> Series<'a> for ProcessStatisticSeries<'a> {
+impl ProcessStatisticSeries {
+    fn new(
+        collection_ids: Arc<Vec<CollectionId>>,
+        db: &Db,
+        krate: Crate,
+        profile: Profile,
+        cache: Cache,
+        stat: ProcessStatistic,
+    ) -> Self {
+        let mut res = Vec::with_capacity(collection_ids.len());
+        let idx = db.index.load();
+        let conn = db.conn();
+        let query = crate::db::DbLabel::ProcessStat {
+            krate,
+            profile,
+            cache,
+            stat,
+        };
+        if stat == *"cpu-clock" {
+            // Convert to seconds -- perf reports this measurement in
+            // milliseconds
+            for cid in collection_ids.iter() {
+                let point = idx.get::<f64>(conn, &query, cid).map(|d| d / 1000.0);
+                res.push(point);
+            }
+        } else {
+            for cid in collection_ids.iter() {
+                let point = idx.get::<f64>(conn, &query, cid);
+                res.push(point);
+            }
+        }
+
+        Self {
+            cids: CollectionIdIter::new(collection_ids),
+            points: res.into_iter(),
+        }
+    }
+}
+
+impl<'a> Series<'a> for ProcessStatisticSeries {
     type Element = Option<f64>;
 
     fn expand_query(
@@ -460,15 +518,14 @@ impl<'a> Series<'a> for ProcessStatisticSeries<'a> {
         Ok(series
             .into_iter()
             .map(|path| SeriesResponse {
-                series: ProcessStatisticSeries {
+                series: ProcessStatisticSeries::new(
+                    collection_ids.clone(),
                     db,
-                    collection_ids: collection_ids.clone(),
-                    idx: 0,
-                    krate: path.0,
-                    profile: path.1,
-                    cache: path.2,
-                    stat: path.3,
-                },
+                    path.0,
+                    path.1,
+                    path.2,
+                    path.3,
+                ),
                 path: Path::new()
                     .set(PathComponent::Crate(path.0))
                     .set(PathComponent::Profile(path.1))
@@ -480,90 +537,88 @@ impl<'a> Series<'a> for ProcessStatisticSeries<'a> {
     }
 }
 
-impl<'a> Iterator for ProcessStatisticSeries<'a> {
+impl Iterator for ProcessStatisticSeries {
     type Item = (CollectionId, Option<f64>);
     fn next(&mut self) -> Option<Self::Item> {
-        let col_id = self.collection_ids.get(self.idx)?;
-        self.idx += 1;
+        Some((self.cids.next()?, self.points.next().unwrap()))
+    }
 
-        let mut point = self.db.index.load().get::<f64>(
-            &self.db.conn(),
-            &crate::db::DbLabel::ProcessStat {
-                krate: self.krate,
-                profile: self.profile,
-                cache: self.cache,
-                stat: self.stat,
-            },
-            col_id,
-        );
-
-        if self.stat == *"cpu-clock" {
-            // Convert to seconds -- perf reports this measurement in
-            // milliseconds
-            point = point.map(|d| d / 1000.0);
-        }
-
-        Some((col_id.clone(), point))
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.cids.size_hint()
     }
 }
 
-pub struct SelfProfile<'a> {
-    collection_ids: Arc<Vec<CollectionId>>,
-    idx: usize,
-    db: &'a Db,
-    krate: Crate,
-    profile: Profile,
-    cache: Cache,
+pub struct SelfProfile {
+    cids: CollectionIdIter,
+    points: std::vec::IntoIter<Option<collector::SelfProfile>>,
 }
 
-impl<'a> Iterator for SelfProfile<'a> {
-    type Item = (CollectionId, Option<collector::SelfProfile>);
-    fn next(&mut self) -> Option<Self::Item> {
-        let col_id = self.collection_ids.get(self.idx)?;
-        self.idx += 1;
-
-        let mut queries = Vec::new();
-
-        for query in self
-            .db
-            .index
-            .load()
-            .filtered_queries(self.krate, self.profile, self.cache)
-        {
-            if let Some(qd) = self.db.index.load().get::<crate::db::QueryDatum>(
-                &self.db.conn(),
-                &crate::db::DbLabel::SelfProfileQuery {
-                    krate: self.krate,
-                    profile: self.profile,
-                    cache: self.cache,
-                    query,
-                },
-                col_id,
-            ) {
-                queries.push(collector::self_profile::QueryData {
-                    label: query,
-                    self_time: qd.self_time.as_nanos().try_into().unwrap(),
-                    number_of_cache_hits: qd.number_of_cache_hits,
-                    invocation_count: qd.invocation_count,
-                    blocked_time: qd.blocked_time.as_nanos().try_into().unwrap(),
-                    incremental_load_time: qd.incremental_load_time.as_nanos().try_into().unwrap(),
-                });
+impl SelfProfile {
+    fn new(
+        cids: Arc<Vec<CollectionId>>,
+        db: &Db,
+        krate: Crate,
+        profile: Profile,
+        cache: Cache,
+    ) -> Self {
+        let mut res = Vec::with_capacity(cids.len());
+        let idx = db.index.load();
+        let conn = db.conn();
+        let labels = idx
+            .filtered_queries(krate, profile, cache)
+            .collect::<Vec<_>>();
+        for cid in cids.iter() {
+            let mut queries = Vec::new();
+            for label in labels.iter() {
+                let query = crate::db::DbLabel::SelfProfileQuery {
+                    krate,
+                    profile,
+                    cache,
+                    query: *label,
+                };
+                if let Some(qd) = idx.get::<crate::db::QueryDatum>(conn, &query, cid) {
+                    queries.push(collector::self_profile::QueryData {
+                        label: *label,
+                        self_time: qd.self_time.as_nanos().try_into().unwrap(),
+                        number_of_cache_hits: qd.number_of_cache_hits,
+                        invocation_count: qd.invocation_count,
+                        blocked_time: qd.blocked_time.as_nanos().try_into().unwrap(),
+                        incremental_load_time: qd
+                            .incremental_load_time
+                            .as_nanos()
+                            .try_into()
+                            .unwrap(),
+                    });
+                }
+            }
+            if queries.is_empty() {
+                res.push(None);
+            } else {
+                res.push(Some(collector::SelfProfile {
+                    query_data: Arc::new(queries),
+                }));
             }
         }
-        if queries.is_empty() {
-            Some((col_id.clone(), None))
-        } else {
-            Some((
-                col_id.clone(),
-                Some(collector::SelfProfile {
-                    query_data: Arc::new(queries),
-                }),
-            ))
+
+        Self {
+            cids: CollectionIdIter::new(cids),
+            points: res.into_iter(),
         }
     }
 }
 
-impl<'a> Series<'a> for SelfProfile<'a> {
+impl Iterator for SelfProfile {
+    type Item = (CollectionId, Option<collector::SelfProfile>);
+    fn next(&mut self) -> Option<Self::Item> {
+        Some((self.cids.next()?, self.points.next().unwrap()))
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.cids.size_hint()
+    }
+}
+
+impl<'a> Series<'a> for SelfProfile {
     type Element = Option<collector::SelfProfile>;
 
     fn expand_query(
@@ -596,14 +651,7 @@ impl<'a> Series<'a> for SelfProfile<'a> {
         Ok(series
             .into_iter()
             .map(|path| SeriesResponse {
-                series: SelfProfile {
-                    collection_ids: collection_ids.clone(),
-                    idx: 0,
-                    db,
-                    krate: path.0,
-                    profile: path.1,
-                    cache: path.2,
-                },
+                series: SelfProfile::new(collection_ids.clone(), db, path.0, path.1, path.2),
                 path: Path::new()
                     .set(PathComponent::Crate(path.0))
                     .set(PathComponent::Profile(path.1))
@@ -614,43 +662,54 @@ impl<'a> Series<'a> for SelfProfile<'a> {
     }
 }
 
-pub struct SelfProfileQueryTime<'a> {
-    collection_ids: Arc<Vec<CollectionId>>,
-    idx: usize,
-    db: &'a Db,
-    krate: Crate,
-    profile: Profile,
-    cache: Cache,
-    query: QueryLabel,
+pub struct SelfProfileQueryTime {
+    cids: CollectionIdIter,
+    points: std::vec::IntoIter<Option<f64>>,
 }
 
-impl<'a> Iterator for SelfProfileQueryTime<'a> {
-    type Item = (CollectionId, Option<f64>);
-    fn next(&mut self) -> Option<Self::Item> {
-        let col_id = self.collection_ids.get(self.idx)?;
-        self.idx += 1;
-
-        let point = self
-            .db
-            .index
-            .load()
-            .get::<crate::db::QueryDatum>(
-                &self.db.conn(),
-                &crate::db::DbLabel::SelfProfileQuery {
-                    krate: self.krate,
-                    profile: self.profile,
-                    cache: self.cache,
-                    query: self.query,
-                },
-                col_id,
-            )
-            .map(|qd| qd.self_time.as_secs_f64());
-
-        Some((col_id.clone(), point))
+impl SelfProfileQueryTime {
+    fn new(
+        collection_ids: Arc<Vec<CollectionId>>,
+        db: &Db,
+        krate: Crate,
+        profile: Profile,
+        cache: Cache,
+        query: QueryLabel,
+    ) -> Self {
+        let mut res = Vec::with_capacity(collection_ids.len());
+        let idx = db.index.load();
+        let conn = db.conn();
+        let query = crate::db::DbLabel::SelfProfileQuery {
+            krate,
+            profile,
+            cache,
+            query,
+        };
+        for cid in collection_ids.iter() {
+            let point = idx
+                .get::<crate::db::QueryDatum>(conn, &query, cid)
+                .map(|qd| qd.self_time.as_secs_f64());
+            res.push(point);
+        }
+        SelfProfileQueryTime {
+            cids: CollectionIdIter::new(collection_ids),
+            points: res.into_iter(),
+        }
     }
 }
 
-impl<'a> Series<'a> for SelfProfileQueryTime<'a> {
+impl Iterator for SelfProfileQueryTime {
+    type Item = (CollectionId, Option<f64>);
+    fn next(&mut self) -> Option<Self::Item> {
+        Some((self.cids.next()?, self.points.next().unwrap()))
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.cids.size_hint()
+    }
+}
+
+impl<'a> Series<'a> for SelfProfileQueryTime {
     type Element = Option<f64>;
 
     fn expand_query(
@@ -689,15 +748,14 @@ impl<'a> Series<'a> for SelfProfileQueryTime<'a> {
         Ok(series
             .into_iter()
             .map(move |path| SeriesResponse {
-                series: SelfProfileQueryTime {
-                    collection_ids: collection_ids.clone(),
-                    idx: 0,
+                series: SelfProfileQueryTime::new(
+                    collection_ids.clone(),
                     db,
-                    krate: path.0,
-                    profile: path.1,
-                    cache: path.2,
-                    query: path.3,
-                },
+                    path.0,
+                    path.1,
+                    path.2,
+                    path.3,
+                ),
                 path: Path::new()
                     .set(PathComponent::Crate(path.0))
                     .set(PathComponent::Profile(path.1))
@@ -708,30 +766,38 @@ impl<'a> Series<'a> for SelfProfileQueryTime<'a> {
     }
 }
 
-pub struct CompileError<'a> {
-    collection_ids: Arc<Vec<CollectionId>>,
-    idx: usize,
-    db: &'a Db,
-    krate: Crate,
+pub struct CompileError {
+    cids: CollectionIdIter,
+    errors: std::vec::IntoIter<Option<String>>,
 }
 
-impl<'a> Iterator for CompileError<'a> {
-    type Item = (CollectionId, Option<String>);
-    fn next(&mut self) -> Option<Self::Item> {
-        let col_id = self.collection_ids.get(self.idx)?;
-        self.idx += 1;
-
-        let point = self.db.index.load().get::<String>(
-            &self.db.conn(),
-            &crate::db::DbLabel::Errors { krate: self.krate },
-            col_id,
-        );
-
-        Some((col_id.clone(), point))
+impl CompileError {
+    fn new(collection_ids: Arc<Vec<CollectionId>>, db: &Db, krate: Crate) -> CompileError {
+        let conn = db.conn();
+        let mut res = Vec::with_capacity(collection_ids.len());
+        let idx = db.index.load();
+        for cid in collection_ids.iter() {
+            res.push(idx.get::<String>(conn, &crate::db::DbLabel::Errors { krate }, cid));
+        }
+        CompileError {
+            cids: CollectionIdIter::new(collection_ids),
+            errors: res.into_iter(),
+        }
     }
 }
 
-impl<'a> Series<'a> for CompileError<'a> {
+impl Iterator for CompileError {
+    type Item = (CollectionId, Option<String>);
+    fn next(&mut self) -> Option<Self::Item> {
+        Some((self.cids.next()?, self.errors.next().unwrap()))
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.cids.size_hint()
+    }
+}
+
+impl<'a> Series<'a> for CompileError {
     type Element = Option<String>;
 
     fn expand_query(
@@ -753,12 +819,7 @@ impl<'a> Series<'a> for CompileError<'a> {
         Ok(series
             .into_iter()
             .map(move |path| SeriesResponse {
-                series: CompileError {
-                    collection_ids: collection_ids.clone(),
-                    idx: 0,
-                    db,
-                    krate: path,
-                },
+                series: CompileError::new(collection_ids.clone(), db, path),
                 path: Path::new().set(PathComponent::Crate(path)),
             })
             .collect::<Vec<_>>())

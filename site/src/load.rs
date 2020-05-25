@@ -198,7 +198,7 @@ impl InputData {
     pub fn conn(&self) -> &Connection {
         self.conn.get_or(|| {
             let conn = Connection::open(&self.path).unwrap();
-            conn.pragma_update(None, "cache_size", &-64000).unwrap();
+            conn.pragma_update(None, "cache_size", &-128000).unwrap();
             conn
         })
     }
