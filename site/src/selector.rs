@@ -211,17 +211,11 @@ impl<T> SeriesResponse<T> {
     }
 }
 
-pub trait Series<'a>: Sized
+pub trait Series: Sized
 where
-    Self: Iterator<Item = (CollectionId, <Self as Series<'a>>::Element)>,
+    Self: Iterator<Item = (CollectionId, <Self as Series>::Element)>,
 {
     type Element: Sized;
-
-    fn expand_query(
-        collection_ids: Arc<Vec<CollectionId>>,
-        db: &'a Db,
-        query: Query,
-    ) -> Result<Vec<SeriesResponse<Self>>, String>;
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -479,12 +473,14 @@ impl ProcessStatisticSeries {
     }
 }
 
-impl<'a> Series<'a> for ProcessStatisticSeries {
+impl Series for ProcessStatisticSeries {
     type Element = Option<f64>;
+}
 
+impl ProcessStatisticSeries {
     fn expand_query(
         collection_ids: Arc<Vec<CollectionId>>,
-        db: &'a Db,
+        db: &Db,
         mut query: Query,
     ) -> Result<Vec<SeriesResponse<Self>>, String> {
         let krate = query.extract(Tag::Crate)?.raw;
@@ -618,12 +614,14 @@ impl Iterator for SelfProfile {
     }
 }
 
-impl<'a> Series<'a> for SelfProfile {
+impl Series for SelfProfile {
     type Element = Option<collector::SelfProfile>;
+}
 
+impl SelfProfile {
     fn expand_query(
         collection_ids: Arc<Vec<CollectionId>>,
-        db: &'a Db,
+        db: &Db,
         mut query: Query,
     ) -> Result<Vec<SeriesResponse<Self>>, String> {
         let krate = query.extract(Tag::Crate)?.raw;
@@ -709,12 +707,14 @@ impl Iterator for SelfProfileQueryTime {
     }
 }
 
-impl<'a> Series<'a> for SelfProfileQueryTime {
+impl Series for SelfProfileQueryTime {
     type Element = Option<f64>;
+}
 
+impl SelfProfileQueryTime {
     fn expand_query(
         collection_ids: Arc<Vec<CollectionId>>,
-        db: &'a Db,
+        db: &Db,
         mut query: Query,
     ) -> Result<Vec<SeriesResponse<Self>>, String> {
         let krate = query.extract(Tag::Crate)?.raw;
@@ -797,12 +797,14 @@ impl Iterator for CompileError {
     }
 }
 
-impl<'a> Series<'a> for CompileError {
+impl Series for CompileError {
     type Element = Option<String>;
+}
 
+impl CompileError {
     fn expand_query(
         collection_ids: Arc<Vec<CollectionId>>,
-        db: &'a Db,
+        db: &Db,
         mut query: Query,
     ) -> Result<Vec<SeriesResponse<Self>>, String> {
         let krate = query.extract(Tag::Crate)?.raw;
