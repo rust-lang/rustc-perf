@@ -64,10 +64,10 @@ pub fn handle_info(data: &InputData) -> info::Response {
     }
 }
 
-pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
+pub async fn handle_dashboard(data: Arc<InputData>) -> ServerResult<dashboard::Response> {
     let index = data.index.load();
     if index.artifacts().next().is_none() {
-        return dashboard::Response::default();
+        return Ok(dashboard::Response::default());
     }
 
     let mut versions = index.artifacts().collect::<Vec<_>>();
@@ -123,41 +123,50 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
         );
 
     let summary_patches = data.summary_patches();
-    let by_profile = db::ByProfile::new::<String, _>(|profile| {
-        let mut cases = dashboard::Cases::default();
-        for patch in summary_patches.iter() {
-            let responses = data.query::<Option<f64>>(
-                query
-                    .clone()
-                    .set(Tag::Profile, selector::Selector::One(profile))
-                    .set(Tag::Cache, selector::Selector::One(patch)),
-                cids.clone(),
-            )?;
+    let by_profile = db::ByProfile::new::<String, _, _>(|profile| {
+        let summary_patches = &summary_patches;
+        let data = &data;
+        let query = &query;
+        let cids = &cids;
+        async move {
+            let mut cases = dashboard::Cases::default();
+            for patch in summary_patches.iter() {
+                let responses = data
+                    .query::<Option<f64>>(
+                        query
+                            .clone()
+                            .set(Tag::Profile, selector::Selector::One(profile))
+                            .set(Tag::Cache, selector::Selector::One(patch)),
+                        cids.clone(),
+                    )
+                    .await?;
 
-            let points = db::average(
-                responses
-                    .into_iter()
-                    .map(|sr| sr.interpolate().series)
-                    .collect::<Vec<_>>(),
-            )
-            .map(|((_id, point), _interpolated)| {
-                (point.expect("interpolated") * 10.0).round() / 10.0
-            })
-            .collect::<Vec<_>>();
+                let points = db::average(
+                    responses
+                        .into_iter()
+                        .map(|sr| sr.interpolate().series)
+                        .collect::<Vec<_>>(),
+                )
+                .map(|((_id, point), _interpolated)| {
+                    (point.expect("interpolated") * 10.0).round() / 10.0
+                })
+                .collect::<Vec<_>>();
 
-            match patch {
-                Cache::Empty => cases.clean_averages = points,
-                Cache::IncrementalEmpty => cases.base_incr_averages = points,
-                Cache::IncrementalFresh => cases.clean_incr_averages = points,
-                // we only have println patches here
-                Cache::IncrementalPatch(_) => cases.println_incr_averages = points,
+                match patch {
+                    Cache::Empty => cases.clean_averages = points,
+                    Cache::IncrementalEmpty => cases.base_incr_averages = points,
+                    Cache::IncrementalFresh => cases.clean_incr_averages = points,
+                    // we only have println patches here
+                    Cache::IncrementalPatch(_) => cases.println_incr_averages = points,
+                }
             }
+            Ok(cases)
         }
-        Ok(cases)
     })
+    .await
     .unwrap();
 
-    dashboard::Response {
+    Ok(dashboard::Response {
         versions: cids
             .iter()
             .map(|cid| match cid {
@@ -168,7 +177,7 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
         check: by_profile.check,
         debug: by_profile.debug,
         opt: by_profile.opt,
-    }
+    })
 }
 
 fn prettify_log(log: &str) -> Option<String> {
@@ -187,6 +196,7 @@ pub async fn handle_status_page(data: Arc<InputData>) -> status::Response {
             selector::Query::new().set::<String>(selector::Tag::Crate, selector::Selector::All),
             Arc::new(vec![db::CollectionId::Commit(last_commit)]),
         )
+        .await
         .unwrap()
         .into_iter()
         .map(|mut sr| {
@@ -291,7 +301,6 @@ fn to_graph_data<'a>(
 
 pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<graph::Response> {
     let stat_id = StatId::from_str(&body.stat)?;
-    let tx = data.conn().unchecked_transaction().unwrap();
 
     let cc = CommitIdxCache::new();
     let range = data.data_range(body.start.clone()..=body.end.clone());
@@ -299,14 +308,16 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
 
     let stat_selector = selector::Selector::One(stat_id.as_pstat().to_string());
 
-    let series = data.query::<Option<f64>>(
-        selector::Query::new()
-            .set::<String>(selector::Tag::Crate, selector::Selector::All)
-            .set::<String>(selector::Tag::Profile, selector::Selector::All)
-            .set::<String>(selector::Tag::Cache, selector::Selector::All)
-            .set::<String>(selector::Tag::ProcessStatistic, stat_selector.clone()),
-        commits.clone(),
-    )?;
+    let series = data
+        .query::<Option<f64>>(
+            selector::Query::new()
+                .set::<String>(selector::Tag::Crate, selector::Selector::All)
+                .set::<String>(selector::Tag::Profile, selector::Selector::All)
+                .set::<String>(selector::Tag::Cache, selector::Selector::All)
+                .set::<String>(selector::Tag::ProcessStatistic, stat_selector.clone()),
+            commits.clone(),
+        )
+        .await?;
 
     let mut series = series
         .into_iter()
@@ -318,20 +329,7 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
 
     let mut baselines = HashMap::new();
     let c = commits.clone();
-    let mut baseline = move |query: selector::Query| match baselines.entry(query.clone()) {
-        std::collections::hash_map::Entry::Occupied(o) => Ok::<_, String>(*o.get()),
-        std::collections::hash_map::Entry::Vacant(v) => {
-            let value = db::average(
-                data.query::<Option<f64>>(query, c.clone())?
-                    .into_iter()
-                    .map(|sr| sr.interpolate().series)
-                    .collect::<Vec<_>>(),
-            )
-            .next()
-            .map_or(0.0, |((_c, d), _interpolated)| d.expect("interpolated"));
-            Ok(*v.insert(value))
-        }
-    };
+    let baselines = &mut baselines;
 
     let summary_queries = iproduct!(
         data.summary_patches(),
@@ -364,28 +362,38 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
             .assert_one()
             .parse::<Cache>()
             .unwrap();
-        let against = baseline(
-            selector::Query::new()
-                .set::<String>(selector::Tag::Crate, selector::Selector::All)
-                .set(selector::Tag::Profile, selector::Selector::One(profile))
-                .set(selector::Tag::Cache, selector::Selector::One(Cache::Empty))
-                .set(
-                    selector::Tag::ProcessStatistic,
-                    query.get(Tag::ProcessStatistic).unwrap().raw.clone(),
-                ),
-        )?;
-        let graph_data = to_graph_data(
-            &cc,
-            body.absolute,
-            db::average(
-                data.query::<Option<f64>>(query.clone(), commits.clone())?
-                    .into_iter()
-                    .map(|sr| sr.interpolate().series)
-                    .collect(),
-            )
-            .map(|((c, d), i)| ((c, Some(d.expect("interpolated") / against)), i)),
+        let q = selector::Query::new()
+            .set::<String>(selector::Tag::Crate, selector::Selector::All)
+            .set(selector::Tag::Profile, selector::Selector::One(profile))
+            .set(selector::Tag::Cache, selector::Selector::One(Cache::Empty))
+            .set(
+                selector::Tag::ProcessStatistic,
+                query.get(Tag::ProcessStatistic).unwrap().raw.clone(),
+            );
+        let against = match baselines.entry(q.clone()) {
+            std::collections::hash_map::Entry::Occupied(o) => *o.get(),
+            std::collections::hash_map::Entry::Vacant(v) => {
+                let value = db::average(
+                    data.query::<Option<f64>>(q, c.clone())
+                        .await?
+                        .into_iter()
+                        .map(|sr| sr.interpolate().series)
+                        .collect::<Vec<_>>(),
+                )
+                .next()
+                .map_or(0.0, |((_c, d), _interpolated)| d.expect("interpolated"));
+                *v.insert(value)
+            }
+        };
+        let averaged = db::average(
+            data.query::<Option<f64>>(query.clone(), commits.clone())
+                .await?
+                .into_iter()
+                .map(|sr| sr.interpolate().series)
+                .collect(),
         )
-        .collect::<Vec<_>>();
+        .map(|((c, d), i)| ((c, Some(d.expect("interpolated") / against)), i));
+        let graph_data = to_graph_data(&cc, body.absolute, averaged).collect::<Vec<_>>();
         series.push(selector::SeriesResponse {
             path: selector::Path::new()
                 .set(PathComponent::Crate("Summary".into()))
@@ -422,8 +430,6 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
             .push((sr.path.get::<Cache>()?.to_string(), sr.series));
     }
 
-    tx.finish().unwrap();
-
     Ok(graph::Response {
         max: by_krate_max,
         benchmarks: by_krate,
@@ -453,7 +459,7 @@ pub async fn handle_compare(body: days::Request, data: &InputData) -> ServerResu
             selector::Selector::One(stat_id.as_str()),
         );
 
-    let mut responses = data.query::<Option<f64>>(query, cids)?;
+    let mut responses = data.query::<Option<f64>>(query, cids).await?;
 
     Ok(days::Response {
         a: DateData::consume_one(a, &mut responses),
@@ -731,18 +737,21 @@ pub async fn handle_self_profile(
     }
 
     let commits = Arc::new(commits);
-    let mut sp_responses =
-        data.query::<Option<collector::self_profile::SelfProfile>>(query.clone(), commits.clone())?;
+    let mut sp_responses = data
+        .query::<Option<collector::self_profile::SelfProfile>>(query.clone(), commits.clone())
+        .await?;
     assert_eq!(sp_responses.len(), 1, "all selectors are exact");
     let mut sp_response = sp_responses.remove(0).series;
 
-    let mut cpu_responses = data.query::<Option<f64>>(
-        query.clone().set(
-            Tag::ProcessStatistic,
-            selector::Selector::One("cpu-clock".to_string()),
-        ),
-        commits.clone(),
-    )?;
+    let mut cpu_responses = data
+        .query::<Option<f64>>(
+            query.clone().set(
+                Tag::ProcessStatistic,
+                selector::Selector::One("cpu-clock".to_string()),
+            ),
+            commits.clone(),
+        )
+        .await?;
     assert_eq!(cpu_responses.len(), 1, "all selectors are exact");
     let mut cpu_response = cpu_responses.remove(0).series;
 
@@ -923,36 +932,37 @@ impl Server {
 
         let data: Arc<InputData> = self.data.read().as_ref().unwrap().clone();
         let updating = self.updating.release_on_drop(channel);
-        std::thread::spawn(move || {
-            let path = if let Some(p) = std::env::args().nth(2) {
-                p
-            } else {
-                eprintln!("Please pass the rustc-timing git directory as the second argument to support onpush handling.");
-                std::process::exit(1);
-            };
-            let paths = git::update_repo(&path).unwrap();
+        tokio::task::spawn_blocking(move || {
+            tokio::task::spawn(async move {
+                let path = if let Some(p) = std::env::args().nth(2) {
+                    p
+                } else {
+                    eprintln!("Please pass the rustc-timing git directory as the second argument to support onpush handling.");
+                    std::process::exit(1);
+                };
+                let paths = git::update_repo(&path).unwrap();
 
-            let start = std::time::Instant::now();
-            eprintln!("ingesting {} paths: {:#?}", paths.len(), paths);
-            let conn = data.conn();
+                let start = std::time::Instant::now();
+                eprintln!("ingesting {} paths: {:#?}", paths.len(), paths);
+                let mut tx = data.transaction();
 
-            conn.execute(
-                "create table if not exists interned(name text primary key, value blob);",
-                params![],
-            )
-            .unwrap();
-            conn.execute(
-                "create table if not exists errors(series integer, cid integer, value text);",
-                params![],
-            )
-            .unwrap();
-            conn.execute(
-                "create table if not exists pstat(series integer, cid integer, value real);",
-                params![],
-            )
-            .unwrap();
-            conn.execute(
-                "create table if not exists self_profile_query(
+                tx.execute(
+                    "create table if not exists interned(name text primary key, value blob);",
+                    params![],
+                )
+                .unwrap();
+                tx.execute(
+                    "create table if not exists errors(series integer, cid integer, value text);",
+                    params![],
+                )
+                .unwrap();
+                tx.execute(
+                    "create table if not exists pstat(series integer, cid integer, value real);",
+                    params![],
+                )
+                .unwrap();
+                tx.execute(
+                    "create table if not exists self_profile_query(
                     series integer,
                     cid integer,
                     self_time integer,
@@ -961,42 +971,48 @@ impl Server {
                     number_of_cache_hits integer,
                     invocation_count integer
                 );",
-                params![],
-            )
-            .unwrap();
+                    params![],
+                )
+                .unwrap();
 
-            let mut index = crate::db::Index::load(conn);
+                let mut index = db::Index::load(&mut tx).await;
 
-            for path in paths.iter() {
-                crate::ingest::ingest(conn, &mut index, &path);
-            }
+                for path in paths.iter() {
+                    crate::ingest::ingest(&mut tx, &mut index, &path);
+                }
 
-            // Store back the new index, letting everyone else see the new
-            // value.
-            eprintln!("index has {} commits", index.commits().len());
-            index.store(&conn);
-            data.index.store(Arc::new(index));
-            eprintln!("finished updating index in {:?}", start.elapsed());
+                // Store back the new index, letting everyone else see the new
+                // value.
+                eprintln!("index has {} commits", index.commits().len());
+                index.store(&mut tx).await;
+                data.index.store(Arc::new(index));
+                tx.commit().unwrap();
+                eprintln!("finished updating index in {:?}", start.elapsed());
 
-            let start = std::time::Instant::now();
-            eprintln!("creating sqlite indices");
+                let tx = data.transaction();
 
-            conn.execute(
-                "create index if not exists self_profile_query_sc on self_profile_query(series, cid);",
-                params![],
-            )
-            .unwrap();
+                let start = std::time::Instant::now();
+                eprintln!("creating sqlite indices");
 
-            conn.execute(
-                "create index if not exists pstat_sc on pstat(series, cid);",
-                params![],
-            )
-            .unwrap();
+                tx.execute(
+                    "create index if not exists self_profile_query_sc on self_profile_query(series, cid);",
+                    params![],
+                )
+                .unwrap();
 
-            conn.execute("analyze;", params![]).unwrap();
-            eprintln!("done creating sqlite indices in {:?}", start.elapsed());
+                tx.execute(
+                    "create index if not exists pstat_sc on pstat(series, cid);",
+                    params![],
+                )
+                .unwrap();
 
-            std::mem::drop(updating);
+                tx.execute("analyze;", params![]).unwrap();
+                eprintln!("done creating sqlite indices in {:?}", start.elapsed());
+
+                tx.commit().unwrap();
+
+                std::mem::drop(updating);
+            });
         });
 
         Response::new(body)
@@ -1044,7 +1060,10 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
 
     match req.uri().path() {
         "/perf/info" => return ctx.handle_get(&req, handle_info),
-        "/perf/dashboard" => return ctx.handle_get(&req, handle_dashboard),
+        "/perf/dashboard" => {
+            let ret = ctx.handle_get_async(&req, |c| handle_dashboard(c));
+            return ret.await;
+        }
         "/perf/status_page" => {
             let ret = ctx.handle_get_async(&req, |c| handle_status_page(c));
             return ret.await;

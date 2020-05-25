@@ -30,8 +30,10 @@ async fn main() {
         std::process::exit(1);
     });
     let fut = tokio::task::spawn_blocking(move || {
-        let res = Some(Arc::new(load::InputData::from_fs(&path).unwrap()));
-        *data_.write() = res;
+        tokio::task::spawn(async move {
+            let res = Some(Arc::new(load::InputData::from_fs(&path).await.unwrap()));
+            *data_.write() = res;
+        })
     })
     .fuse();
     let port = env::var("PORT")

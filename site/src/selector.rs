@@ -25,6 +25,7 @@
 use crate::db::{Cache, CollectionId, Profile};
 use crate::interpolate::Interpolate;
 use crate::load::InputData as Db;
+use async_trait::async_trait;
 use collector::self_profile::QueryLabel;
 use collector::{BenchmarkName as Crate, ProcessStatistic};
 use std::convert::TryInto;
@@ -299,19 +300,26 @@ impl Query {
     }
 }
 
+#[async_trait]
 pub trait SeriesElement: Sized {
-    fn query<'a>(
+    async fn query<'a>(
         db: &'a Db,
         collection_ids: Arc<Vec<CollectionId>>,
         query: Query,
-    ) -> Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, Self)> + 'a>>>, String>;
+    ) -> Result<
+        Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, Self)> + Send + 'a>>>,
+        String,
+    >;
 }
 
 fn handle_results<'a, E>(
     results: Vec<
-        Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, E)> + 'a>>>, String>,
+        Result<
+            Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, E)> + Send + 'a>>>,
+            String,
+        >,
     >,
-) -> Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, E)> + 'a>>>, String> {
+) -> Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, E)> + Send + 'a>>>, String> {
     let mut ok = None;
     let mut errs = Vec::new();
     for res in results {
@@ -338,76 +346,112 @@ fn handle_results<'a, E>(
     })
 }
 
+#[async_trait]
 impl SeriesElement for Option<String> {
-    fn query<'a>(
+    async fn query<'a>(
         db: &'a Db,
         collection_ids: Arc<Vec<CollectionId>>,
         query: Query,
-    ) -> Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, Self)> + 'a>>>, String>
-    {
+    ) -> Result<
+        Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, Option<String>)> + Send + 'a>>>,
+        String,
+    > {
         let results = vec![
-            CompileError::expand_query(collection_ids.clone(), db, query.clone()).map(|sr| {
-                sr.into_iter()
-                    .map(|sr| {
-                        sr.map(|r| Box::new(r) as Box<dyn Iterator<Item = (CollectionId, Self)>>)
-                    })
-                    .collect()
-            }),
+            CompileError::expand_query(collection_ids.clone(), db, query.clone())
+                .await
+                .map(|sr| {
+                    sr.into_iter()
+                        .map(|sr| {
+                            sr.map(|r| {
+                                Box::new(r)
+                                    as Box<
+                                        dyn Iterator<Item = (CollectionId, Option<String>)> + Send,
+                                    >
+                            })
+                        })
+                        .collect()
+                }),
         ];
         handle_results(results)
     }
 }
 
-impl SeriesElement for Option<collector::self_profile::SelfProfile> {
-    fn query<'a>(
+#[async_trait]
+impl SeriesElement for Option<collector::SelfProfile> {
+    async fn query<'a>(
         db: &'a Db,
         collection_ids: Arc<Vec<CollectionId>>,
         query: Query,
-    ) -> Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, Self)> + 'a>>>, String>
-    {
+    ) -> Result<
+        Vec<
+            SeriesResponse<
+                Box<
+                    dyn Iterator<Item = (CollectionId, Option<collector::SelfProfile>)> + Send + 'a,
+                >,
+            >,
+        >,
+        String,
+    > {
         let results = vec![
-            SelfProfile::expand_query(collection_ids.clone(), db, query.clone()).map(|sr| {
-                sr.into_iter()
-                    .map(|sr| {
-                        sr.map(|r| Box::new(r) as Box<dyn Iterator<Item = (CollectionId, Self)>>)
-                    })
-                    .collect()
-            }),
+            SelfProfile::expand_query(collection_ids.clone(), db, query.clone())
+                .await
+                .map(|sr| {
+                    sr.into_iter()
+                        .map(|sr| {
+                            sr.map(|r| {
+                                Box::new(r)
+                                    as Box<
+                                        dyn Iterator<
+                                                Item = (
+                                                    CollectionId,
+                                                    Option<collector::SelfProfile>,
+                                                ),
+                                            > + Send,
+                                    >
+                            })
+                        })
+                        .collect()
+                }),
         ];
         handle_results(results)
     }
 }
 
+#[async_trait]
 impl SeriesElement for Option<f64> {
-    fn query<'a>(
+    async fn query<'a>(
         db: &'a Db,
         collection_ids: Arc<Vec<CollectionId>>,
         query: Query,
-    ) -> Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, Self)> + 'a>>>, String>
-    {
+    ) -> Result<
+        Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, Option<f64>)> + Send + 'a>>>,
+        String,
+    > {
         let results = vec![
-            ProcessStatisticSeries::expand_query(collection_ids.clone(), db, query.clone()).map(
-                |sr| {
+            ProcessStatisticSeries::expand_query(collection_ids.clone(), db, query.clone())
+                .await
+                .map(|sr| {
                     sr.into_iter()
                         .map(|sr| {
                             sr.map(|r| {
-                                Box::new(r) as Box<dyn Iterator<Item = (CollectionId, Self)>>
+                                Box::new(r)
+                                    as Box<dyn Iterator<Item = (CollectionId, Option<f64>)> + Send>
                             })
                         })
                         .collect()
-                },
-            ),
-            SelfProfileQueryTime::expand_query(collection_ids.clone(), db, query.clone()).map(
-                |sr| {
+                }),
+            SelfProfileQueryTime::expand_query(collection_ids.clone(), db, query.clone())
+                .await
+                .map(|sr| {
                     sr.into_iter()
                         .map(|sr| {
                             sr.map(|r| {
-                                Box::new(r) as Box<dyn Iterator<Item = (CollectionId, Self)>>
+                                Box::new(r)
+                                    as Box<dyn Iterator<Item = (CollectionId, Option<f64>)> + Send>
                             })
                         })
                         .collect()
-                },
-            ),
+                }),
         ];
 
         handle_results(results)
@@ -415,12 +459,13 @@ impl SeriesElement for Option<f64> {
 }
 
 impl Db {
-    pub fn query<'a, E: SeriesElement>(
+    pub async fn query<'a, E: SeriesElement>(
         &'a self,
         query: Query,
         collection_ids: Arc<Vec<CollectionId>>,
-    ) -> Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, E)> + 'a>>>, String> {
-        E::query(self, collection_ids, query)
+    ) -> Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, E)> + Send + 'a>>>, String>
+    {
+        E::query(self, collection_ids, query).await
     }
 }
 
@@ -435,7 +480,7 @@ pub struct ProcessStatisticSeries {
 }
 
 impl ProcessStatisticSeries {
-    fn new(
+    async fn new(
         collection_ids: Arc<Vec<CollectionId>>,
         db: &Db,
         krate: Crate,
@@ -445,7 +490,7 @@ impl ProcessStatisticSeries {
     ) -> Self {
         let mut res = Vec::with_capacity(collection_ids.len());
         let idx = db.index.load();
-        let conn = db.conn();
+        let mut tx = db.transaction();
         let query = crate::db::DbLabel::ProcessStat {
             krate,
             profile,
@@ -456,15 +501,17 @@ impl ProcessStatisticSeries {
             // Convert to seconds -- perf reports this measurement in
             // milliseconds
             for cid in collection_ids.iter() {
-                let point = idx.get::<f64>(conn, &query, cid).map(|d| d / 1000.0);
+                let pt = idx.get::<f64>(&mut tx, &query, cid);
+                let point = pt.await.map(|d| d / 1000.0);
                 res.push(point);
             }
         } else {
             for cid in collection_ids.iter() {
-                let point = idx.get::<f64>(conn, &query, cid);
-                res.push(point);
+                let point = idx.get::<f64>(&mut tx, &query, cid);
+                res.push(point.await);
             }
         }
+        tx.finish().unwrap();
 
         Self {
             cids: CollectionIdIter::new(collection_ids),
@@ -478,7 +525,7 @@ impl Series for ProcessStatisticSeries {
 }
 
 impl ProcessStatisticSeries {
-    fn expand_query(
+    async fn expand_query(
         collection_ids: Arc<Vec<CollectionId>>,
         db: &Db,
         mut query: Query,
@@ -511,9 +558,9 @@ impl ProcessStatisticSeries {
 
         series.sort_unstable();
 
-        Ok(series
-            .into_iter()
-            .map(|path| SeriesResponse {
+        let mut res = Vec::with_capacity(series.len());
+        for path in series {
+            res.push(SeriesResponse {
                 series: ProcessStatisticSeries::new(
                     collection_ids.clone(),
                     db,
@@ -521,15 +568,16 @@ impl ProcessStatisticSeries {
                     path.1,
                     path.2,
                     path.3,
-                ),
+                )
+                .await,
                 path: Path::new()
                     .set(PathComponent::Crate(path.0))
                     .set(PathComponent::Profile(path.1))
                     .set(PathComponent::Cache(path.2))
                     .set(PathComponent::ProcessStatistic(path.3)),
-            })
-            .into_iter()
-            .collect())
+            });
+        }
+        Ok(res)
     }
 }
 
@@ -550,7 +598,7 @@ pub struct SelfProfile {
 }
 
 impl SelfProfile {
-    fn new(
+    async fn new(
         cids: Arc<Vec<CollectionId>>,
         db: &Db,
         krate: Crate,
@@ -559,7 +607,7 @@ impl SelfProfile {
     ) -> Self {
         let mut res = Vec::with_capacity(cids.len());
         let idx = db.index.load();
-        let conn = db.conn();
+        let mut tx = db.transaction();
         let labels = idx
             .filtered_queries(krate, profile, cache)
             .collect::<Vec<_>>();
@@ -572,7 +620,7 @@ impl SelfProfile {
                     cache,
                     query: *label,
                 };
-                if let Some(qd) = idx.get::<crate::db::QueryDatum>(conn, &query, cid) {
+                if let Some(qd) = idx.get::<crate::db::QueryDatum>(&mut tx, &query, cid).await {
                     queries.push(collector::self_profile::QueryData {
                         label: *label,
                         self_time: qd.self_time.as_nanos().try_into().unwrap(),
@@ -595,6 +643,7 @@ impl SelfProfile {
                 }));
             }
         }
+        tx.finish().unwrap();
 
         Self {
             cids: CollectionIdIter::new(cids),
@@ -619,7 +668,7 @@ impl Series for SelfProfile {
 }
 
 impl SelfProfile {
-    fn expand_query(
+    async fn expand_query(
         collection_ids: Arc<Vec<CollectionId>>,
         db: &Db,
         mut query: Query,
@@ -646,17 +695,17 @@ impl SelfProfile {
         series.sort_unstable();
         series.dedup();
 
-        Ok(series
-            .into_iter()
-            .map(|path| SeriesResponse {
-                series: SelfProfile::new(collection_ids.clone(), db, path.0, path.1, path.2),
+        let mut res = Vec::with_capacity(series.len());
+        for path in series {
+            res.push(SeriesResponse {
+                series: SelfProfile::new(collection_ids.clone(), db, path.0, path.1, path.2).await,
                 path: Path::new()
                     .set(PathComponent::Crate(path.0))
                     .set(PathComponent::Profile(path.1))
                     .set(PathComponent::Cache(path.2)),
-            })
-            .into_iter()
-            .collect())
+            });
+        }
+        Ok(res)
     }
 }
 
@@ -666,7 +715,7 @@ pub struct SelfProfileQueryTime {
 }
 
 impl SelfProfileQueryTime {
-    fn new(
+    async fn new(
         collection_ids: Arc<Vec<CollectionId>>,
         db: &Db,
         krate: Crate,
@@ -676,7 +725,7 @@ impl SelfProfileQueryTime {
     ) -> Self {
         let mut res = Vec::with_capacity(collection_ids.len());
         let idx = db.index.load();
-        let conn = db.conn();
+        let mut tx = db.transaction();
         let query = crate::db::DbLabel::SelfProfileQuery {
             krate,
             profile,
@@ -685,10 +734,12 @@ impl SelfProfileQueryTime {
         };
         for cid in collection_ids.iter() {
             let point = idx
-                .get::<crate::db::QueryDatum>(conn, &query, cid)
+                .get::<crate::db::QueryDatum>(&mut tx, &query, cid)
+                .await
                 .map(|qd| qd.self_time.as_secs_f64());
             res.push(point);
         }
+        tx.finish().unwrap();
         SelfProfileQueryTime {
             cids: CollectionIdIter::new(collection_ids),
             points: res.into_iter(),
@@ -712,7 +763,7 @@ impl Series for SelfProfileQueryTime {
 }
 
 impl SelfProfileQueryTime {
-    fn expand_query(
+    async fn expand_query(
         collection_ids: Arc<Vec<CollectionId>>,
         db: &Db,
         mut query: Query,
@@ -745,9 +796,9 @@ impl SelfProfileQueryTime {
 
         series.sort_unstable();
 
-        Ok(series
-            .into_iter()
-            .map(move |path| SeriesResponse {
+        let mut res = Vec::with_capacity(series.len());
+        for path in series {
+            res.push(SeriesResponse {
                 series: SelfProfileQueryTime::new(
                     collection_ids.clone(),
                     db,
@@ -755,14 +806,16 @@ impl SelfProfileQueryTime {
                     path.1,
                     path.2,
                     path.3,
-                ),
+                )
+                .await,
                 path: Path::new()
                     .set(PathComponent::Crate(path.0))
                     .set(PathComponent::Profile(path.1))
                     .set(PathComponent::Cache(path.2))
                     .set(PathComponent::QueryLabel(path.3)),
-            })
-            .collect::<Vec<_>>())
+            });
+        }
+        Ok(res)
     }
 }
 
@@ -772,12 +825,15 @@ pub struct CompileError {
 }
 
 impl CompileError {
-    fn new(collection_ids: Arc<Vec<CollectionId>>, db: &Db, krate: Crate) -> CompileError {
-        let conn = db.conn();
+    async fn new(collection_ids: Arc<Vec<CollectionId>>, db: &Db, krate: Crate) -> CompileError {
+        let mut tx = db.transaction();
         let mut res = Vec::with_capacity(collection_ids.len());
         let idx = db.index.load();
         for cid in collection_ids.iter() {
-            res.push(idx.get::<String>(conn, &crate::db::DbLabel::Errors { krate }, cid));
+            res.push(
+                idx.get::<String>(&mut tx, &crate::db::DbLabel::Errors { krate }, cid)
+                    .await,
+            );
         }
         CompileError {
             cids: CollectionIdIter::new(collection_ids),
@@ -802,7 +858,7 @@ impl Series for CompileError {
 }
 
 impl CompileError {
-    fn expand_query(
+    async fn expand_query(
         collection_ids: Arc<Vec<CollectionId>>,
         db: &Db,
         mut query: Query,
@@ -818,12 +874,13 @@ impl CompileError {
             .collect::<Vec<_>>();
         series.sort_unstable();
 
-        Ok(series
-            .into_iter()
-            .map(move |path| SeriesResponse {
-                series: CompileError::new(collection_ids.clone(), db, path),
+        let mut res = Vec::with_capacity(series.len());
+        for path in series {
+            res.push(SeriesResponse {
+                series: CompileError::new(collection_ids.clone(), db, path).await,
                 path: Path::new().set(PathComponent::Crate(path)),
-            })
-            .collect::<Vec<_>>())
+            });
+        }
+        Ok(res)
     }
 }

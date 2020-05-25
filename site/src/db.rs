@@ -10,6 +10,8 @@ use std::fmt;
 use std::ops::RangeInclusive;
 use std::time::Duration;
 
+pub mod pool;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RunId {
     pub profile: Profile,
@@ -132,14 +134,15 @@ pub struct ByProfile<T> {
 }
 
 impl<T> ByProfile<T> {
-    pub fn new<E, F>(mut f: F) -> Result<Self, E>
+    pub async fn new<E, F, F1>(mut f: F) -> Result<Self, E>
     where
-        F: FnMut(Profile) -> Result<T, E>,
+        F: FnMut(Profile) -> F1,
+        F1: std::future::Future<Output = Result<T, E>>,
     {
         Ok(ByProfile {
-            check: f(Profile::Check)?,
-            debug: f(Profile::Debug)?,
-            opt: f(Profile::Opt)?,
+            check: f(Profile::Check).await?,
+            debug: f(Profile::Debug).await?,
+            opt: f(Profile::Opt).await?,
         })
     }
 }
@@ -768,7 +771,7 @@ pub enum DbLabel {
 }
 
 impl Index {
-    pub fn load(conn: &Connection) -> Index {
+    pub async fn load(conn: &mut Connection) -> Index {
         let indices: rusqlite::Result<Option<Vec<u8>>> = conn
             .query_row(
                 "select value from interned where name = 'index'",
@@ -789,7 +792,7 @@ impl Index {
         }
     }
 
-    pub fn store(&self, conn: &Connection) {
+    pub async fn store(&self, conn: &mut Connection) {
         let serialized = serde_json::to_vec(self).unwrap();
         conn.execute(
             "insert or replace into interned (name, value) VALUES ('index', ?)",
@@ -798,9 +801,9 @@ impl Index {
         .unwrap();
     }
 
-    pub fn get<T: SeriesType>(
+    pub async fn get<T: SeriesType>(
         &self,
-        db: &Connection,
+        db: &mut Connection,
         path: &DbLabel,
         cid: &CollectionId,
     ) -> Option<T> {

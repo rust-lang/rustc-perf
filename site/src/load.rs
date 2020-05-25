@@ -19,14 +19,14 @@ use chrono::{Duration, Utc};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
+use crate::db;
 use crate::util;
 use collector::{Bound, Date};
 
 use crate::api::github;
 use collector;
 pub use collector::{BenchmarkName, Commit, Patch, Sha, StatId, Stats};
-use rusqlite::Connection;
-use thread_local::ThreadLocal;
+use r2d2::PooledConnection;
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum MissingReason {
@@ -132,8 +132,7 @@ pub struct InputData {
     pub config: Config,
 
     pub index: ArcSwap<crate::db::Index>,
-    path: String,
-    pub conn: ThreadLocal<Connection>,
+    pub conn: r2d2::Pool<db::pool::Sqlite>,
 }
 
 impl InputData {
@@ -155,7 +154,7 @@ impl InputData {
     }
 
     /// Initialize `InputData from the file system.
-    pub fn from_fs(db: &str) -> anyhow::Result<InputData> {
+    pub async fn from_fs(db: &str) -> anyhow::Result<InputData> {
         if Path::new(db).join("times").exists() {
             eprintln!("It looks like you're running the site off of the old data format");
             eprintln!(
@@ -170,8 +169,14 @@ impl InputData {
             std::process::exit(1);
         }
 
-        let conn = Connection::open(&db).unwrap();
-        let index = crate::db::Index::load(&conn);
+        let pool = r2d2::Pool::builder()
+            .max_size(16)
+            .connection_timeout(std::time::Duration::from_secs(1))
+            .build(db::pool::Sqlite::new(db.into()))
+            .unwrap();
+
+        let mut conn = pool.get().unwrap();
+        let index = db::Index::load(&mut conn).await;
 
         let config = if let Ok(s) = fs::read_to_string("site-config.toml") {
             toml::from_str(&s)?
@@ -190,17 +195,16 @@ impl InputData {
             persistent: Mutex::new(persistent),
             config,
             index: ArcSwap::new(Arc::new(index)),
-            path: db.to_string(),
-            conn: ThreadLocal::new(),
+            conn: pool,
         })
     }
 
-    pub fn conn(&self) -> &Connection {
-        self.conn.get_or(|| {
-            let conn = Connection::open(&self.path).unwrap();
-            conn.pragma_update(None, "cache_size", &-128000).unwrap();
-            conn
-        })
+    pub fn conn(&self) -> PooledConnection<db::pool::Sqlite> {
+        self.conn.get().unwrap()
+    }
+
+    pub fn transaction(&self) -> db::pool::SqliteTransaction {
+        db::pool::SqliteTransaction::start(self.conn.get().unwrap())
     }
 
     pub async fn missing_commits(&self) -> Vec<(Commit, MissingReason)> {
