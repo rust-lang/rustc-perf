@@ -1,7 +1,8 @@
 use chrono::NaiveDate;
 pub use database::{Commit, PatchName, QueryLabel, Sha};
 use database::{Crate, ProcessStatistic};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+use serde::Serialize;
 use std::borrow::Cow;
 use std::cmp::{Ord, PartialOrd};
 use std::fmt;
@@ -15,7 +16,7 @@ pub mod self_profile;
 pub use self_profile::{QueryData, SelfProfile};
 intern::intern!(pub struct PatchPath);
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Patch {
     index: usize,
     pub name: PatchName,
@@ -80,7 +81,7 @@ impl Patch {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Deserialize)]
 pub enum BenchmarkState {
     Clean,
     IncrementalStart,
@@ -122,13 +123,13 @@ impl BenchmarkState {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Benchmark {
     pub runs: Vec<Run>,
     pub name: Crate,
 }
 
-#[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Clone, Deserialize)]
 pub struct Stats {
     stats: Vec<Option<f64>>,
 }
@@ -203,15 +204,6 @@ impl<'de> Deserialize<'de> for StatId {
     }
 }
 
-impl Serialize for StatId {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::ser::Serializer,
-    {
-        serializer.serialize_u16(self.to_id())
-    }
-}
-
 impl StatId {
     // These ids should be unique for all time, i.e., if we remove and add stats
     // we should keep the id growing rather than go back and reuse ids. 2^16 ids
@@ -283,7 +275,7 @@ impl StatId {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Run {
     pub stats: Stats,
     #[serde(default)]
@@ -364,7 +356,7 @@ impl Run {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Deserialize)]
 pub struct DeltaTime(#[serde(with = "round_float")] pub f64);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -394,7 +386,7 @@ impl Bound {
     }
 }
 
-impl Serialize for Bound {
+impl serde::Serialize for Bound {
     fn serialize<S>(&self, serializer: S) -> ::std::result::Result<S::Ok, S::Error>
     where
         S: serde::ser::Serializer,

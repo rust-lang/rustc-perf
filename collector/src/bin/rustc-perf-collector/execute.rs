@@ -10,7 +10,8 @@ use std::str;
 
 use tempfile::TempDir;
 
-use collector::{command_output, BenchmarkState, Patch, Run, SelfProfile, StatId, Stats};
+use crate::old::{BenchmarkState, Patch, Run, SelfProfile, StatId, Stats};
+use collector::command_output;
 
 use anyhow::{bail, Context};
 
@@ -62,8 +63,8 @@ impl Default for BenchmarkConfig {
     }
 }
 
-#[derive(Ord, PartialOrd, Eq, PartialEq, Clone)]
-struct BenchmarkName(String);
+#[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Hash)]
+pub struct BenchmarkName(pub String);
 
 impl fmt::Display for BenchmarkName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -320,7 +321,7 @@ impl<'a> CargoProcess<'a> {
             let output = command_output(&mut cmd)?;
             if let Some((ref mut processor, run_kind, run_kind_str, patch)) = self.processor_etc {
                 let data = ProcessOutputData {
-                    name: self.processor_name,
+                    name: self.processor_name.clone(),
                     cwd: self.cwd,
                     build_kind: self.build_kind,
                     run_kind,
@@ -865,7 +866,7 @@ impl Benchmark {
 
         CargoProcess {
             compiler,
-            processor_name: self.name,
+            processor_name: self.name.clone(),
             cwd: cwd,
             build_kind: build_kind,
             incremental: false,

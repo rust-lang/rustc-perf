@@ -8,7 +8,7 @@ use chrono::{Timelike, Utc};
 use collector::api::collected;
 use database::{Commit, Date, Sha};
 use log::{debug, error};
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::env;
 use std::fs;
@@ -21,11 +21,13 @@ use std::sync::Arc;
 
 mod background_worker;
 mod execute;
+mod old;
 mod outrepo;
 mod sysroot;
 
 use background_worker::send_home;
 use execute::{Benchmark, Profiler};
+use old::{ArtifactData, Benchmark as CollectedBenchmark, CommitData};
 use sysroot::Sysroot;
 
 #[derive(Debug, Copy, Clone)]
@@ -278,7 +280,7 @@ fn bench_commit(
     }
     let existing_data = repo.and_then(|r| r.load_commit_data(&commit, &compiler.triple).ok());
 
-    let mut results = BTreeMap::new();
+    let mut results = HashMap::new();
     if let Some(ref data) = existing_data {
         for benchmark in benchmarks {
             if let Some(result) = data.benchmarks.get(&benchmark.name) {
@@ -317,7 +319,7 @@ fn bench_commit(
             benchmark.measure(&mut processor, build_kinds, run_kinds, compiler, iterations);
         let result = match result {
             Ok(runs) => Ok(CollectedBenchmark {
-                name: benchmark.name,
+                name: benchmark.name.clone(),
                 runs,
             }),
             Err(ref s) => {

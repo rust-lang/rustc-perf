@@ -409,8 +409,41 @@ impl SeriesElement for Option<String> {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct SelfProfileData {
+    pub query_data: Vec<QueryData>,
+}
+
+#[derive(Clone, Debug)]
+pub struct QueryData {
+    pub label: QueryLabel,
+    pub self_time: u64,
+    pub number_of_cache_hits: u32,
+    pub invocation_count: u32,
+    pub blocked_time: u64,
+    pub incremental_load_time: u64,
+}
+
+impl QueryData {
+    pub fn self_time(&self) -> std::time::Duration {
+        std::time::Duration::from_nanos(self.self_time)
+    }
+
+    pub fn blocked_time(&self) -> std::time::Duration {
+        std::time::Duration::from_nanos(self.blocked_time)
+    }
+
+    pub fn incremental_load_time(&self) -> std::time::Duration {
+        std::time::Duration::from_nanos(self.incremental_load_time)
+    }
+
+    pub fn number_of_cache_misses(&self) -> u32 {
+        self.invocation_count - self.number_of_cache_hits
+    }
+}
+
 #[async_trait]
-impl SeriesElement for Option<collector::SelfProfile> {
+impl SeriesElement for Option<SelfProfileData> {
     async fn query<'a>(
         db: &'a Db,
         collection_ids: Arc<Vec<CollectionId>>,
@@ -418,9 +451,7 @@ impl SeriesElement for Option<collector::SelfProfile> {
     ) -> Result<
         Vec<
             SeriesResponse<
-                Box<
-                    dyn Iterator<Item = (CollectionId, Option<collector::SelfProfile>)> + Send + 'a,
-                >,
+                Box<dyn Iterator<Item = (CollectionId, Option<SelfProfileData>)> + Send + 'a>,
             >,
         >,
         String,
@@ -434,12 +465,8 @@ impl SeriesElement for Option<collector::SelfProfile> {
                             sr.map(|r| {
                                 Box::new(r)
                                     as Box<
-                                        dyn Iterator<
-                                                Item = (
-                                                    CollectionId,
-                                                    Option<collector::SelfProfile>,
-                                                ),
-                                            > + Send,
+                                        dyn Iterator<Item = (CollectionId, Option<SelfProfileData>)>
+                                            + Send,
                                     >
                             })
                         })
@@ -628,7 +655,7 @@ impl Iterator for ProcessStatisticSeries {
 
 pub struct SelfProfile {
     cids: CollectionIdIter,
-    points: std::vec::IntoIter<Option<collector::SelfProfile>>,
+    points: std::vec::IntoIter<Option<SelfProfileData>>,
 }
 
 impl SelfProfile {
@@ -659,7 +686,7 @@ impl SelfProfile {
                     .get::<crate::db::QueryDatum>(tx.conn(), &query, cid)
                     .await
                 {
-                    queries.push(collector::self_profile::QueryData {
+                    queries.push(QueryData {
                         label: *label,
                         self_time: qd.self_time.as_nanos().try_into().unwrap(),
                         number_of_cache_hits: qd.number_of_cache_hits,
@@ -676,8 +703,8 @@ impl SelfProfile {
             if queries.is_empty() {
                 res.push(None);
             } else {
-                res.push(Some(collector::SelfProfile {
-                    query_data: Arc::new(queries),
+                res.push(Some(SelfProfileData {
+                    query_data: queries,
                 }));
             }
         }
@@ -691,7 +718,7 @@ impl SelfProfile {
 }
 
 impl Iterator for SelfProfile {
-    type Item = (CollectionId, Option<collector::SelfProfile>);
+    type Item = (CollectionId, Option<SelfProfileData>);
     fn next(&mut self) -> Option<Self::Item> {
         Some((self.cids.next()?, self.points.next().unwrap()))
     }
@@ -702,7 +729,7 @@ impl Iterator for SelfProfile {
 }
 
 impl Series for SelfProfile {
-    type Element = Option<collector::SelfProfile>;
+    type Element = Option<SelfProfileData>;
 }
 
 impl SelfProfile {

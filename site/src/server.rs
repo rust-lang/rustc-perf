@@ -627,7 +627,7 @@ pub async fn handle_collected(
 
 fn get_self_profile_data(
     cpu_clock: Option<f64>,
-    self_profile: Option<collector::SelfProfile>,
+    self_profile: Option<crate::selector::SelfProfileData>,
     sort_idx: Option<i32>,
 ) -> ServerResult<self_profile::SelfProfile> {
     let profile = self_profile
@@ -767,7 +767,7 @@ pub async fn handle_self_profile(
 
     let commits = Arc::new(commits);
     let mut sp_responses = data
-        .query::<Option<collector::self_profile::SelfProfile>>(query.clone(), commits.clone())
+        .query::<Option<selector::SelfProfileData>>(query.clone(), commits.clone())
         .await?;
     assert_eq!(sp_responses.len(), 1, "all selectors are exact");
     let mut sp_response = sp_responses.remove(0).series;
