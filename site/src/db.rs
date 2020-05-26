@@ -1,67 +1,13 @@
 use collector::self_profile::{QueryData, QueryLabel};
 pub use collector::BenchmarkName as Crate;
-use collector::{Bound, Commit, PatchName, ProcessStatistic, StatId};
+use collector::{Bound, Commit, PatchName, ProcessStatistic};
 use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
-use std::convert::TryInto;
 use std::fmt;
 use std::ops::RangeInclusive;
 use std::time::Duration;
 
 pub mod pool;
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct RunId {
-    pub profile: Profile,
-    pub state: Cache,
-}
-
-#[derive(Debug, Clone, serde::Deserialize)]
-#[serde(from = "CollectorRun")]
-pub struct Run {
-    pub stats: collector::Stats,
-    pub profile: Profile,
-    pub state: Cache,
-}
-
-#[derive(Debug, Clone, serde::Deserialize)]
-pub struct CollectorRun {
-    pub stats: collector::Stats,
-    #[serde(default)]
-    pub check: bool,
-    pub release: bool,
-    pub state: collector::BenchmarkState,
-}
-
-impl Run {
-    pub fn get_stat(&self, stat: StatId) -> Option<f64> {
-        self.stats.get(stat)
-    }
-
-    pub fn id(&self) -> RunId {
-        RunId {
-            profile: self.profile,
-            state: self.state,
-        }
-    }
-}
-
-impl From<CollectorRun> for Run {
-    fn from(c: CollectorRun) -> Run {
-        Run {
-            stats: c.stats,
-            profile: if c.check {
-                Profile::Check
-            } else if c.release {
-                Profile::Opt
-            } else {
-                Profile::Debug
-            },
-            state: (&c.state).into(),
-        }
-    }
-}
 
 impl<'a> From<&'a collector::BenchmarkState> for Cache {
     fn from(other: &'a collector::BenchmarkState) -> Self {
@@ -72,26 +18,6 @@ impl<'a> From<&'a collector::BenchmarkState> for Cache {
             collector::BenchmarkState::IncrementalPatched(p) => Cache::IncrementalPatch(p.name),
         }
     }
-}
-
-#[derive(Debug, Clone, serde::Deserialize)]
-pub struct Benchmark {
-    pub runs: Vec<Run>,
-    pub name: Crate,
-}
-
-#[derive(Debug, Clone, serde::Deserialize)]
-pub struct CommitData {
-    pub commit: Commit,
-    // String in Result is the output of the command that failed
-    pub benchmarks: BTreeMap<Crate, Result<Benchmark, String>>,
-}
-
-#[derive(Debug, Clone, serde::Deserialize)]
-pub struct ArtifactData {
-    pub id: String,
-    // String in Result is the output of the command that failed
-    pub benchmarks: BTreeMap<Crate, Result<Benchmark, String>>,
 }
 
 pub fn data_for(data: &[Commit], is_left: bool, query: Bound) -> Option<Commit> {
@@ -192,12 +118,6 @@ impl fmt::Display for Profile {
     }
 }
 
-impl Profile {
-    pub fn matches_run(self, run: &RunId) -> bool {
-        run.profile == self
-    }
-}
-
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "variant", content = "name")]
 pub enum Cache {
@@ -238,12 +158,6 @@ impl fmt::Display for Cache {
             Cache::IncrementalFresh => write!(f, "incr-unchanged"),
             Cache::IncrementalPatch(name) => write!(f, "incr-patched: {}", name),
         }
-    }
-}
-
-impl Cache {
-    pub fn matches_run(self, r: &RunId) -> bool {
-        r.state == self
     }
 }
 
@@ -519,55 +433,15 @@ impl SeriesType for String {
 #[derive(Hash, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct LabelId(pub u8, pub u32);
 
-impl LabelId {
-    pub fn as_bytes(self) -> [u8; 4] {
-        let mut bytes = u32::to_be_bytes(self.1);
-        assert_eq!(bytes[0], 0);
-        bytes[0] = self.0;
-        bytes
-    }
-
-    fn from_bytes(mut bytes: [u8; 4]) -> Self {
-        let ty = bytes[0];
-        bytes[0] = 0;
-        Self(ty, u32::from_be_bytes(bytes))
-    }
-}
-
 #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct CollectionIdNumber(u8, u32);
 
 impl CollectionIdNumber {
-    pub fn as_bytes(self) -> [u8; 4] {
+    pub fn pack(self) -> u32 {
         let mut bytes = u32::to_be_bytes(self.1);
         assert_eq!(bytes[0], 0);
         bytes[0] = self.0;
-        bytes
-    }
-
-    fn from_bytes(mut bytes: [u8; 4]) -> Self {
-        let ty = bytes[0];
-        bytes[0] = 0;
-        Self(ty, u32::from_be_bytes(bytes))
-    }
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct DatabaseKey(pub LabelId, pub CollectionIdNumber);
-
-impl DatabaseKey {
-    pub fn as_bytes(&self) -> [u8; 8] {
-        let mut buf = [0; 8];
-        buf[..4].copy_from_slice(&self.0.as_bytes());
-        buf[4..].copy_from_slice(&self.1.as_bytes());
-        buf
-    }
-
-    pub fn from_bytes(key: &[u8]) -> Self {
-        Self(
-            LabelId::from_bytes(key[..4].try_into().unwrap()),
-            CollectionIdNumber::from_bytes(key[4..].try_into().unwrap()),
-        )
+        u32::from_be_bytes(bytes)
     }
 }
 

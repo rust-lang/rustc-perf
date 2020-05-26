@@ -159,7 +159,7 @@ impl Connection for SqliteConnection {
         self.conn
             .prepare_cached("insert into pstat(series, cid, value) VALUES (?, ?, ?)")
             .unwrap()
-            .execute(params![&series, &u32::from_be_bytes(cid.as_bytes()), stat])
+            .execute(params![&series, &cid.pack(), stat])
             .unwrap();
     }
     async fn insert_self_profile_query(
@@ -182,7 +182,7 @@ impl Connection for SqliteConnection {
             .unwrap()
             .execute(params![
                 &series,
-                &u32::from_be_bytes(cid.as_bytes()),
+                &cid.pack(),
                 &i64::try_from(data.self_time.as_nanos()).unwrap(),
                 &i64::try_from(data.blocked_time.as_nanos()).unwrap(),
                 &i64::try_from(data.incremental_load_time.as_nanos()).unwrap(),
@@ -192,7 +192,7 @@ impl Connection for SqliteConnection {
             .unwrap();
     }
     async fn insert_error(&mut self, series: u32, cid: CollectionIdNumber, text: &str) {
-        let cid = u32::from_be_bytes(cid.as_bytes());
+        let cid = cid.pack();
         self.conn
             .prepare_cached(
                 "insert into errors(
@@ -204,7 +204,7 @@ impl Connection for SqliteConnection {
             .unwrap();
     }
     async fn get_pstat(&mut self, series: u32, cid: CollectionIdNumber) -> Option<f64> {
-        let cid = u32::from_be_bytes(cid.as_bytes());
+        let cid = cid.pack();
 
         self.conn
             .prepare_cached("select value from pstat where series = ? and cid = ?;")
@@ -218,7 +218,7 @@ impl Connection for SqliteConnection {
         series: u32,
         cid: CollectionIdNumber,
     ) -> Option<QueryDatum> {
-        let cid = u32::from_be_bytes(cid.as_bytes());
+        let cid = cid.pack();
         self.conn.prepare_cached("
                 select self_time, blocked_time, incremental_load_time, number_of_cache_hits, invocation_count
                     from self_profile_query
@@ -240,7 +240,7 @@ impl Connection for SqliteConnection {
             .unwrap()
     }
     async fn get_error(&mut self, series: u32, cid: CollectionIdNumber) -> Option<String> {
-        let cid = u32::from_be_bytes(cid.as_bytes());
+        let cid = cid.pack();
         self.conn
             .prepare_cached("select value from errors where series = ? and cid = ?;")
             .unwrap()
