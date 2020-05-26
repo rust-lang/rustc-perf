@@ -1,9 +1,45 @@
-use crate::db::pool::Connection;
-use crate::db::{CollectionId, DbLabel, Label, LabelPath, LabelTag, Profile};
+//! This ingests JSON (old-style) content into a database.
+
 use anyhow::Context as _;
 use collector::{ArtifactData, CommitData};
+use database::pool::Connection;
+use database::{CollectionId, DbLabel, Label, LabelPath, LabelTag, Profile};
 use std::io::Read;
 use std::path::Path;
+
+#[tokio::main]
+async fn main() {
+    let db = std::env::args().nth(1).expect("database as first arg");
+    let pool = r2d2::Pool::builder()
+        .max_size(16)
+        .connection_timeout(std::time::Duration::from_secs(1))
+        .build(database::pool::sqlite::Sqlite::new(db.clone().into()))
+        .unwrap();
+
+    let mut conn = database::pool::sqlite::SqliteConnection::new(pool.get().unwrap());
+    let mut index = database::Index::load(&mut conn).await;
+
+    conn.maybe_create_tables().await;
+
+    let paths = std::env::args().skip(2).collect::<Vec<_>>();
+    let paths_count = paths.len();
+    let mut last = std::time::Instant::now();
+    for (idx, path) in paths.into_iter().enumerate() {
+        if idx % 10 == 0 {
+            eprintln!(
+                "{}/{}, per {:?}; estimated total time {:?}",
+                idx,
+                paths_count,
+                last.elapsed() / 10,
+                last.elapsed() / 10 * paths_count as u32
+            );
+            last = std::time::Instant::now();
+        }
+        ingest(&mut conn, &mut index, Path::new(&path)).await;
+    }
+
+    index.store(&mut conn).await;
+}
 
 enum Res {
     Artifact(ArtifactData),
@@ -40,7 +76,7 @@ fn deserialize_path(path: &Path) -> Res {
     }
 }
 
-pub async fn ingest(conn: &mut dyn Connection, index: &mut crate::db::Index, path: &Path) {
+async fn ingest(conn: &mut dyn Connection, index: &mut database::Index, path: &Path) {
     let res = deserialize_path(path);
     let (cid, benchmarks) = match res {
         Res::Commit(cd) => (CollectionId::Commit(cd.commit), cd.benchmarks),
@@ -106,7 +142,7 @@ pub async fn ingest(conn: &mut dyn Connection, index: &mut crate::db::Index, pat
                             },
                             tx.conn(),
                             cid_num,
-                            &crate::db::QueryDatum::from_query_data(qd),
+                            &database::QueryDatum::from_query_data(qd),
                         )
                         .await;
                 }
