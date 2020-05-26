@@ -1,10 +1,9 @@
 use collector::self_profile::{QueryData, QueryLabel};
 pub use collector::BenchmarkName as Crate;
-use collector::{Bound, Commit, PatchName, ProcessStatistic};
+use collector::{Commit, PatchName, ProcessStatistic};
 use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::ops::RangeInclusive;
 use std::time::Duration;
 
 pub mod pool;
@@ -17,38 +16,6 @@ impl<'a> From<&'a collector::BenchmarkState> for Cache {
             collector::BenchmarkState::IncrementalClean => Cache::IncrementalFresh,
             collector::BenchmarkState::IncrementalPatched(p) => Cache::IncrementalPatch(p.name),
         }
-    }
-}
-
-pub fn data_for(data: &[Commit], is_left: bool, query: Bound) -> Option<Commit> {
-    if is_left {
-        data.iter().find(|commit| query.left_match(commit)).cloned()
-    } else {
-        data.iter()
-            .rfind(|commit| query.left_match(commit))
-            .cloned()
-    }
-}
-
-pub fn range_subset(data: Vec<Commit>, range: RangeInclusive<Bound>) -> Vec<Commit> {
-    let (a, b) = range.into_inner();
-
-    let left_idx = data.iter().position(|commit| a.left_match(commit));
-    let right_idx = data.iter().rposition(|commit| b.left_match(commit));
-
-    if let (Some(left), Some(right)) = (left_idx, right_idx) {
-        data.get(left..=right)
-            .map(|s| s.to_vec())
-            .unwrap_or_else(|| {
-                log::error!(
-                    "Failed to compute left/right indices from {:?}..={:?}",
-                    a,
-                    b
-                );
-                vec![]
-            })
-    } else {
-        vec![]
     }
 }
 

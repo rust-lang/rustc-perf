@@ -28,9 +28,43 @@ use crate::load::InputData as Db;
 use async_trait::async_trait;
 use collector::self_profile::QueryLabel;
 use collector::{BenchmarkName as Crate, ProcessStatistic};
+use collector::{Bound, Commit};
 use std::convert::TryInto;
 use std::fmt;
+use std::ops::RangeInclusive;
 use std::sync::Arc;
+
+pub fn data_for(data: &[Commit], is_left: bool, query: Bound) -> Option<Commit> {
+    if is_left {
+        data.iter().find(|commit| query.left_match(commit)).cloned()
+    } else {
+        data.iter()
+            .rfind(|commit| query.left_match(commit))
+            .cloned()
+    }
+}
+
+pub fn range_subset(data: Vec<Commit>, range: RangeInclusive<Bound>) -> Vec<Commit> {
+    let (a, b) = range.into_inner();
+
+    let left_idx = data.iter().position(|commit| a.left_match(commit));
+    let right_idx = data.iter().rposition(|commit| b.left_match(commit));
+
+    if let (Some(left), Some(right)) = (left_idx, right_idx) {
+        data.get(left..=right)
+            .map(|s| s.to_vec())
+            .unwrap_or_else(|| {
+                log::error!(
+                    "Failed to compute left/right indices from {:?}..={:?}",
+                    a,
+                    b
+                );
+                vec![]
+            })
+    } else {
+        vec![]
+    }
+}
 
 struct CollectionIdIter {
     s: Arc<Vec<CollectionId>>,

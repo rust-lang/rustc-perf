@@ -145,11 +145,11 @@ impl InputData {
     }
 
     pub fn data_for(&self, is_left: bool, query: Bound) -> Option<Commit> {
-        crate::db::data_for(&self.index.load().commits(), is_left, query)
+        crate::selector::data_for(&self.index.load().commits(), is_left, query)
     }
 
     pub fn data_range(&self, range: RangeInclusive<Bound>) -> Vec<Commit> {
-        crate::db::range_subset(self.index.load().commits(), range)
+        crate::selector::range_subset(self.index.load().commits(), range)
     }
 
     /// Initialize `InputData from the file system.
