@@ -18,7 +18,6 @@ pub struct CommandFailed {
     command: String,
 }
 
-mod git;
 mod github;
 
 pub mod api;

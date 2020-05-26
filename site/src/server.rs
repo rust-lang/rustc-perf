@@ -41,7 +41,6 @@ pub use crate::api::{
     DateData, ServerResult, StyledBenchmarkName,
 };
 use crate::db::{self, Cache, Crate, Profile};
-use crate::git;
 use crate::github::post_comment;
 use crate::interpolate::Interpolated;
 use crate::load::CurrentState;
@@ -930,7 +929,7 @@ impl Server {
 
         let last = LAST_UPDATE.lock().clone();
         if let Some(last) = last {
-            let min = 60 * 5; // 5 minutes
+            let min = 60 * 1; // 1 minutes
             let elapsed = last.elapsed();
             if elapsed < std::time::Duration::from_secs(min) {
                 return http::Response::builder()
@@ -961,39 +960,11 @@ impl Server {
         let (channel, body) = hyper::Body::channel();
 
         let data: Arc<InputData> = self.data.read().as_ref().unwrap().clone();
-        let updating = self.updating.release_on_drop(channel);
-        tokio::task::spawn_blocking(move || {
-            tokio::task::spawn(async move {
-                let path = if let Some(p) = std::env::args().nth(2) {
-                    p
-                } else {
-                    eprintln!("Please pass the rustc-timing git directory as the second argument to support onpush handling.");
-                    std::process::exit(1);
-                };
-                let paths = git::update_repo(&path).unwrap();
-
-                let start = std::time::Instant::now();
-                eprintln!("ingesting {} paths: {:#?}", paths.len(), paths);
-                let mut conn = data.conn();
-                let mut tx = conn.transaction().await;
-                tx.maybe_create_tables().await;
-                let mut index = db::Index::load(tx.conn()).await;
-
-                for path in paths.iter() {
-                    crate::ingest::ingest(tx.conn(), &mut index, &path).await;
-                }
-
-                // Store back the new index, letting everyone else see the new
-                // value.
-                eprintln!("index has {} commits", index.commits().len());
-                index.store(tx.conn()).await;
-                data.index.store(Arc::new(index));
-                tx.commit().await.unwrap();
-                eprintln!("finished updating index in {:?}", start.elapsed());
-
-                std::mem::drop(updating);
-            });
-        });
+        let _updating = self.updating.release_on_drop(channel);
+        let mut conn = data.conn();
+        let index = db::Index::load(&mut *conn).await;
+        eprintln!("index has {} commits", index.commits().len());
+        data.index.store(Arc::new(index));
 
         Response::new(body)
     }
