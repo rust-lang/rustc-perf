@@ -1,5 +1,5 @@
-use crate::db::pool::{Connection, Transaction};
-use crate::db::{CollectionIdNumber, QueryDatum};
+use crate::pool::{Connection, Transaction};
+use crate::{CollectionIdNumber, QueryDatum};
 use r2d2::{ManageConnection, PooledConnection};
 use rusqlite::params;
 use rusqlite::OptionalExtension;

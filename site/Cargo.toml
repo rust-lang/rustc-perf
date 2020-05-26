@@ -37,6 +37,7 @@ hashbrown = "0.7"
 arc-swap = "0.4"
 rusqlite = { version = "0.23", features = ["bundled"] }
 async-trait = "0.1"
+database = { path = "../database" }
 r2d2 = "0.8"
 
 [dependencies.collector]

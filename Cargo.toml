@@ -1,5 +1,5 @@
 [workspace]
-members = ["collector", "site"]
+members = ["collector", "site", "database"]
 exclude = ["collector/benchmarks"]
 
 [profile.release.package.site]

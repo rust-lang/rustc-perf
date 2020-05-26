@@ -1,4 +1,4 @@
-use crate::db::{CollectionIdNumber, QueryDatum};
+use crate::{CollectionIdNumber, QueryDatum};
 
 #[async_trait::async_trait]
 pub trait Connection: Send {

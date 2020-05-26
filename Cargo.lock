@@ -534,6 +534,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "database"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "collector",
+ "hashbrown",
+ "r2d2",
+ "rusqlite",
+ "serde",
+ "serde_derive",
+ "serde_json",
+]
+
+[[package]]
 name = "derive_builder"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2192,6 +2207,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "collector",
+ "database",
  "env_logger",
  "futures",
  "hashbrown",
