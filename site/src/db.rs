@@ -19,37 +19,6 @@ impl<'a> From<&'a collector::BenchmarkState> for Cache {
     }
 }
 
-pub struct ByProfile<T> {
-    pub check: T,
-    pub debug: T,
-    pub opt: T,
-}
-
-impl<T> ByProfile<T> {
-    pub async fn new<E, F, F1>(mut f: F) -> Result<Self, E>
-    where
-        F: FnMut(Profile) -> F1,
-        F1: std::future::Future<Output = Result<T, E>>,
-    {
-        Ok(ByProfile {
-            check: f(Profile::Check).await?,
-            debug: f(Profile::Debug).await?,
-            opt: f(Profile::Opt).await?,
-        })
-    }
-}
-
-impl<T> std::ops::Index<Profile> for ByProfile<T> {
-    type Output = T;
-    fn index(&self, index: Profile) -> &Self::Output {
-        match index {
-            Profile::Check => &self.check,
-            Profile::Debug => &self.debug,
-            Profile::Opt => &self.opt,
-        }
-    }
-}
-
 #[derive(
     Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
 )]
