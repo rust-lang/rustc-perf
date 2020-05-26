@@ -6,8 +6,7 @@ extern crate clap;
 use anyhow::{bail, Context};
 use chrono::{Timelike, Utc};
 use collector::api::collected;
-use collector::git::get_commit_or_fake_it;
-use collector::{ArtifactData, Commit, CommitData, Date, Sha};
+use database::{Commit, Date, Sha};
 use log::{debug, error};
 use std::collections::BTreeMap;
 use std::collections::HashSet;
@@ -26,7 +25,6 @@ mod outrepo;
 mod sysroot;
 
 use background_worker::send_home;
-use collector::Benchmark as CollectedBenchmark;
 use execute::{Benchmark, Profiler};
 use sysroot::Sysroot;
 
@@ -275,7 +273,7 @@ fn bench_commit(
     if call_home {
         send_home(collected::Request::BenchmarkCommit {
             commit: commit.clone(),
-            benchmarks: benchmarks.iter().map(|b| b.name).collect(),
+            benchmarks: benchmarks.iter().map(|b| b.name.to_string()).collect(),
         });
     }
     let existing_data = repo.and_then(|r| r.load_commit_data(&commit, &compiler.triple).ok());
@@ -286,7 +284,7 @@ fn bench_commit(
             if let Some(result) = data.benchmarks.get(&benchmark.name) {
                 if call_home {
                     send_home(collected::Request::BenchmarkDone {
-                        benchmark: benchmark.name.clone(),
+                        benchmark: benchmark.name.to_string(),
                         commit: commit.clone(),
                     });
                 }
@@ -330,7 +328,7 @@ fn bench_commit(
 
         if call_home {
             send_home(collected::Request::BenchmarkDone {
-                benchmark: benchmark.name.clone(),
+                benchmark: benchmark.name.to_string(),
                 commit: commit.clone(),
             });
         }
@@ -628,4 +626,25 @@ fn main_result() -> anyhow::Result<i32> {
     };
     background_worker::shut_down();
     ret
+}
+
+pub fn get_commit_or_fake_it(sha: &str) -> anyhow::Result<Commit> {
+    let mut rt = tokio::runtime::Runtime::new().unwrap();
+    Ok(rt
+        .block_on(rustc_artifacts::master_commits())
+        .map_err(|e| anyhow::anyhow!("{:?}", e))
+        .context("getting master commit list")?
+        .into_iter()
+        .find(|c| c.sha == *sha)
+        .map(|c| Commit {
+            sha: c.sha.as_str().into(),
+            date: c.time.into(),
+        })
+        .unwrap_or_else(|| {
+            log::warn!("utilizing fake commit!");
+            Commit {
+                sha: sha.into(),
+                date: database::Date::ymd_hms(2000, 01, 01, 0, 0, 0),
+            }
+        }))
 }

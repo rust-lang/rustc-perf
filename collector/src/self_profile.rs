@@ -1,3 +1,4 @@
+use database::QueryLabel;
 use serde::de::Deserializer;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
@@ -143,5 +144,3 @@ impl QueryData {
         self.invocation_count - self.number_of_cache_hits
     }
 }
-
-crate::intern!(pub struct QueryLabel);

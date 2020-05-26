@@ -559,7 +559,7 @@ pub async fn handle_collected(
                 persistent.current = Some(CurrentState {
                     commit,
                     issue,
-                    benchmarks,
+                    benchmarks: benchmarks.iter().map(|b| b.as_str().into()).collect(),
                 });
             }
             collected::Request::BenchmarkDone { commit, benchmark } => {

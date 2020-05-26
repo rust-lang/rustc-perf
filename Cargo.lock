@@ -366,15 +366,15 @@ name = "collector"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "arc-swap",
  "bincode",
- "bumpalo",
  "cargo_metadata",
  "chrono",
  "clap",
  "crossbeam-channel",
+ "database",
  "env_logger",
  "hashbrown",
+ "intern",
  "lazy_static",
  "libc",
  "log",
@@ -539,12 +539,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "collector",
+ "chrono",
  "hashbrown",
+ "intern",
  "r2d2",
  "rusqlite",
  "serde",
- "serde_derive",
  "serde_json",
  "snap",
  "tokio",
@@ -1116,6 +1116,19 @@ checksum = "076f042c5b7b98f31d205f1249267e12a6518c1481e9dae9764af19b707d2292"
 dependencies = [
  "autocfg 1.0.0",
  "serde",
+]
+
+[[package]]
+name = "intern"
+version = "0.1.0"
+dependencies = [
+ "arc-swap",
+ "bumpalo",
+ "hashbrown",
+ "lazy_static",
+ "parking_lot",
+ "serde",
+ "serde_derive",
 ]
 
 [[package]]

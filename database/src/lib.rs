@@ -1,23 +1,273 @@
-use collector::self_profile::{QueryData, QueryLabel};
-pub use collector::BenchmarkName as Crate;
-use collector::{Commit, PatchName, ProcessStatistic};
+use chrono::offset::TimeZone;
+use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use hashbrown::HashMap;
+use intern::intern;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::hash;
+use std::ops::{Add, Sub};
 use std::time::Duration;
 
-pub mod pool;
+intern!(pub struct ProcessStatistic);
+intern!(pub struct Crate);
 
-impl<'a> From<&'a collector::BenchmarkState> for Cache {
-    fn from(other: &'a collector::BenchmarkState) -> Self {
-        match other {
-            collector::BenchmarkState::Clean => Cache::Empty,
-            collector::BenchmarkState::IncrementalStart => Cache::IncrementalEmpty,
-            collector::BenchmarkState::IncrementalClean => Cache::IncrementalFresh,
-            collector::BenchmarkState::IncrementalPatched(p) => Cache::IncrementalPatch(p.name),
+#[derive(Debug, Hash, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Date(pub DateTime<Utc>);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DateParseError {
+    pub input: String,
+    pub format: String,
+    pub error: chrono::ParseError,
+}
+
+impl std::str::FromStr for Date {
+    type Err = DateParseError;
+    fn from_str(s: &str) -> Result<Date, DateParseError> {
+        match DateTime::parse_from_rfc3339(s) {
+            Ok(value) => Ok(Date(value.with_timezone(&Utc))),
+            Err(error) => Err(DateParseError {
+                input: s.to_string(),
+                format: format!("RFC 3339"),
+                error,
+            }),
         }
     }
 }
+
+impl Date {
+    pub fn from_format(date: &str, format: &str) -> Result<Date, DateParseError> {
+        match DateTime::parse_from_str(date, format) {
+            Ok(value) => Ok(Date(value.with_timezone(&Utc))),
+            Err(_) => match Utc.datetime_from_str(date, format) {
+                Ok(dt) => Ok(Date(dt)),
+                Err(err) => Err(DateParseError {
+                    input: date.to_string(),
+                    format: format.to_string(),
+                    error: err,
+                }),
+            },
+        }
+    }
+
+    pub fn ymd_hms(year: i32, month: u32, day: u32, h: u32, m: u32, s: u32) -> Date {
+        Date(Utc.ymd(year, month, day).and_hms(h, m, s))
+    }
+
+    pub fn start_of_week(&self) -> Date {
+        let weekday = self.0.weekday();
+        // num_days_from_sunday is 0 for Sunday
+        Date(self.0 - chrono::Duration::days(weekday.num_days_from_sunday() as i64))
+    }
+}
+
+impl fmt::Display for Date {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0.to_rfc3339())
+    }
+}
+
+impl From<DateTime<Utc>> for Date {
+    fn from(datetime: DateTime<Utc>) -> Date {
+        Date(datetime)
+    }
+}
+
+impl PartialEq<DateTime<Utc>> for Date {
+    fn eq(&self, other: &DateTime<Utc>) -> bool {
+        self.0 == *other
+    }
+}
+
+impl Sub<chrono::Duration> for Date {
+    type Output = Date;
+    fn sub(self, rhs: chrono::Duration) -> Date {
+        Date(self.0 - rhs)
+    }
+}
+
+impl Add<chrono::Duration> for Date {
+    type Output = Date;
+    fn add(self, rhs: chrono::Duration) -> Date {
+        Date(self.0 + rhs)
+    }
+}
+
+impl Serialize for Date {
+    fn serialize<S>(&self, serializer: S) -> ::std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        serializer.serialize_str(&self.0.to_rfc3339())
+    }
+}
+
+impl<'de> Deserialize<'de> for Date {
+    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Date, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        struct DateVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for DateVisitor {
+            type Value = Date;
+
+            fn visit_str<E>(self, value: &str) -> ::std::result::Result<Date, E>
+            where
+                E: serde::de::Error,
+            {
+                value.parse::<Date>().map_err(|_| {
+                    serde::de::Error::invalid_value(serde::de::Unexpected::Str(value), &self)
+                })
+            }
+
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("an RFC 3339 date")
+            }
+        }
+
+        deserializer.deserialize_str(DateVisitor)
+    }
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Sha {
+    /// Straight-up bytes of the 40-long hex-encoded sha
+    Hex([u8; 20]),
+    /// Usually a string ID provided by the user.
+    Raw(RawSha),
+}
+
+intern!(pub struct RawSha);
+
+impl PartialEq<str> for Sha {
+    fn eq(&self, other: &str) -> bool {
+        self.to_string() == other
+    }
+}
+
+fn hex_decode(s: &str) -> Option<[u8; 20]> {
+    let mut in_progress = 0;
+    let mut v = [0; 20];
+    for (idx, ch) in s.chars().enumerate() {
+        let offset = if idx % 2 == 0 { 4 } else { 0 };
+        in_progress |= (ch.to_digit(16)? as u8) << offset;
+        if idx % 2 != 0 {
+            v[idx / 2] = in_progress;
+            in_progress = 0;
+        }
+    }
+    Some(v)
+}
+
+impl<'a> From<&'a str> for Sha {
+    fn from(s: &'a str) -> Sha {
+        if let Some(v) = hex_decode(s) {
+            return Sha::Hex(v);
+        }
+
+        Sha::Raw(s.into())
+    }
+}
+
+impl Serialize for Sha {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        serializer.collect_str(&self)
+    }
+}
+
+impl<'de> Deserialize<'de> for Sha {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        use serde::de::Visitor;
+        struct ShaVisitor;
+        impl<'de> Visitor<'de> for ShaVisitor {
+            type Value = Sha;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("a string")
+            }
+
+            fn visit_str<E>(self, s: &str) -> Result<Sha, E> {
+                Ok(s.into())
+            }
+
+            fn visit_borrowed_str<E>(self, s: &'de str) -> Result<Sha, E> {
+                Ok(s.into())
+            }
+        }
+        deserializer.deserialize_str(ShaVisitor)
+    }
+}
+
+impl fmt::Debug for Sha {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
+impl fmt::Display for Sha {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Sha::Hex(hex) => {
+                for &b in hex.iter() {
+                    write!(f, "{:x}{:x}", b >> 4, b & 0xf)?;
+                }
+            }
+            Sha::Raw(raw) => {
+                write!(f, "{}", raw)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Copy, Clone, serde::Deserialize, serde::Serialize)]
+pub struct Commit {
+    pub sha: Sha,
+    pub date: Date,
+}
+
+impl Commit {
+    pub fn is_try(&self) -> bool {
+        self.date.0.naive_utc().date() == NaiveDate::from_ymd(2000, 1, 1)
+    }
+}
+
+impl hash::Hash for Commit {
+    fn hash<H: hash::Hasher>(&self, hasher: &mut H) {
+        self.sha.hash(hasher);
+    }
+}
+
+impl PartialEq for Commit {
+    fn eq(&self, other: &Self) -> bool {
+        self.sha == other.sha
+    }
+}
+
+impl Eq for Commit {}
+
+impl PartialOrd for Commit {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(&other))
+    }
+}
+
+impl Ord for Commit {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.date
+            .cmp(&other.date)
+            .then_with(|| self.sha.cmp(&other.sha))
+    }
+}
+
+pub mod pool;
 
 #[derive(
     Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
@@ -66,6 +316,8 @@ pub enum Cache {
     #[serde(rename = "incr-patched")]
     IncrementalPatch(PatchName),
 }
+
+intern!(pub struct PatchName);
 
 impl std::str::FromStr for Cache {
     type Err = String;
@@ -242,6 +494,8 @@ impl SeriesType for f64 {
     }
 }
 
+intern!(pub struct QueryLabel);
+
 #[derive(Clone, Debug)]
 pub struct QueryDatum {
     pub self_time: Duration,
@@ -249,18 +503,6 @@ pub struct QueryDatum {
     pub incremental_load_time: Duration,
     pub number_of_cache_hits: u32,
     pub invocation_count: u32,
-}
-
-impl QueryDatum {
-    pub fn from_query_data(qd: &QueryData) -> Self {
-        Self {
-            self_time: qd.self_time(),
-            blocked_time: qd.blocked_time(),
-            incremental_load_time: qd.incremental_load_time(),
-            number_of_cache_hits: qd.number_of_cache_hits,
-            invocation_count: qd.invocation_count,
-        }
-    }
 }
 
 #[async_trait::async_trait]

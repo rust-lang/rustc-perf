@@ -78,6 +78,10 @@ impl SqliteConnection {
     pub fn new(conn: PooledConnection<Sqlite>) -> Self {
         Self { conn }
     }
+
+    pub fn raw(&mut self) -> &mut rusqlite::Connection {
+        &mut *self.conn
+    }
 }
 
 #[async_trait::async_trait]

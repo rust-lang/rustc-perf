@@ -21,11 +21,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::db;
 use crate::util;
-use collector::{Bound, Date};
+use collector::Bound;
+use database::Date;
 
 use crate::api::github;
 use collector;
-pub use collector::{BenchmarkName, Commit, Patch, Sha, StatId, Stats};
+pub use database::{Commit, Crate, Sha};
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum MissingReason {
@@ -39,7 +40,7 @@ pub enum MissingReason {
 pub struct CurrentState {
     pub commit: Commit,
     pub issue: Option<github::Issue>,
-    pub benchmarks: Vec<BenchmarkName>,
+    pub benchmarks: Vec<Crate>,
 }
 
 #[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq)]

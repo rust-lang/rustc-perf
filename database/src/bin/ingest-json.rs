@@ -1,11 +1,167 @@
 //! This ingests JSON (old-style) content into a database.
 
 use anyhow::Context as _;
-use collector::{ArtifactData, CommitData};
 use database::pool::Connection;
-use database::{CollectionId, DbLabel, Label, LabelPath, LabelTag, Profile};
+use database::{Cache, CollectionId, Crate, DbLabel, Label, LabelPath, LabelTag, Profile};
+use database::{Commit, PatchName, ProcessStatistic, QueryLabel};
+use serde::Deserialize;
+use std::collections::HashMap;
 use std::io::Read;
-use std::path::Path;
+use std::{path::Path, time::Duration};
+
+#[derive(Deserialize)]
+pub struct ArtifactData {
+    pub id: String,
+    // String in Result is the output of the command that failed
+    pub benchmarks: HashMap<Crate, Result<Benchmark, String>>,
+}
+
+#[derive(Deserialize)]
+pub struct CommitData {
+    pub commit: Commit,
+    // String in Result is the output of the command that failed
+    pub benchmarks: HashMap<Crate, Result<Benchmark, String>>,
+}
+
+#[derive(Deserialize)]
+pub struct Benchmark {
+    pub runs: Vec<Run>,
+    pub name: Crate,
+}
+
+#[derive(Deserialize)]
+pub struct Run {
+    pub stats: Stats,
+    #[serde(default)]
+    pub self_profile: Option<SelfProfile>,
+    #[serde(default)]
+    pub check: bool,
+    pub release: bool,
+    pub state: BenchmarkState,
+}
+
+#[derive(Deserialize)]
+pub struct Stats {
+    stats: Vec<Option<f64>>,
+}
+
+impl Stats {
+    pub fn new() -> Stats {
+        Stats {
+            stats: vec![None; 10],
+        }
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (ProcessStatistic, f64)> + '_ {
+        self.stats.iter().enumerate().filter_map(|(idx, s)| {
+            s.map(|s| {
+                (
+                    match idx {
+                        0 => "cpu-clock:u".into(),
+                        1 => "cycles:u".into(),
+                        2 => "faults".into(),
+                        3 => "faults:u".into(),
+                        4 => "instructions:u".into(),
+                        5 => "max-rss".into(),
+                        6 => "task-clock".into(),
+                        7 => "task-clock:u".into(),
+                        8 => "wall-time".into(),
+                        9 => "cpu-clock".into(),
+                        _ => panic!("unknown id: {}", idx),
+                    },
+                    s,
+                )
+            })
+        })
+    }
+}
+
+#[derive(Deserialize)]
+pub enum BenchmarkState {
+    Clean,
+    IncrementalStart,
+    IncrementalClean,
+    IncrementalPatched(Patch),
+}
+
+#[derive(Deserialize)]
+pub struct Patch {
+    pub name: PatchName,
+}
+
+#[derive(Deserialize)]
+#[serde(from = "InternalSelfProfile")]
+pub struct SelfProfile {
+    pub query_data: Vec<QueryData>,
+}
+
+pub struct QueryData {
+    pub label: QueryLabel,
+    pub self_time: u64,
+    pub number_of_cache_hits: u32,
+    pub invocation_count: u32,
+    pub blocked_time: u64,
+    pub incremental_load_time: u64,
+}
+
+impl QueryData {
+    pub fn self_time(&self) -> Duration {
+        Duration::from_nanos(self.self_time)
+    }
+
+    pub fn blocked_time(&self) -> Duration {
+        Duration::from_nanos(self.blocked_time)
+    }
+
+    pub fn incremental_load_time(&self) -> Duration {
+        Duration::from_nanos(self.incremental_load_time)
+    }
+}
+
+#[derive(Deserialize)]
+struct InternalSelfProfile {
+    label: Vec<QueryLabel>,
+    // nanos
+    self_time: Vec<u64>,
+    number_of_cache_hits: Vec<u32>,
+    invocation_count: Vec<u32>,
+    // nanos
+    blocked_time: Vec<u64>,
+    // nanos
+    incremental_load_time: Vec<u64>,
+}
+
+impl From<InternalSelfProfile> for SelfProfile {
+    fn from(profile: InternalSelfProfile) -> SelfProfile {
+        let InternalSelfProfile {
+            label,
+            self_time,
+            number_of_cache_hits,
+            invocation_count,
+            blocked_time,
+            incremental_load_time,
+        } = profile;
+        let mut query_data = Vec::with_capacity(label.len());
+        let label = label.into_iter();
+        let mut self_time = self_time.into_iter();
+        let mut number_of_cache_hits = number_of_cache_hits.into_iter();
+        let mut invocation_count = invocation_count.into_iter();
+        let mut blocked_time = blocked_time.into_iter();
+        let mut incremental_load_time = incremental_load_time.into_iter();
+        for label in label {
+            query_data.push(QueryData {
+                label,
+                self_time: self_time.next().unwrap(),
+                number_of_cache_hits: number_of_cache_hits.next().unwrap(),
+                invocation_count: invocation_count.next().unwrap(),
+                blocked_time: blocked_time.next().unwrap(),
+                incremental_load_time: incremental_load_time.next().unwrap(),
+            });
+        }
+        assert_eq!(query_data.capacity(), query_data.len());
+        SelfProfile { query_data }
+    }
+}
 
 #[tokio::main]
 async fn main() {
@@ -19,6 +175,9 @@ async fn main() {
     let mut conn = database::pool::sqlite::SqliteConnection::new(pool.get().unwrap());
     let mut index = database::Index::load(&mut conn).await;
 
+    conn.raw()
+        .pragma_update(None, "journal_mode", &"WAL")
+        .unwrap();
     conn.maybe_create_tables().await;
 
     let paths = std::env::args().skip(2).collect::<Vec<_>>();
@@ -37,6 +196,9 @@ async fn main() {
         }
         ingest(&mut conn, &mut index, Path::new(&path)).await;
     }
+    conn.raw()
+        .pragma_update(None, "journal_mode", &"DELETE")
+        .unwrap();
 
     index.store(&mut conn).await;
 }
@@ -85,13 +247,14 @@ async fn ingest(conn: &mut dyn Connection, index: &mut database::Index, path: &P
     let cid_num = index.intern_cid(&cid);
     let mut path = LabelPath::new();
 
+    let mut tx = conn.transaction().await;
     for (name, bres) in benchmarks.into_iter() {
         path.set(Label::Crate(name));
         let benchmark = match bres {
             Ok(b) => b,
             Err(e) => {
                 index
-                    .insert_labeled(&DbLabel::Errors { krate: name }, conn, cid_num, &e)
+                    .insert_labeled(&DbLabel::Errors { krate: name }, tx.conn(), cid_num, &e)
                     .await;
                 path.remove(LabelTag::Crate);
                 continue;
@@ -99,7 +262,6 @@ async fn ingest(conn: &mut dyn Connection, index: &mut database::Index, path: &P
         };
 
         for run in &benchmark.runs {
-            let mut tx = conn.transaction().await;
             let profile = if run.check {
                 Profile::Check
             } else if run.release {
@@ -107,19 +269,25 @@ async fn ingest(conn: &mut dyn Connection, index: &mut database::Index, path: &P
             } else {
                 Profile::Debug
             };
-            let state = (&run.state).into();
+            let state = match &run.state {
+                BenchmarkState::Clean => Cache::Empty,
+                BenchmarkState::IncrementalStart => Cache::IncrementalEmpty,
+                BenchmarkState::IncrementalClean => Cache::IncrementalFresh,
+                BenchmarkState::IncrementalPatched(p) => Cache::IncrementalPatch(p.name),
+            };
+
             path.set(Label::Profile(profile));
             path.set(Label::Cache(state));
 
             for (sid, stat) in run.stats.iter() {
-                path.set(Label::ProcessStat(sid.as_pstat()));
+                path.set(Label::ProcessStat(sid));
                 index
                     .insert_labeled(
                         &DbLabel::ProcessStat {
                             krate: name,
                             profile,
                             cache: state,
-                            stat: sid.as_pstat(),
+                            stat: sid,
                         },
                         tx.conn(),
                         cid_num,
@@ -132,6 +300,13 @@ async fn ingest(conn: &mut dyn Connection, index: &mut database::Index, path: &P
             if let Some(self_profile) = &run.self_profile {
                 for qd in self_profile.query_data.iter() {
                     path.set(Label::Query(qd.label));
+                    let datum = database::QueryDatum {
+                        self_time: qd.self_time(),
+                        blocked_time: qd.blocked_time(),
+                        incremental_load_time: qd.incremental_load_time(),
+                        number_of_cache_hits: qd.number_of_cache_hits,
+                        invocation_count: qd.invocation_count,
+                    };
                     index
                         .insert_labeled(
                             &DbLabel::SelfProfileQuery {
@@ -142,13 +317,13 @@ async fn ingest(conn: &mut dyn Connection, index: &mut database::Index, path: &P
                             },
                             tx.conn(),
                             cid_num,
-                            &database::QueryDatum::from_query_data(qd),
+                            &datum,
                         )
                         .await;
                 }
                 path.remove(LabelTag::Query);
             }
-            tx.commit().await.unwrap();
         }
     }
+    tx.commit().await.unwrap();
 }

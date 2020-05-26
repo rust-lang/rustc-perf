@@ -2,6 +2,7 @@
 
 use std::cmp;
 use std::env;
+use std::fmt;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::process::{self, Command};
@@ -9,9 +10,7 @@ use std::str;
 
 use tempfile::TempDir;
 
-use collector::{
-    command_output, BenchmarkName, BenchmarkState, Patch, Run, SelfProfile, StatId, Stats,
-};
+use collector::{command_output, BenchmarkState, Patch, Run, SelfProfile, StatId, Stats};
 
 use anyhow::{bail, Context};
 
@@ -60,6 +59,15 @@ impl Default for BenchmarkConfig {
             runs: default_runs(),
             supports_stable: false,
         }
+    }
+}
+
+#[derive(Ord, PartialOrd, Eq, PartialEq, Clone)]
+struct BenchmarkName(String);
+
+impl fmt::Display for BenchmarkName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
@@ -811,7 +819,7 @@ impl Benchmark {
         };
 
         Ok(Benchmark {
-            name: name.as_str().into(),
+            name: BenchmarkName(name),
             path,
             patches,
             config,

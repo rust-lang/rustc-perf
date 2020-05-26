@@ -8,13 +8,13 @@ edition = "2018"
 
 [dependencies]
 hashbrown = "0.7"
-serde = "1"
-serde_derive = "1"
+serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
-collector = { path = "../collector" }
 r2d2 = "0.8"
 rusqlite = { version = "0.23", features = ["bundled"] }
 anyhow = "1"
 async-trait = "0.1"
 tokio = { version = "0.2", features = ["macros"] }
 snap = "1"
+intern = { path = "../intern" }
+chrono = "0.4"
