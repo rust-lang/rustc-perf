@@ -490,7 +490,8 @@ impl ProcessStatisticSeries {
     ) -> Self {
         let mut res = Vec::with_capacity(collection_ids.len());
         let idx = db.index.load();
-        let mut tx = db.transaction();
+        let mut conn = db.conn();
+        let mut tx = conn.transaction().await;
         let query = crate::db::DbLabel::ProcessStat {
             krate,
             profile,
@@ -501,17 +502,17 @@ impl ProcessStatisticSeries {
             // Convert to seconds -- perf reports this measurement in
             // milliseconds
             for cid in collection_ids.iter() {
-                let pt = idx.get::<f64>(&mut tx, &query, cid);
+                let pt = idx.get::<f64>(tx.conn(), &query, cid);
                 let point = pt.await.map(|d| d / 1000.0);
                 res.push(point);
             }
         } else {
             for cid in collection_ids.iter() {
-                let point = idx.get::<f64>(&mut tx, &query, cid);
+                let point = idx.get::<f64>(tx.conn(), &query, cid);
                 res.push(point.await);
             }
         }
-        tx.finish().unwrap();
+        tx.finish().await.unwrap();
 
         Self {
             cids: CollectionIdIter::new(collection_ids),
@@ -607,7 +608,8 @@ impl SelfProfile {
     ) -> Self {
         let mut res = Vec::with_capacity(cids.len());
         let idx = db.index.load();
-        let mut tx = db.transaction();
+        let mut conn = db.conn();
+        let mut tx = conn.transaction().await;
         let labels = idx
             .filtered_queries(krate, profile, cache)
             .collect::<Vec<_>>();
@@ -620,7 +622,10 @@ impl SelfProfile {
                     cache,
                     query: *label,
                 };
-                if let Some(qd) = idx.get::<crate::db::QueryDatum>(&mut tx, &query, cid).await {
+                if let Some(qd) = idx
+                    .get::<crate::db::QueryDatum>(tx.conn(), &query, cid)
+                    .await
+                {
                     queries.push(collector::self_profile::QueryData {
                         label: *label,
                         self_time: qd.self_time.as_nanos().try_into().unwrap(),
@@ -643,7 +648,7 @@ impl SelfProfile {
                 }));
             }
         }
-        tx.finish().unwrap();
+        tx.finish().await.unwrap();
 
         Self {
             cids: CollectionIdIter::new(cids),
@@ -725,7 +730,8 @@ impl SelfProfileQueryTime {
     ) -> Self {
         let mut res = Vec::with_capacity(collection_ids.len());
         let idx = db.index.load();
-        let mut tx = db.transaction();
+        let mut conn = db.conn();
+        let mut tx = conn.transaction().await;
         let query = crate::db::DbLabel::SelfProfileQuery {
             krate,
             profile,
@@ -734,12 +740,12 @@ impl SelfProfileQueryTime {
         };
         for cid in collection_ids.iter() {
             let point = idx
-                .get::<crate::db::QueryDatum>(&mut tx, &query, cid)
+                .get::<crate::db::QueryDatum>(tx.conn(), &query, cid)
                 .await
                 .map(|qd| qd.self_time.as_secs_f64());
             res.push(point);
         }
-        tx.finish().unwrap();
+        tx.finish().await.unwrap();
         SelfProfileQueryTime {
             cids: CollectionIdIter::new(collection_ids),
             points: res.into_iter(),
@@ -826,15 +832,17 @@ pub struct CompileError {
 
 impl CompileError {
     async fn new(collection_ids: Arc<Vec<CollectionId>>, db: &Db, krate: Crate) -> CompileError {
-        let mut tx = db.transaction();
+        let mut conn = db.conn();
+        let mut tx = conn.transaction().await;
         let mut res = Vec::with_capacity(collection_ids.len());
         let idx = db.index.load();
         for cid in collection_ids.iter() {
             res.push(
-                idx.get::<String>(&mut tx, &crate::db::DbLabel::Errors { krate }, cid)
+                idx.get::<String>(tx.conn(), &crate::db::DbLabel::Errors { krate }, cid)
                     .await,
             );
         }
+        tx.finish().await.unwrap();
         CompileError {
             cids: CollectionIdIter::new(collection_ids),
             errors: res.into_iter(),

@@ -2,10 +2,9 @@ use collector::self_profile::{QueryData, QueryLabel};
 pub use collector::BenchmarkName as Crate;
 use collector::{Bound, Commit, PatchName, ProcessStatistic, StatId};
 use hashbrown::HashMap;
-use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryInto;
 use std::fmt;
 use std::ops::RangeInclusive;
 use std::time::Duration;
@@ -414,40 +413,41 @@ impl From<Commit> for CollectionId {
     }
 }
 
-pub trait SeriesType {
-    fn with_bytes(&self, f: impl FnOnce(&[u8]));
-    fn from_bytes(bytes: &[u8]) -> Self;
-
-    fn insert(&self, conn: &Connection, label: LabelId, cid: CollectionIdNumber);
-    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self>
-    where
-        Self: Sized;
+#[async_trait::async_trait]
+pub trait SeriesType: Sized {
+    async fn get(
+        conn: &mut dyn pool::Connection,
+        series: u32,
+        cid: CollectionIdNumber,
+    ) -> Option<Self>;
+    async fn insert(
+        &self,
+        conn: &mut dyn pool::Connection,
+        label: LabelId,
+        cid: CollectionIdNumber,
+    );
 }
 
+#[async_trait::async_trait]
 impl SeriesType for f64 {
-    fn with_bytes(&self, f: impl FnOnce(&[u8])) {
-        f(&self.to_bits().to_le_bytes())
-    }
-
-    fn from_bytes(bytes: &[u8]) -> Self {
-        f64::from_bits(u64::from_le_bytes(bytes.try_into().unwrap()))
-    }
-
-    fn insert(&self, conn: &Connection, label: LabelId, cid: CollectionIdNumber) {
-        let cid = u32::from_be_bytes(cid.as_bytes());
+    async fn insert(
+        &self,
+        conn: &mut dyn pool::Connection,
+        label: LabelId,
+        cid: CollectionIdNumber,
+    ) {
         match label.0 {
-            1 => {
-                conn.prepare_cached("insert into pstat(series, cid, value) VALUES (?, ?, ?)")
-                    .unwrap()
-                    .execute(params![&label.1, &cid, self])
-                    .unwrap();
-            }
+            1 => conn.insert_pstat(label.1, cid, *self).await,
             _ => unreachable!("{}", label.0),
         }
     }
 
-    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
-        row.get(0)
+    async fn get(
+        conn: &mut dyn pool::Connection,
+        series: u32,
+        cid: CollectionIdNumber,
+    ) -> Option<Self> {
+        conn.get_pstat(series, cid).await
     }
 }
 
@@ -472,109 +472,47 @@ impl QueryDatum {
     }
 }
 
+#[async_trait::async_trait]
 impl SeriesType for QueryDatum {
-    fn with_bytes(&self, f: impl FnOnce(&[u8])) {
-        let mut bytes = [0; 32];
-        bytes[..8].copy_from_slice(&u64::to_le_bytes(
-            self.self_time.as_nanos().try_into().unwrap(),
-        ));
-        bytes[8..16].copy_from_slice(&u64::to_le_bytes(
-            self.blocked_time.as_nanos().try_into().unwrap(),
-        ));
-        bytes[16..24].copy_from_slice(&u64::to_le_bytes(
-            self.incremental_load_time.as_nanos().try_into().unwrap(),
-        ));
-        bytes[24..28].copy_from_slice(&u32::to_le_bytes(self.number_of_cache_hits));
-        bytes[28..32].copy_from_slice(&u32::to_le_bytes(self.invocation_count));
-        f(&bytes);
-    }
-
-    fn from_bytes(bytes: &[u8]) -> Self {
-        QueryDatum {
-            self_time: Duration::from_nanos(u64::from_le_bytes(bytes[..8].try_into().unwrap())),
-            blocked_time: Duration::from_nanos(u64::from_le_bytes(
-                bytes[8..16].try_into().unwrap(),
-            )),
-            incremental_load_time: Duration::from_nanos(u64::from_le_bytes(
-                bytes[16..24].try_into().unwrap(),
-            )),
-            number_of_cache_hits: u32::from_le_bytes(bytes[24..28].try_into().unwrap()),
-            invocation_count: u32::from_le_bytes(bytes[28..32].try_into().unwrap()),
-        }
-    }
-
-    fn insert(&self, conn: &Connection, label: LabelId, cid: CollectionIdNumber) {
-        let cid = u32::from_be_bytes(cid.as_bytes());
+    async fn insert(
+        &self,
+        conn: &mut dyn pool::Connection,
+        label: LabelId,
+        cid: CollectionIdNumber,
+    ) {
         match label.0 {
-            2 => {
-                conn.prepare_cached(
-                    "insert into self_profile_query(
-                        series, cid,
-                        self_time,
-                        blocked_time,
-                        incremental_load_time,
-                        number_of_cache_hits,
-                        invocation_count
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                )
-                .unwrap()
-                .execute(params![
-                    &label.1,
-                    &cid,
-                    &i64::try_from(self.self_time.as_nanos()).unwrap(),
-                    &i64::try_from(self.blocked_time.as_nanos()).unwrap(),
-                    &i64::try_from(self.incremental_load_time.as_nanos()).unwrap(),
-                    self.number_of_cache_hits,
-                    self.invocation_count,
-                ])
-                .unwrap();
-            }
+            2 => conn.insert_self_profile_query(label.1, cid, self).await,
             _ => unreachable!("{}", label.0),
         }
     }
-
-    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
-        let self_time: i64 = row.get(0)?;
-        let blocked_time: i64 = row.get(1)?;
-        let incremental_load_time: i64 = row.get(2)?;
-        Ok(QueryDatum {
-            self_time: Duration::from_nanos(self_time as u64),
-            blocked_time: Duration::from_nanos(blocked_time as u64),
-            incremental_load_time: Duration::from_nanos(incremental_load_time as u64),
-            number_of_cache_hits: row.get(3)?,
-            invocation_count: row.get(4)?,
-        })
+    async fn get(
+        conn: &mut dyn pool::Connection,
+        series: u32,
+        cid: CollectionIdNumber,
+    ) -> Option<Self> {
+        conn.get_self_profile_query(series, cid).await
     }
 }
+#[async_trait::async_trait]
 impl SeriesType for String {
-    fn with_bytes(&self, f: impl FnOnce(&[u8])) {
-        f(self.as_bytes())
-    }
-
-    fn from_bytes(bytes: &[u8]) -> Self {
-        std::str::from_utf8(bytes).unwrap().to_string()
-    }
-
-    fn insert(&self, conn: &Connection, label: LabelId, cid: CollectionIdNumber) {
-        let cid = u32::from_be_bytes(cid.as_bytes());
+    async fn insert(
+        &self,
+        conn: &mut dyn pool::Connection,
+        label: LabelId,
+        cid: CollectionIdNumber,
+    ) {
         match label.0 {
-            0 => {
-                conn.prepare_cached(
-                    "insert into errors(
-                        series, cid,
-                        value
-                    ) VALUES (?, ?, ?)",
-                )
-                .unwrap()
-                .execute(params![&label.1, &cid, self,])
-                .unwrap();
-            }
+            0 => conn.insert_error(label.1, cid, self).await,
             _ => unreachable!("{}", label.0),
         }
     }
 
-    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
-        row.get(0)
+    async fn get(
+        conn: &mut dyn pool::Connection,
+        series: u32,
+        cid: CollectionIdNumber,
+    ) -> Option<Self> {
+        conn.get_error(series, cid).await
     }
 }
 
@@ -771,77 +709,52 @@ pub enum DbLabel {
 }
 
 impl Index {
-    pub async fn load(conn: &mut Connection) -> Index {
-        let indices: rusqlite::Result<Option<Vec<u8>>> = conn
-            .query_row(
-                "select value from interned where name = 'index'",
-                params![],
-                |row| row.get(0),
-            )
-            .optional();
-        match indices {
-            Ok(Some(s)) => serde_json::from_slice(&s).unwrap(),
-            Ok(None) => Index::default(),
-            Err(e) => {
-                if e.to_string().contains("no such table: interned") {
-                    Index::default()
-                } else {
-                    panic!("could not load index: {}", e);
-                }
-            }
-        }
+    pub async fn load(conn: &mut dyn pool::Connection) -> Index {
+        let bytes = conn.load_index().await;
+        bytes
+            .map(|s| serde_json::from_slice(&s).unwrap())
+            .unwrap_or_default()
     }
 
-    pub async fn store(&self, conn: &mut Connection) {
-        let serialized = serde_json::to_vec(self).unwrap();
-        conn.execute(
-            "insert or replace into interned (name, value) VALUES ('index', ?)",
-            params![&serialized],
-        )
-        .unwrap();
+    pub async fn store(&self, conn: &mut dyn pool::Connection) {
+        conn.store_index(&serde_json::to_vec(self).unwrap()).await;
     }
 
     pub async fn get<T: SeriesType>(
         &self,
-        db: &mut Connection,
+        db: &mut dyn pool::Connection,
         path: &DbLabel,
         cid: &CollectionId,
     ) -> Option<T> {
-        let (mut stmt, series) = match path {
-            DbLabel::Errors { krate } => (
-                db.prepare_cached("select value from errors where series = ? and cid = ?;")
-                    .unwrap(),
-                self.errors.get(krate)?,
-            ),
+        let cid = match cid {
+            CollectionId::Commit(c) => CollectionIdNumber(0, self.commits.get(c)?),
+            CollectionId::Artifact(a) => CollectionIdNumber(1, self.artifacts.get(a.as_str())?),
+        };
+
+        match path {
+            DbLabel::Errors { krate } => {
+                let series = self.errors.get(krate)?;
+                T::get(db, series, cid).await
+            }
             DbLabel::ProcessStat {
                 krate,
                 profile,
                 cache,
                 stat,
-            } => (
-                db.prepare_cached("select value from pstat where series = ? and cid = ?;")
-                    .unwrap(),
-                self.pstats.get(&(*krate, *profile, *cache, *stat))?,
-            ),
+            } => {
+                let series = self.pstats.get(&(*krate, *profile, *cache, *stat))?;
+                T::get(db, series, cid).await
+            }
             DbLabel::SelfProfileQuery {
                 krate,
                 profile,
                 cache,
                 query,
-            } => (db.prepare_cached("
-                select self_time, blocked_time, incremental_load_time, number_of_cache_hits, invocation_count
-                    from self_profile_query
-                    where series = ? and cid = ?;").unwrap(), self.queries.get(&(*krate, *profile, *cache, *query))?),
-        };
-        let cid = match cid {
-            CollectionId::Commit(c) => CollectionIdNumber(0, self.commits.get(c)?),
-            CollectionId::Artifact(a) => CollectionIdNumber(1, self.artifacts.get(a.as_str())?),
-        };
-        let cid = u32::from_be_bytes(cid.as_bytes());
-
-        stmt.query_row(rusqlite::params![&series, &cid], |row| T::from_row(row))
-            .optional()
-            .unwrap()
+            } => {
+                let series = self.queries.get(&(*krate, *profile, *cache, *query))?;
+                T::get(db, series, cid).await
+            }
+        }
     }
 
     pub fn artifacts(&self) -> impl Iterator<Item = &'_ str> + '_ {
@@ -910,15 +823,15 @@ impl Index {
             .map(|path| path.3)
     }
 
-    pub fn insert_labeled<T: SeriesType>(
+    pub async fn insert_labeled<T: SeriesType>(
         &mut self,
         label: &DbLabel,
-        conn: &Connection,
+        conn: &mut dyn pool::Connection,
         cid: CollectionIdNumber,
         point: &T,
     ) {
         let label_id = self.intern_db_label(&label);
-        point.insert(conn, label_id, cid);
+        point.insert(conn, label_id, cid).await;
     }
 
     pub fn intern_db_label(&mut self, label: &DbLabel) -> LabelId {

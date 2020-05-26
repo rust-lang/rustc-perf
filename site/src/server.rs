@@ -29,7 +29,6 @@ use hyper::StatusCode;
 use log::{debug, error, info};
 use ring::hmac;
 use rmp_serde;
-use rusqlite::params;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json;
@@ -944,72 +943,22 @@ impl Server {
 
                 let start = std::time::Instant::now();
                 eprintln!("ingesting {} paths: {:#?}", paths.len(), paths);
-                let mut tx = data.transaction();
-
-                tx.execute(
-                    "create table if not exists interned(name text primary key, value blob);",
-                    params![],
-                )
-                .unwrap();
-                tx.execute(
-                    "create table if not exists errors(series integer, cid integer, value text);",
-                    params![],
-                )
-                .unwrap();
-                tx.execute(
-                    "create table if not exists pstat(series integer, cid integer, value real);",
-                    params![],
-                )
-                .unwrap();
-                tx.execute(
-                    "create table if not exists self_profile_query(
-                    series integer,
-                    cid integer,
-                    self_time integer,
-                    blocked_time integer,
-                    incremental_load_time integer,
-                    number_of_cache_hits integer,
-                    invocation_count integer
-                );",
-                    params![],
-                )
-                .unwrap();
-
-                let mut index = db::Index::load(&mut tx).await;
+                let mut conn = data.conn();
+                let mut tx = conn.transaction().await;
+                tx.maybe_create_tables().await;
+                let mut index = db::Index::load(tx.conn()).await;
 
                 for path in paths.iter() {
-                    crate::ingest::ingest(&mut tx, &mut index, &path);
+                    crate::ingest::ingest(tx.conn(), &mut index, &path).await;
                 }
 
                 // Store back the new index, letting everyone else see the new
                 // value.
                 eprintln!("index has {} commits", index.commits().len());
-                index.store(&mut tx).await;
+                index.store(tx.conn()).await;
                 data.index.store(Arc::new(index));
-                tx.commit().unwrap();
+                tx.commit().await.unwrap();
                 eprintln!("finished updating index in {:?}", start.elapsed());
-
-                let tx = data.transaction();
-
-                let start = std::time::Instant::now();
-                eprintln!("creating sqlite indices");
-
-                tx.execute(
-                    "create index if not exists self_profile_query_sc on self_profile_query(series, cid);",
-                    params![],
-                )
-                .unwrap();
-
-                tx.execute(
-                    "create index if not exists pstat_sc on pstat(series, cid);",
-                    params![],
-                )
-                .unwrap();
-
-                tx.execute("analyze;", params![]).unwrap();
-                eprintln!("done creating sqlite indices in {:?}", start.elapsed());
-
-                tx.commit().unwrap();
 
                 std::mem::drop(updating);
             });

@@ -1,7 +1,7 @@
+use crate::db::pool::Connection;
 use crate::db::{CollectionId, DbLabel, Label, LabelPath, LabelTag, Profile};
 use anyhow::Context as _;
 use collector::{ArtifactData, CommitData};
-use rusqlite::Connection;
 use std::io::Read;
 use std::path::Path;
 
@@ -40,7 +40,7 @@ fn deserialize_path(path: &Path) -> Res {
     }
 }
 
-pub fn ingest(conn: &Connection, index: &mut crate::db::Index, path: &Path) {
+pub async fn ingest(conn: &mut dyn Connection, index: &mut crate::db::Index, path: &Path) {
     let res = deserialize_path(path);
     let (cid, benchmarks) = match res {
         Res::Commit(cd) => (CollectionId::Commit(cd.commit), cd.benchmarks),
@@ -54,14 +54,16 @@ pub fn ingest(conn: &Connection, index: &mut crate::db::Index, path: &Path) {
         let benchmark = match bres {
             Ok(b) => b,
             Err(e) => {
-                index.insert_labeled(&DbLabel::Errors { krate: name }, &conn, cid_num, &e);
+                index
+                    .insert_labeled(&DbLabel::Errors { krate: name }, conn, cid_num, &e)
+                    .await;
                 path.remove(LabelTag::Crate);
                 continue;
             }
         };
 
         for run in &benchmark.runs {
-            let conn = conn.unchecked_transaction().unwrap();
+            let mut tx = conn.transaction().await;
             let profile = if run.check {
                 Profile::Check
             } else if run.release {
@@ -75,38 +77,42 @@ pub fn ingest(conn: &Connection, index: &mut crate::db::Index, path: &Path) {
 
             for (sid, stat) in run.stats.iter() {
                 path.set(Label::ProcessStat(sid.as_pstat()));
-                index.insert_labeled(
-                    &DbLabel::ProcessStat {
-                        krate: name,
-                        profile,
-                        cache: state,
-                        stat: sid.as_pstat(),
-                    },
-                    &conn,
-                    cid_num,
-                    &stat,
-                );
+                index
+                    .insert_labeled(
+                        &DbLabel::ProcessStat {
+                            krate: name,
+                            profile,
+                            cache: state,
+                            stat: sid.as_pstat(),
+                        },
+                        tx.conn(),
+                        cid_num,
+                        &stat,
+                    )
+                    .await;
             }
             path.remove(LabelTag::ProcessStat);
 
             if let Some(self_profile) = &run.self_profile {
                 for qd in self_profile.query_data.iter() {
                     path.set(Label::Query(qd.label));
-                    index.insert_labeled(
-                        &DbLabel::SelfProfileQuery {
-                            krate: name,
-                            profile,
-                            cache: state,
-                            query: qd.label,
-                        },
-                        &conn,
-                        cid_num,
-                        &crate::db::QueryDatum::from_query_data(qd),
-                    );
+                    index
+                        .insert_labeled(
+                            &DbLabel::SelfProfileQuery {
+                                krate: name,
+                                profile,
+                                cache: state,
+                                query: qd.label,
+                            },
+                            tx.conn(),
+                            cid_num,
+                            &crate::db::QueryDatum::from_query_data(qd),
+                        )
+                        .await;
                 }
                 path.remove(LabelTag::Query);
             }
-            conn.commit().unwrap();
+            tx.commit().await.unwrap();
         }
     }
 }

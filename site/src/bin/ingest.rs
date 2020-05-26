@@ -1,33 +1,43 @@
-use rusqlite::{params, Connection};
+use rusqlite::params;
 use std::path::Path;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let db = std::env::args().nth(1).expect("database as first arg");
-    let conn = Connection::open(&db).unwrap();
-    let mut index = site::db::Index::load(&conn);
-    conn.pragma_update(None, "cache_size", &-64000).unwrap();
+    let pool = r2d2::Pool::builder()
+        .max_size(16)
+        .connection_timeout(std::time::Duration::from_secs(1))
+        .build(site::db::pool::sqlite::Sqlite::new(db.clone().into()))
+        .unwrap();
+
+    let mut conn = site::db::pool::sqlite::SqliteConnection::new(pool.get().unwrap());
+    let mut index = site::db::Index::load(&mut conn).await;
+
+    let raw = rusqlite::Connection::open(&db).unwrap();
+
+    raw.pragma_update(None, "cache_size", &-64000).unwrap();
 
     // When ingesting a bunch of data (the primary use case for this script),
     // we generally don't need durability.
-    conn.pragma_update(None, "journal_mode", &"WAL").unwrap();
-    conn.pragma_update(None, "synchronous", &"NORMAL").unwrap();
+    raw.pragma_update(None, "journal_mode", &"WAL").unwrap();
+    raw.pragma_update(None, "synchronous", &"NORMAL").unwrap();
 
-    conn.execute(
+    raw.execute(
         "create table if not exists interned(name text primary key, value blob);",
         params![],
     )
     .unwrap();
-    conn.execute(
+    raw.execute(
         "create table if not exists errors(series integer, cid integer, value text);",
         params![],
     )
     .unwrap();
-    conn.execute(
+    raw.execute(
         "create table if not exists pstat(series integer, cid integer, value real);",
         params![],
     )
     .unwrap();
-    conn.execute(
+    raw.execute(
         "create table if not exists self_profile_query(
             series integer,
             cid integer,
@@ -42,10 +52,10 @@ fn main() {
     .unwrap();
 
     // otherwise, we'll be really slow.
-    conn.execute("drop index if exists self_profile_query_sc;", params![])
+    raw.execute("drop index if exists self_profile_query_sc;", params![])
         .unwrap();
 
-    conn.execute("drop index if exists pstat_sc;", params![])
+    raw.execute("drop index if exists pstat_sc;", params![])
         .unwrap();
 
     let paths = std::env::args().skip(2).collect::<Vec<_>>();
@@ -62,25 +72,25 @@ fn main() {
             );
             last = std::time::Instant::now();
         }
-        site::ingest::ingest(&conn, &mut index, Path::new(&path));
+        site::ingest::ingest(&mut conn, &mut index, Path::new(&path)).await;
     }
 
     // reset to good default settings
-    conn.pragma_update(None, "journal_mode", &"DELETE").unwrap();
-    conn.pragma_update(None, "synchronous", &"FULL").unwrap();
-    index.store(&conn);
+    raw.pragma_update(None, "journal_mode", &"DELETE").unwrap();
+    raw.pragma_update(None, "synchronous", &"FULL").unwrap();
+    index.store(&mut conn).await;
 
-    conn.execute(
+    raw.execute(
         "create index if not exists self_profile_query_sc on self_profile_query(series, cid);",
         params![],
     )
     .unwrap();
 
-    conn.execute(
+    raw.execute(
         "create index if not exists pstat_sc on pstat(series, cid);",
         params![],
     )
     .unwrap();
 
-    conn.execute("analyze;", params![]).unwrap();
+    raw.execute("analyze;", params![]).unwrap();
 }
