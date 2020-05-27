@@ -6,7 +6,7 @@ extern crate clap;
 use anyhow::{bail, Context};
 use chrono::{Timelike, Utc};
 use collector::api::collected;
-use database::{Commit, Date, Sha};
+use database::{CollectionId, Commit, Date, Sha};
 use log::{debug, error};
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -27,7 +27,7 @@ mod sysroot;
 
 use background_worker::send_home;
 use execute::{Benchmark, Profiler};
-use old::{ArtifactData, Benchmark as CollectedBenchmark, CommitData};
+use old::{Benchmark as CollectedBenchmark, CommitData};
 use sysroot::Sysroot;
 
 #[derive(Debug, Copy, Clone)]
@@ -244,8 +244,8 @@ fn bench_published(
         false,
         false,
     );
-    repo.success_artifact(&ArtifactData {
-        id: id.to_string(),
+    repo.success(&CommitData {
+        id: CollectionId::Artifact(id.to_string()),
         benchmarks: benchmark_data,
     })?;
     Ok(())
@@ -339,7 +339,7 @@ fn bench_commit(
     }
 
     CommitData {
-        commit: commit.clone(),
+        id: CollectionId::Commit(commit.clone()),
         benchmarks: results,
     }
 }

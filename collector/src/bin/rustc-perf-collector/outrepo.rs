@@ -1,9 +1,8 @@
 //! Write benchmark information to the output repository
 
-use crate::old::{ArtifactData, CommitData};
+use crate::old::CommitData;
 use database::Commit;
-use std::path::{PathBuf};
-
+use std::path::PathBuf;
 
 pub struct Repo {}
 
@@ -14,10 +13,6 @@ impl Repo {
     }
 
     pub fn success(&self, data: &CommitData) -> anyhow::Result<()> {
-        todo!()
-    }
-
-    pub fn success_artifact(&self, data: &ArtifactData) -> anyhow::Result<()> {
         todo!()
     }
 

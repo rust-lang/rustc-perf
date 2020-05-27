@@ -1,19 +1,15 @@
 use crate::execute::BenchmarkName as Crate;
-use database::{Commit, PatchName, QueryLabel};
+use database::{PatchName, QueryLabel};
 use std::collections::HashMap;
 use std::hash;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
-pub struct ArtifactData {
-    pub id: String,
-    // String in Result is the output of the command that failed
-    pub benchmarks: HashMap<Crate, Result<Benchmark, String>>,
-}
+use database::CollectionId;
 
 pub struct CommitData {
-    pub commit: Commit,
+    pub id: CollectionId,
     // String in Result is the output of the command that failed
     pub benchmarks: HashMap<Crate, Result<Benchmark, String>>,
 }
