@@ -22,7 +22,6 @@ use std::sync::Arc;
 mod background_worker;
 mod execute;
 mod old;
-mod outrepo;
 mod sysroot;
 
 use background_worker::send_home;
@@ -146,11 +145,7 @@ where
     Ok(v)
 }
 
-fn process_commits(
-    out_repo: outrepo::Repo,
-    benchmarks: &[Benchmark],
-    self_profile: bool,
-) -> anyhow::Result<()> {
+fn process_commits(benchmarks: &[Benchmark], self_profile: bool) -> anyhow::Result<()> {
     println!("processing commits");
     let client = reqwest::blocking::Client::new();
     let commit: Option<String> = client
@@ -170,8 +165,7 @@ fn process_commits(
     let commit = get_commit_or_fake_it(&commit)?;
     match Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu") {
         Ok(sysroot) => {
-            let result = out_repo.success(&bench_commit(
-                Some(&out_repo),
+            bench_commit(
                 &CollectionId::Commit(commit),
                 &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
                 &RunKind::all(),
@@ -180,10 +174,7 @@ fn process_commits(
                 3,
                 true,
                 self_profile,
-            ));
-            if let Err(err) = result {
-                panic!("failed to record success: {:?}", err);
-            }
+            );
         }
         Err(err) => {
             error!("failed to install sysroot for {:?}: {:?}", commit, err);
@@ -200,11 +191,7 @@ fn process_commits(
     Ok(())
 }
 
-fn bench_published(
-    id: &str,
-    repo: outrepo::Repo,
-    mut benchmarks: Vec<Benchmark>,
-) -> anyhow::Result<()> {
+fn bench_published(id: &str, mut benchmarks: Vec<Benchmark>) -> anyhow::Result<()> {
     let cfg = rustup::Cfg::from_env(Arc::new(|_| {})).map_err(|e| anyhow::anyhow!("{:?}", e))?;
     let toolchain = rustup::Toolchain::from(&cfg, id)
         .map_err(|e| anyhow::anyhow!("{:?}", e))
@@ -221,8 +208,7 @@ fn bench_published(
     } else {
         RunKind::all_non_incr()
     };
-    let result = bench_commit(
-        None,
+    bench_commit(
         &CollectionId::Artifact(id.to_string()),
         &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
         &run_kinds,
@@ -237,7 +223,6 @@ fn bench_published(
         false,
         false,
     );
-    repo.success(&result)?;
     Ok(())
 }
 
@@ -247,7 +232,6 @@ fn n_benchmarks_remaining(n: usize) -> String {
 }
 
 fn bench_commit(
-    _: Option<&outrepo::Repo>,
     cid: &CollectionId,
     build_kinds: &[BuildKind],
     run_kinds: &[RunKind],
@@ -391,7 +375,6 @@ fn main_result() -> anyhow::Result<i32> {
 
        (@arg filter: --filter +takes_value "Run only benchmarks that contain this")
        (@arg exclude: --exclude +takes_value "Ignore all benchmarks that contain this")
-       (@arg sync_git: --("sync-git") "Synchronize repository with remote")
        (@arg output_repo: --("output-repo") +required +takes_value "Output repository/directory")
        (@arg self_profile: --("self-profile") "Collect self-profile")
 
@@ -450,7 +433,6 @@ fn main_result() -> anyhow::Result<i32> {
     let filter = matches.value_of("filter");
     let exclude = matches.value_of("exclude");
     let benchmarks = get_benchmarks(&benchmark_dir, filter, exclude)?;
-    let use_remote = matches.is_present("sync_git");
     let self_profile = matches.is_present("self_profile");
 
     let get_out_dir = || {
@@ -459,19 +441,14 @@ fn main_result() -> anyhow::Result<i32> {
         path
     };
 
-    let get_out_repo =
-        |allow_new_dir| outrepo::Repo::open(get_out_dir(), allow_new_dir, use_remote);
-
     let ret = match matches.subcommand() {
         ("bench_commit", Some(sub_m)) => {
             let commit = sub_m.value_of("COMMIT").unwrap();
             let commit = get_commit_or_fake_it(&commit)?;
-            let out_repo = get_out_repo(false)?;
             let sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")?;
             let build_kinds = &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt];
             let run_kinds = RunKind::all();
-            out_repo.success(&bench_commit(
-                Some(&out_repo),
+            bench_commit(
                 &CollectionId::Commit(commit),
                 build_kinds,
                 &run_kinds,
@@ -480,7 +457,7 @@ fn main_result() -> anyhow::Result<i32> {
                 3,
                 false,
                 self_profile,
-            ))?;
+            );
             Ok(0)
         }
 
@@ -502,11 +479,7 @@ fn main_result() -> anyhow::Result<i32> {
             };
             let rustc_path = PathBuf::from(rustc).canonicalize()?;
             let cargo_path = PathBuf::from(cargo).canonicalize()?;
-            // We don't pass `out_repo` here. `commit` is unique because
-            // `commit.date` is unique, so there's no point even trying to load
-            // prior data.
-            let result = bench_commit(
-                None,
+            bench_commit(
                 &CollectionId::Commit(commit),
                 &build_kinds,
                 &run_kinds,
@@ -521,18 +494,17 @@ fn main_result() -> anyhow::Result<i32> {
                 false,
                 self_profile,
             );
-            get_out_repo(true)?.add_commit_data(&result)?;
             Ok(0)
         }
 
         ("bench_published", Some(sub_m)) => {
             let id = sub_m.value_of("ID").unwrap();
-            bench_published(&id, get_out_repo(false)?, benchmarks)?;
+            bench_published(&id, benchmarks)?;
             Ok(0)
         }
 
         ("process", Some(_)) => {
-            process_commits(get_out_repo(false)?, &benchmarks, self_profile)?;
+            process_commits(&benchmarks, self_profile)?;
             Ok(0)
         }
 
@@ -584,7 +556,6 @@ fn main_result() -> anyhow::Result<i32> {
             let sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")?;
             // filter out servo benchmarks as they simply take too long
             bench_commit(
-                None,
                 &CollectionId::Commit(commit),
                 &[BuildKind::Check], // no Debug or Opt builds
                 &RunKind::all(),
