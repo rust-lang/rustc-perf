@@ -172,7 +172,7 @@ fn process_commits(
         Ok(sysroot) => {
             let result = out_repo.success(&bench_commit(
                 Some(&out_repo),
-                &commit,
+                &CollectionId::Commit(commit),
                 &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
                 &RunKind::all(),
                 Compiler::from_sysroot(&sysroot),
@@ -205,10 +205,6 @@ fn bench_published(
     repo: outrepo::Repo,
     mut benchmarks: Vec<Benchmark>,
 ) -> anyhow::Result<()> {
-    let commit = Commit {
-        sha: Sha::from("<none>"),
-        date: Date::ymd_hms(2010, 01, 01, 0, 0, 0),
-    };
     let cfg = rustup::Cfg::from_env(Arc::new(|_| {})).map_err(|e| anyhow::anyhow!("{:?}", e))?;
     let toolchain = rustup::Toolchain::from(&cfg, id)
         .map_err(|e| anyhow::anyhow!("{:?}", e))
@@ -225,12 +221,9 @@ fn bench_published(
     } else {
         RunKind::all_non_incr()
     };
-    let CommitData {
-        benchmarks: benchmark_data,
-        ..
-    } = bench_commit(
+    let result = bench_commit(
         None,
-        &commit,
+        &CollectionId::Artifact(id.to_string()),
         &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
         &run_kinds,
         Compiler {
@@ -244,10 +237,7 @@ fn bench_published(
         false,
         false,
     );
-    repo.success(&CommitData {
-        id: CollectionId::Artifact(id.to_string()),
-        benchmarks: benchmark_data,
-    })?;
+    repo.success(&result)?;
     Ok(())
 }
 
@@ -257,8 +247,8 @@ fn n_benchmarks_remaining(n: usize) -> String {
 }
 
 fn bench_commit(
-    repo: Option<&outrepo::Repo>,
-    commit: &Commit,
+    _: Option<&outrepo::Repo>,
+    cid: &CollectionId,
     build_kinds: &[BuildKind],
     run_kinds: &[RunKind],
     compiler: Compiler<'_>,
@@ -267,34 +257,18 @@ fn bench_commit(
     call_home: bool,
     self_profile: bool,
 ) -> CommitData {
-    eprintln!(
-        "Benchmarking commit {} ({}) for triple {}",
-        commit.sha, commit.date, compiler.triple
-    );
+    eprintln!("Benchmarking {} for triple {}", cid, compiler.triple);
 
     if call_home {
-        send_home(collected::Request::BenchmarkCommit {
-            commit: commit.clone(),
-            benchmarks: benchmarks.iter().map(|b| b.name.to_string()).collect(),
-        });
-    }
-    let existing_data = repo.and_then(|r| r.load_commit_data(&commit, &compiler.triple).ok());
-
-    let mut results = HashMap::new();
-    if let Some(ref data) = existing_data {
-        for benchmark in benchmarks {
-            if let Some(result) = data.benchmarks.get(&benchmark.name) {
-                if call_home {
-                    send_home(collected::Request::BenchmarkDone {
-                        benchmark: benchmark.name.to_string(),
-                        commit: commit.clone(),
-                    });
-                }
-                results.insert(benchmark.name.clone(), result.clone());
-            }
+        if let CollectionId::Commit(commit) = cid {
+            send_home(collected::Request::BenchmarkCommit {
+                commit: commit.clone(),
+                benchmarks: benchmarks.iter().map(|b| b.name.to_string()).collect(),
+            });
         }
     }
 
+    let mut results = HashMap::new();
     let has_measureme = Command::new("summarize").output().is_ok();
     if self_profile {
         assert!(
@@ -329,17 +303,19 @@ fn bench_commit(
         };
 
         if call_home {
-            send_home(collected::Request::BenchmarkDone {
-                benchmark: benchmark.name.to_string(),
-                commit: commit.clone(),
-            });
+            if let CollectionId::Commit(commit) = cid {
+                send_home(collected::Request::BenchmarkDone {
+                    benchmark: benchmark.name.to_string(),
+                    commit: commit.clone(),
+                });
+            }
         }
 
         results.insert(benchmark.name.clone(), result);
     }
 
     CommitData {
-        id: CollectionId::Commit(commit.clone()),
+        id: cid.clone(),
         benchmarks: results,
     }
 }
@@ -496,7 +472,7 @@ fn main_result() -> anyhow::Result<i32> {
             let run_kinds = RunKind::all();
             out_repo.success(&bench_commit(
                 Some(&out_repo),
-                &commit,
+                &CollectionId::Commit(commit),
                 build_kinds,
                 &run_kinds,
                 Compiler::from_sysroot(&sysroot),
@@ -531,7 +507,7 @@ fn main_result() -> anyhow::Result<i32> {
             // prior data.
             let result = bench_commit(
                 None,
-                &commit,
+                &CollectionId::Commit(commit),
                 &build_kinds,
                 &run_kinds,
                 Compiler {
@@ -609,7 +585,7 @@ fn main_result() -> anyhow::Result<i32> {
             // filter out servo benchmarks as they simply take too long
             bench_commit(
                 None,
-                &commit,
+                &CollectionId::Commit(commit),
                 &[BuildKind::Check], // no Debug or Opt builds
                 &RunKind::all(),
                 Compiler::from_sysroot(&sysroot),

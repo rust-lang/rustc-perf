@@ -450,6 +450,15 @@ pub enum CollectionId {
     Artifact(String),
 }
 
+impl fmt::Display for CollectionId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CollectionId::Commit(c) => write!(f, "{} ({})", c.sha, c.date),
+            CollectionId::Artifact(id) => write!(f, "{}", id),
+        }
+    }
+}
+
 impl From<Commit> for CollectionId {
     fn from(c: Commit) -> Self {
         Self::Commit(c)
