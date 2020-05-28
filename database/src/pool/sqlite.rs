@@ -219,7 +219,7 @@ impl Connection for SqliteConnection {
         let cid = cid.pack();
 
         self.conn
-            .prepare_cached("select value from pstat where series = ? and cid = ?;")
+            .prepare_cached("select min(value) from pstat where series = ? and cid = ?;")
             .unwrap()
             .query_row(params![&series, &cid], |row| row.get(0))
             .optional()
@@ -234,7 +234,7 @@ impl Connection for SqliteConnection {
         self.conn.prepare_cached("
                 select self_time, blocked_time, incremental_load_time, number_of_cache_hits, invocation_count
                     from self_profile_query
-                    where series = ? and cid = ?;").unwrap()
+                    where series = ? and cid = ? order by self_time asc;").unwrap()
             .query_row(params![&series, &cid], |row| {
         let self_time: i64 = row.get(0)?;
         let blocked_time: i64 = row.get(1)?;
