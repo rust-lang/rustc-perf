@@ -4,9 +4,8 @@
 extern crate clap;
 
 use anyhow::{bail, Context};
-use chrono::{Timelike, Utc};
 use collector::api::collected;
-use database::{CollectionId, Commit, Date, Sha};
+use database::{CollectionId, Commit};
 use log::{debug, error};
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -468,19 +467,10 @@ fn main_result() -> anyhow::Result<i32> {
             let run_kinds = run_kinds_from_arg(&sub_m.value_of("RUNS"))?;
             let id = sub_m.value_of("ID").unwrap();
 
-            // This isn't a true representation of a commit, because `id` is an
-            // arbitrary identifier, not a commit SHA. But that's ok for local
-            // runs, because `commit` is only used when producing the output
-            // files, not for interacting with a repo.
-            let commit = Commit {
-                sha: Sha::from(id),
-                // Drop the nanoseconds; we don't want that level of precision.
-                date: Date(Utc::now().with_nanosecond(0).unwrap()),
-            };
             let rustc_path = PathBuf::from(rustc).canonicalize()?;
             let cargo_path = PathBuf::from(cargo).canonicalize()?;
             bench_commit(
-                &CollectionId::Commit(commit),
+                &CollectionId::Artifact(id.to_string()),
                 &build_kinds,
                 &run_kinds,
                 Compiler {
