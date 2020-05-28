@@ -291,7 +291,6 @@ fn bench_commit(
 
     // Publish results now that we've finished fully with this commit.
     block_on(tx.commit()).unwrap();
-    std::mem::drop(tx);
 
     // This ensures that we're good to go with the just updated data.
     block_on(conn.maybe_create_indices());

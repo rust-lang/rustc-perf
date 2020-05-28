@@ -13,12 +13,12 @@ pub struct SqliteTransaction<'a> {
 
 #[async_trait::async_trait]
 impl<'a> Transaction for SqliteTransaction<'a> {
-    async fn commit(&mut self) -> Result<(), anyhow::Error> {
+    async fn commit(mut self: Box<Self>) -> Result<(), anyhow::Error> {
         self.finished = true;
         Ok(self.conn.conn.execute_batch("COMMIT")?)
     }
 
-    async fn finish(&mut self) -> Result<(), anyhow::Error> {
+    async fn finish(mut self: Box<Self>) -> Result<(), anyhow::Error> {
         self.finished = true;
         Ok(self.conn.conn.execute_batch("ROLLBACK")?)
     }

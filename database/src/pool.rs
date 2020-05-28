@@ -38,8 +38,8 @@ pub trait Transaction:
         self.deref_mut()
     }
 
-    async fn commit(&mut self) -> Result<(), anyhow::Error>;
-    async fn finish(&mut self) -> Result<(), anyhow::Error>;
+    async fn commit(self: Box<Self>) -> Result<(), anyhow::Error>;
+    async fn finish(self: Box<Self>) -> Result<(), anyhow::Error>;
 }
 
 #[async_trait::async_trait]
