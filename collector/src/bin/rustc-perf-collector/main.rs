@@ -279,6 +279,10 @@ fn bench_commit(
 
     // Publish results now that we've finished fully with this commit.
     block_on(tx.commit()).unwrap();
+    std::mem::drop(tx);
+
+    // This ensures that we're good to go with the just updated data.
+    block_on(conn.maybe_create_indices());
 }
 
 fn get_benchmarks(
@@ -413,7 +417,11 @@ fn main_result() -> anyhow::Result<i32> {
     let mut benchmarks = get_benchmarks(&benchmark_dir, filter, exclude)?;
     let self_profile = matches.is_present("self_profile");
 
-    let pool = matches.value_of("db").map(|db| database::Pool::open(db));
+    let pool = matches.value_of("db").map(|db| {
+        let pool = database::Pool::open(db);
+        block_on(pool.connection().maybe_create_tables());
+        pool
+    });
 
     let ret = match matches.subcommand() {
         ("bench_commit", Some(sub_m)) => {

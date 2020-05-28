@@ -60,6 +60,7 @@ impl ManageConnection for Sqlite {
     fn connect(&self) -> Result<Self::Connection, Self::Error> {
         let conn = rusqlite::Connection::open(&self.0)?;
         conn.pragma_update(None, "cache_size", &-128000)?;
+        conn.pragma_update(None, "journal_mode", &"WAL")?;
         Ok(conn)
     }
     fn is_valid(&self, conn: &mut Self::Connection) -> Result<(), Self::Error> {
@@ -119,6 +120,13 @@ impl Connection for SqliteConnection {
                 params![],
             )
             .unwrap();
+    }
+
+    async fn maybe_create_indices(&mut self) {
+        self.conn.execute_batch("
+            create index if not exists pstat_on_series_cid on pstat(series, cid);
+            create index if not exists self_profile_query_on_series_cid on self_profile_query(series, cid);
+        ").unwrap();
     }
 
     async fn transaction(&mut self) -> Box<dyn Transaction + '_> {

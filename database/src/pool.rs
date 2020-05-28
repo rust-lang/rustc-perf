@@ -5,6 +5,7 @@ pub mod sqlite;
 #[async_trait::async_trait]
 pub trait Connection: Send {
     async fn maybe_create_tables(&mut self);
+    async fn maybe_create_indices(&mut self);
     async fn transaction(&mut self) -> Box<dyn Transaction + '_>;
 
     async fn load_index(&mut self) -> Option<Vec<u8>>;
