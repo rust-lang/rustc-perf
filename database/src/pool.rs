@@ -1,5 +1,7 @@
 use crate::{CollectionIdNumber, QueryDatum};
 
+pub mod sqlite;
+
 #[async_trait::async_trait]
 pub trait Connection: Send {
     async fn maybe_create_tables(&mut self);
@@ -37,4 +39,24 @@ pub trait Transaction:
     async fn finish(&mut self) -> Result<(), anyhow::Error>;
 }
 
-pub mod sqlite;
+pub enum Pool {
+    Sqlite(r2d2::Pool<sqlite::Sqlite>),
+}
+
+impl Pool {
+    pub fn connection(&self) -> Box<dyn Connection> {
+        match self {
+            Pool::Sqlite(p) => Box::new(sqlite::SqliteConnection::new(p.get().unwrap())),
+        }
+    }
+
+    pub fn open(uri: &str) -> Pool {
+        Pool::Sqlite(
+            r2d2::Pool::builder()
+                .max_size(16)
+                .connection_timeout(std::time::Duration::from_secs(1))
+                .build(sqlite::Sqlite::new(uri.into()))
+                .unwrap(),
+        )
+    }
+}

@@ -26,6 +26,7 @@ use database::Date;
 
 use crate::api::github;
 use collector;
+use database::Pool;
 pub use database::{Commit, Crate, Sha};
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
@@ -132,7 +133,7 @@ pub struct InputData {
     pub config: Config,
 
     pub index: ArcSwap<crate::db::Index>,
-    pub conn: r2d2::Pool<db::pool::sqlite::Sqlite>,
+    pub pool: Pool,
 }
 
 impl InputData {
@@ -169,14 +170,10 @@ impl InputData {
             std::process::exit(1);
         }
 
-        let pool = r2d2::Pool::builder()
-            .max_size(16)
-            .connection_timeout(std::time::Duration::from_secs(1))
-            .build(db::pool::sqlite::Sqlite::new(db.into()))
-            .unwrap();
+        let pool = Pool::open(db);
 
-        let mut conn = db::pool::sqlite::SqliteConnection::new(pool.get().unwrap());
-        let index = db::Index::load(&mut conn).await;
+        let mut conn = pool.connection();
+        let index = db::Index::load(&mut *conn).await;
 
         let config = if let Ok(s) = fs::read_to_string("site-config.toml") {
             toml::from_str(&s)?
@@ -195,14 +192,12 @@ impl InputData {
             persistent: Mutex::new(persistent),
             config,
             index: ArcSwap::new(Arc::new(index)),
-            conn: pool,
+            pool,
         })
     }
 
-    pub fn conn(&self) -> Box<dyn db::pool::Connection> {
-        Box::new(db::pool::sqlite::SqliteConnection::new(
-            self.conn.get().unwrap(),
-        ))
+    pub fn conn(&self) -> Box<dyn database::pool::Connection> {
+        self.pool.connection()
     }
 
     pub async fn missing_commits(&self) -> Vec<(Commit, MissingReason)> {

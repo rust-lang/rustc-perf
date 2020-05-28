@@ -8,6 +8,10 @@ use std::hash;
 use std::ops::{Add, Sub};
 use std::time::Duration;
 
+pub mod pool;
+
+pub use pool::Pool;
+
 intern!(pub struct ProcessStatistic);
 intern!(pub struct Crate);
 
@@ -266,8 +270,6 @@ impl Ord for Commit {
             .then_with(|| self.sha.cmp(&other.sha))
     }
 }
-
-pub mod pool;
 
 #[derive(
     Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
