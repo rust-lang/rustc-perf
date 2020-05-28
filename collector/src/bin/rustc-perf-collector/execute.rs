@@ -83,6 +83,7 @@ pub enum Profiler {
     DHAT,
     Massif,
     Eprintln,
+    LlvmLines,
 }
 
 #[derive(thiserror::Error, PartialEq, Eq, Debug)]
@@ -109,6 +110,7 @@ impl Profiler {
             "dhat" => Ok(Profiler::DHAT),
             "massif" => Ok(Profiler::Massif),
             "eprintln" => Ok(Profiler::Eprintln),
+            "llvm-lines" => Ok(Profiler::LlvmLines),
             _ => Err(FromNameError::UnknownProfiler(name.to_string())),
         }
     }
@@ -126,6 +128,60 @@ impl Profiler {
             Profiler::DHAT => "dhat",
             Profiler::Massif => "massif",
             Profiler::Eprintln => "eprintln",
+            Profiler::LlvmLines => "llvm-lines",
+        }
+    }
+
+    // What cargo subcommand do we need to run for this profiler? If not
+    // `rustc`, must be a subcommand that itself invokes `rustc`.
+    fn subcommand(&self) -> &'static str {
+        match self {
+            Profiler::PerfStat
+            | Profiler::PerfStatSelfProfile
+            | Profiler::SelfProfile
+            | Profiler::TimePasses
+            | Profiler::PerfRecord
+            | Profiler::OProfile
+            | Profiler::Cachegrind
+            | Profiler::Callgrind
+            | Profiler::DHAT
+            | Profiler::Massif
+            | Profiler::Eprintln => "rustc",
+            Profiler::LlvmLines => "llvm-lines",
+        }
+    }
+
+    fn is_build_kind_allowed(&self, build_kind: BuildKind) -> bool {
+        match self {
+            Profiler::PerfStat
+            | Profiler::PerfStatSelfProfile
+            | Profiler::SelfProfile
+            | Profiler::TimePasses
+            | Profiler::PerfRecord
+            | Profiler::OProfile
+            | Profiler::Cachegrind
+            | Profiler::Callgrind
+            | Profiler::DHAT
+            | Profiler::Massif
+            | Profiler::Eprintln => true,
+            Profiler::LlvmLines => build_kind != BuildKind::Check,
+        }
+    }
+
+    fn is_run_kind_allowed(&self, run_kind: RunKind) -> bool {
+        match self {
+            Profiler::PerfStat
+            | Profiler::PerfStatSelfProfile
+            | Profiler::SelfProfile
+            | Profiler::TimePasses
+            | Profiler::PerfRecord
+            | Profiler::OProfile
+            | Profiler::Cachegrind
+            | Profiler::Callgrind
+            | Profiler::DHAT
+            | Profiler::Massif
+            | Profiler::Eprintln => true,
+            Profiler::LlvmLines => run_kind == RunKind::Full,
         }
     }
 }
@@ -201,7 +257,30 @@ impl<'a> CargoProcess<'a> {
 
     fn run_rustc(&mut self) -> anyhow::Result<()> {
         loop {
-            let mut cmd = self.base_command(self.cwd, "rustc");
+            // Get the subcommand. If it's not `rustc` it must should be a
+            // subcommand that itself invokes `rustc` (so that the `FAKE_RUSTC`
+            // machinery works).
+            let subcommand = if let Some((ref mut processor, run_kind, ..)) = self.processor_etc {
+                let profiler = processor.profiler();
+                if !profiler.is_build_kind_allowed(self.build_kind) {
+                    return Err(anyhow::anyhow!(
+                        "this profiler doesn't support {:?} builds",
+                        self.build_kind
+                    ));
+                }
+                if !profiler.is_run_kind_allowed(run_kind) {
+                    return Err(anyhow::anyhow!(
+                        "this profiler doesn't support {:?} runs",
+                        run_kind
+                    ));
+                }
+
+                profiler.subcommand()
+            } else {
+                "rustc"
+            };
+
+            let mut cmd = self.base_command(self.cwd, subcommand);
             cmd.arg("-p").arg(self.get_pkgid(self.cwd));
             match self.build_kind {
                 BuildKind::Check => {
@@ -683,12 +762,20 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 fs::copy(&tmp_msout_file, &msout_file)?;
             }
 
-            // eprintln! statements writes their output to stderr. We copy that
-            // output into a file in the output dir.
+            // `eprintln!` statements writes their output to stderr. We copy
+            // that output into a file in the output dir.
             Profiler::Eprintln => {
                 let eprintln_file = filepath(self.output_dir, &out_file("eprintln"));
 
                 fs::write(eprintln_file, &output.stderr)?;
+            }
+
+            // `cargo llvm-lines` writes its output to stdout. We copy that
+            // output into a file in the output dir.
+            Profiler::LlvmLines => {
+                let ll_file = filepath(self.output_dir, &out_file("ll"));
+
+                fs::write(ll_file, &output.stdout)?;
             }
         }
         Ok(Retry::No)
