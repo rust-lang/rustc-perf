@@ -192,7 +192,7 @@ fn main() {
                 assert!(cmd.status().expect("failed to spawn").success());
             }
 
-            "eprintln" => {
+            "eprintln" | "llvm-lines" => {
                 let mut cmd = Command::new(&rustc);
                 cmd.args(&args);
 

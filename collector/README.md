@@ -340,6 +340,16 @@ except that `$PROFILER` is one of the following.
     written to `stderr`) is written to files with an `eprintln` prefix. Those
     files can be post-processed in any appropriate fashion;
     [`counts`](https://github.com/nnethercote/counts) is one possibility.
+- `llvm-lines`: Profile with [`cargo
+  llvm-lines`](https://github.com/dtolnay/cargo-llvm-lines/) a code size
+  measurer.
+  - **Purpose**. This command counts the number of lines of LLVM IR are
+    generated across all instantiations of each function. In other words, it's
+    a tool for finding code bloat.
+  - **Slowdown**. It Is likely to run faster than normal compilation.
+  - **Output**. Human-readable output is written to files with an `ll` prefix.
+  - **Notes**. Does not work with the `Check` build kind. Also does not work
+    with the `IncrFull`, `IncrUnchanged`, and `IncrPatched` run kinds.
 
 ### Profiling options
 
