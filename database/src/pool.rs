@@ -2,6 +2,7 @@ use crate::{CollectionIdNumber, QueryDatum};
 use std::sync::{Arc, Mutex};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
+pub mod postgres;
 pub mod sqlite;
 
 #[async_trait::async_trait]
@@ -31,12 +32,8 @@ pub trait Connection: Send {
 }
 
 #[async_trait::async_trait]
-pub trait Transaction:
-    Send + std::ops::Deref<Target = dyn Connection> + std::ops::DerefMut
-{
-    fn conn(&mut self) -> &mut dyn Connection {
-        self.deref_mut()
-    }
+pub trait Transaction: Send {
+    fn conn(&mut self) -> &mut dyn Connection;
 
     async fn commit(self: Box<Self>) -> Result<(), anyhow::Error>;
     async fn finish(self: Box<Self>) -> Result<(), anyhow::Error>;
@@ -124,16 +121,22 @@ where
 
 pub enum Pool {
     Sqlite(ConnectionPool<sqlite::Sqlite>),
+    Postgres(ConnectionPool<postgres::Postgres>),
 }
 
 impl Pool {
     pub async fn connection(&self) -> Box<dyn Connection> {
         match self {
             Pool::Sqlite(p) => Box::new(sqlite::SqliteConnection::new(p.get().await)),
+            Pool::Postgres(p) => Box::new(postgres::PostgresConnection::new(p.get().await).await),
         }
     }
 
     pub fn open(uri: &str) -> Pool {
-        Pool::Sqlite(ConnectionPool::new(sqlite::Sqlite::new(uri.into())))
+        if uri.starts_with("postgres") {
+            Pool::Postgres(ConnectionPool::new(postgres::Postgres::new(uri.into())))
+        } else {
+            Pool::Sqlite(ConnectionPool::new(sqlite::Sqlite::new(uri.into())))
+        }
     }
 }

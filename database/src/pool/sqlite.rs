@@ -22,6 +22,9 @@ impl<'a> Transaction for SqliteTransaction<'a> {
         self.finished = true;
         Ok(self.conn.conn.execute_batch("ROLLBACK")?)
     }
+    fn conn(&mut self) -> &mut dyn Connection {
+        &mut *self.conn
+    }
 }
 
 impl std::ops::Deref for SqliteTransaction<'_> {
