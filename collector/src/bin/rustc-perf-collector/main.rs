@@ -236,6 +236,18 @@ fn bench_commit(
 
     let mut tx = block_on(conn.transaction());
     let mut index = block_on(database::Index::load(tx.conn()));
+    let has_collected = match cid {
+        CollectionId::Commit(commit) => index.commits().iter().any(|c| c == commit),
+        CollectionId::Artifact(id) => index.artifacts().any(|a| a == id),
+    };
+    if has_collected {
+        eprintln!("{} has previously been collected, skipping.", cid);
+        eprintln!(
+            "Note that this behavior is likely to change in the future \
+            to collect and append the data instead."
+        );
+        return;
+    }
     let interned_cid = index.intern_cid(&cid);
 
     for (nth_benchmark, benchmark) in benchmarks.iter().enumerate() {
