@@ -87,7 +87,12 @@ async fn enqueue_sha(
     data: &InputData,
     commit: String,
 ) -> ServerResult<github::Response> {
-    let timer_token = data.config.keys.github.clone().expect("needs rust-timer token");
+    let timer_token = data
+        .config
+        .keys
+        .github
+        .clone()
+        .expect("needs rust-timer token");
     let client = reqwest::Client::new();
     let url = format!("{}/commits/{}", request.issue.repository_url, commit);
     let commit_response = client
@@ -106,7 +111,10 @@ async fn enqueue_sha(
     let commit_response: github::Commit = match serde_json::from_str(&commit_response) {
         Ok(c) => c,
         Err(e) => {
-            return Err(format!("cannot deserialize commit ({:?}): {:?}", commit_response, e));
+            return Err(format!(
+                "cannot deserialize commit ({:?}): {:?}",
+                commit_response, e
+            ));
         }
     };
     if commit_response.parents.len() != 2 {

@@ -11,7 +11,10 @@ lazy_static::lazy_static! {
         RwLock::new(Some(start_bg_thread()));
 }
 
-fn call_home(client: &reqwest::blocking::Client, request: &collected::Request) -> anyhow::Result<()> {
+fn call_home(
+    client: &reqwest::blocking::Client,
+    request: &collected::Request,
+) -> anyhow::Result<()> {
     let resp = client
         .post(&format!(
             "{}/perf/collected",

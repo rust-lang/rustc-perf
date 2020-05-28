@@ -309,7 +309,10 @@ fn bench_commit(
             continue;
         }
 
-        eprintln!("{}", n_benchmarks_remaining(benchmarks.len() - results.len()));
+        eprintln!(
+            "{}",
+            n_benchmarks_remaining(benchmarks.len() - results.len())
+        );
 
         let mut processor = execute::MeasureProcessor::new(self_profile);
         let result =
