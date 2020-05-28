@@ -352,7 +352,7 @@ fn main_result() -> anyhow::Result<i32> {
 
        (@arg filter: --filter +takes_value "Run only benchmarks that contain this")
        (@arg exclude: --exclude +takes_value "Ignore all benchmarks that contain this")
-       (@arg db: --("db") +required +takes_value "Database file")
+       (@arg db: --("db") +takes_value "Database file")
        (@arg self_profile: --("self-profile") "Collect self-profile")
 
        (@subcommand bench_commit =>
@@ -413,8 +413,7 @@ fn main_result() -> anyhow::Result<i32> {
     let mut benchmarks = get_benchmarks(&benchmark_dir, filter, exclude)?;
     let self_profile = matches.is_present("self_profile");
 
-    let db = matches.value_of("db").unwrap();
-    let pool = database::Pool::open(db);
+    let pool = matches.value_of("db").map(|db| database::Pool::open(db));
 
     let ret = match matches.subcommand() {
         ("bench_commit", Some(sub_m)) => {
@@ -424,7 +423,7 @@ fn main_result() -> anyhow::Result<i32> {
             let build_kinds = &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt];
             let run_kinds = RunKind::all();
             bench_commit(
-                pool.connection(),
+                pool.expect("--db passed").connection(),
                 &CollectionId::Commit(commit),
                 build_kinds,
                 &run_kinds,
@@ -447,7 +446,7 @@ fn main_result() -> anyhow::Result<i32> {
             let rustc_path = PathBuf::from(rustc).canonicalize()?;
             let cargo_path = PathBuf::from(cargo).canonicalize()?;
             bench_commit(
-                pool.connection(),
+                pool.expect("--db passed").connection(),
                 &CollectionId::Artifact(id.to_string()),
                 &build_kinds,
                 &run_kinds,
@@ -485,7 +484,7 @@ fn main_result() -> anyhow::Result<i32> {
                 RunKind::all_non_incr()
             };
             bench_commit(
-                pool.connection(),
+                pool.expect("--db passed").connection(),
                 &CollectionId::Artifact(id.to_string()),
                 &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
                 &run_kinds,
@@ -504,7 +503,7 @@ fn main_result() -> anyhow::Result<i32> {
         }
 
         ("process", Some(_)) => {
-            process_commits(&pool, &benchmarks, self_profile)?;
+            process_commits(&pool.expect("--db passed"), &benchmarks, self_profile)?;
             Ok(0)
         }
 
@@ -556,7 +555,7 @@ fn main_result() -> anyhow::Result<i32> {
             let sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")?;
             // filter out servo benchmarks as they simply take too long
             bench_commit(
-                pool.connection(),
+                pool.expect("--db passed").connection(),
                 &CollectionId::Commit(commit),
                 &[BuildKind::Check], // no Debug or Opt builds
                 &RunKind::all(),
