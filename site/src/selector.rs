@@ -550,7 +550,7 @@ impl ProcessStatisticSeries {
     ) -> Self {
         let mut res = Vec::with_capacity(collection_ids.len());
         let idx = db.index.load();
-        let mut conn = db.conn();
+        let mut conn = db.conn().await;
         let mut tx = conn.transaction().await;
         let query = crate::db::DbLabel::ProcessStat {
             krate,
@@ -668,7 +668,7 @@ impl SelfProfile {
     ) -> Self {
         let mut res = Vec::with_capacity(cids.len());
         let idx = db.index.load();
-        let mut conn = db.conn();
+        let mut conn = db.conn().await;
         let mut tx = conn.transaction().await;
         let labels = idx
             .filtered_queries(krate, profile, cache)
@@ -790,7 +790,7 @@ impl SelfProfileQueryTime {
     ) -> Self {
         let mut res = Vec::with_capacity(collection_ids.len());
         let idx = db.index.load();
-        let mut conn = db.conn();
+        let mut conn = db.conn().await;
         let mut tx = conn.transaction().await;
         let query = crate::db::DbLabel::SelfProfileQuery {
             krate,
@@ -892,7 +892,7 @@ pub struct CompileError {
 
 impl CompileError {
     async fn new(collection_ids: Arc<Vec<CollectionId>>, db: &Db, krate: Crate) -> CompileError {
-        let mut conn = db.conn();
+        let mut conn = db.conn().await;
         let mut tx = conn.transaction().await;
         let mut res = Vec::with_capacity(collection_ids.len());
         let idx = db.index.load();

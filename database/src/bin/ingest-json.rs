@@ -166,18 +166,10 @@ impl From<InternalSelfProfile> for SelfProfile {
 #[tokio::main]
 async fn main() {
     let db = std::env::args().nth(1).expect("database as first arg");
-    let pool = r2d2::Pool::builder()
-        .max_size(16)
-        .connection_timeout(std::time::Duration::from_secs(1))
-        .build(database::pool::sqlite::Sqlite::new(db.clone().into()))
-        .unwrap();
+    let pool = database::Pool::open(&db);
+    let mut conn = pool.connection().await;
+    let mut index = database::Index::load(&mut *conn).await;
 
-    let mut conn = database::pool::sqlite::SqliteConnection::new(pool.get().unwrap());
-    let mut index = database::Index::load(&mut conn).await;
-
-    conn.raw()
-        .pragma_update(None, "journal_mode", &"WAL")
-        .unwrap();
     conn.maybe_create_tables().await;
 
     let paths = std::env::args().skip(2).collect::<Vec<_>>();
@@ -194,13 +186,10 @@ async fn main() {
             );
             last = std::time::Instant::now();
         }
-        ingest(&mut conn, &mut index, Path::new(&path)).await;
+        ingest(&mut *conn, &mut index, Path::new(&path)).await;
     }
-    conn.raw()
-        .pragma_update(None, "journal_mode", &"DELETE")
-        .unwrap();
 
-    index.store(&mut conn).await;
+    index.store(&mut *conn).await;
 }
 
 enum Res {

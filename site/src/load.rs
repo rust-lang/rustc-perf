@@ -172,7 +172,7 @@ impl InputData {
 
         let pool = Pool::open(db);
 
-        let mut conn = pool.connection();
+        let mut conn = pool.connection().await;
         let index = db::Index::load(&mut *conn).await;
 
         let config = if let Ok(s) = fs::read_to_string("site-config.toml") {
@@ -196,8 +196,8 @@ impl InputData {
         })
     }
 
-    pub fn conn(&self) -> Box<dyn database::pool::Connection> {
-        self.pool.connection()
+    pub async fn conn(&self) -> Box<dyn database::pool::Connection> {
+        self.pool.connection().await
     }
 
     pub async fn missing_commits(&self) -> Vec<(Commit, MissingReason)> {

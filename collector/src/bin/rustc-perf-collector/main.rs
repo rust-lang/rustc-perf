@@ -167,7 +167,7 @@ fn process_commits(
     match Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu") {
         Ok(sysroot) => {
             bench_commit(
-                pool.connection(),
+                block_on(pool.connection()),
                 &CollectionId::Commit(commit),
                 &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
                 &RunKind::all(),
@@ -419,7 +419,7 @@ fn main_result() -> anyhow::Result<i32> {
 
     let pool = matches.value_of("db").map(|db| {
         let pool = database::Pool::open(db);
-        block_on(pool.connection().maybe_create_tables());
+        block_on(async { pool.connection().await.maybe_create_tables().await });
         pool
     });
 
@@ -431,7 +431,7 @@ fn main_result() -> anyhow::Result<i32> {
             let build_kinds = &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt];
             let run_kinds = RunKind::all();
             bench_commit(
-                pool.expect("--db passed").connection(),
+                block_on(pool.expect("--db passed").connection()),
                 &CollectionId::Commit(commit),
                 build_kinds,
                 &run_kinds,
@@ -454,7 +454,7 @@ fn main_result() -> anyhow::Result<i32> {
             let rustc_path = PathBuf::from(rustc).canonicalize()?;
             let cargo_path = PathBuf::from(cargo).canonicalize()?;
             bench_commit(
-                pool.expect("--db passed").connection(),
+                block_on(pool.expect("--db passed").connection()),
                 &CollectionId::Artifact(id.to_string()),
                 &build_kinds,
                 &run_kinds,
@@ -492,7 +492,7 @@ fn main_result() -> anyhow::Result<i32> {
                 RunKind::all_non_incr()
             };
             bench_commit(
-                pool.expect("--db passed").connection(),
+                block_on(pool.expect("--db passed").connection()),
                 &CollectionId::Artifact(id.to_string()),
                 &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
                 &run_kinds,
@@ -563,7 +563,7 @@ fn main_result() -> anyhow::Result<i32> {
             let sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")?;
             // filter out servo benchmarks as they simply take too long
             bench_commit(
-                pool.expect("--db passed").connection(),
+                block_on(pool.expect("--db passed").connection()),
                 &CollectionId::Commit(commit),
                 &[BuildKind::Check], // no Debug or Opt builds
                 &RunKind::all(),

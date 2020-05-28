@@ -1,6 +1,5 @@
-use crate::pool::{Connection, Transaction};
+use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{CollectionIdNumber, QueryDatum};
-use r2d2::{ManageConnection, PooledConnection};
 use rusqlite::params;
 use rusqlite::OptionalExtension;
 use std::convert::TryFrom;
@@ -54,29 +53,26 @@ impl Sqlite {
     }
 }
 
-impl ManageConnection for Sqlite {
+#[async_trait::async_trait]
+impl ConnectionManager for Sqlite {
     type Connection = rusqlite::Connection;
-    type Error = rusqlite::Error;
-    fn connect(&self) -> Result<Self::Connection, Self::Error> {
-        let conn = rusqlite::Connection::open(&self.0)?;
-        conn.pragma_update(None, "cache_size", &-128000)?;
-        conn.pragma_update(None, "journal_mode", &"WAL")?;
-        Ok(conn)
+    async fn open(&self) -> Self::Connection {
+        let conn = rusqlite::Connection::open(&self.0).unwrap();
+        conn.pragma_update(None, "cache_size", &-128000).unwrap();
+        conn.pragma_update(None, "journal_mode", &"WAL").unwrap();
+        conn
     }
-    fn is_valid(&self, conn: &mut Self::Connection) -> Result<(), Self::Error> {
-        conn.execute_batch("")
-    }
-    fn has_broken(&self, _: &mut Self::Connection) -> bool {
-        false
+    async fn is_valid(&self, conn: &mut Self::Connection) -> bool {
+        conn.execute_batch("").is_ok()
     }
 }
 
 pub struct SqliteConnection {
-    conn: PooledConnection<Sqlite>,
+    conn: ManagedConnection<rusqlite::Connection>,
 }
 
 impl SqliteConnection {
-    pub fn new(conn: PooledConnection<Sqlite>) -> Self {
+    pub fn new(conn: ManagedConnection<rusqlite::Connection>) -> Self {
         Self { conn }
     }
 

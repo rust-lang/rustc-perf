@@ -961,7 +961,7 @@ impl Server {
 
         let data: Arc<InputData> = self.data.read().as_ref().unwrap().clone();
         let _updating = self.updating.release_on_drop(channel);
-        let mut conn = data.conn();
+        let mut conn = data.conn().await;
         let index = db::Index::load(&mut *conn).await;
         eprintln!("index has {} commits", index.commits().len());
         data.index.store(Arc::new(index));
