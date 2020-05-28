@@ -5,7 +5,7 @@ extern crate clap;
 
 use anyhow::{bail, Context};
 use collector::api::collected;
-use database::{CollectionId, Commit};
+use database::{pool::Connection, CollectionId, Commit};
 use log::{debug, error};
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -144,7 +144,11 @@ where
     Ok(v)
 }
 
-fn process_commits(benchmarks: &[Benchmark], self_profile: bool) -> anyhow::Result<()> {
+fn process_commits(
+    pool: &database::Pool,
+    benchmarks: &[Benchmark],
+    self_profile: bool,
+) -> anyhow::Result<()> {
     println!("processing commits");
     let client = reqwest::blocking::Client::new();
     let commit: Option<String> = client
@@ -165,6 +169,7 @@ fn process_commits(benchmarks: &[Benchmark], self_profile: bool) -> anyhow::Resu
     match Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu") {
         Ok(sysroot) => {
             bench_commit(
+                pool.connection(),
                 &CollectionId::Commit(commit),
                 &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
                 &RunKind::all(),
@@ -190,47 +195,18 @@ fn process_commits(benchmarks: &[Benchmark], self_profile: bool) -> anyhow::Resu
     Ok(())
 }
 
-fn bench_published(id: &str, mut benchmarks: Vec<Benchmark>) -> anyhow::Result<()> {
-    let cfg = rustup::Cfg::from_env(Arc::new(|_| {})).map_err(|e| anyhow::anyhow!("{:?}", e))?;
-    let toolchain = rustup::Toolchain::from(&cfg, id)
-        .map_err(|e| anyhow::anyhow!("{:?}", e))
-        .with_context(|| format!("creating toolchain for id: {}", id))?;
-    toolchain
-        .install_from_dist_if_not_installed()
-        .map_err(|e| anyhow::anyhow!("{:?}", e))?;
-
-    // Remove benchmarks that don't work with a stable compiler.
-    benchmarks.retain(|b| b.supports_stable());
-
-    let run_kinds = if collector::version_supports_incremental(id) {
-        RunKind::all()
-    } else {
-        RunKind::all_non_incr()
-    };
-    bench_commit(
-        &CollectionId::Artifact(id.to_string()),
-        &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
-        &run_kinds,
-        Compiler {
-            rustc: &toolchain.binary_file("rustc"),
-            cargo: &toolchain.binary_file("cargo"),
-            is_nightly: false,
-            triple: "x86_64-unknown-linux-gnu",
-        },
-        &benchmarks,
-        3,
-        false,
-        false,
-    );
-    Ok(())
-}
-
 fn n_benchmarks_remaining(n: usize) -> String {
     let suffix = if n == 1 { "" } else { "s" };
     format!("{} benchmark{} remaining", n, suffix)
 }
 
+pub fn blocking_run<F: std::future::Future>(f: F) -> F::Output {
+    let mut rt = tokio::runtime::Runtime::new().expect("created runtime");
+    rt.block_on(f)
+}
+
 fn bench_commit(
+    _conn: Box<dyn Connection>,
     cid: &CollectionId,
     build_kinds: &[BuildKind],
     run_kinds: &[RunKind],
@@ -374,7 +350,7 @@ fn main_result() -> anyhow::Result<i32> {
 
        (@arg filter: --filter +takes_value "Run only benchmarks that contain this")
        (@arg exclude: --exclude +takes_value "Ignore all benchmarks that contain this")
-       (@arg output_repo: --("output-repo") +required +takes_value "Output repository/directory")
+       (@arg db: --("db") +required +takes_value "Database file")
        (@arg self_profile: --("self-profile") "Collect self-profile")
 
        (@subcommand bench_commit =>
@@ -402,6 +378,7 @@ fn main_result() -> anyhow::Result<i32> {
        )
        (@subcommand profile =>
            (about: "profile a local rustc")
+           (@arg output_dir: --("output") +required +takes_value "Output directory")
            (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
            (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
            (@arg BUILDS: --builds +takes_value
@@ -431,14 +408,11 @@ fn main_result() -> anyhow::Result<i32> {
     let benchmark_dir = PathBuf::from("collector/benchmarks");
     let filter = matches.value_of("filter");
     let exclude = matches.value_of("exclude");
-    let benchmarks = get_benchmarks(&benchmark_dir, filter, exclude)?;
+    let mut benchmarks = get_benchmarks(&benchmark_dir, filter, exclude)?;
     let self_profile = matches.is_present("self_profile");
 
-    let get_out_dir = || {
-        let path = PathBuf::from(matches.value_of_os("output_repo").unwrap());
-        fs::create_dir_all(&path).unwrap();
-        path
-    };
+    let db = matches.value_of("db").unwrap();
+    let pool = database::Pool::open(db);
 
     let ret = match matches.subcommand() {
         ("bench_commit", Some(sub_m)) => {
@@ -448,6 +422,7 @@ fn main_result() -> anyhow::Result<i32> {
             let build_kinds = &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt];
             let run_kinds = RunKind::all();
             bench_commit(
+                pool.connection(),
                 &CollectionId::Commit(commit),
                 build_kinds,
                 &run_kinds,
@@ -470,6 +445,7 @@ fn main_result() -> anyhow::Result<i32> {
             let rustc_path = PathBuf::from(rustc).canonicalize()?;
             let cargo_path = PathBuf::from(cargo).canonicalize()?;
             bench_commit(
+                pool.connection(),
                 &CollectionId::Artifact(id.to_string()),
                 &build_kinds,
                 &run_kinds,
@@ -489,12 +465,44 @@ fn main_result() -> anyhow::Result<i32> {
 
         ("bench_published", Some(sub_m)) => {
             let id = sub_m.value_of("ID").unwrap();
-            bench_published(&id, benchmarks)?;
+            let cfg =
+                rustup::Cfg::from_env(Arc::new(|_| {})).map_err(|e| anyhow::anyhow!("{:?}", e))?;
+            let toolchain = rustup::Toolchain::from(&cfg, id)
+                .map_err(|e| anyhow::anyhow!("{:?}", e))
+                .with_context(|| format!("creating toolchain for id: {}", id))?;
+            toolchain
+                .install_from_dist_if_not_installed()
+                .map_err(|e| anyhow::anyhow!("{:?}", e))?;
+
+            // Remove benchmarks that don't work with a stable compiler.
+            benchmarks.retain(|b| b.supports_stable());
+
+            let run_kinds = if collector::version_supports_incremental(id) {
+                RunKind::all()
+            } else {
+                RunKind::all_non_incr()
+            };
+            bench_commit(
+                pool.connection(),
+                &CollectionId::Artifact(id.to_string()),
+                &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
+                &run_kinds,
+                Compiler {
+                    rustc: &toolchain.binary_file("rustc"),
+                    cargo: &toolchain.binary_file("cargo"),
+                    is_nightly: false,
+                    triple: "x86_64-unknown-linux-gnu",
+                },
+                &benchmarks,
+                3,
+                false,
+                false,
+            );
             Ok(0)
         }
 
         ("process", Some(_)) => {
-            process_commits(&benchmarks, self_profile)?;
+            process_commits(&pool, &benchmarks, self_profile)?;
             Ok(0)
         }
 
@@ -505,6 +513,7 @@ fn main_result() -> anyhow::Result<i32> {
             let run_kinds = run_kinds_from_arg(&sub_m.value_of("RUNS"))?;
             let profiler = Profiler::from_name(sub_m.value_of("PROFILER").unwrap())?;
             let id = sub_m.value_of("ID").unwrap();
+            let out_dir = PathBuf::from(sub_m.value_of_os("output_dir").unwrap());
 
             eprintln!("Profiling with {:?}", profiler);
 
@@ -519,7 +528,6 @@ fn main_result() -> anyhow::Result<i32> {
 
             for (i, benchmark) in benchmarks.iter().enumerate() {
                 eprintln!("{}", n_benchmarks_remaining(benchmarks.len() - i));
-                let out_dir = get_out_dir();
                 let mut processor = execute::ProfileProcessor::new(profiler, &out_dir, &id);
                 let result =
                     benchmark.measure(&mut processor, &build_kinds, &run_kinds, compiler, 1);
@@ -546,6 +554,7 @@ fn main_result() -> anyhow::Result<i32> {
             let sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")?;
             // filter out servo benchmarks as they simply take too long
             bench_commit(
+                pool.connection(),
                 &CollectionId::Commit(commit),
                 &[BuildKind::Check], // no Debug or Opt builds
                 &RunKind::all(),
