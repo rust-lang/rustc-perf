@@ -10,7 +10,7 @@ use std::time::Duration;
 
 pub mod pool;
 
-pub use pool::Pool;
+pub use pool::{Connection, Pool};
 
 intern!(pub struct ProcessStatistic);
 intern!(pub struct Crate);

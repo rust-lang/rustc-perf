@@ -7,7 +7,6 @@ use anyhow::{bail, Context};
 use collector::api::collected;
 use database::{pool::Connection, CollectionId, Commit};
 use log::{debug, error};
-use std::collections::HashMap;
 use std::collections::HashSet;
 use std::env;
 use std::fs;
@@ -25,7 +24,6 @@ mod sysroot;
 
 use background_worker::send_home;
 use execute::{Benchmark, Profiler};
-use old::{Benchmark as CollectedBenchmark, CommitData};
 use sysroot::Sysroot;
 
 #[derive(Debug, Copy, Clone)]
@@ -200,13 +198,13 @@ fn n_benchmarks_remaining(n: usize) -> String {
     format!("{} benchmark{} remaining", n, suffix)
 }
 
-pub fn blocking_run<F: std::future::Future>(f: F) -> F::Output {
+pub fn block_on<F: std::future::Future>(f: F) -> F::Output {
     let mut rt = tokio::runtime::Runtime::new().expect("created runtime");
     rt.block_on(f)
 }
 
 fn bench_commit(
-    _conn: Box<dyn Connection>,
+    mut conn: Box<dyn Connection>,
     cid: &CollectionId,
     build_kinds: &[BuildKind],
     run_kinds: &[RunKind],
@@ -215,7 +213,7 @@ fn bench_commit(
     iterations: usize,
     call_home: bool,
     self_profile: bool,
-) -> CommitData {
+) {
     eprintln!("Benchmarking {} for triple {}", cid, compiler.triple);
 
     if call_home {
@@ -227,7 +225,6 @@ fn bench_commit(
         }
     }
 
-    let mut results = HashMap::new();
     let has_measureme = Command::new("summarize").output().is_ok();
     if self_profile {
         assert!(
@@ -237,28 +234,35 @@ fn bench_commit(
         );
     }
 
-    for benchmark in benchmarks {
-        if results.contains_key(&benchmark.name) {
-            continue;
-        }
+    let mut tx = block_on(conn.transaction());
+    let mut index = block_on(database::Index::load(tx.conn()));
+    let interned_cid = index.intern_cid(&cid);
 
+    for (nth_benchmark, benchmark) in benchmarks.iter().enumerate() {
         eprintln!(
             "{}",
-            n_benchmarks_remaining(benchmarks.len() - results.len())
+            n_benchmarks_remaining(benchmarks.len() - nth_benchmark)
         );
 
-        let mut processor = execute::MeasureProcessor::new(self_profile);
+        let mut processor = execute::MeasureProcessor::new(
+            tx.conn(),
+            &mut index,
+            &benchmark.name,
+            interned_cid,
+            self_profile,
+        );
         let result =
             benchmark.measure(&mut processor, build_kinds, run_kinds, compiler, iterations);
-        let result = match result {
-            Ok(runs) => Ok(CollectedBenchmark {
-                name: benchmark.name.clone(),
-                runs,
-            }),
-            Err(ref s) => {
-                eprintln!("Failed to benchmark {}, recorded: {}", benchmark.name, s);
-                Err(format!("{:?}", s))
-            }
+        if let Err(s) = result {
+            eprintln!("Failed to benchmark {}, recorded: {}", benchmark.name, s);
+            block_on(index.insert_labeled(
+                &database::DbLabel::Errors {
+                    krate: benchmark.name.to_string().as_str().into(),
+                },
+                tx.conn(),
+                interned_cid,
+                &format!("{:?}", s),
+            ));
         };
 
         if call_home {
@@ -269,14 +273,12 @@ fn bench_commit(
                 });
             }
         }
-
-        results.insert(benchmark.name.clone(), result);
     }
 
-    CommitData {
-        id: cid.clone(),
-        benchmarks: results,
-    }
+    block_on(index.store(tx.conn()));
+
+    // Publish results now that we've finished fully with this commit.
+    block_on(tx.commit()).unwrap();
 }
 
 fn get_benchmarks(

@@ -1,37 +1,18 @@
-use crate::execute::BenchmarkName as Crate;
 use database::{PatchName, QueryLabel};
-use std::collections::HashMap;
 use std::hash;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
-use database::CollectionId;
-
-pub struct CommitData {
-    pub id: CollectionId,
-    // String in Result is the output of the command that failed
-    pub benchmarks: HashMap<Crate, Result<Benchmark, String>>,
-}
-
-#[derive(Clone)]
-pub struct Benchmark {
-    pub runs: Vec<Run>,
-    pub name: Crate,
-}
-
-#[derive(Clone)]
-pub struct Run {
-    pub stats: Stats,
-    pub self_profile: Option<SelfProfile>,
-    pub check: bool,
-    pub release: bool,
-    pub state: BenchmarkState,
-}
-
 #[derive(Clone)]
 pub struct Stats {
     stats: Vec<Option<f64>>,
+}
+
+impl Default for Stats {
+    fn default() -> Self {
+        Stats::new()
+    }
 }
 
 impl Stats {
@@ -74,14 +55,6 @@ impl Stats {
             self.insert(stat, previous.min(value));
         }
     }
-}
-
-#[derive(Clone)]
-pub enum BenchmarkState {
-    Clean,
-    IncrementalStart,
-    IncrementalClean,
-    IncrementalPatched(Patch),
 }
 
 #[derive(Debug, Clone)]
@@ -227,5 +200,24 @@ impl StatId {
             "wall-time" => StatId::WallTime,
             _ => return Err(format!("unknown stat: {}", s)),
         })
+    }
+
+    pub fn as_pstat(self) -> database::ProcessStatistic {
+        database::ProcessStatistic::from(self.as_str())
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            StatId::CpuClock => "cpu-clock",
+            StatId::CpuClockUser => "cpu-clock:u",
+            StatId::CyclesUser => "cycles:u",
+            StatId::Faults => "faults",
+            StatId::FaultsUser => "faults:u",
+            StatId::InstructionsUser => "instructions:u",
+            StatId::MaxRss => "max-rss",
+            StatId::TaskClock => "task-clock",
+            StatId::TaskClockUser => "task-clock:u",
+            StatId::WallTime => "wall-time",
+        }
     }
 }
