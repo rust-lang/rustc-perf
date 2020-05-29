@@ -4,6 +4,7 @@ use rusqlite::params;
 use rusqlite::OptionalExtension;
 use std::convert::TryFrom;
 use std::path::PathBuf;
+use std::sync::Mutex;
 use std::time::Duration;
 
 pub struct SqliteTransaction<'a> {
@@ -15,12 +16,12 @@ pub struct SqliteTransaction<'a> {
 impl<'a> Transaction for SqliteTransaction<'a> {
     async fn commit(mut self: Box<Self>) -> Result<(), anyhow::Error> {
         self.finished = true;
-        Ok(self.conn.conn.execute_batch("COMMIT")?)
+        Ok(self.conn.raw().execute_batch("COMMIT")?)
     }
 
     async fn finish(mut self: Box<Self>) -> Result<(), anyhow::Error> {
         self.finished = true;
-        Ok(self.conn.conn.execute_batch("ROLLBACK")?)
+        Ok(self.conn.raw().execute_batch("ROLLBACK")?)
     }
     fn conn(&mut self) -> &mut dyn Connection {
         &mut *self.conn
@@ -43,7 +44,7 @@ impl std::ops::DerefMut for SqliteTransaction<'_> {
 impl Drop for SqliteTransaction<'_> {
     fn drop(&mut self) {
         if !self.finished {
-            self.conn.conn.execute_batch("ROLLBACK").unwrap();
+            self.conn.raw().execute_batch("ROLLBACK").unwrap();
         }
     }
 }
@@ -58,54 +59,63 @@ impl Sqlite {
 
 #[async_trait::async_trait]
 impl ConnectionManager for Sqlite {
-    type Connection = rusqlite::Connection;
+    type Connection = Mutex<rusqlite::Connection>;
     async fn open(&self) -> Self::Connection {
         let conn = rusqlite::Connection::open(&self.0).unwrap();
         conn.pragma_update(None, "cache_size", &-128000).unwrap();
         conn.pragma_update(None, "journal_mode", &"WAL").unwrap();
-        conn
+        Mutex::new(conn)
     }
     async fn is_valid(&self, conn: &mut Self::Connection) -> bool {
-        conn.execute_batch("").is_ok()
+        conn.get_mut()
+            .unwrap_or_else(|e| e.into_inner())
+            .execute_batch("")
+            .is_ok()
     }
 }
 
 pub struct SqliteConnection {
-    conn: ManagedConnection<rusqlite::Connection>,
+    conn: ManagedConnection<Mutex<rusqlite::Connection>>,
 }
 
+fn assert_sync<T: Sync>() {}
+
 impl SqliteConnection {
-    pub fn new(conn: ManagedConnection<rusqlite::Connection>) -> Self {
+    pub fn new(conn: ManagedConnection<Mutex<rusqlite::Connection>>) -> Self {
+        assert_sync::<Self>();
         Self { conn }
     }
 
     pub fn raw(&mut self) -> &mut rusqlite::Connection {
-        &mut *self.conn
+        self.conn.get_mut().unwrap_or_else(|e| e.into_inner())
+    }
+    pub fn raw_ref(&self) -> std::sync::MutexGuard<rusqlite::Connection> {
+        self.conn.lock().unwrap_or_else(|e| e.into_inner())
     }
 }
 
 #[async_trait::async_trait]
 impl Connection for SqliteConnection {
     async fn maybe_create_tables(&mut self) {
-        self.conn
+        self.raw()
             .execute(
                 "create table if not exists interned(name text primary key, value blob);",
                 params![],
             )
             .unwrap();
-        self.conn
+        self.raw()
             .execute(
                 "create table if not exists errors(series integer, cid integer, value text);",
                 params![],
             )
             .unwrap();
-        self.conn
+        self.raw()
             .execute(
                 "create table if not exists pstat(series integer, cid integer, value real);",
                 params![],
             )
             .unwrap();
-        self.conn
+        self.raw()
             .execute(
                 "create table if not exists self_profile_query(
                     series integer,
@@ -122,14 +132,14 @@ impl Connection for SqliteConnection {
     }
 
     async fn maybe_create_indices(&mut self) {
-        self.conn.execute_batch("
+        self.raw().execute_batch("
             create index if not exists pstat_on_series_cid on pstat(series, cid);
             create index if not exists self_profile_query_on_series_cid on self_profile_query(series, cid);
         ").unwrap();
     }
 
     async fn transaction(&mut self) -> Box<dyn Transaction + '_> {
-        self.conn.execute_batch("BEGIN DEFERRED").unwrap();
+        self.raw().execute_batch("BEGIN DEFERRED").unwrap();
         Box::new(SqliteTransaction {
             conn: self,
             finished: false,
@@ -138,7 +148,7 @@ impl Connection for SqliteConnection {
 
     async fn load_index(&mut self) -> Option<Vec<u8>> {
         let indices: rusqlite::Result<Option<Vec<u8>>> = self
-            .conn
+            .raw()
             .query_row(
                 "select value from interned where name = 'index'",
                 params![],
@@ -159,27 +169,27 @@ impl Connection for SqliteConnection {
     }
 
     async fn store_index(&mut self, index: &[u8]) {
-        self.conn
+        self.raw()
             .execute(
                 "insert or replace into interned (name, value) VALUES ('index', ?)",
                 params![&index],
             )
             .unwrap();
     }
-    async fn insert_pstat(&mut self, series: u32, cid: CollectionIdNumber, stat: f64) {
-        self.conn
+    async fn insert_pstat(&self, series: u32, cid: CollectionIdNumber, stat: f64) {
+        self.raw_ref()
             .prepare_cached("insert into pstat(series, cid, value) VALUES (?, ?, ?)")
             .unwrap()
             .execute(params![&series, &cid.pack(), stat])
             .unwrap();
     }
     async fn insert_self_profile_query(
-        &mut self,
+        &self,
         series: u32,
         cid: CollectionIdNumber,
         data: &QueryDatum,
     ) {
-        self.conn
+        self.raw_ref()
             .prepare_cached(
                 "insert into self_profile_query(
                         series, cid,
@@ -202,9 +212,9 @@ impl Connection for SqliteConnection {
             ])
             .unwrap();
     }
-    async fn insert_error(&mut self, series: u32, cid: CollectionIdNumber, text: &str) {
+    async fn insert_error(&self, series: u32, cid: CollectionIdNumber, text: &str) {
         let cid = cid.pack();
-        self.conn
+        self.raw_ref()
             .prepare_cached(
                 "insert into errors(
                         series, cid, value
@@ -214,10 +224,10 @@ impl Connection for SqliteConnection {
             .execute(params![&series, &cid, text,])
             .unwrap();
     }
-    async fn get_pstat(&mut self, series: u32, cid: CollectionIdNumber) -> Option<f64> {
+    async fn get_pstat(&self, series: u32, cid: CollectionIdNumber) -> Option<f64> {
         let cid = cid.pack();
 
-        self.conn
+        self.raw_ref()
             .prepare_cached("select min(value) from pstat where series = ? and cid = ?;")
             .unwrap()
             .query_row(params![&series, &cid], |row| row.get(0))
@@ -225,12 +235,12 @@ impl Connection for SqliteConnection {
             .unwrap()
     }
     async fn get_self_profile_query(
-        &mut self,
+        &self,
         series: u32,
         cid: CollectionIdNumber,
     ) -> Option<QueryDatum> {
         let cid = cid.pack();
-        self.conn.prepare_cached("
+        self.raw_ref().prepare_cached("
                 select self_time, blocked_time, incremental_load_time, number_of_cache_hits, invocation_count
                     from self_profile_query
                     where series = ? and cid = ? order by self_time asc;").unwrap()
@@ -250,9 +260,9 @@ impl Connection for SqliteConnection {
             .optional()
             .unwrap()
     }
-    async fn get_error(&mut self, series: u32, cid: CollectionIdNumber) -> Option<String> {
+    async fn get_error(&self, series: u32, cid: CollectionIdNumber) -> Option<String> {
         let cid = cid.pack();
-        self.conn
+        self.raw_ref()
             .prepare_cached("select value from errors where series = ? and cid = ?;")
             .unwrap()
             .query_row(params![&series, &cid], |row| row.get(0))

@@ -6,7 +6,7 @@ pub mod postgres;
 pub mod sqlite;
 
 #[async_trait::async_trait]
-pub trait Connection: Send {
+pub trait Connection: Send + Sync {
     async fn maybe_create_tables(&mut self);
     async fn maybe_create_indices(&mut self);
     async fn transaction(&mut self) -> Box<dyn Transaction + '_>;
@@ -14,25 +14,25 @@ pub trait Connection: Send {
     async fn load_index(&mut self) -> Option<Vec<u8>>;
     async fn store_index(&mut self, index: &[u8]);
 
-    async fn get_pstat(&mut self, series: u32, cid: CollectionIdNumber) -> Option<f64>;
-    async fn insert_pstat(&mut self, series: u32, cid: CollectionIdNumber, stat: f64);
+    async fn get_pstat(&self, series: u32, cid: CollectionIdNumber) -> Option<f64>;
+    async fn insert_pstat(&self, series: u32, cid: CollectionIdNumber, stat: f64);
     async fn get_self_profile_query(
-        &mut self,
+        &self,
         series: u32,
         cid: CollectionIdNumber,
     ) -> Option<QueryDatum>;
     async fn insert_self_profile_query(
-        &mut self,
+        &self,
         series: u32,
         cid: CollectionIdNumber,
         data: &QueryDatum,
     );
-    async fn get_error(&mut self, series: u32, cid: CollectionIdNumber) -> Option<String>;
-    async fn insert_error(&mut self, series: u32, cid: CollectionIdNumber, text: &str);
+    async fn get_error(&self, series: u32, cid: CollectionIdNumber) -> Option<String>;
+    async fn insert_error(&self, series: u32, cid: CollectionIdNumber, text: &str);
 }
 
 #[async_trait::async_trait]
-pub trait Transaction: Send {
+pub trait Transaction: Send + Sync {
     fn conn(&mut self) -> &mut dyn Connection;
 
     async fn commit(self: Box<Self>) -> Result<(), anyhow::Error>;
@@ -73,6 +73,7 @@ impl<T> std::ops::DerefMut for ManagedConnection<T> {
 
 impl<T> Drop for ManagedConnection<T> {
     fn drop(&mut self) {
+        eprintln!("releasing connection");
         let conn = self.conn.take().unwrap();
         self.connections
             .lock()
@@ -126,6 +127,7 @@ pub enum Pool {
 
 impl Pool {
     pub async fn connection(&self) -> Box<dyn Connection> {
+        eprintln!("giving connection");
         match self {
             Pool::Sqlite(p) => Box::new(sqlite::SqliteConnection::new(p.get().await)),
             Pool::Postgres(p) => Box::new(postgres::PostgresConnection::new(p.get().await).await),

@@ -165,6 +165,7 @@ impl From<InternalSelfProfile> for SelfProfile {
 
 #[tokio::main]
 async fn main() {
+    env_logger::init();
     let db = std::env::args().nth(1).expect("database as first arg");
     let pool = database::Pool::open(&db);
     let mut conn = pool.connection().await;

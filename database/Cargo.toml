@@ -14,7 +14,7 @@ rusqlite = { version = "0.23", features = ["bundled"] }
 tokio-postgres = "0.5.4"
 anyhow = "1"
 async-trait = "0.1"
-tokio = { version = "0.2.21", features = ["sync"] }
+tokio = { version = "0.2.21", features = ["sync", "macros"] }
 snap = "1"
 intern = { path = "../intern" }
 chrono = "0.4"
@@ -22,3 +22,4 @@ reqwest = { version = "0.10.5", features = ["blocking"] }
 postgres-native-tls = "0.3"
 native-tls = "0.2"
 lazy_static = "1"
+env_logger = "0.7"

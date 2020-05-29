@@ -7,11 +7,11 @@ use std::time::Duration;
 use tokio_postgres::GenericClient as _;
 use tokio_postgres::Statement;
 
-pub struct Postgres(String);
+pub struct Postgres(String, std::sync::Once);
 
 impl Postgres {
     pub fn new(url: String) -> Self {
-        Postgres(url)
+        Postgres(url, std::sync::Once::new())
     }
 }
 
@@ -74,7 +74,50 @@ async fn make_client(db_url: &str) -> anyhow::Result<tokio_postgres::Client> {
 impl ConnectionManager for Postgres {
     type Connection = tokio_postgres::Client;
     async fn open(&self) -> Self::Connection {
-        make_client(&self.0).await.unwrap()
+        let client = make_client(&self.0).await.unwrap();
+        let mut should_init = false;
+        self.1.call_once(|| {
+            should_init = true;
+        });
+        if should_init {
+            client
+                .execute(
+                    "create table if not exists interned(name text primary key, value jsonb);",
+                    &[],
+                )
+                .await
+                .unwrap();
+            client
+                .execute(
+                    "create table if not exists errors(series integer, cid integer, value text);",
+                    &[],
+                )
+                .await
+                .unwrap();
+            client
+                .execute(
+                    "create table if not exists pstat(series integer, cid integer, value double precision);",
+                    &[],
+                )
+                .await
+                .unwrap();
+            client
+                .execute(
+                    "create table if not exists self_profile_query(
+                    series integer,
+                    cid integer,
+                    self_time bigint,
+                    blocked_time bigint,
+                    incremental_load_time bigint,
+                    number_of_cache_hits integer,
+                    invocation_count integer
+                );",
+                    &[],
+                )
+                .await
+                .unwrap();
+        }
+        client
     }
     async fn is_valid(&self, conn: &mut Self::Connection) -> bool {
         !conn.is_closed()
@@ -152,7 +195,7 @@ impl PostgresConnection {
         PostgresConnection {
             statements: CachedStatements {
                 get_pstat: conn
-                    .prepare("select min(value) from pstat where series = $1 and cid $2;")
+                    .prepare("select min(value) from pstat where series = $1 and cid = $2;")
                     .await
                     .unwrap(),
                 insert_pstat: conn
@@ -196,44 +239,7 @@ impl<P> Connection for P
 where
     P: Send + Sync + PClient,
 {
-    async fn maybe_create_tables(&mut self) {
-        self.conn()
-            .execute(
-                "create table if not exists interned(name text primary key, value blob);",
-                &[],
-            )
-            .await
-            .unwrap();
-        self.conn()
-            .execute(
-                "create table if not exists errors(series integer, cid integer, value text);",
-                &[],
-            )
-            .await
-            .unwrap();
-        self.conn()
-            .execute(
-                "create table if not exists pstat(series integer, cid integer, value real);",
-                &[],
-            )
-            .await
-            .unwrap();
-        self.conn()
-            .execute(
-                "create table if not exists self_profile_query(
-                    series integer,
-                    cid integer,
-                    self_time integer,
-                    blocked_time integer,
-                    incremental_load_time integer,
-                    number_of_cache_hits integer,
-                    invocation_count integer
-                );",
-                &[],
-            )
-            .await
-            .unwrap();
-    }
+    async fn maybe_create_tables(&mut self) {}
     async fn maybe_create_indices(&mut self) {
         self.conn()
             .execute(
@@ -272,30 +278,36 @@ where
             .await
             .unwrap();
     }
-    async fn get_pstat(&mut self, series: u32, cid: crate::CollectionIdNumber) -> Option<f64> {
+    async fn get_pstat(&self, series: u32, cid: crate::CollectionIdNumber) -> Option<f64> {
         self.conn()
-            .query_opt(&self.statements().get_pstat, &[&series, &cid.pack()])
+            .query_opt(
+                &self.statements().get_pstat,
+                &[&(series as i32), &(cid.pack() as i32)],
+            )
             .await
             .unwrap()
             .map(|r| r.get(0))
     }
-    async fn insert_pstat(&mut self, series: u32, cid: crate::CollectionIdNumber, stat: f64) {
+    async fn insert_pstat(&self, series: u32, cid: crate::CollectionIdNumber, stat: f64) {
         self.conn()
             .execute(
                 &self.statements().insert_pstat,
-                &[&series, &cid.pack(), &stat],
+                &[&(series as i32), &(cid.pack() as i32), &stat],
             )
             .await
             .unwrap();
     }
     async fn get_self_profile_query(
-        &mut self,
+        &self,
         series: u32,
         cid: crate::CollectionIdNumber,
     ) -> Option<crate::QueryDatum> {
         let row = self
             .conn()
-            .query_opt(&self.statements().get_pstat, &[&series, &cid.pack()])
+            .query_opt(
+                &self.statements().get_self_profile_query,
+                &[&(series as i32), &(cid.pack() as i32)],
+            )
             .await
             .unwrap()?;
         let self_time: i64 = row.get(0);
@@ -305,12 +317,12 @@ where
             self_time: Duration::from_nanos(self_time as u64),
             blocked_time: Duration::from_nanos(blocked_time as u64),
             incremental_load_time: Duration::from_nanos(incremental_load_time as u64),
-            number_of_cache_hits: row.get(3),
-            invocation_count: row.get(4),
+            number_of_cache_hits: row.get::<_, i32>(3) as u32,
+            invocation_count: row.get::<_, i32>(4) as u32,
         })
     }
     async fn insert_self_profile_query(
-        &mut self,
+        &self,
         series: u32,
         cid: crate::CollectionIdNumber,
         data: &crate::QueryDatum,
@@ -319,30 +331,33 @@ where
             .execute(
                 &self.statements().insert_self_profile_query,
                 &[
-                    &series,
-                    &cid.pack(),
+                    &(series as i32),
+                    &(cid.pack() as i32),
                     &i64::try_from(data.self_time.as_nanos()).unwrap(),
                     &i64::try_from(data.blocked_time.as_nanos()).unwrap(),
                     &i64::try_from(data.incremental_load_time.as_nanos()).unwrap(),
-                    &data.number_of_cache_hits,
-                    &data.invocation_count,
+                    &(data.number_of_cache_hits as i32),
+                    &(data.invocation_count as i32),
                 ],
             )
             .await
             .unwrap();
     }
-    async fn get_error(&mut self, series: u32, cid: crate::CollectionIdNumber) -> Option<String> {
+    async fn get_error(&self, series: u32, cid: crate::CollectionIdNumber) -> Option<String> {
         self.conn()
-            .query_opt(&self.statements().get_error, &[&series, &cid.pack()])
+            .query_opt(
+                &self.statements().get_error,
+                &[&(series as i32), &(cid.pack() as i32)],
+            )
             .await
             .unwrap()
             .map(|r| r.get(0))
     }
-    async fn insert_error(&mut self, series: u32, cid: crate::CollectionIdNumber, text: &str) {
+    async fn insert_error(&self, series: u32, cid: crate::CollectionIdNumber, text: &str) {
         self.conn()
             .execute(
                 &self.statements().insert_error,
-                &[&series, &cid.pack(), &text],
+                &[&(series as i32), &(cid.pack() as i32), &text],
             )
             .await
             .unwrap();
