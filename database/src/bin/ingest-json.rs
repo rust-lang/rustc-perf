@@ -188,10 +188,10 @@ async fn main() {
                 last.elapsed() / 10 * paths_count as u32
             );
             last = std::time::Instant::now();
+            index.store(&mut *conn).await;
         }
         ingest(&mut *conn, &mut index, Path::new(&path)).await;
     }
-
     index.store(&mut *conn).await;
 }
 
