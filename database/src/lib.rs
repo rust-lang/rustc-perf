@@ -469,11 +469,8 @@ impl From<Commit> for CollectionId {
 
 #[async_trait::async_trait]
 pub trait SeriesType: Sized {
-    async fn get(
-        conn: &mut dyn pool::Connection,
-        series: u32,
-        cid: CollectionIdNumber,
-    ) -> Option<Self>;
+    async fn get(conn: &dyn pool::Connection, series: u32, cid: CollectionIdNumber)
+        -> Option<Self>;
     async fn insert(self, conn: &dyn pool::Connection, label: LabelId, cid: CollectionIdNumber);
 }
 
@@ -487,11 +484,11 @@ impl SeriesType for f64 {
     }
 
     async fn get(
-        conn: &mut dyn pool::Connection,
+        conn: &dyn pool::Connection,
         series: u32,
         cid: CollectionIdNumber,
     ) -> Option<Self> {
-        conn.get_pstat(series, cid).await
+        conn.get_pstats(series, &[Some(cid)]).await[0]
     }
 }
 
@@ -515,7 +512,7 @@ impl SeriesType for QueryDatum {
         }
     }
     async fn get(
-        conn: &mut dyn pool::Connection,
+        conn: &dyn pool::Connection,
         series: u32,
         cid: CollectionIdNumber,
     ) -> Option<Self> {
@@ -532,7 +529,7 @@ impl SeriesType for String {
     }
 
     async fn get(
-        conn: &mut dyn pool::Connection,
+        conn: &dyn pool::Connection,
         series: u32,
         cid: CollectionIdNumber,
     ) -> Option<Self> {
@@ -692,6 +689,42 @@ pub enum DbLabel {
     },
 }
 
+pub trait Lookup {
+    type Id;
+    fn lookup(&self, index: &Index) -> Option<Self::Id>;
+}
+
+impl Lookup for DbLabel {
+    type Id = u32;
+    fn lookup(&self, index: &Index) -> Option<Self::Id> {
+        match self {
+            DbLabel::Errors { krate } => index.errors.get(krate),
+            DbLabel::ProcessStat {
+                krate,
+                profile,
+                cache,
+                stat,
+            } => index.pstats.get(&(*krate, *profile, *cache, *stat)),
+            DbLabel::SelfProfileQuery {
+                krate,
+                profile,
+                cache,
+                query,
+            } => index.queries.get(&(*krate, *profile, *cache, *query)),
+        }
+    }
+}
+
+impl Lookup for CollectionId {
+    type Id = CollectionIdNumber;
+    fn lookup(&self, index: &Index) -> Option<Self::Id> {
+        Some(match self {
+            CollectionId::Commit(c) => CollectionIdNumber(0, index.commits.get(c)?),
+            CollectionId::Artifact(a) => CollectionIdNumber(1, index.artifacts.get(a.as_str())?),
+        })
+    }
+}
+
 impl Index {
     pub async fn load(conn: &mut dyn pool::Connection) -> Index {
         let bytes = conn.load_index().await;
@@ -704,41 +737,20 @@ impl Index {
         conn.store_index(&serde_json::to_vec(self).unwrap()).await;
     }
 
+    pub fn lookup(&self, path: &DbLabel, cid: &CollectionId) -> Option<(u32, CollectionIdNumber)> {
+        let cid = cid.lookup(self)?;
+        let series = path.lookup(self)?;
+        Some((series, cid))
+    }
+
     pub async fn get<T: SeriesType>(
         &self,
         db: &mut dyn pool::Connection,
         path: &DbLabel,
         cid: &CollectionId,
     ) -> Option<T> {
-        let cid = match cid {
-            CollectionId::Commit(c) => CollectionIdNumber(0, self.commits.get(c)?),
-            CollectionId::Artifact(a) => CollectionIdNumber(1, self.artifacts.get(a.as_str())?),
-        };
-
-        match path {
-            DbLabel::Errors { krate } => {
-                let series = self.errors.get(krate)?;
-                T::get(db, series, cid).await
-            }
-            DbLabel::ProcessStat {
-                krate,
-                profile,
-                cache,
-                stat,
-            } => {
-                let series = self.pstats.get(&(*krate, *profile, *cache, *stat))?;
-                T::get(db, series, cid).await
-            }
-            DbLabel::SelfProfileQuery {
-                krate,
-                profile,
-                cache,
-                query,
-            } => {
-                let series = self.queries.get(&(*krate, *profile, *cache, *query))?;
-                T::get(db, series, cid).await
-            }
-        }
+        let (series, cid) = self.lookup(path, cid)?;
+        T::get(db, series, cid).await
     }
 
     pub fn artifacts(&self) -> impl Iterator<Item = &'_ str> + '_ {

@@ -27,7 +27,9 @@ use crate::interpolate::Interpolate;
 use crate::load::InputData as Db;
 use async_trait::async_trait;
 use collector::Bound;
-use database::{Commit, Crate, ProcessStatistic, QueryLabel};
+use database::pool::Connection;
+use database::{Commit, Crate, Lookup, ProcessStatistic, QueryLabel};
+use futures::stream::{FuturesOrdered, StreamExt};
 use std::convert::TryInto;
 use std::fmt;
 use std::ops::RangeInclusive;
@@ -288,6 +290,20 @@ pub struct Query {
     path: Vec<QueryComponent>,
 }
 
+impl fmt::Debug for Query {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Query {{")?;
+        for (idx, qc) in self.path.iter().enumerate() {
+            if idx != 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{:?}={:?}", qc.tag, qc.raw)?;
+        }
+        write!(f, " }}")?;
+        Ok(())
+    }
+}
+
 impl Query {
     pub fn new() -> Self {
         Self { path: vec![] }
@@ -541,6 +557,7 @@ pub struct ProcessStatisticSeries {
 
 impl ProcessStatisticSeries {
     async fn new(
+        conn: &dyn Connection,
         collection_ids: Arc<Vec<CollectionId>>,
         db: &Db,
         krate: Crate,
@@ -548,31 +565,38 @@ impl ProcessStatisticSeries {
         cache: Cache,
         stat: ProcessStatistic,
     ) -> Self {
-        let mut res = Vec::with_capacity(collection_ids.len());
+        let mut res;
         let idx = db.index.load();
-        let mut conn = db.conn().await;
-        let mut tx = conn.transaction().await;
         let query = crate::db::DbLabel::ProcessStat {
             krate,
             profile,
             cache,
             stat,
         };
-        if stat == *"cpu-clock" {
-            // Convert to seconds -- perf reports this measurement in
-            // milliseconds
-            for cid in collection_ids.iter() {
-                let pt = idx.get::<f64>(tx.conn(), &query, cid);
-                let point = pt.await.map(|d| d / 1000.0);
-                res.push(point);
-            }
+        let series = if let Some(series) = query.lookup(&idx) {
+            series
         } else {
-            for cid in collection_ids.iter() {
-                let point = idx.get::<f64>(tx.conn(), &query, cid);
-                res.push(point.await);
+            return Self {
+                points: vec![None; collection_ids.len()].into_iter(),
+                cids: CollectionIdIter::new(collection_ids),
+            };
+        };
+        {
+            let idx = &*idx;
+            let cids = collection_ids
+                .iter()
+                .map(|cid| cid.lookup(&idx))
+                .collect::<Vec<_>>();
+            res = conn.get_pstats(series, &cids).await;
+            if stat == *"cpu-clock" {
+                // Convert to seconds -- perf reports this measurement in
+                // milliseconds
+                res = res
+                    .into_iter()
+                    .map(|pt| pt.map(|v| v / 1000.0))
+                    .collect::<Vec<_>>();
             }
         }
-        tx.finish().await.unwrap();
 
         Self {
             cids: CollectionIdIter::new(collection_ids),
@@ -619,25 +643,36 @@ impl ProcessStatisticSeries {
 
         series.sort_unstable();
 
-        let mut res = Vec::with_capacity(series.len());
-        for path in series {
-            res.push(SeriesResponse {
-                series: ProcessStatisticSeries::new(
-                    collection_ids.clone(),
-                    db,
-                    path.0,
-                    path.1,
-                    path.2,
-                    path.3,
-                )
-                .await,
-                path: Path::new()
-                    .set(PathComponent::Crate(path.0))
-                    .set(PathComponent::Profile(path.1))
-                    .set(PathComponent::Cache(path.2))
-                    .set(PathComponent::ProcessStatistic(path.3)),
-            });
-        }
+        let mut conn = db.conn().await;
+        let mut tx = conn.transaction().await;
+        let conn = &*tx.conn();
+        let res = series
+            .into_iter()
+            .map(|path| {
+                let collection_ids = collection_ids.clone();
+                async move {
+                    SeriesResponse {
+                        series: ProcessStatisticSeries::new(
+                            conn,
+                            collection_ids,
+                            db,
+                            path.0,
+                            path.1,
+                            path.2,
+                            path.3,
+                        )
+                        .await,
+                        path: Path::new()
+                            .set(PathComponent::Crate(path.0))
+                            .set(PathComponent::Profile(path.1))
+                            .set(PathComponent::Cache(path.2))
+                            .set(PathComponent::ProcessStatistic(path.3)),
+                    }
+                }
+            })
+            .collect::<FuturesOrdered<_>>()
+            .collect::<Vec<_>>()
+            .await;
         Ok(res)
     }
 }

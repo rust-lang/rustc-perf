@@ -14,7 +14,8 @@ pub trait Connection: Send + Sync {
     async fn load_index(&mut self) -> Option<Vec<u8>>;
     async fn store_index(&mut self, index: &[u8]);
 
-    async fn get_pstat(&self, series: u32, cid: CollectionIdNumber) -> Option<f64>;
+    async fn get_pstats(&self, series: u32, cid: &[Option<CollectionIdNumber>])
+        -> Vec<Option<f64>>;
     async fn insert_pstat(&self, series: u32, cid: CollectionIdNumber, stat: f64);
     async fn get_self_profile_query(
         &self,
@@ -128,7 +129,7 @@ impl Pool {
     pub async fn connection(&self) -> Box<dyn Connection> {
         match self {
             Pool::Sqlite(p) => Box::new(sqlite::SqliteConnection::new(p.get().await)),
-            Pool::Postgres(p) => Box::new(postgres::PostgresConnection::new(p.get().await).await),
+            Pool::Postgres(p) => Box::new(p.get().await),
         }
     }
 

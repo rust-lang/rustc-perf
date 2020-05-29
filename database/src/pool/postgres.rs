@@ -3,6 +3,7 @@ use anyhow::Context as _;
 use native_tls::{Certificate, TlsConnector};
 use postgres_native_tls::MakeTlsConnector;
 use std::convert::TryFrom;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio_postgres::GenericClient as _;
 use tokio_postgres::Statement;
@@ -72,7 +73,7 @@ async fn make_client(db_url: &str) -> anyhow::Result<tokio_postgres::Client> {
 
 #[async_trait::async_trait]
 impl ConnectionManager for Postgres {
-    type Connection = tokio_postgres::Client;
+    type Connection = PostgresConnection;
     async fn open(&self) -> Self::Connection {
         let client = make_client(&self.0).await.unwrap();
         let mut should_init = false;
@@ -117,10 +118,10 @@ impl ConnectionManager for Postgres {
                 .await
                 .unwrap();
         }
-        client
+        PostgresConnection::new(client).await
     }
     async fn is_valid(&self, conn: &mut Self::Connection) -> bool {
-        !conn.is_closed()
+        !conn.conn.is_closed()
     }
 }
 
@@ -137,7 +138,6 @@ impl<'a> Transaction for PostgresTransaction<'a> {
     }
 }
 
-#[derive(Clone)]
 pub struct CachedStatements {
     get_pstat: Statement,
     insert_pstat: Statement,
@@ -148,20 +148,20 @@ pub struct CachedStatements {
 }
 
 pub struct PostgresTransaction<'a> {
-    statements: CachedStatements,
+    statements: Arc<CachedStatements>,
     conn: tokio_postgres::Transaction<'a>,
 }
 
 pub struct PostgresConnection {
-    statements: CachedStatements,
-    conn: ManagedConnection<tokio_postgres::Client>,
+    statements: Arc<CachedStatements>,
+    conn: tokio_postgres::Client,
 }
 
 pub trait PClient {
     type Client: Send + Sync + tokio_postgres::GenericClient;
     fn conn(&self) -> &Self::Client;
     fn conn_mut(&mut self) -> &mut Self::Client;
-    fn statements(&self) -> &CachedStatements;
+    fn statements(&self) -> &Arc<CachedStatements>;
 }
 
 impl<'a> PClient for PostgresTransaction<'a> {
@@ -172,30 +172,35 @@ impl<'a> PClient for PostgresTransaction<'a> {
     fn conn_mut(&mut self) -> &mut Self::Client {
         &mut self.conn
     }
-    fn statements(&self) -> &CachedStatements {
+    fn statements(&self) -> &Arc<CachedStatements> {
         &self.statements
     }
 }
 
-impl PClient for PostgresConnection {
+impl PClient for ManagedConnection<PostgresConnection> {
     type Client = tokio_postgres::Client;
     fn conn(&self) -> &Self::Client {
-        &*self.conn
+        &(&**self).conn
     }
     fn conn_mut(&mut self) -> &mut Self::Client {
-        &mut *self.conn
+        &mut (&mut **self).conn
     }
-    fn statements(&self) -> &CachedStatements {
+    fn statements(&self) -> &Arc<CachedStatements> {
         &self.statements
     }
 }
 
 impl PostgresConnection {
-    pub async fn new(conn: ManagedConnection<tokio_postgres::Client>) -> Self {
+    pub async fn new(conn: tokio_postgres::Client) -> Self {
         PostgresConnection {
-            statements: CachedStatements {
+            statements: Arc::new(CachedStatements {
                 get_pstat: conn
-                    .prepare("select min(value) from pstat where series = $1 and cid = $2;")
+                    .prepare("select min(pstat.value) from
+                        (select cid, num from unnest($2::int[]) with ordinality x(cid, num)) as x
+                        left outer join pstat
+                        on (x.cid = pstat.cid and pstat.series = $1)
+                        group by x.num
+                        order by x.num")
                     .await
                     .unwrap(),
                 insert_pstat: conn
@@ -228,7 +233,7 @@ impl PostgresConnection {
                     .unwrap(),
                 get_error: conn.prepare("select value from errors where series = $1 and cid = $2;").await.unwrap(),
                 insert_error: conn.prepare("insert into errors(series, cid, value) VALUES ($1, $2, $3)").await.unwrap(),
-            },
+            }),
             conn,
         }
     }
@@ -279,15 +284,23 @@ where
             .await
             .unwrap();
     }
-    async fn get_pstat(&self, series: u32, cid: crate::CollectionIdNumber) -> Option<f64> {
-        self.conn()
-            .query_opt(
-                &self.statements().get_pstat,
-                &[&(series as i32), &(cid.pack() as i32)],
-            )
+    async fn get_pstats(
+        &self,
+        series: u32,
+        cids: &[Option<crate::CollectionIdNumber>],
+    ) -> Vec<Option<f64>> {
+        let cids = cids
+            .iter()
+            .map(|id| id.map(|id| id.pack() as i32))
+            .collect::<Vec<_>>();
+        let rows = self
+            .conn()
+            .query(&self.statements().get_pstat, &[&(series as i32), &cids])
             .await
-            .unwrap()
-            .map(|r| r.get(0))
+            .unwrap();
+        rows.into_iter()
+            .map(|row| row.get::<_, Option<f64>>(0))
+            .collect()
     }
     async fn insert_pstat(&self, series: u32, cid: crate::CollectionIdNumber, stat: f64) {
         self.conn()

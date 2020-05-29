@@ -224,15 +224,27 @@ impl Connection for SqliteConnection {
             .execute(params![&series, &cid, text,])
             .unwrap();
     }
-    async fn get_pstat(&self, series: u32, cid: CollectionIdNumber) -> Option<f64> {
-        let cid = cid.pack();
+    async fn get_pstats(
+        &self,
+        series: u32,
+        cids: &[Option<CollectionIdNumber>],
+    ) -> Vec<Option<f64>> {
+        cids.iter()
+            .map(|cid| {
+                cid.and_then(|cid| {
+                    let cid = cid.pack();
 
-        self.raw_ref()
-            .prepare_cached("select min(value) from pstat where series = ? and cid = ?;")
-            .unwrap()
-            .query_row(params![&series, &cid], |row| row.get(0))
-            .optional()
-            .unwrap()
+                    self.raw_ref()
+                        .prepare_cached(
+                            "select min(value) from pstat where series = ? and cid = ?;",
+                        )
+                        .unwrap()
+                        .query_row(params![&series, &cid], |row| row.get(0))
+                        .optional()
+                        .unwrap()
+                })
+            })
+            .collect()
     }
     async fn get_self_profile_query(
         &self,
