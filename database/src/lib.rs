@@ -474,24 +474,14 @@ pub trait SeriesType: Sized {
         series: u32,
         cid: CollectionIdNumber,
     ) -> Option<Self>;
-    async fn insert(
-        &self,
-        conn: &mut dyn pool::Connection,
-        label: LabelId,
-        cid: CollectionIdNumber,
-    );
+    async fn insert(self, conn: &dyn pool::Connection, label: LabelId, cid: CollectionIdNumber);
 }
 
 #[async_trait::async_trait]
 impl SeriesType for f64 {
-    async fn insert(
-        &self,
-        conn: &mut dyn pool::Connection,
-        label: LabelId,
-        cid: CollectionIdNumber,
-    ) {
+    async fn insert(self, conn: &dyn pool::Connection, label: LabelId, cid: CollectionIdNumber) {
         match label.0 {
-            1 => conn.insert_pstat(label.1, cid, *self).await,
+            1 => conn.insert_pstat(label.1, cid, self).await,
             _ => unreachable!("{}", label.0),
         }
     }
@@ -518,12 +508,7 @@ pub struct QueryDatum {
 
 #[async_trait::async_trait]
 impl SeriesType for QueryDatum {
-    async fn insert(
-        &self,
-        conn: &mut dyn pool::Connection,
-        label: LabelId,
-        cid: CollectionIdNumber,
-    ) {
+    async fn insert(self, conn: &dyn pool::Connection, label: LabelId, cid: CollectionIdNumber) {
         match label.0 {
             2 => conn.insert_self_profile_query(label.1, cid, self).await,
             _ => unreachable!("{}", label.0),
@@ -539,12 +524,7 @@ impl SeriesType for QueryDatum {
 }
 #[async_trait::async_trait]
 impl SeriesType for String {
-    async fn insert(
-        &self,
-        conn: &mut dyn pool::Connection,
-        label: LabelId,
-        cid: CollectionIdNumber,
-    ) {
+    async fn insert(self, conn: &dyn pool::Connection, label: LabelId, cid: CollectionIdNumber) {
         match label.0 {
             0 => conn.insert_error(label.1, cid, self).await,
             _ => unreachable!("{}", label.0),
@@ -829,10 +809,10 @@ impl Index {
 
     pub async fn insert_labeled<T: SeriesType>(
         &mut self,
-        label: &DbLabel,
+        label: DbLabel,
         conn: &mut dyn pool::Connection,
         cid: CollectionIdNumber,
-        point: &T,
+        point: T,
     ) {
         let label_id = self.intern_db_label(&label);
         point.insert(conn, label_id, cid).await;

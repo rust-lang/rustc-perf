@@ -557,6 +557,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "env_logger",
+ "futures",
  "hashbrown",
  "intern",
  "lazy_static",

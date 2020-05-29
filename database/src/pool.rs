@@ -25,10 +25,10 @@ pub trait Connection: Send + Sync {
         &self,
         series: u32,
         cid: CollectionIdNumber,
-        data: &QueryDatum,
+        data: QueryDatum,
     );
     async fn get_error(&self, series: u32, cid: CollectionIdNumber) -> Option<String>;
-    async fn insert_error(&self, series: u32, cid: CollectionIdNumber, text: &str);
+    async fn insert_error(&self, series: u32, cid: CollectionIdNumber, text: String);
 }
 
 #[async_trait::async_trait]
@@ -73,7 +73,6 @@ impl<T> std::ops::DerefMut for ManagedConnection<T> {
 
 impl<T> Drop for ManagedConnection<T> {
     fn drop(&mut self) {
-        eprintln!("releasing connection");
         let conn = self.conn.take().unwrap();
         self.connections
             .lock()
@@ -127,7 +126,6 @@ pub enum Pool {
 
 impl Pool {
     pub async fn connection(&self) -> Box<dyn Connection> {
-        eprintln!("giving connection");
         match self {
             Pool::Sqlite(p) => Box::new(sqlite::SqliteConnection::new(p.get().await)),
             Pool::Postgres(p) => Box::new(postgres::PostgresConnection::new(p.get().await).await),

@@ -268,12 +268,12 @@ fn bench_commit(
         if let Err(s) = result {
             eprintln!("Failed to benchmark {}, recorded: {}", benchmark.name, s);
             block_on(index.insert_labeled(
-                &database::DbLabel::Errors {
+                database::DbLabel::Errors {
                     krate: benchmark.name.to_string().as_str().into(),
                 },
                 tx.conn(),
                 interned_cid,
-                &format!("{:?}", s),
+                format!("{:?}", s),
             ));
         };
 

@@ -457,7 +457,7 @@ impl<'a> MeasureProcessor<'a> {
             };
             block_on(
                 self.index
-                    .insert_labeled(&label, &mut *self.conn, self.cid, &value),
+                    .insert_labeled(label, &mut *self.conn, self.cid, value),
             );
         }
 
@@ -470,10 +470,10 @@ impl<'a> MeasureProcessor<'a> {
                     query: qd.label,
                 };
                 block_on(self.index.insert_labeled(
-                    &label,
+                    label,
                     &mut *self.conn,
                     self.cid,
-                    &database::QueryDatum {
+                    database::QueryDatum {
                         self_time: qd.self_time,
                         blocked_time: qd.blocked_time,
                         incremental_load_time: qd.incremental_load_time,

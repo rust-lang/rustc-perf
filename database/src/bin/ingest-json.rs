@@ -2,8 +2,10 @@
 
 use anyhow::Context as _;
 use database::pool::Connection;
+use database::SeriesType;
 use database::{Cache, CollectionId, Crate, DbLabel, Label, LabelPath, LabelTag, Profile};
 use database::{Commit, PatchName, ProcessStatistic, QueryLabel};
+use futures::stream::{FuturesUnordered, StreamExt};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::io::Read;
@@ -238,82 +240,74 @@ async fn ingest(conn: &mut dyn Connection, index: &mut database::Index, path: &P
     let mut path = LabelPath::new();
 
     let mut tx = conn.transaction().await;
-    for (name, bres) in benchmarks.into_iter() {
-        path.set(Label::Crate(name));
-        let benchmark = match bres {
-            Ok(b) => b,
-            Err(e) => {
-                index
-                    .insert_labeled(&DbLabel::Errors { krate: name }, tx.conn(), cid_num, &e)
-                    .await;
-                path.remove(LabelTag::Crate);
-                continue;
-            }
-        };
-
-        for run in &benchmark.runs {
-            let profile = if run.check {
-                Profile::Check
-            } else if run.release {
-                Profile::Opt
-            } else {
-                Profile::Debug
-            };
-            let state = match &run.state {
-                BenchmarkState::Clean => Cache::Empty,
-                BenchmarkState::IncrementalStart => Cache::IncrementalEmpty,
-                BenchmarkState::IncrementalClean => Cache::IncrementalFresh,
-                BenchmarkState::IncrementalPatched(p) => Cache::IncrementalPatch(p.name),
+    {
+        let conn = &*tx.conn();
+        let mut buf = FuturesUnordered::new();
+        for (name, bres) in benchmarks.into_iter() {
+            path.set(Label::Crate(name));
+            let benchmark = match bres {
+                Ok(b) => b,
+                Err(e) => {
+                    let label_id = index.intern_db_label(&DbLabel::Errors { krate: name });
+                    buf.push(e.insert(conn, label_id, cid_num));
+                    path.remove(LabelTag::Crate);
+                    continue;
+                }
             };
 
-            path.set(Label::Profile(profile));
-            path.set(Label::Cache(state));
+            for run in &benchmark.runs {
+                let profile = if run.check {
+                    Profile::Check
+                } else if run.release {
+                    Profile::Opt
+                } else {
+                    Profile::Debug
+                };
+                let state = match &run.state {
+                    BenchmarkState::Clean => Cache::Empty,
+                    BenchmarkState::IncrementalStart => Cache::IncrementalEmpty,
+                    BenchmarkState::IncrementalClean => Cache::IncrementalFresh,
+                    BenchmarkState::IncrementalPatched(p) => Cache::IncrementalPatch(p.name),
+                };
 
-            for (sid, stat) in run.stats.iter() {
-                path.set(Label::ProcessStat(sid));
-                index
-                    .insert_labeled(
-                        &DbLabel::ProcessStat {
+                path.set(Label::Profile(profile));
+                path.set(Label::Cache(state));
+
+                for (sid, stat) in run.stats.iter() {
+                    path.set(Label::ProcessStat(sid));
+                    let label = index.intern_db_label(&DbLabel::ProcessStat {
+                        krate: name,
+                        profile,
+                        cache: state,
+                        stat: sid,
+                    });
+                    buf.push(stat.insert(conn, label, cid_num));
+                }
+                path.remove(LabelTag::ProcessStat);
+
+                if let Some(self_profile) = &run.self_profile {
+                    for qd in self_profile.query_data.iter() {
+                        path.set(Label::Query(qd.label));
+                        let datum = database::QueryDatum {
+                            self_time: qd.self_time(),
+                            blocked_time: qd.blocked_time(),
+                            incremental_load_time: qd.incremental_load_time(),
+                            number_of_cache_hits: qd.number_of_cache_hits,
+                            invocation_count: qd.invocation_count,
+                        };
+                        let label_id = index.intern_db_label(&DbLabel::SelfProfileQuery {
                             krate: name,
                             profile,
                             cache: state,
-                            stat: sid,
-                        },
-                        tx.conn(),
-                        cid_num,
-                        &stat,
-                    )
-                    .await;
-            }
-            path.remove(LabelTag::ProcessStat);
-
-            if let Some(self_profile) = &run.self_profile {
-                for qd in self_profile.query_data.iter() {
-                    path.set(Label::Query(qd.label));
-                    let datum = database::QueryDatum {
-                        self_time: qd.self_time(),
-                        blocked_time: qd.blocked_time(),
-                        incremental_load_time: qd.incremental_load_time(),
-                        number_of_cache_hits: qd.number_of_cache_hits,
-                        invocation_count: qd.invocation_count,
-                    };
-                    index
-                        .insert_labeled(
-                            &DbLabel::SelfProfileQuery {
-                                krate: name,
-                                profile,
-                                cache: state,
-                                query: qd.label,
-                            },
-                            tx.conn(),
-                            cid_num,
-                            &datum,
-                        )
-                        .await;
+                            query: qd.label,
+                        });
+                        buf.push(datum.insert(conn, label_id, cid_num));
+                    }
+                    path.remove(LabelTag::Query);
                 }
-                path.remove(LabelTag::Query);
             }
         }
+        while let Some(()) = buf.next().await {}
     }
     tx.commit().await.unwrap();
 }

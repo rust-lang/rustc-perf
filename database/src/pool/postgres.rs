@@ -82,7 +82,7 @@ impl ConnectionManager for Postgres {
         if should_init {
             client
                 .execute(
-                    "create table if not exists interned(name text primary key, value jsonb);",
+                    "create table if not exists interned(name text primary key, value bytea);",
                     &[],
                 )
                 .await
@@ -272,7 +272,8 @@ where
     async fn store_index(&mut self, index: &[u8]) {
         self.conn()
             .execute(
-                "insert or replace into interned (name, value) VALUES ('index', $1)",
+                "insert into interned (name, value) VALUES ('index', $1)
+                ON CONFLICT (name) DO UPDATE SET value = EXCLUDED.value",
                 &[&index],
             )
             .await
@@ -325,7 +326,7 @@ where
         &self,
         series: u32,
         cid: crate::CollectionIdNumber,
-        data: &crate::QueryDatum,
+        data: crate::QueryDatum,
     ) {
         self.conn()
             .execute(
@@ -353,7 +354,7 @@ where
             .unwrap()
             .map(|r| r.get(0))
     }
-    async fn insert_error(&self, series: u32, cid: crate::CollectionIdNumber, text: &str) {
+    async fn insert_error(&self, series: u32, cid: crate::CollectionIdNumber, text: String) {
         self.conn()
             .execute(
                 &self.statements().insert_error,

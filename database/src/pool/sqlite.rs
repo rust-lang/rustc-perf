@@ -187,7 +187,7 @@ impl Connection for SqliteConnection {
         &self,
         series: u32,
         cid: CollectionIdNumber,
-        data: &QueryDatum,
+        data: QueryDatum,
     ) {
         self.raw_ref()
             .prepare_cached(
@@ -212,7 +212,7 @@ impl Connection for SqliteConnection {
             ])
             .unwrap();
     }
-    async fn insert_error(&self, series: u32, cid: CollectionIdNumber, text: &str) {
+    async fn insert_error(&self, series: u32, cid: CollectionIdNumber, text: String) {
         let cid = cid.pack();
         self.raw_ref()
             .prepare_cached(
