@@ -1,13 +1,13 @@
-use crate::{CollectionIdNumber, QueryDatum};
+use crate::{CollectionIdNumber, QueryDatum, QueuedCommit};
 use std::sync::{Arc, Mutex};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
+pub mod both;
 pub mod postgres;
 pub mod sqlite;
 
 #[async_trait::async_trait]
 pub trait Connection: Send + Sync {
-    async fn maybe_create_tables(&mut self);
     async fn maybe_create_indices(&mut self);
     async fn transaction(&mut self) -> Box<dyn Transaction + '_>;
 
@@ -44,6 +44,7 @@ pub trait Connection: Send + Sync {
 #[async_trait::async_trait]
 pub trait Transaction: Send + Sync {
     fn conn(&mut self) -> &mut dyn Connection;
+    fn conn_ref(&self) -> &dyn Connection;
 
     async fn commit(self: Box<Self>) -> Result<(), anyhow::Error>;
     async fn finish(self: Box<Self>) -> Result<(), anyhow::Error>;
@@ -132,6 +133,10 @@ where
 pub enum Pool {
     Sqlite(ConnectionPool<sqlite::Sqlite>),
     Postgres(ConnectionPool<postgres::Postgres>),
+    Both {
+        sqlite: ConnectionPool<sqlite::Sqlite>,
+        postgres: ConnectionPool<postgres::Postgres>,
+    },
 }
 
 impl Pool {
@@ -139,12 +144,32 @@ impl Pool {
         match self {
             Pool::Sqlite(p) => Box::new(sqlite::SqliteConnection::new(p.get().await)),
             Pool::Postgres(p) => Box::new(p.get().await),
+            Pool::Both { sqlite, postgres } => Box::new(both::BothConnection::new(
+                sqlite::SqliteConnection::new(sqlite.get().await),
+                postgres.get().await,
+            )),
         }
     }
 
     pub fn open(uri: &str) -> Pool {
         if uri.starts_with("postgres") {
             Pool::Postgres(ConnectionPool::new(postgres::Postgres::new(uri.into())))
+        } else if uri.starts_with("both://") {
+            let mut parts = uri["both://".len()..].rsplitn(2, ';');
+            let p1 = parts.next().unwrap();
+            let p2 = parts.next().unwrap();
+            match (Pool::open(p1), Pool::open(p2)) {
+                (Pool::Sqlite(s), Pool::Postgres(p)) | (Pool::Postgres(p), Pool::Sqlite(s)) => {
+                    Pool::Both {
+                        sqlite: s,
+                        postgres: p,
+                    }
+                }
+                _ => panic!(
+                    "unsupported inputs, must be sqlite and postgres: {} and {}",
+                    p1, p2
+                ),
+            }
         } else {
             Pool::Sqlite(ConnectionPool::new(sqlite::Sqlite::new(uri.into())))
         }

@@ -501,7 +501,7 @@ impl SeriesType for f64 {
 
 intern!(pub struct QueryLabel);
 
-#[derive(Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct QueryDatum {
     pub self_time: Duration,
     pub blocked_time: Duration,

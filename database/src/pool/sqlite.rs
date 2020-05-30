@@ -5,6 +5,7 @@ use rusqlite::OptionalExtension;
 use std::convert::TryFrom;
 use std::path::PathBuf;
 use std::sync::Mutex;
+use std::sync::Once;
 use std::time::Duration;
 
 pub struct SqliteTransaction<'a> {
@@ -25,6 +26,9 @@ impl<'a> Transaction for SqliteTransaction<'a> {
     }
     fn conn(&mut self) -> &mut dyn Connection {
         &mut *self.conn
+    }
+    fn conn_ref(&self) -> &dyn Connection {
+        &*self.conn
     }
 }
 
@@ -49,21 +53,62 @@ impl Drop for SqliteTransaction<'_> {
     }
 }
 
-pub struct Sqlite(PathBuf);
+pub struct Sqlite(PathBuf, Once);
 
 impl Sqlite {
     pub fn new(path: PathBuf) -> Self {
-        Sqlite(path)
+        Sqlite(path, Once::new())
     }
 }
+
+static MIGRATIONS: &[&str] = &["
+    create table interned(name text primary key, value blob);
+    create table errors(series integer, cid integer, value text);
+    create table pstat(series integer, cid integer, value real);
+    create table self_profile_query(
+        series integer,
+        cid integer,
+        self_time integer,
+        blocked_time integer,
+        incremental_load_time integer,
+        number_of_cache_hits integer,
+        invocation_count integer
+    );
+    create table pull_request_builds(
+        pr integer not null,
+        bors_sha text unique,
+        parent_sha text,
+        complete boolean,
+        requested integer -- timestamp
+    );
+    "];
 
 #[async_trait::async_trait]
 impl ConnectionManager for Sqlite {
     type Connection = Mutex<rusqlite::Connection>;
     async fn open(&self) -> Self::Connection {
-        let conn = rusqlite::Connection::open(&self.0).unwrap();
+        let mut conn = rusqlite::Connection::open(&self.0).unwrap();
         conn.pragma_update(None, "cache_size", &-128000).unwrap();
         conn.pragma_update(None, "journal_mode", &"WAL").unwrap();
+
+        self.1.call_once(|| {
+            let version: i32 = conn
+                .query_row(
+                    "select user_version from pragma_user_version;",
+                    params![],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            for mid in (version as usize)..MIGRATIONS.len() {
+                let sql = MIGRATIONS[mid];
+                let tx = conn.transaction().unwrap();
+                tx.execute_batch(&sql).unwrap();
+                tx.pragma_update(None, "user_version", &(mid as i32))
+                    .unwrap();
+                tx.commit().unwrap();
+            }
+        });
+
         Mutex::new(conn)
     }
     async fn is_valid(&self, conn: &mut Self::Connection) -> bool {
@@ -96,41 +141,6 @@ impl SqliteConnection {
 
 #[async_trait::async_trait]
 impl Connection for SqliteConnection {
-    async fn maybe_create_tables(&mut self) {
-        self.raw()
-            .execute(
-                "create table if not exists interned(name text primary key, value blob);",
-                params![],
-            )
-            .unwrap();
-        self.raw()
-            .execute(
-                "create table if not exists errors(series integer, cid integer, value text);",
-                params![],
-            )
-            .unwrap();
-        self.raw()
-            .execute(
-                "create table if not exists pstat(series integer, cid integer, value real);",
-                params![],
-            )
-            .unwrap();
-        self.raw()
-            .execute(
-                "create table if not exists self_profile_query(
-                    series integer,
-                    cid integer,
-                    self_time integer,
-                    blocked_time integer,
-                    incremental_load_time integer,
-                    number_of_cache_hits integer,
-                    invocation_count integer
-                );",
-                params![],
-            )
-            .unwrap();
-    }
-
     async fn maybe_create_indices(&mut self) {
         self.raw().execute_batch("
             create index if not exists pstat_on_series_cid on pstat(series, cid);

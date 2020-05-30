@@ -428,11 +428,7 @@ fn main_result() -> anyhow::Result<i32> {
     let mut benchmarks = get_benchmarks(&benchmark_dir, filter, exclude)?;
     let self_profile = matches.is_present("self_profile");
 
-    let pool = matches.value_of("db").map(|db| {
-        let pool = database::Pool::open(db);
-        block_on(async { pool.connection().await.maybe_create_tables().await });
-        pool
-    });
+    let pool = matches.value_of("db").map(|db| database::Pool::open(db));
 
     let ret = match matches.subcommand() {
         ("bench_commit", Some(sub_m)) => {

@@ -1,4 +1,7 @@
-use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
+use crate::{
+    pool::{Connection, ConnectionManager, ManagedConnection, Transaction},
+    QueuedCommit,
+};
 use anyhow::Context as _;
 use native_tls::{Certificate, TlsConnector};
 use postgres_native_tls::MakeTlsConnector;
@@ -71,52 +74,61 @@ async fn make_client(db_url: &str) -> anyhow::Result<tokio_postgres::Client> {
     }
 }
 
+static MIGRATIONS: &[&str] = &["
+    create table interned(name text primary key, value bytea);
+    create table errors(series integer, cid integer, value text);
+    create table pstat(series integer, cid integer, value double precision);
+    create table self_profile_query(
+        series integer,
+        cid integer,
+        self_time bigint,
+        blocked_time bigint,
+        incremental_load_time bigint,
+        number_of_cache_hits integer,
+        invocation_count integer
+    );
+    create table pull_request_builds(
+        bors_sha text unique,
+        pr integer not null,
+        parent_sha text,
+        complete boolean,
+        requested timestamp without time zone
+    );
+    "];
+
 #[async_trait::async_trait]
 impl ConnectionManager for Postgres {
     type Connection = PostgresConnection;
     async fn open(&self) -> Self::Connection {
-        let client = make_client(&self.0).await.unwrap();
+        let mut client = make_client(&self.0).await.unwrap();
         let mut should_init = false;
         self.1.call_once(|| {
             should_init = true;
         });
         if should_init {
             client
-                .execute(
-                    "create table if not exists interned(name text primary key, value bytea);",
-                    &[],
+                .batch_execute(
+                    "create table if not exists migrations(id integer primary key, query text);",
                 )
                 .await
                 .unwrap();
-            client
-                .execute(
-                    "create table if not exists errors(series integer, cid integer, value text);",
-                    &[],
+            let version = client
+                .query_one("select max(id) from migrations", &[])
+                .await
+                .unwrap();
+            let version: Option<i32> = version.get(0);
+            for mid in (version.unwrap_or(0) as usize)..MIGRATIONS.len() {
+                let sql = MIGRATIONS[mid];
+                let tx = client.transaction().await.unwrap();
+                tx.batch_execute(&sql).await.unwrap();
+                tx.execute(
+                    "insert into migrations (id, query) VALUES ($1, $2)",
+                    &[&(mid as i32), &sql],
                 )
                 .await
                 .unwrap();
-            client
-                .execute(
-                    "create table if not exists pstat(series integer, cid integer, value double precision);",
-                    &[],
-                )
-                .await
-                .unwrap();
-            client
-                .execute(
-                    "create table if not exists self_profile_query(
-                    series integer,
-                    cid integer,
-                    self_time bigint,
-                    blocked_time bigint,
-                    incremental_load_time bigint,
-                    number_of_cache_hits integer,
-                    invocation_count integer
-                );",
-                    &[],
-                )
-                .await
-                .unwrap();
+                tx.commit().await.unwrap();
+            }
         }
         PostgresConnection::new(client).await
     }
@@ -134,6 +146,9 @@ impl<'a> Transaction for PostgresTransaction<'a> {
         Ok(self.conn.rollback().await?)
     }
     fn conn(&mut self) -> &mut dyn Connection {
+        self
+    }
+    fn conn_ref(&self) -> &dyn Connection {
         self
     }
 }
@@ -258,7 +273,6 @@ impl<P> Connection for P
 where
     P: Send + Sync + PClient,
 {
-    async fn maybe_create_tables(&mut self) {}
     async fn maybe_create_indices(&mut self) {
         self.conn()
             .execute(

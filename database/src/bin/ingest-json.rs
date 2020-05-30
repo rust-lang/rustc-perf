@@ -173,8 +173,6 @@ async fn main() {
     let mut conn = pool.connection().await;
     let mut index = database::Index::load(&mut *conn).await;
 
-    conn.maybe_create_tables().await;
-
     let paths = std::env::args().skip(2).collect::<Vec<_>>();
     let paths_count = paths.len();
     let mut last = std::time::Instant::now();
