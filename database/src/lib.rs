@@ -488,7 +488,7 @@ impl SeriesType for f64 {
         series: u32,
         cid: CollectionIdNumber,
     ) -> Option<Self> {
-        conn.get_pstats(series, &[Some(cid)]).await[0]
+        conn.get_pstats(&[series], &[Some(cid)]).await[0][0]
     }
 }
 

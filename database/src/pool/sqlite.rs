@@ -226,23 +226,34 @@ impl Connection for SqliteConnection {
     }
     async fn get_pstats(
         &self,
-        series: u32,
+        series: &[u32],
         cids: &[Option<CollectionIdNumber>],
-    ) -> Vec<Option<f64>> {
-        cids.iter()
-            .map(|cid| {
-                cid.and_then(|cid| {
-                    let cid = cid.pack();
+    ) -> Vec<Vec<Option<f64>>> {
+        series
+            .iter()
+            .map(|sid| {
+                let elements = cids
+                    .iter()
+                    .map(|cid| {
+                        cid.and_then(|cid| {
+                            let cid = cid.pack();
 
-                    self.raw_ref()
-                        .prepare_cached(
-                            "select min(value) from pstat where series = ? and cid = ?;",
-                        )
-                        .unwrap()
-                        .query_row(params![&series, &cid], |row| row.get(0))
-                        .optional()
-                        .unwrap()
-                })
+                            self.raw_ref()
+                                .prepare_cached(
+                                    "select min(value) from pstat where series = ? and cid = ?;",
+                                )
+                                .unwrap()
+                                .query_row(params![&sid, &cid], |row| row.get(0))
+                                .optional()
+                                .unwrap()
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                if elements.is_empty() {
+                    vec![None; cids.len()]
+                } else {
+                    elements
+                }
             })
             .collect()
     }

@@ -27,9 +27,7 @@ use crate::interpolate::Interpolate;
 use crate::load::InputData as Db;
 use async_trait::async_trait;
 use collector::Bound;
-use database::pool::Connection;
 use database::{Commit, Crate, Lookup, ProcessStatistic, QueryLabel};
-use futures::stream::{FuturesOrdered, StreamExt};
 use std::convert::TryInto;
 use std::fmt;
 use std::ops::RangeInclusive;
@@ -555,56 +553,6 @@ pub struct ProcessStatisticSeries {
     points: std::vec::IntoIter<Option<f64>>,
 }
 
-impl ProcessStatisticSeries {
-    async fn new(
-        conn: &dyn Connection,
-        collection_ids: Arc<Vec<CollectionId>>,
-        db: &Db,
-        krate: Crate,
-        profile: Profile,
-        cache: Cache,
-        stat: ProcessStatistic,
-    ) -> Self {
-        let mut res;
-        let idx = db.index.load();
-        let query = crate::db::DbLabel::ProcessStat {
-            krate,
-            profile,
-            cache,
-            stat,
-        };
-        let series = if let Some(series) = query.lookup(&idx) {
-            series
-        } else {
-            return Self {
-                points: vec![None; collection_ids.len()].into_iter(),
-                cids: CollectionIdIter::new(collection_ids),
-            };
-        };
-        {
-            let idx = &*idx;
-            let cids = collection_ids
-                .iter()
-                .map(|cid| cid.lookup(&idx))
-                .collect::<Vec<_>>();
-            res = conn.get_pstats(series, &cids).await;
-            if stat == *"cpu-clock" {
-                // Convert to seconds -- perf reports this measurement in
-                // milliseconds
-                res = res
-                    .into_iter()
-                    .map(|pt| pt.map(|v| v / 1000.0))
-                    .collect::<Vec<_>>();
-            }
-        }
-
-        Self {
-            cids: CollectionIdIter::new(collection_ids),
-            points: res.into_iter(),
-        }
-    }
-}
-
 impl Series for ProcessStatisticSeries {
     type Element = Option<f64>;
 }
@@ -615,6 +563,7 @@ impl ProcessStatisticSeries {
         db: &Db,
         mut query: Query,
     ) -> Result<Vec<SeriesResponse<Self>>, String> {
+        let dumped = format!("{:?}", query);
         let krate = query.extract(Tag::Crate)?.raw;
         let profile = query
             .extract(Tag::Profile)?
@@ -643,36 +592,64 @@ impl ProcessStatisticSeries {
 
         series.sort_unstable();
 
+        let sids = series
+            .iter()
+            .map(|path| {
+                let query = crate::db::DbLabel::ProcessStat {
+                    krate: path.0,
+                    profile: path.1,
+                    cache: path.2,
+                    stat: path.3,
+                };
+                query.lookup(&index).unwrap()
+            })
+            .collect::<Vec<_>>();
+        let cids = collection_ids
+            .iter()
+            .map(|cid| cid.lookup(&index))
+            .collect::<Vec<_>>();
+
         let mut conn = db.conn().await;
         let mut tx = conn.transaction().await;
-        let conn = &*tx.conn();
-        let res = series
+
+        let start = std::time::Instant::now();
+        let res = tx
+            .conn()
+            .get_pstats(&sids, &cids)
+            .await
             .into_iter()
-            .map(|path| {
-                let collection_ids = collection_ids.clone();
-                async move {
-                    SeriesResponse {
-                        series: ProcessStatisticSeries::new(
-                            conn,
-                            collection_ids,
-                            db,
-                            path.0,
-                            path.1,
-                            path.2,
-                            path.3,
-                        )
-                        .await,
-                        path: Path::new()
-                            .set(PathComponent::Crate(path.0))
-                            .set(PathComponent::Profile(path.1))
-                            .set(PathComponent::Cache(path.2))
-                            .set(PathComponent::ProcessStatistic(path.3)),
-                    }
+            .enumerate()
+            .map(|(idx, points)| {
+                let path = &series[idx];
+                SeriesResponse {
+                    series: ProcessStatisticSeries {
+                        cids: CollectionIdIter::new(collection_ids.clone()),
+                        points: if path.3 == *"cpu-clock" {
+                            // Convert to seconds -- perf reports this measurement in
+                            // milliseconds
+                            points
+                                .into_iter()
+                                .map(|p| p.map(|v| v / 1000.0))
+                                .collect::<Vec<_>>()
+                                .into_iter()
+                        } else {
+                            points.into_iter()
+                        },
+                    },
+                    path: Path::new()
+                        .set(PathComponent::Crate(path.0))
+                        .set(PathComponent::Profile(path.1))
+                        .set(PathComponent::Cache(path.2))
+                        .set(PathComponent::ProcessStatistic(path.3)),
                 }
             })
-            .collect::<FuturesOrdered<_>>()
-            .collect::<Vec<_>>()
-            .await;
+            .collect::<Vec<_>>();
+        log::trace!(
+            "{:?}: run {} from {}",
+            start.elapsed(),
+            series.len(),
+            dumped
+        );
         Ok(res)
     }
 }

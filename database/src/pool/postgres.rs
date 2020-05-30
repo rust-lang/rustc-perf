@@ -195,12 +195,26 @@ impl PostgresConnection {
         PostgresConnection {
             statements: Arc::new(CachedStatements {
                 get_pstat: conn
-                    .prepare("select min(pstat.value) from
-                        (select cid, num from unnest($2::int[]) with ordinality x(cid, num)) as x
-                        left outer join pstat
-                        on (x.cid = pstat.cid and pstat.series = $1)
-                        group by x.num
-                        order by x.num")
+                     .prepare("
+                         WITH cids AS (
+                             select cid, num from unnest($2::int[]) with ordinality cids(cid, num)
+                         ),
+                         sids AS (
+                             select sid, idx from unnest($1::int[]) with ordinality sids(sid, idx)
+                         )
+                         select ARRAY(
+                             (
+                                 select min(pstat.value) from cids
+                                     left outer join pstat
+                                     on (cids.cid = pstat.cid and pstat.series = sids.sid)
+                                     group by cids.num
+                                     order by cids.num
+                             )
+                         ) from
+                         sids
+                         group by (sids.idx, sids.sid)
+                         order by sids.idx
+                     ")
                     .await
                     .unwrap(),
                 insert_pstat: conn
@@ -286,20 +300,21 @@ where
     }
     async fn get_pstats(
         &self,
-        series: u32,
+        series: &[u32],
         cids: &[Option<crate::CollectionIdNumber>],
-    ) -> Vec<Option<f64>> {
+    ) -> Vec<Vec<Option<f64>>> {
+        let series = series.iter().map(|sid| *sid as i32).collect::<Vec<_>>();
         let cids = cids
             .iter()
             .map(|id| id.map(|id| id.pack() as i32))
             .collect::<Vec<_>>();
         let rows = self
             .conn()
-            .query(&self.statements().get_pstat, &[&(series as i32), &cids])
+            .query(&self.statements().get_pstat, &[&series, &cids])
             .await
             .unwrap();
         rows.into_iter()
-            .map(|row| row.get::<_, Option<f64>>(0))
+            .map(|row| row.get::<_, Vec<Option<f64>>>(0))
             .collect()
     }
     async fn insert_pstat(&self, series: u32, cid: crate::CollectionIdNumber, stat: f64) {

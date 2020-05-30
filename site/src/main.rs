@@ -33,8 +33,13 @@ async fn main() {
     });
     let fut = tokio::task::spawn_blocking(move || {
         tokio::task::spawn(async move {
-            let res = Some(Arc::new(load::InputData::from_fs(&db_url).await.unwrap()));
-            *data_.write() = res;
+            let res = Arc::new(load::InputData::from_fs(&db_url).await.unwrap());
+            *data_.write() = Some(res.clone());
+            eprintln!(
+                "Loading complete; {} commits and {} artifacts.",
+                res.index.load().commits().len(),
+                res.index.load().artifacts().count()
+            );
         })
     })
     .fuse();
@@ -59,8 +64,6 @@ async fn main() {
                     if let Ok(panic) = e.try_into_panic() {
                         std::panic::resume_unwind(panic);
                     }
-                } else {
-                    eprintln!("Loading complete.");
                 }
             }
         }

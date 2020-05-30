@@ -14,8 +14,11 @@ pub trait Connection: Send + Sync {
     async fn load_index(&mut self) -> Option<Vec<u8>>;
     async fn store_index(&mut self, index: &[u8]);
 
-    async fn get_pstats(&self, series: u32, cid: &[Option<CollectionIdNumber>])
-        -> Vec<Option<f64>>;
+    async fn get_pstats(
+        &self,
+        series: &[u32],
+        cid: &[Option<CollectionIdNumber>],
+    ) -> Vec<Vec<Option<f64>>>;
     async fn insert_pstat(&self, series: u32, cid: CollectionIdNumber, stat: f64);
     async fn get_self_profile_query(
         &self,

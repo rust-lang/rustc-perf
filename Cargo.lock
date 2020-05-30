@@ -561,6 +561,7 @@ dependencies = [
  "hashbrown",
  "intern",
  "lazy_static",
+ "log",
  "native-tls",
  "postgres-native-tls",
  "reqwest",
