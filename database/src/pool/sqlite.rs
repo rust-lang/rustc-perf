@@ -1,5 +1,5 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
-use crate::{CollectionIdNumber, QueryDatum};
+use crate::{CollectionIdNumber, QueryDatum, QueuedCommit};
 use rusqlite::params;
 use rusqlite::OptionalExtension;
 use std::convert::TryFrom;
@@ -289,6 +289,72 @@ impl Connection for SqliteConnection {
             .prepare_cached("select value from errors where series = ? and cid = ?;")
             .unwrap()
             .query_row(params![&series, &cid], |row| row.get(0))
+            .optional()
+            .unwrap()
+    }
+    async fn queue_pr(&self, pr: u32) {
+        self.raw_ref()
+            .prepare_cached("insert into pull_request_builds (pr, requested) VALUES (?, now)")
+            .unwrap()
+            .execute(params![pr])
+            .unwrap();
+    }
+    async fn pr_attach_commit(&self, pr: u32, sha: &str, parent_sha: &str) -> bool {
+        self.raw_ref()
+            .prepare_cached(
+                "update pull_request_builds SET bors_sha = ?, parent_sha = ?
+                where pr = ? and bors_sha is null",
+            )
+            .unwrap()
+            .execute(params![sha, parent_sha, pr])
+            .unwrap()
+            > 0
+    }
+    async fn queued_commits(&self) -> Vec<QueuedCommit> {
+        self.raw_ref()
+            .prepare_cached(
+                "select pr, bors_sha, parent_sha from pull_request_builds
+                where complete is false and bors_sha is not null
+                order by requested asc",
+            )
+            .unwrap()
+            .query(params![])
+            .unwrap()
+            .mapped(|row| {
+                Ok(QueuedCommit {
+                    pr: row.get(0).unwrap(),
+                    sha: row.get(1).unwrap(),
+                    parent_sha: row.get(2).unwrap(),
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+    }
+    async fn mark_complete(&self, sha: &str) -> Option<QueuedCommit> {
+        let count = self
+            .raw_ref()
+            .execute(
+                "update pull_request_builds SET complete = 1 where sha = ? and complete = 0",
+                params![sha],
+            )
+            .unwrap();
+        if count == 0 {
+            return None;
+        }
+        assert_eq!(count, 1, "sha is unique column");
+        self.raw_ref()
+            .query_row(
+                "select pr, sha, parent_sha from pull_request_builds
+            where sha = ?",
+                params![sha],
+                |row| {
+                    Ok(QueuedCommit {
+                        pr: row.get(0).unwrap(),
+                        sha: row.get(1).unwrap(),
+                        parent_sha: row.get(2).unwrap(),
+                    })
+                },
+            )
             .optional()
             .unwrap()
     }

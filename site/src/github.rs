@@ -1,5 +1,6 @@
 use crate::api::{github, ServerResult};
 use crate::load::{Config, InputData, TryCommit};
+use hashbrown::HashSet;
 use serde::Deserialize;
 
 use regex::Regex;
@@ -33,7 +34,7 @@ pub async fn handle_github(
     data: &InputData,
 ) -> ServerResult<github::Response> {
     if request.comment.body.contains(" homu: ") {
-        if let Some(sha) = handle_homu_res(&request, data).await {
+        if let Some(sha) = handle_homu_res(&request).await {
             return enqueue_sha(request, data, sha).await;
         }
     }
@@ -49,7 +50,7 @@ pub async fn handle_github(
     {
         post_comment(
             &data.config,
-            &request.issue,
+            request.issue.number,
             "Insufficient permissions to issue commands to rust-timer.",
         )
         .await;
@@ -58,13 +59,12 @@ pub async fn handle_github(
 
     if BODY_QUEUE.is_match(&request.comment.body) {
         {
-            let mut persistent = data.persistent.lock();
-            persistent.pending_try_builds.insert(request.issue.number);
-            persistent.write().expect("successful encode");
+            let conn = data.conn().await;
+            conn.queue_pr(request.issue.number).await;
         }
         post_comment(
             &data.config,
-            &request.issue,
+            request.issue.number,
             "Awaiting bors try build completion",
         )
         .await;
@@ -123,7 +123,7 @@ async fn enqueue_sha(
             commit_response.sha,
             commit_response.parents.len()
         );
-        post_comment(&data.config, &request.issue, msg).await;
+        post_comment(&data.config, request.issue.number, msg).await;
         return Ok(github::Response);
     }
     let try_commit = TryCommit {
@@ -132,15 +132,13 @@ async fn enqueue_sha(
         issue: request.issue.clone(),
     };
     {
-        let mut persistent = data.persistent.lock();
-        if !persistent
-            .try_commits
-            .iter()
-            .any(|c| c.sha() == &commit_response.sha)
-        {
-            persistent.try_commits.push(try_commit.clone());
-        }
-        persistent.write().expect("successful encode");
+        let conn = data.conn().await;
+        conn.pr_attach_commit(
+            request.issue.number,
+            &commit_response.sha,
+            &commit_response.parents[0].sha,
+        )
+        .await;
     }
     let msg = format!(
         "Queued {} with parent {}, future [comparison URL]({}).",
@@ -148,7 +146,7 @@ async fn enqueue_sha(
         commit_response.parents[0].sha,
         try_commit.comparison_url(),
     );
-    post_comment(&data.config, &request.issue, msg).await;
+    post_comment(&data.config, request.issue.number, msg).await;
     Ok(github::Response)
 }
 
@@ -158,22 +156,9 @@ enum HomuComment {
     TryBuildCompleted { merge_sha: String },
 }
 
-async fn handle_homu_res(request: &github::Request, data: &InputData) -> Option<String> {
+async fn handle_homu_res(request: &github::Request) -> Option<String> {
     if !request.comment.body.contains("Try build successful") {
         return None;
-    }
-
-    {
-        let mut persistent = data.persistent.lock();
-        if persistent.pending_try_builds.remove(&request.issue.number) {
-            persistent.write().expect("successful encode");
-        } else {
-            log::debug!(
-                "Skipping successful try build for pr {}, not in pending",
-                request.issue.number
-            );
-            return None;
-        }
     }
 
     let start = "<!-- homu: ";
@@ -196,7 +181,7 @@ async fn handle_homu_res(request: &github::Request, data: &InputData) -> Option<
     Some(sha)
 }
 
-pub async fn post_comment<B>(cfg: &Config, issue: &github::Issue, body: B)
+pub async fn post_comment<B>(cfg: &Config, pr: u32, body: B)
 where
     B: Into<String>,
 {
@@ -204,7 +189,10 @@ where
     let timer_token = cfg.keys.github.clone().expect("needs rust-timer token");
     let client = reqwest::Client::new();
     let req = client
-        .post(&issue.comments_url)
+        .post(&format!(
+            "https://api.github.com/repos/rust-lang/rust/issues/{}/comments",
+            pr
+        ))
         .json(&github::PostComment {
             body: body.to_owned(),
         })
@@ -213,5 +201,43 @@ where
 
     if let Err(e) = req.send().await {
         eprintln!("failed to post comment: {:?}", e);
+    }
+}
+
+pub async fn post_finished(data: &InputData) {
+    let conn = data.conn().await;
+    let index = data.index.load();
+    let commits = index
+        .commits()
+        .into_iter()
+        .map(|c| c.sha.to_string())
+        .collect::<HashSet<_>>();
+    let queued = conn.queued_commits().await;
+
+    for commit in queued {
+        if !commits.contains(&commit.sha) {
+            continue;
+        }
+
+        // This commit has been benchmarked.
+
+        assert_eq!(
+            conn.mark_complete(&commit.sha).await.as_ref(),
+            Some(&commit)
+        );
+
+        let comparison_url = format!(
+            "https://perf.rust-lang.org/compare.html?start={}&end={}",
+            commit.parent_sha, commit.sha
+        );
+        post_comment(
+            &data.config,
+            commit.pr,
+            format!(
+                "Finished benchmarking try commit ({}): [comparison url]({}).",
+                commit.sha, comparison_url
+            ),
+        )
+        .await;
     }
 }

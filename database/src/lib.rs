@@ -15,6 +15,13 @@ pub use pool::{Connection, Pool};
 intern!(pub struct ProcessStatistic);
 intern!(pub struct Crate);
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct QueuedCommit {
+    pub pr: u32,
+    pub sha: String,
+    pub parent_sha: String,
+}
+
 #[derive(Debug, Hash, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Date(pub DateTime<Utc>);
 

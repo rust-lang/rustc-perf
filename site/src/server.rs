@@ -41,9 +41,7 @@ pub use crate::api::{
     DateData, ServerResult, StyledBenchmarkName,
 };
 use crate::db::{self, Cache, Crate, Profile};
-use crate::github::post_comment;
 use crate::interpolate::Interpolated;
-use crate::load::CurrentState;
 use crate::load::{Config, InputData};
 use crate::selector::{self, PathComponent, Tag};
 use collector::api::collected;
@@ -247,7 +245,8 @@ pub async fn handle_status_page(data: Arc<InputData>) -> status::Response {
     benchmark_state.reverse();
 
     let missing = data.missing_commits().await;
-    let current = data.persistent.lock().current.clone();
+    // FIXME: no current builds
+    let current = None;
 
     status::Response {
         last_commit,
@@ -540,88 +539,9 @@ pub async fn handle_github(
 }
 
 pub async fn handle_collected(
-    body: collected::Request,
-    data: &InputData,
+    _body: collected::Request,
+    _data: &InputData,
 ) -> ServerResult<collected::Response> {
-    let mut comment = None;
-    {
-        let mut persistent = data.persistent.lock();
-        let mut persistent = &mut *persistent;
-        match body {
-            collected::Request::BenchmarkCommit { commit, benchmarks } => {
-                let issue = if let Some(r#try) =
-                    persistent.try_commits.iter().find(|c| commit.sha == *c.sha)
-                {
-                    Some(r#try.issue.clone())
-                } else {
-                    None
-                };
-                persistent.current = Some(CurrentState {
-                    commit,
-                    issue,
-                    benchmarks: benchmarks.iter().map(|b| b.as_str().into()).collect(),
-                });
-            }
-            collected::Request::BenchmarkDone { commit, benchmark } => {
-                // If something went wrong, then just clear current commit.
-                if persistent
-                    .current
-                    .as_ref()
-                    .map_or(false, |c| c.commit != commit)
-                {
-                    persistent.current = None;
-                }
-                let current_sha = persistent.current.as_ref().map(|c| c.commit.sha.to_owned());
-                let comparison_url = if let Some(current_sha) = current_sha {
-                    if let Some(try_commit) = persistent
-                        .try_commits
-                        .iter()
-                        .find(|c| current_sha == *c.sha.as_str())
-                    {
-                        format!(", [comparison URL]({}).", try_commit.comparison_url())
-                    } else {
-                        String::new()
-                    }
-                } else {
-                    String::new()
-                };
-                if let Some(current) = persistent.current.as_mut() {
-                    // If the request was received twice (e.g., we stopped after we wrote DB but before
-                    // responding) then we don't want to loop the collector.
-                    if let Some(pos) = current.benchmarks.iter().position(|b| *b == benchmark) {
-                        current.benchmarks.remove(pos);
-                    }
-                    // We've finished with this benchmark
-                    if current.benchmarks.is_empty() {
-                        // post a comment to some issue
-                        if let Some(issue) = &current.issue {
-                            let commit = current.commit.sha.clone();
-                            if !persistent.posted_ends.contains(&commit) {
-                                comment = Some((
-                                    issue.clone(),
-                                    format!(
-                                        "Finished benchmarking try commit {}{}",
-                                        commit, comparison_url
-                                    ),
-                                ));
-                                persistent.posted_ends.push(commit);
-                                // keep 100 commits in cache
-                                if persistent.posted_ends.len() > 100 {
-                                    persistent.posted_ends.remove(0);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        persistent.write().unwrap();
-    }
-    if let Some((issue, comment)) = comment {
-        post_comment(&data.config, &issue, comment).await;
-    }
-
     Ok(collected::Response {})
 }
 
@@ -965,6 +885,12 @@ impl Server {
         let index = db::Index::load(&mut *conn).await;
         eprintln!("index has {} commits", index.commits().len());
         data.index.store(Arc::new(index));
+
+        // Spawn off a task to post the results of any commit results that we
+        // are now aware of.
+        tokio::spawn(async move {
+            crate::github::post_finished(&data).await;
+        });
 
         Response::new(body)
     }

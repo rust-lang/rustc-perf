@@ -33,6 +33,12 @@ pub trait Connection: Send + Sync {
     );
     async fn get_error(&self, series: u32, cid: CollectionIdNumber) -> Option<String>;
     async fn insert_error(&self, series: u32, cid: CollectionIdNumber, text: String);
+
+    async fn queue_pr(&self, pr: u32);
+    /// Returns true if this PR was queued waiting for a commit
+    async fn pr_attach_commit(&self, pr: u32, sha: &str, parent_sha: &str) -> bool;
+    async fn queued_commits(&self) -> Vec<QueuedCommit>;
+    async fn mark_complete(&self, sha: &str) -> Option<QueuedCommit>;
 }
 
 #[async_trait::async_trait]

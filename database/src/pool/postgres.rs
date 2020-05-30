@@ -391,4 +391,60 @@ where
             .await
             .unwrap();
     }
+    async fn queue_pr(&self, pr: u32) {
+        self.conn()
+            .execute(
+                "insert into pull_request_builds (pr, requested) VALUES ($1, CURRENT_TIMESTAMP)",
+                &[&(pr as i32)],
+            )
+            .await
+            .unwrap();
+    }
+    async fn pr_attach_commit(&self, pr: u32, sha: &str, parent_sha: &str) -> bool {
+        self.conn()
+            .execute(
+                "update pull_request_builds SET bors_sha = $1, parent_sha = $2
+                where pr = $3 and bors_sha is null",
+                &[&sha, &parent_sha, &(pr as i32)],
+            )
+            .await
+            .unwrap()
+            > 0
+    }
+    async fn queued_commits(&self) -> Vec<QueuedCommit> {
+        let rows = self
+            .conn()
+            .query(
+                "select pr, bors_sha, parent_sha from pull_request_builds
+                where complete is false and bors_sha is not null
+                order by requested asc",
+                &[],
+            )
+            .await
+            .unwrap();
+        rows.into_iter()
+            .map(|row| QueuedCommit {
+                pr: row.get::<_, i32>(0) as u32,
+                sha: row.get(1),
+                parent_sha: row.get(2),
+            })
+            .collect()
+    }
+    async fn mark_complete(&self, sha: &str) -> Option<QueuedCommit> {
+        let row = self
+            .conn()
+            .query_opt(
+                "update pull_request_builds SET complete = true
+                where sha = $1
+                returning pr, bors_sha, parent_sha",
+                &[&sha],
+            )
+            .await
+            .unwrap()?;
+        Some(QueuedCommit {
+            pr: row.get::<_, i32>(0) as u32,
+            sha: row.get(1),
+            parent_sha: row.get(2),
+        })
+    }
 }

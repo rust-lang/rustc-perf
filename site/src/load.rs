@@ -11,12 +11,11 @@ use arc_swap::ArcSwap;
 use std::collections::HashSet;
 use std::fs;
 use std::ops::RangeInclusive;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::Context;
 use chrono::{Duration, Utc};
-use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
 use crate::db;
@@ -64,56 +63,6 @@ impl TryCommit {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize, Debug)]
-pub struct Persistent {
-    pub try_commits: Vec<TryCommit>,
-    pub current: Option<CurrentState>,
-    // this is a list of pr numbers for which we expect to run
-    // a perf build once the try build completes.
-    // This only persists for one try build (so should not be long at any point).
-    #[serde(default)]
-    pub pending_try_builds: HashSet<u32>,
-    // Set of commit hashes for which we've completed benchmarking.
-    #[serde(default)]
-    pub posted_ends: Vec<Sha>,
-}
-
-lazy_static::lazy_static! {
-    static ref PERSISTENT_PATH: PathBuf = std::env::var_os("PERSISTENT_PATH").map(PathBuf::from).unwrap_or_else(|| {
-        PathBuf::from("persistent.json")
-    });
-}
-
-impl Persistent {
-    pub fn write(&self) -> anyhow::Result<()> {
-        if PERSISTENT_PATH.exists() {
-            let _ = fs::copy(&*PERSISTENT_PATH, "persistent.json.previous");
-        }
-        let s = serde_json::to_string(self)?;
-        fs::write(&*PERSISTENT_PATH, &s)
-            .with_context(|| format!("failed to write persistent DB"))?;
-        Ok(())
-    }
-
-    fn load() -> Persistent {
-        let p = Persistent::load_().unwrap_or_else(|| Persistent {
-            try_commits: Vec::new(),
-            current: None,
-            pending_try_builds: HashSet::new(),
-            posted_ends: Vec::new(),
-        });
-        p.write().unwrap();
-        p
-    }
-
-    fn load_() -> Option<Persistent> {
-        let s = fs::read_to_string(&*PERSISTENT_PATH).ok()?;
-        let persistent: Persistent = serde_json::from_str(&s).ok()?;
-
-        Some(persistent)
-    }
-}
-
 #[derive(Debug, Default, Deserialize)]
 pub struct Keys {
     pub github: Option<String>,
@@ -128,8 +77,6 @@ pub struct Config {
 }
 
 pub struct InputData {
-    pub persistent: Mutex<Persistent>,
-
     pub config: Config,
 
     pub index: ArcSwap<crate::db::Index>,
@@ -187,9 +134,7 @@ impl InputData {
             }
         };
 
-        let persistent = Persistent::load();
         Ok(InputData {
-            persistent: Mutex::new(persistent),
             config,
             index: ArcSwap::new(Arc::new(index)),
             pool,
@@ -234,12 +179,13 @@ impl InputData {
             .collect::<Vec<_>>();
 
         let mut commits = self
-            .persistent
-            .lock()
-            .try_commits
-            .iter()
+            .conn()
+            .await
+            .queued_commits()
+            .await
+            .into_iter()
             .flat_map(
-                |TryCommit {
+                |database::QueuedCommit {
                      sha, parent_sha, ..
                  }| {
                     let mut ret = Vec::new();

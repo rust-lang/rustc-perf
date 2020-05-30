@@ -40,6 +40,9 @@ async fn main() {
                 res.index.load().commits().len(),
                 res.index.load().artifacts().count()
             );
+            // Spawn off a task to post the results of any commit results that we
+            // are now aware of.
+            site::github::post_finished(&res).await;
         })
     })
     .fuse();
