@@ -63,7 +63,7 @@ impl Sqlite {
 
 static MIGRATIONS: &[&str] = &[
     "",
-    "
+    r#"
     create table interned(name text primary key, value blob);
     create table errors(series integer, cid integer, value text);
     create table pstat(series integer, cid integer, value real);
@@ -83,7 +83,22 @@ static MIGRATIONS: &[&str] = &[
         complete boolean,
         requested integer -- timestamp
     );
-    ",
+    CREATE VIEW commits (id, sha, date) as
+        select
+            key,
+            json_extract(json_each.value, "$.sha") as sha,
+            json_extract(json_each.value, "$.date") as date
+        from interned, json_each(interned.value, "$.commits.map");
+    CREATE VIEW pstat_series (id, crate, profile, cache, stat) as
+        select
+            key,
+            json_extract(json_each.value, "$[0]") as crate,
+            json_extract(json_each.value, "$[1]") as profile,
+            json_extract(json_each.value, "$[2].variant") ||
+                ifnull("-" || json_extract(json_each.value, "$[2].name"), "") as cache,
+            json_extract(json_each.value, "$[3]") as stat
+        from interned, json_each(interned.value, "$.pstats.map")
+    "#,
 ];
 
 #[async_trait::async_trait]

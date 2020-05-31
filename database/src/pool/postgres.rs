@@ -77,7 +77,7 @@ async fn make_client(db_url: &str) -> anyhow::Result<tokio_postgres::Client> {
 
 static MIGRATIONS: &[&str] = &[
     "",
-    "
+    r#"
     create table interned(name text primary key, value jsonb);
     create table errors(series integer, cid integer, value text);
     create table pstat(series integer, cid integer, value double precision);
@@ -97,7 +97,29 @@ static MIGRATIONS: &[&str] = &[
         complete boolean,
         requested timestamp without time zone
     );
-    ",
+    create view commits (id, sha, date) as (
+        select id::integer, value->>'sha' as sha, (value->>'date')::timestamp as date
+        from jsonb_each((select value->'commits'->'map' from interned)) as commits(id, value)
+    );
+    create view pstat_series (id, crate, profile, cache, stat) as (
+        select
+            id::integer,
+            value->>0 as crate,
+            value->>1 as profile,
+            value->2->>'variant' || coalesce('-' || (value->2->>'name'), '') as cache,
+            value->>3 as stat
+        from jsonb_each((select value->'pstats'->'map' from interned)) as pstats(id, value)
+    );
+    create view self_profile_query_series (id, crate, profile, cache, query) as (
+        select
+            id::integer,
+            value->>0 as crate,
+            value->>1 as profile,
+            value->2->>'variant' || coalesce('-' || (value->2->>'name'), '') as cache,
+            value->>3 as query
+        from jsonb_each((select value->'queries'->'map' from interned)) as spq(id, value)
+    );
+    "#,
 ];
 
 #[async_trait::async_trait]
