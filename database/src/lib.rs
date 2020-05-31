@@ -559,7 +559,7 @@ impl CollectionIdNumber {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Index {
     commits: Indexed<Commit>,
     artifacts: Indexed<Box<str>>,

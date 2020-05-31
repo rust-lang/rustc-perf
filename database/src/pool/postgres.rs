@@ -9,7 +9,7 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio_postgres::types::Json;
-use tokio_postgres::GenericClient as _;
+use tokio_postgres::GenericClient;
 use tokio_postgres::Statement;
 
 pub struct Postgres(String, std::sync::Once);
@@ -99,7 +99,15 @@ static MIGRATIONS: &[&str] = &[
     );
     create view commits (id, sha, date) as (
         select id::integer, value->>'sha' as sha, (value->>'date')::timestamp as date
-        from jsonb_each((select value->'commits'->'map' from interned)) as commits(id, value)
+        from jsonb_each((
+            select value->'map' from interned where interned.name = 'commits'
+        )) as commits(id, value)
+    );
+    create view artifacts (id, name) as (
+        select id::integer, value #>> '{}' as name
+        from jsonb_each((
+            select value->'map' from interned where interned.name = 'artifacts'
+        )) as artifacts(id, value)
     );
     create view pstat_series (id, crate, profile, cache, stat) as (
         select
@@ -108,7 +116,9 @@ static MIGRATIONS: &[&str] = &[
             value->>1 as profile,
             value->2->>'variant' || coalesce('-' || (value->2->>'name'), '') as cache,
             value->>3 as stat
-        from jsonb_each((select value->'pstats'->'map' from interned)) as pstats(id, value)
+        from jsonb_each((
+            select value->'map' from interned where interned.name = 'pstats'
+        )) as pstats(id, value)
     );
     create view self_profile_query_series (id, crate, profile, cache, query) as (
         select
@@ -117,7 +127,9 @@ static MIGRATIONS: &[&str] = &[
             value->>1 as profile,
             value->2->>'variant' || coalesce('-' || (value->2->>'name'), '') as cache,
             value->>3 as query
-        from jsonb_each((select value->'queries'->'map' from interned)) as spq(id, value)
+        from jsonb_each((
+            select value->'map' from interned where interned.name = 'queries'
+        )) as spq(id, value)
     );
     "#,
 ];
@@ -318,25 +330,50 @@ where
         })
     }
     async fn load_index(&mut self) -> Index {
-        let row = self
-            .conn()
-            .query_opt("select value from interned where name = 'index'", &[])
-            .await
-            .unwrap();
-        match row {
-            Some(r) => {
-                let v: Json<Index> = r.get(0);
-                v.0
-            }
-            None => Index::default(),
+        async fn get<T: Default + serde::de::DeserializeOwned>(
+            c: &impl GenericClient,
+            name: &str,
+        ) -> T {
+            c.query_opt("select value from interned where name = $1", &[&name])
+                .await
+                .unwrap()
+                .map(|row| row.get(0))
+                .map(|json: Json<T>| json.0)
+                .unwrap_or_default()
+        }
+        let c = self.conn();
+        let (commits, artifacts, errors, pstats, queries) = futures::join!(
+            get(c, "commits"),
+            get(c, "artifacts"),
+            get(c, "errors"),
+            get(c, "pstats"),
+            get(c, "queries"),
+        );
+        Index {
+            commits,
+            artifacts,
+            errors,
+            pstats,
+            queries,
         }
     }
     async fn store_index(&mut self, index: &Index) {
         self.conn()
             .execute(
-                "insert into interned (name, value) VALUES ('index', $1)
+                "insert into interned (name, value) VALUES
+                    ('commits', $1),
+                    ('artifacts', $2),
+                    ('errors', $3),
+                    ('pstats', $4),
+                    ('queries', $5)
                 ON CONFLICT (name) DO UPDATE SET value = EXCLUDED.value",
-                &[&Json(index)],
+                &[
+                    &Json(&index.commits),
+                    &Json(&index.artifacts),
+                    &Json(&index.errors),
+                    &Json(&index.pstats),
+                    &Json(&index.queries),
+                ],
             )
             .await
             .unwrap();

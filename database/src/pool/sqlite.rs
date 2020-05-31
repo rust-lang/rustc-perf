@@ -88,7 +88,8 @@ static MIGRATIONS: &[&str] = &[
             key,
             json_extract(json_each.value, "$.sha") as sha,
             json_extract(json_each.value, "$.date") as date
-        from interned, json_each(interned.value, "$.commits.map");
+        from interned, json_each(interned.value, "$.map")
+            where interned.name = "commits";
     CREATE VIEW pstat_series (id, crate, profile, cache, stat) as
         select
             key,
@@ -97,7 +98,8 @@ static MIGRATIONS: &[&str] = &[
             json_extract(json_each.value, "$[2].variant") ||
                 ifnull("-" || json_extract(json_each.value, "$[2].name"), "") as cache,
             json_extract(json_each.value, "$[3]") as stat
-        from interned, json_each(interned.value, "$.pstats.map")
+        from interned, json_each(interned.value, "$.map")
+            where interned.name = "pstats";
     "#,
 ];
 
@@ -175,33 +177,47 @@ impl Connection for SqliteConnection {
     }
 
     async fn load_index(&mut self) -> Index {
-        let indices: rusqlite::Result<Option<Vec<u8>>> = self
-            .raw()
-            .query_row(
-                "select value from interned where name = 'index'",
-                params![],
+        fn load_ty_or_default<T: Default + serde::de::DeserializeOwned>(
+            c: &mut rusqlite::Connection,
+            name: &str,
+        ) -> T {
+            c.query_row(
+                "select value from interned where name = ?",
+                params![name],
                 |row| row.get(0),
             )
-            .optional();
-        match indices {
-            Ok(Some(s)) => serde_json::from_slice(&s).unwrap(),
-            Ok(None) => Index::default(),
-            Err(e) => {
-                if e.to_string().contains("no such table: interned") {
-                    Index::default()
-                } else {
-                    panic!("could not load index: {}", e);
-                }
-            }
+            .optional()
+            .unwrap()
+            .map(|v: Vec<u8>| serde_json::from_slice(&v).unwrap())
+            .unwrap_or_default()
+        }
+
+        let raw = self.raw();
+        Index {
+            commits: load_ty_or_default(raw, "commits"),
+            artifacts: load_ty_or_default(raw, "artifacts"),
+            errors: load_ty_or_default(raw, "errors"),
+            pstats: load_ty_or_default(raw, "pstats"),
+            queries: load_ty_or_default(raw, "queries"),
         }
     }
 
     async fn store_index(&mut self, index: &Index) {
-        let bytes = serde_json::to_vec(index).unwrap();
         self.raw()
             .execute(
-                "insert or replace into interned (name, value) VALUES ('index', ?)",
-                params![&bytes],
+                "insert or replace into interned (name, value) VALUES
+                    ('commits', ?),
+                    ('artifacts', ?),
+                    ('errors', ?),
+                    ('pstats', ?),
+                    ('queries', ?)",
+                params![
+                    &serde_json::to_vec(&index.commits).unwrap(),
+                    &serde_json::to_vec(&index.artifacts).unwrap(),
+                    &serde_json::to_vec(&index.errors).unwrap(),
+                    &serde_json::to_vec(&index.pstats).unwrap(),
+                    &serde_json::to_vec(&index.queries).unwrap(),
+                ],
             )
             .unwrap();
     }

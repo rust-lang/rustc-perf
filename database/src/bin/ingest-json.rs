@@ -179,14 +179,18 @@ async fn main() {
     for (idx, path) in paths.into_iter().enumerate() {
         if idx % 10 == 0 {
             eprintln!(
-                "{}/{}, per {:?}; estimated total time {:?}",
+                "{}/{}, per {:?}; estimated time left {:?}",
                 idx,
                 paths_count,
                 last.elapsed() / 10,
-                last.elapsed() / 10 * paths_count as u32
+                last.elapsed() / 10 * (paths_count as u32 - idx as u32)
             );
             last = std::time::Instant::now();
-            index.store(&mut *conn).await;
+            if idx % 100 == 0 {
+                index.store(&mut *conn).await;
+                eprintln!("stored index in {:?}", last.elapsed());
+                last = std::time::Instant::now();
+            }
         }
         ingest(&mut *conn, &mut index, Path::new(&path)).await;
     }
