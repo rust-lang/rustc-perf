@@ -1,5 +1,5 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
-use crate::{CollectionIdNumber, QueryDatum, QueuedCommit};
+use crate::{CollectionIdNumber, Index, QueryDatum, QueuedCommit};
 use rusqlite::params;
 use rusqlite::OptionalExtension;
 use std::convert::TryFrom;
@@ -159,7 +159,7 @@ impl Connection for SqliteConnection {
         })
     }
 
-    async fn load_index(&mut self) -> Option<Vec<u8>> {
+    async fn load_index(&mut self) -> Index {
         let indices: rusqlite::Result<Option<Vec<u8>>> = self
             .raw()
             .query_row(
@@ -169,11 +169,11 @@ impl Connection for SqliteConnection {
             )
             .optional();
         match indices {
-            Ok(Some(s)) => Some(s),
-            Ok(None) => None,
+            Ok(Some(s)) => serde_json::from_slice(&s).unwrap(),
+            Ok(None) => Index::default(),
             Err(e) => {
                 if e.to_string().contains("no such table: interned") {
-                    None
+                    Index::default()
                 } else {
                     panic!("could not load index: {}", e);
                 }
@@ -181,11 +181,12 @@ impl Connection for SqliteConnection {
         }
     }
 
-    async fn store_index(&mut self, index: &[u8]) {
+    async fn store_index(&mut self, index: &Index) {
+        let bytes = serde_json::to_vec(index).unwrap();
         self.raw()
             .execute(
                 "insert or replace into interned (name, value) VALUES ('index', ?)",
-                params![&index],
+                params![&bytes],
             )
             .unwrap();
     }

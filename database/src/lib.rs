@@ -559,7 +559,7 @@ impl CollectionIdNumber {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Default)]
 pub struct Index {
     commits: Indexed<Commit>,
     artifacts: Indexed<Box<str>>,
@@ -569,13 +569,23 @@ pub struct Index {
     queries: Indexed<(Crate, Profile, Cache, QueryLabel)>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Indexed<T> {
     #[serde(with = "index_serde")]
     #[serde(bound = "T: Serialize + serde::de::DeserializeOwned + std::hash::Hash + Eq")]
     map: HashMap<T, u32>,
     next: u32,
 }
+
+impl<T> PartialEq for Indexed<T>
+where
+    T: PartialEq + Eq + std::hash::Hash,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.next == other.next && self.map == other.map
+    }
+}
+impl<T> Eq for Indexed<T> where T: PartialEq + Eq + std::hash::Hash {}
 
 impl<T> Default for Indexed<T> {
     fn default() -> Self {
@@ -734,14 +744,11 @@ impl Lookup for CollectionId {
 
 impl Index {
     pub async fn load(conn: &mut dyn pool::Connection) -> Index {
-        let bytes = conn.load_index().await;
-        bytes
-            .map(|s| serde_json::from_slice(&s).unwrap())
-            .unwrap_or_default()
+        conn.load_index().await
     }
 
     pub async fn store(&self, conn: &mut dyn pool::Connection) {
-        conn.store_index(&serde_json::to_vec(self).unwrap()).await;
+        conn.store_index(&self).await;
     }
 
     pub fn lookup(&self, path: &DbLabel, cid: &CollectionId) -> Option<(u32, CollectionIdNumber)> {

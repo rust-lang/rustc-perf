@@ -1,4 +1,4 @@
-use crate::{CollectionIdNumber, QueryDatum, QueuedCommit};
+use crate::{CollectionIdNumber, Index, QueryDatum, QueuedCommit};
 use std::sync::{Arc, Mutex};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
@@ -11,8 +11,8 @@ pub trait Connection: Send + Sync {
     async fn maybe_create_indices(&mut self);
     async fn transaction(&mut self) -> Box<dyn Transaction + '_>;
 
-    async fn load_index(&mut self) -> Option<Vec<u8>>;
-    async fn store_index(&mut self, index: &[u8]);
+    async fn load_index(&mut self) -> Index;
+    async fn store_index(&mut self, index: &Index);
 
     async fn get_pstats(
         &self,

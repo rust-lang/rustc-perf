@@ -1,6 +1,6 @@
 use crate::{
     pool::{Connection, ConnectionManager, ManagedConnection, Transaction},
-    QueuedCommit,
+    Index, QueuedCommit,
 };
 use anyhow::Context as _;
 use native_tls::{Certificate, TlsConnector};
@@ -8,6 +8,7 @@ use postgres_native_tls::MakeTlsConnector;
 use std::convert::TryFrom;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio_postgres::types::Json;
 use tokio_postgres::GenericClient as _;
 use tokio_postgres::Statement;
 
@@ -77,7 +78,7 @@ async fn make_client(db_url: &str) -> anyhow::Result<tokio_postgres::Client> {
 static MIGRATIONS: &[&str] = &[
     "",
     "
-    create table interned(name text primary key, value bytea);
+    create table interned(name text primary key, value jsonb);
     create table errors(series integer, cid integer, value text);
     create table pstat(series integer, cid integer, value double precision);
     create table self_profile_query(
@@ -294,23 +295,26 @@ where
             conn: tx,
         })
     }
-    async fn load_index(&mut self) -> Option<Vec<u8>> {
+    async fn load_index(&mut self) -> Index {
         let row = self
             .conn()
             .query_opt("select value from interned where name = 'index'", &[])
             .await
             .unwrap();
         match row {
-            Some(r) => Some(r.get(0)),
-            None => None,
+            Some(r) => {
+                let v: Json<Index> = r.get(0);
+                v.0
+            }
+            None => Index::default(),
         }
     }
-    async fn store_index(&mut self, index: &[u8]) {
+    async fn store_index(&mut self, index: &Index) {
         self.conn()
             .execute(
                 "insert into interned (name, value) VALUES ('index', $1)
                 ON CONFLICT (name) DO UPDATE SET value = EXCLUDED.value",
-                &[&index],
+                &[&Json(index)],
             )
             .await
             .unwrap();

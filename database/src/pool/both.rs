@@ -2,7 +2,7 @@ use crate::pool::postgres::PostgresConnection;
 use crate::pool::sqlite::SqliteConnection;
 use crate::{
     pool::{Connection, ManagedConnection},
-    QueuedCommit,
+    Index, QueuedCommit,
 };
 use futures::join;
 
@@ -60,12 +60,12 @@ where
         let (a, b) = join!(self.a.transaction(), self.b.transaction());
         Box::new(BothTransaction { a, b })
     }
-    async fn load_index(&mut self) -> Option<Vec<u8>> {
+    async fn load_index(&mut self) -> Index {
         let (a, b) = join!(self.a.load_index(), self.b.load_index());
         assert!(a == b);
         a
     }
-    async fn store_index(&mut self, index: &[u8]) {
+    async fn store_index(&mut self, index: &Index) {
         join!(self.a.store_index(index), self.b.store_index(index));
     }
     async fn get_pstats(
@@ -154,12 +154,12 @@ impl<'a> Connection for BothTransaction<'a> {
     async fn transaction(&mut self) -> Box<dyn super::Transaction> {
         panic!("nested transactions not supported")
     }
-    async fn load_index(&mut self) -> Option<Vec<u8>> {
+    async fn load_index(&mut self) -> Index {
         let (a, b) = join!(self.a.conn().load_index(), self.b.conn().load_index());
-        assert_eq!(a, b);
+        assert!(a == b);
         a
     }
-    async fn store_index(&mut self, index: &[u8]) {
+    async fn store_index(&mut self, index: &Index) {
         join!(
             self.a.conn().store_index(index),
             self.b.conn().store_index(index)
