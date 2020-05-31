@@ -10,13 +10,13 @@ use std::str;
 
 use tempfile::TempDir;
 
-use crate::block_on;
 use crate::old::{Patch, SelfProfile, StatId, Stats};
 use collector::command_output;
 
 use anyhow::{bail, Context};
 
 use crate::{BuildKind, Compiler, RunKind};
+use tokio::runtime::Runtime;
 
 fn touch_all(path: &Path) -> anyhow::Result<()> {
     let mut cmd = Command::new("bash");
@@ -398,6 +398,7 @@ pub trait Processor {
 }
 
 pub struct MeasureProcessor<'a> {
+    rt: &'a mut Runtime,
     krate: &'a BenchmarkName,
     conn: &'a mut dyn database::Connection,
     cid: database::CollectionIdNumber,
@@ -412,6 +413,7 @@ pub struct MeasureProcessor<'a> {
 
 impl<'a> MeasureProcessor<'a> {
     pub fn new(
+        rt: &'a mut Runtime,
         conn: &'a mut dyn database::Connection,
         index: &'a mut database::Index,
         krate: &'a BenchmarkName,
@@ -423,6 +425,7 @@ impl<'a> MeasureProcessor<'a> {
         assert!(has_perf);
 
         MeasureProcessor {
+            rt,
             conn,
             krate,
             cid,
@@ -455,7 +458,7 @@ impl<'a> MeasureProcessor<'a> {
                 cache,
                 stat: stat.as_pstat(),
             };
-            block_on(
+            self.rt.block_on(
                 self.index
                     .insert_labeled(label, &mut *self.conn, self.cid, value),
             );
@@ -469,7 +472,7 @@ impl<'a> MeasureProcessor<'a> {
                     cache,
                     query: qd.label,
                 };
-                block_on(self.index.insert_labeled(
+                self.rt.block_on(self.index.insert_labeled(
                     label,
                     &mut *self.conn,
                     self.cid,

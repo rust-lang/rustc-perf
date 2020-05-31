@@ -16,6 +16,7 @@ use std::process;
 use std::process::Command;
 use std::str;
 use std::sync::Arc;
+use tokio::runtime::Runtime;
 
 mod background_worker;
 mod execute;
@@ -143,6 +144,7 @@ where
 }
 
 fn process_commits(
+    rt: &mut Runtime,
     pool: &database::Pool,
     benchmarks: &[Benchmark],
     self_profile: bool,
@@ -166,8 +168,10 @@ fn process_commits(
     let commit = get_commit_or_fake_it(&commit)?;
     match Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu") {
         Ok(sysroot) => {
+            let conn = rt.block_on(pool.connection());
             bench_commit(
-                block_on(pool.connection()),
+                rt,
+                conn,
                 &CollectionId::Commit(commit),
                 &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
                 &RunKind::all(),
@@ -198,12 +202,8 @@ fn n_benchmarks_remaining(n: usize) -> String {
     format!("{} benchmark{} remaining", n, suffix)
 }
 
-pub fn block_on<F: std::future::Future>(f: F) -> F::Output {
-    let mut rt = tokio::runtime::Runtime::new().expect("created runtime");
-    rt.block_on(f)
-}
-
 fn bench_commit(
+    rt: &mut Runtime,
     mut conn: Box<dyn Connection>,
     cid: &CollectionId,
     build_kinds: &[BuildKind],
@@ -234,8 +234,8 @@ fn bench_commit(
         );
     }
 
-    let mut tx = block_on(conn.transaction());
-    let mut index = block_on(database::Index::load(tx.conn()));
+    let mut tx = rt.block_on(conn.transaction());
+    let mut index = rt.block_on(database::Index::load(tx.conn()));
     let has_collected = match cid {
         CollectionId::Commit(commit) => index.commits().iter().any(|c| c == commit),
         CollectionId::Artifact(id) => index.artifacts().any(|a| a == id),
@@ -257,6 +257,7 @@ fn bench_commit(
         );
 
         let mut processor = execute::MeasureProcessor::new(
+            rt,
             tx.conn(),
             &mut index,
             &benchmark.name,
@@ -267,7 +268,7 @@ fn bench_commit(
             benchmark.measure(&mut processor, build_kinds, run_kinds, compiler, iterations);
         if let Err(s) = result {
             eprintln!("Failed to benchmark {}, recorded: {}", benchmark.name, s);
-            block_on(index.insert_labeled(
+            rt.block_on(index.insert_labeled(
                 database::DbLabel::Errors {
                     krate: benchmark.name.to_string().as_str().into(),
                 },
@@ -287,13 +288,16 @@ fn bench_commit(
         }
     }
 
-    block_on(index.store(tx.conn()));
+    rt.block_on(async move {
+        index.store(tx.conn()).await;
+        // Publish results now that we've finished fully with this commit.
+        tx.commit().await.unwrap();
+    });
 
-    // Publish results now that we've finished fully with this commit.
-    block_on(tx.commit()).unwrap();
-
-    // This ensures that we're good to go with the just updated data.
-    block_on(conn.maybe_create_indices());
+    rt.block_on(async move {
+        // This ensures that we're good to go with the just updated data.
+        conn.maybe_create_indices().await;
+    });
 }
 
 fn get_benchmarks(
@@ -428,6 +432,15 @@ fn main_result() -> anyhow::Result<i32> {
     let mut benchmarks = get_benchmarks(&benchmark_dir, filter, exclude)?;
     let self_profile = matches.is_present("self_profile");
 
+    let mut builder = tokio::runtime::Builder::new();
+    // We want to minimize noise from the runtime
+    builder
+        .core_threads(1)
+        .max_threads(1)
+        .enable_io()
+        .basic_scheduler();
+    let mut rt = builder.build().expect("built runtime");
+
     let pool = matches.value_of("db").map(|db| database::Pool::open(db));
 
     let ret = match matches.subcommand() {
@@ -437,8 +450,10 @@ fn main_result() -> anyhow::Result<i32> {
             let sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")?;
             let build_kinds = &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt];
             let run_kinds = RunKind::all();
+            let conn = rt.block_on(pool.expect("--db passed").connection());
             bench_commit(
-                block_on(pool.expect("--db passed").connection()),
+                &mut rt,
+                conn,
                 &CollectionId::Commit(commit),
                 build_kinds,
                 &run_kinds,
@@ -460,8 +475,10 @@ fn main_result() -> anyhow::Result<i32> {
 
             let rustc_path = PathBuf::from(rustc).canonicalize()?;
             let cargo_path = PathBuf::from(cargo).canonicalize()?;
+            let conn = rt.block_on(pool.expect("--db passed").connection());
             bench_commit(
-                block_on(pool.expect("--db passed").connection()),
+                &mut rt,
+                conn,
                 &CollectionId::Artifact(id.to_string()),
                 &build_kinds,
                 &run_kinds,
@@ -498,8 +515,10 @@ fn main_result() -> anyhow::Result<i32> {
             } else {
                 RunKind::all_non_incr()
             };
+            let conn = rt.block_on(pool.expect("--db passed").connection());
             bench_commit(
-                block_on(pool.expect("--db passed").connection()),
+                &mut rt,
+                conn,
                 &CollectionId::Artifact(id.to_string()),
                 &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
                 &run_kinds,
@@ -518,7 +537,12 @@ fn main_result() -> anyhow::Result<i32> {
         }
 
         ("process", Some(_)) => {
-            process_commits(&pool.expect("--db passed"), &benchmarks, self_profile)?;
+            process_commits(
+                &mut rt,
+                &pool.expect("--db passed"),
+                &benchmarks,
+                self_profile,
+            )?;
             Ok(0)
         }
 
@@ -569,8 +593,10 @@ fn main_result() -> anyhow::Result<i32> {
             let commit = get_commit_or_fake_it(&last_sha).expect("success");
             let sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")?;
             // filter out servo benchmarks as they simply take too long
+            let conn = rt.block_on(pool.expect("--db passed").connection());
             bench_commit(
-                block_on(pool.expect("--db passed").connection()),
+                &mut rt,
+                conn,
                 &CollectionId::Commit(commit),
                 &[BuildKind::Check], // no Debug or Opt builds
                 &RunKind::all(),
