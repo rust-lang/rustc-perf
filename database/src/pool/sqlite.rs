@@ -61,7 +61,9 @@ impl Sqlite {
     }
 }
 
-static MIGRATIONS: &[&str] = &["
+static MIGRATIONS: &[&str] = &[
+    "",
+    "
     create table interned(name text primary key, value blob);
     create table errors(series integer, cid integer, value text);
     create table pstat(series integer, cid integer, value real);
@@ -81,7 +83,8 @@ static MIGRATIONS: &[&str] = &["
         complete boolean,
         requested integer -- timestamp
     );
-    "];
+    ",
+];
 
 #[async_trait::async_trait]
 impl ConnectionManager for Sqlite {
@@ -99,7 +102,7 @@ impl ConnectionManager for Sqlite {
                     |row| row.get(0),
                 )
                 .unwrap();
-            for mid in (version as usize)..MIGRATIONS.len() {
+            for mid in (version as usize + 1)..MIGRATIONS.len() {
                 let sql = MIGRATIONS[mid];
                 let tx = conn.transaction().unwrap();
                 tx.execute_batch(&sql).unwrap();

@@ -74,7 +74,9 @@ async fn make_client(db_url: &str) -> anyhow::Result<tokio_postgres::Client> {
     }
 }
 
-static MIGRATIONS: &[&str] = &["
+static MIGRATIONS: &[&str] = &[
+    "",
+    "
     create table interned(name text primary key, value bytea);
     create table errors(series integer, cid integer, value text);
     create table pstat(series integer, cid integer, value double precision);
@@ -94,7 +96,8 @@ static MIGRATIONS: &[&str] = &["
         complete boolean,
         requested timestamp without time zone
     );
-    "];
+    ",
+];
 
 #[async_trait::async_trait]
 impl ConnectionManager for Postgres {
@@ -117,7 +120,7 @@ impl ConnectionManager for Postgres {
                 .await
                 .unwrap();
             let version: Option<i32> = version.get(0);
-            for mid in (version.unwrap_or(0) as usize)..MIGRATIONS.len() {
+            for mid in (version.unwrap_or(0) as usize + 1)..MIGRATIONS.len() {
                 let sql = MIGRATIONS[mid];
                 let tx = client.transaction().await.unwrap();
                 tx.batch_execute(&sql).await.unwrap();
