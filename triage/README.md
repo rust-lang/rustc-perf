@@ -12,7 +12,7 @@ usage.
 Check the most recent triage log entry. Look for responses in PRs, and follow
 up on any promised actions. (I.e. nag people!)
 
-Start a new triage log entry.
+Start a new triage log entry. Follow the format of the preceding entries.
 
 Look through the [`instructions:u` graphs](https://perf.rust-lang.org) for each
 benchmark, looking for significant changes (regressions or improvements) in the
