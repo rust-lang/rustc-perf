@@ -47,6 +47,7 @@ use crate::selector::{self, PathComponent, Tag};
 use collector::api::collected;
 use collector::Sha;
 use collector::StatId;
+use db::{CollectionId, Lookup};
 use parking_lot::RwLock;
 
 static INTERPOLATED_COLOR: &str = "#fcb0f1";
@@ -216,25 +217,23 @@ fn prettify_log(log: &str) -> Option<String> {
 }
 
 pub async fn handle_status_page(data: Arc<InputData>) -> status::Response {
-    let last_commit = *data.index.load().commits().last().unwrap();
+    let idx = data.index.load();
+    let last_commit = *idx.commits().last().unwrap();
 
     let mut benchmark_state = data
-        .query::<Option<String>>(
-            selector::Query::new().set::<String>(selector::Tag::Crate, selector::Selector::All),
-            Arc::new(vec![db::CollectionId::Commit(last_commit)]),
-        )
+        .conn()
         .await
-        .unwrap()
+        .get_error(CollectionId::from(last_commit).lookup(&idx).unwrap())
+        .await
         .into_iter()
-        .map(|mut sr| {
-            let name = sr.path.get::<Crate>().unwrap();
-            let msg = if let Some(error) = sr.series.next().and_then(|(_, e)| e) {
+        .map(|(name, error)| {
+            let msg = if let Some(error) = error {
                 Some(prettify_log(&error).unwrap_or(error))
             } else {
                 None
             };
             status::BenchmarkStatus {
-                name: *name,
+                name,
                 success: msg.is_none(),
                 error: msg,
             }

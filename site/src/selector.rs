@@ -393,36 +393,6 @@ fn handle_results<'a, E>(
     })
 }
 
-#[async_trait]
-impl SeriesElement for Option<String> {
-    async fn query<'a>(
-        db: &'a Db,
-        collection_ids: Arc<Vec<CollectionId>>,
-        query: Query,
-    ) -> Result<
-        Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, Option<String>)> + Send + 'a>>>,
-        String,
-    > {
-        let results = vec![
-            CompileError::expand_query(collection_ids.clone(), db, query.clone())
-                .await
-                .map(|sr| {
-                    sr.into_iter()
-                        .map(|sr| {
-                            sr.map(|r| {
-                                Box::new(r)
-                                    as Box<
-                                        dyn Iterator<Item = (CollectionId, Option<String>)> + Send,
-                                    >
-                            })
-                        })
-                        .collect()
-                }),
-        ];
-        handle_results(results)
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct SelfProfileData {
     pub query_data: Vec<QueryData>,
@@ -891,74 +861,6 @@ impl SelfProfileQueryTime {
                     .set(PathComponent::Profile(path.1))
                     .set(PathComponent::Cache(path.2))
                     .set(PathComponent::QueryLabel(path.3)),
-            });
-        }
-        Ok(res)
-    }
-}
-
-pub struct CompileError {
-    cids: CollectionIdIter,
-    errors: std::vec::IntoIter<Option<String>>,
-}
-
-impl CompileError {
-    async fn new(collection_ids: Arc<Vec<CollectionId>>, db: &Db, krate: Crate) -> CompileError {
-        let mut conn = db.conn().await;
-        let mut tx = conn.transaction().await;
-        let mut res = Vec::with_capacity(collection_ids.len());
-        let idx = db.index.load();
-        for cid in collection_ids.iter() {
-            res.push(
-                idx.get::<String>(tx.conn(), &crate::db::DbLabel::Errors { krate }, cid)
-                    .await,
-            );
-        }
-        tx.finish().await.unwrap();
-        CompileError {
-            cids: CollectionIdIter::new(collection_ids),
-            errors: res.into_iter(),
-        }
-    }
-}
-
-impl Iterator for CompileError {
-    type Item = (CollectionId, Option<String>);
-    fn next(&mut self) -> Option<Self::Item> {
-        Some((self.cids.next()?, self.errors.next().unwrap()))
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.cids.size_hint()
-    }
-}
-
-impl Series for CompileError {
-    type Element = Option<String>;
-}
-
-impl CompileError {
-    async fn expand_query(
-        collection_ids: Arc<Vec<CollectionId>>,
-        db: &Db,
-        mut query: Query,
-    ) -> Result<Vec<SeriesResponse<Self>>, String> {
-        let krate = query.extract(Tag::Crate)?.raw;
-        query.assert_empty()?;
-
-        let mut series = db
-            .index
-            .load()
-            .all_errors()
-            .filter(|k| krate.matches(*k))
-            .collect::<Vec<_>>();
-        series.sort_unstable();
-
-        let mut res = Vec::with_capacity(series.len());
-        for path in series {
-            res.push(SeriesResponse {
-                series: CompileError::new(collection_ids.clone(), db, path).await,
-                path: Path::new().set(PathComponent::Crate(path)),
             });
         }
         Ok(res)

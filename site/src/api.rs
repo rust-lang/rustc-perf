@@ -161,12 +161,12 @@ pub mod days {
 
 pub mod status {
     use crate::load::{CurrentState, MissingReason};
-    use database::{Commit, Crate};
+    use database::Commit;
     use serde::{Deserialize, Serialize};
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct BenchmarkStatus {
-        pub name: Crate,
+        pub name: String,
         pub success: bool,
         pub error: Option<String>,
     }

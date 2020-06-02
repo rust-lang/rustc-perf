@@ -5,6 +5,7 @@ use crate::{
     Index, QueuedCommit,
 };
 use futures::join;
+use hashbrown::HashMap;
 
 pub struct BothConnection<A, B> {
     a: A,
@@ -65,9 +66,6 @@ where
         assert!(a == b);
         a
     }
-    async fn store_index(&mut self, index: &Index) {
-        join!(self.a.store_index(index), self.b.store_index(index));
-    }
     async fn get_pstats(
         &self,
         series: &[u32],
@@ -109,8 +107,8 @@ where
             self.b.insert_self_profile_query(series, cid, data)
         );
     }
-    async fn get_error(&self, series: u32, cid: crate::CollectionIdNumber) -> Option<String> {
-        let (a, b) = join!(self.a.get_error(series, cid), self.b.get_error(series, cid));
+    async fn get_error(&self, cid: crate::CollectionIdNumber) -> HashMap<String, Option<String>> {
+        let (a, b) = join!(self.a.get_error(cid), self.b.get_error(cid));
         assert_eq!(a, b);
         a
     }
@@ -159,12 +157,6 @@ impl<'a> Connection for BothTransaction<'a> {
         assert!(a == b);
         a
     }
-    async fn store_index(&mut self, index: &Index) {
-        join!(
-            self.a.conn().store_index(index),
-            self.b.conn().store_index(index)
-        );
-    }
     async fn get_pstats(
         &self,
         series: &[u32],
@@ -210,10 +202,10 @@ impl<'a> Connection for BothTransaction<'a> {
                 .insert_self_profile_query(series, cid, data)
         );
     }
-    async fn get_error(&self, series: u32, cid: crate::CollectionIdNumber) -> Option<String> {
+    async fn get_error(&self, cid: crate::CollectionIdNumber) -> HashMap<String, Option<String>> {
         let (a, b) = join!(
-            self.a.conn_ref().get_error(series, cid),
-            self.b.conn_ref().get_error(series, cid)
+            self.a.conn_ref().get_error(cid),
+            self.b.conn_ref().get_error(cid)
         );
         assert_eq!(a, b);
         a

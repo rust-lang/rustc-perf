@@ -1,4 +1,5 @@
 use crate::{CollectionIdNumber, Index, QueryDatum, QueuedCommit};
+use hashbrown::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
@@ -12,7 +13,6 @@ pub trait Connection: Send + Sync {
     async fn transaction(&mut self) -> Box<dyn Transaction + '_>;
 
     async fn load_index(&mut self) -> Index;
-    async fn store_index(&mut self, index: &Index);
 
     async fn get_pstats(
         &self,
@@ -31,7 +31,7 @@ pub trait Connection: Send + Sync {
         cid: CollectionIdNumber,
         data: QueryDatum,
     );
-    async fn get_error(&self, series: u32, cid: CollectionIdNumber) -> Option<String>;
+    async fn get_error(&self, cid: CollectionIdNumber) -> HashMap<String, Option<String>>;
     async fn insert_error(&self, series: u32, cid: CollectionIdNumber, text: String);
 
     async fn queue_pr(&self, pr: u32);
@@ -103,6 +103,10 @@ where
             permits: Arc::new(Semaphore::new(16)),
             manager,
         }
+    }
+
+    pub fn raw(&mut self) -> &mut M {
+        &mut self.manager
     }
 
     async fn get(&self) -> ManagedConnection<T> {

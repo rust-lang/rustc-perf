@@ -536,11 +536,11 @@ impl SeriesType for String {
     }
 
     async fn get(
-        conn: &dyn pool::Connection,
-        series: u32,
-        cid: CollectionIdNumber,
+        _conn: &dyn pool::Connection,
+        _series: u32,
+        _cid: CollectionIdNumber,
     ) -> Option<Self> {
-        conn.get_error(series, cid).await
+        unimplemented!()
     }
 }
 
@@ -548,16 +548,7 @@ impl SeriesType for String {
 pub struct LabelId(pub u8, pub u32);
 
 #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub struct CollectionIdNumber(u8, u32);
-
-impl CollectionIdNumber {
-    pub fn pack(self) -> u32 {
-        let mut bytes = u32::to_be_bytes(self.1);
-        assert_eq!(bytes[0], 0);
-        bytes[0] = self.0;
-        u32::from_be_bytes(bytes)
-    }
-}
+pub struct CollectionIdNumber(pub u32);
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Index {
@@ -574,7 +565,17 @@ struct Indexed<T> {
     #[serde(with = "index_serde")]
     #[serde(bound = "T: Serialize + serde::de::DeserializeOwned + std::hash::Hash + Eq")]
     map: HashMap<T, u32>,
-    next: u32,
+}
+
+impl<T> std::iter::FromIterator<(u32, T)> for Indexed<T>
+where
+    T: std::hash::Hash + Eq,
+{
+    fn from_iter<I: IntoIterator<Item = (u32, T)>>(iter: I) -> Self {
+        Self {
+            map: iter.into_iter().map(|(idx, v)| (v, idx)).collect(),
+        }
+    }
 }
 
 impl<T> PartialEq for Indexed<T>
@@ -582,7 +583,7 @@ where
     T: PartialEq + Eq + std::hash::Hash,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.next == other.next && self.map == other.map
+        self.map == other.map
     }
 }
 impl<T> Eq for Indexed<T> where T: PartialEq + Eq + std::hash::Hash {}
@@ -591,8 +592,6 @@ impl<T> Default for Indexed<T> {
     fn default() -> Self {
         Indexed {
             map: Default::default(),
-            // start at 0
-            next: 0,
         }
     }
 }
@@ -602,26 +601,6 @@ where
     T: Clone,
     T: Eq + std::hash::Hash,
 {
-    pub fn intern<U>(&mut self, value: U) -> u32
-    where
-        T: std::borrow::Borrow<U>,
-        U: std::hash::Hash + Eq,
-        U: Into<T>,
-    {
-        let next = &mut self.next;
-        *self
-            .map
-            .raw_entry_mut()
-            .from_key(&value)
-            .or_insert_with(|| {
-                let idx = *next;
-                // FIXME: search for a deleted entry on wrap?
-                *next = idx.checked_add(1).unwrap();
-                (value.into(), idx)
-            })
-            .1
-    }
-
     pub fn get<U>(&self, value: &U) -> Option<u32>
     where
         T: std::borrow::Borrow<U>,
@@ -736,8 +715,8 @@ impl Lookup for CollectionId {
     type Id = CollectionIdNumber;
     fn lookup(&self, index: &Index) -> Option<Self::Id> {
         Some(match self {
-            CollectionId::Commit(c) => CollectionIdNumber(0, index.commits.get(c)?),
-            CollectionId::Artifact(a) => CollectionIdNumber(1, index.artifacts.get(a.as_str())?),
+            CollectionId::Commit(c) => CollectionIdNumber(index.commits.get(c)?),
+            CollectionId::Artifact(a) => CollectionIdNumber(index.artifacts.get(a.as_str())?),
         })
     }
 }
@@ -745,10 +724,6 @@ impl Lookup for CollectionId {
 impl Index {
     pub async fn load(conn: &mut dyn pool::Connection) -> Index {
         conn.load_index().await
-    }
-
-    pub async fn store(&self, conn: &mut dyn pool::Connection) {
-        conn.store_index(&self).await;
     }
 
     pub fn lookup(&self, path: &DbLabel, cid: &CollectionId) -> Option<(u32, CollectionIdNumber)> {
@@ -831,52 +806,5 @@ impl Index {
             .keys()
             .filter(move |path| path.0 == krate && path.1 == profile && path.2 == cache)
             .map(|path| path.3)
-    }
-
-    pub async fn insert_labeled<T: SeriesType>(
-        &mut self,
-        label: DbLabel,
-        conn: &mut dyn pool::Connection,
-        cid: CollectionIdNumber,
-        point: T,
-    ) {
-        let label_id = self.intern_db_label(&label);
-        point.insert(conn, label_id, cid).await;
-    }
-
-    pub fn intern_db_label(&mut self, label: &DbLabel) -> LabelId {
-        match *label {
-            DbLabel::Errors { krate } => {
-                let id = self.errors.intern(krate);
-                LabelId(0, id)
-            }
-            DbLabel::ProcessStat {
-                krate,
-                profile,
-                cache,
-                stat,
-            } => {
-                let id = self.pstats.intern((krate, profile, cache, stat));
-                LabelId(1, id)
-            }
-            DbLabel::SelfProfileQuery {
-                krate,
-                profile,
-                cache,
-                query,
-            } => {
-                let id = self.queries.intern((krate, profile, cache, query));
-                LabelId(2, id)
-            }
-        }
-    }
-
-    pub fn intern_cid(&mut self, cid: &CollectionId) -> CollectionIdNumber {
-        match cid {
-            CollectionId::Commit(c) => CollectionIdNumber(0, self.commits.intern(*c)),
-            CollectionId::Artifact(aid) => {
-                CollectionIdNumber(1, self.artifacts.intern(aid.clone().into_boxed_str()))
-            }
-        }
     }
 }

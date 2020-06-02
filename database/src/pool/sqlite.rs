@@ -1,5 +1,8 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{CollectionIdNumber, Index, QueryDatum, QueuedCommit};
+use crate::{Commit, Crate, Date, Profile};
+use chrono::{TimeZone, Utc};
+use hashbrown::HashMap;
 use rusqlite::params;
 use rusqlite::OptionalExtension;
 use std::convert::TryFrom;
@@ -64,42 +67,71 @@ impl Sqlite {
 static MIGRATIONS: &[&str] = &[
     "",
     r#"
-    create table interned(name text primary key, value blob);
-    create table errors(series integer, cid integer, value text);
-    create table pstat(series integer, cid integer, value real);
+    create table benchmark(
+        name text primary key,
+        -- Whether this benchmark supports stable
+        stabilized bool not null
+    );
+    create table artifact(
+        id integer primary key not null,
+        name text not null unique,
+        date integer,
+        type text not null
+    );
+    create table collection(
+        id integer primary key not null
+    );
+    create table error_series(
+        id integer primary key not null,
+        crate text not null unique references benchmark(name) on delete cascade on update cascade
+    );
+    create table error(
+        series integer not null references error_series(id) on delete cascade on update cascade,
+        aid integer not null references artifact(id) on delete cascade on update cascade,
+        error text,
+        PRIMARY KEY(series, aid)
+    );
+    create table pstat_series(
+        id integer primary key not null,
+        crate text not null references benchmark(name) on delete cascade on update cascade,
+        profile text not null,
+        cache text not null,
+        statistic text not null,
+        UNIQUE(crate, profile, cache, statistic)
+    );
+    create table pstat(
+        series integer references pstat_series(id) on delete cascade on update cascade,
+        aid integer references artifact(id) on delete cascade on update cascade,
+        cid integer references collection(id) on delete cascade on update cascade,
+        value double not null,
+        PRIMARY KEY(series, aid, cid)
+    );
+    create table self_profile_query_series(
+        id integer primary key not null,
+        crate text not null references benchmark(name) on delete cascade on update cascade,
+        profile text not null,
+        cache text not null,
+        query text not null,
+        UNIQUE(crate, profile, cache, query)
+    );
     create table self_profile_query(
-        series integer,
-        cid integer,
+        series integer references self_profile_query_series(id) on delete cascade on update cascade,
+        aid integer references artifact(id) on delete cascade on update cascade,
+        cid integer references collection(id) on delete cascade on update cascade,
         self_time integer,
         blocked_time integer,
         incremental_load_time integer,
         number_of_cache_hits integer,
-        invocation_count integer
+        invocation_count integer,
+        PRIMARY KEY(series, aid, cid)
     );
     create table pull_request_builds(
-        pr integer not null,
         bors_sha text unique,
+        pr integer not null,
         parent_sha text,
         complete boolean,
-        requested integer -- timestamp
+        requested timestamp without time zone
     );
-    CREATE VIEW commits (id, sha, date) as
-        select
-            key,
-            json_extract(json_each.value, "$.sha") as sha,
-            json_extract(json_each.value, "$.date") as date
-        from interned, json_each(interned.value, "$.map")
-            where interned.name = "commits";
-    CREATE VIEW pstat_series (id, crate, profile, cache, stat) as
-        select
-            key,
-            json_extract(json_each.value, "$[0]") as crate,
-            json_extract(json_each.value, "$[1]") as profile,
-            json_extract(json_each.value, "$[2].variant") ||
-                ifnull("-" || json_extract(json_each.value, "$[2].name"), "") as cache,
-            json_extract(json_each.value, "$[3]") as stat
-        from interned, json_each(interned.value, "$.map")
-            where interned.name = "pstats";
     "#,
 ];
 
@@ -110,6 +142,7 @@ impl ConnectionManager for Sqlite {
         let mut conn = rusqlite::Connection::open(&self.0).unwrap();
         conn.pragma_update(None, "cache_size", &-128000).unwrap();
         conn.pragma_update(None, "journal_mode", &"WAL").unwrap();
+        conn.pragma_update(None, "foreign_keys", &"ON").unwrap();
 
         self.1.call_once(|| {
             let version: i32 = conn
@@ -177,55 +210,90 @@ impl Connection for SqliteConnection {
     }
 
     async fn load_index(&mut self) -> Index {
-        fn load_ty_or_default<T: Default + serde::de::DeserializeOwned>(
-            c: &mut rusqlite::Connection,
-            name: &str,
-        ) -> T {
-            c.query_row(
-                "select value from interned where name = ?",
-                params![name],
-                |row| row.get(0),
-            )
-            .optional()
+        let commits = self.raw().prepare("select id, name, date from artifact where type = 'master' or type = 'try' order by date").unwrap().query_map(params![], |row| {
+                Ok((row.get::<_, i16>(0)? as u32, Commit {
+                    sha: row.get::<_, String>(1)?.as_str().into(),
+                    date: {
+                        let timestamp: Option<i64> = row.get(2)?;
+                        match timestamp {
+                            Some(t) => Date(Utc.timestamp(t, 0)),
+                            None => Date(Utc.ymd(2001, 01, 01).and_hms(0,0,0)),
+                        }
+                    }
+                }))
+            }).unwrap().map(|r| r.unwrap()).collect();
+        let artifacts = self
+            .raw()
+            .prepare("select id, name from artifact where type = 'release'")
             .unwrap()
-            .map(|v: Vec<u8>| serde_json::from_slice(&v).unwrap())
-            .unwrap_or_default()
-        }
-
-        let raw = self.raw();
+            .query_map(params![], |row| {
+                Ok((
+                    row.get::<_, i16>(0)? as u32,
+                    row.get::<_, String>(1)?.into_boxed_str(),
+                ))
+            })
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+        let queries = self
+            .raw()
+            .prepare("select id, crate, profile, cache, query from self_profile_query_series;")
+            .unwrap()
+            .query_map(params![], |row| {
+                Ok((
+                    row.get::<_, i32>(0)? as u32,
+                    (
+                        Crate::from(row.get::<_, String>(1)?.as_str()),
+                        match row.get::<_, String>(2)?.as_str() {
+                            "check" => Profile::Check,
+                            "opt" => Profile::Opt,
+                            "debug" => Profile::Debug,
+                            o => unreachable!("{}: not a profile", o),
+                        },
+                        row.get::<_, String>(3)?.as_str().parse().unwrap(),
+                        row.get::<_, String>(4)?.as_str().into(),
+                    ),
+                ))
+            })
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
         Index {
-            commits: load_ty_or_default(raw, "commits"),
-            artifacts: load_ty_or_default(raw, "artifacts"),
-            errors: load_ty_or_default(raw, "errors"),
-            pstats: load_ty_or_default(raw, "pstats"),
-            queries: load_ty_or_default(raw, "queries"),
+            commits,
+            artifacts,
+            errors: Default::default(),
+            pstats: self
+                .raw()
+                .prepare("select id, crate, profile, cache, statistic from pstat_series;")
+                .unwrap()
+                .query_map(params![], |row| {
+                    Ok((
+                        row.get::<_, i32>(0)? as u32,
+                        (
+                            Crate::from(row.get::<_, String>(1)?.as_str()),
+                            match row.get::<_, String>(2)?.as_str() {
+                                "check" => Profile::Check,
+                                "opt" => Profile::Opt,
+                                "debug" => Profile::Debug,
+                                o => unreachable!("{}: not a profile", o),
+                            },
+                            row.get::<_, String>(3)?.as_str().parse().unwrap(),
+                            row.get::<_, String>(4)?.as_str().into(),
+                        ),
+                    ))
+                })
+                .unwrap()
+                .map(|r| r.unwrap())
+                .collect(),
+            queries,
         }
     }
 
-    async fn store_index(&mut self, index: &Index) {
-        self.raw()
-            .execute(
-                "insert or replace into interned (name, value) VALUES
-                    ('commits', ?),
-                    ('artifacts', ?),
-                    ('errors', ?),
-                    ('pstats', ?),
-                    ('queries', ?)",
-                params![
-                    &serde_json::to_vec(&index.commits).unwrap(),
-                    &serde_json::to_vec(&index.artifacts).unwrap(),
-                    &serde_json::to_vec(&index.errors).unwrap(),
-                    &serde_json::to_vec(&index.pstats).unwrap(),
-                    &serde_json::to_vec(&index.queries).unwrap(),
-                ],
-            )
-            .unwrap();
-    }
     async fn insert_pstat(&self, series: u32, cid: CollectionIdNumber, stat: f64) {
         self.raw_ref()
             .prepare_cached("insert into pstat(series, cid, value) VALUES (?, ?, ?)")
             .unwrap()
-            .execute(params![&series, &cid.pack(), stat])
+            .execute(params![&series, &cid.0, stat])
             .unwrap();
     }
     async fn insert_self_profile_query(
@@ -248,7 +316,7 @@ impl Connection for SqliteConnection {
             .unwrap()
             .execute(params![
                 &series,
-                &cid.pack(),
+                &cid.0,
                 &i64::try_from(data.self_time.as_nanos()).unwrap(),
                 &i64::try_from(data.blocked_time.as_nanos()).unwrap(),
                 &i64::try_from(data.incremental_load_time.as_nanos()).unwrap(),
@@ -258,7 +326,6 @@ impl Connection for SqliteConnection {
             .unwrap();
     }
     async fn insert_error(&self, series: u32, cid: CollectionIdNumber, text: String) {
-        let cid = cid.pack();
         self.raw_ref()
             .prepare_cached(
                 "insert into errors(
@@ -266,7 +333,7 @@ impl Connection for SqliteConnection {
                     ) VALUES (?, ?, ?)",
             )
             .unwrap()
-            .execute(params![&series, &cid, text,])
+            .execute(params![&series, &cid.0, text])
             .unwrap();
     }
     async fn get_pstats(
@@ -274,6 +341,10 @@ impl Connection for SqliteConnection {
         series: &[u32],
         cids: &[Option<CollectionIdNumber>],
     ) -> Vec<Vec<Option<f64>>> {
+        let conn = self.raw_ref();
+        let mut query = conn
+            .prepare_cached("select min(value) from pstat where series = ? and aid = ?;")
+            .unwrap();
         series
             .iter()
             .map(|sid| {
@@ -281,14 +352,8 @@ impl Connection for SqliteConnection {
                     .iter()
                     .map(|cid| {
                         cid.and_then(|cid| {
-                            let cid = cid.pack();
-
-                            self.raw_ref()
-                                .prepare_cached(
-                                    "select min(value) from pstat where series = ? and cid = ?;",
-                                )
-                                .unwrap()
-                                .query_row(params![&sid, &cid], |row| row.get(0))
+                            query
+                                .query_row(params![&sid, &cid.0], |row| row.get(0))
                                 .optional()
                                 .unwrap()
                         })
@@ -307,12 +372,11 @@ impl Connection for SqliteConnection {
         series: u32,
         cid: CollectionIdNumber,
     ) -> Option<QueryDatum> {
-        let cid = cid.pack();
         self.raw_ref().prepare_cached("
                 select self_time, blocked_time, incremental_load_time, number_of_cache_hits, invocation_count
                     from self_profile_query
                     where series = ? and cid = ? order by self_time asc;").unwrap()
-            .query_row(params![&series, &cid], |row| {
+            .query_row(params![&series, &cid.0], |row| {
         let self_time: i64 = row.get(0)?;
         let blocked_time: i64 = row.get(1)?;
         let incremental_load_time: i64 = row.get(2)?;
@@ -328,13 +392,16 @@ impl Connection for SqliteConnection {
             .optional()
             .unwrap()
     }
-    async fn get_error(&self, series: u32, cid: CollectionIdNumber) -> Option<String> {
-        let cid = cid.pack();
+    async fn get_error(&self, cid: crate::CollectionIdNumber) -> HashMap<String, Option<String>> {
         self.raw_ref()
-            .prepare_cached("select value from errors where series = ? and cid = ?;")
+            .prepare_cached(
+                "select crate, error from error_series
+                    left join error on error.series = error_series.id and aid = ?",
+            )
             .unwrap()
-            .query_row(params![&series, &cid], |row| row.get(0))
-            .optional()
+            .query_map(params![&cid.0], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
             .unwrap()
     }
     async fn queue_pr(&self, pr: u32) {

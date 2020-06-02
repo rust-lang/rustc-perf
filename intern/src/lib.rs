@@ -18,6 +18,12 @@ macro_rules! intern {
         #[derive(Serialize, Debug, Copy, Clone)]
         pub struct $for_ty($crate::ArenaStr);
 
+        impl $for_ty {
+            pub fn as_str(&self) -> &'static str {
+                self.0.as_str()
+            }
+        }
+
         impl std::cmp::PartialEq for $for_ty {
             fn eq(&self, other: &Self) -> bool {
                 self.0.hash_ptr() == other.0.hash_ptr()

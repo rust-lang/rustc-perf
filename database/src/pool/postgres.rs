@@ -1,14 +1,13 @@
-use crate::{
-    pool::{Connection, ConnectionManager, ManagedConnection, Transaction},
-    Index, QueuedCommit,
-};
+use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
+use crate::{Commit, Crate, Date, Index, Profile, QueuedCommit};
 use anyhow::Context as _;
+use chrono::{DateTime, TimeZone, Utc};
+use hashbrown::HashMap;
 use native_tls::{Certificate, TlsConnector};
 use postgres_native_tls::MakeTlsConnector;
 use std::convert::TryFrom;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio_postgres::types::Json;
 use tokio_postgres::GenericClient;
 use tokio_postgres::Statement;
 
@@ -78,58 +77,73 @@ async fn make_client(db_url: &str) -> anyhow::Result<tokio_postgres::Client> {
 static MIGRATIONS: &[&str] = &[
     "",
     r#"
-    create table interned(name text primary key, value jsonb);
-    create table errors(series integer, cid integer, value text);
-    create table pstat(series integer, cid integer, value double precision);
+    create table benchmark(
+        name text primary key,
+        -- Whether this benchmark supports stable
+        stabilized bool
+    );
+    create table artifact(
+        id smallint primary key generated always as identity,
+        name text not null unique, -- usually a sha, but also version numbers
+        date timestamptz, -- the date when this rustc was created, not the collection date
+        type text not null
+    );
+    -- This identifies an individual run on the collection server, and is used
+    -- to distinguish between multiple collections of data for the same artifact.
+    create table collection(
+        id integer primary key generated always as identity
+    );
+    create table error_series(
+        id integer primary key generated always as identity,
+        crate text not null references benchmark(name) on delete cascade on update cascade,
+        UNIQUE(crate)
+    );
+    create table error(
+        series integer not null references error_series(id) on delete cascade on update cascade,
+        aid smallint not null references artifact(id) on delete cascade on update cascade,
+        error text,
+        PRIMARY KEY(series, aid)
+    );
+    create table pstat_series(
+        id integer primary key generated always as identity,
+        crate text not null references benchmark(name) on delete cascade on update cascade,
+        profile text not null,
+        cache text not null,
+        statistic text not null,
+        UNIQUE(crate, profile, cache, statistic)
+    );
+    create table pstat(
+        series integer references pstat_series(id) on delete cascade on update cascade,
+        aid smallint references artifact(id) on delete cascade on update cascade,
+        cid integer references collection(id) on delete cascade on update cascade,
+        value double precision not null,
+        PRIMARY KEY(series, aid, cid)
+    );
+    create table self_profile_query_series(
+        id integer primary key generated always as identity,
+        crate text not null references benchmark(name) on delete cascade on update cascade,
+        profile text not null,
+        cache text not null,
+        query text not null,
+        UNIQUE(crate, profile, cache, query)
+    );
     create table self_profile_query(
-        series integer,
-        cid integer,
+        series integer references self_profile_query_series(id) on delete cascade on update cascade,
+        aid smallint references artifact(id) on delete cascade on update cascade,
+        cid integer references collection(id) on delete cascade on update cascade,
         self_time bigint,
         blocked_time bigint,
         incremental_load_time bigint,
         number_of_cache_hits integer,
-        invocation_count integer
+        invocation_count integer,
+        PRIMARY KEY(series, aid, cid)
     );
-    create table pull_request_builds(
+    create table pull_request_build(
         bors_sha text unique,
         pr integer not null,
         parent_sha text,
         complete boolean,
-        requested timestamp without time zone
-    );
-    create view commits (id, sha, date) as (
-        select id::integer, value->>'sha' as sha, (value->>'date')::timestamp as date
-        from jsonb_each((
-            select value->'map' from interned where interned.name = 'commits'
-        )) as commits(id, value)
-    );
-    create view artifacts (id, name) as (
-        select id::integer, value #>> '{}' as name
-        from jsonb_each((
-            select value->'map' from interned where interned.name = 'artifacts'
-        )) as artifacts(id, value)
-    );
-    create view pstat_series (id, crate, profile, cache, stat) as (
-        select
-            id::integer,
-            value->>0 as crate,
-            value->>1 as profile,
-            value->2->>'variant' || coalesce('-' || (value->2->>'name'), '') as cache,
-            value->>3 as stat
-        from jsonb_each((
-            select value->'map' from interned where interned.name = 'pstats'
-        )) as pstats(id, value)
-    );
-    create view self_profile_query_series (id, crate, profile, cache, query) as (
-        select
-            id::integer,
-            value->>0 as crate,
-            value->>1 as profile,
-            value->2->>'variant' || coalesce('-' || (value->2->>'name'), '') as cache,
-            value->>3 as query
-        from jsonb_each((
-            select value->'map' from interned where interned.name = 'queries'
-        )) as spq(id, value)
+        requested timestamptz
     );
     "#,
 ];
@@ -208,6 +222,12 @@ pub struct PostgresTransaction<'a> {
 pub struct PostgresConnection {
     statements: Arc<CachedStatements>,
     conn: tokio_postgres::Client,
+}
+
+impl Into<tokio_postgres::Client> for PostgresConnection {
+    fn into(self) -> tokio_postgres::Client {
+        self.conn
+    }
 }
 
 pub trait PClient {
@@ -298,8 +318,9 @@ impl PostgresConnection {
                     )
                     .await
                     .unwrap(),
-                get_error: conn.prepare("select value from errors where series = $1 and cid = $2;").await.unwrap(),
-                insert_error: conn.prepare("insert into errors(series, cid, value) VALUES ($1, $2, $3)").await.unwrap(),
+                get_error: conn.prepare("select crate, error from error_series
+                    left join error on error.series = error_series.id and aid = $1").await.unwrap(),
+                insert_error: conn.prepare("select 1;").await.unwrap(),
             }),
             conn,
         }
@@ -311,16 +332,7 @@ impl<P> Connection for P
 where
     P: Send + Sync + PClient,
 {
-    async fn maybe_create_indices(&mut self) {
-        self.conn()
-            .execute(
-                "create index if not exists pstat_on_series_cid on pstat(series, cid);",
-                &[],
-            )
-            .await
-            .unwrap();
-        self.conn().execute("create index if not exists self_profile_query_on_series_cid on self_profile_query(series, cid);", &[]).await.unwrap();
-    }
+    async fn maybe_create_indices(&mut self) {}
     async fn transaction(&mut self) -> Box<dyn Transaction + '_> {
         let statements = self.statements().clone();
         let tx = self.conn_mut().transaction().await.unwrap();
@@ -330,53 +342,52 @@ where
         })
     }
     async fn load_index(&mut self) -> Index {
-        async fn get<T: Default + serde::de::DeserializeOwned>(
-            c: &impl GenericClient,
-            name: &str,
-        ) -> T {
-            c.query_opt("select value from interned where name = $1", &[&name])
-                .await
-                .unwrap()
-                .map(|row| row.get(0))
-                .map(|json: Json<T>| json.0)
-                .unwrap_or_default()
-        }
-        let c = self.conn();
-        let (commits, artifacts, errors, pstats, queries) = futures::join!(
-            get(c, "commits"),
-            get(c, "artifacts"),
-            get(c, "errors"),
-            get(c, "pstats"),
-            get(c, "queries"),
-        );
         Index {
-            commits,
-            artifacts,
-            errors,
-            pstats,
-            queries,
+            commits: self.conn().query("select id, name, date from artifact where type = 'master' or type = 'try' order by date", &[]).await.unwrap().into_iter().map(|row| {
+                (row.get::<_, i16>(0) as u32, Commit {
+                    sha: row.get::<_, String>(1).as_str().into(),
+                    date: {
+                        let timestamp: Option<DateTime<Utc>> = row.get(2);
+                        match timestamp {
+                            Some(t) => Date(t),
+                            None => Date(Utc.ymd(2001, 01, 01).and_hms(0,0,0)),
+                        }
+                    }
+                })
+            }).collect(),
+            artifacts: self.conn().query("select id, name from artifact where type = 'release'", &[]).await.unwrap().into_iter().map(|row| {
+                (row.get::<_, i16>(0) as u32, row.get::<_, String>(1).as_str().into())
+            }).collect(),
+            errors: self.conn().query("select id, crate from error_series", &[]).await.unwrap().into_iter().map(|row| {
+                (row.get::<_, i32>(0) as u32, row.get::<_, String>(1).as_str().into())
+            }).collect(),
+            pstats: self.conn().query("select id, crate, profile, cache, statistic from pstat_series;", &[]).await.unwrap().into_iter().map(|row| {
+                (row.get::<_, i32>(0) as u32, (
+                    Crate::from(row.get::<_, String>(1).as_str()),
+                    match row.get::<_, String>(2).as_str() {
+                        "check" => Profile::Check,
+                        "opt" => Profile::Opt,
+                        "debug" => Profile::Debug,
+                        o => unreachable!("{}: not a profile", o),
+                    },
+                    row.get::<_, String>(3).as_str().parse().unwrap(),
+                    row.get::<_, String>(4).as_str().into(),
+                ))
+            }).collect(),
+            queries: self.conn().query("select id, crate, profile, cache, query from self_profile_query_series;", &[]).await.unwrap().into_iter().map(|row| {
+                (row.get::<_, i32>(0) as u32, (
+                    Crate::from(row.get::<_, String>(1).as_str()),
+                    match row.get::<_, String>(2).as_str() {
+                        "check" => Profile::Check,
+                        "opt" => Profile::Opt,
+                        "debug" => Profile::Debug,
+                        o => unreachable!("{}: not a profile", o),
+                    },
+                    row.get::<_, String>(3).as_str().parse().unwrap(),
+                    row.get::<_, String>(4).as_str().into(),
+                ))
+            }).collect(),
         }
-    }
-    async fn store_index(&mut self, index: &Index) {
-        self.conn()
-            .execute(
-                "insert into interned (name, value) VALUES
-                    ('commits', $1),
-                    ('artifacts', $2),
-                    ('errors', $3),
-                    ('pstats', $4),
-                    ('queries', $5)
-                ON CONFLICT (name) DO UPDATE SET value = EXCLUDED.value",
-                &[
-                    &Json(&index.commits),
-                    &Json(&index.artifacts),
-                    &Json(&index.errors),
-                    &Json(&index.pstats),
-                    &Json(&index.queries),
-                ],
-            )
-            .await
-            .unwrap();
     }
     async fn get_pstats(
         &self,
@@ -386,7 +397,7 @@ where
         let series = series.iter().map(|sid| *sid as i32).collect::<Vec<_>>();
         let cids = cids
             .iter()
-            .map(|id| id.map(|id| id.pack() as i32))
+            .map(|id| id.map(|id| id.0 as i32))
             .collect::<Vec<_>>();
         let rows = self
             .conn()
@@ -401,7 +412,7 @@ where
         self.conn()
             .execute(
                 &self.statements().insert_pstat,
-                &[&(series as i32), &(cid.pack() as i32), &stat],
+                &[&(series as i32), &(cid.0 as i32), &stat],
             )
             .await
             .unwrap();
@@ -415,7 +426,7 @@ where
             .conn()
             .query_opt(
                 &self.statements().get_self_profile_query,
-                &[&(series as i32), &(cid.pack() as i32)],
+                &[&(series as i32), &(cid.0 as i32)],
             )
             .await
             .unwrap()?;
@@ -441,7 +452,7 @@ where
                 &self.statements().insert_self_profile_query,
                 &[
                     &(series as i32),
-                    &(cid.pack() as i32),
+                    &(cid.0 as i32),
                     &i64::try_from(data.self_time.as_nanos()).unwrap(),
                     &i64::try_from(data.blocked_time.as_nanos()).unwrap(),
                     &i64::try_from(data.incremental_load_time.as_nanos()).unwrap(),
@@ -452,21 +463,21 @@ where
             .await
             .unwrap();
     }
-    async fn get_error(&self, series: u32, cid: crate::CollectionIdNumber) -> Option<String> {
-        self.conn()
-            .query_opt(
-                &self.statements().get_error,
-                &[&(series as i32), &(cid.pack() as i32)],
-            )
+    async fn get_error(&self, cid: crate::CollectionIdNumber) -> HashMap<String, Option<String>> {
+        let rows = self
+            .conn()
+            .query(&self.statements().get_error, &[&(cid.0 as i16)])
             .await
-            .unwrap()
-            .map(|r| r.get(0))
+            .unwrap();
+        rows.into_iter()
+            .map(|row| (row.get(0), row.get(1)))
+            .collect()
     }
     async fn insert_error(&self, series: u32, cid: crate::CollectionIdNumber, text: String) {
         self.conn()
             .execute(
                 &self.statements().insert_error,
-                &[&(series as i32), &(cid.pack() as i32), &text],
+                &[&(series as i32), &(cid.0 as i32), &text],
             )
             .await
             .unwrap();
@@ -474,7 +485,7 @@ where
     async fn queue_pr(&self, pr: u32) {
         self.conn()
             .execute(
-                "insert into pull_request_builds (pr, requested) VALUES ($1, CURRENT_TIMESTAMP)",
+                "insert into pull_request_build (pr, requested) VALUES ($1, CURRENT_TIMESTAMP)",
                 &[&(pr as i32)],
             )
             .await
@@ -483,7 +494,7 @@ where
     async fn pr_attach_commit(&self, pr: u32, sha: &str, parent_sha: &str) -> bool {
         self.conn()
             .execute(
-                "update pull_request_builds SET bors_sha = $1, parent_sha = $2
+                "update pull_request_build SET bors_sha = $1, parent_sha = $2
                 where pr = $3 and bors_sha is null",
                 &[&sha, &parent_sha, &(pr as i32)],
             )
@@ -495,7 +506,7 @@ where
         let rows = self
             .conn()
             .query(
-                "select pr, bors_sha, parent_sha from pull_request_builds
+                "select pr, bors_sha, parent_sha from pull_request_build
                 where complete is false and bors_sha is not null
                 order by requested asc",
                 &[],
@@ -514,7 +525,7 @@ where
         let row = self
             .conn()
             .query_opt(
-                "update pull_request_builds SET complete = true
+                "update pull_request_build SET complete = true
                 where sha = $1
                 returning pr, bors_sha, parent_sha",
                 &[&sha],
