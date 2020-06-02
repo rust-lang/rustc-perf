@@ -454,21 +454,21 @@ pub enum Label {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum CollectionId {
+pub enum ArtifactId {
     Commit(Commit),
     Artifact(String),
 }
 
-impl fmt::Display for CollectionId {
+impl fmt::Display for ArtifactId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CollectionId::Commit(c) => write!(f, "{} ({})", c.sha, c.date),
-            CollectionId::Artifact(id) => write!(f, "{}", id),
+            ArtifactId::Commit(c) => write!(f, "{} ({})", c.sha, c.date),
+            ArtifactId::Artifact(id) => write!(f, "{}", id),
         }
     }
 }
 
-impl From<Commit> for CollectionId {
+impl From<Commit> for ArtifactId {
     fn from(c: Commit) -> Self {
         Self::Commit(c)
     }
@@ -476,25 +476,20 @@ impl From<Commit> for CollectionId {
 
 #[async_trait::async_trait]
 pub trait SeriesType: Sized {
-    async fn get(conn: &dyn pool::Connection, series: u32, cid: CollectionIdNumber)
-        -> Option<Self>;
-    async fn insert(self, conn: &dyn pool::Connection, label: LabelId, cid: CollectionIdNumber);
+    async fn get(conn: &dyn pool::Connection, series: u32, cid: ArtifactIdNumber) -> Option<Self>;
+    async fn insert(self, conn: &dyn pool::Connection, label: LabelId, cid: ArtifactIdNumber);
 }
 
 #[async_trait::async_trait]
 impl SeriesType for f64 {
-    async fn insert(self, conn: &dyn pool::Connection, label: LabelId, cid: CollectionIdNumber) {
+    async fn insert(self, conn: &dyn pool::Connection, label: LabelId, cid: ArtifactIdNumber) {
         match label.0 {
             1 => conn.insert_pstat(label.1, cid, self).await,
             _ => unreachable!("{}", label.0),
         }
     }
 
-    async fn get(
-        conn: &dyn pool::Connection,
-        series: u32,
-        cid: CollectionIdNumber,
-    ) -> Option<Self> {
+    async fn get(conn: &dyn pool::Connection, series: u32, cid: ArtifactIdNumber) -> Option<Self> {
         conn.get_pstats(&[series], &[Some(cid)]).await[0][0]
     }
 }
@@ -512,23 +507,19 @@ pub struct QueryDatum {
 
 #[async_trait::async_trait]
 impl SeriesType for QueryDatum {
-    async fn insert(self, conn: &dyn pool::Connection, label: LabelId, cid: CollectionIdNumber) {
+    async fn insert(self, conn: &dyn pool::Connection, label: LabelId, cid: ArtifactIdNumber) {
         match label.0 {
             2 => conn.insert_self_profile_query(label.1, cid, self).await,
             _ => unreachable!("{}", label.0),
         }
     }
-    async fn get(
-        conn: &dyn pool::Connection,
-        series: u32,
-        cid: CollectionIdNumber,
-    ) -> Option<Self> {
+    async fn get(conn: &dyn pool::Connection, series: u32, cid: ArtifactIdNumber) -> Option<Self> {
         conn.get_self_profile_query(series, cid).await
     }
 }
 #[async_trait::async_trait]
 impl SeriesType for String {
-    async fn insert(self, conn: &dyn pool::Connection, label: LabelId, cid: CollectionIdNumber) {
+    async fn insert(self, conn: &dyn pool::Connection, label: LabelId, cid: ArtifactIdNumber) {
         match label.0 {
             0 => conn.insert_error(label.1, cid, self).await,
             _ => unreachable!("{}", label.0),
@@ -538,7 +529,7 @@ impl SeriesType for String {
     async fn get(
         _conn: &dyn pool::Connection,
         _series: u32,
-        _cid: CollectionIdNumber,
+        _cid: ArtifactIdNumber,
     ) -> Option<Self> {
         unimplemented!()
     }
@@ -548,7 +539,7 @@ impl SeriesType for String {
 pub struct LabelId(pub u8, pub u32);
 
 #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub struct CollectionIdNumber(pub u32);
+pub struct ArtifactIdNumber(pub u32);
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Index {
@@ -711,12 +702,12 @@ impl Lookup for DbLabel {
     }
 }
 
-impl Lookup for CollectionId {
-    type Id = CollectionIdNumber;
+impl Lookup for ArtifactId {
+    type Id = ArtifactIdNumber;
     fn lookup(&self, index: &Index) -> Option<Self::Id> {
         Some(match self {
-            CollectionId::Commit(c) => CollectionIdNumber(index.commits.get(c)?),
-            CollectionId::Artifact(a) => CollectionIdNumber(index.artifacts.get(a.as_str())?),
+            ArtifactId::Commit(c) => ArtifactIdNumber(index.commits.get(c)?),
+            ArtifactId::Artifact(a) => ArtifactIdNumber(index.artifacts.get(a.as_str())?),
         })
     }
 }
@@ -726,7 +717,7 @@ impl Index {
         conn.load_index().await
     }
 
-    pub fn lookup(&self, path: &DbLabel, cid: &CollectionId) -> Option<(u32, CollectionIdNumber)> {
+    pub fn lookup(&self, path: &DbLabel, cid: &ArtifactId) -> Option<(u32, ArtifactIdNumber)> {
         let cid = cid.lookup(self)?;
         let series = path.lookup(self)?;
         Some((series, cid))
@@ -736,7 +727,7 @@ impl Index {
         &self,
         db: &mut dyn pool::Connection,
         path: &DbLabel,
-        cid: &CollectionId,
+        cid: &ArtifactId,
     ) -> Option<T> {
         let (series, cid) = self.lookup(path, cid)?;
         T::get(db, series, cid).await

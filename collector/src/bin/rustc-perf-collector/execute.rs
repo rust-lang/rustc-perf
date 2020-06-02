@@ -401,7 +401,7 @@ pub struct MeasureProcessor<'a> {
     rt: &'a mut Runtime,
     krate: &'a BenchmarkName,
     conn: &'a mut dyn database::Connection,
-    cid: database::CollectionIdNumber,
+    cid: database::ArtifactIdNumber,
     index: &'a mut database::Index,
     clean_stats: (Stats, Option<SelfProfile>),
     base_incr_stats: (Stats, Option<SelfProfile>),
@@ -417,7 +417,7 @@ impl<'a> MeasureProcessor<'a> {
         conn: &'a mut dyn database::Connection,
         index: &'a mut database::Index,
         krate: &'a BenchmarkName,
-        cid: database::CollectionIdNumber,
+        cid: database::ArtifactIdNumber,
         self_profile: bool,
     ) -> Self {
         // Check we have `perf` available.

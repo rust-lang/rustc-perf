@@ -69,7 +69,7 @@ where
     async fn get_pstats(
         &self,
         series: &[u32],
-        cid: &[Option<crate::CollectionIdNumber>],
+        cid: &[Option<crate::ArtifactIdNumber>],
     ) -> Vec<Vec<Option<f64>>> {
         let (a, b) = join!(
             self.a.get_pstats(series, cid),
@@ -78,7 +78,7 @@ where
         assert_eq!(a, b);
         a
     }
-    async fn insert_pstat(&self, series: u32, cid: crate::CollectionIdNumber, stat: f64) {
+    async fn insert_pstat(&self, series: u32, cid: crate::ArtifactIdNumber, stat: f64) {
         join!(
             self.a.insert_pstat(series, cid, stat),
             self.b.insert_pstat(series, cid, stat)
@@ -87,7 +87,7 @@ where
     async fn get_self_profile_query(
         &self,
         series: u32,
-        cid: crate::CollectionIdNumber,
+        cid: crate::ArtifactIdNumber,
     ) -> Option<crate::QueryDatum> {
         let (a, b) = join!(
             self.a.get_self_profile_query(series, cid),
@@ -99,7 +99,7 @@ where
     async fn insert_self_profile_query(
         &self,
         series: u32,
-        cid: crate::CollectionIdNumber,
+        cid: crate::ArtifactIdNumber,
         data: crate::QueryDatum,
     ) {
         join!(
@@ -107,12 +107,12 @@ where
             self.b.insert_self_profile_query(series, cid, data)
         );
     }
-    async fn get_error(&self, cid: crate::CollectionIdNumber) -> HashMap<String, Option<String>> {
+    async fn get_error(&self, cid: crate::ArtifactIdNumber) -> HashMap<String, Option<String>> {
         let (a, b) = join!(self.a.get_error(cid), self.b.get_error(cid));
         assert_eq!(a, b);
         a
     }
-    async fn insert_error(&self, series: u32, cid: crate::CollectionIdNumber, text: String) {
+    async fn insert_error(&self, series: u32, cid: crate::ArtifactIdNumber, text: String) {
         join!(
             self.a.insert_error(series, cid, text.clone()),
             self.b.insert_error(series, cid, text)
@@ -160,7 +160,7 @@ impl<'a> Connection for BothTransaction<'a> {
     async fn get_pstats(
         &self,
         series: &[u32],
-        cid: &[Option<crate::CollectionIdNumber>],
+        cid: &[Option<crate::ArtifactIdNumber>],
     ) -> Vec<Vec<Option<f64>>> {
         let (a, b) = join!(
             self.a.conn_ref().get_pstats(series, cid),
@@ -169,7 +169,7 @@ impl<'a> Connection for BothTransaction<'a> {
         assert_eq!(a, b);
         a
     }
-    async fn insert_pstat(&self, series: u32, cid: crate::CollectionIdNumber, stat: f64) {
+    async fn insert_pstat(&self, series: u32, cid: crate::ArtifactIdNumber, stat: f64) {
         join!(
             self.a.conn_ref().insert_pstat(series, cid, stat),
             self.b.conn_ref().insert_pstat(series, cid, stat)
@@ -178,7 +178,7 @@ impl<'a> Connection for BothTransaction<'a> {
     async fn get_self_profile_query(
         &self,
         series: u32,
-        cid: crate::CollectionIdNumber,
+        cid: crate::ArtifactIdNumber,
     ) -> Option<crate::QueryDatum> {
         let (a, b) = join!(
             self.a.conn_ref().get_self_profile_query(series, cid),
@@ -190,7 +190,7 @@ impl<'a> Connection for BothTransaction<'a> {
     async fn insert_self_profile_query(
         &self,
         series: u32,
-        cid: crate::CollectionIdNumber,
+        cid: crate::ArtifactIdNumber,
         data: crate::QueryDatum,
     ) {
         join!(
@@ -202,7 +202,7 @@ impl<'a> Connection for BothTransaction<'a> {
                 .insert_self_profile_query(series, cid, data)
         );
     }
-    async fn get_error(&self, cid: crate::CollectionIdNumber) -> HashMap<String, Option<String>> {
+    async fn get_error(&self, cid: crate::ArtifactIdNumber) -> HashMap<String, Option<String>> {
         let (a, b) = join!(
             self.a.conn_ref().get_error(cid),
             self.b.conn_ref().get_error(cid)
@@ -210,7 +210,7 @@ impl<'a> Connection for BothTransaction<'a> {
         assert_eq!(a, b);
         a
     }
-    async fn insert_error(&self, series: u32, cid: crate::CollectionIdNumber, text: String) {
+    async fn insert_error(&self, series: u32, cid: crate::ArtifactIdNumber, text: String) {
         join!(
             self.a.conn_ref().insert_error(series, cid, text.clone()),
             self.b.conn_ref().insert_error(series, cid, text)

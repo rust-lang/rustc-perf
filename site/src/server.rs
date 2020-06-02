@@ -47,7 +47,7 @@ use crate::selector::{self, PathComponent, Tag};
 use collector::api::collected;
 use collector::Sha;
 use collector::StatId;
-use db::{CollectionId, Lookup};
+use db::{ArtifactId, Lookup};
 use parking_lot::RwLock;
 
 static INTERPOLATED_COLOR: &str = "#fcb0f1";
@@ -120,7 +120,7 @@ pub async fn handle_dashboard(data: Arc<InputData>) -> ServerResult<dashboard::R
     let cids = Arc::new(
         versions
             .into_iter()
-            .map(|v| db::CollectionId::Artifact(v.to_string()))
+            .map(|v| db::ArtifactId::Artifact(v.to_string()))
             .chain(std::iter::once(
                 data.index.load().commits().last().unwrap().clone().into(),
             ))
@@ -198,8 +198,8 @@ pub async fn handle_dashboard(data: Arc<InputData>) -> ServerResult<dashboard::R
         versions: cids
             .iter()
             .map(|cid| match cid {
-                db::CollectionId::Commit(c) => format!("master: {}", &c.sha.to_string()[0..8]),
-                db::CollectionId::Artifact(aid) => aid.clone(),
+                db::ArtifactId::Commit(c) => format!("master: {}", &c.sha.to_string()[0..8]),
+                db::ArtifactId::Artifact(aid) => aid.clone(),
             })
             .collect::<Vec<_>>(),
         check: by_profile.check,
@@ -223,7 +223,7 @@ pub async fn handle_status_page(data: Arc<InputData>) -> status::Response {
     let mut benchmark_state = data
         .conn()
         .await
-        .get_error(CollectionId::from(last_commit).lookup(&idx).unwrap())
+        .get_error(ArtifactId::from(last_commit).lookup(&idx).unwrap())
         .await
         .into_iter()
         .map(|(name, error)| {
@@ -298,11 +298,11 @@ impl CommitIdxCache {
 fn to_graph_data<'a>(
     cc: &'a CommitIdxCache,
     is_absolute: bool,
-    points: impl Iterator<Item = ((db::CollectionId, Option<f64>), Interpolated)> + 'a,
+    points: impl Iterator<Item = ((db::ArtifactId, Option<f64>), Interpolated)> + 'a,
 ) -> impl Iterator<Item = graph::GraphData> + 'a {
     let mut first = None;
     points.map(move |((cid, point), interpolated)| {
-        let commit = if let db::CollectionId::Commit(commit) = cid {
+        let commit = if let db::ArtifactId::Commit(commit) = cid {
             commit
         } else {
             unimplemented!()
@@ -500,13 +500,13 @@ impl DateData {
         series: &mut [selector::SeriesResponse<T>],
     ) -> DateData
     where
-        T: Iterator<Item = (db::CollectionId, Option<f64>)>,
+        T: Iterator<Item = (db::ArtifactId, Option<f64>)>,
     {
         let mut data = HashMap::new();
 
         for response in series {
             let (id, point) = response.series.next().expect("must have element");
-            assert_eq!(db::CollectionId::from(commit), id);
+            assert_eq!(db::ArtifactId::from(commit), id);
 
             let point = if let Some(pt) = point {
                 pt

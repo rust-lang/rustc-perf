@@ -392,7 +392,7 @@ where
     async fn get_pstats(
         &self,
         series: &[u32],
-        cids: &[Option<crate::CollectionIdNumber>],
+        cids: &[Option<crate::ArtifactIdNumber>],
     ) -> Vec<Vec<Option<f64>>> {
         let series = series.iter().map(|sid| *sid as i32).collect::<Vec<_>>();
         let cids = cids
@@ -408,7 +408,7 @@ where
             .map(|row| row.get::<_, Vec<Option<f64>>>(0))
             .collect()
     }
-    async fn insert_pstat(&self, series: u32, cid: crate::CollectionIdNumber, stat: f64) {
+    async fn insert_pstat(&self, series: u32, cid: crate::ArtifactIdNumber, stat: f64) {
         self.conn()
             .execute(
                 &self.statements().insert_pstat,
@@ -420,7 +420,7 @@ where
     async fn get_self_profile_query(
         &self,
         series: u32,
-        cid: crate::CollectionIdNumber,
+        cid: crate::ArtifactIdNumber,
     ) -> Option<crate::QueryDatum> {
         let row = self
             .conn()
@@ -444,7 +444,7 @@ where
     async fn insert_self_profile_query(
         &self,
         series: u32,
-        cid: crate::CollectionIdNumber,
+        cid: crate::ArtifactIdNumber,
         data: crate::QueryDatum,
     ) {
         self.conn()
@@ -463,7 +463,7 @@ where
             .await
             .unwrap();
     }
-    async fn get_error(&self, cid: crate::CollectionIdNumber) -> HashMap<String, Option<String>> {
+    async fn get_error(&self, cid: crate::ArtifactIdNumber) -> HashMap<String, Option<String>> {
         let rows = self
             .conn()
             .query(&self.statements().get_error, &[&(cid.0 as i16)])
@@ -473,7 +473,7 @@ where
             .map(|row| (row.get(0), row.get(1)))
             .collect()
     }
-    async fn insert_error(&self, series: u32, cid: crate::CollectionIdNumber, text: String) {
+    async fn insert_error(&self, series: u32, cid: crate::ArtifactIdNumber, text: String) {
         self.conn()
             .execute(
                 &self.statements().insert_error,

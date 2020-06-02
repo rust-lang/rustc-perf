@@ -5,7 +5,7 @@ extern crate clap;
 
 use anyhow::{bail, Context};
 use collector::api::collected;
-use database::{pool::Connection, CollectionId, Commit};
+use database::{pool::Connection, ArtifactId, Commit};
 use log::{debug, error};
 use std::collections::HashSet;
 use std::env;
@@ -172,7 +172,7 @@ fn process_commits(
             bench_commit(
                 rt,
                 conn,
-                &CollectionId::Commit(commit),
+                &ArtifactId::Commit(commit),
                 &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
                 &RunKind::all(),
                 Compiler::from_sysroot(&sysroot),
@@ -205,7 +205,7 @@ fn n_benchmarks_remaining(n: usize) -> String {
 fn bench_commit(
     rt: &mut Runtime,
     mut conn: Box<dyn Connection>,
-    cid: &CollectionId,
+    cid: &ArtifactId,
     build_kinds: &[BuildKind],
     run_kinds: &[RunKind],
     compiler: Compiler<'_>,
@@ -217,7 +217,7 @@ fn bench_commit(
     eprintln!("Benchmarking {} for triple {}", cid, compiler.triple);
 
     if call_home {
-        if let CollectionId::Commit(commit) = cid {
+        if let ArtifactId::Commit(commit) = cid {
             send_home(collected::Request::BenchmarkCommit {
                 commit: commit.clone(),
                 benchmarks: benchmarks.iter().map(|b| b.name.to_string()).collect(),
@@ -237,8 +237,8 @@ fn bench_commit(
     let mut tx = rt.block_on(conn.transaction());
     let mut index = rt.block_on(database::Index::load(tx.conn()));
     let has_collected = match cid {
-        CollectionId::Commit(commit) => index.commits().iter().any(|c| c == commit),
-        CollectionId::Artifact(id) => index.artifacts().any(|a| a == id),
+        ArtifactId::Commit(commit) => index.commits().iter().any(|c| c == commit),
+        ArtifactId::Artifact(id) => index.artifacts().any(|a| a == id),
     };
     if has_collected {
         eprintln!("{} has previously been collected, skipping.", cid);
@@ -279,7 +279,7 @@ fn bench_commit(
         };
 
         if call_home {
-            if let CollectionId::Commit(commit) = cid {
+            if let ArtifactId::Commit(commit) = cid {
                 send_home(collected::Request::BenchmarkDone {
                     benchmark: benchmark.name.to_string(),
                     commit: commit.clone(),
@@ -454,7 +454,7 @@ fn main_result() -> anyhow::Result<i32> {
             bench_commit(
                 &mut rt,
                 conn,
-                &CollectionId::Commit(commit),
+                &ArtifactId::Commit(commit),
                 build_kinds,
                 &run_kinds,
                 Compiler::from_sysroot(&sysroot),
@@ -479,7 +479,7 @@ fn main_result() -> anyhow::Result<i32> {
             bench_commit(
                 &mut rt,
                 conn,
-                &CollectionId::Artifact(id.to_string()),
+                &ArtifactId::Artifact(id.to_string()),
                 &build_kinds,
                 &run_kinds,
                 Compiler {
@@ -519,7 +519,7 @@ fn main_result() -> anyhow::Result<i32> {
             bench_commit(
                 &mut rt,
                 conn,
-                &CollectionId::Artifact(id.to_string()),
+                &ArtifactId::Artifact(id.to_string()),
                 &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
                 &run_kinds,
                 Compiler {
@@ -597,7 +597,7 @@ fn main_result() -> anyhow::Result<i32> {
             bench_commit(
                 &mut rt,
                 conn,
-                &CollectionId::Commit(commit),
+                &ArtifactId::Commit(commit),
                 &[BuildKind::Check], // no Debug or Opt builds
                 &RunKind::all(),
                 Compiler::from_sysroot(&sysroot),

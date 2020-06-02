@@ -1,5 +1,5 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
-use crate::{CollectionIdNumber, Index, QueryDatum, QueuedCommit};
+use crate::{ArtifactIdNumber, Index, QueryDatum, QueuedCommit};
 use crate::{Commit, Crate, Date, Profile};
 use chrono::{TimeZone, Utc};
 use hashbrown::HashMap;
@@ -289,7 +289,7 @@ impl Connection for SqliteConnection {
         }
     }
 
-    async fn insert_pstat(&self, series: u32, cid: CollectionIdNumber, stat: f64) {
+    async fn insert_pstat(&self, series: u32, cid: ArtifactIdNumber, stat: f64) {
         self.raw_ref()
             .prepare_cached("insert into pstat(series, cid, value) VALUES (?, ?, ?)")
             .unwrap()
@@ -299,7 +299,7 @@ impl Connection for SqliteConnection {
     async fn insert_self_profile_query(
         &self,
         series: u32,
-        cid: CollectionIdNumber,
+        cid: ArtifactIdNumber,
         data: QueryDatum,
     ) {
         self.raw_ref()
@@ -325,7 +325,7 @@ impl Connection for SqliteConnection {
             ])
             .unwrap();
     }
-    async fn insert_error(&self, series: u32, cid: CollectionIdNumber, text: String) {
+    async fn insert_error(&self, series: u32, cid: ArtifactIdNumber, text: String) {
         self.raw_ref()
             .prepare_cached(
                 "insert into errors(
@@ -339,7 +339,7 @@ impl Connection for SqliteConnection {
     async fn get_pstats(
         &self,
         series: &[u32],
-        cids: &[Option<CollectionIdNumber>],
+        cids: &[Option<ArtifactIdNumber>],
     ) -> Vec<Vec<Option<f64>>> {
         let conn = self.raw_ref();
         let mut query = conn
@@ -370,7 +370,7 @@ impl Connection for SqliteConnection {
     async fn get_self_profile_query(
         &self,
         series: u32,
-        cid: CollectionIdNumber,
+        cid: ArtifactIdNumber,
     ) -> Option<QueryDatum> {
         self.raw_ref().prepare_cached("
                 select self_time, blocked_time, incremental_load_time, number_of_cache_hits, invocation_count
@@ -392,7 +392,7 @@ impl Connection for SqliteConnection {
             .optional()
             .unwrap()
     }
-    async fn get_error(&self, cid: crate::CollectionIdNumber) -> HashMap<String, Option<String>> {
+    async fn get_error(&self, cid: crate::ArtifactIdNumber) -> HashMap<String, Option<String>> {
         self.raw_ref()
             .prepare_cached(
                 "select crate, error from error_series

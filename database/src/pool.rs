@@ -1,4 +1,4 @@
-use crate::{CollectionIdNumber, Index, QueryDatum, QueuedCommit};
+use crate::{ArtifactIdNumber, Index, QueryDatum, QueuedCommit};
 use hashbrown::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
@@ -17,22 +17,17 @@ pub trait Connection: Send + Sync {
     async fn get_pstats(
         &self,
         series: &[u32],
-        cid: &[Option<CollectionIdNumber>],
+        cid: &[Option<ArtifactIdNumber>],
     ) -> Vec<Vec<Option<f64>>>;
-    async fn insert_pstat(&self, series: u32, cid: CollectionIdNumber, stat: f64);
+    async fn insert_pstat(&self, series: u32, cid: ArtifactIdNumber, stat: f64);
     async fn get_self_profile_query(
         &self,
         series: u32,
-        cid: CollectionIdNumber,
+        cid: ArtifactIdNumber,
     ) -> Option<QueryDatum>;
-    async fn insert_self_profile_query(
-        &self,
-        series: u32,
-        cid: CollectionIdNumber,
-        data: QueryDatum,
-    );
-    async fn get_error(&self, cid: CollectionIdNumber) -> HashMap<String, Option<String>>;
-    async fn insert_error(&self, series: u32, cid: CollectionIdNumber, text: String);
+    async fn insert_self_profile_query(&self, series: u32, cid: ArtifactIdNumber, data: QueryDatum);
+    async fn get_error(&self, cid: ArtifactIdNumber) -> HashMap<String, Option<String>>;
+    async fn insert_error(&self, series: u32, cid: ArtifactIdNumber, text: String);
 
     async fn queue_pr(&self, pr: u32);
     /// Returns true if this PR was queued waiting for a commit

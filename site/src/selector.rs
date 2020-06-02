@@ -22,7 +22,7 @@
 //! requests that all are provided. Note that this is a cartesian product if
 //! there are multiple `None`s.
 
-use crate::db::{Cache, CollectionId, Profile};
+use crate::db::{ArtifactId, Cache, Profile};
 use crate::interpolate::Interpolate;
 use crate::load::InputData as Db;
 use async_trait::async_trait;
@@ -65,19 +65,19 @@ pub fn range_subset(data: Vec<Commit>, range: RangeInclusive<Bound>) -> Vec<Comm
     }
 }
 
-struct CollectionIdIter {
-    s: Arc<Vec<CollectionId>>,
+struct ArtifactIdIter {
+    s: Arc<Vec<ArtifactId>>,
     idx: usize,
 }
 
-impl CollectionIdIter {
-    fn new(cids: Arc<Vec<CollectionId>>) -> CollectionIdIter {
-        CollectionIdIter { s: cids, idx: 0 }
+impl ArtifactIdIter {
+    fn new(cids: Arc<Vec<ArtifactId>>) -> ArtifactIdIter {
+        ArtifactIdIter { s: cids, idx: 0 }
     }
 }
 
-impl Iterator for CollectionIdIter {
-    type Item = CollectionId;
+impl Iterator for ArtifactIdIter {
+    type Item = ArtifactId;
     fn next(&mut self) -> Option<Self::Item> {
         let r = self.s.get(self.idx)?;
         self.idx += 1;
@@ -247,7 +247,7 @@ impl<T> SeriesResponse<T> {
 
 pub trait Series: Sized
 where
-    Self: Iterator<Item = (CollectionId, <Self as Series>::Element)>,
+    Self: Iterator<Item = (ArtifactId, <Self as Series>::Element)>,
 {
     type Element: Sized;
 }
@@ -351,22 +351,16 @@ impl Query {
 pub trait SeriesElement: Sized {
     async fn query<'a>(
         db: &'a Db,
-        collection_ids: Arc<Vec<CollectionId>>,
+        collection_ids: Arc<Vec<ArtifactId>>,
         query: Query,
-    ) -> Result<
-        Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, Self)> + Send + 'a>>>,
-        String,
-    >;
+    ) -> Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (ArtifactId, Self)> + Send + 'a>>>, String>;
 }
 
 fn handle_results<'a, E>(
     results: Vec<
-        Result<
-            Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, E)> + Send + 'a>>>,
-            String,
-        >,
+        Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (ArtifactId, E)> + Send + 'a>>>, String>,
     >,
-) -> Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, E)> + Send + 'a>>>, String> {
+) -> Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (ArtifactId, E)> + Send + 'a>>>, String> {
     let mut ok = None;
     let mut errs = Vec::new();
     for res in results {
@@ -430,12 +424,12 @@ impl QueryData {
 impl SeriesElement for Option<SelfProfileData> {
     async fn query<'a>(
         db: &'a Db,
-        collection_ids: Arc<Vec<CollectionId>>,
+        collection_ids: Arc<Vec<ArtifactId>>,
         query: Query,
     ) -> Result<
         Vec<
             SeriesResponse<
-                Box<dyn Iterator<Item = (CollectionId, Option<SelfProfileData>)> + Send + 'a>,
+                Box<dyn Iterator<Item = (ArtifactId, Option<SelfProfileData>)> + Send + 'a>,
             >,
         >,
         String,
@@ -449,7 +443,7 @@ impl SeriesElement for Option<SelfProfileData> {
                             sr.map(|r| {
                                 Box::new(r)
                                     as Box<
-                                        dyn Iterator<Item = (CollectionId, Option<SelfProfileData>)>
+                                        dyn Iterator<Item = (ArtifactId, Option<SelfProfileData>)>
                                             + Send,
                                     >
                             })
@@ -465,10 +459,10 @@ impl SeriesElement for Option<SelfProfileData> {
 impl SeriesElement for Option<f64> {
     async fn query<'a>(
         db: &'a Db,
-        collection_ids: Arc<Vec<CollectionId>>,
+        collection_ids: Arc<Vec<ArtifactId>>,
         query: Query,
     ) -> Result<
-        Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, Option<f64>)> + Send + 'a>>>,
+        Vec<SeriesResponse<Box<dyn Iterator<Item = (ArtifactId, Option<f64>)> + Send + 'a>>>,
         String,
     > {
         let results = vec![
@@ -479,7 +473,7 @@ impl SeriesElement for Option<f64> {
                         .map(|sr| {
                             sr.map(|r| {
                                 Box::new(r)
-                                    as Box<dyn Iterator<Item = (CollectionId, Option<f64>)> + Send>
+                                    as Box<dyn Iterator<Item = (ArtifactId, Option<f64>)> + Send>
                             })
                         })
                         .collect()
@@ -491,7 +485,7 @@ impl SeriesElement for Option<f64> {
                         .map(|sr| {
                             sr.map(|r| {
                                 Box::new(r)
-                                    as Box<dyn Iterator<Item = (CollectionId, Option<f64>)> + Send>
+                                    as Box<dyn Iterator<Item = (ArtifactId, Option<f64>)> + Send>
                             })
                         })
                         .collect()
@@ -506,8 +500,8 @@ impl Db {
     pub async fn query<'a, E: SeriesElement>(
         &'a self,
         query: Query,
-        collection_ids: Arc<Vec<CollectionId>>,
-    ) -> Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, E)> + Send + 'a>>>, String>
+        collection_ids: Arc<Vec<ArtifactId>>,
+    ) -> Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (ArtifactId, E)> + Send + 'a>>>, String>
     {
         E::query(self, collection_ids, query).await
     }
@@ -519,7 +513,7 @@ pub struct Source<'a> {
 }
 
 pub struct ProcessStatisticSeries {
-    cids: CollectionIdIter,
+    cids: ArtifactIdIter,
     points: std::vec::IntoIter<Option<f64>>,
 }
 
@@ -529,7 +523,7 @@ impl Series for ProcessStatisticSeries {
 
 impl ProcessStatisticSeries {
     async fn expand_query(
-        collection_ids: Arc<Vec<CollectionId>>,
+        collection_ids: Arc<Vec<ArtifactId>>,
         db: &Db,
         mut query: Query,
     ) -> Result<Vec<SeriesResponse<Self>>, String> {
@@ -593,7 +587,7 @@ impl ProcessStatisticSeries {
                 let path = &series[idx];
                 SeriesResponse {
                     series: ProcessStatisticSeries {
-                        cids: CollectionIdIter::new(collection_ids.clone()),
+                        cids: ArtifactIdIter::new(collection_ids.clone()),
                         points: if path.3 == *"cpu-clock" {
                             // Convert to seconds -- perf reports this measurement in
                             // milliseconds
@@ -625,7 +619,7 @@ impl ProcessStatisticSeries {
 }
 
 impl Iterator for ProcessStatisticSeries {
-    type Item = (CollectionId, Option<f64>);
+    type Item = (ArtifactId, Option<f64>);
     fn next(&mut self) -> Option<Self::Item> {
         Some((self.cids.next()?, self.points.next().unwrap()))
     }
@@ -636,13 +630,13 @@ impl Iterator for ProcessStatisticSeries {
 }
 
 pub struct SelfProfile {
-    cids: CollectionIdIter,
+    cids: ArtifactIdIter,
     points: std::vec::IntoIter<Option<SelfProfileData>>,
 }
 
 impl SelfProfile {
     async fn new(
-        cids: Arc<Vec<CollectionId>>,
+        cids: Arc<Vec<ArtifactId>>,
         db: &Db,
         krate: Crate,
         profile: Profile,
@@ -693,14 +687,14 @@ impl SelfProfile {
         tx.finish().await.unwrap();
 
         Self {
-            cids: CollectionIdIter::new(cids),
+            cids: ArtifactIdIter::new(cids),
             points: res.into_iter(),
         }
     }
 }
 
 impl Iterator for SelfProfile {
-    type Item = (CollectionId, Option<SelfProfileData>);
+    type Item = (ArtifactId, Option<SelfProfileData>);
     fn next(&mut self) -> Option<Self::Item> {
         Some((self.cids.next()?, self.points.next().unwrap()))
     }
@@ -716,7 +710,7 @@ impl Series for SelfProfile {
 
 impl SelfProfile {
     async fn expand_query(
-        collection_ids: Arc<Vec<CollectionId>>,
+        collection_ids: Arc<Vec<ArtifactId>>,
         db: &Db,
         mut query: Query,
     ) -> Result<Vec<SeriesResponse<Self>>, String> {
@@ -757,13 +751,13 @@ impl SelfProfile {
 }
 
 pub struct SelfProfileQueryTime {
-    cids: CollectionIdIter,
+    cids: ArtifactIdIter,
     points: std::vec::IntoIter<Option<f64>>,
 }
 
 impl SelfProfileQueryTime {
     async fn new(
-        collection_ids: Arc<Vec<CollectionId>>,
+        collection_ids: Arc<Vec<ArtifactId>>,
         db: &Db,
         krate: Crate,
         profile: Profile,
@@ -789,14 +783,14 @@ impl SelfProfileQueryTime {
         }
         tx.finish().await.unwrap();
         SelfProfileQueryTime {
-            cids: CollectionIdIter::new(collection_ids),
+            cids: ArtifactIdIter::new(collection_ids),
             points: res.into_iter(),
         }
     }
 }
 
 impl Iterator for SelfProfileQueryTime {
-    type Item = (CollectionId, Option<f64>);
+    type Item = (ArtifactId, Option<f64>);
     fn next(&mut self) -> Option<Self::Item> {
         Some((self.cids.next()?, self.points.next().unwrap()))
     }
@@ -812,7 +806,7 @@ impl Series for SelfProfileQueryTime {
 
 impl SelfProfileQueryTime {
     async fn expand_query(
-        collection_ids: Arc<Vec<CollectionId>>,
+        collection_ids: Arc<Vec<ArtifactId>>,
         db: &Db,
         mut query: Query,
     ) -> Result<Vec<SeriesResponse<Self>>, String> {
