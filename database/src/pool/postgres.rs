@@ -217,7 +217,6 @@ pub struct CachedStatements {
     insert_pstat_series: Statement,
     select_pstat_series: Statement,
     get_error: Statement,
-    insert_error: Statement,
     collection_id: Statement,
 }
 
@@ -276,19 +275,19 @@ impl PostgresConnection {
             statements: Arc::new(CachedStatements {
                 get_pstat: conn
                      .prepare("
-                         WITH cids AS (
-                             select cid, num from unnest($2::int[]) with ordinality cids(cid, num)
+                         WITH aids AS (
+                             select aid, num from unnest($2::int[]) with ordinality aids(aid, num)
                          ),
                          sids AS (
                              select sid, idx from unnest($1::int[]) with ordinality sids(sid, idx)
                          )
                          select ARRAY(
                              (
-                                 select min(pstat.value) from cids
+                                 select min(pstat.value) from aids
                                      left outer join pstat
-                                     on (cids.cid = pstat.cid and pstat.series = sids.sid)
-                                     group by cids.num
-                                     order by cids.num
+                                     on (aids.aid = pstat.aid and pstat.series = sids.sid)
+                                     group by aids.num
+                                     order by aids.num
                              )
                          ) from
                          sids
@@ -306,7 +305,7 @@ impl PostgresConnection {
                         "select
                         self_time, blocked_time, incremental_load_time, number_of_cache_hits, invocation_count
                         from self_profile_query
-                        where series = $1 and cid = $2 order by self_time asc;
+                        where series = $1 and aid = $2 order by self_time asc;
                         ",
                     )
                     .await
@@ -328,7 +327,6 @@ impl PostgresConnection {
                     .unwrap(),
                 get_error: conn.prepare("select crate, error from error_series
                     left join error on error.series = error_series.id and aid = $1").await.unwrap(),
-                insert_error: conn.prepare("insert into error (series, aid, error) VALUES ($1, $2, $3)").await.unwrap(),
                 select_self_query_series: conn.prepare("select id from self_profile_query_series where crate = $1 and profile = $2 and cache = $3 and query = $4").await.unwrap(),
                 insert_self_query_series: conn.prepare("insert into self_profile_query_series (crate, profile, cache, query) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING RETURNING id").await.unwrap(),
                 insert_pstat_series: conn.prepare("insert into pstat_series (crate, profile, cache, statistic) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING RETURNING id").await.unwrap(),
@@ -480,9 +478,6 @@ where
             .map(|row| row.get::<_, Vec<Option<f64>>>(0))
             .collect()
     }
-    async fn insert_pstat(&self, _: u32, _: crate::ArtifactIdNumber, _: f64) {
-        unimplemented!()
-    }
     async fn get_self_profile_query(
         &self,
         series: u32,
@@ -507,28 +502,6 @@ where
             invocation_count: row.get::<_, i32>(4) as u32,
         })
     }
-    async fn insert_self_profile_query(
-        &self,
-        series: u32,
-        cid: crate::ArtifactIdNumber,
-        data: crate::QueryDatum,
-    ) {
-        self.conn()
-            .execute(
-                &self.statements().insert_self_profile_query,
-                &[
-                    &(series as i32),
-                    &(cid.0 as i32),
-                    &i64::try_from(data.self_time.as_nanos()).unwrap(),
-                    &i64::try_from(data.blocked_time.as_nanos()).unwrap(),
-                    &i64::try_from(data.incremental_load_time.as_nanos()).unwrap(),
-                    &(data.number_of_cache_hits as i32),
-                    &(data.invocation_count as i32),
-                ],
-            )
-            .await
-            .unwrap();
-    }
     async fn get_error(&self, cid: crate::ArtifactIdNumber) -> HashMap<String, Option<String>> {
         let rows = self
             .conn()
@@ -538,15 +511,6 @@ where
         rows.into_iter()
             .map(|row| (row.get(0), row.get(1)))
             .collect()
-    }
-    async fn insert_error(&self, series: u32, cid: crate::ArtifactIdNumber, text: String) {
-        self.conn()
-            .execute(
-                &self.statements().insert_error,
-                &[&(series as i32), &(cid.0 as i32), &text],
-            )
-            .await
-            .unwrap();
     }
     async fn queue_pr(&self, pr: u32) {
         self.conn()

@@ -477,18 +477,10 @@ impl From<Commit> for ArtifactId {
 #[async_trait::async_trait]
 pub trait SeriesType: Sized {
     async fn get(conn: &dyn pool::Connection, series: u32, cid: ArtifactIdNumber) -> Option<Self>;
-    async fn insert(self, conn: &dyn pool::Connection, label: LabelId, cid: ArtifactIdNumber);
 }
 
 #[async_trait::async_trait]
 impl SeriesType for f64 {
-    async fn insert(self, conn: &dyn pool::Connection, label: LabelId, cid: ArtifactIdNumber) {
-        match label.0 {
-            1 => conn.insert_pstat(label.1, cid, self).await,
-            _ => unreachable!("{}", label.0),
-        }
-    }
-
     async fn get(conn: &dyn pool::Connection, series: u32, cid: ArtifactIdNumber) -> Option<Self> {
         conn.get_pstats(&[series], &[Some(cid)]).await[0][0]
     }
@@ -507,34 +499,10 @@ pub struct QueryDatum {
 
 #[async_trait::async_trait]
 impl SeriesType for QueryDatum {
-    async fn insert(self, conn: &dyn pool::Connection, label: LabelId, cid: ArtifactIdNumber) {
-        match label.0 {
-            2 => conn.insert_self_profile_query(label.1, cid, self).await,
-            _ => unreachable!("{}", label.0),
-        }
-    }
     async fn get(conn: &dyn pool::Connection, series: u32, cid: ArtifactIdNumber) -> Option<Self> {
         conn.get_self_profile_query(series, cid).await
     }
 }
-#[async_trait::async_trait]
-impl SeriesType for String {
-    async fn insert(self, conn: &dyn pool::Connection, label: LabelId, cid: ArtifactIdNumber) {
-        match label.0 {
-            0 => conn.insert_error(label.1, cid, self).await,
-            _ => unreachable!("{}", label.0),
-        }
-    }
-
-    async fn get(
-        _conn: &dyn pool::Connection,
-        _series: u32,
-        _cid: ArtifactIdNumber,
-    ) -> Option<Self> {
-        unimplemented!()
-    }
-}
-
 #[derive(Hash, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct LabelId(pub u8, pub u32);
 

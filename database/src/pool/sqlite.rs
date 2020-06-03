@@ -196,8 +196,8 @@ impl SqliteConnection {
 impl Connection for SqliteConnection {
     async fn maybe_create_indices(&mut self) {
         self.raw().execute_batch("
-            create index if not exists pstat_on_series_cid on pstat(series, cid);
-            create index if not exists self_profile_query_on_series_cid on self_profile_query(series, cid);
+            create index if not exists pstat_on_series_aid on pstat(series, aid);
+            create index if not exists self_profile_query_on_series_aid on self_profile_query(series, aid);
         ").unwrap();
     }
 
@@ -312,53 +312,6 @@ impl Connection for SqliteConnection {
         }
     }
 
-    async fn insert_pstat(&self, series: u32, cid: ArtifactIdNumber, stat: f64) {
-        self.raw_ref()
-            .prepare_cached("insert into pstat(series, cid, value) VALUES (?, ?, ?)")
-            .unwrap()
-            .execute(params![&series, &cid.0, stat])
-            .unwrap();
-    }
-    async fn insert_self_profile_query(
-        &self,
-        series: u32,
-        cid: ArtifactIdNumber,
-        data: QueryDatum,
-    ) {
-        self.raw_ref()
-            .prepare_cached(
-                "insert into self_profile_query(
-                        series, cid,
-                        self_time,
-                        blocked_time,
-                        incremental_load_time,
-                        number_of_cache_hits,
-                        invocation_count
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            )
-            .unwrap()
-            .execute(params![
-                &series,
-                &cid.0,
-                &i64::try_from(data.self_time.as_nanos()).unwrap(),
-                &i64::try_from(data.blocked_time.as_nanos()).unwrap(),
-                &i64::try_from(data.incremental_load_time.as_nanos()).unwrap(),
-                data.number_of_cache_hits,
-                data.invocation_count,
-            ])
-            .unwrap();
-    }
-    async fn insert_error(&self, series: u32, cid: ArtifactIdNumber, text: String) {
-        self.raw_ref()
-            .prepare_cached(
-                "insert into errors(
-                        series, cid, value
-                    ) VALUES (?, ?, ?)",
-            )
-            .unwrap()
-            .execute(params![&series, &cid.0, text])
-            .unwrap();
-    }
     async fn get_pstats(
         &self,
         series: &[u32],
