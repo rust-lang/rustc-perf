@@ -1,4 +1,5 @@
-use crate::{ArtifactIdNumber, Index, QueryDatum, QueuedCommit};
+use crate::{ArtifactId, ArtifactIdNumber};
+use crate::{Cache, CollectionId, Index, Profile, QueryDatum, QueuedCommit};
 use hashbrown::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
@@ -13,6 +14,31 @@ pub trait Connection: Send + Sync {
     async fn transaction(&mut self) -> Box<dyn Transaction + '_>;
 
     async fn load_index(&mut self) -> Index;
+
+    async fn collection_id(&self) -> CollectionId;
+    async fn artifact_id(&self, artifact: &ArtifactId) -> ArtifactIdNumber;
+    async fn record_benchmark(&self, krate: &str, supports_stable: bool);
+    async fn record_statistic(
+        &self,
+        collection: CollectionId,
+        artifact: ArtifactIdNumber,
+        krate: &str,
+        profile: Profile,
+        cache: Cache,
+        statistic: &str,
+        value: f64,
+    );
+    async fn record_self_profile_query(
+        &self,
+        collection: CollectionId,
+        artifact: ArtifactIdNumber,
+        krate: &str,
+        profile: Profile,
+        cache: Cache,
+        query: &str,
+        qd: QueryDatum,
+    );
+    async fn record_error(&self, artifact: ArtifactIdNumber, krate: &str, error: &str);
 
     async fn get_pstats(
         &self,

@@ -30,6 +30,7 @@ rustc-artifacts = "0.2"
 parking_lot = "0.10"
 database = { path = "../database" }
 intern = { path = "../intern" }
+futures = "0.3.5"
 
 [dependencies.rustup]
 git = "https://github.com/rust-lang/rustup.git"

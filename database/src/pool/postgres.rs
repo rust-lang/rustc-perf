@@ -1,5 +1,7 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
-use crate::{Commit, Crate, Date, Index, Profile, QueuedCommit};
+use crate::{
+    ArtifactIdNumber, Cache, CollectionId, Commit, Crate, Date, Index, Profile, QueuedCommit,
+};
 use anyhow::Context as _;
 use chrono::{DateTime, TimeZone, Utc};
 use hashbrown::HashMap;
@@ -210,8 +212,13 @@ pub struct CachedStatements {
     insert_pstat: Statement,
     get_self_profile_query: Statement,
     insert_self_profile_query: Statement,
+    select_self_query_series: Statement,
+    insert_self_query_series: Statement,
+    insert_pstat_series: Statement,
+    select_pstat_series: Statement,
     get_error: Statement,
     insert_error: Statement,
+    collection_id: Statement,
 }
 
 pub struct PostgresTransaction<'a> {
@@ -291,7 +298,7 @@ impl PostgresConnection {
                     .await
                     .unwrap(),
                 insert_pstat: conn
-                    .prepare("insert into pstat(series, cid, value) VALUES ($1, $2, $3)")
+                    .prepare("insert into pstat (series, aid, cid, value) VALUES ($1, $2, $3, $4)")
                     .await
                     .unwrap(),
                 get_self_profile_query: conn
@@ -308,19 +315,25 @@ impl PostgresConnection {
                     .prepare(
                         "insert into self_profile_query(
                             series,
+                            aid,
                             cid,
                             self_time,
                             blocked_time,
                             incremental_load_time,
                             number_of_cache_hits,
                             invocation_count
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
                     )
                     .await
                     .unwrap(),
                 get_error: conn.prepare("select crate, error from error_series
                     left join error on error.series = error_series.id and aid = $1").await.unwrap(),
-                insert_error: conn.prepare("select 1;").await.unwrap(),
+                insert_error: conn.prepare("insert into error (series, aid, error) VALUES ($1, $2, $3)").await.unwrap(),
+                select_self_query_series: conn.prepare("select id from self_profile_query_series where crate = $1 and profile = $2 and cache = $3 and query = $4").await.unwrap(),
+                insert_self_query_series: conn.prepare("insert into self_profile_query_series (crate, profile, cache, query) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING RETURNING id").await.unwrap(),
+                insert_pstat_series: conn.prepare("insert into pstat_series (crate, profile, cache, statistic) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING RETURNING id").await.unwrap(),
+                select_pstat_series: conn.prepare("select id from pstat_series where crate = $1 and profile = $2 and cache = $3 and statistic = $4").await.unwrap(),
+                collection_id: conn.prepare("insert into collection DEFAULT VALUES returning id").await.unwrap(),
             }),
             conn,
         }
@@ -343,50 +356,109 @@ where
     }
     async fn load_index(&mut self) -> Index {
         Index {
-            commits: self.conn().query("select id, name, date from artifact where type = 'master' or type = 'try' order by date", &[]).await.unwrap().into_iter().map(|row| {
-                (row.get::<_, i16>(0) as u32, Commit {
-                    sha: row.get::<_, String>(1).as_str().into(),
-                    date: {
-                        let timestamp: Option<DateTime<Utc>> = row.get(2);
-                        match timestamp {
-                            Some(t) => Date(t),
-                            None => Date(Utc.ymd(2001, 01, 01).and_hms(0,0,0)),
-                        }
-                    }
+            commits: self
+                .conn()
+                .query(
+                    "select id, name, date from artifact where type = 'master' or type = 'try'",
+                    &[],
+                )
+                .await
+                .unwrap()
+                .into_iter()
+                .map(|row| {
+                    (
+                        row.get::<_, i16>(0) as u32,
+                        Commit {
+                            sha: row.get::<_, String>(1).as_str().into(),
+                            date: {
+                                let timestamp: Option<DateTime<Utc>> = row.get(2);
+                                match timestamp {
+                                    Some(t) => Date(t),
+                                    None => Date(Utc.ymd(2001, 01, 01).and_hms(0, 0, 0)),
+                                }
+                            },
+                        },
+                    )
                 })
-            }).collect(),
-            artifacts: self.conn().query("select id, name from artifact where type = 'release'", &[]).await.unwrap().into_iter().map(|row| {
-                (row.get::<_, i16>(0) as u32, row.get::<_, String>(1).as_str().into())
-            }).collect(),
-            errors: self.conn().query("select id, crate from error_series", &[]).await.unwrap().into_iter().map(|row| {
-                (row.get::<_, i32>(0) as u32, row.get::<_, String>(1).as_str().into())
-            }).collect(),
-            pstats: self.conn().query("select id, crate, profile, cache, statistic from pstat_series;", &[]).await.unwrap().into_iter().map(|row| {
-                (row.get::<_, i32>(0) as u32, (
-                    Crate::from(row.get::<_, String>(1).as_str()),
-                    match row.get::<_, String>(2).as_str() {
-                        "check" => Profile::Check,
-                        "opt" => Profile::Opt,
-                        "debug" => Profile::Debug,
-                        o => unreachable!("{}: not a profile", o),
-                    },
-                    row.get::<_, String>(3).as_str().parse().unwrap(),
-                    row.get::<_, String>(4).as_str().into(),
-                ))
-            }).collect(),
-            queries: self.conn().query("select id, crate, profile, cache, query from self_profile_query_series;", &[]).await.unwrap().into_iter().map(|row| {
-                (row.get::<_, i32>(0) as u32, (
-                    Crate::from(row.get::<_, String>(1).as_str()),
-                    match row.get::<_, String>(2).as_str() {
-                        "check" => Profile::Check,
-                        "opt" => Profile::Opt,
-                        "debug" => Profile::Debug,
-                        o => unreachable!("{}: not a profile", o),
-                    },
-                    row.get::<_, String>(3).as_str().parse().unwrap(),
-                    row.get::<_, String>(4).as_str().into(),
-                ))
-            }).collect(),
+                .collect(),
+            artifacts: self
+                .conn()
+                .query("select id, name from artifact where type = 'release'", &[])
+                .await
+                .unwrap()
+                .into_iter()
+                .map(|row| {
+                    (
+                        row.get::<_, i16>(0) as u32,
+                        row.get::<_, String>(1).as_str().into(),
+                    )
+                })
+                .collect(),
+            errors: self
+                .conn()
+                .query("select id, crate from error_series", &[])
+                .await
+                .unwrap()
+                .into_iter()
+                .map(|row| {
+                    (
+                        row.get::<_, i32>(0) as u32,
+                        row.get::<_, String>(1).as_str().into(),
+                    )
+                })
+                .collect(),
+            pstats: self
+                .conn()
+                .query(
+                    "select id, crate, profile, cache, statistic from pstat_series;",
+                    &[],
+                )
+                .await
+                .unwrap()
+                .into_iter()
+                .map(|row| {
+                    (
+                        row.get::<_, i32>(0) as u32,
+                        (
+                            Crate::from(row.get::<_, String>(1).as_str()),
+                            match row.get::<_, String>(2).as_str() {
+                                "check" => Profile::Check,
+                                "opt" => Profile::Opt,
+                                "debug" => Profile::Debug,
+                                o => unreachable!("{}: not a profile", o),
+                            },
+                            row.get::<_, String>(3).as_str().parse().unwrap(),
+                            row.get::<_, String>(4).as_str().into(),
+                        ),
+                    )
+                })
+                .collect(),
+            queries: self
+                .conn()
+                .query(
+                    "select id, crate, profile, cache, query from self_profile_query_series;",
+                    &[],
+                )
+                .await
+                .unwrap()
+                .into_iter()
+                .map(|row| {
+                    (
+                        row.get::<_, i32>(0) as u32,
+                        (
+                            Crate::from(row.get::<_, String>(1).as_str()),
+                            match row.get::<_, String>(2).as_str() {
+                                "check" => Profile::Check,
+                                "opt" => Profile::Opt,
+                                "debug" => Profile::Debug,
+                                o => unreachable!("{}: not a profile", o),
+                            },
+                            row.get::<_, String>(3).as_str().parse().unwrap(),
+                            row.get::<_, String>(4).as_str().into(),
+                        ),
+                    )
+                })
+                .collect(),
         }
     }
     async fn get_pstats(
@@ -408,14 +480,8 @@ where
             .map(|row| row.get::<_, Vec<Option<f64>>>(0))
             .collect()
     }
-    async fn insert_pstat(&self, series: u32, cid: crate::ArtifactIdNumber, stat: f64) {
-        self.conn()
-            .execute(
-                &self.statements().insert_pstat,
-                &[&(series as i32), &(cid.0 as i32), &stat],
-            )
-            .await
-            .unwrap();
+    async fn insert_pstat(&self, _: u32, _: crate::ArtifactIdNumber, _: f64) {
+        unimplemented!()
     }
     async fn get_self_profile_query(
         &self,
@@ -537,5 +603,176 @@ where
             sha: row.get(1),
             parent_sha: row.get(2),
         })
+    }
+    async fn collection_id(&self) -> CollectionId {
+        CollectionId(
+            self.conn()
+                .query_one(&self.statements().collection_id, &[])
+                .await
+                .unwrap()
+                .get(0),
+        )
+    }
+
+    async fn record_statistic(
+        &self,
+        collection: CollectionId,
+        artifact: ArtifactIdNumber,
+        krate: &str,
+        profile: Profile,
+        cache: Cache,
+        statistic: &str,
+        value: f64,
+    ) {
+        let profile = profile.to_string();
+        let cache = cache.to_string();
+        let sid = self
+            .conn()
+            .query_opt(
+                &self.statements().insert_pstat_series,
+                &[&krate, &profile, &cache, &statistic],
+            )
+            .await
+            .unwrap();
+        let sid: i32 = match sid {
+            Some(id) => id.get(0),
+            None => self
+                .conn()
+                .query_one(
+                    &self.statements().select_pstat_series,
+                    &[&krate, &profile, &cache, &statistic],
+                )
+                .await
+                .unwrap()
+                .get(0),
+        };
+        self.conn()
+            .execute(
+                &self.statements().insert_pstat,
+                &[&sid, &(artifact.0 as i16), &(collection.0 as i32), &value],
+            )
+            .await
+            .unwrap();
+    }
+
+    async fn artifact_id(&self, artifact: &crate::ArtifactId) -> ArtifactIdNumber {
+        let (name, date, ty) = match artifact {
+            crate::ArtifactId::Commit(commit) => (
+                commit.sha.to_string(),
+                if commit.is_try() {
+                    None
+                } else {
+                    Some(commit.date.0)
+                },
+                if commit.is_try() { "try" } else { "master" },
+            ),
+            crate::ArtifactId::Artifact(a) => (a.clone(), None, "release"),
+        };
+
+        let aid = self.conn()
+            .query_opt("insert into artifact (name, date, type) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING RETURNING id", &[
+                &name,
+                &date,
+                &ty,
+            ])
+            .await
+            .unwrap();
+        if let Some(row) = aid {
+            return ArtifactIdNumber(row.get::<_, i16>(0) as u32);
+        }
+        ArtifactIdNumber(
+            self.conn()
+                .query_one("select id from artifact where name = $1", &[&name])
+                .await
+                .unwrap()
+                .get::<_, i16>(0) as u32,
+        )
+    }
+
+    async fn record_self_profile_query(
+        &self,
+        collection: CollectionId,
+        artifact: ArtifactIdNumber,
+        krate: &str,
+        profile: Profile,
+        cache: Cache,
+        query: &str,
+        qd: crate::QueryDatum,
+    ) {
+        let profile = profile.to_string();
+        let cache = cache.to_string();
+        let sid = self
+            .conn()
+            .query_opt(
+                &self.statements().insert_self_query_series,
+                &[&krate, &profile, &cache, &query],
+            )
+            .await
+            .unwrap();
+        let sid: i32 = match sid {
+            Some(id) => id.get(0),
+            None => self
+                .conn()
+                .query_one(
+                    &self.statements().select_self_query_series,
+                    &[&krate, &profile, &cache, &query],
+                )
+                .await
+                .unwrap()
+                .get(0),
+        };
+        self.conn()
+            .execute(
+                &self.statements().insert_self_profile_query,
+                &[
+                    &(sid as i32),
+                    &(artifact.0 as i16),
+                    &(collection.0 as i32),
+                    &i64::try_from(qd.self_time.as_nanos()).unwrap(),
+                    &i64::try_from(qd.blocked_time.as_nanos()).unwrap(),
+                    &i64::try_from(qd.incremental_load_time.as_nanos()).unwrap(),
+                    &(qd.number_of_cache_hits as i32),
+                    &(qd.invocation_count as i32),
+                ],
+            )
+            .await
+            .unwrap();
+    }
+
+    async fn record_error(&self, artifact: ArtifactIdNumber, krate: &str, error: &str) {
+        let sid = self
+            .conn()
+            .query_opt(
+                "insert into error_series (crate) VALUES ($1) ON CONFLICT DO NOTHING RETURNING id",
+                &[&krate],
+            )
+            .await
+            .unwrap();
+        let sid: i32 = match sid {
+            Some(id) => id.get(0),
+            None => self
+                .conn()
+                .query_one("select id from error_series where crate = $1", &[&krate])
+                .await
+                .unwrap()
+                .get(0),
+        };
+        self.conn()
+            .execute(
+                "insert into error (series, aid, error) VALUES ($1, $2, $3)",
+                &[&sid, &(artifact.0 as i16), &error],
+            )
+            .await
+            .unwrap();
+    }
+    async fn record_benchmark(&self, krate: &str, supports_stable: bool) {
+        self.conn()
+            .execute(
+                "insert into benchmark (name, stabilized) VALUES ($1, $2)
+                ON CONFLICT (name) DO UPDATE SET stabilized = EXCLUDED.stabilized",
+                &[&krate, &supports_stable],
+            )
+            .await
+            .unwrap();
     }
 }

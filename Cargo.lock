@@ -379,6 +379,7 @@ dependencies = [
  "crossbeam-channel",
  "database",
  "env_logger",
+ "futures",
  "hashbrown",
  "intern",
  "lazy_static",

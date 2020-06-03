@@ -1,6 +1,6 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{ArtifactIdNumber, Index, QueryDatum, QueuedCommit};
-use crate::{Commit, Crate, Date, Profile};
+use crate::{CollectionId, Commit, Crate, Date, Profile};
 use chrono::{TimeZone, Utc};
 use hashbrown::HashMap;
 use rusqlite::params;
@@ -210,18 +210,28 @@ impl Connection for SqliteConnection {
     }
 
     async fn load_index(&mut self) -> Index {
-        let commits = self.raw().prepare("select id, name, date from artifact where type = 'master' or type = 'try' order by date").unwrap().query_map(params![], |row| {
-                Ok((row.get::<_, i16>(0)? as u32, Commit {
-                    sha: row.get::<_, String>(1)?.as_str().into(),
-                    date: {
-                        let timestamp: Option<i64> = row.get(2)?;
-                        match timestamp {
-                            Some(t) => Date(Utc.timestamp(t, 0)),
-                            None => Date(Utc.ymd(2001, 01, 01).and_hms(0,0,0)),
-                        }
-                    }
-                }))
-            }).unwrap().map(|r| r.unwrap()).collect();
+        let commits = self
+            .raw()
+            .prepare("select id, name, date from artifact where type = 'master' or type = 'try'")
+            .unwrap()
+            .query_map(params![], |row| {
+                Ok((
+                    row.get::<_, i16>(0)? as u32,
+                    Commit {
+                        sha: row.get::<_, String>(1)?.as_str().into(),
+                        date: {
+                            let timestamp: Option<i64> = row.get(2)?;
+                            match timestamp {
+                                Some(t) => Date(Utc.timestamp(t, 0)),
+                                None => Date(Utc.ymd(2001, 01, 01).and_hms(0, 0, 0)),
+                            }
+                        },
+                    },
+                ))
+            })
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
         let artifacts = self
             .raw()
             .prepare("select id, name from artifact where type = 'release'")
@@ -258,10 +268,23 @@ impl Connection for SqliteConnection {
             .unwrap()
             .map(|r| r.unwrap())
             .collect();
+        let errors = self
+            .raw()
+            .prepare("select id, crate from error_series")
+            .unwrap()
+            .query_map(params![], |row| {
+                Ok((
+                    row.get::<_, i32>(0)? as u32,
+                    row.get::<_, String>(1)?.as_str().into(),
+                ))
+            })
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
         Index {
             commits,
             artifacts,
-            errors: Default::default(),
+            errors,
             pstats: self
                 .raw()
                 .prepare("select id, crate, profile, cache, statistic from pstat_series;")
@@ -469,5 +492,162 @@ impl Connection for SqliteConnection {
             )
             .optional()
             .unwrap()
+    }
+    async fn collection_id(&self) -> CollectionId {
+        let raw = self.raw_ref();
+        raw.execute("insert into collection default values", params![])
+            .unwrap();
+        CollectionId(
+            raw.query_row(
+                "select id from collection where rowid = last_insert_rowid()",
+                params![],
+                |r| r.get(0),
+            )
+            .unwrap(),
+        )
+    }
+
+    async fn record_statistic(
+        &self,
+        collection: CollectionId,
+        artifact: ArtifactIdNumber,
+        krate: &str,
+        profile: Profile,
+        cache: crate::Cache,
+        statistic: &str,
+        value: f64,
+    ) {
+        let profile = profile.to_string();
+        let cache = cache.to_string();
+        self.raw_ref().execute("insert or ignore into pstat_series (crate, profile, cache, statistic) VALUES (?, ?, ?, ?)", params![
+            &krate,
+            &profile,
+            &cache,
+            &statistic,
+        ]).unwrap();
+        let sid: i32 = self.raw_ref().query_row("select id from pstat_series where crate = ? and profile = ? and cache = ? and statistic = ?", params![
+            &krate,
+            &profile,
+            &cache,
+            &statistic,
+        ], |r| r.get(0)).unwrap();
+        self.raw_ref()
+            .execute(
+                "insert into pstat (series, aid, cid, value) VALUES (?, ?, ?, ?)",
+                params![&sid, &artifact.0, &collection.0, &value],
+            )
+            .unwrap();
+    }
+
+    async fn artifact_id(&self, artifact: &crate::ArtifactId) -> ArtifactIdNumber {
+        let (name, date, ty) = match artifact {
+            crate::ArtifactId::Commit(commit) => (
+                commit.sha.to_string(),
+                if commit.is_try() {
+                    None
+                } else {
+                    Some(commit.date.0)
+                },
+                if commit.is_try() { "try" } else { "master" },
+            ),
+            crate::ArtifactId::Artifact(a) => (a.clone(), None, "release"),
+        };
+
+        self.raw_ref()
+            .execute(
+                "insert or ignore into artifact (name, date, type) VALUES (?, ?, ?)",
+                params![&name, &date.map(|d| d.timestamp()), &ty,],
+            )
+            .unwrap();
+        ArtifactIdNumber(
+            self.raw_ref()
+                .query_row(
+                    "select id from artifact where name = $1",
+                    params![&name],
+                    |r| r.get::<_, i16>(0),
+                )
+                .unwrap() as u32,
+        )
+    }
+
+    async fn record_self_profile_query(
+        &self,
+        collection: CollectionId,
+        artifact: ArtifactIdNumber,
+        krate: &str,
+        profile: Profile,
+        cache: crate::Cache,
+        query: &str,
+        qd: QueryDatum,
+    ) {
+        let profile = profile.to_string();
+        let cache = cache.to_string();
+        self.raw_ref().execute("insert or ignore into self_profile_query_series (crate, profile, cache, query) VALUES (?, ?, ?, ?)", params![
+            &krate,
+            &profile,
+            &cache,
+            &query,
+        ]).unwrap();
+        let sid: i32 = self.raw_ref().query_row("select id from self_profile_query_series where crate = ? and profile = ? and cache = ? and query = ?", params![
+            &krate,
+            &profile,
+            &cache,
+            &query,
+        ], |r| r.get(0)).unwrap();
+        self.raw_ref()
+            .prepare_cached(
+                "insert into self_profile_query(
+                    series,
+                    aid,
+                    cid,
+                    self_time,
+                    blocked_time,
+                    incremental_load_time,
+                    number_of_cache_hits,
+                    invocation_count
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            )
+            .unwrap()
+            .execute(params![
+                &sid,
+                &artifact.0,
+                &collection.0,
+                &i64::try_from(qd.self_time.as_nanos()).unwrap(),
+                &i64::try_from(qd.blocked_time.as_nanos()).unwrap(),
+                &i64::try_from(qd.incremental_load_time.as_nanos()).unwrap(),
+                qd.number_of_cache_hits,
+                qd.invocation_count,
+            ])
+            .unwrap();
+    }
+    async fn record_error(&self, artifact: ArtifactIdNumber, krate: &str, error: &str) {
+        self.raw_ref()
+            .execute(
+                "insert or ignore into error_series (crate) VALUES (?)",
+                params![&krate,],
+            )
+            .unwrap();
+        let sid: i32 = self
+            .raw_ref()
+            .query_row(
+                "select id from error_series where crate = ?",
+                params![&krate,],
+                |r| r.get(0),
+            )
+            .unwrap();
+        self.raw_ref()
+            .execute(
+                "insert into error (series, aid, error) VALUES (?, ?, ?)",
+                params![&sid, &artifact.0, &error],
+            )
+            .unwrap();
+    }
+    async fn record_benchmark(&self, krate: &str, supports_stable: bool) {
+        self.raw_ref()
+            .execute(
+                "insert or replace into benchmark (name, stabilized) VALUES (?, ?)",
+                params![krate, supports_stable],
+            )
+            .unwrap();
     }
 }

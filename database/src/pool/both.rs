@@ -2,7 +2,7 @@ use crate::pool::postgres::PostgresConnection;
 use crate::pool::sqlite::SqliteConnection;
 use crate::{
     pool::{Connection, ManagedConnection},
-    Index, QueuedCommit,
+    CollectionId, Index, QueuedCommit,
 };
 use futures::join;
 use hashbrown::HashMap;
@@ -139,6 +139,76 @@ where
         assert_eq!(a, b);
         a
     }
+    async fn collection_id(&self) -> CollectionId {
+        let (a, b) = join!(self.a.collection_id(), self.b.collection_id());
+        assert_eq!(a, b);
+        a
+    }
+    async fn record_statistic(
+        &self,
+        collection: CollectionId,
+        artifact: crate::ArtifactIdNumber,
+        krate: &str,
+        profile: crate::Profile,
+        cache: crate::Cache,
+        statistic: &str,
+        value: f64,
+    ) {
+        join!(
+            self.a
+                .record_statistic(collection, artifact, krate, profile, cache, statistic, value),
+            self.b
+                .record_statistic(collection, artifact, krate, profile, cache, statistic, value)
+        );
+    }
+    async fn artifact_id(&self, artifact: &crate::ArtifactId) -> crate::ArtifactIdNumber {
+        let (a, b) = join!(self.a.artifact_id(artifact), self.b.artifact_id(artifact));
+        assert_eq!(a, b);
+        a
+    }
+    async fn record_self_profile_query(
+        &self,
+        collection: CollectionId,
+        artifact: crate::ArtifactIdNumber,
+        krate: &str,
+        profile: crate::Profile,
+        cache: crate::Cache,
+        query: &str,
+        qd: crate::QueryDatum,
+    ) {
+        join!(
+            self.a.record_self_profile_query(
+                collection,
+                artifact,
+                krate,
+                profile,
+                cache,
+                query,
+                qd.clone()
+            ),
+            self.b.record_self_profile_query(
+                collection,
+                artifact,
+                krate,
+                profile,
+                cache,
+                query,
+                qd.clone()
+            )
+        );
+    }
+    async fn record_error(&self, artifact: crate::ArtifactIdNumber, krate: &str, error: &str) {
+        join!(
+            self.a.record_error(artifact, krate, error),
+            self.b.record_error(artifact, krate, error)
+        );
+    }
+    async fn record_benchmark(&self, krate: &str, supports_stable: bool) {
+        join!(
+            self.a.record_benchmark(krate, supports_stable),
+            self.b.record_benchmark(krate, supports_stable)
+        );
+    }
 }
 
 #[async_trait::async_trait]
@@ -154,6 +224,11 @@ impl<'a> Connection for BothTransaction<'a> {
     }
     async fn load_index(&mut self) -> Index {
         let (a, b) = join!(self.a.conn().load_index(), self.b.conn().load_index());
+        for (a, b) in a.commits().iter().zip(b.commits().iter()) {
+            assert_eq!(a, b);
+        }
+        assert_eq!(a.commits.map.len(), b.commits.map.len());
+        assert_eq!(a.commits.map, b.commits.map);
         assert!(a == b);
         a
     }
@@ -245,5 +320,83 @@ impl<'a> Connection for BothTransaction<'a> {
         );
         assert_eq!(a, b);
         a
+    }
+    async fn collection_id(&self) -> CollectionId {
+        let (a, b) = join!(
+            self.a.conn_ref().collection_id(),
+            self.b.conn_ref().collection_id()
+        );
+        assert_eq!(a, b);
+        a
+    }
+    async fn record_statistic(
+        &self,
+        collection: CollectionId,
+        artifact: crate::ArtifactIdNumber,
+        krate: &str,
+        profile: crate::Profile,
+        cache: crate::Cache,
+        statistic: &str,
+        value: f64,
+    ) {
+        join!(
+            self.a
+                .conn_ref()
+                .record_statistic(collection, artifact, krate, profile, cache, statistic, value),
+            self.b
+                .conn_ref()
+                .record_statistic(collection, artifact, krate, profile, cache, statistic, value)
+        );
+    }
+    async fn artifact_id(&self, artifact: &crate::ArtifactId) -> crate::ArtifactIdNumber {
+        let (a, b) = join!(
+            self.a.conn_ref().artifact_id(artifact),
+            self.b.conn_ref().artifact_id(artifact)
+        );
+        assert_eq!(a, b);
+        a
+    }
+    async fn record_self_profile_query(
+        &self,
+        collection: CollectionId,
+        artifact: crate::ArtifactIdNumber,
+        krate: &str,
+        profile: crate::Profile,
+        cache: crate::Cache,
+        query: &str,
+        qd: crate::QueryDatum,
+    ) {
+        join!(
+            self.a.conn_ref().record_self_profile_query(
+                collection,
+                artifact,
+                krate,
+                profile,
+                cache,
+                query,
+                qd.clone()
+            ),
+            self.b.conn_ref().record_self_profile_query(
+                collection,
+                artifact,
+                krate,
+                profile,
+                cache,
+                query,
+                qd.clone()
+            )
+        );
+    }
+    async fn record_error(&self, artifact: crate::ArtifactIdNumber, krate: &str, error: &str) {
+        join!(
+            self.a.conn_ref().record_error(artifact, krate, error),
+            self.b.conn_ref().record_error(artifact, krate, error)
+        );
+    }
+    async fn record_benchmark(&self, krate: &str, supports_stable: bool) {
+        join!(
+            self.a.conn_ref().record_benchmark(krate, supports_stable),
+            self.b.conn_ref().record_benchmark(krate, supports_stable)
+        );
     }
 }

@@ -235,7 +235,7 @@ fn bench_commit(
     }
 
     let mut tx = rt.block_on(conn.transaction());
-    let mut index = rt.block_on(database::Index::load(tx.conn()));
+    let index = rt.block_on(database::Index::load(tx.conn()));
     let has_collected = match cid {
         ArtifactId::Commit(commit) => index.commits().iter().any(|c| c == commit),
         ArtifactId::Artifact(id) => index.artifacts().any(|a| a == id),
@@ -248,9 +248,13 @@ fn bench_commit(
         );
         return;
     }
-    let interned_cid = index.intern_cid(&cid);
+    let interned_cid = rt.block_on(tx.conn().artifact_id(&cid));
 
     for (nth_benchmark, benchmark) in benchmarks.iter().enumerate() {
+        rt.block_on(
+            tx.conn()
+                .record_benchmark(benchmark.name.0.as_str(), benchmark.supports_stable()),
+        );
         eprintln!(
             "{}",
             n_benchmarks_remaining(benchmarks.len() - nth_benchmark)
@@ -259,7 +263,6 @@ fn bench_commit(
         let mut processor = execute::MeasureProcessor::new(
             rt,
             tx.conn(),
-            &mut index,
             &benchmark.name,
             interned_cid,
             self_profile,
@@ -268,13 +271,10 @@ fn bench_commit(
             benchmark.measure(&mut processor, build_kinds, run_kinds, compiler, iterations);
         if let Err(s) = result {
             eprintln!("Failed to benchmark {}, recorded: {}", benchmark.name, s);
-            rt.block_on(index.insert_labeled(
-                database::DbLabel::Errors {
-                    krate: benchmark.name.to_string().as_str().into(),
-                },
-                tx.conn(),
+            rt.block_on(tx.conn().record_error(
                 interned_cid,
-                format!("{:?}", s),
+                benchmark.name.0.as_str(),
+                &format!("{:?}", s),
             ));
         };
 
@@ -288,11 +288,8 @@ fn bench_commit(
         }
     }
 
-    rt.block_on(async move {
-        index.store(tx.conn()).await;
-        // Publish results now that we've finished fully with this commit.
-        tx.commit().await.unwrap();
-    });
+    // Publish results now that we've finished fully with this commit.
+    rt.block_on(tx.commit()).unwrap();
 
     rt.block_on(async move {
         // This ensures that we're good to go with the just updated data.

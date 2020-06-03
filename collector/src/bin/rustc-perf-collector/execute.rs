@@ -16,6 +16,8 @@ use collector::command_output;
 use anyhow::{bail, Context};
 
 use crate::{BuildKind, Compiler, RunKind};
+use futures::stream::FuturesUnordered;
+use futures::stream::StreamExt;
 use tokio::runtime::Runtime;
 
 fn touch_all(path: &Path) -> anyhow::Result<()> {
@@ -393,7 +395,7 @@ pub trait Processor {
     }
 
     /// Called when all the runs of a benchmark for a particular `BuildKind`
-    /// have been completed. Can be used to process/reset accumulated state.
+    /// and iteration have been completed. Can be used to process/reset accumulated state.
     fn finish_build_kind(&mut self, _build_kind: BuildKind) {}
 }
 
@@ -402,7 +404,6 @@ pub struct MeasureProcessor<'a> {
     krate: &'a BenchmarkName,
     conn: &'a mut dyn database::Connection,
     cid: database::ArtifactIdNumber,
-    index: &'a mut database::Index,
     clean_stats: (Stats, Option<SelfProfile>),
     base_incr_stats: (Stats, Option<SelfProfile>),
     clean_incr_stats: (Stats, Option<SelfProfile>),
@@ -415,7 +416,6 @@ impl<'a> MeasureProcessor<'a> {
     pub fn new(
         rt: &'a mut Runtime,
         conn: &'a mut dyn database::Connection,
-        index: &'a mut database::Index,
         krate: &'a BenchmarkName,
         cid: database::ArtifactIdNumber,
         self_profile: bool,
@@ -429,7 +429,6 @@ impl<'a> MeasureProcessor<'a> {
             conn,
             krate,
             cid,
-            index,
             clean_stats: (Stats::new(), None),
             base_incr_stats: (Stats::new(), None),
             clean_incr_stats: (Stats::new(), None),
@@ -446,36 +445,37 @@ impl<'a> MeasureProcessor<'a> {
         build_kind: BuildKind,
         stats: (Stats, Option<SelfProfile>),
     ) {
+        let collection = self.rt.block_on(self.conn.collection_id());
         let profile = match build_kind {
             BuildKind::Check => database::Profile::Check,
             BuildKind::Debug => database::Profile::Debug,
             BuildKind::Opt => database::Profile::Opt,
         };
+        let mut buf = FuturesUnordered::new();
         for (stat, value) in stats.0.iter() {
-            let label = database::DbLabel::ProcessStat {
-                krate: self.krate.to_string().as_str().into(),
+            buf.push(self.conn.record_statistic(
+                collection,
+                self.cid,
+                self.krate.0.as_str(),
                 profile,
                 cache,
-                stat: stat.as_pstat(),
-            };
-            self.rt.block_on(
-                self.index
-                    .insert_labeled(label, &mut *self.conn, self.cid, value),
-            );
+                stat.as_str(),
+                value,
+            ));
         }
 
         if let Some(sp) = &stats.1 {
+            let conn = &*self.conn;
+            let cid = self.cid;
+            let krate = self.krate.0.as_str();
             for qd in &sp.query_data {
-                let label = database::DbLabel::SelfProfileQuery {
-                    krate: self.krate.to_string().as_str().into(),
+                buf.push(conn.record_self_profile_query(
+                    collection,
+                    cid,
+                    krate,
                     profile,
                     cache,
-                    query: qd.label,
-                };
-                self.rt.block_on(self.index.insert_labeled(
-                    label,
-                    &mut *self.conn,
-                    self.cid,
+                    qd.label.as_str(),
                     database::QueryDatum {
                         self_time: qd.self_time,
                         blocked_time: qd.blocked_time,
@@ -486,6 +486,8 @@ impl<'a> MeasureProcessor<'a> {
                 ));
             }
         }
+        self.rt
+            .block_on(async move { while let Some(()) = buf.next().await {} });
     }
 }
 
@@ -1025,9 +1027,9 @@ impl Benchmark {
                             .run_rustc()?;
                     }
                 }
-            }
 
-            processor.finish_build_kind(build_kind);
+                processor.finish_build_kind(build_kind);
+            }
         }
 
         Ok(())

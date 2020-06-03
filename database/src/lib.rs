@@ -799,3 +799,6 @@ impl Index {
             .map(|path| path.3)
     }
 }
+
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub struct CollectionId(i32);

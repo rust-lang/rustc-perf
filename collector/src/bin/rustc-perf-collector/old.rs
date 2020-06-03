@@ -202,11 +202,7 @@ impl StatId {
         })
     }
 
-    pub fn as_pstat(self) -> database::ProcessStatistic {
-        database::ProcessStatistic::from(self.as_str())
-    }
-
-    fn as_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             StatId::CpuClock => "cpu-clock",
             StatId::CpuClockUser => "cpu-clock:u",
