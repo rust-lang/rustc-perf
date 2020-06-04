@@ -42,10 +42,11 @@ request a run on the benchmark server for a specific PR.
 First, create a PR with the changes.
 
 After that, you need try privileges, or the assistance of someone with try
-privileges. Ping `simulacrum` on IRC as a starting point.
+privileges. Ask in #t-compiler/help on [Zulip](rust-lang.zulipchat.com) and/or
+ping `@simulacrum` as a starting point.
 
 There are two ways for that person to do a benchmark run.
-- The easier way: they must enter `@bors try @rust-timer queue` as a comment in
+- The easier way: they enter `@bors try @rust-timer queue` as a comment in
   the PR. This queues a try build and a benchmarking run. Several hours later,
   the results will be available at the given URL.
 - The harder way: they must first enter `@bors try` to trigger a try build. Once
@@ -62,12 +63,15 @@ marked with a '?' in the `compare` page.
 
 To benchmark a local build:
 ```
-./target/release/collector --output-repo $OUTPUT_DIR \
+./target/release/collector --db $DATABASE \
     bench_local --rustc $RUSTC --cargo $CARGO $ID
 ```
 
-`$OUTPUT_DIR` is a path (relative or absolute) to a directory, in which the
-timing data will be placed. It will be created if it does not already exist.
+`$DATABASE` is a path (relative or absolute) to a sqlite database file, in which
+the timing data will be placed. It will be created if it does not already exist.
+Alternatively, the collector supports postgres as a backend and the URL can be
+specified (beginning with `postgres://`), but this is unlikely to be useful for
+local collection.
 
 `$RUSTC` is a path (relative or absolute) to a rustc executable. Some
 benchmarks use procedural macros, which require a stage 2 compiler. Therefore,
@@ -76,10 +80,13 @@ the value is likely to be something like
 `$RUSTC_REPO` is a path (relative or absolute) to a rustc repository.
 
 `$CARGO` is a path (relative or absolute) to a Cargo executable. Using an
-installed Cargo is fine, e.g. ``--cargo `which cargo` ``.
+installed Cargo is fine, e.g. ``--cargo `which cargo` ``, though you should
+prefer a nightly cargo -- and note that things may not closely match production
+measurements as Cargo sometimes begins passing (or stops passing) various flags
+to rustc.
 
-`$ID` is an identifier, which will be used in the output file name and
-contents.
+`$ID` is an identifier which will be used to identify the results in the
+collected data.
 
 The full benchmark suite takes some time to run: tens of minutes or more,
 depending on the speed of your machine. Progress output is printed to stderr.
@@ -97,9 +104,6 @@ command.
   substring of the name of the benchmark(s) you wish to run.
 - `--exclude $STR` is the inverse of `--filter`. `$STR` is a substring of the
   name of the benchmark(s) you wish to skip.
-- `--sync-git` can be passed to make the collector sync with the remote
-  repository before and after committing. This is usually not useful for
-  individual Rust compiler developers.
 
 The following options, if present, must appear after `bench_local` in the
 command.
@@ -120,73 +124,45 @@ second that contains a branch of your changes. To compare the two versions, do
 something like this:
 
 ```
-./target/release/collector --output-repo sep03 \
+./target/release/collector --db timings.db \
     bench_local --rustc $RUST_TIP --cargo `which cargo` Orig
 
-./target/release/collector --output-repo sep03 \
+./target/release/collector --db timings.db \
     bench_local --rustc $RUST_MODIFIED --cargo `which cargo` Modified
 ```
 
 where `$RUST_TIP` and `$RUST_MODIFIED` are paths (relative or absolute) to the
-relevant rustc executables. The `--output-repo` argument must be the same in
+relevant rustc executables. The `--db` argument must be the same in
 each invocation.
 
 ### How to view the measurements on your own machine
 
 Once the benchmarks have been run, start the website:
 ```
-./target/release/site $OUTPUT_DIR
+./target/release/site $DATABASE
 ```
 and visit `localhost:2346/compare.html` in a web browser.
 
-The first time you do this the rustc repository is cloned, so it will take a
-minute or two (or more if you have a slow internet connection) before the web
-server starts; wait for the "Starting server with port=2346" message on
-`stdout`.
+Wait for the "Loading complete" message; it should come within a couple dozen
+seconds (or faster, depending on how much data you've collected).
 
-Subsequent times you do this the rustc repository is updated, so it will take a
-few seconds before the web server starts.
-
-Note that all benchmark data processing happens when the website is started. If
-additional benchmark runs subsequently occur you must restart the website to
-see the data from those runs; reloading the website in the browser isn't
-enough.
+If you've collected new data, you can run `curl -X POST
+localhost:2346/perf/onpush` to update the site's view of the data, or just
+restart the server.
 
 ### Technical details of the benchmark server
 
 We download the artifacts (rustc, rust-std, cargo) produced by CI and properly
 unarchive them into the correct directories to allow cargo and rustc to
 function. Currently only `x86_64-unknown-linux-gnu` is supported, but the
-system should trivially expand to other platforms (e.g., Windows), though
-generation and downloading of artifacts becomes necessary at that point.
+system should expand to other platforms (e.g., Windows) with some work.
 
-`perf` is used to gather most of the data.
+The Linux `perf` tool is used to gather most of the data.
 
-Benchmarking will only work for commits that have builds on
-`s3://rust-lang-ci/rustc-builds`: these merged after `rust-lang/rust#38748`
-(bors sha: `927c55d86b0be44337f37cf5b0a76fb8ba86e06c`). Additionally, try
-builds can also be tested, but the process is currently manual.
-
-### Benchmark server operations
-
-This section is probably only useful for those with access to the benchmark
-server.
-
-The following command will benchmark and push results for a given commit
-(including a try auto commit).
-```bash
-cd code/rustc-perf
-echo '$COMMIT_HASH' >> try
-```
-
-To benchmark builds from a rustc repository:
-```
-./target/release/collector --output-repo $RUSTC_TIMING process
-```
-
-`$RUSTC_TIMING` is a path (relative or absolute) to a clone of the
-`https://github.com/rust-lang/rustc-timing` repository, in which the
-output data will be placed and committed.
+Benchmarking will only work for commits that have been built on rust-lang/rust
+repository in the last ~168 days, including try commits. Local benchmarking is
+of course theoretically possible for any commit, though some of the benchmarks
+may require recent compilers to build without patching.
 
 ## Profiling
 

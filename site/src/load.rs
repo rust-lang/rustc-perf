@@ -106,14 +106,12 @@ impl InputData {
         if Path::new(db).join("times").exists() {
             eprintln!("It looks like you're running the site off of the old data format");
             eprintln!(
-                "Please run the ingestion script pointing at a different directory, like so:"
+                "Please utilize the ingest-json script to convert the data into the new database format."
             );
+            eprintln!("This is intended to be a one-time operation; you can delete the JSON fiels once it is complete.");
             eprintln!(
-                "    find rustc-timing/times/ -type f | xargs ./target/release/ingest perf-rlo.db"
+                "    find rustc-timing/times/ -type f | xargs ./target/release/ingest perf-rlo.db finished-files/"
             );
-            eprintln!();
-            eprintln!("You can run the ingestion script repeatedly over all the files,");
-            eprintln!("or you can run it on just some newly collected data.");
             std::process::exit(1);
         }
 
