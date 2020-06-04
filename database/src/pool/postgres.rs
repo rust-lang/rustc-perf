@@ -556,7 +556,7 @@ where
             .conn()
             .query_opt(
                 "update pull_request_build SET complete = true
-                where sha = $1
+                where bors_sha = $1
                 returning pr, bors_sha, parent_sha",
                 &[&sha],
             )
