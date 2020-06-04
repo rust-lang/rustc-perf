@@ -221,23 +221,22 @@ pub async fn post_finished(data: &InputData) {
 
         // This commit has been benchmarked.
 
-        assert_eq!(
-            conn.mark_complete(&commit.sha).await.as_ref(),
-            Some(&commit)
-        );
+        if let Some(completed) = conn.mark_complete(&commit.sha).await {
+            assert_eq!(completed, commit);
 
-        let comparison_url = format!(
-            "https://perf.rust-lang.org/compare.html?start={}&end={}",
-            commit.parent_sha, commit.sha
-        );
-        post_comment(
-            &data.config,
-            commit.pr,
-            format!(
-                "Finished benchmarking try commit ({}): [comparison url]({}).",
-                commit.sha, comparison_url
-            ),
-        )
-        .await;
+            let comparison_url = format!(
+                "https://perf.rust-lang.org/compare.html?start={}&end={}",
+                commit.parent_sha, commit.sha
+            );
+            post_comment(
+                &data.config,
+                commit.pr,
+                format!(
+                    "Finished benchmarking try commit ({}): [comparison url]({}).",
+                    commit.sha, comparison_url
+                ),
+            )
+            .await;
+        }
     }
 }
