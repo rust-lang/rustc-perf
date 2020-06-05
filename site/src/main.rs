@@ -11,7 +11,7 @@ use env_logger;
 
 use futures::future::FutureExt;
 use parking_lot::RwLock;
-use site::{load, util};
+use site::load;
 use std::env;
 use std::sync::Arc;
 
@@ -25,13 +25,30 @@ async fn main() {
 
     let data: Arc<RwLock<Option<Arc<load::InputData>>>> = Arc::new(RwLock::new(None));
     let data_ = data.clone();
-    let path = util::get_repo_path().unwrap_or_else(|e| {
-        eprintln!("{:?}", e);
+    let db_url = env::var("DATABASE_URL").ok().or_else(|| {
+        env::args().nth(1)
+    }).unwrap_or_else(|| {
+        eprintln!("Either $DATABASE_URL or first argument must be a filepath to sqlite database or postgres:// URL");
         std::process::exit(1);
     });
     let fut = tokio::task::spawn_blocking(move || {
-        let res = Some(Arc::new(load::InputData::from_fs(&path).unwrap()));
-        *data_.write() = res;
+        tokio::task::spawn(async move {
+            let res = Arc::new(load::InputData::from_fs(&db_url).await.unwrap());
+            *data_.write() = Some(res.clone());
+            let commits = res.index.load().commits().len();
+            let artifacts = res.index.load().artifacts().count();
+            if commits + artifacts == 0 {
+                eprintln!("Loading complete but no data identified; exiting.");
+                std::process::exit(1);
+            }
+            eprintln!(
+                "Loading complete; {} commits and {} artifacts.",
+                commits, artifacts,
+            );
+            // Spawn off a task to post the results of any commit results that we
+            // are now aware of.
+            site::github::post_finished(&res).await;
+        })
     })
     .fuse();
     let port = env::var("PORT")
@@ -55,8 +72,6 @@ async fn main() {
                     if let Ok(panic) = e.try_into_panic() {
                         std::panic::resume_unwind(panic);
                     }
-                } else {
-                    eprintln!("Loading complete.");
                 }
             }
         }

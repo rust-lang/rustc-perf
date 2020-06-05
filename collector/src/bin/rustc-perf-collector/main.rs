@@ -4,12 +4,9 @@
 extern crate clap;
 
 use anyhow::{bail, Context};
-use chrono::{Timelike, Utc};
 use collector::api::collected;
-use collector::git::get_commit_or_fake_it;
-use collector::{ArtifactData, Commit, CommitData, Date, Sha};
+use database::{pool::Connection, ArtifactId, Commit};
 use log::{debug, error};
-use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::env;
 use std::fs;
@@ -19,14 +16,14 @@ use std::process;
 use std::process::Command;
 use std::str;
 use std::sync::Arc;
+use tokio::runtime::Runtime;
 
 mod background_worker;
 mod execute;
-mod outrepo;
+mod old;
 mod sysroot;
 
 use background_worker::send_home;
-use collector::Benchmark as CollectedBenchmark;
 use execute::{Benchmark, Profiler};
 use sysroot::Sysroot;
 
@@ -147,7 +144,8 @@ where
 }
 
 fn process_commits(
-    out_repo: outrepo::Repo,
+    rt: &mut Runtime,
+    pool: &database::Pool,
     benchmarks: &[Benchmark],
     self_profile: bool,
 ) -> anyhow::Result<()> {
@@ -170,9 +168,11 @@ fn process_commits(
     let commit = get_commit_or_fake_it(&commit)?;
     match Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu") {
         Ok(sysroot) => {
-            let result = out_repo.success(&bench_commit(
-                Some(&out_repo),
-                &commit,
+            let conn = rt.block_on(pool.connection());
+            bench_commit(
+                rt,
+                conn,
+                &ArtifactId::Commit(commit),
                 &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
                 &RunKind::all(),
                 Compiler::from_sysroot(&sysroot),
@@ -180,10 +180,7 @@ fn process_commits(
                 3,
                 true,
                 self_profile,
-            ));
-            if let Err(err) = result {
-                panic!("failed to record success: {:?}", err);
-            }
+            );
         }
         Err(err) => {
             error!("failed to install sysroot for {:?}: {:?}", commit, err);
@@ -200,65 +197,15 @@ fn process_commits(
     Ok(())
 }
 
-fn bench_published(
-    id: &str,
-    repo: outrepo::Repo,
-    mut benchmarks: Vec<Benchmark>,
-) -> anyhow::Result<()> {
-    let commit = Commit {
-        sha: Sha::from("<none>"),
-        date: Date::ymd_hms(2010, 01, 01, 0, 0, 0),
-    };
-    let cfg = rustup::Cfg::from_env(Arc::new(|_| {})).map_err(|e| anyhow::anyhow!("{:?}", e))?;
-    let toolchain = rustup::Toolchain::from(&cfg, id)
-        .map_err(|e| anyhow::anyhow!("{:?}", e))
-        .with_context(|| format!("creating toolchain for id: {}", id))?;
-    toolchain
-        .install_from_dist_if_not_installed()
-        .map_err(|e| anyhow::anyhow!("{:?}", e))?;
-
-    // Remove benchmarks that don't work with a stable compiler.
-    benchmarks.retain(|b| b.supports_stable());
-
-    let run_kinds = if collector::version_supports_incremental(id) {
-        RunKind::all()
-    } else {
-        RunKind::all_non_incr()
-    };
-    let CommitData {
-        benchmarks: benchmark_data,
-        ..
-    } = bench_commit(
-        None,
-        &commit,
-        &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
-        &run_kinds,
-        Compiler {
-            rustc: &toolchain.binary_file("rustc"),
-            cargo: &toolchain.binary_file("cargo"),
-            is_nightly: false,
-            triple: "x86_64-unknown-linux-gnu",
-        },
-        &benchmarks,
-        3,
-        false,
-        false,
-    );
-    repo.success_artifact(&ArtifactData {
-        id: id.to_string(),
-        benchmarks: benchmark_data,
-    })?;
-    Ok(())
-}
-
 fn n_benchmarks_remaining(n: usize) -> String {
     let suffix = if n == 1 { "" } else { "s" };
     format!("{} benchmark{} remaining", n, suffix)
 }
 
 fn bench_commit(
-    repo: Option<&outrepo::Repo>,
-    commit: &Commit,
+    rt: &mut Runtime,
+    mut conn: Box<dyn Connection>,
+    cid: &ArtifactId,
     build_kinds: &[BuildKind],
     run_kinds: &[RunKind],
     compiler: Compiler<'_>,
@@ -266,32 +213,15 @@ fn bench_commit(
     iterations: usize,
     call_home: bool,
     self_profile: bool,
-) -> CommitData {
-    eprintln!(
-        "Benchmarking commit {} ({}) for triple {}",
-        commit.sha, commit.date, compiler.triple
-    );
+) {
+    eprintln!("Benchmarking {} for triple {}", cid, compiler.triple);
 
     if call_home {
-        send_home(collected::Request::BenchmarkCommit {
-            commit: commit.clone(),
-            benchmarks: benchmarks.iter().map(|b| b.name).collect(),
-        });
-    }
-    let existing_data = repo.and_then(|r| r.load_commit_data(&commit, &compiler.triple).ok());
-
-    let mut results = BTreeMap::new();
-    if let Some(ref data) = existing_data {
-        for benchmark in benchmarks {
-            if let Some(result) = data.benchmarks.get(&benchmark.name) {
-                if call_home {
-                    send_home(collected::Request::BenchmarkDone {
-                        benchmark: benchmark.name.clone(),
-                        commit: commit.clone(),
-                    });
-                }
-                results.insert(benchmark.name.clone(), result.clone());
-            }
+        if let ArtifactId::Commit(commit) = cid {
+            send_home(collected::Request::BenchmarkCommit {
+                commit: commit.clone(),
+                benchmarks: benchmarks.iter().map(|b| b.name.to_string()).collect(),
+            });
         }
     }
 
@@ -304,44 +234,67 @@ fn bench_commit(
         );
     }
 
-    for benchmark in benchmarks {
-        if results.contains_key(&benchmark.name) {
-            continue;
-        }
+    let mut tx = rt.block_on(conn.transaction());
+    let index = rt.block_on(database::Index::load(tx.conn()));
+    let has_collected = match cid {
+        ArtifactId::Commit(commit) => index.commits().iter().any(|c| c == commit),
+        ArtifactId::Artifact(id) => index.artifacts().any(|a| a == id),
+    };
+    if has_collected {
+        eprintln!("{} has previously been collected, skipping.", cid);
+        eprintln!(
+            "Note that this behavior is likely to change in the future \
+            to collect and append the data instead."
+        );
+        return;
+    }
+    let interned_cid = rt.block_on(tx.conn().artifact_id(&cid));
 
+    for (nth_benchmark, benchmark) in benchmarks.iter().enumerate() {
+        rt.block_on(
+            tx.conn()
+                .record_benchmark(benchmark.name.0.as_str(), benchmark.supports_stable()),
+        );
         eprintln!(
             "{}",
-            n_benchmarks_remaining(benchmarks.len() - results.len())
+            n_benchmarks_remaining(benchmarks.len() - nth_benchmark)
         );
 
-        let mut processor = execute::MeasureProcessor::new(self_profile);
+        let mut processor = execute::MeasureProcessor::new(
+            rt,
+            tx.conn(),
+            &benchmark.name,
+            interned_cid,
+            self_profile,
+        );
         let result =
             benchmark.measure(&mut processor, build_kinds, run_kinds, compiler, iterations);
-        let result = match result {
-            Ok(runs) => Ok(CollectedBenchmark {
-                name: benchmark.name,
-                runs,
-            }),
-            Err(ref s) => {
-                eprintln!("Failed to benchmark {}, recorded: {}", benchmark.name, s);
-                Err(format!("{:?}", s))
-            }
+        if let Err(s) = result {
+            eprintln!("Failed to benchmark {}, recorded: {}", benchmark.name, s);
+            rt.block_on(tx.conn().record_error(
+                interned_cid,
+                benchmark.name.0.as_str(),
+                &format!("{:?}", s),
+            ));
         };
 
         if call_home {
-            send_home(collected::Request::BenchmarkDone {
-                benchmark: benchmark.name.clone(),
-                commit: commit.clone(),
-            });
+            if let ArtifactId::Commit(commit) = cid {
+                send_home(collected::Request::BenchmarkDone {
+                    benchmark: benchmark.name.to_string(),
+                    commit: commit.clone(),
+                });
+            }
         }
-
-        results.insert(benchmark.name.clone(), result);
     }
 
-    CommitData {
-        commit: commit.clone(),
-        benchmarks: results,
-    }
+    // Publish results now that we've finished fully with this commit.
+    rt.block_on(tx.commit()).unwrap();
+
+    rt.block_on(async move {
+        // This ensures that we're good to go with the just updated data.
+        conn.maybe_create_indices().await;
+    });
 }
 
 fn get_benchmarks(
@@ -415,8 +368,7 @@ fn main_result() -> anyhow::Result<i32> {
 
        (@arg filter: --filter +takes_value "Run only benchmarks that contain this")
        (@arg exclude: --exclude +takes_value "Ignore all benchmarks that contain this")
-       (@arg sync_git: --("sync-git") "Synchronize repository with remote")
-       (@arg output_repo: --("output-repo") +required +takes_value "Output repository/directory")
+       (@arg db: --("db") +takes_value "Database file")
        (@arg self_profile: --("self-profile") "Collect self-profile")
 
        (@subcommand bench_commit =>
@@ -444,6 +396,7 @@ fn main_result() -> anyhow::Result<i32> {
        )
        (@subcommand profile =>
            (about: "profile a local rustc")
+           (@arg output_dir: --("output") +required +takes_value "Output directory")
            (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
            (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
            (@arg BUILDS: --builds +takes_value
@@ -473,30 +426,32 @@ fn main_result() -> anyhow::Result<i32> {
     let benchmark_dir = PathBuf::from("collector/benchmarks");
     let filter = matches.value_of("filter");
     let exclude = matches.value_of("exclude");
-    let benchmarks = get_benchmarks(&benchmark_dir, filter, exclude)?;
-    let use_remote = matches.is_present("sync_git");
+    let mut benchmarks = get_benchmarks(&benchmark_dir, filter, exclude)?;
     let self_profile = matches.is_present("self_profile");
 
-    let get_out_dir = || {
-        let path = PathBuf::from(matches.value_of_os("output_repo").unwrap());
-        fs::create_dir_all(&path).unwrap();
-        path
-    };
+    let mut builder = tokio::runtime::Builder::new();
+    // We want to minimize noise from the runtime
+    builder
+        .core_threads(1)
+        .max_threads(1)
+        .enable_io()
+        .basic_scheduler();
+    let mut rt = builder.build().expect("built runtime");
 
-    let get_out_repo =
-        |allow_new_dir| outrepo::Repo::open(get_out_dir(), allow_new_dir, use_remote);
+    let pool = matches.value_of("db").map(|db| database::Pool::open(db));
 
     let ret = match matches.subcommand() {
         ("bench_commit", Some(sub_m)) => {
             let commit = sub_m.value_of("COMMIT").unwrap();
             let commit = get_commit_or_fake_it(&commit)?;
-            let out_repo = get_out_repo(false)?;
             let sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")?;
             let build_kinds = &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt];
             let run_kinds = RunKind::all();
-            out_repo.success(&bench_commit(
-                Some(&out_repo),
-                &commit,
+            let conn = rt.block_on(pool.expect("--db passed").connection());
+            bench_commit(
+                &mut rt,
+                conn,
+                &ArtifactId::Commit(commit),
                 build_kinds,
                 &run_kinds,
                 Compiler::from_sysroot(&sysroot),
@@ -504,7 +459,7 @@ fn main_result() -> anyhow::Result<i32> {
                 3,
                 false,
                 self_profile,
-            ))?;
+            );
             Ok(0)
         }
 
@@ -515,23 +470,13 @@ fn main_result() -> anyhow::Result<i32> {
             let run_kinds = run_kinds_from_arg(&sub_m.value_of("RUNS"))?;
             let id = sub_m.value_of("ID").unwrap();
 
-            // This isn't a true representation of a commit, because `id` is an
-            // arbitrary identifier, not a commit SHA. But that's ok for local
-            // runs, because `commit` is only used when producing the output
-            // files, not for interacting with a repo.
-            let commit = Commit {
-                sha: Sha::from(id),
-                // Drop the nanoseconds; we don't want that level of precision.
-                date: Date(Utc::now().with_nanosecond(0).unwrap()),
-            };
             let rustc_path = PathBuf::from(rustc).canonicalize()?;
             let cargo_path = PathBuf::from(cargo).canonicalize()?;
-            // We don't pass `out_repo` here. `commit` is unique because
-            // `commit.date` is unique, so there's no point even trying to load
-            // prior data.
-            let result = bench_commit(
-                None,
-                &commit,
+            let conn = rt.block_on(pool.expect("--db passed").connection());
+            bench_commit(
+                &mut rt,
+                conn,
+                &ArtifactId::Artifact(id.to_string()),
                 &build_kinds,
                 &run_kinds,
                 Compiler {
@@ -545,18 +490,56 @@ fn main_result() -> anyhow::Result<i32> {
                 false,
                 self_profile,
             );
-            get_out_repo(true)?.add_commit_data(&result)?;
             Ok(0)
         }
 
         ("bench_published", Some(sub_m)) => {
             let id = sub_m.value_of("ID").unwrap();
-            bench_published(&id, get_out_repo(false)?, benchmarks)?;
+            let cfg =
+                rustup::Cfg::from_env(Arc::new(|_| {})).map_err(|e| anyhow::anyhow!("{:?}", e))?;
+            let toolchain = rustup::Toolchain::from(&cfg, id)
+                .map_err(|e| anyhow::anyhow!("{:?}", e))
+                .with_context(|| format!("creating toolchain for id: {}", id))?;
+            toolchain
+                .install_from_dist_if_not_installed()
+                .map_err(|e| anyhow::anyhow!("{:?}", e))?;
+
+            // Remove benchmarks that don't work with a stable compiler.
+            benchmarks.retain(|b| b.supports_stable());
+
+            let run_kinds = if collector::version_supports_incremental(id) {
+                RunKind::all()
+            } else {
+                RunKind::all_non_incr()
+            };
+            let conn = rt.block_on(pool.expect("--db passed").connection());
+            bench_commit(
+                &mut rt,
+                conn,
+                &ArtifactId::Artifact(id.to_string()),
+                &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
+                &run_kinds,
+                Compiler {
+                    rustc: &toolchain.binary_file("rustc"),
+                    cargo: &toolchain.binary_file("cargo"),
+                    is_nightly: false,
+                    triple: "x86_64-unknown-linux-gnu",
+                },
+                &benchmarks,
+                3,
+                false,
+                false,
+            );
             Ok(0)
         }
 
         ("process", Some(_)) => {
-            process_commits(get_out_repo(false)?, &benchmarks, self_profile)?;
+            process_commits(
+                &mut rt,
+                &pool.expect("--db passed"),
+                &benchmarks,
+                self_profile,
+            )?;
             Ok(0)
         }
 
@@ -567,6 +550,7 @@ fn main_result() -> anyhow::Result<i32> {
             let run_kinds = run_kinds_from_arg(&sub_m.value_of("RUNS"))?;
             let profiler = Profiler::from_name(sub_m.value_of("PROFILER").unwrap())?;
             let id = sub_m.value_of("ID").unwrap();
+            let out_dir = PathBuf::from(sub_m.value_of_os("output_dir").unwrap());
 
             eprintln!("Profiling with {:?}", profiler);
 
@@ -581,7 +565,6 @@ fn main_result() -> anyhow::Result<i32> {
 
             for (i, benchmark) in benchmarks.iter().enumerate() {
                 eprintln!("{}", n_benchmarks_remaining(benchmarks.len() - i));
-                let out_dir = get_out_dir();
                 let mut processor = execute::ProfileProcessor::new(profiler, &out_dir, &id);
                 let result =
                     benchmark.measure(&mut processor, &build_kinds, &run_kinds, compiler, 1);
@@ -607,9 +590,11 @@ fn main_result() -> anyhow::Result<i32> {
             let commit = get_commit_or_fake_it(&last_sha).expect("success");
             let sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")?;
             // filter out servo benchmarks as they simply take too long
+            let conn = rt.block_on(pool.expect("--db passed").connection());
             bench_commit(
-                None,
-                &commit,
+                &mut rt,
+                conn,
+                &ArtifactId::Commit(commit),
                 &[BuildKind::Check], // no Debug or Opt builds
                 &RunKind::all(),
                 Compiler::from_sysroot(&sysroot),
@@ -628,4 +613,25 @@ fn main_result() -> anyhow::Result<i32> {
     };
     background_worker::shut_down();
     ret
+}
+
+pub fn get_commit_or_fake_it(sha: &str) -> anyhow::Result<Commit> {
+    let mut rt = tokio::runtime::Runtime::new().unwrap();
+    Ok(rt
+        .block_on(rustc_artifacts::master_commits())
+        .map_err(|e| anyhow::anyhow!("{:?}", e))
+        .context("getting master commit list")?
+        .into_iter()
+        .find(|c| c.sha == *sha)
+        .map(|c| Commit {
+            sha: c.sha.as_str().into(),
+            date: c.time.into(),
+        })
+        .unwrap_or_else(|| {
+            log::warn!("utilizing fake commit!");
+            Commit {
+                sha: sha.into(),
+                date: database::Date::ymd_hms(2000, 01, 01, 0, 0, 0),
+            }
+        }))
 }

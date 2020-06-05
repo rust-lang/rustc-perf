@@ -16,7 +16,13 @@ pub trait InternString {
 macro_rules! intern {
     (pub struct $for_ty:ident) => {
         #[derive(Serialize, Debug, Copy, Clone)]
-        pub struct $for_ty(crate::intern::ArenaStr);
+        pub struct $for_ty($crate::ArenaStr);
+
+        impl $for_ty {
+            pub fn as_str(&self) -> &'static str {
+                self.0.as_str()
+            }
+        }
 
         impl std::cmp::PartialEq for $for_ty {
             fn eq(&self, other: &Self) -> bool {
@@ -60,11 +66,11 @@ macro_rules! intern {
                     }
 
                     fn visit_str<E>(self, s: &str) -> Result<$for_ty, E> {
-                        Ok($crate::intern::intern::<$for_ty>(s))
+                        Ok($crate::intern::<$for_ty>(s))
                     }
 
                     fn visit_borrowed_str<E>(self, s: &'de str) -> Result<$for_ty, E> {
-                        Ok($crate::intern::intern::<$for_ty>(s))
+                        Ok($crate::intern::<$for_ty>(s))
                     }
                 }
                 deserializer.deserialize_str(InternVisitor)
@@ -91,7 +97,7 @@ macro_rules! intern {
 
         impl<'a> From<&'a str> for $for_ty {
             fn from(s: &'a str) -> Self {
-                $crate::intern::intern::<$for_ty>(s)
+                $crate::intern::<$for_ty>(s)
             }
         }
 
@@ -102,8 +108,8 @@ macro_rules! intern {
             }
         }
 
-        impl crate::intern::InternString for $for_ty {
-            unsafe fn to_interned(v: crate::intern::ArenaStr) -> $for_ty {
+        impl $crate::InternString for $for_ty {
+            unsafe fn to_interned(v: $crate::ArenaStr) -> $for_ty {
                 $for_ty(v)
             }
         }
@@ -111,7 +117,7 @@ macro_rules! intern {
         impl std::str::FromStr for $for_ty {
             type Err = String;
             fn from_str(s: &str) -> Result<Self, Self::Err> {
-                crate::intern::preloaded(s).ok_or_else(|| {
+                $crate::preloaded(s).ok_or_else(|| {
                     format!(
                         "{} does not have `{}` as a valid value",
                         stringify!($for_ty),
@@ -178,7 +184,7 @@ pub fn intern<T: InternString>(value: &str) -> T {
     })
 }
 
-#[derive(serde::Serialize, Copy, Clone, PartialEq, Eq)]
+#[derive(serde_derive::Serialize, Copy, Clone, PartialEq, Eq)]
 #[serde(into = "&'static str")]
 pub struct ArenaStr(NonNull<u8>);
 

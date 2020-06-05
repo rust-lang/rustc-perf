@@ -41,15 +41,13 @@ pub use crate::api::{
     DateData, ServerResult, StyledBenchmarkName,
 };
 use crate::db::{self, Cache, Crate, Profile};
-use crate::git;
-use crate::github::post_comment;
 use crate::interpolate::Interpolated;
-use crate::load::CurrentState;
 use crate::load::{Config, InputData};
 use crate::selector::{self, PathComponent, Tag};
 use collector::api::collected;
 use collector::Sha;
 use collector::StatId;
+use db::{ArtifactId, Lookup};
 use parking_lot::RwLock;
 
 static INTERPOLATED_COLOR: &str = "#fcb0f1";
@@ -63,10 +61,41 @@ pub fn handle_info(data: &InputData) -> info::Response {
     }
 }
 
-pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
+pub struct ByProfile<T> {
+    pub check: T,
+    pub debug: T,
+    pub opt: T,
+}
+
+impl<T> ByProfile<T> {
+    pub async fn new<E, F, F1>(mut f: F) -> Result<Self, E>
+    where
+        F: FnMut(Profile) -> F1,
+        F1: std::future::Future<Output = Result<T, E>>,
+    {
+        Ok(ByProfile {
+            check: f(Profile::Check).await?,
+            debug: f(Profile::Debug).await?,
+            opt: f(Profile::Opt).await?,
+        })
+    }
+}
+
+impl<T> std::ops::Index<Profile> for ByProfile<T> {
+    type Output = T;
+    fn index(&self, index: Profile) -> &Self::Output {
+        match index {
+            Profile::Check => &self.check,
+            Profile::Debug => &self.debug,
+            Profile::Opt => &self.opt,
+        }
+    }
+}
+
+pub async fn handle_dashboard(data: Arc<InputData>) -> ServerResult<dashboard::Response> {
     let index = data.index.load();
     if index.artifacts().next().is_none() {
-        return dashboard::Response::default();
+        return Ok(dashboard::Response::default());
     }
 
     let mut versions = index.artifacts().collect::<Vec<_>>();
@@ -77,7 +106,9 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
         ) {
             (Some(a), Some(b)) => a.cmp(&b),
             (_, _) => {
-                if *a == "beta" {
+                if a.starts_with("beta") && b.starts_with("beta") {
+                    a.cmp(b)
+                } else if *a == "beta" {
                     std::cmp::Ordering::Greater
                 } else if *b == "beta" {
                     std::cmp::Ordering::Less
@@ -91,7 +122,7 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
     let cids = Arc::new(
         versions
             .into_iter()
-            .map(|v| db::CollectionId::Artifact(v.to_string()))
+            .map(|v| db::ArtifactId::Artifact(v.to_string()))
             .chain(std::iter::once(
                 data.index.load().commits().last().unwrap().clone().into(),
             ))
@@ -122,52 +153,61 @@ pub fn handle_dashboard(data: &InputData) -> dashboard::Response {
         );
 
     let summary_patches = data.summary_patches();
-    let by_profile = db::ByProfile::new::<String, _>(|profile| {
-        let mut cases = dashboard::Cases::default();
-        for patch in summary_patches.iter() {
-            let responses = data.query::<Option<f64>>(
-                query
-                    .clone()
-                    .set(Tag::Profile, selector::Selector::One(profile))
-                    .set(Tag::Cache, selector::Selector::One(patch)),
-                cids.clone(),
-            )?;
+    let by_profile = ByProfile::new::<String, _, _>(|profile| {
+        let summary_patches = &summary_patches;
+        let data = &data;
+        let query = &query;
+        let cids = &cids;
+        async move {
+            let mut cases = dashboard::Cases::default();
+            for patch in summary_patches.iter() {
+                let responses = data
+                    .query::<Option<f64>>(
+                        query
+                            .clone()
+                            .set(Tag::Profile, selector::Selector::One(profile))
+                            .set(Tag::Cache, selector::Selector::One(patch)),
+                        cids.clone(),
+                    )
+                    .await?;
 
-            let points = db::average(
-                responses
-                    .into_iter()
-                    .map(|sr| sr.interpolate().series)
-                    .collect::<Vec<_>>(),
-            )
-            .map(|((_id, point), _interpolated)| {
-                (point.expect("interpolated") * 10.0).round() / 10.0
-            })
-            .collect::<Vec<_>>();
+                let points = db::average(
+                    responses
+                        .into_iter()
+                        .map(|sr| sr.interpolate().series)
+                        .collect::<Vec<_>>(),
+                )
+                .map(|((_id, point), _interpolated)| {
+                    (point.expect("interpolated") * 10.0).round() / 10.0
+                })
+                .collect::<Vec<_>>();
 
-            match patch {
-                Cache::Empty => cases.clean_averages = points,
-                Cache::IncrementalEmpty => cases.base_incr_averages = points,
-                Cache::IncrementalFresh => cases.clean_incr_averages = points,
-                // we only have println patches here
-                Cache::IncrementalPatch(_) => cases.println_incr_averages = points,
+                match patch {
+                    Cache::Empty => cases.clean_averages = points,
+                    Cache::IncrementalEmpty => cases.base_incr_averages = points,
+                    Cache::IncrementalFresh => cases.clean_incr_averages = points,
+                    // we only have println patches here
+                    Cache::IncrementalPatch(_) => cases.println_incr_averages = points,
+                }
             }
+            Ok(cases)
         }
-        Ok(cases)
     })
+    .await
     .unwrap();
 
-    dashboard::Response {
+    Ok(dashboard::Response {
         versions: cids
             .iter()
             .map(|cid| match cid {
-                db::CollectionId::Commit(c) => format!("master: {}", &c.sha.to_string()[0..8]),
-                db::CollectionId::Artifact(aid) => aid.clone(),
+                db::ArtifactId::Commit(c) => format!("master: {}", &c.sha.to_string()[0..8]),
+                db::ArtifactId::Artifact(aid) => aid.clone(),
             })
             .collect::<Vec<_>>(),
         check: by_profile.check,
         debug: by_profile.debug,
         opt: by_profile.opt,
-    }
+    })
 }
 
 fn prettify_log(log: &str) -> Option<String> {
@@ -179,24 +219,23 @@ fn prettify_log(log: &str) -> Option<String> {
 }
 
 pub async fn handle_status_page(data: Arc<InputData>) -> status::Response {
-    let last_commit = *data.index.load().commits().last().unwrap();
+    let idx = data.index.load();
+    let last_commit = *idx.commits().last().unwrap();
 
     let mut benchmark_state = data
-        .query::<Option<String>>(
-            selector::Query::new().set::<String>(selector::Tag::Crate, selector::Selector::All),
-            Arc::new(vec![db::CollectionId::Commit(last_commit)]),
-        )
-        .unwrap()
+        .conn()
+        .await
+        .get_error(ArtifactId::from(last_commit).lookup(&idx).unwrap())
+        .await
         .into_iter()
-        .map(|mut sr| {
-            let name = sr.path.get::<Crate>().unwrap();
-            let msg = if let Some(error) = sr.series.next().and_then(|(_, e)| e) {
+        .map(|(name, error)| {
+            let msg = if let Some(error) = error {
                 Some(prettify_log(&error).unwrap_or(error))
             } else {
                 None
             };
             status::BenchmarkStatus {
-                name: *name,
+                name,
                 success: msg.is_none(),
                 error: msg,
             }
@@ -207,7 +246,8 @@ pub async fn handle_status_page(data: Arc<InputData>) -> status::Response {
     benchmark_state.reverse();
 
     let missing = data.missing_commits().await;
-    let current = data.persistent.lock().current.clone();
+    // FIXME: no current builds
+    let current = None;
 
     status::Response {
         last_commit,
@@ -260,11 +300,11 @@ impl CommitIdxCache {
 fn to_graph_data<'a>(
     cc: &'a CommitIdxCache,
     is_absolute: bool,
-    points: impl Iterator<Item = ((db::CollectionId, Option<f64>), Interpolated)> + 'a,
+    points: impl Iterator<Item = ((db::ArtifactId, Option<f64>), Interpolated)> + 'a,
 ) -> impl Iterator<Item = graph::GraphData> + 'a {
     let mut first = None;
     points.map(move |((cid, point), interpolated)| {
-        let commit = if let db::CollectionId::Commit(commit) = cid {
+        let commit = if let db::ArtifactId::Commit(commit) = cid {
             commit
         } else {
             unimplemented!()
@@ -297,14 +337,16 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
 
     let stat_selector = selector::Selector::One(stat_id.as_pstat().to_string());
 
-    let series = data.query::<Option<f64>>(
-        selector::Query::new()
-            .set::<String>(selector::Tag::Crate, selector::Selector::All)
-            .set::<String>(selector::Tag::Profile, selector::Selector::All)
-            .set::<String>(selector::Tag::Cache, selector::Selector::All)
-            .set::<String>(selector::Tag::ProcessStatistic, stat_selector.clone()),
-        commits.clone(),
-    )?;
+    let series = data
+        .query::<Option<f64>>(
+            selector::Query::new()
+                .set::<String>(selector::Tag::Crate, selector::Selector::All)
+                .set::<String>(selector::Tag::Profile, selector::Selector::All)
+                .set::<String>(selector::Tag::Cache, selector::Selector::All)
+                .set::<String>(selector::Tag::ProcessStatistic, stat_selector.clone()),
+            commits.clone(),
+        )
+        .await?;
 
     let mut series = series
         .into_iter()
@@ -316,20 +358,7 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
 
     let mut baselines = HashMap::new();
     let c = commits.clone();
-    let mut baseline = move |query: selector::Query| match baselines.entry(query.clone()) {
-        std::collections::hash_map::Entry::Occupied(o) => Ok::<_, String>(*o.get()),
-        std::collections::hash_map::Entry::Vacant(v) => {
-            let value = db::average(
-                data.query::<Option<f64>>(query, c.clone())?
-                    .into_iter()
-                    .map(|sr| sr.interpolate().series)
-                    .collect::<Vec<_>>(),
-            )
-            .next()
-            .map_or(0.0, |((_c, d), _interpolated)| d.expect("interpolated"));
-            Ok(*v.insert(value))
-        }
-    };
+    let baselines = &mut baselines;
 
     let summary_queries = iproduct!(
         data.summary_patches(),
@@ -362,28 +391,38 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
             .assert_one()
             .parse::<Cache>()
             .unwrap();
-        let against = baseline(
-            selector::Query::new()
-                .set::<String>(selector::Tag::Crate, selector::Selector::All)
-                .set(selector::Tag::Profile, selector::Selector::One(profile))
-                .set(selector::Tag::Cache, selector::Selector::One(Cache::Empty))
-                .set(
-                    selector::Tag::ProcessStatistic,
-                    query.get(Tag::ProcessStatistic).unwrap().raw.clone(),
-                ),
-        )?;
-        let graph_data = to_graph_data(
-            &cc,
-            body.absolute,
-            db::average(
-                data.query::<Option<f64>>(query.clone(), commits.clone())?
-                    .into_iter()
-                    .map(|sr| sr.interpolate().series)
-                    .collect(),
-            )
-            .map(|((c, d), i)| ((c, Some(d.expect("interpolated") / against)), i)),
+        let q = selector::Query::new()
+            .set::<String>(selector::Tag::Crate, selector::Selector::All)
+            .set(selector::Tag::Profile, selector::Selector::One(profile))
+            .set(selector::Tag::Cache, selector::Selector::One(Cache::Empty))
+            .set(
+                selector::Tag::ProcessStatistic,
+                query.get(Tag::ProcessStatistic).unwrap().raw.clone(),
+            );
+        let against = match baselines.entry(q.clone()) {
+            std::collections::hash_map::Entry::Occupied(o) => *o.get(),
+            std::collections::hash_map::Entry::Vacant(v) => {
+                let value = db::average(
+                    data.query::<Option<f64>>(q, c.clone())
+                        .await?
+                        .into_iter()
+                        .map(|sr| sr.interpolate().series)
+                        .collect::<Vec<_>>(),
+                )
+                .next()
+                .map_or(0.0, |((_c, d), _interpolated)| d.expect("interpolated"));
+                *v.insert(value)
+            }
+        };
+        let averaged = db::average(
+            data.query::<Option<f64>>(query.clone(), commits.clone())
+                .await?
+                .into_iter()
+                .map(|sr| sr.interpolate().series)
+                .collect(),
         )
-        .collect::<Vec<_>>();
+        .map(|((c, d), i)| ((c, Some(d.expect("interpolated") / against)), i));
+        let graph_data = to_graph_data(&cc, body.absolute, averaged).collect::<Vec<_>>();
         series.push(selector::SeriesResponse {
             path: selector::Path::new()
                 .set(PathComponent::Crate("Summary".into()))
@@ -449,7 +488,7 @@ pub async fn handle_compare(body: days::Request, data: &InputData) -> ServerResu
             selector::Selector::One(stat_id.as_str()),
         );
 
-    let mut responses = data.query::<Option<f64>>(query, cids)?;
+    let mut responses = data.query::<Option<f64>>(query, cids).await?;
 
     Ok(days::Response {
         a: DateData::consume_one(a, &mut responses),
@@ -463,13 +502,13 @@ impl DateData {
         series: &mut [selector::SeriesResponse<T>],
     ) -> DateData
     where
-        T: Iterator<Item = (db::CollectionId, Option<f64>)>,
+        T: Iterator<Item = (db::ArtifactId, Option<f64>)>,
     {
         let mut data = HashMap::new();
 
         for response in series {
             let (id, point) = response.series.next().expect("must have element");
-            assert_eq!(db::CollectionId::from(commit), id);
+            assert_eq!(db::ArtifactId::from(commit), id);
 
             let point = if let Some(pt) = point {
                 pt
@@ -501,94 +540,15 @@ pub async fn handle_github(
 }
 
 pub async fn handle_collected(
-    body: collected::Request,
-    data: &InputData,
+    _body: collected::Request,
+    _data: &InputData,
 ) -> ServerResult<collected::Response> {
-    let mut comment = None;
-    {
-        let mut persistent = data.persistent.lock();
-        let mut persistent = &mut *persistent;
-        match body {
-            collected::Request::BenchmarkCommit { commit, benchmarks } => {
-                let issue = if let Some(r#try) =
-                    persistent.try_commits.iter().find(|c| commit.sha == *c.sha)
-                {
-                    Some(r#try.issue.clone())
-                } else {
-                    None
-                };
-                persistent.current = Some(CurrentState {
-                    commit,
-                    issue,
-                    benchmarks,
-                });
-            }
-            collected::Request::BenchmarkDone { commit, benchmark } => {
-                // If something went wrong, then just clear current commit.
-                if persistent
-                    .current
-                    .as_ref()
-                    .map_or(false, |c| c.commit != commit)
-                {
-                    persistent.current = None;
-                }
-                let current_sha = persistent.current.as_ref().map(|c| c.commit.sha.to_owned());
-                let comparison_url = if let Some(current_sha) = current_sha {
-                    if let Some(try_commit) = persistent
-                        .try_commits
-                        .iter()
-                        .find(|c| current_sha == *c.sha.as_str())
-                    {
-                        format!(", [comparison URL]({}).", try_commit.comparison_url())
-                    } else {
-                        String::new()
-                    }
-                } else {
-                    String::new()
-                };
-                if let Some(current) = persistent.current.as_mut() {
-                    // If the request was received twice (e.g., we stopped after we wrote DB but before
-                    // responding) then we don't want to loop the collector.
-                    if let Some(pos) = current.benchmarks.iter().position(|b| *b == benchmark) {
-                        current.benchmarks.remove(pos);
-                    }
-                    // We've finished with this benchmark
-                    if current.benchmarks.is_empty() {
-                        // post a comment to some issue
-                        if let Some(issue) = &current.issue {
-                            let commit = current.commit.sha.clone();
-                            if !persistent.posted_ends.contains(&commit) {
-                                comment = Some((
-                                    issue.clone(),
-                                    format!(
-                                        "Finished benchmarking try commit {}{}",
-                                        commit, comparison_url
-                                    ),
-                                ));
-                                persistent.posted_ends.push(commit);
-                                // keep 100 commits in cache
-                                if persistent.posted_ends.len() > 100 {
-                                    persistent.posted_ends.remove(0);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        persistent.write().unwrap();
-    }
-    if let Some((issue, comment)) = comment {
-        post_comment(&data.config, &issue, comment).await;
-    }
-
     Ok(collected::Response {})
 }
 
 fn get_self_profile_data(
     cpu_clock: Option<f64>,
-    self_profile: Option<collector::SelfProfile>,
+    self_profile: Option<crate::selector::SelfProfileData>,
     sort_idx: Option<i32>,
 ) -> ServerResult<self_profile::SelfProfile> {
     let profile = self_profile
@@ -727,18 +687,21 @@ pub async fn handle_self_profile(
     }
 
     let commits = Arc::new(commits);
-    let mut sp_responses =
-        data.query::<Option<collector::self_profile::SelfProfile>>(query.clone(), commits.clone())?;
+    let mut sp_responses = data
+        .query::<Option<selector::SelfProfileData>>(query.clone(), commits.clone())
+        .await?;
     assert_eq!(sp_responses.len(), 1, "all selectors are exact");
     let mut sp_response = sp_responses.remove(0).series;
 
-    let mut cpu_responses = data.query::<Option<f64>>(
-        query.clone().set(
-            Tag::ProcessStatistic,
-            selector::Selector::One("cpu-clock".to_string()),
-        ),
-        commits.clone(),
-    )?;
+    let mut cpu_responses = data
+        .query::<Option<f64>>(
+            query.clone().set(
+                Tag::ProcessStatistic,
+                selector::Selector::One("cpu-clock".to_string()),
+            ),
+            commits.clone(),
+        )
+        .await?;
     assert_eq!(cpu_responses.len(), 1, "all selectors are exact");
     let mut cpu_response = cpu_responses.remove(0).series;
 
@@ -887,7 +850,7 @@ impl Server {
 
         let last = LAST_UPDATE.lock().clone();
         if let Some(last) = last {
-            let min = 60 * 5; // 5 minutes
+            let min = 60 * 1; // 1 minutes
             let elapsed = last.elapsed();
             if elapsed < std::time::Duration::from_secs(min) {
                 return http::Response::builder()
@@ -913,39 +876,21 @@ impl Server {
                 .unwrap();
         }
 
-        // FIXME we are throwing everything away and starting again. It would be
-        // better to read just the added files. These should be available in the
-        // body of the request.
-
         debug!("received onpush hook");
 
         let (channel, body) = hyper::Body::channel();
 
         let data: Arc<InputData> = self.data.read().as_ref().unwrap().clone();
-        let updating = self.updating.release_on_drop(channel);
-        std::thread::spawn(move || {
-            let path = if let Some(p) = std::env::args().nth(2) {
-                p
-            } else {
-                eprintln!("Please pass the rustc-timing git directory as the second argument to support onpush handling.");
-                std::process::exit(1);
-            };
-            let paths = git::update_repo(&path).unwrap();
+        let _updating = self.updating.release_on_drop(channel);
+        let mut conn = data.conn().await;
+        let index = db::Index::load(&mut *conn).await;
+        eprintln!("index has {} commits", index.commits().len());
+        data.index.store(Arc::new(index));
 
-            let start = std::time::Instant::now();
-            eprintln!("ingesting {} paths: {:#?}", paths.len(), paths);
-            let mut index = crate::db::Index::load(&data.db);
-
-            for path in paths {
-                crate::ingest::ingest(&data.db, &mut index, &path);
-            }
-
-            // Store back the new index, letting everyone else see the new
-            // value.
-            data.index.store(Arc::new(index));
-            eprintln!("finished updating index in {:?}", start.elapsed());
-
-            std::mem::drop(updating);
+        // Spawn off a task to post the results of any commit results that we
+        // are now aware of.
+        tokio::spawn(async move {
+            crate::github::post_finished(&data).await;
         });
 
         Response::new(body)
@@ -993,7 +938,10 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
 
     match req.uri().path() {
         "/perf/info" => return ctx.handle_get(&req, handle_info),
-        "/perf/dashboard" => return ctx.handle_get(&req, handle_dashboard),
+        "/perf/dashboard" => {
+            let ret = ctx.handle_get_async(&req, |c| handle_dashboard(c));
+            return ret.await;
+        }
         "/perf/status_page" => {
             let ret = ctx.handle_get_async(&req, |c| handle_status_page(c));
             return ret.await;

@@ -2,6 +2,7 @@
 
 use std::cmp;
 use std::env;
+use std::fmt;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::process::{self, Command};
@@ -9,13 +10,15 @@ use std::str;
 
 use tempfile::TempDir;
 
-use collector::{
-    command_output, BenchmarkName, BenchmarkState, Patch, Run, SelfProfile, StatId, Stats,
-};
+use crate::old::{Patch, SelfProfile, StatId, Stats};
+use collector::command_output;
 
 use anyhow::{bail, Context};
 
 use crate::{BuildKind, Compiler, RunKind};
+use futures::stream::FuturesUnordered;
+use futures::stream::StreamExt;
+use tokio::runtime::Runtime;
 
 fn touch_all(path: &Path) -> anyhow::Result<()> {
     let mut cmd = Command::new("bash");
@@ -60,6 +63,15 @@ impl Default for BenchmarkConfig {
             runs: default_runs(),
             supports_stable: false,
         }
+    }
+}
+
+#[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Hash)]
+pub struct BenchmarkName(pub String);
+
+impl fmt::Display for BenchmarkName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
@@ -312,7 +324,7 @@ impl<'a> CargoProcess<'a> {
             let output = command_output(&mut cmd)?;
             if let Some((ref mut processor, run_kind, run_kind_str, patch)) = self.processor_etc {
                 let data = ProcessOutputData {
-                    name: self.processor_name,
+                    name: self.processor_name.clone(),
                     cwd: self.cwd,
                     build_kind: self.build_kind,
                     run_kind,
@@ -383,11 +395,15 @@ pub trait Processor {
     }
 
     /// Called when all the runs of a benchmark for a particular `BuildKind`
-    /// have been completed. Can be used to process/reset accumulated state.
-    fn finish_build_kind(&mut self, _build_kind: BuildKind, _runs: &mut Vec<Run>) {}
+    /// and iteration have been completed. Can be used to process/reset accumulated state.
+    fn finish_build_kind(&mut self, _build_kind: BuildKind) {}
 }
 
-pub struct MeasureProcessor {
+pub struct MeasureProcessor<'a> {
+    rt: &'a mut Runtime,
+    krate: &'a BenchmarkName,
+    conn: &'a mut dyn database::Connection,
+    cid: database::ArtifactIdNumber,
     clean_stats: (Stats, Option<SelfProfile>),
     base_incr_stats: (Stats, Option<SelfProfile>),
     clean_incr_stats: (Stats, Option<SelfProfile>),
@@ -396,13 +412,23 @@ pub struct MeasureProcessor {
     self_profile: bool,
 }
 
-impl MeasureProcessor {
-    pub fn new(self_profile: bool) -> Self {
+impl<'a> MeasureProcessor<'a> {
+    pub fn new(
+        rt: &'a mut Runtime,
+        conn: &'a mut dyn database::Connection,
+        krate: &'a BenchmarkName,
+        cid: database::ArtifactIdNumber,
+        self_profile: bool,
+    ) -> Self {
         // Check we have `perf` available.
         let has_perf = Command::new("perf").output().is_ok();
         assert!(has_perf);
 
         MeasureProcessor {
+            rt,
+            conn,
+            krate,
+            cid,
             clean_stats: (Stats::new(), None),
             base_incr_stats: (Stats::new(), None),
             clean_incr_stats: (Stats::new(), None),
@@ -412,9 +438,60 @@ impl MeasureProcessor {
             self_profile,
         }
     }
+
+    fn insert_stats(
+        &mut self,
+        cache: database::Cache,
+        build_kind: BuildKind,
+        stats: (Stats, Option<SelfProfile>),
+    ) {
+        let collection = self.rt.block_on(self.conn.collection_id());
+        let profile = match build_kind {
+            BuildKind::Check => database::Profile::Check,
+            BuildKind::Debug => database::Profile::Debug,
+            BuildKind::Opt => database::Profile::Opt,
+        };
+        let mut buf = FuturesUnordered::new();
+        for (stat, value) in stats.0.iter() {
+            buf.push(self.conn.record_statistic(
+                collection,
+                self.cid,
+                self.krate.0.as_str(),
+                profile,
+                cache,
+                stat.as_str(),
+                value,
+            ));
+        }
+
+        if let Some(sp) = &stats.1 {
+            let conn = &*self.conn;
+            let cid = self.cid;
+            let krate = self.krate.0.as_str();
+            for qd in &sp.query_data {
+                buf.push(conn.record_self_profile_query(
+                    collection,
+                    cid,
+                    krate,
+                    profile,
+                    cache,
+                    qd.label.as_str(),
+                    database::QueryDatum {
+                        self_time: qd.self_time,
+                        blocked_time: qd.blocked_time,
+                        incremental_load_time: qd.incremental_load_time,
+                        number_of_cache_hits: qd.number_of_cache_hits,
+                        invocation_count: qd.invocation_count,
+                    },
+                ));
+            }
+        }
+        self.rt
+            .block_on(async move { while let Some(()) = buf.next().await {} });
+    }
 }
 
-impl Processor for MeasureProcessor {
+impl<'a> Processor for MeasureProcessor<'a> {
     fn profiler(&self) -> Profiler {
         if self.is_first_collection && self.self_profile {
             Profiler::PerfStatSelfProfile
@@ -488,39 +565,26 @@ impl Processor for MeasureProcessor {
         }
     }
 
-    fn finish_build_kind(&mut self, build_kind: BuildKind, runs: &mut Vec<Run>) {
+    fn finish_build_kind(&mut self, build_kind: BuildKind) {
         if !self.clean_stats.0.is_empty() {
-            runs.push(process_stats(
-                build_kind,
-                BenchmarkState::Clean,
-                self.clean_stats.0.clone(),
-                self.clean_stats.1.clone(),
-            ));
+            let stats = std::mem::take(&mut self.clean_stats);
+            self.insert_stats(database::Cache::Empty, build_kind, stats);
         }
         if !self.base_incr_stats.0.is_empty() {
-            runs.push(process_stats(
-                build_kind,
-                BenchmarkState::IncrementalStart,
-                self.base_incr_stats.0.clone(),
-                self.base_incr_stats.1.clone(),
-            ));
+            let stats = std::mem::take(&mut self.base_incr_stats);
+            self.insert_stats(database::Cache::IncrementalEmpty, build_kind, stats);
         }
         if !self.clean_incr_stats.0.is_empty() {
-            runs.push(process_stats(
-                build_kind,
-                BenchmarkState::IncrementalClean,
-                self.clean_incr_stats.0.clone(),
-                self.clean_incr_stats.1.clone(),
-            ));
+            let stats = std::mem::take(&mut self.clean_incr_stats);
+            self.insert_stats(database::Cache::IncrementalFresh, build_kind, stats);
         }
         if !self.patched_incr_stats.is_empty() {
-            for (patch, results) in self.patched_incr_stats.iter() {
-                runs.push(process_stats(
+            for (patch, results) in std::mem::take(&mut self.patched_incr_stats) {
+                self.insert_stats(
+                    database::Cache::IncrementalPatch(patch.name),
                     build_kind,
-                    BenchmarkState::IncrementalPatched(patch.clone()),
-                    results.0.clone(),
-                    results.1.clone(),
-                ));
+                    results,
+                );
             }
         }
 
@@ -811,7 +875,7 @@ impl Benchmark {
         };
 
         Ok(Benchmark {
-            name: name.as_str().into(),
+            name: BenchmarkName(name),
             path,
             patches,
             config,
@@ -857,7 +921,7 @@ impl Benchmark {
 
         CargoProcess {
             compiler,
-            processor_name: self.name,
+            processor_name: self.name.clone(),
             cwd: cwd,
             build_kind: build_kind,
             incremental: false,
@@ -887,15 +951,13 @@ impl Benchmark {
         run_kinds: &[RunKind],
         compiler: Compiler<'_>,
         iterations: usize,
-    ) -> anyhow::Result<Vec<Run>> {
+    ) -> anyhow::Result<()> {
         let iterations = cmp::min(iterations, self.config.runs);
 
         if self.config.disabled {
             eprintln!("Skipping {}: disabled", self.name);
             bail!("disabled benchmark");
         }
-
-        let mut runs = Vec::new();
 
         for &build_kind in build_kinds {
             eprintln!("Running {}: {:?} + {:?}", self.name, build_kind, run_kinds);
@@ -965,12 +1027,12 @@ impl Benchmark {
                             .run_rustc()?;
                     }
                 }
-            }
 
-            processor.finish_build_kind(build_kind, &mut runs);
+                processor.finish_build_kind(build_kind);
+            }
         }
 
-        Ok(runs)
+        Ok(())
     }
 }
 
@@ -1034,19 +1096,4 @@ fn process_perf_stat_output(
     }
 
     Ok((stats, profile))
-}
-
-fn process_stats(
-    build_kind: BuildKind,
-    state: BenchmarkState,
-    runs: Stats,
-    prof: Option<SelfProfile>,
-) -> Run {
-    Run {
-        stats: runs,
-        self_profile: prof,
-        check: build_kind == BuildKind::Check,
-        release: build_kind == BuildKind::Opt,
-        state: state,
-    }
 }

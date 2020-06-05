@@ -64,6 +64,7 @@
     }
 
     function populate_data(data) {
+        data = data.Ok;
         render("check-average-times", "check", data.check, data.versions);
         render("debug-average-times", "debug", data.debug, data.versions);
         render("opt-average-times", "opt", data.opt, data.versions);

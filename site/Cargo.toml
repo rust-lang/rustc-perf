@@ -24,7 +24,7 @@ ring = "0.16.10"
 hex = "0.4.2"
 regex = "1"
 lazy_static = "1"
-reqwest = { version = "0.10", features = ["json"] }
+reqwest = { version = "0.10", features = ["json", "blocking"] }
 toml = "0.5"
 jemallocator = "0.3"
 jemalloc-ctl = "0.3"
@@ -34,8 +34,10 @@ snap = "1"
 rustc-artifacts = "0.2"
 itertools = "0.9"
 hashbrown = "0.7"
-rocksdb = "0.14"
 arc-swap = "0.4"
+rusqlite = { version = "0.23", features = ["bundled"] }
+async-trait = "0.1"
+database = { path = "../database" }
 
 [dependencies.collector]
 path = "../collector"

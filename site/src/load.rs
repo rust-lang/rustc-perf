@@ -16,15 +16,17 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use chrono::{Duration, Utc};
-use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
+use crate::db;
 use crate::util;
-use collector::{Bound, Date};
+use collector::Bound;
+use database::Date;
 
 use crate::api::github;
 use collector;
-pub use collector::{BenchmarkName, Commit, Patch, Sha, StatId, Stats};
+use database::Pool;
+pub use database::{Commit, Crate, Sha};
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum MissingReason {
@@ -38,7 +40,7 @@ pub enum MissingReason {
 pub struct CurrentState {
     pub commit: Commit,
     pub issue: Option<github::Issue>,
-    pub benchmarks: Vec<BenchmarkName>,
+    pub benchmarks: Vec<Crate>,
 }
 
 #[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq)]
@@ -61,54 +63,6 @@ impl TryCommit {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize, Debug)]
-pub struct Persistent {
-    pub try_commits: Vec<TryCommit>,
-    pub current: Option<CurrentState>,
-    // this is a list of pr numbers for which we expect to run
-    // a perf build once the try build completes.
-    // This only persists for one try build (so should not be long at any point).
-    #[serde(default)]
-    pub pending_try_builds: HashSet<u32>,
-    // Set of commit hashes for which we've completed benchmarking.
-    #[serde(default)]
-    pub posted_ends: Vec<Sha>,
-}
-
-lazy_static::lazy_static! {
-    static ref PERSISTENT_PATH: &'static Path = Path::new("persistent.json");
-}
-
-impl Persistent {
-    pub fn write(&self) -> anyhow::Result<()> {
-        if PERSISTENT_PATH.exists() {
-            let _ = fs::copy(&*PERSISTENT_PATH, "persistent.json.previous");
-        }
-        let s = serde_json::to_string(self)?;
-        fs::write(&*PERSISTENT_PATH, &s)
-            .with_context(|| format!("failed to write persistent DB"))?;
-        Ok(())
-    }
-
-    fn load() -> Persistent {
-        let p = Persistent::load_().unwrap_or_else(|| Persistent {
-            try_commits: Vec::new(),
-            current: None,
-            pending_try_builds: HashSet::new(),
-            posted_ends: Vec::new(),
-        });
-        p.write().unwrap();
-        p
-    }
-
-    fn load_() -> Option<Persistent> {
-        let s = fs::read_to_string(&*PERSISTENT_PATH).ok()?;
-        let persistent: Persistent = serde_json::from_str(&s).ok()?;
-
-        Some(persistent)
-    }
-}
-
 #[derive(Debug, Default, Deserialize)]
 pub struct Keys {
     pub github: Option<String>,
@@ -123,12 +77,10 @@ pub struct Config {
 }
 
 pub struct InputData {
-    pub persistent: Mutex<Persistent>,
-
     pub config: Config,
 
     pub index: ArcSwap<crate::db::Index>,
-    pub db: rocksdb::DB,
+    pub pool: Pool,
 }
 
 impl InputData {
@@ -142,54 +94,53 @@ impl InputData {
     }
 
     pub fn data_for(&self, is_left: bool, query: Bound) -> Option<Commit> {
-        crate::db::data_for(&self.index.load().commits(), is_left, query)
+        crate::selector::data_for(&self.index.load().commits(), is_left, query)
     }
 
     pub fn data_range(&self, range: RangeInclusive<Bound>) -> Vec<Commit> {
-        crate::db::range_subset(self.index.load().commits(), range)
+        crate::selector::range_subset(self.index.load().commits(), range)
     }
 
     /// Initialize `InputData from the file system.
-    pub fn from_fs(db: &str) -> anyhow::Result<InputData> {
-        if std::path::Path::new(db).join("times").exists() {
+    pub async fn from_fs(db: &str) -> anyhow::Result<InputData> {
+        if Path::new(db).join("times").exists() {
             eprintln!("It looks like you're running the site off of the old data format");
             eprintln!(
-                "Please run the ingestion script pointing at a different directory, like so:"
+                "Please utilize the ingest-json script to convert the data into the new database format."
             );
+            eprintln!("This is intended to be a one-time operation; you can delete the JSON fiels once it is complete.");
             eprintln!(
-                "    find rustc-timing/times/ -type f | xargs ./target/release/ingest database"
-            );
-            eprintln!();
-            eprintln!("And optionally follow up by shrinking the database:");
-            eprintln!("    ./target/release/compact database");
-            eprintln!("");
-            eprintln!("You can run the ingestion script repeatedly over all the files,");
-            eprintln!("or you can run it on just some newly collected data.");
-            eprintln!(
-                "The ingestion script must not be run in parallel with the site (it should error)."
+                "    find rustc-timing/times/ -type f | xargs ./target/release/ingest perf-rlo.db finished-files/"
             );
             std::process::exit(1);
         }
 
-        let db = crate::db::open(db, false);
-        let index = crate::db::Index::load(&db);
+        let pool = Pool::open(db);
+
+        let mut conn = pool.connection().await;
+        let index = db::Index::load(&mut *conn).await;
 
         let config = if let Ok(s) = fs::read_to_string("site-config.toml") {
             toml::from_str(&s)?
         } else {
             Config {
-                keys: Keys::default(),
+                keys: Keys {
+                    github: std::env::var("GITHUB_API_TOKEN").ok(),
+                    secret: std::env::var("GITHUB_WEBHOOK_SECRET").ok(),
+                },
                 skip: HashSet::default(),
             }
         };
 
-        let persistent = Persistent::load();
         Ok(InputData {
-            persistent: Mutex::new(persistent),
             config,
             index: ArcSwap::new(Arc::new(index)),
-            db,
+            pool,
         })
+    }
+
+    pub async fn conn(&self) -> Box<dyn database::pool::Connection> {
+        self.pool.connection().await
     }
 
     pub async fn missing_commits(&self) -> Vec<(Commit, MissingReason)> {
@@ -226,12 +177,13 @@ impl InputData {
             .collect::<Vec<_>>();
 
         let mut commits = self
-            .persistent
-            .lock()
-            .try_commits
-            .iter()
+            .conn()
+            .await
+            .queued_commits()
+            .await
+            .into_iter()
             .flat_map(
-                |TryCommit {
+                |database::QueuedCommit {
                      sha, parent_sha, ..
                  }| {
                     let mut ret = Vec::new();

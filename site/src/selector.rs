@@ -22,14 +22,72 @@
 //! requests that all are provided. Note that this is a cartesian product if
 //! there are multiple `None`s.
 
-use crate::db::{Cache, CollectionId, Profile};
+use crate::db::{ArtifactId, Cache, Profile};
 use crate::interpolate::Interpolate;
 use crate::load::InputData as Db;
-use collector::self_profile::QueryLabel;
-use collector::{BenchmarkName as Crate, ProcessStatistic};
+use async_trait::async_trait;
+use collector::Bound;
+use database::{Commit, Crate, Lookup, ProcessStatistic, QueryLabel};
 use std::convert::TryInto;
 use std::fmt;
+use std::ops::RangeInclusive;
 use std::sync::Arc;
+
+pub fn data_for(data: &[Commit], is_left: bool, query: Bound) -> Option<Commit> {
+    if is_left {
+        data.iter().find(|commit| query.left_match(commit)).cloned()
+    } else {
+        data.iter()
+            .rfind(|commit| query.left_match(commit))
+            .cloned()
+    }
+}
+
+pub fn range_subset(data: Vec<Commit>, range: RangeInclusive<Bound>) -> Vec<Commit> {
+    let (a, b) = range.into_inner();
+
+    let left_idx = data.iter().position(|commit| a.left_match(commit));
+    let right_idx = data.iter().rposition(|commit| b.left_match(commit));
+
+    if let (Some(left), Some(right)) = (left_idx, right_idx) {
+        data.get(left..=right)
+            .map(|s| s.to_vec())
+            .unwrap_or_else(|| {
+                log::error!(
+                    "Failed to compute left/right indices from {:?}..={:?}",
+                    a,
+                    b
+                );
+                vec![]
+            })
+    } else {
+        vec![]
+    }
+}
+
+struct ArtifactIdIter {
+    s: Arc<Vec<ArtifactId>>,
+    idx: usize,
+}
+
+impl ArtifactIdIter {
+    fn new(cids: Arc<Vec<ArtifactId>>) -> ArtifactIdIter {
+        ArtifactIdIter { s: cids, idx: 0 }
+    }
+}
+
+impl Iterator for ArtifactIdIter {
+    type Item = ArtifactId;
+    fn next(&mut self) -> Option<Self::Item> {
+        let r = self.s.get(self.idx)?;
+        self.idx += 1;
+        Some(r.clone())
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.s.len(), Some(self.s.len()))
+    }
+}
 
 #[derive(Copy, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Tag {
@@ -187,17 +245,11 @@ impl<T> SeriesResponse<T> {
     }
 }
 
-pub trait Series<'a>: Sized
+pub trait Series: Sized
 where
-    Self: Iterator<Item = (CollectionId, <Self as Series<'a>>::Element)>,
+    Self: Iterator<Item = (ArtifactId, <Self as Series>::Element)>,
 {
     type Element: Sized;
-
-    fn expand_query(
-        collection_ids: Arc<Vec<CollectionId>>,
-        db: &'a Db,
-        query: Query,
-    ) -> Result<Vec<SeriesResponse<Self>>, String>;
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -234,6 +286,20 @@ impl Path {
 #[derive(Clone, Hash, Eq, PartialEq)]
 pub struct Query {
     path: Vec<QueryComponent>,
+}
+
+impl fmt::Debug for Query {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Query {{")?;
+        for (idx, qc) in self.path.iter().enumerate() {
+            if idx != 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{:?}={:?}", qc.tag, qc.raw)?;
+        }
+        write!(f, " }}")?;
+        Ok(())
+    }
 }
 
 impl Query {
@@ -281,19 +347,20 @@ impl Query {
     }
 }
 
+#[async_trait]
 pub trait SeriesElement: Sized {
-    fn query<'a>(
+    async fn query<'a>(
         db: &'a Db,
-        collection_ids: Arc<Vec<CollectionId>>,
+        collection_ids: Arc<Vec<ArtifactId>>,
         query: Query,
-    ) -> Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, Self)> + 'a>>>, String>;
+    ) -> Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (ArtifactId, Self)> + Send + 'a>>>, String>;
 }
 
 fn handle_results<'a, E>(
     results: Vec<
-        Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, E)> + 'a>>>, String>,
+        Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (ArtifactId, E)> + Send + 'a>>>, String>,
     >,
-) -> Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, E)> + 'a>>>, String> {
+) -> Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (ArtifactId, E)> + Send + 'a>>>, String> {
     let mut ok = None;
     let mut errs = Vec::new();
     for res in results {
@@ -320,76 +387,109 @@ fn handle_results<'a, E>(
     })
 }
 
-impl SeriesElement for Option<String> {
-    fn query<'a>(
+#[derive(Debug, Clone)]
+pub struct SelfProfileData {
+    pub query_data: Vec<QueryData>,
+}
+
+#[derive(Clone, Debug)]
+pub struct QueryData {
+    pub label: QueryLabel,
+    pub self_time: u64,
+    pub number_of_cache_hits: u32,
+    pub invocation_count: u32,
+    pub blocked_time: u64,
+    pub incremental_load_time: u64,
+}
+
+impl QueryData {
+    pub fn self_time(&self) -> std::time::Duration {
+        std::time::Duration::from_nanos(self.self_time)
+    }
+
+    pub fn blocked_time(&self) -> std::time::Duration {
+        std::time::Duration::from_nanos(self.blocked_time)
+    }
+
+    pub fn incremental_load_time(&self) -> std::time::Duration {
+        std::time::Duration::from_nanos(self.incremental_load_time)
+    }
+
+    pub fn number_of_cache_misses(&self) -> u32 {
+        self.invocation_count - self.number_of_cache_hits
+    }
+}
+
+#[async_trait]
+impl SeriesElement for Option<SelfProfileData> {
+    async fn query<'a>(
         db: &'a Db,
-        collection_ids: Arc<Vec<CollectionId>>,
+        collection_ids: Arc<Vec<ArtifactId>>,
         query: Query,
-    ) -> Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, Self)> + 'a>>>, String>
-    {
+    ) -> Result<
+        Vec<
+            SeriesResponse<
+                Box<dyn Iterator<Item = (ArtifactId, Option<SelfProfileData>)> + Send + 'a>,
+            >,
+        >,
+        String,
+    > {
         let results = vec![
-            CompileError::expand_query(collection_ids.clone(), db, query.clone()).map(|sr| {
-                sr.into_iter()
-                    .map(|sr| {
-                        sr.map(|r| Box::new(r) as Box<dyn Iterator<Item = (CollectionId, Self)>>)
-                    })
-                    .collect()
-            }),
+            SelfProfile::expand_query(collection_ids.clone(), db, query.clone())
+                .await
+                .map(|sr| {
+                    sr.into_iter()
+                        .map(|sr| {
+                            sr.map(|r| {
+                                Box::new(r)
+                                    as Box<
+                                        dyn Iterator<Item = (ArtifactId, Option<SelfProfileData>)>
+                                            + Send,
+                                    >
+                            })
+                        })
+                        .collect()
+                }),
         ];
         handle_results(results)
     }
 }
 
-impl SeriesElement for Option<collector::self_profile::SelfProfile> {
-    fn query<'a>(
-        db: &'a Db,
-        collection_ids: Arc<Vec<CollectionId>>,
-        query: Query,
-    ) -> Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, Self)> + 'a>>>, String>
-    {
-        let results = vec![
-            SelfProfile::expand_query(collection_ids.clone(), db, query.clone()).map(|sr| {
-                sr.into_iter()
-                    .map(|sr| {
-                        sr.map(|r| Box::new(r) as Box<dyn Iterator<Item = (CollectionId, Self)>>)
-                    })
-                    .collect()
-            }),
-        ];
-        handle_results(results)
-    }
-}
-
+#[async_trait]
 impl SeriesElement for Option<f64> {
-    fn query<'a>(
+    async fn query<'a>(
         db: &'a Db,
-        collection_ids: Arc<Vec<CollectionId>>,
+        collection_ids: Arc<Vec<ArtifactId>>,
         query: Query,
-    ) -> Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, Self)> + 'a>>>, String>
-    {
+    ) -> Result<
+        Vec<SeriesResponse<Box<dyn Iterator<Item = (ArtifactId, Option<f64>)> + Send + 'a>>>,
+        String,
+    > {
         let results = vec![
-            ProcessStatisticSeries::expand_query(collection_ids.clone(), db, query.clone()).map(
-                |sr| {
+            ProcessStatisticSeries::expand_query(collection_ids.clone(), db, query.clone())
+                .await
+                .map(|sr| {
                     sr.into_iter()
                         .map(|sr| {
                             sr.map(|r| {
-                                Box::new(r) as Box<dyn Iterator<Item = (CollectionId, Self)>>
+                                Box::new(r)
+                                    as Box<dyn Iterator<Item = (ArtifactId, Option<f64>)> + Send>
                             })
                         })
                         .collect()
-                },
-            ),
-            SelfProfileQueryTime::expand_query(collection_ids.clone(), db, query.clone()).map(
-                |sr| {
+                }),
+            SelfProfileQueryTime::expand_query(collection_ids.clone(), db, query.clone())
+                .await
+                .map(|sr| {
                     sr.into_iter()
                         .map(|sr| {
                             sr.map(|r| {
-                                Box::new(r) as Box<dyn Iterator<Item = (CollectionId, Self)>>
+                                Box::new(r)
+                                    as Box<dyn Iterator<Item = (ArtifactId, Option<f64>)> + Send>
                             })
                         })
                         .collect()
-                },
-            ),
+                }),
         ];
 
         handle_results(results)
@@ -397,12 +497,13 @@ impl SeriesElement for Option<f64> {
 }
 
 impl Db {
-    pub fn query<'a, E: SeriesElement>(
+    pub async fn query<'a, E: SeriesElement>(
         &'a self,
         query: Query,
-        collection_ids: Arc<Vec<CollectionId>>,
-    ) -> Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (CollectionId, E)> + 'a>>>, String> {
-        E::query(self, collection_ids, query)
+        collection_ids: Arc<Vec<ArtifactId>>,
+    ) -> Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (ArtifactId, E)> + Send + 'a>>>, String>
+    {
+        E::query(self, collection_ids, query).await
     }
 }
 
@@ -411,24 +512,22 @@ pub struct Source<'a> {
     db: &'a Db,
 }
 
-pub struct ProcessStatisticSeries<'a> {
-    collection_ids: Arc<Vec<CollectionId>>,
-    idx: usize,
-    db: &'a Db,
-    krate: Crate,
-    profile: Profile,
-    cache: Cache,
-    stat: ProcessStatistic,
+pub struct ProcessStatisticSeries {
+    cids: ArtifactIdIter,
+    points: std::vec::IntoIter<Option<f64>>,
 }
 
-impl<'a> Series<'a> for ProcessStatisticSeries<'a> {
+impl Series for ProcessStatisticSeries {
     type Element = Option<f64>;
+}
 
-    fn expand_query(
-        collection_ids: Arc<Vec<CollectionId>>,
-        db: &'a Db,
+impl ProcessStatisticSeries {
+    async fn expand_query(
+        collection_ids: Arc<Vec<ArtifactId>>,
+        db: &Db,
         mut query: Query,
     ) -> Result<Vec<SeriesResponse<Self>>, String> {
+        let dumped = format!("{:?}", query);
         let krate = query.extract(Tag::Crate)?.raw;
         let profile = query
             .extract(Tag::Profile)?
@@ -457,118 +556,162 @@ impl<'a> Series<'a> for ProcessStatisticSeries<'a> {
 
         series.sort_unstable();
 
-        Ok(series
-            .into_iter()
-            .map(|path| SeriesResponse {
-                series: ProcessStatisticSeries {
-                    db,
-                    collection_ids: collection_ids.clone(),
-                    idx: 0,
+        let sids = series
+            .iter()
+            .map(|path| {
+                let query = crate::db::DbLabel::ProcessStat {
                     krate: path.0,
                     profile: path.1,
                     cache: path.2,
                     stat: path.3,
-                },
-                path: Path::new()
-                    .set(PathComponent::Crate(path.0))
-                    .set(PathComponent::Profile(path.1))
-                    .set(PathComponent::Cache(path.2))
-                    .set(PathComponent::ProcessStatistic(path.3)),
+                };
+                query.lookup(&index).unwrap()
             })
+            .collect::<Vec<_>>();
+        let cids = collection_ids
+            .iter()
+            .map(|cid| cid.lookup(&index))
+            .collect::<Vec<_>>();
+
+        let mut conn = db.conn().await;
+        let mut tx = conn.transaction().await;
+
+        let start = std::time::Instant::now();
+        let res = tx
+            .conn()
+            .get_pstats(&sids, &cids)
+            .await
             .into_iter()
-            .collect())
-    }
-}
-
-impl<'a> Iterator for ProcessStatisticSeries<'a> {
-    type Item = (CollectionId, Option<f64>);
-    fn next(&mut self) -> Option<Self::Item> {
-        let col_id = self.collection_ids.get(self.idx)?;
-        self.idx += 1;
-
-        let mut point = self.db.index.load().get::<f64>(
-            &self.db.db,
-            &crate::db::DbLabel::ProcessStat {
-                krate: self.krate,
-                profile: self.profile,
-                cache: self.cache,
-                stat: self.stat,
-            },
-            col_id,
+            .enumerate()
+            .map(|(idx, points)| {
+                let path = &series[idx];
+                SeriesResponse {
+                    series: ProcessStatisticSeries {
+                        cids: ArtifactIdIter::new(collection_ids.clone()),
+                        points: if path.3 == *"cpu-clock" {
+                            // Convert to seconds -- perf reports this measurement in
+                            // milliseconds
+                            points
+                                .into_iter()
+                                .map(|p| p.map(|v| v / 1000.0))
+                                .collect::<Vec<_>>()
+                                .into_iter()
+                        } else {
+                            points.into_iter()
+                        },
+                    },
+                    path: Path::new()
+                        .set(PathComponent::Crate(path.0))
+                        .set(PathComponent::Profile(path.1))
+                        .set(PathComponent::Cache(path.2))
+                        .set(PathComponent::ProcessStatistic(path.3)),
+                }
+            })
+            .collect::<Vec<_>>();
+        log::trace!(
+            "{:?}: run {} from {}",
+            start.elapsed(),
+            series.len(),
+            dumped
         );
-
-        if self.stat == *"cpu-clock" {
-            // Convert to seconds -- perf reports this measurement in
-            // milliseconds
-            point = point.map(|d| d / 1000.0);
-        }
-
-        Some((col_id.clone(), point))
+        Ok(res)
     }
 }
 
-pub struct SelfProfile<'a> {
-    collection_ids: Arc<Vec<CollectionId>>,
-    idx: usize,
-    db: &'a Db,
-    krate: Crate,
-    profile: Profile,
-    cache: Cache,
+impl Iterator for ProcessStatisticSeries {
+    type Item = (ArtifactId, Option<f64>);
+    fn next(&mut self) -> Option<Self::Item> {
+        Some((self.cids.next()?, self.points.next().unwrap()))
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.cids.size_hint()
+    }
 }
 
-impl<'a> Iterator for SelfProfile<'a> {
-    type Item = (CollectionId, Option<collector::SelfProfile>);
-    fn next(&mut self) -> Option<Self::Item> {
-        let col_id = self.collection_ids.get(self.idx)?;
-        self.idx += 1;
+pub struct SelfProfile {
+    cids: ArtifactIdIter,
+    points: std::vec::IntoIter<Option<SelfProfileData>>,
+}
 
-        let mut queries = Vec::new();
-
-        for query in self
-            .db
-            .index
-            .load()
-            .filtered_queries(self.krate, self.profile, self.cache)
-        {
-            if let Some(qd) = self.db.index.load().get::<crate::db::QueryDatum>(
-                &self.db.db,
-                &crate::db::DbLabel::SelfProfileQuery {
-                    krate: self.krate,
-                    profile: self.profile,
-                    cache: self.cache,
-                    query,
-                },
-                col_id,
-            ) {
-                queries.push(collector::self_profile::QueryData {
-                    label: query,
-                    self_time: qd.self_time.as_nanos().try_into().unwrap(),
-                    number_of_cache_hits: qd.number_of_cache_hits,
-                    invocation_count: qd.invocation_count,
-                    blocked_time: qd.blocked_time.as_nanos().try_into().unwrap(),
-                    incremental_load_time: qd.incremental_load_time.as_nanos().try_into().unwrap(),
-                });
+impl SelfProfile {
+    async fn new(
+        cids: Arc<Vec<ArtifactId>>,
+        db: &Db,
+        krate: Crate,
+        profile: Profile,
+        cache: Cache,
+    ) -> Self {
+        let mut res = Vec::with_capacity(cids.len());
+        let idx = db.index.load();
+        let mut conn = db.conn().await;
+        let mut tx = conn.transaction().await;
+        let labels = idx
+            .filtered_queries(krate, profile, cache)
+            .collect::<Vec<_>>();
+        for cid in cids.iter() {
+            let mut queries = Vec::new();
+            for label in labels.iter() {
+                let query = crate::db::DbLabel::SelfProfileQuery {
+                    krate,
+                    profile,
+                    cache,
+                    query: *label,
+                };
+                if let Some(qd) = idx
+                    .get::<crate::db::QueryDatum>(tx.conn(), &query, cid)
+                    .await
+                {
+                    queries.push(QueryData {
+                        label: *label,
+                        self_time: qd.self_time.as_nanos().try_into().unwrap(),
+                        number_of_cache_hits: qd.number_of_cache_hits,
+                        invocation_count: qd.invocation_count,
+                        blocked_time: qd.blocked_time.as_nanos().try_into().unwrap(),
+                        incremental_load_time: qd
+                            .incremental_load_time
+                            .as_nanos()
+                            .try_into()
+                            .unwrap(),
+                    });
+                }
+            }
+            if queries.is_empty() {
+                res.push(None);
+            } else {
+                res.push(Some(SelfProfileData {
+                    query_data: queries,
+                }));
             }
         }
-        if queries.is_empty() {
-            Some((col_id.clone(), None))
-        } else {
-            Some((
-                col_id.clone(),
-                Some(collector::SelfProfile {
-                    query_data: Arc::new(queries),
-                }),
-            ))
+        tx.finish().await.unwrap();
+
+        Self {
+            cids: ArtifactIdIter::new(cids),
+            points: res.into_iter(),
         }
     }
 }
 
-impl<'a> Series<'a> for SelfProfile<'a> {
-    type Element = Option<collector::SelfProfile>;
+impl Iterator for SelfProfile {
+    type Item = (ArtifactId, Option<SelfProfileData>);
+    fn next(&mut self) -> Option<Self::Item> {
+        Some((self.cids.next()?, self.points.next().unwrap()))
+    }
 
-    fn expand_query(
-        collection_ids: Arc<Vec<CollectionId>>,
-        db: &'a Db,
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.cids.size_hint()
+    }
+}
+
+impl Series for SelfProfile {
+    type Element = Option<SelfProfileData>;
+}
+
+impl SelfProfile {
+    async fn expand_query(
+        collection_ids: Arc<Vec<ArtifactId>>,
+        db: &Db,
         mut query: Query,
     ) -> Result<Vec<SeriesResponse<Self>>, String> {
         let krate = query.extract(Tag::Crate)?.raw;
@@ -593,69 +736,78 @@ impl<'a> Series<'a> for SelfProfile<'a> {
         series.sort_unstable();
         series.dedup();
 
-        Ok(series
-            .into_iter()
-            .map(|path| SeriesResponse {
-                series: SelfProfile {
-                    collection_ids: collection_ids.clone(),
-                    idx: 0,
-                    db,
-                    krate: path.0,
-                    profile: path.1,
-                    cache: path.2,
-                },
+        let mut res = Vec::with_capacity(series.len());
+        for path in series {
+            res.push(SeriesResponse {
+                series: SelfProfile::new(collection_ids.clone(), db, path.0, path.1, path.2).await,
                 path: Path::new()
                     .set(PathComponent::Crate(path.0))
                     .set(PathComponent::Profile(path.1))
                     .set(PathComponent::Cache(path.2)),
-            })
-            .into_iter()
-            .collect())
+            });
+        }
+        Ok(res)
     }
 }
 
-pub struct SelfProfileQueryTime<'a> {
-    collection_ids: Arc<Vec<CollectionId>>,
-    idx: usize,
-    db: &'a Db,
-    krate: Crate,
-    profile: Profile,
-    cache: Cache,
-    query: QueryLabel,
+pub struct SelfProfileQueryTime {
+    cids: ArtifactIdIter,
+    points: std::vec::IntoIter<Option<f64>>,
 }
 
-impl<'a> Iterator for SelfProfileQueryTime<'a> {
-    type Item = (CollectionId, Option<f64>);
+impl SelfProfileQueryTime {
+    async fn new(
+        collection_ids: Arc<Vec<ArtifactId>>,
+        db: &Db,
+        krate: Crate,
+        profile: Profile,
+        cache: Cache,
+        query: QueryLabel,
+    ) -> Self {
+        let mut res = Vec::with_capacity(collection_ids.len());
+        let idx = db.index.load();
+        let mut conn = db.conn().await;
+        let mut tx = conn.transaction().await;
+        let query = crate::db::DbLabel::SelfProfileQuery {
+            krate,
+            profile,
+            cache,
+            query,
+        };
+        for cid in collection_ids.iter() {
+            let point = idx
+                .get::<crate::db::QueryDatum>(tx.conn(), &query, cid)
+                .await
+                .map(|qd| qd.self_time.as_secs_f64());
+            res.push(point);
+        }
+        tx.finish().await.unwrap();
+        SelfProfileQueryTime {
+            cids: ArtifactIdIter::new(collection_ids),
+            points: res.into_iter(),
+        }
+    }
+}
+
+impl Iterator for SelfProfileQueryTime {
+    type Item = (ArtifactId, Option<f64>);
     fn next(&mut self) -> Option<Self::Item> {
-        let col_id = self.collection_ids.get(self.idx)?;
-        self.idx += 1;
+        Some((self.cids.next()?, self.points.next().unwrap()))
+    }
 
-        let point = self
-            .db
-            .index
-            .load()
-            .get::<crate::db::QueryDatum>(
-                &self.db.db,
-                &crate::db::DbLabel::SelfProfileQuery {
-                    krate: self.krate,
-                    profile: self.profile,
-                    cache: self.cache,
-                    query: self.query,
-                },
-                col_id,
-            )
-            .map(|qd| qd.self_time.as_secs_f64());
-
-        Some((col_id.clone(), point))
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.cids.size_hint()
     }
 }
 
-impl<'a> Series<'a> for SelfProfileQueryTime<'a> {
+impl Series for SelfProfileQueryTime {
     type Element = Option<f64>;
+}
 
-    fn expand_query(
-        collection_ids: Arc<Vec<CollectionId>>,
-        db: &'a Db,
+impl SelfProfileQueryTime {
+    async fn expand_query(
+        collection_ids: Arc<Vec<ArtifactId>>,
+        db: &Db,
         mut query: Query,
     ) -> Result<Vec<SeriesResponse<Self>>, String> {
         let krate = query.extract(Tag::Crate)?.raw;
@@ -686,81 +838,25 @@ impl<'a> Series<'a> for SelfProfileQueryTime<'a> {
 
         series.sort_unstable();
 
-        Ok(series
-            .into_iter()
-            .map(move |path| SeriesResponse {
-                series: SelfProfileQueryTime {
-                    collection_ids: collection_ids.clone(),
-                    idx: 0,
+        let mut res = Vec::with_capacity(series.len());
+        for path in series {
+            res.push(SeriesResponse {
+                series: SelfProfileQueryTime::new(
+                    collection_ids.clone(),
                     db,
-                    krate: path.0,
-                    profile: path.1,
-                    cache: path.2,
-                    query: path.3,
-                },
+                    path.0,
+                    path.1,
+                    path.2,
+                    path.3,
+                )
+                .await,
                 path: Path::new()
                     .set(PathComponent::Crate(path.0))
                     .set(PathComponent::Profile(path.1))
                     .set(PathComponent::Cache(path.2))
                     .set(PathComponent::QueryLabel(path.3)),
-            })
-            .collect::<Vec<_>>())
-    }
-}
-
-pub struct CompileError<'a> {
-    collection_ids: Arc<Vec<CollectionId>>,
-    idx: usize,
-    db: &'a Db,
-    krate: Crate,
-}
-
-impl<'a> Iterator for CompileError<'a> {
-    type Item = (CollectionId, Option<String>);
-    fn next(&mut self) -> Option<Self::Item> {
-        let col_id = self.collection_ids.get(self.idx)?;
-        self.idx += 1;
-
-        let point = self.db.index.load().get::<String>(
-            &self.db.db,
-            &crate::db::DbLabel::Errors { krate: self.krate },
-            col_id,
-        );
-
-        Some((col_id.clone(), point))
-    }
-}
-
-impl<'a> Series<'a> for CompileError<'a> {
-    type Element = Option<String>;
-
-    fn expand_query(
-        collection_ids: Arc<Vec<CollectionId>>,
-        db: &'a Db,
-        mut query: Query,
-    ) -> Result<Vec<SeriesResponse<Self>>, String> {
-        let krate = query.extract(Tag::Crate)?.raw;
-        query.assert_empty()?;
-
-        let mut series = db
-            .index
-            .load()
-            .all_errors()
-            .filter(|k| krate.matches(*k))
-            .collect::<Vec<_>>();
-        series.sort_unstable();
-
-        Ok(series
-            .into_iter()
-            .map(move |path| SeriesResponse {
-                series: CompileError {
-                    collection_ids: collection_ids.clone(),
-                    idx: 0,
-                    db,
-                    krate: path,
-                },
-                path: Path::new().set(PathComponent::Crate(path)),
-            })
-            .collect::<Vec<_>>())
+            });
+        }
+        Ok(res)
     }
 }

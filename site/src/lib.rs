@@ -18,13 +18,11 @@ pub struct CommandFailed {
     command: String,
 }
 
-mod git;
-mod github;
+pub mod github;
 
 pub mod api;
 mod average;
 pub mod db;
-pub mod ingest;
 mod interpolate;
 pub mod load;
 mod selector;

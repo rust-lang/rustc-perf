@@ -13,7 +13,7 @@
 //!
 //! The responses are calculated in the server.rs file.
 
-use collector::{BenchmarkName, Date, Sha};
+use database::{Crate, Date, Sha};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
@@ -21,7 +21,7 @@ use std::result::Result as StdResult;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct StyledBenchmarkName {
-    pub name: BenchmarkName,
+    pub name: Crate,
     pub profile: crate::db::Profile,
 }
 
@@ -51,7 +51,7 @@ pub struct DateData {
 pub type ServerResult<T> = StdResult<T, String>;
 
 pub mod info {
-    use collector::Date;
+    use database::Date;
     use serde::Serialize;
 
     #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -161,12 +161,12 @@ pub mod days {
 
 pub mod status {
     use crate::load::{CurrentState, MissingReason};
-    use collector::{BenchmarkName, Commit};
+    use database::Commit;
     use serde::{Deserialize, Serialize};
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct BenchmarkStatus {
-        pub name: BenchmarkName,
+        pub name: String,
         pub success: bool,
         pub error: Option<String>,
     }
@@ -181,7 +181,7 @@ pub mod status {
 }
 
 pub mod self_profile {
-    use collector::self_profile::QueryLabel;
+    use database::QueryLabel;
     use serde::{Deserialize, Serialize};
     use std::time::Duration;
 
