@@ -515,7 +515,7 @@ where
     async fn queue_pr(&self, pr: u32) {
         self.conn()
             .execute(
-                "insert into pull_request_build (pr, requested) VALUES ($1, CURRENT_TIMESTAMP)",
+                "insert into pull_request_build (pr, completed, requested) VALUES ($1, false, CURRENT_TIMESTAMP)",
                 &[&(pr as i32)],
             )
             .await

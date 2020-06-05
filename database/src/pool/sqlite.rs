@@ -382,7 +382,9 @@ impl Connection for SqliteConnection {
     }
     async fn queue_pr(&self, pr: u32) {
         self.raw_ref()
-            .prepare_cached("insert into pull_request_builds (pr, requested) VALUES (?, now)")
+            .prepare_cached(
+                "insert into pull_request_builds (pr, completed, requested) VALUES (?, false, now)",
+            )
             .unwrap()
             .execute(params![pr])
             .unwrap();
