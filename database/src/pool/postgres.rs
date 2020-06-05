@@ -487,7 +487,7 @@ where
             .conn()
             .query_opt(
                 &self.statements().get_self_profile_query,
-                &[&(series as i32), &(cid.0 as i32)],
+                &[&(series as i32), &(cid.0 as i16)],
             )
             .await
             .unwrap()?;
