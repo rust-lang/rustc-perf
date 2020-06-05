@@ -118,12 +118,11 @@ async fn enqueue_sha(
         }
     };
     if commit_response.parents.len() != 2 {
-        let msg = format!(
+        log::error!(
             "Bors try commit {} unexpectedly has {} parents.",
             commit_response.sha,
             commit_response.parents.len()
         );
-        post_comment(&data.config, request.issue.number, msg).await;
         return Ok(github::Response);
     }
     let try_commit = TryCommit {
@@ -131,22 +130,24 @@ async fn enqueue_sha(
         parent_sha: commit_response.parents[0].sha.clone(),
         issue: request.issue.clone(),
     };
-    {
+    let queued = {
         let conn = data.conn().await;
         conn.pr_attach_commit(
             request.issue.number,
             &commit_response.sha,
             &commit_response.parents[0].sha,
         )
-        .await;
+        .await
+    };
+    if queued {
+        let msg = format!(
+            "Queued {} with parent {}, future [comparison URL]({}).",
+            commit_response.sha,
+            commit_response.parents[0].sha,
+            try_commit.comparison_url(),
+        );
+        post_comment(&data.config, request.issue.number, msg).await;
     }
-    let msg = format!(
-        "Queued {} with parent {}, future [comparison URL]({}).",
-        commit_response.sha,
-        commit_response.parents[0].sha,
-        try_commit.comparison_url(),
-    );
-    post_comment(&data.config, request.issue.number, msg).await;
     Ok(github::Response)
 }
 
