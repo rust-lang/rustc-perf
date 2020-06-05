@@ -106,7 +106,9 @@ pub async fn handle_dashboard(data: Arc<InputData>) -> ServerResult<dashboard::R
         ) {
             (Some(a), Some(b)) => a.cmp(&b),
             (_, _) => {
-                if *a == "beta" {
+                if a.starts_with("beta") && b.starts_with("beta") {
+                    a.cmp(b)
+                } else if *a == "beta" {
                     std::cmp::Ordering::Greater
                 } else if *b == "beta" {
                     std::cmp::Ordering::Less

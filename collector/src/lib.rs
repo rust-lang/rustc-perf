@@ -445,7 +445,7 @@ pub fn version_supports_incremental(version_str: &str) -> bool {
     if let Some(version) = version_str.parse::<semver::Version>().ok() {
         version >= semver::Version::new(1, 24, 0)
     } else {
-        assert!(version_str == "beta" || version_str.starts_with("master"));
+        assert!(version_str.starts_with("beta") || version_str.starts_with("master"));
         true
     }
 }
