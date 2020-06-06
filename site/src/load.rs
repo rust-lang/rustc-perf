@@ -26,7 +26,7 @@ use database::Date;
 use crate::api::github;
 use collector;
 use database::Pool;
-pub use database::{Commit, Crate, Sha};
+pub use database::{ArtifactId, Commit, Crate, Sha};
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum MissingReason {
@@ -93,8 +93,8 @@ impl InputData {
         ]
     }
 
-    pub fn data_for(&self, is_left: bool, query: Bound) -> Option<Commit> {
-        crate::selector::data_for(&self.index.load().commits(), is_left, query)
+    pub fn data_for(&self, is_left: bool, query: Bound) -> Option<ArtifactId> {
+        crate::selector::data_for(&self.index.load(), is_left, query)
     }
 
     pub fn data_range(&self, range: RangeInclusive<Bound>) -> Vec<Commit> {

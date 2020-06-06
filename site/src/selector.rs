@@ -27,20 +27,34 @@ use crate::interpolate::Interpolate;
 use crate::load::InputData as Db;
 use async_trait::async_trait;
 use collector::Bound;
-use database::{Commit, Crate, Lookup, ProcessStatistic, QueryLabel};
+use database::{Commit, Crate, Index, Lookup, ProcessStatistic, QueryLabel};
 use std::convert::TryInto;
 use std::fmt;
 use std::ops::RangeInclusive;
 use std::sync::Arc;
 
-pub fn data_for(data: &[Commit], is_left: bool, query: Bound) -> Option<Commit> {
-    if is_left {
-        data.iter().find(|commit| query.left_match(commit)).cloned()
+pub fn data_for(data: &Index, is_left: bool, query: Bound) -> Option<ArtifactId> {
+    let commits = data.commits();
+    let commit = if is_left {
+        commits
+            .iter()
+            .find(|commit| query.left_match(commit))
+            .cloned()
     } else {
-        data.iter()
+        commits
+            .iter()
             .rfind(|commit| query.left_match(commit))
             .cloned()
-    }
+    };
+    commit.map(|c| ArtifactId::Commit(c)).or_else(|| {
+        data.artifacts()
+            .find(|aid| match &query {
+                Bound::Commit(c) => *c == **aid,
+                Bound::Date(_) => false,
+                Bound::None => false,
+            })
+            .map(|aid| ArtifactId::Artifact(aid.to_string()))
+    })
 }
 
 pub fn range_subset(data: Vec<Commit>, range: RangeInclusive<Bound>) -> Vec<Commit> {

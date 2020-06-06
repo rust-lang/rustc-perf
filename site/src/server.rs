@@ -57,7 +57,7 @@ pub fn handle_info(data: &InputData) -> info::Response {
     stats.sort();
     info::Response {
         stats,
-        as_of: data.index.load().commits().last().unwrap().date,
+        as_of: data.index.load().commits().last().map(|d| d.date),
     }
 }
 
@@ -476,7 +476,7 @@ pub async fn handle_compare(body: days::Request, data: &InputData) -> ServerResu
         "could not find end commit for bound {:?}",
         body.end
     ))?;
-    let cids = Arc::new(vec![a.into(), b.into()]);
+    let cids = Arc::new(vec![a.clone().into(), b.clone().into()]);
     let stat_id = StatId::from_str(&body.stat)?;
 
     let query = selector::Query::new()
@@ -498,7 +498,7 @@ pub async fn handle_compare(body: days::Request, data: &InputData) -> ServerResu
 
 impl DateData {
     fn consume_one<'a, T>(
-        commit: collector::Commit,
+        commit: ArtifactId,
         series: &mut [selector::SeriesResponse<T>],
     ) -> DateData
     where
@@ -508,7 +508,7 @@ impl DateData {
 
         for response in series {
             let (id, point) = response.series.next().expect("must have element");
-            assert_eq!(db::ArtifactId::from(commit), id);
+            assert_eq!(commit, id);
 
             let point = if let Some(pt) = point {
                 pt
@@ -525,8 +525,15 @@ impl DateData {
         }
 
         DateData {
-            date: commit.date,
-            commit: commit.sha.clone(),
+            date: if let ArtifactId::Commit(c) = commit {
+                Some(c.date)
+            } else {
+                None
+            },
+            commit: match commit {
+                ArtifactId::Commit(c) => c.sha.to_string(),
+                ArtifactId::Artifact(i) => i,
+            },
             data,
         }
     }

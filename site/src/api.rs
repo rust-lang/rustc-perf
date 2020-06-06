@@ -13,7 +13,7 @@
 //!
 //! The responses are calculated in the server.rs file.
 
-use database::{Crate, Date, Sha};
+use database::{Crate, Date};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
@@ -43,8 +43,8 @@ impl Serialize for StyledBenchmarkName {
 /// Data associated with a specific date
 #[derive(Debug, Clone, Serialize)]
 pub struct DateData {
-    pub date: Date,
-    pub commit: Sha,
+    pub date: Option<Date>,
+    pub commit: String,
     pub data: HashMap<String, Vec<(String, f64)>>,
 }
 
@@ -60,7 +60,7 @@ pub mod info {
         pub stats: Vec<String>,
 
         /// Chronologically last loaded run date.
-        pub as_of: Date,
+        pub as_of: Option<Date>,
     }
 }
 
