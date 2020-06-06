@@ -108,9 +108,9 @@ pub async fn handle_dashboard(data: Arc<InputData>) -> ServerResult<dashboard::R
             (_, _) => {
                 if a.starts_with("beta") && b.starts_with("beta") {
                     a.cmp(b)
-                } else if *a == "beta" {
+                } else if a.starts_with("beta") {
                     std::cmp::Ordering::Greater
-                } else if *b == "beta" {
+                } else if b.starts_with("beta") {
                     std::cmp::Ordering::Less
                 } else {
                     panic!("unexpected version")
