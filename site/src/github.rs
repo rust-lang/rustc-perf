@@ -74,6 +74,10 @@ pub async fn handle_github(
     if let Some(captures) = BODY_TRY_COMMIT.captures(&request.comment.body) {
         if let Some(commit) = captures.get(1).map(|c| c.as_str().to_owned()) {
             let commit = commit.trim_start_matches("https://github.com/rust-lang/rust/commit/");
+            {
+                let conn = data.conn().await;
+                conn.queue_pr(request.issue.number).await;
+            }
             let f = enqueue_sha(request, data, commit.to_owned());
             return f.await;
         }
