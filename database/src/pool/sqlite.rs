@@ -331,7 +331,9 @@ impl Connection for SqliteConnection {
                             query
                                 .query_row(params![&sid, &cid.0], |row| row.get(0))
                                 .optional()
-                                .unwrap()
+                                .unwrap_or_else(|e| {
+                                    panic!("{:?}: series={:?}, aid={:?}", e, sid, cid);
+                                })
                         })
                     })
                     .collect::<Vec<_>>();
@@ -600,7 +602,8 @@ impl Connection for SqliteConnection {
     async fn record_benchmark(&self, krate: &str, supports_stable: bool) {
         self.raw_ref()
             .execute(
-                "insert or replace into benchmark (name, stabilized) VALUES (?, ?)",
+                "insert into benchmark (name, stabilized) VALUES (?, ?)
+                ON CONFLICT (name) do update set stabilized = excluded.stabilized",
                 params![krate, supports_stable],
             )
             .unwrap();
