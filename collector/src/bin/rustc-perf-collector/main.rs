@@ -15,7 +15,6 @@ use std::path::{Path, PathBuf};
 use std::process;
 use std::process::Command;
 use std::str;
-use std::sync::Arc;
 use tokio::runtime::Runtime;
 
 mod background_worker;
@@ -495,14 +494,36 @@ fn main_result() -> anyhow::Result<i32> {
 
         ("bench_published", Some(sub_m)) => {
             let id = sub_m.value_of("ID").unwrap();
-            let cfg =
-                rustup::Cfg::from_env(Arc::new(|_| {})).map_err(|e| anyhow::anyhow!("{:?}", e))?;
-            let toolchain = rustup::Toolchain::from(&cfg, id)
-                .map_err(|e| anyhow::anyhow!("{:?}", e))
-                .with_context(|| format!("creating toolchain for id: {}", id))?;
-            toolchain
-                .install_from_dist_if_not_installed()
-                .map_err(|e| anyhow::anyhow!("{:?}", e))?;
+            let status = Command::new("rustup")
+                .args(&["install", "--profile=minimal", &id])
+                .status()
+                .context("rustup install")?;
+            if !status.success() {
+                anyhow::bail!("failed to install toolchain for {}", id);
+            }
+
+            let rustc = String::from_utf8(
+                Command::new("rustup")
+                    .arg("which")
+                    .arg("--toolchain")
+                    .arg(&id)
+                    .arg("rustc")
+                    .output()
+                    .context("rustup which rustc")?
+                    .stdout,
+            )
+            .context("utf8")?;
+            let cargo = String::from_utf8(
+                Command::new("rustup")
+                    .arg("which")
+                    .arg("--toolchain")
+                    .arg(&id)
+                    .arg("cargo")
+                    .output()
+                    .context("rustup which cargo")?
+                    .stdout,
+            )
+            .context("utf8")?;
 
             // Remove benchmarks that don't work with a stable compiler.
             benchmarks.retain(|b| b.supports_stable());
@@ -520,8 +541,8 @@ fn main_result() -> anyhow::Result<i32> {
                 &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
                 &run_kinds,
                 Compiler {
-                    rustc: &toolchain.binary_file("rustc"),
-                    cargo: &toolchain.binary_file("cargo"),
+                    rustc: Path::new(rustc.trim()),
+                    cargo: Path::new(cargo.trim()),
                     is_nightly: false,
                     triple: "x86_64-unknown-linux-gnu",
                 },

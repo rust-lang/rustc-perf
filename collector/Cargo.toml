@@ -32,10 +32,6 @@ database = { path = "../database" }
 intern = { path = "../intern" }
 futures = "0.3.5"
 
-[dependencies.rustup]
-git = "https://github.com/rust-lang/rustup.git"
-optional = false
-
 [[bin]]
 name = "collector"
 path = "src/bin/rustc-perf-collector/main.rs"
