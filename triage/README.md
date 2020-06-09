@@ -7,6 +7,10 @@ usage.
 
 - Tuesday morning (Melbourne time): njn
 
+This is a good time to do it because This Week in Rust (see below) is usually
+published on Tuesday, US time, and so it means the PR to include the triage
+details in TWiR can be merged shortly before publication.
+
 ## Instructions
 
 Check the most recent triage log entry. Look for responses in PRs, and follow
