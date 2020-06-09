@@ -148,6 +148,10 @@ static MIGRATIONS: &[&str] = &[
         requested timestamptz
     );
     "#,
+    // Prevent more than one queued entry per PR without a build
+    r#"
+    create unique index on pull_request_build (pr) where complete = false;
+    "#,
 ];
 
 #[async_trait::async_trait]
@@ -515,7 +519,7 @@ where
     async fn queue_pr(&self, pr: u32) {
         self.conn()
             .execute(
-                "insert into pull_request_build (pr, complete, requested) VALUES ($1, false, CURRENT_TIMESTAMP)",
+                "insert into pull_request_build (pr, complete, requested) VALUES ($1, false, CURRENT_TIMESTAMP) ON CONFLICT DO NOTHING",
                 &[&(pr as i32)],
             )
             .await
