@@ -10,7 +10,6 @@ homepage = "https://github.com/lifthrasiir/rust-encoding"
 documentation = "https://lifthrasiir.github.io/rust-encoding/"
 repository = "https://github.com/lifthrasiir/rust-encoding"
 keywords = ["encoding", "unicode", "charset"]
-readme = "README.md"
 license = "MIT"
 
 [lib]
