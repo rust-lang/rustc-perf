@@ -658,6 +658,7 @@ pub async fn handle_self_profile(
     let mut it = body.benchmark.rsplitn(2, '-');
     let bench_ty = it.next().ok_or(format!("no benchmark type"))?;
     let bench_name = it.next().ok_or(format!("no benchmark name"))?;
+    let index = data.index.load();
 
     let sort_idx = body
         .sort_idx
@@ -670,26 +671,33 @@ pub async fn handle_self_profile(
         .set(Tag::Profile, selector::Selector::One(bench_ty))
         .set(Tag::Cache, selector::Selector::One(body.run_name.clone()));
 
-    let mut commits = vec![data
-        .index
-        .load()
+    let mut commits = vec![index
         .commits()
         .iter()
         .find(|c| c.sha == *body.commit.as_str())
-        .cloned()
-        .ok_or(format!("could not find commit {}", body.commit))?
-        .into()];
+        .map(|c| database::ArtifactId::Commit(*c))
+        .or_else(|| {
+            index
+                .artifacts()
+                .find(|a| **a == body.commit)
+                .map(|a| database::ArtifactId::Artifact(a.to_owned()))
+        })
+        .ok_or(format!("could not find artifact {}", body.commit))?];
 
     if let Some(bc) = &body.base_commit {
         commits.push(
-            data.index
-                .load()
+            index
                 .commits()
                 .iter()
                 .find(|c| c.sha == *bc.as_str())
-                .cloned()
-                .ok_or(format!("could not find base commit {}", body.commit))?
-                .into(),
+                .map(|c| database::ArtifactId::Commit(*c))
+                .or_else(|| {
+                    index
+                        .artifacts()
+                        .find(|a| **a == *bc.as_str())
+                        .map(|a| database::ArtifactId::Artifact(a.to_owned()))
+                })
+                .ok_or(format!("could not find artifact {}", body.commit))?,
         );
     }
 
@@ -716,13 +724,17 @@ pub async fn handle_self_profile(
         cpu_response.next().unwrap().1,
         sp_response.next().unwrap().1,
         Some(sort_idx),
-    )?;
+    )
+    .map_err(|e| format!("{}: {}", body.commit, e))?;
     let base_profile = if body.base_commit.is_some() {
-        Some(get_self_profile_data(
-            cpu_response.next().unwrap().1,
-            sp_response.next().unwrap().1,
-            None,
-        )?)
+        Some(
+            get_self_profile_data(
+                cpu_response.next().unwrap().1,
+                sp_response.next().unwrap().1,
+                None,
+            )
+            .map_err(|e| format!("{}: {}", body.base_commit.as_ref().unwrap(), e))?,
+        )
     } else {
         None
     };

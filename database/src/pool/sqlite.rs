@@ -353,7 +353,7 @@ impl Connection for SqliteConnection {
         self.raw_ref().prepare_cached("
                 select self_time, blocked_time, incremental_load_time, number_of_cache_hits, invocation_count
                     from self_profile_query
-                    where series = ? and cid = ? order by self_time asc;").unwrap()
+                    where series = ? and aid = ? order by self_time asc;").unwrap()
             .query_row(params![&series, &cid.0], |row| {
         let self_time: i64 = row.get(0)?;
         let blocked_time: i64 = row.get(1)?;
