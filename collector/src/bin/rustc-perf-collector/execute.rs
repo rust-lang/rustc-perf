@@ -238,7 +238,7 @@ impl<'a> CargoProcess<'a> {
             .env("RUSTC", &*FAKE_RUSTC)
             .env("RUSTDOC", &*FAKE_RUSTDOC)
             .env("RUSTC_REAL", &self.compiler.rustc)
-            .env("RUSTDOC_REAL", dbg!(&self.compiler.rustdoc))
+            .env("RUSTDOC_REAL", &self.compiler.rustdoc)
             .env(
                 "CARGO_INCREMENTAL",
                 &format!("{}", self.incremental as usize),
@@ -247,7 +247,7 @@ impl<'a> CargoProcess<'a> {
             .arg(subcommand)
             .arg("--manifest-path")
             .arg(&self.manifest_path);
-        dbg!(cmd)
+        cmd
     }
 
     fn get_pkgid(&self, cwd: &Path) -> String {

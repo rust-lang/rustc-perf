@@ -55,6 +55,17 @@ pub enum BuildKind {
     Opt,
 }
 
+impl BuildKind {
+    fn all() -> Vec<Self> {
+        vec![
+            BuildKind::Check,
+            BuildKind::Debug,
+            BuildKind::Doc,
+            BuildKind::Opt,
+        ]
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum RunKind {
     Full,
@@ -104,7 +115,7 @@ pub fn build_kinds_from_arg(arg: &Option<&str>) -> Result<Vec<BuildKind>, KindEr
     if let Some(arg) = arg {
         kinds_from_arg(STRINGS_AND_BUILD_KINDS, arg)
     } else {
-        Ok(vec![BuildKind::Check, BuildKind::Debug, BuildKind::Opt])
+        Ok(BuildKind::all())
     }
 }
 
@@ -176,7 +187,7 @@ fn process_commits(
                 rt,
                 conn,
                 &ArtifactId::Commit(commit),
-                &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
+                &BuildKind::all(),
                 &RunKind::all(),
                 Compiler::from_sysroot(&sysroot),
                 &benchmarks,
@@ -402,7 +413,7 @@ fn main_result() -> anyhow::Result<i32> {
            (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
            (@arg BUILDS: --builds +takes_value
             "One or more (comma-separated) of: 'Check', 'Debug',\n\
-            'Opt', 'All'")
+            'Doc', 'Opt', 'All'")
            (@arg RUNS: --runs +takes_value
             "One or more (comma-separated) of: 'Full',\n\
             'IncrFull', 'IncrUnchanged', 'IncrPatched', 'All'")
@@ -466,14 +477,14 @@ fn main_result() -> anyhow::Result<i32> {
             let commit = sub_m.value_of("COMMIT").unwrap();
             let commit = get_commit_or_fake_it(&commit)?;
             let sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")?;
-            let build_kinds = &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt];
+            let build_kinds = BuildKind::all();
             let run_kinds = RunKind::all();
             let conn = rt.block_on(pool.expect("--db passed").connection());
             bench_commit(
                 &mut rt,
                 conn,
                 &ArtifactId::Commit(commit),
-                build_kinds,
+                &build_kinds,
                 &run_kinds,
                 Compiler::from_sysroot(&sysroot),
                 &benchmarks,
@@ -557,7 +568,7 @@ fn main_result() -> anyhow::Result<i32> {
                 &mut rt,
                 conn,
                 &ArtifactId::Artifact(id.to_string()),
-                &[BuildKind::Check, BuildKind::Debug, BuildKind::Opt],
+                &BuildKind::all(),
                 &run_kinds,
                 Compiler {
                     rustc: Path::new(rustc.trim()),
