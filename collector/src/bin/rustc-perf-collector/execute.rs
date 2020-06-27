@@ -236,7 +236,9 @@ impl<'a> CargoProcess<'a> {
             // Not all cargo invocations (e.g. `cargo clean`) need all of these
             // env vars set, but it doesn't hurt to have them.
             .env("RUSTC", &*FAKE_RUSTC)
+            .env("RUSTDOC", &*FAKE_RUSTDOC)
             .env("RUSTC_REAL", &self.compiler.rustc)
+            .env("RUSTDOC_REAL", dbg!(&self.compiler.rustdoc))
             .env(
                 "CARGO_INCREMENTAL",
                 &format!("{}", self.incremental as usize),
@@ -280,7 +282,7 @@ impl<'a> CargoProcess<'a> {
                 }
 
                 if self.build_kind == BuildKind::Doc {
-                    dbg!("doc")
+                    "rustdoc"
                 } else {
                     profiler.subcommand()
                 }
@@ -309,8 +311,9 @@ impl<'a> CargoProcess<'a> {
             // onto rustc for the final crate, which is exactly the crate for which
             // we want to wrap rustc.
             if let Some((ref mut processor, ..)) = self.processor_etc {
+                let profiler = processor.profiler().name();
                 cmd.arg("--wrap-rustc-with");
-                cmd.arg(processor.profiler().name());
+                cmd.arg(profiler);
                 cmd.args(&self.rustc_args);
             }
 
@@ -346,6 +349,16 @@ lazy_static::lazy_static! {
         fake_rustc.pop();
         fake_rustc.push("rustc-fake");
         fake_rustc
+    };
+    static ref FAKE_RUSTDOC: PathBuf = {
+        let mut fake_rustdoc = env::current_exe().unwrap();
+        fake_rustdoc.pop();
+        fake_rustdoc.push("rustdoc-fake");
+        // link from rustc-fake to rustdoc-fake
+        if !fake_rustdoc.exists() {
+            std::fs::hard_link(&*FAKE_RUSTC, &fake_rustdoc).expect("failed to make hard link");
+        }
+        fake_rustdoc
     };
 }
 

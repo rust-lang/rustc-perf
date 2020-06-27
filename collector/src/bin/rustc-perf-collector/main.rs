@@ -29,6 +29,7 @@ use sysroot::Sysroot;
 #[derive(Debug, Copy, Clone)]
 pub struct Compiler<'a> {
     pub rustc: &'a Path,
+    pub rustdoc: &'a Path,
     pub cargo: &'a Path,
     pub triple: &'a str,
     pub is_nightly: bool,
@@ -38,6 +39,7 @@ impl<'a> Compiler<'a> {
     fn from_sysroot(sysroot: &'a Sysroot) -> Compiler<'a> {
         Compiler {
             rustc: &sysroot.rustc,
+            rustdoc: &sysroot.rustdoc,
             cargo: &sysroot.cargo,
             triple: &sysroot.triple,
             is_nightly: true,
@@ -86,6 +88,7 @@ pub enum KindError {
 const STRINGS_AND_BUILD_KINDS: &[(&str, BuildKind)] = &[
     ("Check", BuildKind::Check),
     ("Debug", BuildKind::Debug),
+    ("Doc", BuildKind::Doc),
     ("Opt", BuildKind::Opt),
 ];
 
@@ -395,6 +398,7 @@ fn main_result() -> anyhow::Result<i32> {
        (@subcommand bench_local =>
            (about: "benchmark a local rustc")
            (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
+           (@arg RUSTDOC: --rustdoc +required +takes_value "The path to the local rustdoc to benchmark")
            (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
            (@arg BUILDS: --builds +takes_value
             "One or more (comma-separated) of: 'Check', 'Debug',\n\
@@ -482,12 +486,14 @@ fn main_result() -> anyhow::Result<i32> {
 
         ("bench_local", Some(sub_m)) => {
             let rustc = sub_m.value_of("RUSTC").unwrap();
+            let rustdoc = sub_m.value_of("RUSTDOC").unwrap();
             let cargo = sub_m.value_of("CARGO").unwrap();
             let build_kinds = build_kinds_from_arg(&sub_m.value_of("BUILDS"))?;
             let run_kinds = run_kinds_from_arg(&sub_m.value_of("RUNS"))?;
             let id = sub_m.value_of("ID").unwrap();
 
             let rustc_path = PathBuf::from(rustc).canonicalize()?;
+            let rustdoc_path = PathBuf::from(rustdoc).canonicalize()?;
             let cargo_path = PathBuf::from(cargo).canonicalize()?;
             let conn = rt.block_on(pool.expect("--db passed").connection());
             bench_commit(
@@ -498,6 +504,7 @@ fn main_result() -> anyhow::Result<i32> {
                 &run_kinds,
                 Compiler {
                     rustc: &rustc_path,
+                    rustdoc: &rustdoc_path,
                     cargo: &cargo_path,
                     triple: "x86_64-unknown-linux-gnu",
                     is_nightly: true,
@@ -520,28 +527,22 @@ fn main_result() -> anyhow::Result<i32> {
                 anyhow::bail!("failed to install toolchain for {}", id);
             }
 
-            let rustc = String::from_utf8(
-                Command::new("rustup")
-                    .arg("which")
-                    .arg("--toolchain")
-                    .arg(&id)
-                    .arg("rustc")
-                    .output()
-                    .context("rustup which rustc")?
-                    .stdout,
-            )
-            .context("utf8")?;
-            let cargo = String::from_utf8(
-                Command::new("rustup")
-                    .arg("which")
-                    .arg("--toolchain")
-                    .arg(&id)
-                    .arg("cargo")
-                    .output()
-                    .context("rustup which cargo")?
-                    .stdout,
-            )
-            .context("utf8")?;
+            let which = |tool| {
+                String::from_utf8(
+                    Command::new("rustup")
+                        .arg("which")
+                        .arg("--toolchain")
+                        .arg(&id)
+                        .arg(tool)
+                        .output()
+                        .context(format!("rustup which {}", tool))?
+                        .stdout,
+                )
+                .context("utf8")
+            };
+            let rustc = which("rustc")?;
+            let rustdoc = which("rustdoc")?;
+            let cargo = which("cargo")?;
 
             // Remove benchmarks that don't work with a stable compiler.
             benchmarks.retain(|b| b.supports_stable());
@@ -560,6 +561,7 @@ fn main_result() -> anyhow::Result<i32> {
                 &run_kinds,
                 Compiler {
                     rustc: Path::new(rustc.trim()),
+                    rustdoc: Path::new(rustdoc.trim()),
                     cargo: Path::new(cargo.trim()),
                     is_nightly: false,
                     triple: "x86_64-unknown-linux-gnu",
@@ -584,6 +586,7 @@ fn main_result() -> anyhow::Result<i32> {
 
         ("profile", Some(sub_m)) => {
             let rustc = sub_m.value_of("RUSTC").unwrap();
+            let rustdoc = sub_m.value_of("RUSTDOC").unwrap();
             let cargo = sub_m.value_of("CARGO").unwrap();
             let build_kinds = build_kinds_from_arg(&sub_m.value_of("BUILDS"))?;
             let run_kinds = run_kinds_from_arg(&sub_m.value_of("RUNS"))?;
@@ -594,9 +597,11 @@ fn main_result() -> anyhow::Result<i32> {
             eprintln!("Profiling with {:?}", profiler);
 
             let rustc_path = PathBuf::from(rustc).canonicalize()?;
+            let rustdoc_path = PathBuf::from(rustdoc).canonicalize()?;
             let cargo_path = PathBuf::from(cargo).canonicalize()?;
             let compiler = Compiler {
                 rustc: &rustc_path,
+                rustdoc: &rustdoc_path,
                 cargo: &cargo_path,
                 is_nightly: true,
                 triple: "x86_64-unknown-linux-gnu", // XXX: Technically not necessarily true
