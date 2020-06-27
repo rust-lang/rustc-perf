@@ -176,7 +176,10 @@ impl Profiler {
             | Profiler::DHAT
             | Profiler::Massif
             | Profiler::Eprintln => true,
-            Profiler::LlvmLines => build_kind != BuildKind::Check,
+            Profiler::LlvmLines => match build_kind {
+                BuildKind::Debug | BuildKind::Opt => true,
+                BuildKind::Check | BuildKind::Doc => false,
+            }
         }
     }
 
@@ -242,7 +245,7 @@ impl<'a> CargoProcess<'a> {
             .arg(subcommand)
             .arg("--manifest-path")
             .arg(&self.manifest_path);
-        cmd
+        dbg!(cmd)
     }
 
     fn get_pkgid(&self, cwd: &Path) -> String {
@@ -276,7 +279,11 @@ impl<'a> CargoProcess<'a> {
                     ));
                 }
 
-                profiler.subcommand()
+                if self.build_kind == BuildKind::Doc {
+                    dbg!("doc")
+                } else {
+                    profiler.subcommand()
+                }
             } else {
                 "rustc"
             };
@@ -288,6 +295,7 @@ impl<'a> CargoProcess<'a> {
                     cmd.arg("--profile").arg("check");
                 }
                 BuildKind::Debug => {}
+                BuildKind::Doc => {}
                 BuildKind::Opt => {
                     cmd.arg("--release");
                 }
@@ -438,6 +446,7 @@ impl<'a> MeasureProcessor<'a> {
         let profile = match build_kind {
             BuildKind::Check => database::Profile::Check,
             BuildKind::Debug => database::Profile::Debug,
+            BuildKind::Doc => database::Profile::Doc,
             BuildKind::Opt => database::Profile::Opt,
         };
         let mut buf = FuturesUnordered::new();

@@ -64,6 +64,7 @@ pub fn handle_info(data: &InputData) -> info::Response {
 pub struct ByProfile<T> {
     pub check: T,
     pub debug: T,
+    pub doc: T,
     pub opt: T,
 }
 
@@ -76,6 +77,7 @@ impl<T> ByProfile<T> {
         Ok(ByProfile {
             check: f(Profile::Check).await?,
             debug: f(Profile::Debug).await?,
+            doc: f(Profile::Doc).await?,
             opt: f(Profile::Opt).await?,
         })
     }
@@ -87,6 +89,7 @@ impl<T> std::ops::Index<Profile> for ByProfile<T> {
         match index {
             Profile::Check => &self.check,
             Profile::Debug => &self.debug,
+            Profile::Doc => &self.doc,
             Profile::Opt => &self.opt,
         }
     }

@@ -49,6 +49,7 @@ impl<'a> Compiler<'a> {
 pub enum BuildKind {
     Check,
     Debug,
+    Doc,
     Opt,
 }
 
