@@ -55,4 +55,30 @@ jobs:
 
       - name: Check benchmarks
         run: sh -x -c "ci/check-benchmarks.sh"
+        env:
+          COLLECTOR_ARGS: "--exclude servo,cargo,crates.io,packed-simd,sentry-cli,tuple-stress"
+  test_benchmarks_2:
+    name: Benchmark test 2
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the source code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 1
 
+      - name: Install latest nightly
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+
+      - name: Configure environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y linux-tools-common linux-tools-generic linux-tools-`uname -r`
+          echo -1 | sudo tee /proc/sys/kernel/perf_event_paranoid
+
+      - name: Check benchmarks
+        run: sh -x -c "ci/check-benchmarks.sh"
+        env:
+          COLLECTOR_ARGS: "--filter servo,cargo,crates.io,packed-simd,sentry-cli,tuple-stress"
