@@ -9,8 +9,8 @@ env:
   AWS_ACCESS_KEY_ID: AKIA46X5W6CZBLO3VBND
 
 jobs:
-  ci:
-    name: CI
+  test_and_deploy:
+    name: Test and deploy
     runs-on: ubuntu-latest
     steps:
       - name: Checkout the source code
@@ -32,3 +32,27 @@ jobs:
           aws_access_key_id: "${{ env.AWS_ACCESS_KEY_ID }}"
           aws_secret_access_key: "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
         if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/deploy'
+  test_benchmarks_1:
+    name: Benchmark test 1
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the source code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 1
+
+      - name: Install latest nightly
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+
+      - name: Configure environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y linux-tools-common linux-tools-generic linux-tools-`uname -r`
+          echo -1 | sudo tee /proc/sys/kernel/perf_event_paranoid
+
+      - name: Check benchmarks
+        run: sh -x -c "ci/check-benchmarks.sh"
+
