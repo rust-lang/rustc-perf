@@ -196,7 +196,7 @@ impl<'a> Connection for BothTransaction<'a> {
             self.b.conn().maybe_create_indices()
         );
     }
-    async fn transaction(&mut self) -> Box<dyn super::Transaction> {
+    async fn transaction<'b>(&'b mut self) -> Box<dyn super::Transaction + 'b> {
         panic!("nested transactions not supported")
     }
     async fn load_index(&mut self) -> Index {
