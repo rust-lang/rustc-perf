@@ -336,12 +336,15 @@ fn get_benchmarks(
         }
 
         if let Some(filter) = filter {
-            if !name.contains(filter) {
+            if !filter
+                .split(',')
+                .any(|to_include| name.contains(to_include))
+            {
                 debug!(
                     "benchmark {} - doesn't match --filter argument, skipping",
                     name
                 );
-                continue;
+                continue 'outer;
             }
         }
 
