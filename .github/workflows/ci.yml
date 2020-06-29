@@ -32,8 +32,8 @@ jobs:
           aws_access_key_id: "${{ env.AWS_ACCESS_KEY_ID }}"
           aws_secret_access_key: "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
         if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/deploy'
-  test_benchmarks_1:
-    name: Benchmark test 1
+  test_benchmarks:
+    name: Test benchmarks
     runs-on: ubuntu-latest
     steps:
       - name: Checkout the source code
@@ -60,8 +60,8 @@ jobs:
         run: sh -x -c "ci/check-benchmarks.sh"
         env:
           COLLECTOR_ARGS: "--exclude script-servo"
-  test_benchmarks_2:
-    name: Benchmark test 2
+  test_script_servo:
+    name: Test benchmark script-servo
     runs-on: ubuntu-latest
     steps:
       - name: Checkout the source code
