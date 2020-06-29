@@ -616,6 +616,8 @@ impl<'a> Processor for ProfileProcessor<'a> {
         data: &ProcessOutputData<'_>,
         output: process::Output,
     ) -> anyhow::Result<Retry> {
+        fs::create_dir_all(self.output_dir)?;
+
         // Produce a name of the form $PREFIX-$ID-$BENCHMARK-$BUILDKIND-$RUNKIND.
         let out_file = |prefix: &str| -> String {
             format!(

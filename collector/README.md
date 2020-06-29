@@ -146,6 +146,9 @@ and visit `localhost:2346/compare.html` in a web browser.
 Wait for the "Loading complete" message; it should come within a couple dozen
 seconds (or faster, depending on how much data you've collected).
 
+Enter the IDs for two runs in the "Commit/Date A" and "Commit/Date B" text
+boxes (the two IDs can be the same) and click on "Submit".
+
 If you've collected new data, you can run `curl -X POST
 localhost:2346/perf/onpush` to update the site's view of the data, or just
 restart the server.
@@ -186,20 +189,23 @@ Without this you won't get useful file names and line numbers in the output.
 
 To self-profile a local build:
 ```
-./target/release/collector --output-repo $OUTPUT_DIR --self-profile \
-    bench_local $PROFILER --rustc $RUSTC --cargo $CARGO $ID
+./target/release/collector --db $DATABASE --self-profile \
+    bench_local --rustc $RUSTC --cargo $CARGO $ID
 ```
 
 Then view the results the same way as for the `bench_local` subcommand.
 
 To profile a local build with a different profiler:
 ```
-./target/release/collector --output-repo $OUTPUT_DIR \
-    profile $PROFILER --rustc $RUSTC --cargo $CARGO $ID
+./target/release/collector profile $PROFILER \
+    --output $OUTPUT_DIR --rustc $RUSTC --cargo $CARGO $ID
 ```
 
-All the parts of this command are the same as for the `bench_local` subcommand,
-except that `$PROFILER` is one of the following.
+This is similar to the `bench_local` subcommand, with a couple of exceptions.
+First, `$OUTPUT_DIR` is a directory in which the output will be placed. If the
+directory doesn't exist, it will be created.
+
+Second, `$PROFILER` is one of the following.
 - `self-profile`: Profile with rustc's `-Zself-profile`.
   - **Purpose**. This gives multiple high-level views of compiler performance,
     in both tabular and graphical form.
