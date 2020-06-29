@@ -495,7 +495,9 @@ impl<'a> Processor for MeasureProcessor<'a> {
 
     fn finished_first_collection(&mut self) -> bool {
         self.is_first_collection = false;
-        true
+        // The second collection is different from the first only if
+        // self-profile is enabled, otherwise they're the same.
+        self.self_profile
     }
 
     fn process_output(
