@@ -56,7 +56,7 @@ jobs:
       - name: Check benchmarks
         run: sh -x -c "ci/check-benchmarks.sh"
         env:
-          COLLECTOR_ARGS: "--exclude servo,cargo,crates.io,packed-simd,sentry-cli,tuple-stress"
+          COLLECTOR_ARGS: "--exclude script-servo"
   test_benchmarks_2:
     name: Benchmark test 2
     runs-on: ubuntu-latest
@@ -84,5 +84,5 @@ jobs:
       - name: Check benchmarks
         run: sh -x -c "ci/check-benchmarks.sh"
         env:
-          COLLECTOR_ARGS: "--filter servo,cargo,crates.io,packed-simd,sentry-cli,tuple-stress"
+          COLLECTOR_ARGS: "--filter script-servo"
           SHELL: "/bin/bash"
