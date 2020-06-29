@@ -53,6 +53,9 @@ jobs:
           sudo apt-get install -y linux-tools-common linux-tools-generic linux-tools-`uname -r`
           echo -1 | sudo tee /proc/sys/kernel/perf_event_paranoid
 
+      - name: Build collector
+        run: cargo build -p collector
+
       - name: Check benchmarks
         run: sh -x -c "ci/check-benchmarks.sh"
         env:
@@ -80,6 +83,9 @@ jobs:
 
       - name: Install servo dependencies
         run: sudo apt-get install -y llvm-dev clang libx11-dev python2.7 autoconf2.13
+
+      - name: Build collector
+        run: cargo build -p collector
 
       - name: Check benchmarks
         run: sh -x -c "ci/check-benchmarks.sh"
