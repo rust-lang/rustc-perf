@@ -331,7 +331,6 @@ impl Connection for SqliteConnection {
                         cid.and_then(|cid| {
                             query
                                 .query_row(params![&sid, &cid.0], |row| row.get(0))
-                                .optional()
                                 .unwrap_or_else(|e| {
                                     panic!("{:?}: series={:?}, aid={:?}", e, sid, cid);
                                 })
