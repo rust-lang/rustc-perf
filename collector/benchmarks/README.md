@@ -20,7 +20,9 @@ These are real programs that are important in some way, and worth tracking.
 - **piston-image**: A modular game engine. An interesting Rust program.
 - **regex**: A regular expression parser. Used by many Rust programs.
 - **ripgrep**: A line-oriented search tool. A widely-used utility.
-- **script-servo**: Servo's `script` crate. A particularly large crate.
+- **script-servo**: Servo's `script` crate. A particularly large crate. At
+5ad7e5b4fbd58, with [PR#27063](https://github.com/servo/servo/pull/27063)
+applied atop.
 - **serde**: A serialization/deserialization crate. Used by many other
   Rust programs.
 - **style-servo**: Servo's `style` crate. A large crate, and one used by

@@ -201,6 +201,17 @@ fn n_benchmarks_remaining(n: usize) -> String {
     format!("{} benchmark{} remaining", n, suffix)
 }
 
+struct BenchmarkErrors(usize);
+
+impl BenchmarkErrors {
+    fn fail_if_error(self) -> anyhow::Result<()> {
+        if self.0 > 0 {
+            anyhow::bail!("{} benchmarks failed", self.0)
+        }
+        Ok(())
+    }
+}
+
 fn bench_commit(
     rt: &mut Runtime,
     mut conn: Box<dyn Connection>,
@@ -212,7 +223,8 @@ fn bench_commit(
     iterations: usize,
     call_home: bool,
     self_profile: bool,
-) {
+) -> BenchmarkErrors {
+    let mut errors_recorded = 0;
     eprintln!("Benchmarking {} for triple {}", cid, compiler.triple);
 
     if call_home {
@@ -245,7 +257,7 @@ fn bench_commit(
             "Note that this behavior is likely to change in the future \
             to collect and append the data instead."
         );
-        return;
+        return BenchmarkErrors(errors_recorded);
     }
     let interned_cid = rt.block_on(tx.conn().artifact_id(&cid));
 
@@ -270,6 +282,7 @@ fn bench_commit(
             benchmark.measure(&mut processor, build_kinds, run_kinds, compiler, iterations);
         if let Err(s) = result {
             eprintln!("Failed to benchmark {}, recorded: {}", benchmark.name, s);
+            errors_recorded += 1;
             rt.block_on(tx.conn().record_error(
                 interned_cid,
                 benchmark.name.0.as_str(),
@@ -294,6 +307,7 @@ fn bench_commit(
         // This ensures that we're good to go with the just updated data.
         conn.maybe_create_indices().await;
     });
+    BenchmarkErrors(errors_recorded)
 }
 
 fn get_benchmarks(
@@ -322,12 +336,15 @@ fn get_benchmarks(
         }
 
         if let Some(filter) = filter {
-            if !name.contains(filter) {
+            if !filter
+                .split(',')
+                .any(|to_include| name.contains(to_include))
+            {
                 debug!(
                     "benchmark {} - doesn't match --filter argument, skipping",
                     name
                 );
-                continue;
+                continue 'outer;
             }
         }
 
@@ -612,7 +629,7 @@ fn main_result() -> anyhow::Result<i32> {
             let sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")?;
             // filter out servo benchmarks as they simply take too long
             let conn = rt.block_on(pool.expect("--db passed").connection());
-            bench_commit(
+            let res = bench_commit(
                 &mut rt,
                 conn,
                 &ArtifactId::Commit(commit),
@@ -624,6 +641,7 @@ fn main_result() -> anyhow::Result<i32> {
                 false,
                 self_profile,
             );
+            res.fail_if_error()?;
             Ok(0)
         }
 

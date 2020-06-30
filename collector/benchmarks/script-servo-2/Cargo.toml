@@ -1,0 +1,33 @@
+[workspace]
+members = [
+    "ports/winit",
+    "ports/gstplugin",
+    "ports/libsimpleservo/capi/",
+    "ports/libsimpleservo/jniapi/",
+    "ports/libmlservo/",
+]
+exclude = [".cargo"]
+
+[profile.release]
+opt-level = 3
+# Uncomment to profile on Linux:
+# debug = true
+# lto = false
+
+[patch.crates-io]
+# If you need to temporarily test Servo with a local fork of some upstream
+# crate, add that here. Use the form:
+#
+#     <crate> = { path = "/path/to/local/checkout" }
+#
+# Or for a git dependency:
+#
+#     [patch."https://github.com/servo/<repository>"]
+#     <crate> = { path = "/path/to/local/checkout" }
+
+# This is here to dedupe winapi since mio 0.6 is still using winapi 0.2.
+mio = { git = "https://github.com/servo/mio.git", branch = "servo" }
+surfman = { git = "https://github.com/servo/surfman" }
+surfman-chains = { git = "https://github.com/asajeffrey/surfman-chains" }
+# https://github.com/retep998/winapi-rs/pull/816
+winapi = { git = "https://github.com/servo/winapi-rs", branch = "patch-1" }

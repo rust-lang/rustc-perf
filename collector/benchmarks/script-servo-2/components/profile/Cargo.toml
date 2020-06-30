@@ -1,0 +1,25 @@
+[package]
+name = "profile"
+version = "0.0.1"
+authors = ["The Servo Project Developers"]
+license = "MPL-2.0"
+edition = "2018"
+publish = false
+
+[lib]
+name = "profile"
+path = "lib.rs"
+
+[dependencies]
+ipc-channel = "0.14"
+profile_traits = { path = "../profile_traits" }
+serde = "1.0"
+serde_json = "1.0"
+servo_config = { path = "../config" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+regex = "1.1"
+
+[target.'cfg(not(target_os = "windows"))'.dependencies]
+libc = "0.2"
+servo_allocator = { path = "../allocator" }
