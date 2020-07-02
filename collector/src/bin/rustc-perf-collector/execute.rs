@@ -947,19 +947,26 @@ impl Benchmark {
     ) -> anyhow::Result<()> {
         let iterations = cmp::min(iterations, self.config.runs);
 
-        if self.config.disabled {
+        if self.config.disabled || build_kinds.is_empty() {
             eprintln!("Skipping {}: disabled", self.name);
             bail!("disabled benchmark");
         }
 
+        eprintln!("Preparing {} (with {:?})", self.name, build_kinds[0]);
+        // Build everything, including all dependent crates, in a temp dir with
+        // the first build kind we're building for. The intent is to cache build
+        // dependencies at least between runs.
+        let prep_dir = self.make_temp_dir(&self.path)?;
+        self.mk_cargo_process(compiler, prep_dir.path(), build_kinds[0])
+            .run_rustc()?;
+
         for &build_kind in build_kinds {
             eprintln!("Running {}: {:?} + {:?}", self.name, build_kind, run_kinds);
 
-            // Build everything, including all dependent crates, in a temp dir.
-            // We do this before the iterations so that dependent crates aren't
-            // built on every iteration. A different temp dir is used for the
-            // timing builds.
-            let prep_dir = self.make_temp_dir(&self.path)?;
+            // Rebuild the prepared crates for the given profile. This shouldn't
+            // rebuild build dependencies but will likely rebuild everything
+            // else -- that's fine though.
+            let prep_dir = self.make_temp_dir(prep_dir.path())?;
             self.mk_cargo_process(compiler, prep_dir.path(), build_kind)
                 .run_rustc()?;
 
