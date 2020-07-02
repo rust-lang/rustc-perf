@@ -339,7 +339,12 @@ lazy_static::lazy_static! {
         fake_rustdoc.push("rustdoc-fake");
         // link from rustc-fake to rustdoc-fake
         if !fake_rustdoc.exists() {
-            std::fs::hard_link(&*FAKE_RUSTC, &fake_rustdoc).expect("failed to make hard link");
+            #[cfg(unix)]
+            use std::os::unix::fs::symlink;
+            #[cfg(windows)]
+            use std::os::windows::fs::symlink_file as symlink;
+
+            symlink(&*FAKE_RUSTC, &fake_rustdoc).expect("failed to make symbolic link");
         }
         fake_rustdoc
     };
