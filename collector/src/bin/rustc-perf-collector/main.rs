@@ -650,7 +650,7 @@ fn main_result() -> anyhow::Result<i32> {
                 &mut rt,
                 conn,
                 &ArtifactId::Commit(commit),
-                &[BuildKind::Check], // no Debug or Opt builds
+                &[BuildKind::Check, BuildKind::Doc], // no Debug or Opt builds
                 &RunKind::all(),
                 Compiler::from_sysroot(&sysroot),
                 &benchmarks,
