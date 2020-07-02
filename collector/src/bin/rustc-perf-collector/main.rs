@@ -331,7 +331,8 @@ fn get_benchmarks(
     exclude: Option<&str>,
 ) -> anyhow::Result<Vec<Benchmark>> {
     let mut benchmarks = Vec::new();
-    'outer: for entry in fs::read_dir(benchmark_dir).context("failed to list benchmarks")? {
+    'outer: for entry in fs::read_dir(benchmark_dir)
+                        .with_context(|| format!("failed to list benchmark dir {}", benchmark_dir.display()))? {
         let entry = entry?;
         let path = entry.path();
         let name = match entry.file_name().into_string() {
@@ -383,7 +384,7 @@ fn main() {
     match main_result() {
         Ok(code) => process::exit(code),
         Err(err) => {
-            eprintln!("{}", err);
+            eprintln!("{:#}\n{}", err, err.backtrace());
             process::exit(1);
         }
     }
