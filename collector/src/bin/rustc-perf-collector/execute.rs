@@ -24,13 +24,13 @@ fn touch_all(path: &Path) -> anyhow::Result<()> {
     let mut cmd = Command::new("bash");
     cmd.current_dir(path)
         .args(&["-c", "find . -name '*.rs' | xargs touch"]);
-    command_output(&mut cmd)?;
+    command_output(&mut cmd).with_context(|| format!("touching all .rs in {:?}", path))?;
     // We also delete the cmake caches to avoid errors when moving directories around.
     // This might be a bit slower but at least things build
     let mut cmd = Command::new("bash");
     cmd.current_dir(path)
         .args(&["-c", "find . -name 'CMakeCache.txt' -delete"]);
-    command_output(&mut cmd)?;
+    command_output(&mut cmd).with_context(|| format!("deleting cmake caches in {:?}", path))?;
     Ok(())
 }
 
@@ -308,7 +308,17 @@ impl<'a> CargoProcess<'a> {
 
             log::debug!("{:?}", cmd);
 
-            touch_all(&self.cwd)?;
+            // Touch all the files under the Cargo.toml of the manifest we're
+            // benchmarking, so as to not refresh dependencies, which may be
+            // in-tree (e.g., in the case of the servo crates there are a lot of
+            // other components).
+            touch_all(
+                &self.cwd.join(
+                    Path::new(&self.manifest_path)
+                        .parent()
+                        .expect("manifest has parent"),
+                ),
+            )?;
 
             let output = command_output(&mut cmd)?;
             if let Some((ref mut processor, run_kind, run_kind_str, patch)) = self.processor_etc {
@@ -886,7 +896,7 @@ impl Benchmark {
         base_dot.push(".");
         let tmp_dir = TempDir::new()?;
         let mut cmd = Command::new("cp");
-        cmd.arg("-LR").arg(base_dot).arg(tmp_dir.path());
+        cmd.arg("-pLR").arg(base_dot).arg(tmp_dir.path());
         command_output(&mut cmd).with_context(|| format!("copying {} to tmp dir", self.name))?;
         Ok(tmp_dir)
     }
