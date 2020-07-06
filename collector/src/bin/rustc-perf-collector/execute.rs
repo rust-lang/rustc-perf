@@ -399,6 +399,7 @@ pub struct MeasureProcessor<'a> {
     patched_incr_stats: Vec<(Patch, (Stats, Option<SelfProfile>))>,
     is_first_collection: bool,
     self_profile: bool,
+    tries: u8,
 }
 
 impl<'a> MeasureProcessor<'a> {
@@ -425,6 +426,7 @@ impl<'a> MeasureProcessor<'a> {
             is_first_collection: true,
             // Command::new("summarize").status().is_ok()
             self_profile,
+            tries: 0,
         }
     }
 
@@ -544,11 +546,17 @@ impl<'a> Processor for MeasureProcessor<'a> {
                 Ok(Retry::No)
             }
             Err(DeserializeStatError::NoOutput(output)) => {
-                log::warn!(
-                    "failed to deserialize stats, retrying; output: {:?}",
-                    output
-                );
-                Ok(Retry::Yes)
+                if self.tries < 5 {
+                    log::warn!(
+                        "failed to deserialize stats, retrying (try {}); output: {:?}",
+                        self.tries,
+                        output
+                    );
+                    self.tries += 1;
+                    Ok(Retry::Yes)
+                } else {
+                    panic!("failed to collect statistics after 5 tries");
+                }
             }
             Err(e @ DeserializeStatError::ParseError { .. }) => {
                 panic!("process_perf_stat_output failed: {:?}", e);
