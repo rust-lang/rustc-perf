@@ -32,6 +32,8 @@ Look for significant changes (regressions or improvements) in the graphs.
 - Click on a data point to open the "compare" page for that merge.
 - Click on the "compare" link at the top of the measurements on that page to
   open the page of commits in the merge.
+- A change isn't significant unless one or more of the benchmarks changed by at
+  least 1%.
 
 Easy cases: there is only a single PR in the merge.
 - Add a comment to the PR pointing to the "compare" page (unless someone else
@@ -57,10 +59,9 @@ Difficult cases: the merge was a rollup of multiple PRs.
   that are likely to affect performance.
 - Add an entry to the triage log, as for the easy cases.
 
-Repeat with the [`max-rss`
-graphs](https://perf.rust-lang.org/?start=&end=&absolute=true&stat=max-rss).
-These measurements are much noisier than `instructions:u`, so only larger
-changes will be clear.
+Repeat with the `max-rss` graphs. These measurements are much noisier than
+`instructions:u`, so only larger changes will be clear; recheck the "Absolute
+data" checkbox otherwise the noise becomes unmanageable.
 
 Once finished, file a PR adding a link to the log entry in [This Week in
 Rust](https://github.com/emberian/this-week-in-rust/).
