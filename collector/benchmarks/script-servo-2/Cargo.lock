@@ -520,8 +520,8 @@ dependencies = [
  "sparkle",
  "style",
  "style_traits",
- "surfman",
- "surfman-chains",
+ "surfman 0.2.0",
+ "surfman-chains 0.3.0",
  "surfman-chains-api",
  "time",
  "webrender",
@@ -1915,6 +1915,17 @@ checksum = "bcc8e0c9bce37868955864dbecd2b1ab2bdf967e6f28066d65aaac620444b65c"
 
 [[package]]
 name = "gl_generator"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "39a23d5e872a275135d66895d954269cf5e8661d234eb1c2480f4ce0d586acbd"
+dependencies = [
+ "khronos_api",
+ "log",
+ "xml-rs",
+]
+
+[[package]]
+name = "gl_generator"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ca98bbde17256e02d17336a6bdb5a50f7d0ccacee502e191d3e3d0ec2f96f84a"
@@ -3069,7 +3080,7 @@ dependencies = [
  "sparkle",
  "style",
  "style_traits",
- "surfman",
+ "surfman 0.2.0",
  "webdriver_server",
  "webgpu",
  "webrender",
@@ -3820,6 +3831,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a86ed3f5f244b372d6b1a00b72ef7f8876d0bc6a78a4c9985c53614041512063"
 
 [[package]]
+name = "osmesa-sys"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "88cfece6e95d2e717e0872a7f53a8684712ad13822a7979bc760b9c77ec0013b"
+dependencies = [
+ "shared_library",
+]
+
+[[package]]
 name = "owning_ref"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4170,7 +4190,6 @@ dependencies = [
  "serde_json",
  "servo_allocator",
  "servo_config",
- "task_info",
 ]
 
 [[package]]
@@ -4568,7 +4587,6 @@ dependencies = [
  "ref_slice",
  "regex",
  "script_layout_interface",
- "script_plugins",
  "script_traits",
  "selectors",
  "serde",
@@ -4633,10 +4651,6 @@ dependencies = [
  "style_traits",
  "webrender_api",
 ]
-
-[[package]]
-name = "script_plugins"
-version = "0.0.1"
 
 [[package]]
 name = "script_traits"
@@ -4782,7 +4796,7 @@ dependencies = [
  "servo-media",
  "shellwords",
  "sig",
- "surfman",
+ "surfman 0.2.0",
  "tinyfiledialogs",
  "webxr",
  "winapi",
@@ -4849,8 +4863,8 @@ dependencies = [
  "log",
  "servo-media",
  "sparkle",
- "surfman",
- "surfman-chains",
+ "surfman 0.3.0 (git+https://github.com/servo/surfman)",
+ "surfman-chains 0.4.0",
  "surfman-chains-api",
 ]
 
@@ -5142,6 +5156,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "shared_library"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a9e7e0f2bfae24d8a5b5a66c5b257a83c7412304311512a0c054cd5e619da11"
+dependencies = [
+ "lazy_static",
+ "libc",
+]
+
+[[package]]
 name = "shellwords"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5184,7 +5208,7 @@ dependencies = [
  "libservo",
  "log",
  "servo-media",
- "surfman",
+ "surfman 0.2.0",
  "webxr",
  "webxr-api",
  "winapi",
@@ -5201,7 +5225,7 @@ dependencies = [
  "libc",
  "log",
  "simpleservo",
- "surfman",
+ "surfman 0.2.0",
  "winapi",
 ]
 
@@ -5490,6 +5514,34 @@ dependencies = [
 
 [[package]]
 name = "surfman"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "43bf043642ad98aaa51956091c4f829a400bad5f023b5f0095ecda61f925c63d"
+dependencies = [
+ "bitflags",
+ "cgl",
+ "cocoa 0.19.1",
+ "core-foundation 0.6.4",
+ "core-graphics 0.17.3",
+ "display-link",
+ "euclid",
+ "gl_generator 0.11.0",
+ "io-surface",
+ "lazy_static",
+ "libc",
+ "log",
+ "mach",
+ "objc",
+ "osmesa-sys",
+ "wayland-sys 0.24.0",
+ "winapi",
+ "winit",
+ "wio",
+ "x11",
+]
+
+[[package]]
+name = "surfman"
 version = "0.2.0"
 source = "git+https://github.com/servo/surfman#2283acaa3a856c2f76028cb23b5dde7dc0030cdf"
 dependencies = [
@@ -5518,15 +5570,87 @@ dependencies = [
 ]
 
 [[package]]
+name = "surfman"
+version = "0.3.0"
+source = "git+https://github.com/servo/surfman#afea998dc7ae48b0cc680542ab21176e21732a18"
+dependencies = [
+ "bitflags",
+ "cfg_aliases",
+ "cgl",
+ "cocoa 0.19.1",
+ "core-foundation 0.6.4",
+ "core-graphics 0.17.3",
+ "display-link",
+ "euclid",
+ "gl_generator 0.14.0",
+ "io-surface",
+ "lazy_static",
+ "libc",
+ "log",
+ "mach",
+ "metal",
+ "objc",
+ "parking_lot 0.10.2",
+ "wayland-sys 0.24.0",
+ "winapi",
+ "winit",
+ "wio",
+ "x11",
+]
+
+[[package]]
+name = "surfman"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a3d85bf0eb91b66b93dda5c04627f00074ea1fa008c2980b132a065fafe7a1ab"
+dependencies = [
+ "bitflags",
+ "cfg_aliases",
+ "cgl",
+ "cocoa 0.19.1",
+ "core-foundation 0.6.4",
+ "core-graphics 0.17.3",
+ "display-link",
+ "euclid",
+ "gl_generator 0.14.0",
+ "io-surface",
+ "lazy_static",
+ "libc",
+ "log",
+ "mach",
+ "metal",
+ "objc",
+ "parking_lot 0.10.2",
+ "wayland-sys 0.24.0",
+ "winapi",
+ "winit",
+ "wio",
+]
+
+[[package]]
 name = "surfman-chains"
 version = "0.3.0"
-source = "git+https://github.com/asajeffrey/surfman-chains#b949a240d73ef86d3c4bd22bc3d93933fac21ee9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2a679f5be9644bbf93662f3b1a704cc6b81c147d4b7d6d5c8d8b6f453176f01"
 dependencies = [
  "euclid",
  "fnv",
  "log",
  "sparkle",
- "surfman",
+ "surfman 0.1.4",
+ "surfman-chains-api",
+]
+
+[[package]]
+name = "surfman-chains"
+version = "0.4.0"
+source = "git+https://github.com/asajeffrey/surfman-chains#e6254e05883e276e96c5978f78c8a5992b2b9059"
+dependencies = [
+ "euclid",
+ "fnv",
+ "log",
+ "sparkle",
+ "surfman 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "surfman-chains-api",
 ]
 
@@ -5582,13 +5706,6 @@ name = "take_mut"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f764005d11ee5f36500a149ace24e00e3da98b0158b3e2d53a7495660d3f4d60"
-
-[[package]]
-name = "task_info"
-version = "0.0.1"
-dependencies = [
- "cc",
-]
 
 [[package]]
 name = "tempfile"
@@ -6435,8 +6552,8 @@ name = "webrender_surfman"
 version = "0.0.1"
 dependencies = [
  "euclid",
- "surfman",
- "surfman-chains",
+ "surfman 0.2.0",
+ "surfman-chains 0.3.0",
 ]
 
 [[package]]
@@ -6462,8 +6579,8 @@ dependencies = [
  "log",
  "openxr",
  "serde",
- "surfman",
- "surfman-chains",
+ "surfman 0.3.0 (git+https://github.com/servo/surfman)",
+ "surfman-chains 0.4.0",
  "time",
  "webxr-api",
  "winapi",
