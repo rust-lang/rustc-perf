@@ -489,6 +489,12 @@ pub fn command_output(cmd: &mut Command) -> anyhow::Result<process::Output> {
             String::from_utf8_lossy(&output.stderr),
             String::from_utf8_lossy(&output.stdout)
         ));
+    } else {
+        //        log::trace!(
+        //            "stderr={}\n\nstdout={}",
+        //            String::from_utf8_lossy(&output.stderr),
+        //            String::from_utf8_lossy(&output.stdout),
+        //        );
     }
     Ok(output)
 }
