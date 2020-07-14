@@ -9,29 +9,39 @@ usage.
 
 This is a good time to do it because This Week in Rust (see below) is usually
 published on Tuesday, US time, and so it means the PR to include the triage
-details in TWiR can be merged shortly before publication.
+details in TWiR can be merged shortly before publication. This time is also
+shortly before the weekly Rust compiler meeting, where the results are looked
+at.
 
 ## Instructions
 
-Check the most recent triage log entry. Look for responses in PRs, and follow
-up on any promised actions. (I.e. nag people!)
+First, check the previous triage log entry. Look for responses in PRs, and
+follow up on any promised actions. (I.e. nag people!)
 
-Start a new triage log entry. Follow the format of the preceding entries.
+Start the new triage log entry in a new file using a `YYYY-MM-DD.md`-form name.
+Follow the format of the previous entries.
 
-Look through the [`instructions:u` graphs](https://perf.rust-lang.org) for each
-benchmark.
-- Record the hash of the latest measured revision in the log entry.
-- Set the "start" revision to the previous log entry's latest revision, and the
-  "end" revision to the latest revision. Full SHAs must be used.
+View the [perf website](https://perf.rust-lang.org).
+
+- Determine the revision range. The start revision corresponds to the end
+  revision from the previous log entry. The end revision is the latest measured
+  revision on perf.rust-lang.org.
+- Set the range on the graphs by setting the "start" and "end" revisions at
+  the top of the page. Full SHAs must be used.
 - Uncheck the "Absolute data" checkbox, because that makes changes easier to
   see.
+- Record the revision range, with a link, in the log entry.
 
-Look for significant changes (regressions or improvements) in the graphs.
+Look for significant changes (regressions or improvements) in the instruction
+count graphs.
 - Click and drag a region of a graph to zoom in on it. This is useful when data
   points are close together.
 - Click on a data point to open the "compare" page for that merge.
 - Click on the "compare" link at the top of the measurements on that page to
   open the page of commits in the merge.
+- Alternatively, it may be easier to simply click through to the "compare" page
+  for every revision in the range (there often aren't that many), rather than
+  looking at the graphs.
 - A change isn't significant unless one or more of the benchmarks changed by at
   least 1%.
 
@@ -42,10 +52,11 @@ Easy cases: there is only a single PR in the merge.
   regression, consider requesting a backout. It may be worth looking through
   the comments to see if any perf CI runs were done, and whether the
   regression was expected.
-- Add an entry to the triage log. Include the PR title, a link to it, and a
-  link to the performance results. Include useful details, such as the size of
-  the regression/improvement, and any promises of follow-up action from authors
-  in the case of a regression.
+- Add an entry to the triage log. Include the PR title and number, a link to
+  the PR comment you added mentioning the performange effect, and a link to the
+  performance results. Include useful details, such as the size of the
+  regression/improvement, and any promises of follow-up action from authors in
+  the case of a regression.
 
 Difficult cases: the merge was a rollup of multiple PRs.
 - Look through the PRs and try to determine which was the cause. Often you
@@ -72,10 +83,6 @@ Rust](https://github.com/emberian/this-week-in-rust/).
 - That item should be a link to the triage log entry with the form
   "YYYY-MM-DD", possibly with some brief text about notable things.
 
-If you have any questions, the #wg-compiler-performance channel on Discord and
-the t-compiler stream on Zulip are good places to ask.
-
-## Triage logs
-
-- [2020](2020.md)
+If you have any questions, the `t-compiler/performance` stream on Zulip is the
+best place to ask.
 
