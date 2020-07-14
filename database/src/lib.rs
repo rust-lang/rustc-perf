@@ -284,6 +284,7 @@ impl Ord for Commit {
 pub enum Profile {
     Check,
     Debug,
+    Doc,
     Opt,
 }
 
@@ -293,6 +294,7 @@ impl std::str::FromStr for Profile {
         Ok(match s.to_ascii_lowercase().as_str() {
             "check" => Profile::Check,
             "debug" => Profile::Debug,
+            "doc" => Profile::Doc,
             "opt" => Profile::Opt,
             _ => return Err(format!("{} is not a profile", s)),
         })
@@ -308,6 +310,7 @@ impl fmt::Display for Profile {
                 Profile::Check => "check",
                 Profile::Opt => "opt",
                 Profile::Debug => "debug",
+                Profile::Doc => "doc",
             }
         )
     }

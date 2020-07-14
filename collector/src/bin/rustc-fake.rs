@@ -4,8 +4,18 @@ use std::process::Command;
 use std::time::{Duration, Instant};
 
 fn main() {
-    let mut args = env::args_os().skip(1).collect::<Vec<_>>();
+    let mut args_os = env::args_os();
+    let name = args_os.next().unwrap().into_string().unwrap();
+
+    let mut args = args_os.collect::<Vec<_>>();
     let rustc = env::var_os("RUSTC_REAL").unwrap();
+    let rustdoc = env::var_os("RUSTDOC_REAL").unwrap();
+    let actually_rustdoc = name.ends_with("rustdoc-fake");
+    let tool = if actually_rustdoc {
+        rustdoc
+    } else {
+        rustc
+    };
 
     if let Some(count) = env::var("RUSTC_THREAD_COUNT")
         .ok()
@@ -36,7 +46,7 @@ fn main() {
                     .arg("instructions:u,cycles:u,task-clock,cpu-clock,faults")
                     .arg("--log-fd")
                     .arg("1")
-                    .arg(&rustc)
+                    .arg(&tool)
                     .args(&args);
 
                 let prof_out_dir = std::env::current_dir().unwrap().join("self-profile-output");
@@ -91,14 +101,14 @@ fn main() {
             }
 
             "self-profile" => {
-                let mut cmd = Command::new(&rustc);
+                let mut cmd = Command::new(&tool);
                 cmd.arg("-Zself-profile=Zsp").args(&args);
 
                 assert!(cmd.status().expect("failed to spawn").success());
             }
 
             "time-passes" => {
-                let mut cmd = Command::new(&rustc);
+                let mut cmd = Command::new(&tool);
                 cmd.arg("-Ztime-passes").args(&args);
 
                 assert!(cmd.status().expect("failed to spawn").success());
@@ -113,7 +123,7 @@ fn main() {
                     .arg("--output=perf")
                     .arg("--freq=299")
                     .arg("--event=cycles:u,instructions:u")
-                    .arg(&rustc)
+                    .arg(&tool)
                     .args(&args);
 
                 assert!(cmd.status().expect("failed to spawn").success());
@@ -124,7 +134,7 @@ fn main() {
                 let has_oprofile = cmd.output().is_ok();
                 assert!(has_oprofile);
                 // Other possibly useful args: --callgraph, --separate-thread
-                cmd.arg("operf").arg(&rustc).args(&args);
+                cmd.arg("operf").arg(&tool).args(&args);
 
                 assert!(cmd.status().expect("failed to spawn").success());
             }
@@ -140,7 +150,7 @@ fn main() {
                     .arg("--cache-sim=no")
                     .arg("--branch-sim=no")
                     .arg("--cachegrind-out-file=cgout")
-                    .arg(&rustc)
+                    .arg(&tool)
                     .args(&args);
 
                 assert!(cmd.status().expect("failed to spawn").success());
@@ -157,7 +167,7 @@ fn main() {
                     .arg("--cache-sim=no")
                     .arg("--branch-sim=no")
                     .arg("--callgrind-out-file=clgout")
-                    .arg(&rustc)
+                    .arg(&tool)
                     .args(&args);
 
                 assert!(cmd.status().expect("failed to spawn").success());
@@ -170,7 +180,7 @@ fn main() {
                 cmd.arg("--tool=dhat")
                     .arg("--num-callers=4")
                     .arg("--dhat-out-file=dhout")
-                    .arg(&rustc)
+                    .arg(&tool)
                     .args(&args);
 
                 assert!(cmd.status().expect("failed to spawn").success());
@@ -186,14 +196,14 @@ fn main() {
                     .arg("--threshold=0.2")
                     .arg("--massif-out-file=msout")
                     .arg("--alloc-fn=__rdl_alloc")
-                    .arg(&rustc)
+                    .arg(&tool)
                     .args(&args);
 
                 assert!(cmd.status().expect("failed to spawn").success());
             }
 
             "eprintln" | "llvm-lines" => {
-                let mut cmd = Command::new(&rustc);
+                let mut cmd = Command::new(&tool);
                 cmd.args(&args);
 
                 assert!(cmd.status().expect("failed to spawn").success());
@@ -204,7 +214,7 @@ fn main() {
             }
         }
     } else {
-        let mut cmd = Command::new(&rustc);
+        let mut cmd = Command::new(&tool);
         cmd.args(&args);
         exec(&mut cmd);
     }

@@ -146,7 +146,7 @@ impl Profiler {
 
     // What cargo subcommand do we need to run for this profiler? If not
     // `rustc`, must be a subcommand that itself invokes `rustc`.
-    fn subcommand(&self) -> &'static str {
+    fn subcommand(&self, build_kind: BuildKind) -> Option<&'static str> {
         match self {
             Profiler::PerfStat
             | Profiler::PerfStatSelfProfile
@@ -158,25 +158,17 @@ impl Profiler {
             | Profiler::Callgrind
             | Profiler::DHAT
             | Profiler::Massif
-            | Profiler::Eprintln => "rustc",
-            Profiler::LlvmLines => "llvm-lines",
-        }
-    }
-
-    fn is_build_kind_allowed(&self, build_kind: BuildKind) -> bool {
-        match self {
-            Profiler::PerfStat
-            | Profiler::PerfStatSelfProfile
-            | Profiler::SelfProfile
-            | Profiler::TimePasses
-            | Profiler::PerfRecord
-            | Profiler::OProfile
-            | Profiler::Cachegrind
-            | Profiler::Callgrind
-            | Profiler::DHAT
-            | Profiler::Massif
-            | Profiler::Eprintln => true,
-            Profiler::LlvmLines => build_kind != BuildKind::Check,
+            | Profiler::Eprintln => {
+                if build_kind == BuildKind::Doc {
+                    Some("rustdoc")
+                } else {
+                    Some("rustc")
+                }
+            }
+            Profiler::LlvmLines => match build_kind {
+                BuildKind::Debug | BuildKind::Opt => Some("rustc"),
+                BuildKind::Check | BuildKind::Doc => None,
+            },
         }
     }
 
@@ -242,6 +234,10 @@ impl<'a> CargoProcess<'a> {
             .arg(subcommand)
             .arg("--manifest-path")
             .arg(&self.manifest_path);
+
+        if let Some(r) = &self.compiler.rustdoc {
+            cmd.env("RUSTDOC", &*FAKE_RUSTDOC).env("RUSTDOC_REAL", r);
+        }
         cmd
     }
 
@@ -263,12 +259,6 @@ impl<'a> CargoProcess<'a> {
             // machinery works).
             let subcommand = if let Some((ref mut processor, run_kind, ..)) = self.processor_etc {
                 let profiler = processor.profiler();
-                if !profiler.is_build_kind_allowed(self.build_kind) {
-                    return Err(anyhow::anyhow!(
-                        "this profiler doesn't support {:?} builds",
-                        self.build_kind
-                    ));
-                }
                 if !profiler.is_run_kind_allowed(run_kind) {
                     return Err(anyhow::anyhow!(
                         "this profiler doesn't support {:?} runs",
@@ -276,7 +266,15 @@ impl<'a> CargoProcess<'a> {
                     ));
                 }
 
-                profiler.subcommand()
+                match profiler.subcommand(self.build_kind) {
+                    None => {
+                        return Err(anyhow::anyhow!(
+                            "this profiler doesn't support {:?} builds",
+                            self.build_kind
+                        ))
+                    }
+                    Some(sub) => sub,
+                }
             } else {
                 "rustc"
             };
@@ -288,6 +286,7 @@ impl<'a> CargoProcess<'a> {
                     cmd.arg("--profile").arg("check");
                 }
                 BuildKind::Debug => {}
+                BuildKind::Doc => {}
                 BuildKind::Opt => {
                     cmd.arg("--release");
                 }
@@ -301,8 +300,9 @@ impl<'a> CargoProcess<'a> {
             // onto rustc for the final crate, which is exactly the crate for which
             // we want to wrap rustc.
             if let Some((ref mut processor, ..)) = self.processor_etc {
+                let profiler = processor.profiler().name();
                 cmd.arg("--wrap-rustc-with");
-                cmd.arg(processor.profiler().name());
+                cmd.arg(profiler);
                 cmd.args(&self.rustc_args);
             }
 
@@ -348,6 +348,21 @@ lazy_static::lazy_static! {
         fake_rustc.pop();
         fake_rustc.push("rustc-fake");
         fake_rustc
+    };
+    static ref FAKE_RUSTDOC: PathBuf = {
+        let mut fake_rustdoc = env::current_exe().unwrap();
+        fake_rustdoc.pop();
+        fake_rustdoc.push("rustdoc-fake");
+        // link from rustc-fake to rustdoc-fake
+        if !fake_rustdoc.exists() {
+            #[cfg(unix)]
+            use std::os::unix::fs::symlink;
+            #[cfg(windows)]
+            use std::os::windows::fs::symlink_file as symlink;
+
+            symlink(&*FAKE_RUSTC, &fake_rustdoc).expect("failed to make symbolic link");
+        }
+        fake_rustdoc
     };
 }
 
@@ -448,6 +463,7 @@ impl<'a> MeasureProcessor<'a> {
         let profile = match build_kind {
             BuildKind::Check => database::Profile::Check,
             BuildKind::Debug => database::Profile::Debug,
+            BuildKind::Doc => database::Profile::Doc,
             BuildKind::Opt => database::Profile::Opt,
         };
         let mut buf = FuturesUnordered::new();

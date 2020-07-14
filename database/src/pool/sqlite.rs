@@ -298,6 +298,7 @@ impl Connection for SqliteConnection {
                                 "check" => Profile::Check,
                                 "opt" => Profile::Opt,
                                 "debug" => Profile::Debug,
+                                "doc" => Profile::Doc,
                                 o => unreachable!("{}: not a profile", o),
                             },
                             row.get::<_, String>(3)?.as_str().parse().unwrap(),
@@ -330,7 +331,6 @@ impl Connection for SqliteConnection {
                         cid.and_then(|cid| {
                             query
                                 .query_row(params![&sid, &cid.0], |row| row.get(0))
-                                .optional()
                                 .unwrap_or_else(|e| {
                                     panic!("{:?}: series={:?}, aid={:?}", e, sid, cid);
                                 })
