@@ -9,9 +9,9 @@ fn main() {
 
     let mut args = args_os.collect::<Vec<_>>();
     let rustc = env::var_os("RUSTC_REAL").unwrap();
-    let rustdoc = env::var_os("RUSTDOC_REAL").unwrap();
     let actually_rustdoc = name.ends_with("rustdoc-fake");
     let tool = if actually_rustdoc {
+        let rustdoc = env::var_os("RUSTDOC_REAL").unwrap();
         rustdoc
     } else {
         rustc
