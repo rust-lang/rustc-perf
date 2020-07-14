@@ -158,15 +158,17 @@ impl Profiler {
             | Profiler::Callgrind
             | Profiler::DHAT
             | Profiler::Massif
-            | Profiler::Eprintln => if build_kind == BuildKind::Doc {
+            | Profiler::Eprintln => {
+                if build_kind == BuildKind::Doc {
                     Some("rustdoc")
                 } else {
                     Some("rustc")
-                },
+                }
+            }
             Profiler::LlvmLines => match build_kind {
                 BuildKind::Debug | BuildKind::Opt => Some("rustc"),
                 BuildKind::Check | BuildKind::Doc => None,
-            }
+            },
         }
     }
 
@@ -223,9 +225,7 @@ impl<'a> CargoProcess<'a> {
             // Not all cargo invocations (e.g. `cargo clean`) need all of these
             // env vars set, but it doesn't hurt to have them.
             .env("RUSTC", &*FAKE_RUSTC)
-            .env("RUSTDOC", &*FAKE_RUSTDOC)
             .env("RUSTC_REAL", &self.compiler.rustc)
-            .env("RUSTDOC_REAL", &self.compiler.rustdoc)
             .env(
                 "CARGO_INCREMENTAL",
                 &format!("{}", self.incremental as usize),
@@ -234,6 +234,10 @@ impl<'a> CargoProcess<'a> {
             .arg(subcommand)
             .arg("--manifest-path")
             .arg(&self.manifest_path);
+
+        if let Some(r) = &self.compiler.rustdoc {
+            cmd.env("RUSTDOC", &*FAKE_RUSTDOC).env("RUSTDOC_REAL", r);
+        }
         cmd
     }
 
@@ -263,10 +267,12 @@ impl<'a> CargoProcess<'a> {
                 }
 
                 match profiler.subcommand(self.build_kind) {
-                    None => return Err(anyhow::anyhow!(
-                        "this profiler doesn't support {:?} builds",
-                        self.build_kind
-                    )),
+                    None => {
+                        return Err(anyhow::anyhow!(
+                            "this profiler doesn't support {:?} builds",
+                            self.build_kind
+                        ))
+                    }
                     Some(sub) => sub,
                 }
             } else {

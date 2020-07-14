@@ -29,7 +29,7 @@ use sysroot::Sysroot;
 #[derive(Debug, Copy, Clone)]
 pub struct Compiler<'a> {
     pub rustc: &'a Path,
-    pub rustdoc: &'a Path,
+    pub rustdoc: Option<&'a Path>,
     pub cargo: &'a Path,
     pub triple: &'a str,
     pub is_nightly: bool,
@@ -39,7 +39,7 @@ impl<'a> Compiler<'a> {
     fn from_sysroot(sysroot: &'a Sysroot) -> Compiler<'a> {
         Compiler {
             rustc: &sysroot.rustc,
-            rustdoc: &sysroot.rustdoc,
+            rustdoc: Some(&sysroot.rustdoc),
             cargo: &sysroot.cargo,
             triple: &sysroot.triple,
             is_nightly: true,
@@ -239,6 +239,11 @@ fn bench_commit(
     call_home: bool,
     self_profile: bool,
 ) -> BenchmarkErrors {
+    if compiler.rustdoc.is_none() && build_kinds.iter().any(|b| *b == BuildKind::Doc) {
+        eprintln!("Rustdoc build specified but rustdoc path not provided");
+        std::process::exit(1);
+    }
+
     let mut errors_recorded = 0;
     eprintln!("Benchmarking {} for triple {}", cid, compiler.triple);
 
@@ -332,7 +337,8 @@ fn get_benchmarks(
 ) -> anyhow::Result<Vec<Benchmark>> {
     let mut benchmarks = Vec::new();
     'outer: for entry in fs::read_dir(benchmark_dir)
-                        .with_context(|| format!("failed to list benchmark dir {}", benchmark_dir.display()))? {
+        .with_context(|| format!("failed to list benchmark dir {}", benchmark_dir.display()))?
+    {
         let entry = entry?;
         let path = entry.path();
         let name = match entry.file_name().into_string() {
@@ -410,7 +416,7 @@ fn main_result() -> anyhow::Result<i32> {
        (@subcommand bench_local =>
            (about: "benchmark a local rustc")
            (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
-           (@arg RUSTDOC: --rustdoc +required +takes_value "The path to the local rustdoc to benchmark")
+           (@arg RUSTDOC: --rustdoc +takes_value "The path to the local rustdoc to benchmark")
            (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
            (@arg BUILDS: --builds +takes_value
             "One or more (comma-separated) of: 'Check', 'Debug',\n\
@@ -431,6 +437,7 @@ fn main_result() -> anyhow::Result<i32> {
            (about: "profile a local rustc")
            (@arg output_dir: --("output") +required +takes_value "Output directory")
            (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
+           (@arg RUSTDOC: --rustdoc +takes_value "The path to the local rustdoc to benchmark")
            (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
            (@arg BUILDS: --builds +takes_value
             "One or more (comma-separated) of: 'Check', 'Debug',\n\
@@ -498,14 +505,18 @@ fn main_result() -> anyhow::Result<i32> {
 
         ("bench_local", Some(sub_m)) => {
             let rustc = sub_m.value_of("RUSTC").unwrap();
-            let rustdoc = sub_m.value_of("RUSTDOC").unwrap();
+            let rustdoc = sub_m.value_of("RUSTDOC");
             let cargo = sub_m.value_of("CARGO").unwrap();
             let build_kinds = build_kinds_from_arg(&sub_m.value_of("BUILDS"))?;
             let run_kinds = run_kinds_from_arg(&sub_m.value_of("RUNS"))?;
             let id = sub_m.value_of("ID").unwrap();
 
             let rustc_path = PathBuf::from(rustc).canonicalize()?;
-            let rustdoc_path = PathBuf::from(rustdoc).canonicalize()?;
+            let rustdoc_path = if let Some(r) = rustdoc {
+                Some(PathBuf::from(r).canonicalize()?)
+            } else {
+                None
+            };
             let cargo_path = PathBuf::from(cargo).canonicalize()?;
             let conn = rt.block_on(pool.expect("--db passed").connection());
             bench_commit(
@@ -516,7 +527,7 @@ fn main_result() -> anyhow::Result<i32> {
                 &run_kinds,
                 Compiler {
                     rustc: &rustc_path,
-                    rustdoc: &rustdoc_path,
+                    rustdoc: rustdoc_path.as_deref(),
                     cargo: &cargo_path,
                     triple: "x86_64-unknown-linux-gnu",
                     is_nightly: true,
@@ -573,7 +584,7 @@ fn main_result() -> anyhow::Result<i32> {
                 &run_kinds,
                 Compiler {
                     rustc: Path::new(rustc.trim()),
-                    rustdoc: Path::new(rustdoc.trim()),
+                    rustdoc: Some(Path::new(rustdoc.trim())),
                     cargo: Path::new(cargo.trim()),
                     is_nightly: false,
                     triple: "x86_64-unknown-linux-gnu",
@@ -598,7 +609,7 @@ fn main_result() -> anyhow::Result<i32> {
 
         ("profile", Some(sub_m)) => {
             let rustc = sub_m.value_of("RUSTC").unwrap();
-            let rustdoc = sub_m.value_of("RUSTDOC").unwrap();
+            let rustdoc = sub_m.value_of("RUSTDOC");
             let cargo = sub_m.value_of("CARGO").unwrap();
             let build_kinds = build_kinds_from_arg(&sub_m.value_of("BUILDS"))?;
             let run_kinds = run_kinds_from_arg(&sub_m.value_of("RUNS"))?;
@@ -609,11 +620,15 @@ fn main_result() -> anyhow::Result<i32> {
             eprintln!("Profiling with {:?}", profiler);
 
             let rustc_path = PathBuf::from(rustc).canonicalize()?;
-            let rustdoc_path = PathBuf::from(rustdoc).canonicalize()?;
+            let rustdoc_path = if let Some(r) = rustdoc {
+                Some(PathBuf::from(r).canonicalize()?)
+            } else {
+                None
+            };
             let cargo_path = PathBuf::from(cargo).canonicalize()?;
             let compiler = Compiler {
                 rustc: &rustc_path,
-                rustdoc: &rustdoc_path,
+                rustdoc: rustdoc_path.as_deref(),
                 cargo: &cargo_path,
                 is_nightly: true,
                 triple: "x86_64-unknown-linux-gnu", // XXX: Technically not necessarily true
