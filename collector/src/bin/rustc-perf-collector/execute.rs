@@ -258,7 +258,7 @@ impl<'a> CargoProcess<'a> {
             // subcommand that itself invokes `rustc` (so that the `FAKE_RUSTC`
             // machinery works).
             let subcommand = if let Some((ref mut processor, run_kind, ..)) = self.processor_etc {
-                let profiler = processor.profiler();
+                let profiler = processor.profiler(self.build_kind);
                 if !profiler.is_run_kind_allowed(run_kind) {
                     return Err(anyhow::anyhow!(
                         "this profiler doesn't support {:?} runs",
@@ -300,7 +300,7 @@ impl<'a> CargoProcess<'a> {
             // onto rustc for the final crate, which is exactly the crate for which
             // we want to wrap rustc.
             if let Some((ref mut processor, ..)) = self.processor_etc {
-                let profiler = processor.profiler().name();
+                let profiler = processor.profiler(self.build_kind).name();
                 cmd.arg("--wrap-rustc-with");
                 cmd.arg(profiler);
                 cmd.args(&self.rustc_args);
@@ -385,7 +385,7 @@ pub struct ProcessOutputData<'a> {
 /// processing.
 pub trait Processor {
     /// The `Profiler` being used.
-    fn profiler(&self) -> Profiler;
+    fn profiler(&self, _: BuildKind) -> Profiler;
 
     /// Process the output produced by the particular `Profiler` being used.
     fn process_output(
@@ -507,8 +507,8 @@ impl<'a> MeasureProcessor<'a> {
 }
 
 impl<'a> Processor for MeasureProcessor<'a> {
-    fn profiler(&self) -> Profiler {
-        if self.is_first_collection && self.self_profile {
+    fn profiler(&self, build: BuildKind) -> Profiler {
+        if self.is_first_collection && self.self_profile && build != BuildKind::Doc {
             Profiler::PerfStatSelfProfile
         } else {
             Profiler::PerfStat
@@ -633,7 +633,7 @@ impl<'a> ProfileProcessor<'a> {
 }
 
 impl<'a> Processor for ProfileProcessor<'a> {
-    fn profiler(&self) -> Profiler {
+    fn profiler(&self, _: BuildKind) -> Profiler {
         self.profiler
     }
 
