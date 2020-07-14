@@ -115,7 +115,12 @@ pub fn build_kinds_from_arg(arg: &Option<&str>) -> Result<Vec<BuildKind>, KindEr
     if let Some(arg) = arg {
         kinds_from_arg(STRINGS_AND_BUILD_KINDS, arg)
     } else {
-        Ok(BuildKind::all())
+        // don't run rustdoc by default
+        Ok(vec![
+            BuildKind::Check,
+            BuildKind::Debug,
+            BuildKind::Opt,
+        ])
     }
 }
 
