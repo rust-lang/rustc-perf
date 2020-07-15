@@ -258,6 +258,7 @@ impl Connection for SqliteConnection {
                             "check" => Profile::Check,
                             "opt" => Profile::Opt,
                             "debug" => Profile::Debug,
+                            "doc" => Profile::Doc,
                             o => unreachable!("{}: not a profile", o),
                         },
                         row.get::<_, String>(3)?.as_str().parse().unwrap(),
