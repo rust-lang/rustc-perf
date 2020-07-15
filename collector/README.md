@@ -100,10 +100,13 @@ The following options, if present, must appear before `bench_local` in the
 command.
 - `--self-profile` can be used to do self-profiling, which requires the
   `measureme` tool.
-- `--filter $STR` can be used to run a subset of the benchmarks. `$STR` is a
-  substring of the name of the benchmark(s) you wish to run.
-- `--exclude $STR` is the inverse of `--filter`. `$STR` is a substring of the
-  name of the benchmark(s) you wish to skip.
+- `--include $STRS` can be used to run a subset of the benchmarks. `$STRS` is a
+  comma-separated list of strings. When this option is specified, a benchmark
+  is included in the run only if its name contains one or more of the given
+  strings.
+- `--exclude $STRS` is the inverse of `--include`. `$STRS` is a comma-separated
+  list of strings. When this option is specified, a benchmark is excluded from
+  the run if its name contains one or more of the given strings.
 
 The following options, if present, must appear after `bench_local` in the
 command.

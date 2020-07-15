@@ -332,7 +332,7 @@ fn bench(
 
 fn get_benchmarks(
     benchmark_dir: &Path,
-    filter: Option<&str>,
+    include: Option<&str>,
     exclude: Option<&str>,
 ) -> anyhow::Result<Vec<Benchmark>> {
     let mut benchmarks = Vec::new();
@@ -357,13 +357,13 @@ fn get_benchmarks(
             continue;
         }
 
-        if let Some(filter) = filter {
-            if !filter
+        if let Some(include) = include {
+            if !include
                 .split(',')
                 .any(|to_include| name.contains(to_include))
             {
                 debug!(
-                    "benchmark {} - doesn't match --filter argument, skipping",
+                    "benchmark {} - doesn't match --include argument, skipping",
                     name
                 );
                 continue 'outer;
@@ -404,8 +404,8 @@ fn main_result() -> anyhow::Result<i32> {
        (author: "The Rust Compiler Team")
        (about: "Collects Rust performance data")
 
-       (@arg filter: --filter +takes_value "Run only benchmarks that contain this")
-       (@arg exclude: --exclude +takes_value "Ignore all benchmarks that contain this")
+       (@arg include: --include +takes_value "Include benchmarks matching these")
+       (@arg exclude: --exclude +takes_value "Exclude benchmarks matching these")
        (@arg db: --("db") +takes_value "Database file")
        (@arg self_profile: --("self-profile") "Collect self-profile")
 
@@ -453,9 +453,9 @@ fn main_result() -> anyhow::Result<i32> {
     .get_matches();
 
     let benchmark_dir = PathBuf::from("collector/benchmarks");
-    let filter = matches.value_of("filter");
+    let include = matches.value_of("include");
     let exclude = matches.value_of("exclude");
-    let mut benchmarks = get_benchmarks(&benchmark_dir, filter, exclude)?;
+    let mut benchmarks = get_benchmarks(&benchmark_dir, include, exclude)?;
     let self_profile = matches.is_present("self_profile");
 
     let mut builder = tokio::runtime::Builder::new();
@@ -575,7 +575,6 @@ fn main_result() -> anyhow::Result<i32> {
             let last_sha = last_sha.split_whitespace().next().expect(&last_sha);
             let commit = get_commit_or_fake_it(&last_sha).expect("success");
             let sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")?;
-            // filter out servo benchmarks as they simply take too long
             let conn = rt.block_on(pool.expect("--db passed").connection());
             let res = bench(
                 &mut rt,

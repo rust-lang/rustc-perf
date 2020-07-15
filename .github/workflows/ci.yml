@@ -90,5 +90,5 @@ jobs:
       - name: Check benchmarks
         run: sh -x -c "ci/check-benchmarks.sh"
         env:
-          COLLECTOR_ARGS: "--filter script-servo"
+          COLLECTOR_ARGS: "--include script-servo"
           SHELL: "/bin/bash"
