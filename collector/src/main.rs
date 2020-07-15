@@ -414,12 +414,8 @@ fn main_result() -> anyhow::Result<i32> {
        (@arg db: --("db") +takes_value "Database file")
        (@arg self_profile: --("self-profile") "Collect self-profile")
 
-       (@subcommand bench_commit =>
-           (about: "benchmark a bors merge from AWS")
-           (@arg COMMIT: +required +takes_value "Commit hash to bench")
-       )
        (@subcommand bench_local =>
-           (about: "benchmark a local rustc")
+           (about: "Benchmarks a local rustc")
            (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
            (@arg RUSTDOC: --rustdoc +takes_value "The path to the local rustdoc to benchmark")
            (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
@@ -432,14 +428,14 @@ fn main_result() -> anyhow::Result<i32> {
            (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
        )
        (@subcommand bench_published =>
-           (about: "bench an artifact from static.r-l.o")
+           (about: "Benchmarks an artifact from static.r-l.o")
            (@arg ID: +required +takes_value "id to install (e.g., stable, beta, 1.26.0)")
        )
        (@subcommand process =>
-           (about: "syncs to git and collects performance data for all versions")
+           (about: "Syncs to git and collects performance data for all versions")
        )
        (@subcommand profile =>
-           (about: "profile a local rustc")
+           (about: "Profiles a local rustc")
            (@arg output_dir: --("output") +required +takes_value "Output directory")
            (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
            (@arg RUSTDOC: --rustdoc +takes_value "The path to the local rustdoc to benchmark")
@@ -455,15 +451,8 @@ fn main_result() -> anyhow::Result<i32> {
             'cachegrind', 'callgrind', ''dhat', 'massif', 'eprintln'")
            (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
        )
-       (@subcommand remove_benchmark =>
-           (about: "remove data for a benchmark")
-           (@arg BENCHMARK: --benchmark +required +takes_value "benchmark name to remove data for")
-       )
-       (@subcommand remove_errs =>
-           (about: "remove errored data")
-       )
        (@subcommand test_benchmarks =>
-           (about: "test benchmark the most recent commit")
+           (about: "Test benchmarks the most recent commit")
        )
     )
     .get_matches();
@@ -486,28 +475,6 @@ fn main_result() -> anyhow::Result<i32> {
     let pool = matches.value_of("db").map(|db| database::Pool::open(db));
 
     let ret = match matches.subcommand() {
-        ("bench_commit", Some(sub_m)) => {
-            let commit = sub_m.value_of("COMMIT").unwrap();
-            let commit = get_commit_or_fake_it(&commit)?;
-            let sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")?;
-            let build_kinds = BuildKind::all();
-            let run_kinds = RunKind::all();
-            let conn = rt.block_on(pool.expect("--db passed").connection());
-            bench_commit(
-                &mut rt,
-                conn,
-                &ArtifactId::Commit(commit),
-                &build_kinds,
-                &run_kinds,
-                Compiler::from_sysroot(&sysroot),
-                &benchmarks,
-                3,
-                false,
-                self_profile,
-            );
-            Ok(0)
-        }
-
         ("bench_local", Some(sub_m)) => {
             let rustc = sub_m.value_of("RUSTC").unwrap();
             let rustdoc = sub_m.value_of("RUSTDOC");
