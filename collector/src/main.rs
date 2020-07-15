@@ -428,8 +428,8 @@ fn main_result() -> anyhow::Result<i32> {
            (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
        )
        (@subcommand bench_published =>
-           (about: "Benchmarks an artifact from static.r-l.o")
-           (@arg ID: +required +takes_value "id to install (e.g., stable, beta, 1.26.0)")
+           (about: "Benchmarks a specified toolchain")
+           (@arg TOOLCHAIN: +required +takes_value "Toolchain to install (e.g. stable, beta, 1.26.0)")
        )
        (@subcommand bench_test =>
            (about: "Benchmarks the most recent commit for testing purposes")
@@ -513,13 +513,13 @@ fn main_result() -> anyhow::Result<i32> {
         }
 
         ("bench_published", Some(sub_m)) => {
-            let id = sub_m.value_of("ID").unwrap();
+            let toolchain = sub_m.value_of("TOOLCHAIN").unwrap();
             let status = Command::new("rustup")
-                .args(&["install", "--profile=minimal", &id])
+                .args(&["install", "--profile=minimal", &toolchain])
                 .status()
                 .context("rustup install")?;
             if !status.success() {
-                anyhow::bail!("failed to install toolchain for {}", id);
+                anyhow::bail!("failed to install toolchain for {}", toolchain);
             }
 
             let which = |tool| {
@@ -527,7 +527,7 @@ fn main_result() -> anyhow::Result<i32> {
                     Command::new("rustup")
                         .arg("which")
                         .arg("--toolchain")
-                        .arg(&id)
+                        .arg(&toolchain)
                         .arg(tool)
                         .output()
                         .context(format!("rustup which {}", tool))?
@@ -542,7 +542,7 @@ fn main_result() -> anyhow::Result<i32> {
             // Remove benchmarks that don't work with a stable compiler.
             benchmarks.retain(|b| b.supports_stable());
 
-            let run_kinds = if collector::version_supports_incremental(id) {
+            let run_kinds = if collector::version_supports_incremental(toolchain) {
                 RunKind::all()
             } else {
                 RunKind::all_non_incr()
@@ -551,7 +551,7 @@ fn main_result() -> anyhow::Result<i32> {
             bench(
                 &mut rt,
                 conn,
-                &ArtifactId::Artifact(id.to_string()),
+                &ArtifactId::Artifact(toolchain.to_string()),
                 &BuildKind::all(),
                 &run_kinds,
                 Compiler {
