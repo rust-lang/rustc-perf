@@ -162,7 +162,7 @@ where
     Ok(v)
 }
 
-fn process_commits(
+fn process(
     rt: &mut Runtime,
     pool: &database::Pool,
     benchmarks: &[Benchmark],
@@ -188,7 +188,7 @@ fn process_commits(
     match Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu") {
         Ok(sysroot) => {
             let conn = rt.block_on(pool.connection());
-            bench_commit(
+            bench(
                 rt,
                 conn,
                 &ArtifactId::Commit(commit),
@@ -232,7 +232,7 @@ impl BenchmarkErrors {
     }
 }
 
-fn bench_commit(
+fn bench(
     rt: &mut Runtime,
     mut conn: Box<dyn Connection>,
     cid: &ArtifactId,
@@ -491,7 +491,7 @@ fn main_result() -> anyhow::Result<i32> {
             };
             let cargo_path = PathBuf::from(cargo).canonicalize()?;
             let conn = rt.block_on(pool.expect("--db passed").connection());
-            bench_commit(
+            bench(
                 &mut rt,
                 conn,
                 &ArtifactId::Artifact(id.to_string()),
@@ -548,7 +548,7 @@ fn main_result() -> anyhow::Result<i32> {
                 RunKind::all_non_incr()
             };
             let conn = rt.block_on(pool.expect("--db passed").connection());
-            bench_commit(
+            bench(
                 &mut rt,
                 conn,
                 &ArtifactId::Artifact(id.to_string()),
@@ -570,7 +570,7 @@ fn main_result() -> anyhow::Result<i32> {
         }
 
         ("process", Some(_)) => {
-            process_commits(
+            process(
                 &mut rt,
                 &pool.expect("--db passed"),
                 &benchmarks,
@@ -634,7 +634,7 @@ fn main_result() -> anyhow::Result<i32> {
             let sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")?;
             // filter out servo benchmarks as they simply take too long
             let conn = rt.block_on(pool.expect("--db passed").connection());
-            let res = bench_commit(
+            let res = bench(
                 &mut rt,
                 conn,
                 &ArtifactId::Commit(commit),
