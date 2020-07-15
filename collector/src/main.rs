@@ -162,7 +162,7 @@ where
     Ok(v)
 }
 
-fn process_commits(
+fn process(
     rt: &mut Runtime,
     pool: &database::Pool,
     benchmarks: &[Benchmark],
@@ -188,7 +188,7 @@ fn process_commits(
     match Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu") {
         Ok(sysroot) => {
             let conn = rt.block_on(pool.connection());
-            bench_commit(
+            bench(
                 rt,
                 conn,
                 &ArtifactId::Commit(commit),
@@ -232,7 +232,7 @@ impl BenchmarkErrors {
     }
 }
 
-fn bench_commit(
+fn bench(
     rt: &mut Runtime,
     mut conn: Box<dyn Connection>,
     cid: &ArtifactId,
@@ -414,12 +414,8 @@ fn main_result() -> anyhow::Result<i32> {
        (@arg db: --("db") +takes_value "Database file")
        (@arg self_profile: --("self-profile") "Collect self-profile")
 
-       (@subcommand bench_commit =>
-           (about: "benchmark a bors merge from AWS")
-           (@arg COMMIT: +required +takes_value "Commit hash to bench")
-       )
        (@subcommand bench_local =>
-           (about: "benchmark a local rustc")
+           (about: "Benchmarks a local rustc")
            (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
            (@arg RUSTDOC: --rustdoc +takes_value "The path to the local rustdoc to benchmark")
            (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
@@ -432,14 +428,17 @@ fn main_result() -> anyhow::Result<i32> {
            (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
        )
        (@subcommand bench_published =>
-           (about: "bench an artifact from static.r-l.o")
-           (@arg ID: +required +takes_value "id to install (e.g., stable, beta, 1.26.0)")
+           (about: "Benchmarks a specified toolchain")
+           (@arg TOOLCHAIN: +required +takes_value "Toolchain to install (e.g. stable, beta, 1.26.0)")
+       )
+       (@subcommand bench_test =>
+           (about: "Benchmarks the most recent commit for testing purposes")
        )
        (@subcommand process =>
-           (about: "syncs to git and collects performance data for all versions")
+           (about: "Syncs to git and collects performance data for all versions")
        )
        (@subcommand profile =>
-           (about: "profile a local rustc")
+           (about: "Profiles a local rustc")
            (@arg output_dir: --("output") +required +takes_value "Output directory")
            (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
            (@arg RUSTDOC: --rustdoc +takes_value "The path to the local rustdoc to benchmark")
@@ -454,16 +453,6 @@ fn main_result() -> anyhow::Result<i32> {
             "One of: 'self-profile', 'time-passes', 'perf-record',\n\
             'cachegrind', 'callgrind', ''dhat', 'massif', 'eprintln'")
            (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
-       )
-       (@subcommand remove_benchmark =>
-           (about: "remove data for a benchmark")
-           (@arg BENCHMARK: --benchmark +required +takes_value "benchmark name to remove data for")
-       )
-       (@subcommand remove_errs =>
-           (about: "remove errored data")
-       )
-       (@subcommand test_benchmarks =>
-           (about: "test benchmark the most recent commit")
        )
     )
     .get_matches();
@@ -486,28 +475,6 @@ fn main_result() -> anyhow::Result<i32> {
     let pool = matches.value_of("db").map(|db| database::Pool::open(db));
 
     let ret = match matches.subcommand() {
-        ("bench_commit", Some(sub_m)) => {
-            let commit = sub_m.value_of("COMMIT").unwrap();
-            let commit = get_commit_or_fake_it(&commit)?;
-            let sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")?;
-            let build_kinds = BuildKind::all();
-            let run_kinds = RunKind::all();
-            let conn = rt.block_on(pool.expect("--db passed").connection());
-            bench_commit(
-                &mut rt,
-                conn,
-                &ArtifactId::Commit(commit),
-                &build_kinds,
-                &run_kinds,
-                Compiler::from_sysroot(&sysroot),
-                &benchmarks,
-                3,
-                false,
-                self_profile,
-            );
-            Ok(0)
-        }
-
         ("bench_local", Some(sub_m)) => {
             let rustc = sub_m.value_of("RUSTC").unwrap();
             let rustdoc = sub_m.value_of("RUSTDOC");
@@ -524,7 +491,7 @@ fn main_result() -> anyhow::Result<i32> {
             };
             let cargo_path = PathBuf::from(cargo).canonicalize()?;
             let conn = rt.block_on(pool.expect("--db passed").connection());
-            bench_commit(
+            bench(
                 &mut rt,
                 conn,
                 &ArtifactId::Artifact(id.to_string()),
@@ -546,13 +513,13 @@ fn main_result() -> anyhow::Result<i32> {
         }
 
         ("bench_published", Some(sub_m)) => {
-            let id = sub_m.value_of("ID").unwrap();
+            let toolchain = sub_m.value_of("TOOLCHAIN").unwrap();
             let status = Command::new("rustup")
-                .args(&["install", "--profile=minimal", &id])
+                .args(&["install", "--profile=minimal", &toolchain])
                 .status()
                 .context("rustup install")?;
             if !status.success() {
-                anyhow::bail!("failed to install toolchain for {}", id);
+                anyhow::bail!("failed to install toolchain for {}", toolchain);
             }
 
             let which = |tool| {
@@ -560,7 +527,7 @@ fn main_result() -> anyhow::Result<i32> {
                     Command::new("rustup")
                         .arg("which")
                         .arg("--toolchain")
-                        .arg(&id)
+                        .arg(&toolchain)
                         .arg(tool)
                         .output()
                         .context(format!("rustup which {}", tool))?
@@ -575,16 +542,16 @@ fn main_result() -> anyhow::Result<i32> {
             // Remove benchmarks that don't work with a stable compiler.
             benchmarks.retain(|b| b.supports_stable());
 
-            let run_kinds = if collector::version_supports_incremental(id) {
+            let run_kinds = if collector::version_supports_incremental(toolchain) {
                 RunKind::all()
             } else {
                 RunKind::all_non_incr()
             };
             let conn = rt.block_on(pool.expect("--db passed").connection());
-            bench_commit(
+            bench(
                 &mut rt,
                 conn,
-                &ArtifactId::Artifact(id.to_string()),
+                &ArtifactId::Artifact(toolchain.to_string()),
                 &BuildKind::all(),
                 &run_kinds,
                 Compiler {
@@ -602,8 +569,37 @@ fn main_result() -> anyhow::Result<i32> {
             Ok(0)
         }
 
+        ("bench_test", Some(_)) => {
+            let last_sha = Command::new("git")
+                .arg("ls-remote")
+                .arg("https://github.com/rust-lang/rust.git")
+                .arg("master")
+                .output()
+                .unwrap();
+            let last_sha = String::from_utf8(last_sha.stdout).expect("utf8");
+            let last_sha = last_sha.split_whitespace().next().expect(&last_sha);
+            let commit = get_commit_or_fake_it(&last_sha).expect("success");
+            let sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")?;
+            // filter out servo benchmarks as they simply take too long
+            let conn = rt.block_on(pool.expect("--db passed").connection());
+            let res = bench(
+                &mut rt,
+                conn,
+                &ArtifactId::Commit(commit),
+                &[BuildKind::Check, BuildKind::Doc], // no Debug or Opt builds
+                &RunKind::all(),
+                Compiler::from_sysroot(&sysroot),
+                &benchmarks,
+                1,
+                false,
+                self_profile,
+            );
+            res.fail_if_error()?;
+            Ok(0)
+        }
+
         ("process", Some(_)) => {
-            process_commits(
+            process(
                 &mut rt,
                 &pool.expect("--db passed"),
                 &benchmarks,
@@ -651,35 +647,6 @@ fn main_result() -> anyhow::Result<i32> {
                     );
                 }
             }
-            Ok(0)
-        }
-
-        ("test_benchmarks", Some(_)) => {
-            let last_sha = Command::new("git")
-                .arg("ls-remote")
-                .arg("https://github.com/rust-lang/rust.git")
-                .arg("master")
-                .output()
-                .unwrap();
-            let last_sha = String::from_utf8(last_sha.stdout).expect("utf8");
-            let last_sha = last_sha.split_whitespace().next().expect(&last_sha);
-            let commit = get_commit_or_fake_it(&last_sha).expect("success");
-            let sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")?;
-            // filter out servo benchmarks as they simply take too long
-            let conn = rt.block_on(pool.expect("--db passed").connection());
-            let res = bench_commit(
-                &mut rt,
-                conn,
-                &ArtifactId::Commit(commit),
-                &[BuildKind::Check, BuildKind::Doc], // no Debug or Opt builds
-                &RunKind::all(),
-                Compiler::from_sysroot(&sysroot),
-                &benchmarks,
-                1,
-                false,
-                self_profile,
-            );
-            res.fail_if_error()?;
             Ok(0)
         }
 
