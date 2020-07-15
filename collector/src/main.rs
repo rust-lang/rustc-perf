@@ -404,10 +404,10 @@ fn main_result() -> anyhow::Result<i32> {
        (author: "The Rust Compiler Team")
        (about: "Collects Rust performance data")
 
-       (@arg include: --include +takes_value "Include benchmarks matching these")
-       (@arg exclude: --exclude +takes_value "Exclude benchmarks matching these")
-       (@arg db: --("db") +takes_value "Database file")
-       (@arg self_profile: --("self-profile") "Collect self-profile")
+       (@arg INCLUDE: --include +takes_value "Include benchmarks matching these")
+       (@arg EXCLUDE: --exclude +takes_value "Exclude benchmarks matching these")
+       (@arg DB: --db +takes_value "Database file")
+       (@arg SELF_PROFILE: --("self-profile") "Collect self-profile")
 
        (@subcommand bench_local =>
            (about: "Benchmarks a local rustc")
@@ -434,7 +434,7 @@ fn main_result() -> anyhow::Result<i32> {
        )
        (@subcommand profile =>
            (about: "Profiles a local rustc")
-           (@arg output_dir: --("output") +required +takes_value "Output directory")
+           (@arg OUTPUT: --output +required +takes_value "Output directory")
            (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
            (@arg RUSTDOC: --rustdoc +takes_value "The path to the local rustdoc to benchmark")
            (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
@@ -453,10 +453,10 @@ fn main_result() -> anyhow::Result<i32> {
     .get_matches();
 
     let benchmark_dir = PathBuf::from("collector/benchmarks");
-    let include = matches.value_of("include");
-    let exclude = matches.value_of("exclude");
+    let include = matches.value_of("INCLUDE");
+    let exclude = matches.value_of("EXCLUDE");
     let mut benchmarks = get_benchmarks(&benchmark_dir, include, exclude)?;
-    let self_profile = matches.is_present("self_profile");
+    let self_profile = matches.is_present("SELF_PROFILE");
 
     let mut builder = tokio::runtime::Builder::new();
     // We want to minimize noise from the runtime
@@ -467,7 +467,7 @@ fn main_result() -> anyhow::Result<i32> {
         .basic_scheduler();
     let mut rt = builder.build().expect("built runtime");
 
-    let pool = matches.value_of("db").map(|db| database::Pool::open(db));
+    let pool = matches.value_of("DB").map(|db| database::Pool::open(db));
 
     let ret = match matches.subcommand() {
         ("bench_local", Some(sub_m)) => {
@@ -610,7 +610,7 @@ fn main_result() -> anyhow::Result<i32> {
             let run_kinds = run_kinds_from_arg(&sub_m.value_of("RUNS"))?;
             let profiler = Profiler::from_name(sub_m.value_of("PROFILER").unwrap())?;
             let id = sub_m.value_of("ID").unwrap();
-            let out_dir = PathBuf::from(sub_m.value_of_os("output_dir").unwrap());
+            let out_dir = PathBuf::from(sub_m.value_of_os("OUTPUT").unwrap());
 
             eprintln!("Profiling with {:?}", profiler);
 
