@@ -431,6 +431,9 @@ fn main_result() -> anyhow::Result<i32> {
            (about: "Benchmarks an artifact from static.r-l.o")
            (@arg ID: +required +takes_value "id to install (e.g., stable, beta, 1.26.0)")
        )
+       (@subcommand bench_test =>
+           (about: "Benchmarks the most recent commit for testing purposes")
+       )
        (@subcommand process =>
            (about: "Syncs to git and collects performance data for all versions")
        )
@@ -450,9 +453,6 @@ fn main_result() -> anyhow::Result<i32> {
             "One of: 'self-profile', 'time-passes', 'perf-record',\n\
             'cachegrind', 'callgrind', ''dhat', 'massif', 'eprintln'")
            (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
-       )
-       (@subcommand test_benchmarks =>
-           (about: "Test benchmarks the most recent commit")
        )
     )
     .get_matches();
@@ -569,6 +569,35 @@ fn main_result() -> anyhow::Result<i32> {
             Ok(0)
         }
 
+        ("bench_test", Some(_)) => {
+            let last_sha = Command::new("git")
+                .arg("ls-remote")
+                .arg("https://github.com/rust-lang/rust.git")
+                .arg("master")
+                .output()
+                .unwrap();
+            let last_sha = String::from_utf8(last_sha.stdout).expect("utf8");
+            let last_sha = last_sha.split_whitespace().next().expect(&last_sha);
+            let commit = get_commit_or_fake_it(&last_sha).expect("success");
+            let sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")?;
+            // filter out servo benchmarks as they simply take too long
+            let conn = rt.block_on(pool.expect("--db passed").connection());
+            let res = bench(
+                &mut rt,
+                conn,
+                &ArtifactId::Commit(commit),
+                &[BuildKind::Check, BuildKind::Doc], // no Debug or Opt builds
+                &RunKind::all(),
+                Compiler::from_sysroot(&sysroot),
+                &benchmarks,
+                1,
+                false,
+                self_profile,
+            );
+            res.fail_if_error()?;
+            Ok(0)
+        }
+
         ("process", Some(_)) => {
             process(
                 &mut rt,
@@ -618,35 +647,6 @@ fn main_result() -> anyhow::Result<i32> {
                     );
                 }
             }
-            Ok(0)
-        }
-
-        ("test_benchmarks", Some(_)) => {
-            let last_sha = Command::new("git")
-                .arg("ls-remote")
-                .arg("https://github.com/rust-lang/rust.git")
-                .arg("master")
-                .output()
-                .unwrap();
-            let last_sha = String::from_utf8(last_sha.stdout).expect("utf8");
-            let last_sha = last_sha.split_whitespace().next().expect(&last_sha);
-            let commit = get_commit_or_fake_it(&last_sha).expect("success");
-            let sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")?;
-            // filter out servo benchmarks as they simply take too long
-            let conn = rt.block_on(pool.expect("--db passed").connection());
-            let res = bench(
-                &mut rt,
-                conn,
-                &ArtifactId::Commit(commit),
-                &[BuildKind::Check, BuildKind::Doc], // no Debug or Opt builds
-                &RunKind::all(),
-                Compiler::from_sysroot(&sysroot),
-                &benchmarks,
-                1,
-                false,
-                self_profile,
-            );
-            res.fail_if_error()?;
             Ok(0)
         }
 
