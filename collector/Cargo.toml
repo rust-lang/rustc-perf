@@ -34,8 +34,8 @@ futures = "0.3.5"
 
 [[bin]]
 name = "collector"
-path = "src/bin/rustc-perf-collector/main.rs"
+path = "src/main.rs"
 
 [[bin]]
 name = "rustc-fake"
-path = "src/bin/rustc-fake.rs"
+path = "src/rustc-fake.rs"
