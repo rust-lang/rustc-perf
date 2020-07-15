@@ -8,7 +8,6 @@ use collector::api::collected;
 use database::{pool::Connection, ArtifactId, Commit};
 use log::{debug, error};
 use std::collections::HashSet;
-use std::env;
 use std::fs;
 use std::io::{stderr, Write};
 use std::path::{Path, PathBuf};
@@ -63,6 +62,11 @@ impl BuildKind {
             BuildKind::Opt,
         ]
     }
+
+    fn default() -> Vec<Self> {
+        // Don't run rustdoc by default.
+        vec![BuildKind::Check, BuildKind::Debug, BuildKind::Opt]
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -85,6 +89,10 @@ impl RunKind {
 
     fn all_non_incr() -> Vec<RunKind> {
         vec![RunKind::Full]
+    }
+
+    fn default() -> Vec<RunKind> {
+        Self::all()
     }
 }
 
@@ -114,8 +122,7 @@ pub fn build_kinds_from_arg(arg: &Option<&str>) -> Result<Vec<BuildKind>, KindEr
     if let Some(arg) = arg {
         kinds_from_arg(STRINGS_AND_BUILD_KINDS, arg)
     } else {
-        // don't run rustdoc by default
-        Ok(vec![BuildKind::Check, BuildKind::Debug, BuildKind::Opt])
+        Ok(BuildKind::default())
     }
 }
 
@@ -123,7 +130,7 @@ pub fn run_kinds_from_arg(arg: &Option<&str>) -> Result<Vec<RunKind>, KindError>
     if let Some(arg) = arg {
         kinds_from_arg(STRINGS_AND_RUN_KINDS, arg)
     } else {
-        Ok(RunKind::all())
+        Ok(RunKind::default())
     }
 }
 
@@ -157,8 +164,9 @@ where
     Ok(v)
 }
 
-fn process(
+fn bench_next(
     rt: &mut Runtime,
+    site_url: &str,
     pool: &database::Pool,
     benchmarks: &[Benchmark],
     self_profile: bool,
@@ -166,10 +174,7 @@ fn process(
     println!("processing commits");
     let client = reqwest::blocking::Client::new();
     let commit: Option<String> = client
-        .get(&format!(
-            "{}/perf/next_commit",
-            env::var("SITE_URL").expect("SITE_URL defined")
-        ))
+        .get(&format!("{}/perf/next_commit", site_url))
         .send()?
         .json()?;
     let commit = if let Some(c) = commit {
@@ -192,7 +197,7 @@ fn process(
                 Compiler::from_sysroot(&sysroot),
                 &benchmarks,
                 3,
-                true,
+                /* call_home */ true,
                 self_profile,
             );
         }
@@ -201,12 +206,7 @@ fn process(
         }
     }
 
-    client
-        .post(&format!(
-            "{}/perf/onpush",
-            env::var("SITE_URL").expect("SITE_URL defined")
-        ))
-        .send()?;
+    client.post(&format!("{}/perf/onpush", site_url)).send()?;
 
     Ok(())
 }
@@ -239,11 +239,6 @@ fn bench(
     call_home: bool,
     self_profile: bool,
 ) -> BenchmarkErrors {
-    if compiler.rustdoc.is_none() && build_kinds.iter().any(|b| *b == BuildKind::Doc) {
-        eprintln!("Rustdoc build specified but rustdoc path not provided");
-        std::process::exit(1);
-    }
-
     let mut errors_recorded = 0;
     eprintln!("Benchmarking {} for triple {}", cid, compiler.triple);
 
@@ -272,7 +267,7 @@ fn bench(
         ArtifactId::Artifact(id) => index.artifacts().any(|a| a == id),
     };
     if has_collected {
-        eprintln!("{} has previously been collected, skipping.", cid);
+        eprintln!("'{}' has previously been collected, aborting.", cid);
         eprintln!(
             "Note that this behavior is likely to change in the future \
             to collect and append the data instead."
@@ -301,7 +296,10 @@ fn bench(
         let result =
             benchmark.measure(&mut processor, build_kinds, run_kinds, compiler, iterations);
         if let Err(s) = result {
-            eprintln!("Failed to benchmark {}, recorded: {}", benchmark.name, s);
+            eprintln!(
+                "collector error: Failed to benchmark '{}', recorded: {}",
+                benchmark.name, s
+            );
             errors_recorded += 1;
             rt.block_on(tx.conn().record_error(
                 interned_cid,
@@ -337,7 +335,7 @@ fn get_benchmarks(
 ) -> anyhow::Result<Vec<Benchmark>> {
     let mut benchmarks = Vec::new();
     'outer: for entry in fs::read_dir(benchmark_dir)
-        .with_context(|| format!("failed to list benchmark dir {}", benchmark_dir.display()))?
+        .with_context(|| format!("failed to list benchmark dir '{}'", benchmark_dir.display()))?
     {
         let entry = entry?;
         let path = entry.path();
@@ -386,11 +384,71 @@ fn get_benchmarks(
     Ok(benchmarks)
 }
 
+/// Get a toolchain from the input.
+/// - `rustc`: check if the given one is acceptable.
+/// - `rustdoc`: if one is given, check if it is acceptable. Otherwise, if
+///   `Doc` builds are requested, look for one next to the given `rustc`.
+/// - `cargo`: if one is given, check if it is acceptable. Otherwise, look
+///   for the nightly Cargo via `rustup`.
+fn get_local_toolchain(
+    build_kinds: &[BuildKind],
+    rustc: &str,
+    rustdoc: Option<&str>,
+    cargo: Option<&str>,
+) -> anyhow::Result<(PathBuf, Option<PathBuf>, PathBuf)> {
+    let rustc = PathBuf::from(rustc)
+        .canonicalize()
+        .with_context(|| format!("failed to canonicalize rustc executable '{}'", rustc))?;
+
+    let rustdoc =
+        if let Some(rustdoc) = rustdoc {
+            Some(PathBuf::from(rustdoc).canonicalize().with_context(|| {
+                format!("failed to canonicalize rustdoc executable '{}'", rustdoc)
+            })?)
+        } else if build_kinds.contains(&BuildKind::Doc) {
+            // We need a `rustdoc`. Look for one next to `rustc`.
+            if let Ok(rustdoc) = rustc.with_file_name("rustdoc").canonicalize() {
+                debug!("found rustdoc: {:?}", &rustdoc);
+                Some(rustdoc)
+            } else {
+                anyhow::bail!(
+                    "'Doc' build specified but '--rustdoc' not specified and no 'rustdoc' found \
+                    next to 'rustc'"
+                );
+            }
+        } else {
+            // No `rustdoc` provided, but none needed.
+            None
+        };
+
+    let cargo = if let Some(cargo) = cargo {
+        PathBuf::from(cargo)
+            .canonicalize()
+            .with_context(|| format!("failed to canonicalize cargo executable '{}'", cargo))?
+    } else {
+        // Use the nightly cargo from `rustup`.
+        let s = String::from_utf8(
+            Command::new("rustup")
+                .args(&["which", "cargo", "--toolchain=nightly"])
+                .output()
+                .context("failed to run `rustup which cargo`")?
+                .stdout,
+        )
+        .context("failed to convert `rustup which cargo` output to utf8")?;
+
+        let cargo = PathBuf::from(s.trim());
+        debug!("found cargo: {:?}", &cargo);
+        cargo
+    };
+
+    Ok((rustc, rustdoc, cargo))
+}
+
 fn main() {
     match main_result() {
         Ok(code) => process::exit(code),
         Err(err) => {
-            eprintln!("{:#}\n{}", err, err.backtrace());
+            eprintln!("collector error: {:#}\n{}", err, err.backtrace());
             process::exit(1);
         }
     }
@@ -404,59 +462,90 @@ fn main_result() -> anyhow::Result<i32> {
        (author: "The Rust Compiler Team")
        (about: "Collects Rust performance data")
 
-       (@arg INCLUDE: --include +takes_value "Include benchmarks matching these")
-       (@arg EXCLUDE: --exclude +takes_value "Exclude benchmarks matching these")
-       (@arg DB: --db +takes_value "Database file")
-       (@arg SELF_PROFILE: --("self-profile") "Collect self-profile")
+        // For each subcommand we list the mandatory arguments in the required
+        // order, followed by the options in alphabetical order.
 
        (@subcommand bench_local =>
            (about: "Benchmarks a local rustc")
-           (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
-           (@arg RUSTDOC: --rustdoc +takes_value "The path to the local rustdoc to benchmark")
-           (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
-           (@arg BUILDS: --builds +takes_value
+
+           // Mandatory arguments
+           (@arg RUSTC: +required +takes_value "The path to the local rustc to benchmark")
+           (@arg ID:    +required +takes_value "Identifier to associate benchmark results with")
+
+           // Options
+           (@arg BUILDS:  --builds  +takes_value
             "One or more (comma-separated) of: 'Check', 'Debug',\n\
             'Doc', 'Opt', 'All'")
-           (@arg RUNS: --runs +takes_value
+           (@arg CARGO:   --cargo   +takes_value "The path to the local Cargo to use")
+           (@arg DB:      --db      +takes_value "Database output file")
+           (@arg EXCLUDE: --exclude +takes_value "Exclude benchmarks matching these")
+           (@arg INCLUDE: --include +takes_value "Include benchmarks matching these")
+           (@arg RUNS:    --runs    +takes_value
             "One or more (comma-separated) of: 'Full',\n\
             'IncrFull', 'IncrUnchanged', 'IncrPatched', 'All'")
-           (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
+           (@arg RUSTDOC: --rustdoc +takes_value "The path to the local rustdoc to benchmark")
+           (@arg SELF_PROFILE: --("self-profile") "Collect self-profile data")
        )
+
+       (@subcommand bench_next =>
+           (about: "Benchmarks the next commit for perf.rust-lang.org")
+
+           // Mandatory arguments
+           (@arg SITE_URL: +required +takes_value "Site URL")
+
+           // Options
+           (@arg DB:           --db  +takes_value "Database output file")
+           (@arg SELF_PROFILE: --("self-profile") "Collect self-profile data")
+       )
+
        (@subcommand bench_published =>
-           (about: "Benchmarks a specified toolchain")
-           (@arg TOOLCHAIN: +required +takes_value "Toolchain to install (e.g. stable, beta, 1.26.0)")
+           (about: "Benchmarks a published toolchain for perf.rust-lang.org's dashboard")
+
+           // Mandatory arguments
+           (@arg TOOLCHAIN: +required +takes_value "Toolchain (e.g. stable, beta, 1.26.0)")
+
+           // Options
+           (@arg DB: --db +takes_value "Database output file")
        )
+
        (@subcommand bench_test =>
            (about: "Benchmarks the most recent commit for testing purposes")
+
+           // Mandatory arguments: (none)
+
+           // Options
+           (@arg DB:      --db      +takes_value "Database output file")
+           (@arg EXCLUDE: --exclude +takes_value "Exclude benchmarks matching these")
+           (@arg INCLUDE: --include +takes_value "Include benchmarks matching these")
        )
-       (@subcommand process =>
-           (about: "Syncs to git and collects performance data for all versions")
-       )
-       (@subcommand profile =>
-           (about: "Profiles a local rustc")
-           (@arg OUTPUT: --output +required +takes_value "Output directory")
-           (@arg RUSTC: --rustc +required +takes_value "The path to the local rustc to benchmark")
-           (@arg RUSTDOC: --rustdoc +takes_value "The path to the local rustdoc to benchmark")
-           (@arg CARGO: --cargo +required +takes_value "The path to the local Cargo to use")
-           (@arg BUILDS: --builds +takes_value
-            "One or more (comma-separated) of: 'Check', 'Debug',\n\
-            'Opt', 'All'")
-           (@arg RUNS: --runs +takes_value
-            "One or more (comma-separated) of: 'Full',\n\
-            'IncrFull', 'IncrUnchanged', 'IncrPatched', 'All'")
+
+       (@subcommand profile_local =>
+           (about: "Profiles a local rustc with one of several profilers")
+
+           // Mandatory arguments
            (@arg PROFILER: +required +takes_value
             "One of: 'self-profile', 'time-passes', 'perf-record',\n\
             'cachegrind', 'callgrind', ''dhat', 'massif', 'eprintln'")
-           (@arg ID: +required +takes_value "Identifier to associate benchmark results with")
+           (@arg RUSTC:    +required +takes_value "The path to the local rustc to benchmark")
+           (@arg ID:       +required +takes_value "Identifier to associate benchmark results with")
+
+            // Options
+           (@arg BUILDS: --builds       +takes_value
+            "One or more (comma-separated) of: 'Check', 'Debug',\n\
+            'Doc', 'Opt', 'All'")
+           (@arg CARGO:   --cargo       +takes_value "The path to the local Cargo to use")
+           (@arg EXCLUDE: --exclude     +takes_value "Exclude benchmarks matching these")
+           (@arg INCLUDE: --include     +takes_value "Include benchmarks matching these")
+           (@arg OUT_DIR: --("out-dir") +takes_value "Output directory")
+           (@arg RUNS:    --runs        +takes_value
+            "One or more (comma-separated) of: 'Full',\n\
+            'IncrFull', 'IncrUnchanged', 'IncrPatched', 'All'")
+           (@arg RUSTDOC: --rustdoc +takes_value "The path to the local rustdoc to benchmark")
        )
     )
     .get_matches();
 
     let benchmark_dir = PathBuf::from("collector/benchmarks");
-    let include = matches.value_of("INCLUDE");
-    let exclude = matches.value_of("EXCLUDE");
-    let mut benchmarks = get_benchmarks(&benchmark_dir, include, exclude)?;
-    let self_profile = matches.is_present("SELF_PROFILE");
 
     let mut builder = tokio::runtime::Builder::new();
     // We want to minimize noise from the runtime
@@ -467,25 +556,32 @@ fn main_result() -> anyhow::Result<i32> {
         .basic_scheduler();
     let mut rt = builder.build().expect("built runtime");
 
-    let pool = matches.value_of("DB").map(|db| database::Pool::open(db));
+    let default_db = "results.db";
+    let default_out_dir = std::ffi::OsStr::new("results");
 
     let ret = match matches.subcommand() {
         ("bench_local", Some(sub_m)) => {
+            // Mandatory arguments
             let rustc = sub_m.value_of("RUSTC").unwrap();
-            let rustdoc = sub_m.value_of("RUSTDOC");
-            let cargo = sub_m.value_of("CARGO").unwrap();
-            let build_kinds = build_kinds_from_arg(&sub_m.value_of("BUILDS"))?;
-            let run_kinds = run_kinds_from_arg(&sub_m.value_of("RUNS"))?;
             let id = sub_m.value_of("ID").unwrap();
 
-            let rustc_path = PathBuf::from(rustc).canonicalize()?;
-            let rustdoc_path = if let Some(r) = rustdoc {
-                Some(PathBuf::from(r).canonicalize()?)
-            } else {
-                None
-            };
-            let cargo_path = PathBuf::from(cargo).canonicalize()?;
-            let conn = rt.block_on(pool.expect("--db passed").connection());
+            // Options
+            let build_kinds = build_kinds_from_arg(&sub_m.value_of("BUILDS"))?;
+            let cargo = sub_m.value_of("CARGO");
+            let db = sub_m.value_of("DB").unwrap_or(default_db);
+            let exclude = sub_m.value_of("EXCLUDE");
+            let include = sub_m.value_of("INCLUDE");
+            let run_kinds = run_kinds_from_arg(&sub_m.value_of("RUNS"))?;
+            let rustdoc = sub_m.value_of("RUSTDOC");
+            let self_profile = sub_m.is_present("SELF_PROFILE");
+
+            let pool = database::Pool::open(db);
+            let conn = rt.block_on(pool.connection());
+
+            let (rustc, rustdoc, cargo) = get_local_toolchain(&build_kinds, rustc, rustdoc, cargo)?;
+
+            let benchmarks = get_benchmarks(&benchmark_dir, include, exclude)?;
+
             bench(
                 &mut rt,
                 conn,
@@ -493,22 +589,43 @@ fn main_result() -> anyhow::Result<i32> {
                 &build_kinds,
                 &run_kinds,
                 Compiler {
-                    rustc: &rustc_path,
-                    rustdoc: rustdoc_path.as_deref(),
-                    cargo: &cargo_path,
-                    triple: "x86_64-unknown-linux-gnu",
+                    rustc: &rustc,
+                    rustdoc: rustdoc.as_deref(),
+                    cargo: &cargo,
+                    triple: "x86_64-unknown-linux-gnu", // XXX: technically not necessarily true
                     is_nightly: true,
                 },
                 &benchmarks,
                 1,
-                false,
+                /* call_home */ false,
                 self_profile,
             );
             Ok(0)
         }
 
+        ("bench_next", Some(sub_m)) => {
+            // Mandatory arguments
+            let site_url = sub_m.value_of("SITE_URL").unwrap();
+
+            // Options
+            let db = sub_m.value_of("DB").unwrap_or(default_db);
+            let self_profile = sub_m.is_present("SELF_PROFILE");
+
+            let pool = database::Pool::open(db);
+
+            let benchmarks = get_benchmarks(&benchmark_dir, None, None)?;
+
+            bench_next(&mut rt, &site_url, &pool, &benchmarks, self_profile)?;
+            Ok(0)
+        }
+
         ("bench_published", Some(sub_m)) => {
+            // Mandatory arguments
             let toolchain = sub_m.value_of("TOOLCHAIN").unwrap();
+
+            // Options
+            let db = sub_m.value_of("DB").unwrap_or(default_db);
+
             let status = Command::new("rustup")
                 .args(&["install", "--profile=minimal", &toolchain])
                 .status()
@@ -516,6 +633,15 @@ fn main_result() -> anyhow::Result<i32> {
             if !status.success() {
                 anyhow::bail!("failed to install toolchain for {}", toolchain);
             }
+
+            let pool = database::Pool::open(db);
+            let conn = rt.block_on(pool.connection());
+
+            let run_kinds = if collector::version_supports_incremental(toolchain) {
+                RunKind::all()
+            } else {
+                RunKind::all_non_incr()
+            };
 
             let which = |tool| {
                 String::from_utf8(
@@ -534,15 +660,10 @@ fn main_result() -> anyhow::Result<i32> {
             let rustdoc = which("rustdoc")?;
             let cargo = which("cargo")?;
 
-            // Remove benchmarks that don't work with a stable compiler.
+            // Exclude benchmarks that don't work with a stable compiler.
+            let mut benchmarks = get_benchmarks(&benchmark_dir, None, None)?;
             benchmarks.retain(|b| b.supports_stable());
 
-            let run_kinds = if collector::version_supports_incremental(toolchain) {
-                RunKind::all()
-            } else {
-                RunKind::all_non_incr()
-            };
-            let conn = rt.block_on(pool.expect("--db passed").connection());
             bench(
                 &mut rt,
                 conn,
@@ -558,13 +679,23 @@ fn main_result() -> anyhow::Result<i32> {
                 },
                 &benchmarks,
                 3,
-                false,
-                false,
+                /* call_home */ false,
+                /* self_profile */ false,
             );
             Ok(0)
         }
 
-        ("bench_test", Some(_)) => {
+        ("bench_test", Some(sub_m)) => {
+            // Mandatory arguments: (none)
+
+            // Options
+            let db = sub_m.value_of("DB").unwrap_or(default_db);
+            let exclude = sub_m.value_of("EXCLUDE");
+            let include = sub_m.value_of("INCLUDE");
+
+            let pool = database::Pool::open(db);
+            let conn = rt.block_on(pool.connection());
+
             let last_sha = Command::new("git")
                 .arg("ls-remote")
                 .arg("https://github.com/rust-lang/rust.git")
@@ -575,7 +706,9 @@ fn main_result() -> anyhow::Result<i32> {
             let last_sha = last_sha.split_whitespace().next().expect(&last_sha);
             let commit = get_commit_or_fake_it(&last_sha).expect("success");
             let sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")?;
-            let conn = rt.block_on(pool.expect("--db passed").connection());
+
+            let benchmarks = get_benchmarks(&benchmark_dir, include, exclude)?;
+
             let res = bench(
                 &mut rt,
                 conn,
@@ -585,49 +718,41 @@ fn main_result() -> anyhow::Result<i32> {
                 Compiler::from_sysroot(&sysroot),
                 &benchmarks,
                 1,
-                false,
-                self_profile,
+                /* call_home */ false,
+                /* self_profile */ false,
             );
             res.fail_if_error()?;
             Ok(0)
         }
 
-        ("process", Some(_)) => {
-            process(
-                &mut rt,
-                &pool.expect("--db passed"),
-                &benchmarks,
-                self_profile,
-            )?;
-            Ok(0)
-        }
-
-        ("profile", Some(sub_m)) => {
-            let rustc = sub_m.value_of("RUSTC").unwrap();
-            let rustdoc = sub_m.value_of("RUSTDOC");
-            let cargo = sub_m.value_of("CARGO").unwrap();
-            let build_kinds = build_kinds_from_arg(&sub_m.value_of("BUILDS"))?;
-            let run_kinds = run_kinds_from_arg(&sub_m.value_of("RUNS"))?;
+        ("profile_local", Some(sub_m)) => {
+            // Mandatory arguments
             let profiler = Profiler::from_name(sub_m.value_of("PROFILER").unwrap())?;
+            let rustc = sub_m.value_of("RUSTC").unwrap();
             let id = sub_m.value_of("ID").unwrap();
-            let out_dir = PathBuf::from(sub_m.value_of_os("OUTPUT").unwrap());
+
+            // Options
+            let build_kinds = build_kinds_from_arg(&sub_m.value_of("BUILDS"))?;
+            let cargo = sub_m.value_of("CARGO");
+            let exclude = sub_m.value_of("EXCLUDE");
+            let include = sub_m.value_of("INCLUDE");
+            let out_dir = PathBuf::from(sub_m.value_of_os("OUT_DIR").unwrap_or(default_out_dir));
+            let run_kinds = run_kinds_from_arg(&sub_m.value_of("RUNS"))?;
+            let rustdoc = sub_m.value_of("RUSTDOC");
+
+            let (rustc, rustdoc, cargo) = get_local_toolchain(&build_kinds, rustc, rustdoc, cargo)?;
+
+            let compiler = Compiler {
+                rustc: &rustc,
+                rustdoc: rustdoc.as_deref(),
+                cargo: &cargo,
+                triple: "x86_64-unknown-linux-gnu", // XXX: technically not necessarily true
+                is_nightly: true,
+            };
+
+            let benchmarks = get_benchmarks(&benchmark_dir, include, exclude)?;
 
             eprintln!("Profiling with {:?}", profiler);
-
-            let rustc_path = PathBuf::from(rustc).canonicalize()?;
-            let rustdoc_path = if let Some(r) = rustdoc {
-                Some(PathBuf::from(r).canonicalize()?)
-            } else {
-                None
-            };
-            let cargo_path = PathBuf::from(cargo).canonicalize()?;
-            let compiler = Compiler {
-                rustc: &rustc_path,
-                rustdoc: rustdoc_path.as_deref(),
-                cargo: &cargo_path,
-                is_nightly: true,
-                triple: "x86_64-unknown-linux-gnu", // XXX: Technically not necessarily true
-            };
 
             for (i, benchmark) in benchmarks.iter().enumerate() {
                 eprintln!("{}", n_benchmarks_remaining(benchmarks.len() - i));
@@ -636,7 +761,7 @@ fn main_result() -> anyhow::Result<i32> {
                     benchmark.measure(&mut processor, &build_kinds, &run_kinds, compiler, 1);
                 if let Err(ref s) = result {
                     eprintln!(
-                        "Failed to profile {} with {:?}, recorded: {:?}",
+                        "collector error: Failed to profile '{}' with {:?}, recorded: {:?}",
                         benchmark.name, profiler, s
                     );
                 }

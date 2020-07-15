@@ -240,15 +240,13 @@ impl<'a> CargoProcess<'a> {
         cmd
     }
 
-    fn get_pkgid(&self, cwd: &Path) -> String {
+    fn get_pkgid(&self, cwd: &Path) -> anyhow::Result<String> {
         let mut pkgid_cmd = self.base_command(cwd, "pkgid");
         let out = command_output(&mut pkgid_cmd)
-            .unwrap_or_else(|e| {
-                panic!("failed to obtain pkgid in {:?}: {:?}", cwd, e);
-            })
+            .with_context(|| format!("failed to obtain pkgid in '{:?}'", cwd))?
             .stdout;
         let package_id = str::from_utf8(&out).unwrap();
-        package_id.trim().to_string()
+        Ok(package_id.trim().to_string())
     }
 
     fn run_rustc(&mut self) -> anyhow::Result<()> {
@@ -279,7 +277,7 @@ impl<'a> CargoProcess<'a> {
             };
 
             let mut cmd = self.base_command(self.cwd, subcommand);
-            cmd.arg("-p").arg(self.get_pkgid(self.cwd));
+            cmd.arg("-p").arg(self.get_pkgid(self.cwd)?);
             match self.build_kind {
                 BuildKind::Check => {
                     cmd.arg("--profile").arg("check");
