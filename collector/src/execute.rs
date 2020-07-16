@@ -1,23 +1,22 @@
 //! Execute benchmarks.
 
+use crate::{BuildKind, Compiler, RunKind};
+use anyhow::{bail, Context};
+use collector::command_output;
+use database::{PatchName, QueryLabel};
+use futures::stream::FuturesUnordered;
+use futures::stream::StreamExt;
 use std::cmp;
+use std::collections::HashMap;
 use std::env;
 use std::fmt;
 use std::fs::{self, File};
+use std::hash;
 use std::path::{Path, PathBuf};
-use std::process::{self, Command};
+use std::process::{self, Command, Stdio};
 use std::str;
-
+use std::time::Duration;
 use tempfile::TempDir;
-
-use crate::old::{Patch, SelfProfile, StatId, Stats};
-use collector::command_output;
-
-use anyhow::{bail, Context};
-
-use crate::{BuildKind, Compiler, RunKind};
-use futures::stream::FuturesUnordered;
-use futures::stream::StreamExt;
 use tokio::runtime::Runtime;
 
 fn touch_all(path: &Path) -> anyhow::Result<()> {
@@ -418,10 +417,6 @@ pub struct MeasureProcessor<'a> {
     krate: &'a BenchmarkName,
     conn: &'a mut dyn database::Connection,
     cid: database::ArtifactIdNumber,
-    clean_stats: (Stats, Option<SelfProfile>),
-    base_incr_stats: (Stats, Option<SelfProfile>),
-    clean_incr_stats: (Stats, Option<SelfProfile>),
-    patched_incr_stats: Vec<(Patch, (Stats, Option<SelfProfile>))>,
     is_first_collection: bool,
     self_profile: bool,
     tries: u8,
@@ -444,10 +439,6 @@ impl<'a> MeasureProcessor<'a> {
             conn,
             krate,
             cid,
-            clean_stats: (Stats::new(), None),
-            base_incr_stats: (Stats::new(), None),
-            clean_incr_stats: (Stats::new(), None),
-            patched_incr_stats: Vec::new(),
             is_first_collection: true,
             // Command::new("summarize").status().is_ok()
             self_profile,
@@ -476,7 +467,7 @@ impl<'a> MeasureProcessor<'a> {
                 self.krate.0.as_str(),
                 profile,
                 cache,
-                stat.as_str(),
+                stat,
                 value,
             ));
         }
@@ -537,36 +528,33 @@ impl<'a> Processor for MeasureProcessor<'a> {
             Ok((stats, profile)) => {
                 match data.run_kind {
                     RunKind::Full => {
-                        self.clean_stats.0.combine_with(stats);
-                        if profile.is_some() {
-                            self.clean_stats.1 = profile;
-                        }
+                        self.insert_stats(
+                            database::Cache::Empty,
+                            data.build_kind,
+                            (stats, profile),
+                        );
                     }
                     RunKind::IncrFull => {
-                        self.base_incr_stats.0.combine_with(stats);
-                        if profile.is_some() {
-                            self.base_incr_stats.1 = profile;
-                        }
+                        self.insert_stats(
+                            database::Cache::IncrementalEmpty,
+                            data.build_kind,
+                            (stats, profile),
+                        );
                     }
                     RunKind::IncrUnchanged => {
-                        self.clean_incr_stats.0.combine_with(stats);
-                        if profile.is_some() {
-                            self.clean_incr_stats.1 = profile;
-                        }
+                        self.insert_stats(
+                            database::Cache::IncrementalFresh,
+                            data.build_kind,
+                            (stats, profile),
+                        );
                     }
                     RunKind::IncrPatched => {
                         let patch = data.patch.unwrap();
-                        if let Some(entry) =
-                            self.patched_incr_stats.iter_mut().find(|s| &s.0 == patch)
-                        {
-                            (entry.1).0.combine_with(stats);
-                            if profile.is_some() {
-                                (entry.1).1 = profile;
-                            }
-                            return Ok(Retry::No);
-                        }
-                        self.patched_incr_stats
-                            .push((patch.clone(), (stats, profile)));
+                        self.insert_stats(
+                            database::Cache::IncrementalPatch(patch.name),
+                            data.build_kind,
+                            (stats, profile),
+                        );
                     }
                 }
                 Ok(Retry::No)
@@ -590,37 +578,8 @@ impl<'a> Processor for MeasureProcessor<'a> {
         }
     }
 
-    fn finish_build_kind(&mut self, build_kind: BuildKind) {
-        if !self.clean_stats.0.is_empty() {
-            let stats = std::mem::take(&mut self.clean_stats);
-            self.insert_stats(database::Cache::Empty, build_kind, stats);
-        }
-        if !self.base_incr_stats.0.is_empty() {
-            let stats = std::mem::take(&mut self.base_incr_stats);
-            self.insert_stats(database::Cache::IncrementalEmpty, build_kind, stats);
-        }
-        if !self.clean_incr_stats.0.is_empty() {
-            let stats = std::mem::take(&mut self.clean_incr_stats);
-            self.insert_stats(database::Cache::IncrementalFresh, build_kind, stats);
-        }
-        if !self.patched_incr_stats.is_empty() {
-            for (patch, results) in std::mem::take(&mut self.patched_incr_stats) {
-                self.insert_stats(
-                    database::Cache::IncrementalPatch(patch.name),
-                    build_kind,
-                    results,
-                );
-            }
-        }
-
-        // Empty all the vectors.
-        self.clean_stats.0.clear();
-        self.base_incr_stats.0.clear();
-        self.clean_incr_stats.0.clear();
-        self.patched_incr_stats.clear();
-        self.clean_stats.1.take();
-        self.base_incr_stats.1.take();
-        self.clean_incr_stats.1.take();
+    fn finish_build_kind(&mut self, _: BuildKind) {
+        // do nothing
     }
 }
 
@@ -949,8 +908,8 @@ impl Benchmark {
         CargoProcess {
             compiler,
             processor_name: self.name.clone(),
-            cwd: cwd,
-            build_kind: build_kind,
+            cwd,
+            build_kind,
             incremental: false,
             processor_etc: None,
             manifest_path: self
@@ -1119,7 +1078,7 @@ fn process_perf_stat_output(
             );
         }
         stats.insert(
-            StatId::from_str(name).unwrap(),
+            name.to_owned(),
             cnt.parse()
                 .map_err(|e| DeserializeStatError::ParseError(cnt.to_string(), e))?,
         );
@@ -1130,4 +1089,115 @@ fn process_perf_stat_output(
     }
 
     Ok((stats, profile))
+}
+
+#[derive(Clone)]
+pub struct Stats {
+    stats: HashMap<String, f64>,
+}
+
+impl Default for Stats {
+    fn default() -> Self {
+        Stats::new()
+    }
+}
+
+impl Stats {
+    pub fn new() -> Stats {
+        Stats {
+            stats: HashMap::new(),
+        }
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&str, f64)> + '_ {
+        self.stats.iter().map(|(k, v)| (k.as_str(), *v))
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.stats.is_empty()
+    }
+
+    pub fn insert(&mut self, stat: String, value: f64) {
+        self.stats.insert(stat, value);
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Patch {
+    index: usize,
+    pub name: PatchName,
+    path: PathBuf,
+}
+
+impl PartialEq for Patch {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+impl Eq for Patch {}
+
+impl hash::Hash for Patch {
+    fn hash<H: hash::Hasher>(&self, h: &mut H) {
+        self.name.hash(h);
+    }
+}
+
+impl Patch {
+    pub fn new(path: PathBuf) -> Self {
+        assert!(path.is_file());
+        let (index, name) = {
+            let file_name = path.file_name().unwrap().to_string_lossy();
+            let mut parts = file_name.split("-");
+            let index = parts.next().unwrap().parse().unwrap_or_else(|e| {
+                panic!(
+                    "{:?} should be in the format 000-name.patch, \
+                     but did not start with a number: {:?}",
+                    &path, e
+                );
+            });
+            let mut name = parts.fold(String::new(), |mut acc, part| {
+                acc.push_str(part);
+                acc.push(' ');
+                acc
+            });
+            let len = name.len();
+            // take final space off
+            name.truncate(len - 1);
+            let name = name.replace(".patch", "");
+            (index, name)
+        };
+
+        Patch {
+            path: PathBuf::from(path.file_name().unwrap().to_str().unwrap()),
+            index,
+            name: name.as_str().into(),
+        }
+    }
+
+    pub fn apply(&self, dir: &Path) -> Result<(), String> {
+        log::debug!("applying {} to {:?}", self.name, dir);
+        let mut cmd = Command::new("patch");
+        cmd.current_dir(dir).args(&["-Np1", "-i"]).arg(&*self.path);
+        cmd.stdout(Stdio::null());
+        if cmd.status().map(|s| !s.success()).unwrap_or(false) {
+            return Err(format!("could not execute {:?}.", cmd));
+        }
+        Ok(())
+    }
+}
+
+#[derive(serde::Deserialize, Clone)]
+pub struct SelfProfile {
+    pub query_data: Vec<QueryData>,
+}
+
+#[derive(serde::Deserialize, Clone)]
+pub struct QueryData {
+    pub label: QueryLabel,
+    pub self_time: Duration,
+    pub number_of_cache_hits: u32,
+    pub invocation_count: u32,
+    pub blocked_time: Duration,
+    pub incremental_load_time: Duration,
 }
