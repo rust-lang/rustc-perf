@@ -19,7 +19,6 @@ use tokio::runtime::Runtime;
 
 mod background_worker;
 mod execute;
-mod old;
 mod sysroot;
 
 use background_worker::send_home;
@@ -116,11 +115,7 @@ pub fn build_kinds_from_arg(arg: &Option<&str>) -> Result<Vec<BuildKind>, KindEr
         kinds_from_arg(STRINGS_AND_BUILD_KINDS, arg)
     } else {
         // don't run rustdoc by default
-        Ok(vec![
-            BuildKind::Check,
-            BuildKind::Debug,
-            BuildKind::Opt,
-        ])
+        Ok(vec![BuildKind::Check, BuildKind::Debug, BuildKind::Opt])
     }
 }
 
