@@ -456,90 +456,90 @@ fn main_result() -> anyhow::Result<i32> {
     env_logger::init();
 
     let matches = clap_app!(rustc_perf_collector =>
-       (version: "0.1")
-       (author: "The Rust Compiler Team")
-       (about: "Collects Rust performance data")
+        (version: "0.1")
+        (author: "The Rust Compiler Team")
+        (about: "Collects Rust performance data")
 
-        // For each subcommand we list the mandatory arguments in the required
-        // order, followed by the options in alphabetical order.
+         // For each subcommand we list the mandatory arguments in the required
+         // order, followed by the options in alphabetical order.
 
-       (@subcommand bench_local =>
-           (about: "Benchmarks a local rustc")
+        (@subcommand bench_local =>
+            (about: "Benchmarks a local rustc")
 
-           // Mandatory arguments
-           (@arg RUSTC: +required +takes_value "The path to the local rustc to benchmark")
-           (@arg ID:    +required +takes_value "Identifier to associate benchmark results with")
-
-           // Options
-           (@arg BUILDS:  --builds  +takes_value
-            "One or more (comma-separated) of: 'Check', 'Debug',\n\
-            'Doc', 'Opt', 'All'")
-           (@arg CARGO:   --cargo   +takes_value "The path to the local Cargo to use")
-           (@arg DB:      --db      +takes_value "Database output file")
-           (@arg EXCLUDE: --exclude +takes_value "Exclude benchmarks matching these")
-           (@arg INCLUDE: --include +takes_value "Include benchmarks matching these")
-           (@arg RUNS:    --runs    +takes_value
-            "One or more (comma-separated) of: 'Full',\n\
-            'IncrFull', 'IncrUnchanged', 'IncrPatched', 'All'")
-           (@arg RUSTDOC: --rustdoc +takes_value "The path to the local rustdoc to benchmark")
-           (@arg SELF_PROFILE: --("self-profile") "Collect self-profile data")
-       )
-
-       (@subcommand bench_next =>
-           (about: "Benchmarks the next commit for perf.rust-lang.org")
-
-           // Mandatory arguments
-           (@arg SITE_URL: +required +takes_value "Site URL")
-
-           // Options
-           (@arg DB:           --db  +takes_value "Database output file")
-           (@arg SELF_PROFILE: --("self-profile") "Collect self-profile data")
-       )
-
-       (@subcommand bench_published =>
-           (about: "Benchmarks a published toolchain for perf.rust-lang.org's dashboard")
-
-           // Mandatory arguments
-           (@arg TOOLCHAIN: +required +takes_value "Toolchain (e.g. stable, beta, 1.26.0)")
-
-           // Options
-           (@arg DB: --db +takes_value "Database output file")
-       )
-
-       (@subcommand bench_test =>
-           (about: "Benchmarks the most recent commit for testing purposes")
-
-           // Mandatory arguments: (none)
-
-           // Options
-           (@arg DB:      --db      +takes_value "Database output file")
-           (@arg EXCLUDE: --exclude +takes_value "Exclude benchmarks matching these")
-           (@arg INCLUDE: --include +takes_value "Include benchmarks matching these")
-       )
-
-       (@subcommand profile_local =>
-           (about: "Profiles a local rustc with one of several profilers")
-
-           // Mandatory arguments
-           (@arg PROFILER: +required +takes_value
-            "One of: 'self-profile', 'time-passes', 'perf-record',\n\
-            'cachegrind', 'callgrind', ''dhat', 'massif', 'eprintln'")
-           (@arg RUSTC:    +required +takes_value "The path to the local rustc to benchmark")
-           (@arg ID:       +required +takes_value "Identifier to associate benchmark results with")
+            // Mandatory arguments
+            (@arg RUSTC: +required +takes_value "The path to the local rustc to benchmark")
+            (@arg ID:    +required +takes_value "Identifier to associate benchmark results with")
 
             // Options
-           (@arg BUILDS: --builds       +takes_value
-            "One or more (comma-separated) of: 'Check', 'Debug',\n\
-            'Doc', 'Opt', 'All'")
-           (@arg CARGO:   --cargo       +takes_value "The path to the local Cargo to use")
-           (@arg EXCLUDE: --exclude     +takes_value "Exclude benchmarks matching these")
-           (@arg INCLUDE: --include     +takes_value "Include benchmarks matching these")
-           (@arg OUT_DIR: --("out-dir") +takes_value "Output directory")
-           (@arg RUNS:    --runs        +takes_value
-            "One or more (comma-separated) of: 'Full',\n\
-            'IncrFull', 'IncrUnchanged', 'IncrPatched', 'All'")
-           (@arg RUSTDOC: --rustdoc +takes_value "The path to the local rustdoc to benchmark")
-       )
+            (@arg BUILDS:  --builds  +takes_value
+             "One or more (comma-separated) of: 'Check', 'Debug',\n\
+             'Doc', 'Opt', 'All'")
+            (@arg CARGO:   --cargo   +takes_value "The path to the local Cargo to use")
+            (@arg DB:      --db      +takes_value "Database output file")
+            (@arg EXCLUDE: --exclude +takes_value "Exclude benchmarks matching these")
+            (@arg INCLUDE: --include +takes_value "Include benchmarks matching these")
+            (@arg RUNS:    --runs    +takes_value
+             "One or more (comma-separated) of: 'Full',\n\
+             'IncrFull', 'IncrUnchanged', 'IncrPatched', 'All'")
+            (@arg RUSTDOC: --rustdoc +takes_value "The path to the local rustdoc to benchmark")
+            (@arg SELF_PROFILE: --("self-profile") "Collect self-profile data")
+        )
+
+        (@subcommand bench_next =>
+            (about: "Benchmarks the next commit for perf.rust-lang.org")
+
+            // Mandatory arguments
+            (@arg SITE_URL: +required +takes_value "Site URL")
+
+            // Options
+            (@arg DB:           --db  +takes_value "Database output file")
+            (@arg SELF_PROFILE: --("self-profile") "Collect self-profile data")
+        )
+
+        (@subcommand bench_published =>
+            (about: "Benchmarks a published toolchain for perf.rust-lang.org's dashboard")
+
+            // Mandatory arguments
+            (@arg TOOLCHAIN: +required +takes_value "Toolchain (e.g. stable, beta, 1.26.0)")
+
+            // Options
+            (@arg DB: --db +takes_value "Database output file")
+        )
+
+        (@subcommand bench_test =>
+            (about: "Benchmarks the most recent commit for testing purposes")
+
+            // Mandatory arguments: (none)
+
+            // Options
+            (@arg DB:      --db      +takes_value "Database output file")
+            (@arg EXCLUDE: --exclude +takes_value "Exclude benchmarks matching these")
+            (@arg INCLUDE: --include +takes_value "Include benchmarks matching these")
+        )
+
+        (@subcommand profile_local =>
+            (about: "Profiles a local rustc with one of several profilers")
+
+            // Mandatory arguments
+            (@arg PROFILER: +required +takes_value
+             "One of: 'self-profile', 'time-passes', 'perf-record',\n\
+             'cachegrind', 'callgrind', ''dhat', 'massif', 'eprintln'")
+            (@arg RUSTC:    +required +takes_value "The path to the local rustc to benchmark")
+            (@arg ID:       +required +takes_value "Identifier to associate benchmark results with")
+
+             // Options
+            (@arg BUILDS: --builds       +takes_value
+             "One or more (comma-separated) of: 'Check', 'Debug',\n\
+             'Doc', 'Opt', 'All'")
+            (@arg CARGO:   --cargo       +takes_value "The path to the local Cargo to use")
+            (@arg EXCLUDE: --exclude     +takes_value "Exclude benchmarks matching these")
+            (@arg INCLUDE: --include     +takes_value "Include benchmarks matching these")
+            (@arg OUT_DIR: --("out-dir") +takes_value "Output directory")
+            (@arg RUNS:    --runs        +takes_value
+             "One or more (comma-separated) of: 'Full',\n\
+             'IncrFull', 'IncrUnchanged', 'IncrPatched', 'All'")
+            (@arg RUSTDOC: --rustdoc +takes_value "The path to the local rustdoc to benchmark")
+        )
     )
     .get_matches();
 
