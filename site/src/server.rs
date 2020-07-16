@@ -46,7 +46,6 @@ use crate::load::{Config, InputData};
 use crate::selector::{self, PathComponent, Tag};
 use collector::api::collected;
 use collector::Sha;
-use collector::StatId;
 use db::{ArtifactId, Lookup};
 use parking_lot::RwLock;
 
@@ -154,10 +153,7 @@ pub async fn handle_dashboard(data: Arc<InputData>) -> ServerResult<dashboard::R
                 "tokio-webpush-simple",
             ]),
         )
-        .set(
-            Tag::ProcessStatistic,
-            selector::Selector::One(StatId::WallTime.as_str()),
-        );
+        .set(Tag::ProcessStatistic, selector::Selector::One("wall-time"));
 
     let summary_patches = data.summary_patches();
     let by_profile = ByProfile::new::<String, _, _>(|profile| {
@@ -336,13 +332,11 @@ fn to_graph_data<'a>(
 }
 
 pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<graph::Response> {
-    let stat_id = StatId::from_str(&body.stat)?;
-
     let cc = CommitIdxCache::new();
     let range = data.data_range(body.start.clone()..=body.end.clone());
     let commits: Arc<Vec<_>> = Arc::new(range.iter().map(|&c| c.into()).collect());
 
-    let stat_selector = selector::Selector::One(stat_id.as_pstat().to_string());
+    let stat_selector = selector::Selector::One(body.stat.clone());
 
     let series = data
         .query::<Option<f64>>(
@@ -370,7 +364,7 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
     let summary_queries = iproduct!(
         data.summary_patches(),
         vec![Profile::Check, Profile::Debug, Profile::Opt],
-        vec![stat_id.as_pstat().to_string()]
+        vec![body.stat.clone()]
     )
     .map(|(cache, profile, pstat)| {
         selector::Query::new()
@@ -484,7 +478,6 @@ pub async fn handle_compare(body: days::Request, data: &InputData) -> ServerResu
         body.end
     ))?;
     let cids = Arc::new(vec![a.clone().into(), b.clone().into()]);
-    let stat_id = StatId::from_str(&body.stat)?;
 
     let query = selector::Query::new()
         .set::<String>(Tag::Crate, selector::Selector::All)
@@ -492,7 +485,7 @@ pub async fn handle_compare(body: days::Request, data: &InputData) -> ServerResu
         .set::<String>(Tag::Profile, selector::Selector::All)
         .set(
             Tag::ProcessStatistic,
-            selector::Selector::One(stat_id.as_str()),
+            selector::Selector::One(body.stat.clone()),
         );
 
     let mut responses = data.query::<Option<f64>>(query, cids).await?;
