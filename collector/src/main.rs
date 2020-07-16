@@ -96,12 +96,6 @@ impl RunKind {
     }
 }
 
-#[derive(thiserror::Error, PartialEq, Eq, Debug)]
-pub enum KindError {
-    #[error("'{:?}' is not a known {} kind", .1, .0)]
-    UnknownKind(&'static str, String),
-}
-
 // How the --builds arg maps to BuildKinds.
 const STRINGS_AND_BUILD_KINDS: &[(&str, BuildKind)] = &[
     ("Check", BuildKind::Check),
@@ -118,17 +112,17 @@ const STRINGS_AND_RUN_KINDS: &[(&str, RunKind)] = &[
     ("IncrPatched", RunKind::IncrPatched),
 ];
 
-pub fn build_kinds_from_arg(arg: &Option<&str>) -> Result<Vec<BuildKind>, KindError> {
+fn build_kinds_from_arg(arg: &Option<&str>) -> anyhow::Result<Vec<BuildKind>> {
     if let Some(arg) = arg {
-        kinds_from_arg(STRINGS_AND_BUILD_KINDS, arg)
+        kinds_from_arg("build", STRINGS_AND_BUILD_KINDS, arg)
     } else {
         Ok(BuildKind::default())
     }
 }
 
-pub fn run_kinds_from_arg(arg: &Option<&str>) -> Result<Vec<RunKind>, KindError> {
+fn run_kinds_from_arg(arg: &Option<&str>) -> anyhow::Result<Vec<RunKind>> {
     if let Some(arg) = arg {
-        kinds_from_arg(STRINGS_AND_RUN_KINDS, arg)
+        kinds_from_arg("run", STRINGS_AND_RUN_KINDS, arg)
     } else {
         Ok(RunKind::default())
     }
@@ -136,7 +130,11 @@ pub fn run_kinds_from_arg(arg: &Option<&str>) -> Result<Vec<RunKind>, KindError>
 
 // Converts a comma-separated list of kind names to a vector of kinds with no
 // duplicates.
-fn kinds_from_arg<K>(strings_and_kinds: &[(&str, K)], arg: &str) -> Result<Vec<K>, KindError>
+fn kinds_from_arg<K>(
+    name: &str,
+    strings_and_kinds: &[(&str, K)],
+    arg: &str,
+) -> anyhow::Result<Vec<K>>
 where
     K: Copy + Eq + ::std::hash::Hash,
 {
@@ -150,7 +148,7 @@ where
                 kind_set.insert(k);
             }
         } else {
-            return Err(KindError::UnknownKind("build", s.to_string()));
+            anyhow::bail!("'{}' is not a known {} kind", s, name);
         }
     }
 

@@ -1,7 +1,7 @@
 //! Execute benchmarks.
 
 use crate::{BuildKind, Compiler, RunKind};
-use anyhow::{bail, Context};
+use anyhow::{anyhow, bail, Context};
 use collector::command_output;
 use database::{PatchName, QueryLabel};
 use futures::stream::FuturesUnordered;
@@ -97,21 +97,13 @@ pub enum Profiler {
     LlvmLines,
 }
 
-#[derive(thiserror::Error, PartialEq, Eq, Debug)]
-pub enum FromNameError {
-    #[error("'perf-stat' cannot be used as the profiler")]
-    PerfStat,
-    #[error("'{:?}' is not a known profiler", .0)]
-    UnknownProfiler(String),
-}
-
 impl Profiler {
-    pub fn from_name(name: &str) -> Result<Profiler, FromNameError> {
+    pub fn from_name(name: &str) -> anyhow::Result<Profiler> {
         match name {
             // Even though `PerfStat` is a valid `Profiler` value, "perf-stat"
             // is rejected because it can't be used with the `profiler`
             // subcommand. (It's used with `bench_local` instead.)
-            "perf-stat" => Err(FromNameError::PerfStat),
+            "perf-stat" => Err(anyhow!("'perf-stat' cannot be used as the profiler")),
             "self-profile" => Ok(Profiler::SelfProfile),
             "time-passes" => Ok(Profiler::TimePasses),
             "perf-record" => Ok(Profiler::PerfRecord),
@@ -122,7 +114,7 @@ impl Profiler {
             "massif" => Ok(Profiler::Massif),
             "eprintln" => Ok(Profiler::Eprintln),
             "llvm-lines" => Ok(Profiler::LlvmLines),
-            _ => Err(FromNameError::UnknownProfiler(name.to_string())),
+            _ => Err(anyhow!("'{}' is not a known profiler", name)),
         }
     }
 
