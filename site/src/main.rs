@@ -42,9 +42,10 @@ async fn main() {
                 std::process::exit(1);
             }
             eprintln!(
-                "Loading complete; {} commits and {} artifacts.",
+                "Loading complete; {} commits and {} artifacts",
                 commits, artifacts,
             );
+            eprintln!("View the results in a web browser at 'localhost:2346/compare.html'");
             // Spawn off a task to post the results of any commit results that we
             // are now aware of.
             site::github::post_finished(&res).await;

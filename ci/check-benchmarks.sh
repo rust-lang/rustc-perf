@@ -7,9 +7,7 @@ PING_LOOP_PID=$!
 trap - ERR
 RUST_BACKTRACE=1 RUST_LOG=collector=debug,rust_sysroot=debug \
     cargo run -p collector --bin collector -- \
-    --db temporary.db \
-    $COLLECTOR_ARGS \
-    bench_test;
+    bench_test $BENCH_TEST_OPTS
 code=$?
 kill $PING_LOOP_PID
 exit $code

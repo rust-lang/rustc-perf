@@ -61,62 +61,69 @@ marked with a '?' in the `compare` page.
 
 ### How to benchmark a change on your own machine
 
-To benchmark a local build:
+The following command runs the benchmark suite using a local rustc:
 ```
-./target/release/collector --db $DATABASE \
-    bench_local --rustc $RUSTC --cargo $CARGO $ID
+./target/release/collector bench_local <RUSTC> <ID>
 ```
 
-`$DATABASE` is a path (relative or absolute) to a sqlite database file, in which
-the timing data will be placed. It will be created if it does not already exist.
-Alternatively, the collector supports postgres as a backend and the URL can be
-specified (beginning with `postgres://`), but this is unlikely to be useful for
-local collection.
+It will benchmark the entire suite and put the results in a SQLite database
+file called `results.db`. The full benchmark suite takes hours to run, but the
+time can be reduced greatly by using the options below to reduce the number of
+benchmarks, runs, or builds. Progress output is printed to stderr.
 
-`$RUSTC` is a path (relative or absolute) to a rustc executable. Some
-benchmarks use procedural macros, which require a stage 2 compiler. Therefore,
-the value is likely to be something like
-`$RUSTC_REPO/build/x86_64-unknown-linux-gnu/stage2/bin/rustc`, where
-`$RUSTC_REPO` is a path (relative or absolute) to a rustc repository.
+The following arguments are mandatory.
 
-`$CARGO` is a path (relative or absolute) to a Cargo executable. Using an
-installed Cargo is fine, e.g. ``--cargo `which cargo` ``, though you should
-prefer a nightly cargo -- and note that things may not closely match production
-measurements as Cargo sometimes begins passing (or stops passing) various flags
-to rustc.
+- `<RUSTC>`: a path (relative or absolute) to a rustc executable that will be
+  benchmarked. Some benchmarks use plugins, which require a stage 2 compiler.
+  Therefore, the value is likely to be something like
+  `$RUST/build/x86_64-unknown-linux-gnu/stage2/bin/rustc`, where `$RUST` is a
+  path (relative or absolute) to a `rust` repository.
 
-`$ID` is an identifier which will be used to identify the results in the
-collected data.
-
-The full benchmark suite takes some time to run: tens of minutes or more,
-depending on the speed of your machine. Progress output is printed to stderr.
-
-`RUST_LOG=debug` can be specified to enable some verbose logging, which is
-useful for debugging rustc-perf itself.
+- `<ID>`: an identifier which will be used to identify the results in the
+  database.
 
 ### Benchmarking options
 
-The following options, if present, must appear before `bench_local` in the
-command.
-- `--self-profile` can be used to do self-profiling, which requires the
-  `measureme` tool.
-- `--filter $STR` can be used to run a subset of the benchmarks. `$STR` is a
-  substring of the name of the benchmark(s) you wish to run.
-- `--exclude $STR` is the inverse of `--filter`. `$STR` is a substring of the
-  name of the benchmark(s) you wish to skip.
+The following options alter the behaviour of the `bench_local` subcommand.
+- `--builds <BUILDS>`: the build kinds to be benchmarked. The possible choices
+  are one or more (comma-separated) of `Check`, `Debug`, `Doc`, `Opt`, and
+  `All`. The default is `Check,Debug,Opt`.
+- `--cargo <CARGO>`: a path (relative or absolute) to a Cargo executable that
+  will be used to build the benchmarks. By default, the nightly Cargo installed
+  by `rustup` will be used. This is usually fine, though in rare cases it may
+  cause local results to not exactly match production results, because Cargo
+  sometimes begins passing (or stops passing) various flags to rustc.
+- `--db $DATABASE`: a path (relative or absolute) to a sqlite database file in
+  which the timing data will be placed. It will be created if it does not
+  already exist. The default is `results.db`. Alternatively, the collector
+  supports postgres as a backend and the URL can be specified (beginning with
+  `postgres://`), but this is unlikely to be useful for local collection.
+- `--exclude <EXCLUDE>`: this is used to run a subset of the benchmarks. The
+  argument is a comma-separated list of strings. When this option is specified,
+  a benchmark is excluded from the run if its name contains one or more of the
+  given strings.
+- `--include <INCLUDE>`: the inverse of `--exclude`. The argument is a
+  comma-separated list of strings. When this option is specified, a benchmark
+  is included in the run only if its name contains one or more of the given
+  strings.
+- `--runs $RUNS`: the run kinds to be benchmarked. The possible choices are one
+  or more (comma-separated) of `Full`, `IncrFull`, `IncrUnchanged`,
+  `IncrPatched`, and `All`. The default is `All`. Note that `IncrFull` is
+  always run (even if not requested) if either of `IncrUnchanged` or
+  `IncrPatched` are run.
+- `--rustdoc <RUSTDOC>`: a path (relative or absolute) to a rustdoc
+  executable that will be benchmarked (but only if a `Doc` build is requested
+  with `--builds`). If a `Doc` build is requested, by default the tool will
+  look for a rustdoc executable next to the rustc specified via the `<RUSTC>`
+  argument.
+- `--self-profile`: enable self-profiling, i.e. the inclusion of query
+  statistics in the output. The `measureme` tool must be installed for this to
+  work.
 
-The following options, if present, must appear after `bench_local` in the
-command.
-- `--builds $BUILDS` can be used to select what kind of builds are profiled.
-  The possible choices are one or more (comma-separated) of `Check`, `Debug`,
-  `Opt`, and `All` (the default).
-- `--runs $RUNS` can be used to select what profiling runs are done for each
-  build. The possible choices are one or more (comma-separated) of `Full`,
-  `IncrFull`, `IncrUnchanged`, `IncrPatched`, and `All` (the default). Note
-  that `IncrFull` is always run (even if not requested) if either of
-  `IncrUnchanged` or `IncrPatched` are run.
+`RUST_LOG=debug` can be specified to enable verbose logging, which is useful
+for debugging `collector` itself.
 
-### Comparing different versions on your own machine
+### How to compare different versions on your own machine
 
 Often you'll want to compare two different compiler versions. For example, you
 might have two clones of the rustc repository: one that is unmodified, and a
@@ -124,30 +131,26 @@ second that contains a branch of your changes. To compare the two versions, do
 something like this:
 
 ```
-./target/release/collector --db timings.db \
-    bench_local --rustc $RUST_TIP --cargo `which cargo` Orig
+./target/release/collector bench_local $RUST_ORIGINAL Original
 
-./target/release/collector --db timings.db \
-    bench_local --rustc $RUST_MODIFIED --cargo `which cargo` Modified
+./target/release/collector bench_local $RUST_MODIFIED Modified
 ```
 
-where `$RUST_TIP` and `$RUST_MODIFIED` are paths (relative or absolute) to the
-relevant rustc executables. The `--db` argument must be the same in
-each invocation.
+where `$RUST_ORIGINAL` and `$RUST_MODIFIED` are paths (relative or absolute) to
+the relevant rustc executables.
 
 ### How to view the measurements on your own machine
 
 Once the benchmarks have been run, start the website:
 ```
-./target/release/site $DATABASE
+./target/release/site <DATABASE>
 ```
-and visit `localhost:2346/compare.html` in a web browser.
-
-Wait for the "Loading complete" message; it should come within a couple dozen
-seconds (or faster, depending on how much data you've collected).
+wait for the "Loading complete" message to be printed, and then visit
+`localhost:2346/compare.html` in a web browser.
 
 Enter the IDs for two runs in the "Commit/Date A" and "Commit/Date B" text
-boxes (the two IDs can be the same) and click on "Submit".
+boxes and click on "Submit". You can enter the same ID twice, though in that
+case you won't be shown any percentage differences.
 
 If you've collected new data, you can run `curl -X POST
 localhost:2346/perf/onpush` to update the site's view of the data, or just
@@ -187,28 +190,19 @@ Without this you won't get useful file names and line numbers in the output.
 
 ### Profiling local builds
 
-To self-profile a local build:
+To profile a local rustc with one of several profilers:
 ```
-./target/release/collector --db $DATABASE --self-profile \
-    bench_local --rustc $RUSTC --cargo $CARGO $ID
+./target/release/collector profile_local <PROFILER> <RUSTC> <ID>
 ```
+It will profile the entire suite and put the results in a directory called
+`results/`.
 
-Then view the results the same way as for the `bench_local` subcommand.
-
-To profile a local build with a different profiler:
-```
-./target/release/collector profile $PROFILER \
-    --output $OUTPUT_DIR --rustc $RUSTC --cargo $CARGO $ID
-```
-
-This is similar to the `bench_local` subcommand, with a couple of exceptions.
-First, `$OUTPUT_DIR` is a directory in which the output will be placed. If the
-directory doesn't exist, it will be created.
-
-Second, `$PROFILER` is one of the following.
+The mandatory `<PROFILER>` argument must be one of the following.
 - `self-profile`: Profile with rustc's `-Zself-profile`.
   - **Purpose**. This gives multiple high-level views of compiler performance,
-    in both tabular and graphical form.
+    in both tabular and graphical form. It is related to, but distinct from,
+    the profiling done by the `--self-profiling` option of the `bench_local`
+    subcommand.
   - **Slowdown**. Minimal.
   - **Output**. Raw output is written to a directory with a `Zsp` prefix.
     The files in that directory can be processed with various
@@ -255,7 +249,7 @@ Second, `$PROFILER` is one of the following.
     Cachegrind's results are almost deterministic, which eases comparisons
     across multiple runs.
   - **Slowdown**. Roughly 3--10x.
-  - **Configuration**. Within `profile`, Cachegrind is configured to not
+  - **Configuration**. Within `profile_local`, Cachegrind is configured to not
     simulate caches and the branch predictor, even though it can, because the
     simulation slows it down and 99% of the time instruction counts are all you
     need.
@@ -273,7 +267,7 @@ Second, `$PROFILER` is one of the following.
     function call information. So it can be used like either Cachegrind or
     `perf-record`. However, it cannot perform diffs between profiles.
   - **Slowdown**. Roughly 5--20x.
-  - **Configuration**. Like Cachegrind, within `profile` Callgrind is
+  - **Configuration**. Like Cachegrind, within `profile_local` Callgrind is
     configured to not simulate caches and the branch predictor.
   - **Output**. Raw output is written to files with a `clgout` prefix; those
     files can be viewed with the graphical
@@ -291,13 +285,13 @@ Second, `$PROFILER` is one of the following.
   - **Slowdown**. Roughly 5--20x.
   - **Prerequisites**. DHAT may require a rustc configured with `jemalloc =
     false` to work well.
-  - **Configuration**. DHAT is configured within `profile` to run with the
-    non-default `--num-callers=4` option, which dictates stack depths. (This
-    value of 4 does not include inlined stack frames, so in practice the depths
-    of stack traces are a lot more than 4.) This is almost always enough, but
-    on the rare occasion it isn't, you can the value in `rustc-fake.rs` and
-    rebuild `collector`. Note that higher values make DHAT run more slowly and
-    increase the size of its data files.
+  - **Configuration**. DHAT is configured within `profile_local` to run with
+    the non-default `--num-callers=4` option, which dictates stack depths.
+    (This value of 4 does not include inlined stack frames, so in practice the
+    depths of stack traces are a lot more than 4.) This is almost always
+    enough, but on the rare occasion it isn't, you can change the value in
+    `rustc-fake.rs` and rebuild `collector`. Note that higher values make DHAT
+    run more slowly and increase the size of its data files.
   - **Output**. Raw output is written to files with a `dhout` prefix. Those
     files can be viewed with DHAT's viewer (`dh_view.html`).
 - `massif`: Profile with
@@ -333,6 +327,24 @@ Second, `$PROFILER` is one of the following.
   - **Notes**. Does not work with the `Check` build kind. Also does not work
     with the `IncrFull`, `IncrUnchanged`, and `IncrPatched` run kinds.
 
+The mandatory `<RUSTC>` argument is a patch to a rustc executable, similar to
+`bench_local`.
+
+The mandatory `<ID>` argument is an identifer that will form part of the
+output filenames.
+
 ### Profiling options
 
-These are the same as the benchmarking options above.
+The following options alter the behaviour of the `profile_local` subcommand.
+- `--builds <BUILDS>`: as for `bench_local`.
+- `--cargo <CARGO>`: as for `bench_local`.
+- `--exclude <EXCLUDE>`: as for `bench_local`.
+- `--include <INCLUDE>`: as for `bench_local`.
+- `--out-dir <OUT_DIR>`: a path (relative or absolute) to a directory in
+  which the output will be placed. If the directory doesn't exist, it will be
+  created. The default is `results/`.
+- `--runs <RUNS>`: as for `bench_local`.
+- `--rustdoc <RUSTDOC>` as for `bench_local`.
+
+`RUST_LOG=debug` can be specified to enable verbose logging, which is useful
+for debugging `collector` itself.
