@@ -1,126 +1,14 @@
 use chrono::NaiveDate;
 pub use database::{Commit, PatchName, QueryLabel, Sha};
 use serde::Deserialize;
-use serde::Serialize;
-use std::borrow::Cow;
-use std::cmp::{Ord, PartialOrd};
+use std::cmp::PartialOrd;
 use std::fmt;
-use std::hash;
-use std::path::{Path, PathBuf};
-use std::process::{self, Command, Stdio};
+use std::process::{self, Command};
 
 pub mod api;
 pub mod self_profile;
 
 pub use self_profile::{QueryData, SelfProfile};
-intern::intern!(pub struct PatchPath);
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct Patch {
-    index: usize,
-    pub name: PatchName,
-    path: PatchPath,
-}
-
-impl PartialEq for Patch {
-    fn eq(&self, other: &Self) -> bool {
-        self.name == other.name
-    }
-}
-
-impl Eq for Patch {}
-
-impl hash::Hash for Patch {
-    fn hash<H: hash::Hasher>(&self, h: &mut H) {
-        self.name.hash(h);
-    }
-}
-
-impl Patch {
-    pub fn new(path: PathBuf) -> Self {
-        assert!(path.is_file());
-        let (index, name) = {
-            let file_name = path.file_name().unwrap().to_string_lossy();
-            let mut parts = file_name.split("-");
-            let index = parts.next().unwrap().parse().unwrap_or_else(|e| {
-                panic!(
-                    "{:?} should be in the format 000-name.patch, \
-                     but did not start with a number: {:?}",
-                    &path, e
-                );
-            });
-            let mut name = parts.fold(String::new(), |mut acc, part| {
-                acc.push_str(part);
-                acc.push(' ');
-                acc
-            });
-            let len = name.len();
-            // take final space off
-            name.truncate(len - 1);
-            let name = name.replace(".patch", "");
-            (index, name)
-        };
-
-        Patch {
-            path: PatchPath::from(path.file_name().unwrap().to_str().unwrap()),
-            index,
-            name: name.as_str().into(),
-        }
-    }
-
-    pub fn apply(&self, dir: &Path) -> Result<(), String> {
-        log::debug!("applying {} to {:?}", self.name, dir);
-        let mut cmd = process::Command::new("patch");
-        cmd.current_dir(dir).args(&["-Np1", "-i"]).arg(&*self.path);
-        cmd.stdout(Stdio::null());
-        if cmd.status().map(|s| !s.success()).unwrap_or(false) {
-            return Err(format!("could not execute {:?}.", cmd));
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Deserialize)]
-pub enum BenchmarkState {
-    Clean,
-    IncrementalStart,
-    IncrementalClean,
-    IncrementalPatched(Patch),
-}
-
-impl BenchmarkState {
-    pub fn is_base_compile(&self) -> bool {
-        matches!(*self, BenchmarkState::Clean)
-    }
-
-    pub fn is_patch(&self) -> bool {
-        matches!(*self, BenchmarkState::IncrementalPatched(_))
-    }
-
-    pub fn name(&self) -> Cow<'static, str> {
-        match *self {
-            BenchmarkState::Clean => "clean".into(),
-            BenchmarkState::IncrementalStart => "baseline incremental".into(),
-            BenchmarkState::IncrementalClean => "clean incremental".into(),
-            BenchmarkState::IncrementalPatched(ref patch) => {
-                format!("patched incremental: {}", patch.name).into()
-            }
-        }
-    }
-
-    // Otherwise we end up with "equivalent benchmarks" looking different,
-    // e.g. 8-println.patch vs. 0-println.patch
-    pub fn erase_path(mut self) -> Self {
-        match &mut self {
-            BenchmarkState::IncrementalPatched(patch) => {
-                patch.index = 0;
-                patch.path = PatchPath::from("");
-            }
-            _ => {}
-        }
-        self
-    }
-}
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Deserialize)]
 pub struct DeltaTime(#[serde(with = "round_float")] pub f64);
