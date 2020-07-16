@@ -10,7 +10,7 @@ use std::str;
 
 use tempfile::TempDir;
 
-use crate::old::{Patch, SelfProfile, StatId, Stats};
+use crate::old::{Patch, SelfProfile, Stats};
 use collector::command_output;
 
 use anyhow::{bail, Context};
@@ -476,7 +476,7 @@ impl<'a> MeasureProcessor<'a> {
                 self.krate.0.as_str(),
                 profile,
                 cache,
-                stat.as_str(),
+                stat,
                 value,
             ));
         }
@@ -1119,7 +1119,7 @@ fn process_perf_stat_output(
             );
         }
         stats.insert(
-            StatId::from_str(name).unwrap(),
+            name.to_owned(),
             cnt.parse()
                 .map_err(|e| DeserializeStatError::ParseError(cnt.to_string(), e))?,
         );
