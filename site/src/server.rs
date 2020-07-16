@@ -712,7 +712,20 @@ pub async fn handle_self_profile(
     let mut sp_responses = data
         .query::<Option<selector::SelfProfileData>>(query.clone(), commits.clone())
         .await?;
-    assert_eq!(sp_responses.len(), 1, "all selectors are exact");
+
+    if sp_responses.is_empty() {
+        return Err(format!("no results found for {:?} in {:?}", query, commits));
+    }
+
+    assert_eq!(
+        sp_responses.len(),
+        1,
+        "all selectors are exact, paths: {:?}",
+        sp_responses
+            .iter()
+            .map(|v| format!("{:?}", v.path))
+            .collect::<Vec<_>>()
+    );
     let mut sp_response = sp_responses.remove(0).series;
 
     let mut cpu_responses = data
