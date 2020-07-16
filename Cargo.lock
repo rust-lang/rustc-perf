@@ -71,16 +71,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "53d1ccbaf7d9ec9537465a97bf19edc1a4e158ecb49fc16178202238c569cc42"
 
 [[package]]
-name = "bincode"
-version = "1.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5753e2a71534719bf3f4e57006c3a4f0d2c672a4b676eec84161f763eca87dbf"
-dependencies = [
- "byteorder",
- "serde",
-]
-
-[[package]]
 name = "bitflags"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -130,18 +120,6 @@ name = "bytes"
 version = "0.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "130aac562c0dd69c56b3b1cc8ffd2e17be31d0b6c25b61c96b76231aa23e39e1"
-
-[[package]]
-name = "cargo_metadata"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46e3374c604fb39d1a2f35ed5e4a4e30e60d01fab49446e08f1b3e9a90aef202"
-dependencies = [
- "semver",
- "serde",
- "serde_derive",
- "serde_json",
-]
 
 [[package]]
 name = "cc"
@@ -196,26 +174,21 @@ name = "collector"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "bincode",
- "cargo_metadata",
  "chrono",
  "clap",
  "crossbeam-channel",
  "database",
  "env_logger",
  "futures",
- "hashbrown",
  "intern",
  "lazy_static",
  "libc",
  "log",
- "parking_lot",
  "reqwest",
  "rustc-artifacts",
  "semver",
  "serde",
  "serde_json",
- "snap",
  "tar",
  "tempfile",
  "thiserror",
@@ -1506,7 +1479,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d7eb9ef2c18661902cc47e535f9bc51b78acd254da71d375c2f6720d9a40403"
 dependencies = [
  "semver-parser",
- "serde",
 ]
 
 [[package]]
