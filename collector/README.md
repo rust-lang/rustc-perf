@@ -116,9 +116,9 @@ The following options alter the behaviour of the `bench_local` subcommand.
   with `--builds`). If a `Doc` build is requested, by default the tool will
   look for a rustdoc executable next to the rustc specified via the `<RUSTC>`
   argument.
-- `--self-profile`: enable self-profiling, i.e. the inclusion of query
-  statistics in the output. The `measureme` tool must be installed for this to
-  work.
+- `--self-profile`: use rustc's `-Zself-profile` option to produce
+  query/function tables in the output. The `measureme` tool must be installed
+  for this to work.
 
 `RUST_LOG=debug` can be specified to enable verbose logging, which is useful
 for debugging `collector` itself.
@@ -199,19 +199,19 @@ It will profile the entire suite and put the results in a directory called
 
 The mandatory `<PROFILER>` argument must be one of the following.
 - `self-profile`: Profile with rustc's `-Zself-profile`.
-  - **Purpose**. This gives multiple high-level views of compiler performance,
-    in both tabular and graphical form. It is related to, but distinct from,
-    the profiling done by the `--self-profiling` option of the `bench_local`
-    subcommand.
+  - **Purpose**. This gathers the same high-level query/function data as the
+    `--self-profile` option of the `bench_local` subcommand, but it presents
+    the data in three different forms.
   - **Slowdown**. Minimal.
   - **Output**. Raw output is written to a directory with a `Zsp` prefix.
     The files in that directory can be processed with various
     [`measureme`](https://github.com/rust-lang/measureme/) tools.
     Human-readable output from `summarize` is written to a file with a
-    `summarize` prefix. Output from `flamegraph`, viewable with a web browser,
-    is written to a file with a `flamegraph` prefix. Output from `crox`,
-    viewable with Chromium's profiler, is written to a file with a `crox`
-    prefix.
+    `summarize` prefix; this is very similar to the query/function tables
+    produced by `bench_local` with the `--self-profile` option. Output from
+    `flamegraph`, viewable with a web browser, is written to a file with a
+    `flamegraph` prefix. Output from `crox`, viewable with Chromium's profiler,
+    is written to a file with a `crox` prefix.
 - `time-passes`: Profile with rustc's `-Ztime-passes`.
   - **Purpose**. This gives a high-level indication of compiler performance by
     showing how long each compilation pass takes.
