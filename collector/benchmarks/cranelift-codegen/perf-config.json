@@ -1,3 +1,4 @@
 {
-    "cargo_toml": "cranelift-codegen/Cargo.toml"
+    "cargo_toml": "cranelift-codegen/Cargo.toml",
+    "touch_file": "cranelift-codegen/src/lib.rs"
 }

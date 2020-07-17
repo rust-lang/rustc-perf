@@ -24,6 +24,7 @@ fn main() {
         set.build(),
     )
     .unwrap();
+    println!("cargo:rerun-if-changed=build.rs");
 }
 
 /// <https://html.spec.whatwg.org/multipage/#selectors>
