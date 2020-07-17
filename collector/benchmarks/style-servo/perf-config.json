@@ -3,5 +3,6 @@
     "cargo_rustc_opts": "--cap-lints=warn",
     "cargo_toml": "components/style/Cargo.toml",
     "runs": 1,
-    "supports_stable": true
+    "supports_stable": true,
+    "touch_file": "components/style/lib.rs"
 }

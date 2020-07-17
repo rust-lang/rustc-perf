@@ -19,6 +19,13 @@ use std::time::Duration;
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
 
+fn touch(root: &Path, path: &Path) -> anyhow::Result<()> {
+    let mut cmd = Command::new("touch");
+    cmd.current_dir(root).arg(path);
+    command_output(&mut cmd).with_context(|| format!("touching {:?} in {:?}", path, root))?;
+    Ok(())
+}
+
 fn touch_all(path: &Path) -> anyhow::Result<()> {
     let mut cmd = Command::new("bash");
     cmd.current_dir(path)
@@ -50,6 +57,13 @@ struct BenchmarkConfig {
     runs: usize,
     #[serde(default)]
     supports_stable: bool,
+
+    /// The file that should be touched to ensure cargo re-checks the leaf crate
+    /// we're interested in. Likely, something similar to `src/lib.rs`. The
+    /// default if this is not present is to touch all .rs files in the
+    /// directory that `Cargo.toml` is in.
+    #[serde(default)]
+    touch_file: Option<String>,
 }
 
 impl Default for BenchmarkConfig {
@@ -61,6 +75,7 @@ impl Default for BenchmarkConfig {
             disabled: false,
             runs: default_runs(),
             supports_stable: false,
+            touch_file: None,
         }
     }
 }
@@ -191,6 +206,7 @@ struct CargoProcess<'a> {
     manifest_path: String,
     cargo_args: Vec<String>,
     rustc_args: Vec<String>,
+    touch_file: Option<String>,
 }
 
 impl<'a> CargoProcess<'a> {
@@ -301,13 +317,17 @@ impl<'a> CargoProcess<'a> {
             // benchmarking, so as to not refresh dependencies, which may be
             // in-tree (e.g., in the case of the servo crates there are a lot of
             // other components).
-            touch_all(
-                &self.cwd.join(
-                    Path::new(&self.manifest_path)
-                        .parent()
-                        .expect("manifest has parent"),
-                ),
-            )?;
+            if let Some(file) = &self.touch_file {
+                touch(&self.cwd, Path::new(&file))?;
+            } else {
+                touch_all(
+                    &self.cwd.join(
+                        Path::new(&self.manifest_path)
+                            .parent()
+                            .expect("manifest has parent"),
+                    ),
+                )?;
+            }
 
             let output = command_output(&mut cmd)?;
             if let Some((ref mut processor, run_kind, run_kind_str, patch)) = self.processor_etc {
@@ -908,6 +928,7 @@ impl Benchmark {
                 .split_whitespace()
                 .map(String::from)
                 .collect(),
+            touch_file: self.config.touch_file.clone(),
         }
     }
 
