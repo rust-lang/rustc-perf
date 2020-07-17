@@ -968,38 +968,46 @@ impl Benchmark {
                         .run_rustc()?;
                 }
 
-                // An incremental build from scratch (slowest incremental case).
-                // This is required for any subsequent incremental builds.
-                if run_kinds.contains(&RunKind::IncrFull)
-                    || run_kinds.contains(&RunKind::IncrUnchanged)
-                    || run_kinds.contains(&RunKind::IncrPatched)
-                {
-                    self.mk_cargo_process(compiler, cwd, build_kind)
-                        .incremental(true)
-                        .processor(processor, RunKind::IncrFull, "IncrFull", None)
-                        .run_rustc()?;
-                }
-
-                // An incremental build with no changes (fastest incremental case).
-                if run_kinds.contains(&RunKind::IncrUnchanged) {
-                    self.mk_cargo_process(compiler, cwd, build_kind)
-                        .incremental(true)
-                        .processor(processor, RunKind::IncrUnchanged, "IncrUnchanged", None)
-                        .run_rustc()?;
-                }
-
-                if run_kinds.contains(&RunKind::IncrPatched) {
-                    for (i, patch) in self.patches.iter().enumerate() {
-                        log::debug!("applying patch {}", patch.name);
-                        patch.apply(cwd).map_err(|s| anyhow::anyhow!("{}", s))?;
-
-                        // An incremental build with some changes (realistic
-                        // incremental case).
-                        let run_kind_str = format!("IncrPatched{}", i);
+                // Rustdoc does not support incremental compilation
+                if build_kind != BuildKind::Doc {
+                    // An incremental build from scratch (slowest incremental case).
+                    // This is required for any subsequent incremental builds.
+                    if run_kinds.contains(&RunKind::IncrFull)
+                        || run_kinds.contains(&RunKind::IncrUnchanged)
+                        || run_kinds.contains(&RunKind::IncrPatched)
+                    {
                         self.mk_cargo_process(compiler, cwd, build_kind)
                             .incremental(true)
-                            .processor(processor, RunKind::IncrPatched, &run_kind_str, Some(&patch))
+                            .processor(processor, RunKind::IncrFull, "IncrFull", None)
                             .run_rustc()?;
+                    }
+
+                    // An incremental build with no changes (fastest incremental case).
+                    if run_kinds.contains(&RunKind::IncrUnchanged) {
+                        self.mk_cargo_process(compiler, cwd, build_kind)
+                            .incremental(true)
+                            .processor(processor, RunKind::IncrUnchanged, "IncrUnchanged", None)
+                            .run_rustc()?;
+                    }
+
+                    if run_kinds.contains(&RunKind::IncrPatched) {
+                        for (i, patch) in self.patches.iter().enumerate() {
+                            log::debug!("applying patch {}", patch.name);
+                            patch.apply(cwd).map_err(|s| anyhow::anyhow!("{}", s))?;
+
+                            // An incremental build with some changes (realistic
+                            // incremental case).
+                            let run_kind_str = format!("IncrPatched{}", i);
+                            self.mk_cargo_process(compiler, cwd, build_kind)
+                                .incremental(true)
+                                .processor(
+                                    processor,
+                                    RunKind::IncrPatched,
+                                    &run_kind_str,
+                                    Some(&patch),
+                                )
+                                .run_rustc()?;
+                        }
                     }
                 }
             }
