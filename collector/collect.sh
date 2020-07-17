@@ -10,6 +10,8 @@ export RUST_LOG=collector=trace,collector::sysroot=debug
 export PATH="/home/collector/.cargo/bin:$PATH"
 
 while : ; do
+        # Update and rebuild the collector.
+        git pull
         cargo +nightly build --release -p collector
 
         touch todo-artifacts
