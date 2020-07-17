@@ -10,18 +10,18 @@ use std::io::{BufWriter, Write};
 use std::path::Path;
 
 fn main() {
-    let path = Path::new(&env::var("OUT_DIR").unwrap())
-        .join("ascii_case_insensitive_html_attributes.rs");
+    let path =
+        Path::new(&env::var("OUT_DIR").unwrap()).join("ascii_case_insensitive_html_attributes.rs");
     let mut file = BufWriter::new(File::create(&path).unwrap());
 
-    write!(&mut file, "{{ static SET: ::phf::Set<&'static str> = ",
-    ).unwrap();
+    write!(&mut file, "{{ static SET: ::phf::Set<&'static str> = ",).unwrap();
     let mut set = phf_codegen::Set::new();
     for name in ASCII_CASE_INSENSITIVE_HTML_ATTRIBUTES.split_whitespace() {
         set.entry(name);
     }
     set.build(&mut file).unwrap();
     write!(&mut file, "; &SET }}").unwrap();
+    println!("cargo:rerun-if-changed=build.rs");
 }
 
 /// https://html.spec.whatwg.org/multipage/#selectors
