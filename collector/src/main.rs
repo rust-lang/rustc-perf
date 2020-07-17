@@ -13,7 +13,7 @@ use std::io::{stderr, Write};
 use std::path::{Path, PathBuf};
 use std::process;
 use std::process::Command;
-use std::str;
+use std::{str, time::Instant};
 use tokio::runtime::Runtime;
 
 mod background_worker;
@@ -274,6 +274,7 @@ fn bench(
     }
     let interned_cid = rt.block_on(tx.conn().artifact_id(&cid));
 
+    let start = Instant::now();
     for (nth_benchmark, benchmark) in benchmarks.iter().enumerate() {
         rt.block_on(
             tx.conn()
@@ -315,6 +316,11 @@ fn bench(
             }
         }
     }
+    let end = start.elapsed();
+
+    eprintln!("collection took {:?}", end);
+
+    rt.block_on(tx.conn().record_duration(interned_cid, end));
 
     // Publish results now that we've finished fully with this commit.
     rt.block_on(tx.commit()).unwrap();

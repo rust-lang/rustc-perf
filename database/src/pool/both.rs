@@ -186,6 +186,16 @@ where
             self.b.record_benchmark(krate, supports_stable)
         );
     }
+    async fn record_duration(
+        &self,
+        artifact: crate::ArtifactIdNumber,
+        duration: std::time::Duration,
+    ) {
+        join!(
+            self.a.record_duration(artifact, duration),
+            self.b.record_duration(artifact, duration)
+        );
+    }
 }
 
 #[async_trait::async_trait]
@@ -347,6 +357,16 @@ impl<'a> Connection for BothTransaction<'a> {
         join!(
             self.a.conn_ref().record_benchmark(krate, supports_stable),
             self.b.conn_ref().record_benchmark(krate, supports_stable)
+        );
+    }
+    async fn record_duration(
+        &self,
+        artifact: crate::ArtifactIdNumber,
+        duration: std::time::Duration,
+    ) {
+        join!(
+            self.a.conn_ref().record_duration(artifact, duration),
+            self.b.conn_ref().record_duration(artifact, duration)
         );
     }
 }

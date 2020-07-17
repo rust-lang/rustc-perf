@@ -152,6 +152,13 @@ static MIGRATIONS: &[&str] = &[
     r#"
     create unique index on pull_request_build (pr) where complete = false;
     "#,
+    r#"
+    create table artifact_collection_duration(
+        aid smallint primary key not null references artifact(id) on delete cascade on update cascade,
+        date_recorded timestamptz not null,
+        duration integer not null
+    );
+    "#,
 ];
 
 #[async_trait::async_trait]
@@ -222,6 +229,7 @@ pub struct CachedStatements {
     select_pstat_series: Statement,
     get_error: Statement,
     collection_id: Statement,
+    record_duration: Statement,
 }
 
 pub struct PostgresTransaction<'a> {
@@ -336,6 +344,13 @@ impl PostgresConnection {
                 insert_pstat_series: conn.prepare("insert into pstat_series (crate, profile, cache, statistic) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING RETURNING id").await.unwrap(),
                 select_pstat_series: conn.prepare("select id from pstat_series where crate = $1 and profile = $2 and cache = $3 and statistic = $4").await.unwrap(),
                 collection_id: conn.prepare("insert into collection DEFAULT VALUES returning id").await.unwrap(),
+                record_duration: conn.prepare("
+                    insert into artifact_collection_duration (
+                        aid,
+                        date_recorded,
+                        duration
+                    ) VALUES ($1, CURRENT_TIMESTAMP, $2)
+                ").await.unwrap(),
             }),
             conn,
         }
@@ -356,6 +371,17 @@ where
             conn: tx,
         })
     }
+
+    async fn record_duration(&self, artifact: ArtifactIdNumber, duration: Duration) {
+        self.conn()
+            .execute(
+                &self.statements().record_duration,
+                &[&(artifact.0 as i16), &(duration.as_secs() as i32)],
+            )
+            .await
+            .unwrap();
+    }
+
     async fn load_index(&mut self) -> Index {
         Index {
             commits: self

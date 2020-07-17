@@ -2,6 +2,7 @@ use crate::{ArtifactId, ArtifactIdNumber};
 use crate::{Cache, CollectionId, Index, Profile, QueryDatum, QueuedCommit};
 use hashbrown::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 pub mod both;
@@ -14,6 +15,10 @@ pub trait Connection: Send + Sync {
     async fn transaction(&mut self) -> Box<dyn Transaction + '_>;
 
     async fn load_index(&mut self) -> Index;
+
+    /// This records the duration of a collection run, i.e., collecting all of
+    /// the statistics for a particular artifact.
+    async fn record_duration(&self, artifact: ArtifactIdNumber, duration: Duration);
 
     async fn collection_id(&self) -> CollectionId;
     async fn artifact_id(&self, artifact: &ArtifactId) -> ArtifactIdNumber;

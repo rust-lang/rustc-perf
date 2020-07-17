@@ -133,6 +133,13 @@ static MIGRATIONS: &[&str] = &[
         requested timestamp without time zone
     );
     "#,
+    r#"
+    create table artifact_collection_duration(
+        aid integer primary key not null references artifact(id) on delete cascade on update cascade,
+        date_recorded timestamp without time zone not null,
+        duration integer not null
+    );
+    "#,
 ];
 
 #[async_trait::async_trait]
@@ -207,6 +214,16 @@ impl Connection for SqliteConnection {
             conn: self,
             finished: false,
         })
+    }
+
+    async fn record_duration(&self, artifact: ArtifactIdNumber, duration: Duration) {
+        self.raw_ref()
+            .prepare_cached(
+                "insert into artifact_collection_duration (aid, date_recorded, duration) VALUES (?, strftime('%s','now'), ?)",
+            )
+            .unwrap()
+            .execute(params![artifact.0, duration.as_secs() as i64])
+            .unwrap();
     }
 
     async fn load_index(&mut self) -> Index {
@@ -386,7 +403,7 @@ impl Connection for SqliteConnection {
     async fn queue_pr(&self, pr: u32) {
         self.raw_ref()
             .prepare_cached(
-                "insert into pull_request_builds (pr, complete, requested) VALUES (?, 0, now)",
+                "insert into pull_request_builds (pr, complete, requested) VALUES (?, 0, strftime('%s','now'))",
             )
             .unwrap()
             .execute(params![pr])
