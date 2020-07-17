@@ -25,6 +25,7 @@ fn main() {
     }
 
     args.push(std::ffi::OsString::from("-Adeprecated"));
+    args.push(std::ffi::OsString::from("-Aunknown-lints"));
 
     if let Some(pos) = args.iter().position(|arg| arg == "--wrap-rustc-with") {
         // Strip out the flag and its argument, and run rustc under the wrapper
