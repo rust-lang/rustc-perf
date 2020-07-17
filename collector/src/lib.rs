@@ -148,7 +148,7 @@ pub fn command_output(cmd: &mut Command) -> anyhow::Result<process::Output> {
         child.stderr.take().unwrap(),
         &mut |is_stdout, buffer, _is_done| {
             // Send output if trace logging is enabled
-            if log::log_enabled!(target: "collector_raw_cargo", log::Level::Trace) {
+            if log::log_enabled!(target: "raw_cargo_messages", log::Level::Trace) {
                 use std::io::Write;
                 if is_stdout {
                     stdout_writer.write_all(&buffer[stdout.len()..]).unwrap();
