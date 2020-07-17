@@ -6,8 +6,10 @@ use std::fmt;
 use std::process::{self, Command};
 
 pub mod api;
+mod read2;
 pub mod self_profile;
 
+use process::Stdio;
 pub use self_profile::{QueryData, SelfProfile};
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Deserialize)]
@@ -135,20 +137,47 @@ pub fn run_command(cmd: &mut Command) -> anyhow::Result<()> {
 
 pub fn command_output(cmd: &mut Command) -> anyhow::Result<process::Output> {
     log::trace!("running: {:?}", cmd);
-    let output = cmd.output()?;
-    if !output.status.success() {
+    let mut child = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
+
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+    let mut stdout_writer = std::io::LineWriter::new(std::io::stdout());
+    let mut stderr_writer = std::io::LineWriter::new(std::io::stderr());
+    read2::read2(
+        child.stdout.take().unwrap(),
+        child.stderr.take().unwrap(),
+        &mut |is_stdout, buffer, _is_done| {
+            // Send output if trace logging is enabled
+            if log::log_enabled!(target: "collector_raw_cargo", log::Level::Trace) {
+                use std::io::Write;
+                if is_stdout {
+                    stdout_writer.write_all(&buffer[stdout.len()..]).unwrap();
+                } else {
+                    stderr_writer.write_all(&buffer[stderr.len()..]).unwrap();
+                }
+            }
+            if is_stdout {
+                stdout = buffer.clone();
+            } else {
+                stderr = buffer.clone();
+            }
+        },
+    )?;
+
+    let status = child.wait()?;
+    if !status.success() {
         return Err(anyhow::anyhow!(
             "expected success, got {}\n\nstderr={}\n\n stdout={}",
-            output.status,
-            String::from_utf8_lossy(&output.stderr),
-            String::from_utf8_lossy(&output.stdout)
+            status,
+            String::from_utf8_lossy(&stderr),
+            String::from_utf8_lossy(&stdout)
         ));
-    } else {
-        //        log::trace!(
-        //            "stderr={}\n\nstdout={}",
-        //            String::from_utf8_lossy(&output.stderr),
-        //            String::from_utf8_lossy(&output.stdout),
-        //        );
     }
+
+    let output = process::Output {
+        status,
+        stdout: stdout,
+        stderr: stderr,
+    };
     Ok(output)
 }
