@@ -396,10 +396,6 @@ pub trait Processor {
     fn finished_first_collection(&mut self) -> bool {
         false
     }
-
-    /// Called when all the runs of a benchmark for a particular `BuildKind`
-    /// and iteration have been completed. Can be used to process/reset accumulated state.
-    fn finish_build_kind(&mut self, _build_kind: BuildKind) {}
 }
 
 pub struct MeasureProcessor<'a> {
@@ -566,10 +562,6 @@ impl<'a> Processor for MeasureProcessor<'a> {
                 panic!("process_perf_stat_output failed: {:?}", e);
             }
         }
-    }
-
-    fn finish_build_kind(&mut self, _: BuildKind) {
-        // do nothing
     }
 }
 
@@ -1010,8 +1002,6 @@ impl Benchmark {
                             .run_rustc()?;
                     }
                 }
-
-                processor.finish_build_kind(build_kind);
             }
         }
 
