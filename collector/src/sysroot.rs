@@ -34,117 +34,13 @@ impl Sysroot {
         };
 
         download.get_and_extract(ModuleVariant::Rustc)?;
-        // HACK(eddyb) commented out because we build our own stdlib
-        // (see `fn build_std` below).
-        // download.get_and_extract(ModuleVariant::Std)?;
+        download.get_and_extract(ModuleVariant::Std)?;
         download.get_and_extract(ModuleVariant::Cargo)?;
         download.get_and_extract(ModuleVariant::RustSrc)?;
 
-        let sysroot_dir = download.directory.join(&download.rust_sha);
         let sysroot = download.into_sysroot()?;
 
-        // FIXME(eddyb) remove this once we no longer need to
-        // build our own stdlib (see `fn build_std` below).
-        sysroot.build_std(sysroot_dir)?;
-
         Ok(sysroot)
-    }
-
-    /// Build `std`+`test`+`proc_macro` in a similar way to Cargo's `-Zbuild-std`
-    /// feature, but only once, and move the resulting libraries into the sysroot.
-    ///
-    /// We only need this until https://github.com/rust-lang/cargo/pull/8073
-    /// reaches beta, because then `rust-lang/rust` builds will have that
-    /// treatment. For now, we only have access to that Cargo change here,
-    /// using the newly built Cargo.
-    ///
-    /// For more background on why we need this, see this comment:
-    /// https://github.com/rust-lang/rust/issues/69060#issuecomment-604928032
-    /// (in short, Cargo used to include `rustc -vV` output, which contains
-    /// the commit hash, into `-Cmetadata`, producing different `std`s,
-    /// and making the perf runs incomparable, up to several % of difference).
-    fn build_std(&self, sysroot_dir: PathBuf) -> anyhow::Result<()> {
-        // Make sure everything below gets absolute directories.
-        let sysroot_dir = sysroot_dir.canonicalize()?;
-
-        let sysroot_rustlib_dir = sysroot_dir.join("lib/rustlib");
-        let rust_src_dir = sysroot_rustlib_dir.join("src/rust");
-
-        // HACK(eddyb) add a top-level `Cargo.toml` that has the necessary
-        // `patch.crates-io` entries for `rustc-std-workspace-{core,alloc,std}`.
-        // (maybe `rust-src` should include such a `Cargo.toml`?)
-        fs::write(
-            rust_src_dir.join("Cargo.toml"),
-            "\
-[workspace]
-members = ['src/libtest']
-
-[patch.crates-io]
-# See comments in `tools/rustc-std-workspace-core/README.md` for what's going on
-# here
-rustc-std-workspace-core = { path = 'src/tools/rustc-std-workspace-core' }
-rustc-std-workspace-alloc = { path = 'src/tools/rustc-std-workspace-alloc' }
-rustc-std-workspace-std = { path = 'src/tools/rustc-std-workspace-std' }
-",
-        )?;
-
-        // HACK(eddyb) we need `std` to run the build scripts to build `std`.
-        let vanilla_sysroot_dir = {
-            let vanilla_download = SysrootDownload {
-                directory: sysroot_dir.join("vanilla-sysroot"),
-                rust_sha: self.sha.clone(),
-                triple: self.triple.clone(),
-            };
-            vanilla_download.get_and_extract(ModuleVariant::Std)?;
-            vanilla_download.directory.join(vanilla_download.rust_sha)
-        };
-
-        let rustflags = format!(
-            "--sysroot={sysroot} --remap-path-prefix={remap_from}={remap_to}",
-            sysroot = vanilla_sysroot_dir.display(),
-            remap_from = rust_src_dir.display(),
-            remap_to = "/rustc/REDACTED_SHA_HASH/"
-        );
-
-        // Run Cargo to produce `$local_build_target_dir/release/deps/lib*.rlib`.
-        let local_build_target_dir = sysroot_dir.join("build-std-target");
-        let cargo_status = std::process::Command::new(&self.cargo)
-            .env("RUSTC", &self.rustc)
-            .env("RUSTFLAGS", rustflags)
-            .env("__CARGO_DEFAULT_LIB_METADATA", "rustc-perf-std")
-            .args(&["build", "--release"])
-            .arg("--target-dir")
-            .arg(&local_build_target_dir)
-            .args(&["--features", "panic-unwind", "--features", "backtrace"])
-            .arg("--manifest-path")
-            .arg(rust_src_dir.join("src/libtest/Cargo.toml"))
-            .status()?;
-        if !cargo_status.success() {
-            return Err(anyhow!(
-                "unable to build stdlib for {} triple {}",
-                self.sha,
-                self.triple
-            ));
-        }
-
-        // Move all of the `rlib` files into the main sysroot.
-        let sysroot_target_lib_dir = sysroot_rustlib_dir.join(&self.triple).join("lib");
-        fs::create_dir_all(&sysroot_target_lib_dir)?;
-        for entry in fs::read_dir(local_build_target_dir.join("release/deps"))? {
-            let entry = entry?;
-            let path = entry.path();
-            if let (Some(name), Some(ext)) = (path.file_name(), path.extension()) {
-                if ext == "rlib" {
-                    fs::rename(&path, sysroot_target_lib_dir.join(name))?;
-                }
-            }
-        }
-
-        // Clean up, to avoid accidental usage of these directories.
-        fs::remove_dir_all(vanilla_sysroot_dir)?;
-        fs::remove_dir_all(local_build_target_dir)?;
-
-        Ok(())
     }
 }
 
