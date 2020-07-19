@@ -18,6 +18,7 @@ use app::{RGArg, RGArgKind};
 mod app;
 
 fn main() {
+    println!("cargo:rerun-if-changed=build.rs");
     // OUT_DIR is set by Cargo and it's where any additional build artifacts
     // are written.
     let outdir = match env::var_os("OUT_DIR") {
@@ -26,7 +27,8 @@ fn main() {
             eprintln!(
                 "OUT_DIR environment variable not defined. \
                  Please file a bug: \
-                 https://github.com/BurntSushi/ripgrep/issues/new");
+                 https://github.com/BurntSushi/ripgrep/issues/new"
+            );
             process::exit(1);
         }
     };
@@ -95,8 +97,10 @@ fn generate_man_page<P: AsRef<Path>>(outdir: P) -> io::Result<()> {
     File::create(&txt_path)?.write_all(tpl.as_bytes())?;
     let result = process::Command::new("a2x")
         .arg("--no-xmllint")
-        .arg("--doctype").arg("manpage")
-        .arg("--format").arg("manpage")
+        .arg("--doctype")
+        .arg("manpage")
+        .arg("--format")
+        .arg("manpage")
         .arg(&txt_path)
         .spawn()?
         .wait()?;
@@ -119,7 +123,7 @@ fn formatted_options() -> io::Result<String> {
         // ripgrep only has two positional arguments, and probably will only
         // ever have two positional arguments, so we just hardcode them into
         // the template.
-        if let app::RGArgKind::Positional{..} = arg.kind {
+        if let app::RGArgKind::Positional { .. } = arg.kind {
             continue;
         }
         formatted.push(formatted_arg(&arg)?);
@@ -129,8 +133,12 @@ fn formatted_options() -> io::Result<String> {
 
 fn formatted_arg(arg: &RGArg) -> io::Result<String> {
     match arg.kind {
-        RGArgKind::Positional{..} => panic!("unexpected positional argument"),
-        RGArgKind::Switch { long, short, multiple } => {
+        RGArgKind::Positional { .. } => panic!("unexpected positional argument"),
+        RGArgKind::Switch {
+            long,
+            short,
+            multiple,
+        } => {
             let mut out = vec![];
 
             let mut header = format!("--{}", long);
@@ -147,7 +155,13 @@ fn formatted_arg(arg: &RGArg) -> io::Result<String> {
 
             Ok(String::from_utf8(out).unwrap())
         }
-        RGArgKind::Flag { long, short, value_name, multiple, .. } => {
+        RGArgKind::Flag {
+            long,
+            short,
+            value_name,
+            multiple,
+            ..
+        } => {
             let mut out = vec![];
 
             let mut header = format!("--{}", long);

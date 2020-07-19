@@ -297,6 +297,10 @@ impl<'a> CargoProcess<'a> {
                 }
             }
             cmd.args(&self.cargo_args);
+            if log::log_enabled!(target: "raw_cargo_messages", log::Level::Trace) {
+                cmd.arg("-Zunstable-options");
+                cmd.arg("-Ztimings");
+            }
             cmd.arg("--");
             // --wrap-rustc-with is not a valid rustc flag. But rustc-fake
             // recognizes it, strips it (and its argument) out, and uses it as an

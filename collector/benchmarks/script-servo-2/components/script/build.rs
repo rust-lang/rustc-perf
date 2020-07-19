@@ -44,6 +44,7 @@ fn main() {
         map.build(),
     )
     .unwrap();
+    println!("cargo:rerun-if-changed=build.rs");
 }
 
 #[derive(Eq, Hash, PartialEq)]

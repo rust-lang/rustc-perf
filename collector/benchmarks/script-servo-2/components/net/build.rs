@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 fn main() {
+    println!("cargo:rerun-if-changed=build.rs");
     let version =
         std::env::var("DEP_OPENSSL_VERSION_NUMBER").expect("missing DEP_OPENSSL_VERSION_NUMBER");
     let actual = u64::from_str_radix(&version, 16).unwrap();

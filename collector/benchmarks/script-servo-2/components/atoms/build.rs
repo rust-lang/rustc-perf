@@ -28,4 +28,5 @@ fn main() {
         .atoms(static_atoms.lines().map(Result::unwrap))
         .write_to_file(&Path::new(&env::var_os("OUT_DIR").unwrap()).join("atom.rs"))
         .unwrap();
+    println!("cargo:rerun-if-changed=build.rs");
 }

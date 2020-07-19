@@ -31,3 +31,6 @@ surfman = { git = "https://github.com/servo/surfman" }
 surfman-chains = { git = "https://github.com/asajeffrey/surfman-chains" }
 # https://github.com/retep998/winapi-rs/pull/816
 winapi = { git = "https://github.com/servo/winapi-rs", branch = "patch-1" }
+
+[patch."https://github.com/servo/rust-mozjs"]
+mozjs = { path = "./rust-mozjs" }

@@ -1,0 +1,11 @@
+/doc
+/target
+/Cargo.lock
+
+# Keep this in sync with ignore() in build.rs
+
+*.pyc
+*.o
+*.so
+*.dll
+*.dylib
