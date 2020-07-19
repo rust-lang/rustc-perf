@@ -22,4 +22,5 @@ fn main() {
             .file("platform/macos/count_threads.c")
             .compile("count_threads");
     }
+    println!("cargo:rerun-if-changed=build.rs");
 }

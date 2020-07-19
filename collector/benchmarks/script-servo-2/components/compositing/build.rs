@@ -8,6 +8,7 @@ use std::io::{Read, Write};
 use std::path::Path;
 
 fn main() {
+    println!("cargo:rerun-if-changed=build.rs");
     let lockfile_path = Path::new(&env::var("CARGO_MANIFEST_DIR").unwrap())
         .join("..")
         .join("..")
