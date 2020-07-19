@@ -4863,7 +4863,7 @@ dependencies = [
  "log",
  "servo-media",
  "sparkle",
- "surfman 0.3.0 (git+https://github.com/servo/surfman)",
+ "surfman 0.3.0",
  "surfman-chains 0.4.0",
  "surfman-chains-api",
 ]
@@ -5543,25 +5543,24 @@ dependencies = [
 [[package]]
 name = "surfman"
 version = "0.2.0"
-source = "git+https://github.com/servo/surfman#2283acaa3a856c2f76028cb23b5dde7dc0030cdf"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d28b4931b29b2c65fcce61898d6b4dbae2337a60308176c2d5cbff0913740d4a"
 dependencies = [
  "bitflags",
- "cfg_aliases",
  "cgl",
  "cocoa 0.19.1",
  "core-foundation 0.6.4",
  "core-graphics 0.17.3",
  "display-link",
  "euclid",
- "gl_generator 0.13.1",
+ "gl_generator 0.11.0",
  "io-surface",
  "lazy_static",
  "libc",
  "log",
  "mach",
- "metal",
  "objc",
- "parking_lot 0.10.2",
+ "parking_lot 0.9.0",
  "wayland-sys 0.24.0",
  "winapi",
  "winit",
@@ -5599,35 +5598,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "surfman"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3d85bf0eb91b66b93dda5c04627f00074ea1fa008c2980b132a065fafe7a1ab"
-dependencies = [
- "bitflags",
- "cfg_aliases",
- "cgl",
- "cocoa 0.19.1",
- "core-foundation 0.6.4",
- "core-graphics 0.17.3",
- "display-link",
- "euclid",
- "gl_generator 0.14.0",
- "io-surface",
- "lazy_static",
- "libc",
- "log",
- "mach",
- "metal",
- "objc",
- "parking_lot 0.10.2",
- "wayland-sys 0.24.0",
- "winapi",
- "winit",
- "wio",
-]
-
-[[package]]
 name = "surfman-chains"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5650,7 +5620,7 @@ dependencies = [
  "fnv",
  "log",
  "sparkle",
- "surfman 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "surfman 0.3.0",
  "surfman-chains-api",
 ]
 
@@ -6579,7 +6549,7 @@ dependencies = [
  "log",
  "openxr",
  "serde",
- "surfman 0.3.0 (git+https://github.com/servo/surfman)",
+ "surfman 0.3.0",
  "surfman-chains 0.4.0",
  "time",
  "webxr-api",
