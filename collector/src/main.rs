@@ -646,6 +646,14 @@ fn main_result() -> anyhow::Result<i32> {
             } else {
                 RunKind::all_non_incr()
             };
+            let build_kinds = if collector::version_supports_doc(toolchain) {
+                BuildKind::all()
+            } else {
+                let mut all = BuildKind::all();
+                let doc = all.iter().position(|bk| *bk == BuildKind::Doc).unwrap();
+                all.remove(doc);
+                all
+            };
 
             let which = |tool| {
                 String::from_utf8(
@@ -672,7 +680,7 @@ fn main_result() -> anyhow::Result<i32> {
                 &mut rt,
                 conn,
                 &ArtifactId::Artifact(toolchain.to_string()),
-                &BuildKind::all(),
+                &build_kinds,
                 &run_kinds,
                 Compiler {
                     rustc: Path::new(rustc.trim()),

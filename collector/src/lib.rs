@@ -97,6 +97,15 @@ where
     Ok(Option::deserialize(deserializer)?.unwrap_or(0.0))
 }
 
+pub fn version_supports_doc(version_str: &str) -> bool {
+    if let Some(version) = version_str.parse::<semver::Version>().ok() {
+        version >= semver::Version::new(1, 46, 0)
+    } else {
+        assert!(version_str.starts_with("beta") || version_str.starts_with("master"));
+        true
+    }
+}
+
 pub fn version_supports_incremental(version_str: &str) -> bool {
     if let Some(version) = version_str.parse::<semver::Version>().ok() {
         version >= semver::Version::new(1, 24, 0)
