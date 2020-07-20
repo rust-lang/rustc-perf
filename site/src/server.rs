@@ -110,8 +110,27 @@ pub async fn handle_dashboard(data: Arc<InputData>) -> ServerResult<dashboard::R
             (_, _) => {
                 use std::cmp::Ordering;
 
-                if a.starts_with("beta") && b.starts_with("beta") {
-                    a.cmp(b)
+                if a.starts_with("beta-") && b.starts_with("beta-") {
+                    let a_date = a
+                        .strip_prefix("beta-")
+                        .unwrap()
+                        .parse::<chrono::NaiveDate>();
+                    let b_date = b
+                        .strip_prefix("beta-")
+                        .unwrap()
+                        .parse::<chrono::NaiveDate>();
+                    if let (Some(a), Some(b)) = (a_date.ok(), b_date.ok()) {
+                        a.cmp(&b)
+                    } else {
+                        log::error!(
+                            "Parse failed: {:?} => {:?}, {:?} => {:?}",
+                            a,
+                            a_date,
+                            b,
+                            b_date
+                        );
+                        Ordering::Equal
+                    }
                 } else if a.starts_with("beta") {
                     Ordering::Greater
                 } else if b.starts_with("beta") {
@@ -124,6 +143,15 @@ pub async fn handle_dashboard(data: Arc<InputData>) -> ServerResult<dashboard::R
             }
         }
     });
+    let first_beta = versions.iter().position(|v| v.starts_with("beta-"));
+    if let Some(first_beta) = first_beta {
+        let last_beta = versions
+            .iter()
+            .rposition(|v| v.starts_with("beta-"))
+            .unwrap();
+        // Remove all but the latest beta version, which is the most recent.
+        versions.drain(first_beta..last_beta);
+    }
 
     let cids = Arc::new(
         versions
