@@ -6,7 +6,7 @@ extern crate clap;
 use anyhow::{bail, Context};
 use collector::api::collected;
 use database::{pool::Connection, ArtifactId, Commit};
-use log::{debug, error};
+use log::debug;
 use std::collections::HashSet;
 use std::fs;
 use std::io::{stderr, Write};
@@ -160,54 +160,6 @@ where
         }
     }
     Ok(v)
-}
-
-fn bench_next(
-    rt: &mut Runtime,
-    site_url: &str,
-    pool: &database::Pool,
-    benchmarks: &[Benchmark],
-    self_profile: bool,
-) -> anyhow::Result<()> {
-    println!("processing commits");
-    let client = reqwest::blocking::Client::new();
-    let response: collector::api::next_commit::Response = client
-        .get(&format!("{}/perf/next_commit", site_url))
-        .send()?
-        .json()?;
-    let commit = if let Some(c) = response.commit {
-        c
-    } else {
-        println!("no commit to benchmark");
-        // no missing commits
-        return Ok(());
-    };
-
-    let commit = get_commit_or_fake_it(&commit)?;
-    match Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu") {
-        Ok(sysroot) => {
-            let conn = rt.block_on(pool.connection());
-            bench(
-                rt,
-                conn,
-                &ArtifactId::Commit(commit),
-                &BuildKind::all(),
-                &RunKind::all(),
-                Compiler::from_sysroot(&sysroot),
-                &benchmarks,
-                3,
-                /* call_home */ true,
-                self_profile,
-            );
-        }
-        Err(err) => {
-            error!("failed to install sysroot for {:?}: {:?}", commit, err);
-        }
-    }
-
-    client.post(&format!("{}/perf/onpush", site_url)).send()?;
-
-    Ok(())
 }
 
 fn n_benchmarks_remaining(n: usize) -> String {
@@ -616,11 +568,44 @@ fn main_result() -> anyhow::Result<i32> {
             let db = sub_m.value_of("DB").unwrap_or(default_db);
             let self_profile = sub_m.is_present("SELF_PROFILE");
 
+            println!("processing commits");
+            let client = reqwest::blocking::Client::new();
+            let response: collector::api::next_commit::Response = client
+                .get(&format!("{}/perf/next_commit", site_url))
+                .send()?
+                .json()?;
+            let commit = if let Some(c) = response.commit {
+                c
+            } else {
+                println!("no commit to benchmark");
+                // no missing commits
+                return Ok(0);
+            };
+            let commit = get_commit_or_fake_it(&commit)?;
+
             let pool = database::Pool::open(db);
+            let conn = rt.block_on(pool.connection());
+
+            let sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")
+                .with_context(|| format!("failed to install sysroot for {:?}", commit))?;
 
             let benchmarks = get_benchmarks(&benchmark_dir, None, None)?;
 
-            bench_next(&mut rt, &site_url, &pool, &benchmarks, self_profile)?;
+            bench(
+                &mut rt,
+                conn,
+                &ArtifactId::Commit(commit),
+                &BuildKind::all(),
+                &RunKind::all(),
+                Compiler::from_sysroot(&sysroot),
+                &benchmarks,
+                3,
+                /* call_home */ true,
+                self_profile,
+            );
+
+            client.post(&format!("{}/perf/onpush", site_url)).send()?;
+
             Ok(0)
         }
 
