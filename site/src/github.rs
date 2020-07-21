@@ -177,7 +177,7 @@ r? @ghost",
     let rollup_merge_sha = rollup_merge_sha.to_owned();
     tokio::task::spawn(async move {
         // Give github time to create the merge commit reference
-        tokio::time::delay_for(Duration::from_secs(1)).await;
+        tokio::time::delay_for(Duration::from_secs(30)).await;
         // This provides the master SHA so that we can check that we only queue
         // an appropriate try build. If there's ever a race condition, i.e.,
         // master was pushed while this command was running, the user will have to
