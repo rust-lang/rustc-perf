@@ -170,7 +170,15 @@ fn n_benchmarks_remaining(n: usize) -> String {
 struct BenchmarkErrors(usize);
 
 impl BenchmarkErrors {
-    fn fail_if_error(self) -> anyhow::Result<()> {
+    fn new() -> BenchmarkErrors {
+        BenchmarkErrors(0)
+    }
+
+    fn incr(&mut self) {
+        self.0 += 1;
+    }
+
+    fn fail_if_nonzero(self) -> anyhow::Result<()> {
         if self.0 > 0 {
             anyhow::bail!("{} benchmarks failed", self.0)
         }
@@ -190,7 +198,7 @@ fn bench(
     call_home: bool,
     self_profile: bool,
 ) -> BenchmarkErrors {
-    let mut errors_recorded = 0;
+    let mut errors = BenchmarkErrors::new();
     eprintln!("Benchmarking {} for triple {}", cid, compiler.triple);
 
     if call_home {
@@ -223,7 +231,7 @@ fn bench(
             "Note that this behavior is likely to change in the future \
             to collect and append the data instead."
         );
-        return BenchmarkErrors(errors_recorded);
+        return errors;
     }
     let interned_cid = rt.block_on(tx.conn().artifact_id(&cid));
 
@@ -252,7 +260,7 @@ fn bench(
                 "collector error: Failed to benchmark '{}', recorded: {}",
                 benchmark.name, s
             );
-            errors_recorded += 1;
+            errors.incr();
             rt.block_on(tx.conn().record_error(
                 interned_cid,
                 benchmark.name.0.as_str(),
@@ -282,7 +290,7 @@ fn bench(
         // This ensures that we're good to go with the just updated data.
         conn.maybe_create_indices().await;
     });
-    BenchmarkErrors(errors_recorded)
+    errors
 }
 
 fn get_benchmarks(
@@ -539,7 +547,7 @@ fn main_result() -> anyhow::Result<i32> {
 
             let benchmarks = get_benchmarks(&benchmark_dir, include, exclude)?;
 
-            bench(
+            let res = bench(
                 &mut rt,
                 conn,
                 &ArtifactId::Artifact(id.to_string()),
@@ -557,6 +565,7 @@ fn main_result() -> anyhow::Result<i32> {
                 /* call_home */ false,
                 self_profile,
             );
+            res.fail_if_nonzero()?;
             Ok(0)
         }
 
@@ -591,7 +600,7 @@ fn main_result() -> anyhow::Result<i32> {
 
             let benchmarks = get_benchmarks(&benchmark_dir, None, None)?;
 
-            bench(
+            let res = bench(
                 &mut rt,
                 conn,
                 &ArtifactId::Commit(commit),
@@ -606,6 +615,7 @@ fn main_result() -> anyhow::Result<i32> {
 
             client.post(&format!("{}/perf/onpush", site_url)).send()?;
 
+            res.fail_if_nonzero()?;
             Ok(0)
         }
 
@@ -662,7 +672,7 @@ fn main_result() -> anyhow::Result<i32> {
             let mut benchmarks = get_benchmarks(&benchmark_dir, None, None)?;
             benchmarks.retain(|b| b.supports_stable());
 
-            bench(
+            let res = bench(
                 &mut rt,
                 conn,
                 &ArtifactId::Artifact(toolchain.to_string()),
@@ -680,6 +690,7 @@ fn main_result() -> anyhow::Result<i32> {
                 /* call_home */ false,
                 /* self_profile */ false,
             );
+            res.fail_if_nonzero()?;
             Ok(0)
         }
 
@@ -719,7 +730,7 @@ fn main_result() -> anyhow::Result<i32> {
                 /* call_home */ false,
                 /* self_profile */ false,
             );
-            res.fail_if_error()?;
+            res.fail_if_nonzero()?;
             Ok(0)
         }
 
@@ -752,18 +763,21 @@ fn main_result() -> anyhow::Result<i32> {
 
             eprintln!("Profiling with {:?}", profiler);
 
+            let mut errors = BenchmarkErrors::new();
             for (i, benchmark) in benchmarks.iter().enumerate() {
                 eprintln!("{}", n_benchmarks_remaining(benchmarks.len() - i));
                 let mut processor = execute::ProfileProcessor::new(profiler, &out_dir, &id);
                 let result =
                     benchmark.measure(&mut processor, &build_kinds, &run_kinds, compiler, 1);
                 if let Err(ref s) = result {
+                    errors.incr();
                     eprintln!(
                         "collector error: Failed to profile '{}' with {:?}, recorded: {:?}",
                         benchmark.name, profiler, s
                     );
                 }
             }
+            errors.fail_if_nonzero()?;
             Ok(0)
         }
 
