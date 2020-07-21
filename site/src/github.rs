@@ -237,7 +237,19 @@ pub async fn post_finished(data: &InputData) {
                 &data.config,
                 commit.pr,
                 format!(
-                    "Finished benchmarking try commit ({}): [comparison url]({}).",
+                    "Finished benchmarking try commit ({}): [comparison url]({}).
+
+                    Benchmarking this pull request likely means that it is \
+                    perf-sensitive, so we're automatically marking it as not fit \
+                    for rolling up. Please note that if the perf results are \
+                    neutral, you should likely undo the rollup=never given below \
+                    by specifying `rollup-` to bors.
+
+                    Importantly, though, if the results of this run are \
+                    non-neutral **do not** roll this PR up -- it will mask other \
+                    regressions or improvements in the roll up.
+
+                    @bors rollup=never",
                     commit.sha, comparison_url
                 ),
             )
