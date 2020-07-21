@@ -473,17 +473,6 @@ fn main_result() -> anyhow::Result<i32> {
             (@arg DB: --db +takes_value "Database output file")
         )
 
-        (@subcommand bench_test =>
-            (about: "Benchmarks the most recent commit for testing purposes")
-
-            // Mandatory arguments: (none)
-
-            // Options
-            (@arg DB:      --db      +takes_value "Database output file")
-            (@arg EXCLUDE: --exclude +takes_value "Exclude benchmarks matching these")
-            (@arg INCLUDE: --include +takes_value "Include benchmarks matching these")
-        )
-
         (@subcommand profile_local =>
             (about: "Profiles a local rustc with one of several profilers")
 
@@ -506,6 +495,14 @@ fn main_result() -> anyhow::Result<i32> {
              "One or more (comma-separated) of: 'Full',\n\
              'IncrFull', 'IncrUnchanged', 'IncrPatched', 'All'")
             (@arg RUSTDOC: --rustdoc +takes_value "The path to the local rustdoc to benchmark")
+        )
+
+        (@subcommand install_next =>
+            (about: "Installs the next commit for perf.rust-lang.org")
+
+            // Mandatory arguments: (none)
+
+            // Options: (none)
         )
     )
     .get_matches();
@@ -694,46 +691,6 @@ fn main_result() -> anyhow::Result<i32> {
             Ok(0)
         }
 
-        ("bench_test", Some(sub_m)) => {
-            // Mandatory arguments: (none)
-
-            // Options
-            let db = sub_m.value_of("DB").unwrap_or(default_db);
-            let exclude = sub_m.value_of("EXCLUDE");
-            let include = sub_m.value_of("INCLUDE");
-
-            let pool = database::Pool::open(db);
-            let conn = rt.block_on(pool.connection());
-
-            let last_sha = Command::new("git")
-                .arg("ls-remote")
-                .arg("https://github.com/rust-lang/rust.git")
-                .arg("master")
-                .output()
-                .unwrap();
-            let last_sha = String::from_utf8(last_sha.stdout).expect("utf8");
-            let last_sha = last_sha.split_whitespace().next().expect(&last_sha);
-            let commit = get_commit_or_fake_it(&last_sha).expect("success");
-            let sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")?;
-
-            let benchmarks = get_benchmarks(&benchmark_dir, include, exclude)?;
-
-            let res = bench(
-                &mut rt,
-                conn,
-                &ArtifactId::Commit(commit),
-                &[BuildKind::Check, BuildKind::Doc], // no Debug or Opt builds
-                &RunKind::all(),
-                Compiler::from_sysroot(&sysroot),
-                &benchmarks,
-                1,
-                /* call_home */ false,
-                /* self_profile */ false,
-            );
-            res.fail_if_nonzero()?;
-            Ok(0)
-        }
-
         ("profile_local", Some(sub_m)) => {
             // Mandatory arguments
             let profiler = Profiler::from_name(sub_m.value_of("PROFILER").unwrap())?;
@@ -778,6 +735,31 @@ fn main_result() -> anyhow::Result<i32> {
                 }
             }
             errors.fail_if_nonzero()?;
+            Ok(0)
+        }
+
+        ("install_next", Some(_sub_m)) => {
+            // Mandatory arguments: (none)
+
+            // Options: (none)
+
+            let last_sha = Command::new("git")
+                .arg("ls-remote")
+                .arg("https://github.com/rust-lang/rust.git")
+                .arg("master")
+                .output()
+                .unwrap();
+            let last_sha = String::from_utf8(last_sha.stdout).expect("utf8");
+            let last_sha = last_sha.split_whitespace().next().expect(&last_sha);
+            let commit = get_commit_or_fake_it(&last_sha).expect("success");
+            let mut sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")?;
+            sysroot.preserve(); // don't delete it
+
+            // Print the directory containing the toolchain.
+            sysroot.rustc.pop();
+            let s = format!("{:?}", sysroot.rustc);
+            println!("{}", &s[1..s.len() - 1]);
+
             Ok(0)
         }
 
