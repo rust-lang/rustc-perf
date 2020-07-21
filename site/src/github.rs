@@ -219,10 +219,18 @@ async fn branch_for_rollup(
         .await
         .context("got rollup merge")?;
 
-    let old_master_commit =
-        get_commit(&client, &data, repository_url, &rollup_merge.parents[0].sha)
+    let mut current = rollup_merge.clone();
+    loop {
+        log::trace!("searching for auto branch, at {:?}", current.sha);
+        if current.commit.message.starts_with("Auto merge") {
+            break;
+        }
+        assert_eq!(current.parents.len(), 2);
+        current = get_commit(&client, &data, repository_url, &current.parents[0].sha)
             .await
             .context("success master get")?;
+    }
+    let old_master_commit = current;
 
     let current_master_commit = get_commit(&client, &data, repository_url, "master")
         .await
