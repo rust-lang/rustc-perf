@@ -171,13 +171,14 @@ fn bench_next(
 ) -> anyhow::Result<()> {
     println!("processing commits");
     let client = reqwest::blocking::Client::new();
-    let commit: Option<String> = client
+    let response: collector::api::next_commit::Response = client
         .get(&format!("{}/perf/next_commit", site_url))
         .send()?
         .json()?;
-    let commit = if let Some(c) = commit {
+    let commit = if let Some(c) = response.commit {
         c
     } else {
+        println!("no commit to benchmark");
         // no missing commits
         return Ok(());
     };
