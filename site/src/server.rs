@@ -572,7 +572,7 @@ impl DateData {
 
 pub async fn handle_github(
     request: github::Request,
-    data: &InputData,
+    data: Arc<InputData>,
 ) -> ServerResult<github::Response> {
     crate::github::handle_github(request, data).await
 }
@@ -1078,7 +1078,7 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
                 .unwrap());
         }
         Ok(to_response(
-            handle_github(body!(parse_body(&body)), &data).await,
+            handle_github(body!(parse_body(&body)), data.clone()).await,
         ))
     } else if p == "/perf/self-profile" {
         Ok(to_response(

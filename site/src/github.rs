@@ -6,6 +6,7 @@ use serde::Deserialize;
 
 use regex::Regex;
 use reqwest::header::USER_AGENT;
+use std::{sync::Arc, time::Duration};
 
 lazy_static::lazy_static! {
     static ref BODY_TRY_COMMIT: Regex =
@@ -36,11 +37,11 @@ async fn get_authorized_users() -> ServerResult<Vec<usize>> {
 
 pub async fn handle_github(
     request: github::Request,
-    data: &InputData,
+    data: Arc<InputData>,
 ) -> ServerResult<github::Response> {
     if request.comment.body.contains(" homu: ") {
         if let Some(sha) = handle_homu_res(&request).await {
-            return enqueue_sha(request, data, sha).await;
+            return enqueue_sha(request, &data, sha).await;
         }
     }
 
@@ -83,7 +84,7 @@ pub async fn handle_github(
                 let conn = data.conn().await;
                 conn.queue_pr(request.issue.number).await;
             }
-            let f = enqueue_sha(request, data, commit.to_owned());
+            let f = enqueue_sha(request, &data, commit.to_owned());
             return f.await;
         }
     }
@@ -98,7 +99,7 @@ pub async fn handle_github(
             let client = reqwest::Client::new();
             pr_and_try_for_rollup(
                 &client,
-                &data,
+                data.clone(),
                 &request.issue.repository_url,
                 &rollup_merge,
                 &request.comment.html_url,
@@ -121,7 +122,7 @@ pub async fn handle_github(
             // between us updating the commit and merging things.
             let client = reqwest::Client::new();
             let branch =
-                branch_for_rollup(&client, data, &request.issue.repository_url, rollup_merge)
+                branch_for_rollup(&client, &data, &request.issue.repository_url, rollup_merge)
                     .await
                     .map_err(|e| e.to_string())?;
             post_comment(
@@ -139,7 +140,7 @@ pub async fn handle_github(
 // Returns the PR number
 async fn pr_and_try_for_rollup(
     client: &reqwest::Client,
-    data: &InputData,
+    data: Arc<InputData>,
     repository_url: &str,
     rollup_merge_sha: &str,
     origin_url: &str,
@@ -149,11 +150,11 @@ async fn pr_and_try_for_rollup(
         repository_url,
         rollup_merge_sha
     );
-    let branch = branch_for_rollup(client, data, repository_url, rollup_merge_sha).await?;
+    let branch = branch_for_rollup(client, &data, repository_url, rollup_merge_sha).await?;
 
     let pr = create_pr(
         client,
-        data,
+        &data,
         repository_url,
         &format!(
             "[DO NOT MERGE] perf-test for #{}",
@@ -165,42 +166,49 @@ async fn pr_and_try_for_rollup(
             "This is an automatically generated pull request (from [here]({})) to \
             run perf tests for #{} which merged in a rollup.
 
-            r? @ghost",
+r? @ghost",
             origin_url, branch.rolled_up_pr_number
         ),
     )
     .await
     .context("Created PR")?;
 
-    // This provides the master SHA so that we can check that we only queue
-    // an appropriate try build. If there's ever a race condition, i.e.,
-    // master was pushed while this command was running, the user will have to
-    // take manual action to detect it.
-    //
-    // Eventually we'll want to handle this automatically, but that's a ways
-    // off: we'd need to store the state in the database and handle the try
-    // build starting and generally that's a lot of work for not too much gain.
-    post_comment(
-        &data.config,
-        pr.number,
-        &format!(
-            "@bors try @rust-timer queue\n
-            The try commit's (master) parent should be {master}. If it isn't, \
-            then please:
+    let pr_number = pr.number;
+    let rollup_merge_sha = rollup_merge_sha.to_owned();
+    tokio::task::spawn(async move {
+        // Give github time to create the merge commit reference
+        tokio::time::delay_for(Duration::from_secs(1)).await;
+        // This provides the master SHA so that we can check that we only queue
+        // an appropriate try build. If there's ever a race condition, i.e.,
+        // master was pushed while this command was running, the user will have to
+        // take manual action to detect it.
+        //
+        // Eventually we'll want to handle this automatically, but that's a ways
+        // off: we'd need to store the state in the database and handle the try
+        // build starting and generally that's a lot of work for not too much gain.
+        post_comment(
+            &data.config,
+            pr.number,
+            &format!(
+                "@bors try @rust-timer queue
 
-              * Stop this try build (`try-`).
-              * Run `@rust-timer update-pr-for {merge}`.
-              * Rerun `bors try`.
+The try commit's (master) parent should be {master}. If it isn't, \
+then please:
 
-            You do not need to reinvoke the queue command as long as the perf \
-            build hasn't yet started.",
-            master = branch.master_base_sha,
-            merge = rollup_merge_sha,
-        ),
-    )
-    .await;
+ * Stop this try build (`try-`).
+ * Run `@rust-timer update-pr-for {merge}`.
+ * Rerun `bors try`.
 
-    Ok(pr.number)
+You do not need to reinvoke the queue command as long as the perf \
+build hasn't yet started.",
+                master = branch.master_base_sha,
+                merge = rollup_merge_sha,
+            ),
+        )
+        .await;
+    });
+
+    Ok(pr_number)
 }
 
 struct RollupBranch {
