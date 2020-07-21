@@ -1077,9 +1077,26 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
                 .body(hyper::Body::empty())
                 .unwrap());
         }
-        Ok(to_response(
-            handle_github(body!(parse_body(&body)), data.clone()).await,
-        ))
+        let event = req.headers.get("X-GitHub-Event").cloned();
+        let event = event.and_then(|g| g.to_str().ok().map(|s| s.to_owned()));
+        let event = match event {
+            Some(v) => v,
+            None => {
+                return Ok(http::Response::builder()
+                    .status(StatusCode::OK)
+                    .body(hyper::Body::from("missing event header"))
+                    .unwrap())
+            }
+        };
+        match event.as_str() {
+            "issue_comment" => Ok(to_response(
+                handle_github(body!(parse_body(&body)), data.clone()).await,
+            )),
+            _ => Ok(http::Response::builder()
+                .status(StatusCode::OK)
+                .body(hyper::Body::from(format!("unknown event: {}", event)))
+                .unwrap()),
+        }
     } else if p == "/perf/self-profile" {
         Ok(to_response(
             handle_self_profile(body!(parse_body(&body)), &data).await,
