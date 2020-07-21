@@ -288,12 +288,15 @@ pub async fn handle_status_page(data: Arc<InputData>) -> status::Response {
     }
 }
 
-pub async fn handle_next_commit(data: Arc<InputData>) -> Option<String> {
-    data.missing_commits()
+pub async fn handle_next_commit(data: Arc<InputData>) -> collector::api::next_commit::Response {
+    let commit = data
+        .missing_commits()
         .await
         .iter()
         .next()
-        .map(|c| c.0.sha.to_string())
+        .map(|c| c.0.sha.to_string());
+
+    collector::api::next_commit::Response { commit }
 }
 
 struct CommitIdxCache {
