@@ -104,7 +104,7 @@ pub async fn handle_github(
                 &request.comment.html_url,
             )
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| format!("{:?}", e))?;
         }
     }
 
@@ -239,7 +239,7 @@ async fn branch_for_rollup(
     let revert_sha = create_commit(
         &client,
         &data,
-        repository_url,
+        "https://api.github.com/repos/rust-timer/rust",
         &format!("Revert to {}", old_master_commit.sha),
         &old_master_commit.commit.tree.sha,
         &[&current_master_commit.sha],
@@ -250,7 +250,7 @@ async fn branch_for_rollup(
     let merge_sha = create_commit(
         &client,
         &data,
-        repository_url,
+        "https://api.github.com/repos/rust-timer/rust",
         &format!(
             "rust-timer simulated merge of {}\n\nOriginal message:\n{}",
             rollup_merge.sha, rollup_merge.commit.message
@@ -283,7 +283,7 @@ async fn branch_for_rollup(
     create_ref(
         &client,
         &data,
-        repository_url,
+        "https://api.github.com/repos/rust-timer/rust",
         &format!("refs/heads/{}", branch),
         &merge_sha,
     )
