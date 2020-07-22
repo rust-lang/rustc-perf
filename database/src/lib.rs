@@ -141,106 +141,9 @@ impl<'de> Deserialize<'de> for Date {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Sha {
-    /// Straight-up bytes of the 40-long hex-encoded sha
-    Hex([u8; 20]),
-    /// Usually a string ID provided by the user.
-    Raw(RawSha),
-}
-
-intern!(pub struct RawSha);
-
-impl PartialEq<str> for Sha {
-    fn eq(&self, other: &str) -> bool {
-        self.to_string() == other
-    }
-}
-
-fn hex_decode(s: &str) -> Option<[u8; 20]> {
-    let mut in_progress = 0;
-    let mut v = [0; 20];
-    for (idx, ch) in s.chars().enumerate() {
-        let offset = if idx % 2 == 0 { 4 } else { 0 };
-        in_progress |= (ch.to_digit(16)? as u8) << offset;
-        if idx % 2 != 0 {
-            v[idx / 2] = in_progress;
-            in_progress = 0;
-        }
-    }
-    Some(v)
-}
-
-impl<'a> From<&'a str> for Sha {
-    fn from(s: &'a str) -> Sha {
-        if let Some(v) = hex_decode(s) {
-            return Sha::Hex(v);
-        }
-
-        Sha::Raw(s.into())
-    }
-}
-
-impl Serialize for Sha {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::ser::Serializer,
-    {
-        serializer.collect_str(&self)
-    }
-}
-
-impl<'de> Deserialize<'de> for Sha {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::de::Deserializer<'de>,
-    {
-        use serde::de::Visitor;
-        struct ShaVisitor;
-        impl<'de> Visitor<'de> for ShaVisitor {
-            type Value = Sha;
-
-            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                f.write_str("a string")
-            }
-
-            fn visit_str<E>(self, s: &str) -> Result<Sha, E> {
-                Ok(s.into())
-            }
-
-            fn visit_borrowed_str<E>(self, s: &'de str) -> Result<Sha, E> {
-                Ok(s.into())
-            }
-        }
-        deserializer.deserialize_str(ShaVisitor)
-    }
-}
-
-impl fmt::Debug for Sha {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self)
-    }
-}
-
-impl fmt::Display for Sha {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Sha::Hex(hex) => {
-                for &b in hex.iter() {
-                    write!(f, "{:x}{:x}", b >> 4, b & 0xf)?;
-                }
-            }
-            Sha::Raw(raw) => {
-                write!(f, "{}", raw)?;
-            }
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Copy, Clone, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct Commit {
-    pub sha: Sha,
+    pub sha: String,
     pub date: Date,
 }
 
@@ -709,7 +612,7 @@ impl Index {
     }
 
     pub fn commits(&self) -> Vec<Commit> {
-        let mut commits = self.commits.map.keys().copied().collect::<Vec<_>>();
+        let mut commits = self.commits.map.keys().cloned().collect::<Vec<_>>();
         commits.sort();
         commits
     }

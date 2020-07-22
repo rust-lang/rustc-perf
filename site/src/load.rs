@@ -26,7 +26,7 @@ use database::Date;
 use crate::api::github;
 use collector;
 use database::Pool;
-pub use database::{ArtifactId, Commit, Crate, Sha};
+pub use database::{ArtifactId, Commit, Crate};
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum MissingReason {
@@ -73,7 +73,7 @@ pub struct Keys {
 pub struct Config {
     pub keys: Keys,
     #[serde(default)]
-    pub skip: HashSet<Sha>,
+    pub skip: HashSet<String>,
 }
 
 pub struct InputData {
@@ -167,8 +167,7 @@ impl InputData {
             .cloned()
             .filter(|c| now.signed_duration_since(c.time) < Duration::days(29))
             .filter_map(|c| {
-                let sha = c.sha.as_str().into();
-                if have.contains(&sha) || self.config.skip.contains(&sha) {
+                if have.contains(&c.sha) || self.config.skip.contains(&c.sha) {
                     None
                 } else {
                     Some((c, MissingReason::Sha))
@@ -208,7 +207,7 @@ impl InputData {
                     ret
                 },
             )
-            .filter(|c| !have.contains(&c.0.sha.as_str().into())) // we may have not updated the try-commits file
+            .filter(|c| !have.contains(&c.0.sha)) // we may have not updated the try-commits file
             .chain(missing)
             .collect::<Vec<_>>();
 

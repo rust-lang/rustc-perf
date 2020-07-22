@@ -1,5 +1,5 @@
 use chrono::NaiveDate;
-pub use database::{Commit, PatchName, QueryLabel, Sha};
+pub use database::{Commit, PatchName, QueryLabel};
 use serde::Deserialize;
 use std::cmp::PartialOrd;
 use std::fmt;
