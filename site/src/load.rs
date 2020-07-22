@@ -72,8 +72,6 @@ pub struct Keys {
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub keys: Keys,
-    #[serde(default)]
-    pub skip: HashSet<String>,
 }
 
 pub struct InputData {
@@ -128,7 +126,6 @@ impl InputData {
                     github: std::env::var("GITHUB_API_TOKEN").ok(),
                     secret: std::env::var("GITHUB_WEBHOOK_SECRET").ok(),
                 },
-                skip: HashSet::default(),
             }
         };
 
@@ -167,7 +164,7 @@ impl InputData {
             .cloned()
             .filter(|c| now.signed_duration_since(c.time) < Duration::days(29))
             .filter_map(|c| {
-                if have.contains(&c.sha) || self.config.skip.contains(&c.sha) {
+                if have.contains(&c.sha) {
                     None
                 } else {
                     Some((c, MissingReason::Sha))
