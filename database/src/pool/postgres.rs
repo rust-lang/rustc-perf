@@ -802,7 +802,7 @@ where
     async fn collector_start_step(&self, aid: ArtifactIdNumber, step: &str) {
         self.conn()
             .execute(
-                "update collector_progress set start = CURRENT_TIMESTAMP \
+                "update collector_progress set start = statement_timestamp() \
                 where aid = $1 and step = $2 and start is null and end is null;",
                 &[&(aid.0 as i16), &step],
             )
@@ -812,11 +812,14 @@ where
     async fn collector_end_step(&self, aid: ArtifactIdNumber, step: &str) {
         self.conn()
             .execute(
-                "update collector_progress set end = CURRENT_TIMESTAMP \
+                "update collector_progress set end = statement_timestamp() \
                 where aid = $1 and step = $2 and start is not null and end is null;",
                 &[&(aid.0 as i16), &step],
             )
             .await
             .unwrap();
+    }
+    fn separate_transaction_for_collector(&self) -> bool {
+        true
     }
 }

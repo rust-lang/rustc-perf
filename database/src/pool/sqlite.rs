@@ -144,8 +144,8 @@ static MIGRATIONS: &[&str] = &[
     create table collector_progress(
         aid integer not null references artifact(id) on delete cascade on update cascade,
         step text not null,
-        start timestamp without time zone,
-        end timestamp without time zone
+        start integer,
+        end integer
     );
     "#,
 ];
@@ -653,7 +653,7 @@ impl Connection for SqliteConnection {
     async fn collector_start_step(&self, aid: ArtifactIdNumber, step: &str) {
         self.raw_ref()
             .execute(
-                "update collector_progress set start = now \
+                "update collector_progress set start = strftime('%s','now') \
             where aid = ? and step = ? and start is null;",
                 params![&aid.0, &step],
             )
@@ -662,10 +662,13 @@ impl Connection for SqliteConnection {
     async fn collector_end_step(&self, aid: ArtifactIdNumber, step: &str) {
         self.raw_ref()
             .execute(
-                "update collector_progress set end = now \
+                "update collector_progress set end = strftime('%s','now') \
             where aid = ? and step = ? and start is not null and end is null;",
                 params![&aid.0, &step],
             )
             .unwrap();
+    }
+    fn separate_transaction_for_collector(&self) -> bool {
+        false
     }
 }

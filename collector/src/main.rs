@@ -194,8 +194,15 @@ fn bench(
     iterations: usize,
     self_profile: bool,
 ) -> BenchmarkErrors {
-    let status_conn = rt.block_on(pool.connection());
     let mut conn = rt.block_on(pool.connection());
+    let status_conn;
+    let status_conn: Option<&dyn database::Connection> =
+        if conn.separate_transaction_for_collector() {
+            status_conn = rt.block_on(pool.connection());
+            Some(&*status_conn)
+        } else {
+            None
+        };
     let mut errors = BenchmarkErrors::new();
     eprintln!("Benchmarking {} for triple {}", cid, compiler.triple);
 
@@ -229,9 +236,17 @@ fn bench(
         .iter()
         .map(|b| b.name.to_string())
         .collect::<Vec<_>>();
-    rt.block_on(status_conn.collector_start(interned_cid, &steps));
+    rt.block_on(
+        status_conn
+            .unwrap_or_else(|| &*tx.conn())
+            .collector_start(interned_cid, &steps),
+    );
     for (nth_benchmark, benchmark) in benchmarks.iter().enumerate() {
-        rt.block_on(status_conn.collector_start_step(interned_cid, &benchmark.name.to_string()));
+        rt.block_on(
+            status_conn
+                .unwrap_or_else(|| &*tx.conn())
+                .collector_start_step(interned_cid, &benchmark.name.to_string()),
+        );
         rt.block_on(
             tx.conn()
                 .record_benchmark(benchmark.name.0.as_str(), benchmark.supports_stable()),
@@ -262,7 +277,11 @@ fn bench(
                 &format!("{:?}", s),
             ));
         };
-        rt.block_on(status_conn.collector_end_step(interned_cid, &benchmark.name.to_string()));
+        rt.block_on(
+            status_conn
+                .unwrap_or_else(|| &*tx.conn())
+                .collector_end_step(interned_cid, &benchmark.name.to_string()),
+        );
     }
     let end = start.elapsed();
 
