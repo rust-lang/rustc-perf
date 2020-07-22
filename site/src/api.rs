@@ -108,7 +108,7 @@ pub mod data {
 }
 
 pub mod graph {
-    use collector::{Bound, Sha};
+    use collector::Bound;
     use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
 
@@ -135,7 +135,7 @@ pub mod graph {
         pub benchmarks: HashMap<String, HashMap<String, Vec<(String, Vec<GraphData>)>>>,
         pub max: HashMap<String, f32>,
         pub colors: Vec<String>,
-        pub commits: Vec<Sha>,
+        pub commits: Vec<String>,
     }
 }
 

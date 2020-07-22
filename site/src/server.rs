@@ -44,8 +44,6 @@ use crate::db::{self, Cache, Crate, Profile};
 use crate::interpolate::Interpolated;
 use crate::load::{Config, InputData};
 use crate::selector::{self, PathComponent, Tag};
-use collector::api::collected;
-use collector::Sha;
 use db::{ArtifactId, Lookup};
 use parking_lot::RwLock;
 
@@ -251,12 +249,12 @@ fn prettify_log(log: &str) -> Option<String> {
 
 pub async fn handle_status_page(data: Arc<InputData>) -> status::Response {
     let idx = data.index.load();
-    let last_commit = *idx.commits().last().unwrap();
+    let last_commit = idx.commits().last().unwrap().clone();
 
     let mut benchmark_state = data
         .conn()
         .await
-        .get_error(ArtifactId::from(last_commit).lookup(&idx).unwrap())
+        .get_error(ArtifactId::from(last_commit.clone()).lookup(&idx).unwrap())
         .await
         .into_iter()
         .map(|(name, error)| {
@@ -300,8 +298,8 @@ pub async fn handle_next_commit(data: Arc<InputData>) -> collector::api::next_co
 }
 
 struct CommitIdxCache {
-    commit_idx: RefCell<HashMap<Sha, u16>>,
-    commits: RefCell<Vec<Sha>>,
+    commit_idx: RefCell<HashMap<String, u16>>,
+    commits: RefCell<Vec<String>>,
 }
 
 impl CommitIdxCache {
@@ -312,15 +310,15 @@ impl CommitIdxCache {
         }
     }
 
-    fn into_commits(self) -> Vec<Sha> {
+    fn into_commits(self) -> Vec<String> {
         std::mem::take(&mut *self.commits.borrow_mut())
     }
 
-    fn lookup(&self, commit: Sha) -> u16 {
+    fn lookup(&self, commit: String) -> u16 {
         *self
             .commit_idx
             .borrow_mut()
-            .entry(commit)
+            .entry(commit.clone())
             .or_insert_with(|| {
                 let idx = self.commits.borrow().len();
                 self.commits.borrow_mut().push(commit);
@@ -365,7 +363,7 @@ fn to_graph_data<'a>(
 pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<graph::Response> {
     let cc = CommitIdxCache::new();
     let range = data.data_range(body.start.clone()..=body.end.clone());
-    let commits: Arc<Vec<_>> = Arc::new(range.iter().map(|&c| c.into()).collect());
+    let commits: Arc<Vec<_>> = Arc::new(range.iter().map(|c| c.clone().into()).collect());
 
     let stat_selector = selector::Selector::One(body.stat.clone());
 
@@ -556,13 +554,13 @@ impl DateData {
         }
 
         DateData {
-            date: if let ArtifactId::Commit(c) = commit {
+            date: if let ArtifactId::Commit(c) = &commit {
                 Some(c.date)
             } else {
                 None
             },
             commit: match commit {
-                ArtifactId::Commit(c) => c.sha.to_string(),
+                ArtifactId::Commit(c) => c.sha,
                 ArtifactId::Artifact(i) => i,
             },
             data,
@@ -577,11 +575,8 @@ pub async fn handle_github(
     crate::github::handle_github(request, data).await
 }
 
-pub async fn handle_collected(
-    _body: collected::Request,
-    _data: &InputData,
-) -> ServerResult<collected::Response> {
-    Ok(collected::Response {})
+pub async fn handle_collected() -> ServerResult<()> {
+    Ok(())
 }
 
 fn get_self_profile_data(
@@ -704,9 +699,9 @@ pub async fn handle_self_profile(
 
     let mut commits = vec![index
         .commits()
-        .iter()
+        .into_iter()
         .find(|c| c.sha == *body.commit.as_str())
-        .map(|c| database::ArtifactId::Commit(*c))
+        .map(|c| database::ArtifactId::Commit(c))
         .or_else(|| {
             index
                 .artifacts()
@@ -719,9 +714,9 @@ pub async fn handle_self_profile(
         commits.push(
             index
                 .commits()
-                .iter()
+                .into_iter()
                 .find(|c| c.sha == *bc.as_str())
-                .map(|c| database::ArtifactId::Commit(*c))
+                .map(|c| database::ArtifactId::Commit(c))
                 .or_else(|| {
                     index
                         .artifacts()
@@ -1067,9 +1062,7 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
                 .body(hyper::Body::empty())
                 .unwrap());
         }
-        Ok(to_response(
-            handle_collected(body!(parse_body(&body)), &data).await,
-        ))
+        Ok(to_response(handle_collected().await))
     } else if p == "/perf/github-hook" {
         if !verify_gh(&data.config, &req, &body) {
             return Ok(http::Response::builder()
