@@ -163,8 +163,8 @@ static MIGRATIONS: &[&str] = &[
     create table collector_progress(
         aid smallint not null references artifact(id) on delete cascade on update cascade,
         step text not null,
-        start timestamptz,
-        end timestamptz
+        start_time timestamptz,
+        end_time timestamptz
     );
     "#,
 ];
@@ -783,7 +783,7 @@ where
     async fn collector_start(&self, aid: ArtifactIdNumber, steps: &[String]) {
         self.conn()
             .execute(
-                "delete from collector_progress where start is null or end is null;",
+                "delete from collector_progress where start_time is null or end_time is null;",
                 &[],
             )
             .await
@@ -802,8 +802,8 @@ where
     async fn collector_start_step(&self, aid: ArtifactIdNumber, step: &str) {
         self.conn()
             .execute(
-                "update collector_progress set start = statement_timestamp() \
-                where aid = $1 and step = $2 and start is null and end is null;",
+                "update collector_progress set start_time = statement_timestamp() \
+                where aid = $1 and step = $2 and start_time is null and end_time is null;",
                 &[&(aid.0 as i16), &step],
             )
             .await
@@ -812,8 +812,8 @@ where
     async fn collector_end_step(&self, aid: ArtifactIdNumber, step: &str) {
         self.conn()
             .execute(
-                "update collector_progress set end = statement_timestamp() \
-                where aid = $1 and step = $2 and start is not null and end is null;",
+                "update collector_progress set end_time = statement_timestamp() \
+                where aid = $1 and step = $2 and start_time is not null and end_time is null;",
                 &[&(aid.0 as i16), &step],
             )
             .await
