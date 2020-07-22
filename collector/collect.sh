@@ -23,7 +23,6 @@ while : ; do
         touch todo-artifacts
 
         target/release/collector bench_next $SITE_URL --self-profile --db $DATABASE;
-        test $? -gt 0 && echo "sleeping 30 seconds -- failure detected" && sleep 30;
         echo sleeping for 30sec at `date`;
         sleep 30;
 done

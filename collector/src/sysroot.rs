@@ -19,6 +19,7 @@ pub struct Sysroot {
     pub rustdoc: PathBuf,
     pub cargo: PathBuf,
     pub triple: String,
+    pub preserve: bool,
 }
 
 impl Sysroot {
@@ -42,10 +43,17 @@ impl Sysroot {
 
         Ok(sysroot)
     }
+
+    pub fn preserve(&mut self) {
+        self.preserve = true;
+    }
 }
 
 impl Drop for Sysroot {
     fn drop(&mut self) {
+        if self.preserve {
+            return;
+        }
         fs::remove_dir_all(format!("cache/{}", self.sha)).unwrap_or_else(|err| {
             log::info!(
                 "failed to remove {:?}, please do so manually: {:?}",
@@ -121,6 +129,7 @@ impl SysrootDownload {
             cargo: sysroot_bin("cargo")?,
             sha: self.rust_sha,
             triple: self.triple,
+            preserve: false,
         })
     }
 

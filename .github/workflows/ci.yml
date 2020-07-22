@@ -59,7 +59,7 @@ jobs:
       - name: Check benchmarks
         run: sh -x -c "ci/check-benchmarks.sh"
         env:
-          BENCH_TEST_OPTS: "--exclude script-servo"
+          BENCH_INCLUDE_EXCLUDE_OPTS: "--exclude script-servo"
   test_script_servo:
     name: Test benchmark script-servo
     runs-on: ubuntu-latest
@@ -90,5 +90,5 @@ jobs:
       - name: Check benchmarks
         run: sh -x -c "ci/check-benchmarks.sh"
         env:
-          BENCH_TEST_OPTS: "--include script-servo"
+          BENCH_INCLUDE_EXCLUDE_OPTS: "--include script-servo"
           SHELL: "/bin/bash"

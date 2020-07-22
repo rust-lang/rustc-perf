@@ -6,7 +6,7 @@ extern crate clap;
 use anyhow::{bail, Context};
 use collector::api::collected;
 use database::{pool::Connection, ArtifactId, Commit};
-use log::{debug, error};
+use log::debug;
 use std::collections::HashSet;
 use std::fs;
 use std::io::{stderr, Write};
@@ -162,54 +162,6 @@ where
     Ok(v)
 }
 
-fn bench_next(
-    rt: &mut Runtime,
-    site_url: &str,
-    pool: &database::Pool,
-    benchmarks: &[Benchmark],
-    self_profile: bool,
-) -> anyhow::Result<()> {
-    println!("processing commits");
-    let client = reqwest::blocking::Client::new();
-    let response: collector::api::next_commit::Response = client
-        .get(&format!("{}/perf/next_commit", site_url))
-        .send()?
-        .json()?;
-    let commit = if let Some(c) = response.commit {
-        c
-    } else {
-        println!("no commit to benchmark");
-        // no missing commits
-        return Ok(());
-    };
-
-    let commit = get_commit_or_fake_it(&commit)?;
-    match Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu") {
-        Ok(sysroot) => {
-            let conn = rt.block_on(pool.connection());
-            bench(
-                rt,
-                conn,
-                &ArtifactId::Commit(commit),
-                &BuildKind::all(),
-                &RunKind::all(),
-                Compiler::from_sysroot(&sysroot),
-                &benchmarks,
-                3,
-                /* call_home */ true,
-                self_profile,
-            );
-        }
-        Err(err) => {
-            error!("failed to install sysroot for {:?}: {:?}", commit, err);
-        }
-    }
-
-    client.post(&format!("{}/perf/onpush", site_url)).send()?;
-
-    Ok(())
-}
-
 fn n_benchmarks_remaining(n: usize) -> String {
     let suffix = if n == 1 { "" } else { "s" };
     format!("{} benchmark{} remaining", n, suffix)
@@ -218,7 +170,15 @@ fn n_benchmarks_remaining(n: usize) -> String {
 struct BenchmarkErrors(usize);
 
 impl BenchmarkErrors {
-    fn fail_if_error(self) -> anyhow::Result<()> {
+    fn new() -> BenchmarkErrors {
+        BenchmarkErrors(0)
+    }
+
+    fn incr(&mut self) {
+        self.0 += 1;
+    }
+
+    fn fail_if_nonzero(self) -> anyhow::Result<()> {
         if self.0 > 0 {
             anyhow::bail!("{} benchmarks failed", self.0)
         }
@@ -238,7 +198,7 @@ fn bench(
     call_home: bool,
     self_profile: bool,
 ) -> BenchmarkErrors {
-    let mut errors_recorded = 0;
+    let mut errors = BenchmarkErrors::new();
     eprintln!("Benchmarking {} for triple {}", cid, compiler.triple);
 
     if call_home {
@@ -271,7 +231,7 @@ fn bench(
             "Note that this behavior is likely to change in the future \
             to collect and append the data instead."
         );
-        return BenchmarkErrors(errors_recorded);
+        return errors;
     }
     let interned_cid = rt.block_on(tx.conn().artifact_id(&cid));
 
@@ -300,7 +260,7 @@ fn bench(
                 "collector error: Failed to benchmark '{}', recorded: {}",
                 benchmark.name, s
             );
-            errors_recorded += 1;
+            errors.incr();
             rt.block_on(tx.conn().record_error(
                 interned_cid,
                 benchmark.name.0.as_str(),
@@ -330,7 +290,7 @@ fn bench(
         // This ensures that we're good to go with the just updated data.
         conn.maybe_create_indices().await;
     });
-    BenchmarkErrors(errors_recorded)
+    errors
 }
 
 fn get_benchmarks(
@@ -513,17 +473,6 @@ fn main_result() -> anyhow::Result<i32> {
             (@arg DB: --db +takes_value "Database output file")
         )
 
-        (@subcommand bench_test =>
-            (about: "Benchmarks the most recent commit for testing purposes")
-
-            // Mandatory arguments: (none)
-
-            // Options
-            (@arg DB:      --db      +takes_value "Database output file")
-            (@arg EXCLUDE: --exclude +takes_value "Exclude benchmarks matching these")
-            (@arg INCLUDE: --include +takes_value "Include benchmarks matching these")
-        )
-
         (@subcommand profile_local =>
             (about: "Profiles a local rustc with one of several profilers")
 
@@ -546,6 +495,14 @@ fn main_result() -> anyhow::Result<i32> {
              "One or more (comma-separated) of: 'Full',\n\
              'IncrFull', 'IncrUnchanged', 'IncrPatched', 'All'")
             (@arg RUSTDOC: --rustdoc +takes_value "The path to the local rustdoc to benchmark")
+        )
+
+        (@subcommand install_next =>
+            (about: "Installs the next commit for perf.rust-lang.org")
+
+            // Mandatory arguments: (none)
+
+            // Options: (none)
         )
     )
     .get_matches();
@@ -587,7 +544,7 @@ fn main_result() -> anyhow::Result<i32> {
 
             let benchmarks = get_benchmarks(&benchmark_dir, include, exclude)?;
 
-            bench(
+            let res = bench(
                 &mut rt,
                 conn,
                 &ArtifactId::Artifact(id.to_string()),
@@ -605,6 +562,7 @@ fn main_result() -> anyhow::Result<i32> {
                 /* call_home */ false,
                 self_profile,
             );
+            res.fail_if_nonzero()?;
             Ok(0)
         }
 
@@ -616,11 +574,45 @@ fn main_result() -> anyhow::Result<i32> {
             let db = sub_m.value_of("DB").unwrap_or(default_db);
             let self_profile = sub_m.is_present("SELF_PROFILE");
 
+            println!("processing commits");
+            let client = reqwest::blocking::Client::new();
+            let response: collector::api::next_commit::Response = client
+                .get(&format!("{}/perf/next_commit", site_url))
+                .send()?
+                .json()?;
+            let commit = if let Some(c) = response.commit {
+                c
+            } else {
+                println!("no commit to benchmark");
+                // no missing commits
+                return Ok(0);
+            };
+            let commit = get_commit_or_fake_it(&commit)?;
+
             let pool = database::Pool::open(db);
+            let conn = rt.block_on(pool.connection());
+
+            let sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")
+                .with_context(|| format!("failed to install sysroot for {:?}", commit))?;
 
             let benchmarks = get_benchmarks(&benchmark_dir, None, None)?;
 
-            bench_next(&mut rt, &site_url, &pool, &benchmarks, self_profile)?;
+            let res = bench(
+                &mut rt,
+                conn,
+                &ArtifactId::Commit(commit),
+                &BuildKind::all(),
+                &RunKind::all(),
+                Compiler::from_sysroot(&sysroot),
+                &benchmarks,
+                3,
+                /* call_home */ true,
+                self_profile,
+            );
+
+            client.post(&format!("{}/perf/onpush", site_url)).send()?;
+
+            res.fail_if_nonzero()?;
             Ok(0)
         }
 
@@ -677,7 +669,7 @@ fn main_result() -> anyhow::Result<i32> {
             let mut benchmarks = get_benchmarks(&benchmark_dir, None, None)?;
             benchmarks.retain(|b| b.supports_stable());
 
-            bench(
+            let res = bench(
                 &mut rt,
                 conn,
                 &ArtifactId::Artifact(toolchain.to_string()),
@@ -695,46 +687,7 @@ fn main_result() -> anyhow::Result<i32> {
                 /* call_home */ false,
                 /* self_profile */ false,
             );
-            Ok(0)
-        }
-
-        ("bench_test", Some(sub_m)) => {
-            // Mandatory arguments: (none)
-
-            // Options
-            let db = sub_m.value_of("DB").unwrap_or(default_db);
-            let exclude = sub_m.value_of("EXCLUDE");
-            let include = sub_m.value_of("INCLUDE");
-
-            let pool = database::Pool::open(db);
-            let conn = rt.block_on(pool.connection());
-
-            let last_sha = Command::new("git")
-                .arg("ls-remote")
-                .arg("https://github.com/rust-lang/rust.git")
-                .arg("master")
-                .output()
-                .unwrap();
-            let last_sha = String::from_utf8(last_sha.stdout).expect("utf8");
-            let last_sha = last_sha.split_whitespace().next().expect(&last_sha);
-            let commit = get_commit_or_fake_it(&last_sha).expect("success");
-            let sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")?;
-
-            let benchmarks = get_benchmarks(&benchmark_dir, include, exclude)?;
-
-            let res = bench(
-                &mut rt,
-                conn,
-                &ArtifactId::Commit(commit),
-                &[BuildKind::Check, BuildKind::Doc], // no Debug or Opt builds
-                &RunKind::all(),
-                Compiler::from_sysroot(&sysroot),
-                &benchmarks,
-                1,
-                /* call_home */ false,
-                /* self_profile */ false,
-            );
-            res.fail_if_error()?;
+            res.fail_if_nonzero()?;
             Ok(0)
         }
 
@@ -767,18 +720,46 @@ fn main_result() -> anyhow::Result<i32> {
 
             eprintln!("Profiling with {:?}", profiler);
 
+            let mut errors = BenchmarkErrors::new();
             for (i, benchmark) in benchmarks.iter().enumerate() {
                 eprintln!("{}", n_benchmarks_remaining(benchmarks.len() - i));
                 let mut processor = execute::ProfileProcessor::new(profiler, &out_dir, &id);
                 let result =
                     benchmark.measure(&mut processor, &build_kinds, &run_kinds, compiler, 1);
                 if let Err(ref s) = result {
+                    errors.incr();
                     eprintln!(
                         "collector error: Failed to profile '{}' with {:?}, recorded: {:?}",
                         benchmark.name, profiler, s
                     );
                 }
             }
+            errors.fail_if_nonzero()?;
+            Ok(0)
+        }
+
+        ("install_next", Some(_sub_m)) => {
+            // Mandatory arguments: (none)
+
+            // Options: (none)
+
+            let last_sha = Command::new("git")
+                .arg("ls-remote")
+                .arg("https://github.com/rust-lang/rust.git")
+                .arg("master")
+                .output()
+                .unwrap();
+            let last_sha = String::from_utf8(last_sha.stdout).expect("utf8");
+            let last_sha = last_sha.split_whitespace().next().expect(&last_sha);
+            let commit = get_commit_or_fake_it(&last_sha).expect("success");
+            let mut sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")?;
+            sysroot.preserve(); // don't delete it
+
+            // Print the directory containing the toolchain.
+            sysroot.rustc.pop();
+            let s = format!("{:?}", sysroot.rustc);
+            println!("{}", &s[1..s.len() - 1]);
+
             Ok(0)
         }
 
