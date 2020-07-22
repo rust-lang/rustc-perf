@@ -44,7 +44,6 @@ use crate::db::{self, Cache, Crate, Profile};
 use crate::interpolate::Interpolated;
 use crate::load::{Config, InputData};
 use crate::selector::{self, PathComponent, Tag};
-use collector::api::collected;
 use db::{ArtifactId, Lookup};
 use parking_lot::RwLock;
 
@@ -576,11 +575,8 @@ pub async fn handle_github(
     crate::github::handle_github(request, data).await
 }
 
-pub async fn handle_collected(
-    _body: collected::Request,
-    _data: &InputData,
-) -> ServerResult<collected::Response> {
-    Ok(collected::Response {})
+pub async fn handle_collected() -> ServerResult<()> {
+    Ok(())
 }
 
 fn get_self_profile_data(
@@ -1066,9 +1062,7 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
                 .body(hyper::Body::empty())
                 .unwrap());
         }
-        Ok(to_response(
-            handle_collected(body!(parse_body(&body)), &data).await,
-        ))
+        Ok(to_response(handle_collected().await))
     } else if p == "/perf/github-hook" {
         if !verify_gh(&data.config, &req, &body) {
             return Ok(http::Response::builder()

@@ -4,7 +4,6 @@
 extern crate clap;
 
 use anyhow::{bail, Context};
-use collector::api::collected;
 use database::{pool::Connection, ArtifactId, Commit};
 use log::debug;
 use std::collections::HashSet;
@@ -16,11 +15,9 @@ use std::process::Command;
 use std::{str, time::Instant};
 use tokio::runtime::Runtime;
 
-mod background_worker;
 mod execute;
 mod sysroot;
 
-use background_worker::send_home;
 use execute::{Benchmark, Profiler};
 use sysroot::Sysroot;
 
@@ -195,20 +192,10 @@ fn bench(
     compiler: Compiler<'_>,
     benchmarks: &[Benchmark],
     iterations: usize,
-    call_home: bool,
     self_profile: bool,
 ) -> BenchmarkErrors {
     let mut errors = BenchmarkErrors::new();
     eprintln!("Benchmarking {} for triple {}", cid, compiler.triple);
-
-    if call_home {
-        if let ArtifactId::Commit(commit) = cid {
-            send_home(collected::Request::BenchmarkCommit {
-                commit: commit.clone(),
-                benchmarks: benchmarks.iter().map(|b| b.name.to_string()).collect(),
-            });
-        }
-    }
 
     let has_measureme = Command::new("summarize").output().is_ok();
     if self_profile {
@@ -267,15 +254,6 @@ fn bench(
                 &format!("{:?}", s),
             ));
         };
-
-        if call_home {
-            if let ArtifactId::Commit(commit) = cid {
-                send_home(collected::Request::BenchmarkDone {
-                    benchmark: benchmark.name.to_string(),
-                    commit: commit.clone(),
-                });
-            }
-        }
     }
     let end = start.elapsed();
 
@@ -559,7 +537,6 @@ fn main_result() -> anyhow::Result<i32> {
                 },
                 &benchmarks,
                 1,
-                /* call_home */ false,
                 self_profile,
             );
             res.fail_if_nonzero()?;
@@ -606,7 +583,6 @@ fn main_result() -> anyhow::Result<i32> {
                 Compiler::from_sysroot(&sysroot),
                 &benchmarks,
                 3,
-                /* call_home */ true,
                 self_profile,
             );
 
@@ -684,7 +660,6 @@ fn main_result() -> anyhow::Result<i32> {
                 },
                 &benchmarks,
                 3,
-                /* call_home */ false,
                 /* self_profile */ false,
             );
             res.fail_if_nonzero()?;
@@ -768,7 +743,6 @@ fn main_result() -> anyhow::Result<i32> {
             Ok(2)
         }
     };
-    background_worker::shut_down();
     ret
 }
 
