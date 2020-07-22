@@ -348,3 +348,4 @@ The following options alter the behaviour of the `profile_local` subcommand.
 
 `RUST_LOG=debug` can be specified to enable verbose logging, which is useful
 for debugging `collector` itself.
+
