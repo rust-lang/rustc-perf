@@ -61,6 +61,12 @@ pub trait Connection: Send + Sync {
     async fn pr_attach_commit(&self, pr: u32, sha: &str, parent_sha: &str) -> bool;
     async fn queued_commits(&self) -> Vec<QueuedCommit>;
     async fn mark_complete(&self, sha: &str) -> Option<QueuedCommit>;
+
+    // Collector status API
+
+    async fn collector_start(&self, aid: ArtifactIdNumber, steps: &[String]);
+    async fn collector_start_step(&self, aid: ArtifactIdNumber, step: &str);
+    async fn collector_end_step(&self, aid: ArtifactIdNumber, step: &str);
 }
 
 #[async_trait::async_trait]

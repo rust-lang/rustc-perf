@@ -159,6 +159,14 @@ static MIGRATIONS: &[&str] = &[
         duration integer not null
     );
     "#,
+    r#"
+    create table collector_progress(
+        aid smallint not null references artifact(id) on delete cascade on update cascade,
+        step text not null,
+        start timestamptz,
+        end timestamptz
+    );
+    "#,
 ];
 
 #[async_trait::async_trait]
@@ -767,6 +775,46 @@ where
                 "insert into benchmark (name, stabilized) VALUES ($1, $2)
                 ON CONFLICT (name) DO UPDATE SET stabilized = EXCLUDED.stabilized",
                 &[&krate, &supports_stable],
+            )
+            .await
+            .unwrap();
+    }
+
+    async fn collector_start(&self, aid: ArtifactIdNumber, steps: &[String]) {
+        self.conn()
+            .execute(
+                "delete from collector_progress where start is null or end is null;",
+                &[],
+            )
+            .await
+            .unwrap();
+
+        for step in steps {
+            self.conn()
+                .execute(
+                    "insert into collector_progress(aid, step) VALUES ($1, $2)",
+                    &[&(aid.0 as i16), &step],
+                )
+                .await
+                .unwrap();
+        }
+    }
+    async fn collector_start_step(&self, aid: ArtifactIdNumber, step: &str) {
+        self.conn()
+            .execute(
+                "update collector_progress set start = CURRENT_TIMESTAMP \
+                where aid = $1 and step = $2 and start is null and end is null;",
+                &[&(aid.0 as i16), &step],
+            )
+            .await
+            .unwrap();
+    }
+    async fn collector_end_step(&self, aid: ArtifactIdNumber, step: &str) {
+        self.conn()
+            .execute(
+                "update collector_progress set end = CURRENT_TIMESTAMP \
+                where aid = $1 and step = $2 and start is not null and end is null;",
+                &[&(aid.0 as i16), &step],
             )
             .await
             .unwrap();

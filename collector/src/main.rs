@@ -4,7 +4,7 @@
 extern crate clap;
 
 use anyhow::{bail, Context};
-use database::{pool::Connection, ArtifactId, Commit};
+use database::{ArtifactId, Commit};
 use log::debug;
 use std::collections::HashSet;
 use std::fs;
@@ -185,7 +185,7 @@ impl BenchmarkErrors {
 
 fn bench(
     rt: &mut Runtime,
-    mut conn: Box<dyn Connection>,
+    pool: database::Pool,
     cid: &ArtifactId,
     build_kinds: &[BuildKind],
     run_kinds: &[RunKind],
@@ -194,6 +194,8 @@ fn bench(
     iterations: usize,
     self_profile: bool,
 ) -> BenchmarkErrors {
+    let status_conn = rt.block_on(pool.connection());
+    let mut conn = rt.block_on(pool.connection());
     let mut errors = BenchmarkErrors::new();
     eprintln!("Benchmarking {} for triple {}", cid, compiler.triple);
 
@@ -223,7 +225,13 @@ fn bench(
     let interned_cid = rt.block_on(tx.conn().artifact_id(&cid));
 
     let start = Instant::now();
+    let steps = benchmarks
+        .iter()
+        .map(|b| b.name.to_string())
+        .collect::<Vec<_>>();
+    rt.block_on(status_conn.collector_start(interned_cid, &steps));
     for (nth_benchmark, benchmark) in benchmarks.iter().enumerate() {
+        rt.block_on(status_conn.collector_start_step(interned_cid, &benchmark.name.to_string()));
         rt.block_on(
             tx.conn()
                 .record_benchmark(benchmark.name.0.as_str(), benchmark.supports_stable()),
@@ -254,6 +262,7 @@ fn bench(
                 &format!("{:?}", s),
             ));
         };
+        rt.block_on(status_conn.collector_end_step(interned_cid, &benchmark.name.to_string()));
     }
     let end = start.elapsed();
 
@@ -516,7 +525,6 @@ fn main_result() -> anyhow::Result<i32> {
             let self_profile = sub_m.is_present("SELF_PROFILE");
 
             let pool = database::Pool::open(db);
-            let conn = rt.block_on(pool.connection());
 
             let (rustc, rustdoc, cargo) = get_local_toolchain(&build_kinds, rustc, rustdoc, cargo)?;
 
@@ -524,7 +532,7 @@ fn main_result() -> anyhow::Result<i32> {
 
             let res = bench(
                 &mut rt,
-                conn,
+                pool,
                 &ArtifactId::Artifact(id.to_string()),
                 &build_kinds,
                 &run_kinds,
@@ -567,7 +575,6 @@ fn main_result() -> anyhow::Result<i32> {
             let commit = get_commit_or_fake_it(&commit)?;
 
             let pool = database::Pool::open(db);
-            let conn = rt.block_on(pool.connection());
 
             let sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")
                 .with_context(|| format!("failed to install sysroot for {:?}", commit))?;
@@ -576,7 +583,7 @@ fn main_result() -> anyhow::Result<i32> {
 
             let res = bench(
                 &mut rt,
-                conn,
+                pool,
                 &ArtifactId::Commit(commit),
                 &BuildKind::all(),
                 &RunKind::all(),
@@ -608,7 +615,6 @@ fn main_result() -> anyhow::Result<i32> {
             }
 
             let pool = database::Pool::open(db);
-            let conn = rt.block_on(pool.connection());
 
             let run_kinds = if collector::version_supports_incremental(toolchain) {
                 RunKind::all()
@@ -647,7 +653,7 @@ fn main_result() -> anyhow::Result<i32> {
 
             let res = bench(
                 &mut rt,
-                conn,
+                pool,
                 &ArtifactId::Artifact(toolchain.to_string()),
                 &build_kinds,
                 &run_kinds,

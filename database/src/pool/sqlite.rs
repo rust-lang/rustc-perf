@@ -140,6 +140,14 @@ static MIGRATIONS: &[&str] = &[
         duration integer not null
     );
     "#,
+    r#"
+    create table collector_progress(
+        aid integer not null references artifact(id) on delete cascade on update cascade,
+        step text not null,
+        start timestamp without time zone,
+        end timestamp without time zone
+    );
+    "#,
 ];
 
 #[async_trait::async_trait]
@@ -623,6 +631,40 @@ impl Connection for SqliteConnection {
                 "insert into benchmark (name, stabilized) VALUES (?, ?)
                 ON CONFLICT (name) do update set stabilized = excluded.stabilized",
                 params![krate, supports_stable],
+            )
+            .unwrap();
+    }
+    async fn collector_start(&self, aid: ArtifactIdNumber, steps: &[String]) {
+        // Clean out any leftover unterminated steps.
+        self.raw_ref()
+            .execute_batch("delete from collector_progress where start is null or end is null;")
+            .unwrap();
+
+        // Populate unstarted and unfinished steps into collector_progress.
+        for step in steps {
+            self.raw_ref()
+                .execute(
+                    "insert into collector_progress(aid, step) VALUES (?, ?)",
+                    params![&aid.0, step],
+                )
+                .unwrap();
+        }
+    }
+    async fn collector_start_step(&self, aid: ArtifactIdNumber, step: &str) {
+        self.raw_ref()
+            .execute(
+                "update collector_progress set start = now \
+            where aid = ? and step = ? and start is null;",
+                params![&aid.0, &step],
+            )
+            .unwrap();
+    }
+    async fn collector_end_step(&self, aid: ArtifactIdNumber, step: &str) {
+        self.raw_ref()
+            .execute(
+                "update collector_progress set end = now \
+            where aid = ? and step = ? and start is not null and end is null;",
+                params![&aid.0, &step],
             )
             .unwrap();
     }
