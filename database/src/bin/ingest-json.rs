@@ -600,13 +600,6 @@ async fn main() {
         Pool::Postgres(mut p) => {
             postgres = Some(p.raw().open().await.into());
         }
-        Pool::Both {
-            sqlite: mut s,
-            postgres: mut p,
-        } => {
-            sqlite = Some(s.raw().open().await.into_inner().unwrap());
-            postgres = Some(p.raw().open().await.into());
-        }
     }
 
     if let Some(s) = &mut sqlite {
