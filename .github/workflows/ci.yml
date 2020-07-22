@@ -41,10 +41,10 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Install latest nightly
+      - name: Install latest beta
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly
+          toolchain: beta
           override: true
 
       - name: Configure environment
@@ -69,10 +69,10 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Install latest nightly
+      - name: Install latest beta
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly
+          toolchain: beta
           override: true
 
       - name: Configure environment

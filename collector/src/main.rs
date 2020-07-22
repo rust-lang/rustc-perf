@@ -413,7 +413,7 @@ fn main() {
     match main_result() {
         Ok(code) => process::exit(code),
         Err(err) => {
-            eprintln!("collector error: {:#}\n{}", err, err.backtrace());
+            eprintln!("collector error: {:?}", err);
             process::exit(1);
         }
     }
