@@ -70,6 +70,9 @@ pub trait Connection: Send + Sync {
     // an end. Otherwise returns false, indicating that we can skip it.
     async fn collector_start_step(&self, aid: ArtifactIdNumber, step: &str) -> bool;
     async fn collector_end_step(&self, aid: ArtifactIdNumber, step: &str);
+
+    // Returns an artifact that is in progress.
+    async fn in_progress_artifact(&self) -> Option<ArtifactId>;
 }
 
 #[async_trait::async_trait]

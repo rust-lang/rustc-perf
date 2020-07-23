@@ -1,6 +1,6 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
+use crate::{ArtifactId, CollectionId, Commit, Crate, Date, Profile};
 use crate::{ArtifactIdNumber, Index, QueryDatum, QueuedCommit};
-use crate::{CollectionId, Commit, Crate, Date, Profile};
 use chrono::{TimeZone, Utc};
 use hashbrown::HashMap;
 use rusqlite::params;
@@ -674,5 +674,46 @@ impl Connection for SqliteConnection {
         if !did_modify {
             log::error!("did not end {} for {:?}", step, aid);
         }
+    }
+    async fn in_progress_artifact(&self) -> Option<ArtifactId> {
+        let aid = self
+            .raw_ref()
+            .query_row(
+                "select distinct aid from collector_progress where end is null order by aid limit 1",
+                params![],
+                |r| r.get::<_, i16>(0),
+            )
+            .optional()
+            .unwrap()?;
+
+        let (name, date, ty) = self
+            .raw_ref()
+            .query_row(
+                "select name, date, type from artifact where id = ?",
+                params![&aid],
+                |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, Option<i64>>(1)?,
+                        r.get::<_, String>(2)?,
+                    ))
+                },
+            )
+            .unwrap();
+
+        Some(match ty.as_str() {
+            "try" | "master" => ArtifactId::Commit(Commit {
+                sha: name,
+                date: date
+                    .map(|d| Utc.timestamp(d, 0))
+                    .map(Date)
+                    .unwrap_or_else(|| Date::ymd_hms(2001, 01, 01, 0, 0, 0)),
+            }),
+            "release" => ArtifactId::Artifact(name),
+            _ => {
+                log::error!("unknown ty {:?}", ty);
+                return None;
+            }
+        })
     }
 }

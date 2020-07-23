@@ -1,6 +1,7 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{
-    ArtifactIdNumber, Cache, CollectionId, Commit, Crate, Date, Index, Profile, QueuedCommit,
+    ArtifactId, ArtifactIdNumber, Cache, CollectionId, Commit, Crate, Date, Index, Profile,
+    QueuedCommit,
 };
 use anyhow::Context as _;
 use chrono::{DateTime, TimeZone, Utc};
@@ -660,9 +661,9 @@ where
             .unwrap();
     }
 
-    async fn artifact_id(&self, artifact: &crate::ArtifactId) -> ArtifactIdNumber {
+    async fn artifact_id(&self, artifact: &ArtifactId) -> ArtifactIdNumber {
         let (name, date, ty) = match artifact {
-            crate::ArtifactId::Commit(commit) => (
+            ArtifactId::Commit(commit) => (
                 commit.sha.to_string(),
                 if commit.is_try() {
                     None
@@ -671,7 +672,7 @@ where
                 },
                 if commit.is_try() { "try" } else { "master" },
             ),
-            crate::ArtifactId::Artifact(a) => (a.clone(), None, "release"),
+            ArtifactId::Artifact(a) => (a.clone(), None, "release"),
         };
 
         let aid = self.conn()
@@ -829,5 +830,38 @@ where
         if !did_modify {
             log::error!("did not end {} for {:?}", step, aid);
         }
+    }
+    async fn in_progress_artifact(&self) -> Option<ArtifactId> {
+        let rows = self
+            .conn()
+            .query(
+                "select distinct aid from collector_progress where end_time is null order by aid limit 1",
+                &[],
+            )
+            .await
+            .unwrap();
+        let aid = rows.into_iter().next().map(|row| row.get::<_, i16>(0))?;
+
+        let row = self
+            .conn()
+            .query_one(
+                "select name, date, type from artifact where id = $1",
+                &[&aid],
+            )
+            .await
+            .unwrap();
+
+        let ty = row.get::<_, String>(2);
+        Some(match ty.as_str() {
+            "try" | "master" => ArtifactId::Commit(Commit {
+                sha: row.get(0),
+                date: Date(row.get(1)),
+            }),
+            "release" => ArtifactId::Artifact(row.get(0)),
+            _ => {
+                log::error!("unknown ty {:?}", ty);
+                return None;
+            }
+        })
     }
 }

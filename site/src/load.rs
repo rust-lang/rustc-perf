@@ -34,6 +34,7 @@ pub enum MissingReason {
     Sha,
     TryParent,
     TryCommit,
+    InProgress,
 }
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
@@ -151,9 +152,8 @@ impl InputData {
             .context("getting master commit list")
             .unwrap();
 
-        let have = self
-            .index
-            .load()
+        let index = self.index.load();
+        let have = index
             .commits()
             .iter()
             .map(|commit| commit.sha.clone())
@@ -207,6 +207,26 @@ impl InputData {
             .filter(|c| !have.contains(&c.0.sha)) // we may have not updated the try-commits file
             .chain(missing)
             .collect::<Vec<_>>();
+
+        match self.conn().await.in_progress_artifact().await {
+            None => {}
+            Some(ArtifactId::Commit(c)) => {
+                commits.insert(
+                    0,
+                    (
+                        rustc_artifacts::Commit {
+                            sha: c.sha,
+                            time: c.date.0,
+                        },
+                        MissingReason::InProgress,
+                    ),
+                );
+            }
+            Some(ArtifactId::Artifact(_)) => {
+                // do nothing, for now, though eventually we'll want an artifact
+                // queue
+            }
+        }
 
         let mut seen = HashSet::with_capacity(commits.len());
 
