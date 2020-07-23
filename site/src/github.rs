@@ -4,6 +4,7 @@ use anyhow::Context as _;
 use hashbrown::HashSet;
 use serde::Deserialize;
 
+use database::ArtifactId;
 use regex::Regex;
 use reqwest::header::USER_AGENT;
 use std::{sync::Arc, time::Duration};
@@ -583,12 +584,32 @@ where
 pub async fn post_finished(data: &InputData) {
     let conn = data.conn().await;
     let index = data.index.load();
-    let commits = index
+    let mut commits = index
         .commits()
         .into_iter()
         .map(|c| c.sha.to_string())
         .collect::<HashSet<_>>();
     let queued = conn.queued_commits().await;
+
+    // In theory this is insufficient -- there could be multiple commits in
+    // progress -- but in practice that really shouldn't happen.
+    //
+    // The failure case here is also just prematurely posting a single comment,
+    // which should be fine. mark_complete below will ensure that only happens
+    // once.
+    //
+    // If this becomes more of a problem, it should be fairly easy to instead
+    // query that there are no in progress benchmarks for commit X.
+    match conn.in_progress_artifact().await {
+        None => {}
+        Some(ArtifactId::Commit(c)) => {
+            commits.insert(c.sha);
+        }
+        Some(ArtifactId::Artifact(_)) => {
+            // do nothing, for now, though eventually we'll want an artifact
+            // queue
+        }
+    }
 
     for commit in queued {
         if !commits.contains(&commit.sha) {

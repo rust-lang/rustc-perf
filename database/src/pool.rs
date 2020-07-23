@@ -65,20 +65,14 @@ pub trait Connection: Send + Sync {
     // Collector status API
 
     async fn collector_start(&self, aid: ArtifactIdNumber, steps: &[String]);
-    async fn collector_start_step(&self, aid: ArtifactIdNumber, step: &str);
+
+    // Returns `true` if the step was started, i.e., it did not previously have
+    // an end. Otherwise returns false, indicating that we can skip it.
+    async fn collector_start_step(&self, aid: ArtifactIdNumber, step: &str) -> bool;
     async fn collector_end_step(&self, aid: ArtifactIdNumber, step: &str);
 
-    // This returns `true` if the collector commands can be placed in a separate
-    // transaction.
-    //
-    // Currently, the sqlite backend does not support "regular" usage where they
-    // are used for genuine progress reporting. sqlite does not support
-    // concurrent writers -- it will return an error (or wait, if a busy timeout
-    // is configured).
-    //
-    // For now we don't care much as sqlite is not used in production and in
-    // local usage you can just look at the logs.
-    fn separate_transaction_for_collector(&self) -> bool;
+    // Returns an artifact that is in progress.
+    async fn in_progress_artifact(&self) -> Option<ArtifactId>;
 }
 
 #[async_trait::async_trait]

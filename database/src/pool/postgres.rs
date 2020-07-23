@@ -1,6 +1,7 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{
-    ArtifactIdNumber, Cache, CollectionId, Commit, Crate, Date, Index, Profile, QueuedCommit,
+    ArtifactId, ArtifactIdNumber, Cache, CollectionId, Commit, Crate, Date, Index, Profile,
+    QueuedCommit,
 };
 use anyhow::Context as _;
 use chrono::{DateTime, TimeZone, Utc};
@@ -167,6 +168,7 @@ static MIGRATIONS: &[&str] = &[
         end_time timestamptz
     );
     "#,
+    r#"alter table collector_progress add unique (aid, step);"#,
 ];
 
 #[async_trait::async_trait]
@@ -659,9 +661,9 @@ where
             .unwrap();
     }
 
-    async fn artifact_id(&self, artifact: &crate::ArtifactId) -> ArtifactIdNumber {
+    async fn artifact_id(&self, artifact: &ArtifactId) -> ArtifactIdNumber {
         let (name, date, ty) = match artifact {
-            crate::ArtifactId::Commit(commit) => (
+            ArtifactId::Commit(commit) => (
                 commit.sha.to_string(),
                 if commit.is_try() {
                     None
@@ -670,7 +672,7 @@ where
                 },
                 if commit.is_try() { "try" } else { "master" },
             ),
-            crate::ArtifactId::Artifact(a) => (a.clone(), None, "release"),
+            ArtifactId::Artifact(a) => (a.clone(), None, "release"),
         };
 
         let aid = self.conn()
@@ -770,6 +772,19 @@ where
             .unwrap();
     }
     async fn record_benchmark(&self, krate: &str, supports_stable: bool) {
+        if let Some(r) = self
+            .conn()
+            .query_opt(
+                "select stabilized from benchmark where name = $1",
+                &[&krate],
+            )
+            .await
+            .unwrap()
+        {
+            if r.get::<_, bool>(0) == supports_stable {
+                return;
+            }
+        }
         self.conn()
             .execute(
                 "insert into benchmark (name, stabilized) VALUES ($1, $2)
@@ -781,6 +796,7 @@ where
     }
 
     async fn collector_start(&self, aid: ArtifactIdNumber, steps: &[String]) {
+        // Clean up -- we'll re-insert any missing things in the loop below.
         self.conn()
             .execute(
                 "delete from collector_progress where start_time is null or end_time is null;",
@@ -792,34 +808,73 @@ where
         for step in steps {
             self.conn()
                 .execute(
-                    "insert into collector_progress(aid, step) VALUES ($1, $2)",
+                    "insert into collector_progress(aid, step) VALUES ($1, $2)
+                    ON CONFLICT DO NOTHING",
                     &[&(aid.0 as i16), &step],
                 )
                 .await
                 .unwrap();
         }
     }
-    async fn collector_start_step(&self, aid: ArtifactIdNumber, step: &str) {
+    async fn collector_start_step(&self, aid: ArtifactIdNumber, step: &str) -> bool {
+        // If we modified a row, then we populated a start time, so we're good
+        // to go. Otherwise we should just skip this step.
         self.conn()
             .execute(
                 "update collector_progress set start_time = statement_timestamp() \
-                where aid = $1 and step = $2 and start_time is null and end_time is null;",
+                where aid = $1 and step = $2 and end_time is null;",
                 &[&(aid.0 as i16), &step],
             )
             .await
-            .unwrap();
+            .unwrap()
+            == 1
     }
     async fn collector_end_step(&self, aid: ArtifactIdNumber, step: &str) {
-        self.conn()
+        let did_modify = self
+            .conn()
             .execute(
                 "update collector_progress set end_time = statement_timestamp() \
                 where aid = $1 and step = $2 and start_time is not null and end_time is null;",
                 &[&(aid.0 as i16), &step],
             )
             .await
-            .unwrap();
+            .unwrap()
+            == 1;
+        if !did_modify {
+            log::error!("did not end {} for {:?}", step, aid);
+        }
     }
-    fn separate_transaction_for_collector(&self) -> bool {
-        true
+    async fn in_progress_artifact(&self) -> Option<ArtifactId> {
+        let rows = self
+            .conn()
+            .query(
+                "select distinct aid from collector_progress where end_time is null order by aid limit 1",
+                &[],
+            )
+            .await
+            .unwrap();
+        let aid = rows.into_iter().next().map(|row| row.get::<_, i16>(0))?;
+
+        let row = self
+            .conn()
+            .query_one(
+                "select name, date, type from artifact where id = $1",
+                &[&aid],
+            )
+            .await
+            .unwrap();
+
+        let ty = row.get::<_, String>(2);
+        Some(match ty.as_str() {
+            "try" | "master" => ArtifactId::Commit(Commit {
+                sha: row.get(0),
+                date: Date(row.get(1)),
+            }),
+            "release" => ArtifactId::Artifact(row.get(0)),
+            _ => {
+                log::error!("unknown ty {:?}", ty);
+                return None;
+            }
+        })
     }
 }

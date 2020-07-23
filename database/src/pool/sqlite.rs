@@ -1,6 +1,6 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
+use crate::{ArtifactId, CollectionId, Commit, Crate, Date, Profile};
 use crate::{ArtifactIdNumber, Index, QueryDatum, QueuedCommit};
-use crate::{CollectionId, Commit, Crate, Date, Profile};
 use chrono::{TimeZone, Utc};
 use hashbrown::HashMap;
 use rusqlite::params;
@@ -145,7 +145,8 @@ static MIGRATIONS: &[&str] = &[
         aid integer not null references artifact(id) on delete cascade on update cascade,
         step text not null,
         start integer,
-        end integer
+        end integer,
+        UNIQUE(aid, step)
     );
     "#,
 ];
@@ -227,7 +228,7 @@ impl Connection for SqliteConnection {
     async fn record_duration(&self, artifact: ArtifactIdNumber, duration: Duration) {
         self.raw_ref()
             .prepare_cached(
-                "insert into artifact_collection_duration (aid, date_recorded, duration) VALUES (?, strftime('%s','now'), ?)",
+                "insert or ignore into artifact_collection_duration (aid, date_recorded, duration) VALUES (?, strftime('%s','now'), ?)",
             )
             .unwrap()
             .execute(params![artifact.0, duration.as_secs() as i64])
@@ -644,31 +645,75 @@ impl Connection for SqliteConnection {
         for step in steps {
             self.raw_ref()
                 .execute(
-                    "insert into collector_progress(aid, step) VALUES (?, ?)",
+                    "insert or ignore into collector_progress(aid, step) VALUES (?, ?)",
                     params![&aid.0, step],
                 )
                 .unwrap();
         }
     }
-    async fn collector_start_step(&self, aid: ArtifactIdNumber, step: &str) {
+    async fn collector_start_step(&self, aid: ArtifactIdNumber, step: &str) -> bool {
         self.raw_ref()
             .execute(
                 "update collector_progress set start = strftime('%s','now') \
-            where aid = ? and step = ? and start is null;",
+                where aid = ? and step = ? and end is null;",
                 params![&aid.0, &step],
             )
-            .unwrap();
+            .unwrap()
+            == 1
     }
     async fn collector_end_step(&self, aid: ArtifactIdNumber, step: &str) {
-        self.raw_ref()
+        let did_modify = self
+            .raw_ref()
             .execute(
                 "update collector_progress set end = strftime('%s','now') \
-            where aid = ? and step = ? and start is not null and end is null;",
+                where aid = ? and step = ? and start is not null and end is null;",
                 params![&aid.0, &step],
             )
-            .unwrap();
+            .unwrap()
+            == 1;
+        if !did_modify {
+            log::error!("did not end {} for {:?}", step, aid);
+        }
     }
-    fn separate_transaction_for_collector(&self) -> bool {
-        false
+    async fn in_progress_artifact(&self) -> Option<ArtifactId> {
+        let aid = self
+            .raw_ref()
+            .query_row(
+                "select distinct aid from collector_progress where end is null order by aid limit 1",
+                params![],
+                |r| r.get::<_, i16>(0),
+            )
+            .optional()
+            .unwrap()?;
+
+        let (name, date, ty) = self
+            .raw_ref()
+            .query_row(
+                "select name, date, type from artifact where id = ?",
+                params![&aid],
+                |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, Option<i64>>(1)?,
+                        r.get::<_, String>(2)?,
+                    ))
+                },
+            )
+            .unwrap();
+
+        Some(match ty.as_str() {
+            "try" | "master" => ArtifactId::Commit(Commit {
+                sha: name,
+                date: date
+                    .map(|d| Utc.timestamp(d, 0))
+                    .map(Date)
+                    .unwrap_or_else(|| Date::ymd_hms(2001, 01, 01, 0, 0, 0)),
+            }),
+            "release" => ArtifactId::Artifact(name),
+            _ => {
+                log::error!("unknown ty {:?}", ty);
+                return None;
+            }
+        })
     }
 }
