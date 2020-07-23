@@ -167,6 +167,7 @@ static MIGRATIONS: &[&str] = &[
         end_time timestamptz
     );
     "#,
+    r#"alter table collector_progress add unique (aid, step);"#,
 ];
 
 #[async_trait::async_trait]
@@ -781,6 +782,7 @@ where
     }
 
     async fn collector_start(&self, aid: ArtifactIdNumber, steps: &[String]) {
+        // Clean up -- we'll re-insert any missing things in the loop below.
         self.conn()
             .execute(
                 "delete from collector_progress where start_time is null or end_time is null;",
@@ -792,34 +794,40 @@ where
         for step in steps {
             self.conn()
                 .execute(
-                    "insert into collector_progress(aid, step) VALUES ($1, $2)",
+                    "insert into collector_progress(aid, step) VALUES ($1, $2)
+                    ON CONFLICT DO NOTHING",
                     &[&(aid.0 as i16), &step],
                 )
                 .await
                 .unwrap();
         }
     }
-    async fn collector_start_step(&self, aid: ArtifactIdNumber, step: &str) {
+    async fn collector_start_step(&self, aid: ArtifactIdNumber, step: &str) -> bool {
+        // If we modified a row, then we populated a start time, so we're good
+        // to go. Otherwise we should just skip this step.
         self.conn()
             .execute(
                 "update collector_progress set start_time = statement_timestamp() \
-                where aid = $1 and step = $2 and start_time is null and end_time is null;",
+                where aid = $1 and step = $2 and end_time is null;",
                 &[&(aid.0 as i16), &step],
             )
             .await
-            .unwrap();
+            .unwrap()
+            == 1
     }
     async fn collector_end_step(&self, aid: ArtifactIdNumber, step: &str) {
-        self.conn()
+        let did_modify = self
+            .conn()
             .execute(
                 "update collector_progress set end_time = statement_timestamp() \
                 where aid = $1 and step = $2 and start_time is not null and end_time is null;",
                 &[&(aid.0 as i16), &step],
             )
             .await
-            .unwrap();
-    }
-    fn separate_transaction_for_collector(&self) -> bool {
-        true
+            .unwrap()
+            == 1;
+        if !did_modify {
+            log::error!("did not end {} for {:?}", step, aid);
+        }
     }
 }

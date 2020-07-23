@@ -195,14 +195,6 @@ fn bench(
     self_profile: bool,
 ) -> BenchmarkErrors {
     let mut conn = rt.block_on(pool.connection());
-    let status_conn;
-    let status_conn: Option<&dyn database::Connection> =
-        if conn.separate_transaction_for_collector() {
-            status_conn = rt.block_on(pool.connection());
-            Some(&*status_conn)
-        } else {
-            None
-        };
     let mut errors = BenchmarkErrors::new();
     eprintln!("Benchmarking {} for triple {}", cid, compiler.triple);
 
@@ -215,38 +207,24 @@ fn bench(
         );
     }
 
-    let mut tx = rt.block_on(conn.transaction());
-    let index = rt.block_on(database::Index::load(tx.conn()));
-    let has_collected = match cid {
-        ArtifactId::Commit(commit) => index.commits().iter().any(|c| c == commit),
-        ArtifactId::Artifact(id) => index.artifacts().any(|a| a == id),
-    };
-    if has_collected {
-        eprintln!("'{}' has previously been collected, aborting.", cid);
-        eprintln!(
-            "Note that this behavior is likely to change in the future \
-            to collect and append the data instead."
-        );
-        return errors;
-    }
-    let interned_cid = rt.block_on(tx.conn().artifact_id(&cid));
+    let interned_cid = rt.block_on(conn.artifact_id(&cid));
 
     let start = Instant::now();
     let steps = benchmarks
         .iter()
         .map(|b| b.name.to_string())
         .collect::<Vec<_>>();
-    rt.block_on(
-        status_conn
-            .unwrap_or_else(|| &*tx.conn())
-            .collector_start(interned_cid, &steps),
-    );
+    rt.block_on(conn.collector_start(interned_cid, &steps));
+    let mut skipped = false;
     for (nth_benchmark, benchmark) in benchmarks.iter().enumerate() {
-        rt.block_on(
-            status_conn
-                .unwrap_or_else(|| &*tx.conn())
-                .collector_start_step(interned_cid, &benchmark.name.to_string()),
-        );
+        let is_fresh =
+            rt.block_on(conn.collector_start_step(interned_cid, &benchmark.name.to_string()));
+        if !is_fresh {
+            skipped = true;
+            eprintln!("skipping {} -- already benchmarked", benchmark.name);
+            continue;
+        }
+        let mut tx = rt.block_on(conn.transaction());
         rt.block_on(
             tx.conn()
                 .record_benchmark(benchmark.name.0.as_str(), benchmark.supports_stable()),
@@ -278,19 +256,19 @@ fn bench(
             ));
         };
         rt.block_on(
-            status_conn
-                .unwrap_or_else(|| &*tx.conn())
+            tx.conn()
                 .collector_end_step(interned_cid, &benchmark.name.to_string()),
         );
+        rt.block_on(tx.commit()).expect("committed");
     }
     let end = start.elapsed();
 
     eprintln!("collection took {:?}", end);
 
-    rt.block_on(tx.conn().record_duration(interned_cid, end));
-
-    // Publish results now that we've finished fully with this commit.
-    rt.block_on(tx.commit()).unwrap();
+    if !skipped {
+        log::info!("skipping duration record -- skipped parts of run");
+        rt.block_on(conn.record_duration(interned_cid, end));
+    }
 
     rt.block_on(async move {
         // This ensures that we're good to go with the just updated data.
