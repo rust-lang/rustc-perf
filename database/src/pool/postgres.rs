@@ -862,7 +862,9 @@ where
                 &[&aid],
             )
             .await
-            .unwrap();
+            // If we couldn't find the row, early exit with `None`. This is a
+            // transition state -- wouldn't be needed in the long run.
+            .ok()?;
 
         let ty = row.get::<_, String>(2);
         Some(match ty.as_str() {
