@@ -772,6 +772,19 @@ where
             .unwrap();
     }
     async fn record_benchmark(&self, krate: &str, supports_stable: bool) {
+        if let Some(r) = self
+            .conn()
+            .query_opt(
+                "select stabilized from benchmark where name = $1",
+                &[&krate],
+            )
+            .await
+            .unwrap()
+        {
+            if r.get::<_, bool>(0) == supports_stable {
+                return;
+            }
+        }
         self.conn()
             .execute(
                 "insert into benchmark (name, stabilized) VALUES ($1, $2)
