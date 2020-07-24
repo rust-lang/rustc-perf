@@ -172,7 +172,7 @@ impl Profiler {
                 }
             }
             Profiler::LlvmLines => match build_kind {
-                BuildKind::Debug | BuildKind::Opt => Some("rustc"),
+                BuildKind::Debug | BuildKind::Opt => Some("llvm-lines"),
                 BuildKind::Check | BuildKind::Doc => None,
             },
         }
