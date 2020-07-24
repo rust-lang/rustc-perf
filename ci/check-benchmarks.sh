@@ -1,10 +1,10 @@
 #!/bin/bash
 
-set -e -x;
+set -eE -x;
 
 bash -c "while true; do sleep 30; echo \$(date) - running ...; done" &
 PING_LOOP_PID=$!
-trap 'kill $PING_LOOP_PID' ERR
+trap 'kill $PING_LOOP_PID' ERR 1 2 3 6
 
 # Install a toolchain.
 RUST_BACKTRACE=1 RUST_LOG=collector_raw_cargo=trace,collector=debug,rust_sysroot=debug \
