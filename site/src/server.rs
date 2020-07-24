@@ -276,7 +276,27 @@ pub async fn handle_status_page(data: Arc<InputData>) -> status::Response {
 
     let missing = data.missing_commits().await;
     // FIXME: no current builds
-    let current = None;
+    let conn = data.conn().await;
+    let current = if let Some(artifact) = conn.in_progress_artifact().await {
+        let steps = conn
+            .in_progress_steps(&artifact)
+            .await
+            .into_iter()
+            .map(|s| crate::api::status::Step {
+                step: s.name,
+                is_done: s.is_done,
+                expected_duration: s.expected.as_secs(),
+                current_progress: s.duration.as_secs(),
+            })
+            .collect();
+
+        Some(crate::api::status::CurrentState {
+            artifact,
+            progress: steps,
+        })
+    } else {
+        None
+    };
 
     status::Response {
         last_commit,

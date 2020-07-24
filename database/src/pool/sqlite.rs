@@ -716,4 +716,38 @@ impl Connection for SqliteConnection {
             }
         })
     }
+    async fn in_progress_steps(&self, artifact: &ArtifactId) -> Vec<crate::Step> {
+        let aid = self.artifact_id(artifact).await;
+
+        self.raw_ref()
+            .prepare(
+                "
+                select
+                    step,
+                    end_time is not null,
+                    coalesce(end, strftime('%s', 'now')) - start,
+                    (select end - start
+                        from collector_progress as cp
+                            where
+                                cp.step = collector_progress.step
+                                and cp.start is not null
+                                and cp.end is not null
+                            limit 1
+                    )
+                from collector_progress where aid = ? order by step
+            ",
+            )
+            .unwrap()
+            .query_map(params![&aid.0], |row| {
+                Ok(crate::Step {
+                    name: row.get(0)?,
+                    is_done: row.get(1)?,
+                    duration: Duration::from_secs(row.get::<_, i64>(2)? as u64),
+                    expected: Duration::from_secs(row.get::<_, i64>(3)? as u64),
+                })
+            })
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect()
+    }
 }

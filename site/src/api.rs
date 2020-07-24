@@ -160,7 +160,8 @@ pub mod days {
 }
 
 pub mod status {
-    use crate::load::{CurrentState, MissingReason};
+    use crate::load::MissingReason;
+    use database::ArtifactId;
     use database::Commit;
     use serde::{Deserialize, Serialize};
 
@@ -171,7 +172,23 @@ pub mod status {
         pub error: Option<String>,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Serialize, Debug)]
+    pub struct Step {
+        pub step: String,
+        pub is_done: bool,
+        // Seconds
+        pub expected_duration: u64,
+        // Seconds since start
+        pub current_progress: u64,
+    }
+
+    #[derive(Serialize, Debug)]
+    pub struct CurrentState {
+        pub artifact: ArtifactId,
+        pub progress: Vec<Step>,
+    }
+
+    #[derive(Serialize, Debug)]
     pub struct Response {
         pub last_commit: Commit,
         pub benchmarks: Vec<BenchmarkStatus>,

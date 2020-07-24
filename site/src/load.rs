@@ -37,13 +37,6 @@ pub enum MissingReason {
     InProgress,
 }
 
-#[derive(Clone, Deserialize, Serialize, Debug)]
-pub struct CurrentState {
-    pub commit: Commit,
-    pub issue: Option<github::Issue>,
-    pub benchmarks: Vec<Crate>,
-}
-
 #[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq)]
 pub struct TryCommit {
     pub sha: String,
