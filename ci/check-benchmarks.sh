@@ -11,7 +11,9 @@ RUST_BACKTRACE=1 RUST_LOG=collector_raw_cargo=trace,collector=debug,rust_sysroot
     bindir=`cargo run -p collector --bin collector install_next`
 
 # Do some benchmarking.
-RUST_BACKTRACE=1 RUST_LOG=collector_raw_cargo=trace,collector=debug,rust_sysroot=debug \
+RUST_BACKTRACE=1 \
+    CARGO_LOG=cargo::core::compiler::fingerprint=info \
+    RUST_LOG=collector_raw_cargo=trace,collector=debug,rust_sysroot=debug \
     cargo run -p collector --bin collector -- \
     bench_local $bindir/rustc Test \
         --builds Check,Doc \
