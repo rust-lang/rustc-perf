@@ -674,5 +674,14 @@ impl Index {
     }
 }
 
+#[derive(Debug)]
+pub struct Step {
+    pub name: String,
+    pub is_done: bool,
+    // The amount of time this step has been ongoing (or took, if completed).
+    pub duration: Duration,
+    pub expected: Duration,
+}
+
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct CollectionId(i32);

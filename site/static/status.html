@@ -56,11 +56,57 @@
         }
         let missing_div = document.querySelector("#missing-commits");
         if (data.current !== null) {
+            let table = document.createElement("table");
+            let tr = document.createElement("tr");
+            let th = document.createElement("th");
+            th.innerText = "Step";
+            tr.appendChild(th);
+            th = document.createElement("th");
+            tr.appendChild(th);
+            th = document.createElement("th");
+            th.innerText = "Took";
+            tr.appendChild(th);
+            th = document.createElement("th");
+            th.innerText = "Expected";
+            tr.appendChild(th);
+            table.appendChild(tr);
+
+            let left = 0;
+            for (let step of data.current.progress) {
+                let tr = document.createElement("tr");
+                let td = document.createElement("td");
+                td.innerText = step.step;
+                tr.appendChild(td);
+                td = document.createElement("td");
+                let progress = document.createElement("progress");
+                progress.setAttribute("max", step.expected_duration);
+                progress.setAttribute("value", step.is_done ?
+                step.expected_duration : step.current_progress);
+                td.appendChild(progress);
+                tr.appendChild(td);
+                td = document.createElement("td");
+                td.innerHTML = step.current_progress == 0 ? "" :
+                    format_duration(step.current_progress);
+                tr.appendChild(td);
+                td = document.createElement("td");
+                td.innerHTML = format_duration(step.expected_duration);
+                tr.appendChild(td);
+                if (!step.is_done) {
+                    left += step.expected_duration - step.current_progress;
+                }
+                table.appendChild(tr);
+            }
             let element = document.createElement("p");
-            element.innerHTML = `Currently benchmarking:
-            ${commit_url(data.current.commit)}<br>${data.current.benchmarks.length} benchmarks \
-            left out of ${data.benchmarks.length} total: ${data.current.benchmarks.join(", ")}.`;
+            let artifact_desc = "";
+            if (data.current.artifact.Commit) {
+                artifact_desc = commit_url(data.current.artifact.Commit);
+            } else {
+                artifact_desc = data.current.Artifact;
+            }
+            element.innerHTML = `Currently benchmarking: ${artifact_desc}.
+                <br>Time left: ${format_duration(left)}`;
             missing_div.appendChild(element);
+            missing_div.appendChild(table);
         } else {
             let element = document.createElement("p");
             element.innerHTML = `(Current work is not currently displayed; this is being worked on)`;
@@ -107,6 +153,19 @@
 
     function commit_url(commit) {
         return `<a href="https://github.com/rust-lang/rust/commit/${commit.sha}">${commit.sha.substr(0, 13)}</a>`;
+    }
+
+    function format_duration(seconds) {
+        let secs = seconds % 60;
+        let mins = Math.trunc(seconds / 60);
+        let hours = Math.trunc(mins / 60);
+        mins -= hours*60;
+
+        let s = `${mins < 10 ? "&nbsp;" + mins : mins}m${secs < 10 ? "0" + secs : secs}s`;
+        if (hours > 0) {
+            s = `${hours}h ${s}`;
+        }
+        return s;
     }
 
     function addHours(date, hours) {

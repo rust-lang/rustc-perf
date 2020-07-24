@@ -240,6 +240,7 @@ pub struct CachedStatements {
     get_error: Statement,
     collection_id: Statement,
     record_duration: Statement,
+    in_progress_steps: Statement,
 }
 
 pub struct PostgresTransaction<'a> {
@@ -360,6 +361,23 @@ impl PostgresConnection {
                         date_recorded,
                         duration
                     ) VALUES ($1, CURRENT_TIMESTAMP, $2)
+                ").await.unwrap(),
+                in_progress_steps: conn.prepare("
+                select step,
+                    end_time is not null,
+                    extract(epoch from interval '0 seconds'::interval +
+                        coalesce(end_time, statement_timestamp()) - start_time)::int4,
+                    extract(
+                        epoch from interval '0 seconds'::interval +
+                        (select end_time - start_time
+                        from collector_progress as cp
+                            where
+                                cp.step = collector_progress.step
+                                and cp.start_time is not null
+                                and cp.end_time is not null
+                            limit 1
+                        ))::int4
+                from collector_progress where aid = $1 order by step
                 ").await.unwrap(),
             }),
             conn,
@@ -878,5 +896,24 @@ where
                 return None;
             }
         })
+    }
+    async fn in_progress_steps(&self, artifact: &ArtifactId) -> Vec<crate::Step> {
+        let aid = self.artifact_id(artifact).await;
+
+        let steps = self
+            .conn()
+            .query(&self.statements().in_progress_steps, &[&(aid.0 as i16)])
+            .await
+            .unwrap();
+
+        steps
+            .into_iter()
+            .map(|row| crate::Step {
+                name: row.get(0),
+                is_done: row.get(1),
+                duration: Duration::from_secs(row.get::<_, Option<i32>>(2).unwrap_or(0) as u64),
+                expected: Duration::from_secs(row.get::<_, i32>(3) as u64),
+            })
+            .collect()
     }
 }
