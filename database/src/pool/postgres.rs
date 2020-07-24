@@ -888,7 +888,10 @@ where
         Some(match ty.as_str() {
             "try" | "master" => ArtifactId::Commit(Commit {
                 sha: row.get(0),
-                date: Date(row.get(1)),
+                date: row
+                    .get::<_, Option<_>>(1)
+                    .map(Date)
+                    .unwrap_or_else(|| Date::ymd_hms(2001, 01, 01, 0, 0, 0)),
             }),
             "release" => ArtifactId::Artifact(row.get(0)),
             _ => {
