@@ -76,7 +76,8 @@ RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=
 test -f results/msout-Test-helloworld-Check-Full
 grep -q "snapshot=0" results/msout-Test-helloworld-Check-Full
 
-# eprintln.
+# eprintln. The output file is empty because a vanilla rustc doesn't print
+# anything to stderr.
 RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
     cargo run -p collector --bin collector -- \
     profile_local eprintln $bindir/rustc Test \
@@ -84,8 +85,8 @@ RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=
         --cargo $bindir/cargo \
         --include helloworld \
         --runs Full
-test -f results/eprintln-Test-helloworld-Check-Full
-grep -q "Checking helloworld" results/eprintln-Test-helloworld-Check-Full
+test   -f results/eprintln-Test-helloworld-Check-Full
+test ! -s results/eprintln-Test-helloworld-Check-Full
 
 # llvm-lines. `Debug` not `Check` because it doesn't support `Check` builds.
 RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \

@@ -661,7 +661,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
             }
 
             // -Zself-profile produces (via rustc-fake) a data directory called
-            // 'Zsp' containing three files with names of the form
+            // `Zsp` containing three files with names of the form
             // `$BENCHMARK-$PID.{events,string_data,string_index}`. We copy it
             // from the temp dir to the output dir, renaming the files within
             // as `Zsp.{events,string_data,string_index}` in the process, then
@@ -703,8 +703,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 // Run `summarize`.
                 let mut summarize_cmd = Command::new("summarize");
                 summarize_cmd.arg("summarize").arg(&zsp_files_prefix);
-                let output = summarize_cmd.output()?;
-                fs::write(&summarize_file, &output.stdout)?;
+                fs::write(&summarize_file, &summarize_cmd.output()?.stdout)?;
 
                 // Run `flamegraph`.
                 let mut flamegraph_cmd = Command::new("flamegraph");
@@ -719,15 +718,16 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 fs::rename("chrome_profiler.json", crox_file)?;
             }
 
-            // -Ztime-passes writes its output to stdout. We copy that output
-            // into a file in the output dir.
+            // `-Ztime-passes` output is redirected (via rustc-fake) to a file
+            // called `Ztp`. We copy that output into a file in the output dir.
             Profiler::TimePasses => {
+                let tmp_ztp_file = filepath(data.cwd.as_ref(), "Ztp");
                 let ztp_file = filepath(self.output_dir, &out_file("Ztp"));
 
-                fs::write(ztp_file, &output.stdout)?;
+                fs::copy(&tmp_ztp_file, &ztp_file)?;
             }
 
-            // perf-record produces (via rustc-fake) a data file called 'perf'.
+            // perf-record produces (via rustc-fake) a data file called `perf`.
             // We copy it from the temp dir to the output dir, giving it a new
             // name in the process.
             Profiler::PerfRecord => {
@@ -738,7 +738,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
             }
 
             // OProfile produces (via rustc-fake) a data directory called
-            // 'oprofile_data'. We copy it from the temp dir to the output dir,
+            // `oprofile_data`. We copy it from the temp dir to the output dir,
             // giving it a new name in the process, and then post-process it
             // twice to produce another two data files in the output dir.
             Profiler::OProfile => {
@@ -765,8 +765,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
                     .arg("--threshold")
                     .arg("0.5")
                     .arg(&session_dir_arg);
-                let output = op_report_cmd.output()?;
-                fs::write(oprep_file, &output.stdout)?;
+                fs::write(oprep_file, &op_report_cmd.output()?.stdout)?;
 
                 let mut op_annotate_cmd = Command::new("opannotate");
                 // Other possibly useful args: --assembly
@@ -775,11 +774,10 @@ impl<'a> Processor for ProfileProcessor<'a> {
                     .arg("--threshold")
                     .arg("0.5")
                     .arg(&session_dir_arg);
-                let output = op_annotate_cmd.output()?;
-                fs::write(opann_file, &output.stdout)?;
+                fs::write(opann_file, &op_annotate_cmd.output()?.stdout)?;
             }
 
-            // Cachegrind produces (via rustc-fake) a data file called 'cgout'.
+            // Cachegrind produces (via rustc-fake) a data file called `cgout`.
             // We copy it from the temp dir to the output dir, giving it a new
             // name in the process, and then post-process it to produce another
             // data file in the output dir.
@@ -795,11 +793,10 @@ impl<'a> Processor for ProfileProcessor<'a> {
                     .arg("--auto=yes")
                     .arg("--show-percs=yes")
                     .arg(&cgout_file);
-                let output = cg_annotate_cmd.output()?;
-                fs::write(cgann_file, &output.stdout)?;
+                fs::write(cgann_file, &cg_annotate_cmd.output()?.stdout)?;
             }
 
-            // Callgrind produces (via rustc-fake) a data file called 'clgout'.
+            // Callgrind produces (via rustc-fake) a data file called `clgout`.
             // We copy it from the temp dir to the output dir, giving it a new
             // name in the process, and then post-process it to produce another
             // data file in the output dir.
@@ -815,11 +812,10 @@ impl<'a> Processor for ProfileProcessor<'a> {
                     .arg("--auto=yes")
                     .arg("--show-percs=yes")
                     .arg(&clgout_file);
-                let output = clg_annotate_cmd.output()?;
-                fs::write(clgann_file, &output.stdout)?;
+                fs::write(clgann_file, &clg_annotate_cmd.output()?.stdout)?;
             }
 
-            // DHAT produces (via rustc-fake) a data file called 'dhout'. We
+            // DHAT produces (via rustc-fake) a data file called `dhout`. We
             // copy it from the temp dir to the output dir, giving it a new
             // name in the process.
             Profiler::DHAT => {
@@ -829,7 +825,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 fs::copy(&tmp_dhout_file, &dhout_file)?;
             }
 
-            // Massif produces (via rustc-fake) a data file called 'msout'. We
+            // Massif produces (via rustc-fake) a data file called `msout`. We
             // copy it from the temp dir to the output dir, giving it a new
             // name in the process.
             Profiler::Massif => {
@@ -839,12 +835,14 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 fs::copy(&tmp_msout_file, &msout_file)?;
             }
 
-            // `eprintln!` statements writes their output to stderr. We copy
-            // that output into a file in the output dir.
+            // `eprintln!` statements are redirected (via rustc-fake) to a file
+            // called `eprintln`. We copy it from the temp dir to the output
+            // dir, giving it a new name in the process.
             Profiler::Eprintln => {
+                let tmp_eprintln_file = filepath(data.cwd.as_ref(), "eprintln");
                 let eprintln_file = filepath(self.output_dir, &out_file("eprintln"));
 
-                fs::write(eprintln_file, &output.stderr)?;
+                fs::copy(&tmp_eprintln_file, &eprintln_file)?;
             }
 
             // `cargo llvm-lines` writes its output to stdout. We copy that
