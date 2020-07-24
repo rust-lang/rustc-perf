@@ -310,6 +310,10 @@ impl<'a> CargoProcess<'a> {
             // we want to wrap rustc.
             if let Some((ref mut processor, ..)) = self.processor_etc {
                 let profiler = processor.profiler(self.build_kind).name();
+                // If we're using a processor, we expect that only the crate
+                // we're interested in benchmarking will be built, not any
+                // dependencies.
+                cmd.env("EXPECT_ONLY_WRAPPED_RUSTC", "1");
                 cmd.arg("--wrap-rustc-with");
                 cmd.arg(profiler);
                 cmd.args(&self.rustc_args);
