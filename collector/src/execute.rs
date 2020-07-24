@@ -687,14 +687,12 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 let mut flamegraph_cmd = Command::new("flamegraph");
                 flamegraph_cmd.arg(&zsp_files_prefix);
                 flamegraph_cmd.status()?;
-                fs::write(&summarize_file, &output.stdout)?;
                 fs::rename("rustc.svg", flamegraph_file)?;
 
                 // Run `crox`.
                 let mut crox_cmd = Command::new("crox");
                 crox_cmd.arg(&zsp_files_prefix);
                 crox_cmd.status()?;
-                fs::write(&summarize_file, &output.stdout)?;
                 fs::rename("chrome_profiler.json", crox_file)?;
             }
 

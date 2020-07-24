@@ -427,8 +427,12 @@ fn main_result() -> anyhow::Result<i32> {
              'Doc', 'Opt', 'All'")
             (@arg CARGO:   --cargo   +takes_value "The path to the local Cargo to use")
             (@arg DB:      --db      +takes_value "Database output file")
-            (@arg EXCLUDE: --exclude +takes_value "Exclude benchmarks matching these")
-            (@arg INCLUDE: --include +takes_value "Include benchmarks matching these")
+            (@arg EXCLUDE: --exclude     +takes_value
+             "Exclude all benchmarks matching anything in\n\
+             this comma-separated list of patterns")
+            (@arg INCLUDE: --include     +takes_value
+             "Include only benchmarks matching something in\n\
+             this comma-separated list of patterns")
             (@arg RUNS:    --runs    +takes_value
              "One or more (comma-separated) of: 'Full',\n\
              'IncrFull', 'IncrUnchanged', 'IncrPatched', 'All'")
@@ -463,17 +467,22 @@ fn main_result() -> anyhow::Result<i32> {
             // Mandatory arguments
             (@arg PROFILER: +required +takes_value
              "One of: 'self-profile', 'time-passes', 'perf-record',\n\
-             'cachegrind', 'callgrind', ''dhat', 'massif', 'eprintln'")
+             'oprofile', 'cachegrind', 'callgrind', 'dhat', 'massif',\n\
+             'eprintln', 'llvm-lines'")
             (@arg RUSTC:    +required +takes_value "The path to the local rustc to benchmark")
             (@arg ID:       +required +takes_value "Identifier to associate benchmark results with")
 
              // Options
             (@arg BUILDS: --builds       +takes_value
-             "One or more (comma-separated) of: 'Check', 'Debug',\n\
-             'Doc', 'Opt', 'All'")
+             "One or more (comma-separated) of: 'Check', \n\
+             'Debug', 'Doc', 'Opt', 'All'")
             (@arg CARGO:   --cargo       +takes_value "The path to the local Cargo to use")
-            (@arg EXCLUDE: --exclude     +takes_value "Exclude benchmarks matching these")
-            (@arg INCLUDE: --include     +takes_value "Include benchmarks matching these")
+            (@arg EXCLUDE: --exclude     +takes_value
+             "Exclude all benchmarks matching anything in\n\
+             this comma-separated list of patterns")
+            (@arg INCLUDE: --include     +takes_value
+             "Include only benchmarks matching something in\n\
+             this comma-separated list of patterns")
             (@arg OUT_DIR: --("out-dir") +takes_value "Output directory")
             (@arg RUNS:    --runs        +takes_value
              "One or more (comma-separated) of: 'Full',\n\
