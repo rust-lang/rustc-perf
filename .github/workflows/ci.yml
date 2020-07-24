@@ -36,7 +36,11 @@ jobs:
   test_benchmarks:
     strategy:
       matrix:
-        BENCH_INCLUDE_EXCLUDE_OPTS: ["--exclude script-servo", "--include script-servo"]
+        BENCH_INCLUDE_EXCLUDE_OPTS: [
+          "--exclude script-servo,webrender-wrench,style-servo",
+          "--include webrender-wrench,style-servo",
+          "--include script-servo",
+        ]
     name: Test benchmarks
     runs-on: ubuntu-latest
     steps:
