@@ -110,6 +110,10 @@ jobs:
           toolchain: beta
           override: true
 
+      - name: Install profilers
+        run: |
+          cargo install cargo-llvm-lines
+
       - name: Configure environment
         run: |
           sudo apt-get update
