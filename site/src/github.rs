@@ -582,6 +582,11 @@ where
 }
 
 pub async fn post_finished(data: &InputData) {
+    // If the github token is not configured, do not run this -- we don't want
+    // to mark things as complete without posting the comment.
+    if data.config.keys.github.is_none() {
+        return;
+    }
     let conn = data.conn().await;
     let index = data.index.load();
     let mut commits = index
