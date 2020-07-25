@@ -258,6 +258,13 @@ impl<'a> CargoProcess<'a> {
     }
 
     fn run_rustc(&mut self) -> anyhow::Result<()> {
+        log::info!(
+            "run_rustc with incremental={}, run_kind={:?}, patch={:?}",
+            self.incremental,
+            self.processor_etc.as_ref().map(|v| v.1),
+            self.processor_etc.as_ref().and_then(|v| v.3)
+        );
+
         loop {
             // Get the subcommand. If it's not `rustc` it must should be a
             // subcommand that itself invokes `rustc` (so that the `FAKE_RUSTC`
@@ -962,8 +969,13 @@ impl Benchmark {
         // Build everything, including all dependent crates, in a temp dir with
         // the first build kind we're building for. The intent is to cache build
         // dependencies at least between runs.
+        //
+        // Cache with both incremental and non-incremental.
         let prep_dir = self.make_temp_dir(&self.path)?;
         self.mk_cargo_process(compiler, prep_dir.path(), build_kinds[0])
+            .run_rustc()?;
+        self.mk_cargo_process(compiler, prep_dir.path(), build_kinds[0])
+            .incremental(true)
             .run_rustc()?;
 
         for &build_kind in build_kinds {
