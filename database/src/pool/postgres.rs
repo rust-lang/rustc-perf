@@ -375,6 +375,7 @@ impl PostgresConnection {
                                 cp.step = collector_progress.step
                                 and cp.start_time is not null
                                 and cp.end_time is not null
+                            order by start_time desc
                             limit 1
                         ))::int4
                 from collector_progress where aid = $1 order by step
