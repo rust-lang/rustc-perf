@@ -63,7 +63,6 @@ fn generate_properties() {
         let entry = entry.unwrap();
         match entry.path().extension().and_then(|e| e.to_str()) {
             Some("mako") | Some("rs") | Some("py") | Some("zip") => {
-                println!("cargo:rerun-if-changed={}", entry.path().display());
             }
             _ => {}
         }
@@ -85,7 +84,6 @@ fn generate_properties() {
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:out_dir={}", env::var("OUT_DIR").unwrap());
     generate_properties();
     build_gecko::generate();
 }

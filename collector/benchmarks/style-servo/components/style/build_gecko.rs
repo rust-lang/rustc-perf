@@ -48,7 +48,6 @@ mod bindings {
     const BINDINGS_FILE: &'static str = "bindings.rs";
 
     fn read_config(path: &PathBuf) -> toml::Table {
-        println!("cargo:rerun-if-changed={}", path.to_str().unwrap());
         update_last_modified(&path);
 
         let mut contents = String::new();
@@ -143,7 +142,6 @@ mod bindings {
         let mut file = File::open(&path).unwrap();
         let mut content = String::new();
         file.read_to_string(&mut content).unwrap();
-        println!("cargo:rerun-if-changed={}", path.to_str().unwrap());
         added_paths.insert(path);
         // Find all includes and add them recursively
         for cap in INCLUDE_RE.captures_iter(&content) {
@@ -538,7 +536,6 @@ mod bindings {
     fn generate_atoms() {
         let script = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
             .join("gecko").join("regen_atoms.py");
-        println!("cargo:rerun-if-changed={}", script.display());
         let status = Command::new(&*PYTHON)
             .arg(&script)
             .arg(DISTDIR_PATH.as_os_str())
@@ -588,9 +585,7 @@ mod bindings {
 
     pub fn generate() {
         let dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("gecko/generated");
-        println!("cargo:rerun-if-changed={}", dir.display());
         copy_dir(&dir, &*OUTDIR_PATH, |path| {
-            println!("cargo:rerun-if-changed={}", path.display());
         }).expect("Fail to copy generated files to out dir");
     }
 }
@@ -598,7 +593,6 @@ mod bindings {
 pub fn generate() {
     use self::common::*;
     use std::fs;
-    println!("cargo:rerun-if-changed=build_gecko.rs");
     fs::create_dir_all(&*OUTDIR_PATH).unwrap();
     bindings::generate();
 }
