@@ -297,7 +297,7 @@ impl<'a> CargoProcess<'a> {
                 }
             }
             cmd.args(&self.cargo_args);
-            if log::log_enabled!(target: "raw_cargo_messages", log::Level::Trace) {
+            if env::var_os("CARGO_RECORD_TIMING").is_some() {
                 cmd.arg("-Zunstable-options");
                 cmd.arg("-Ztimings");
             }
