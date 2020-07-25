@@ -17,7 +17,7 @@ RUST_BACKTRACE=1 \
     RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
     cargo run -p collector --bin collector -- \
     bench_local $bindir/rustc Test \
-        --builds Check,Doc \
+        --builds $BUILD_KINDS \
         --cargo $bindir/cargo \
         --runs All \
         --rustdoc $bindir/rustdoc \

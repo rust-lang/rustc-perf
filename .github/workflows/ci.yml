@@ -41,6 +41,11 @@ jobs:
           "--include webrender-wrench,style-servo",
           "--include script-servo",
         ]
+        BUILD_KINDS: [
+          "Check,Doc",
+          "Debug",
+          "Opt",
+        ]
     name: Test benchmarks
     runs-on: ubuntu-latest
     steps:
@@ -71,6 +76,7 @@ jobs:
         run: sh -x -c "ci/check-benchmarks.sh"
         env:
           BENCH_INCLUDE_EXCLUDE_OPTS: ${{ matrix.BENCH_INCLUDE_EXCLUDE_OPTS }}
+          BUILD_KINDS: ${{ matrix.BUILD_KINDS }}
           SHELL: "/bin/bash"
 
   test_profiling:
