@@ -313,25 +313,29 @@ impl<'a> CargoProcess<'a> {
                 cmd.arg("--wrap-rustc-with");
                 cmd.arg(profiler);
                 cmd.args(&self.rustc_args);
+
+                // If we're not going to be in a processor, then there's no
+                // point ensuring that we recompile anything -- that just wastes
+                // time.
+
+                // Touch all the files under the Cargo.toml of the manifest we're
+                // benchmarking, so as to not refresh dependencies, which may be
+                // in-tree (e.g., in the case of the servo crates there are a lot of
+                // other components).
+                if let Some(file) = &self.touch_file {
+                    touch(&self.cwd, Path::new(&file))?;
+                } else {
+                    touch_all(
+                        &self.cwd.join(
+                            Path::new(&self.manifest_path)
+                                .parent()
+                                .expect("manifest has parent"),
+                        ),
+                    )?;
+                }
             }
 
             log::debug!("{:?}", cmd);
-
-            // Touch all the files under the Cargo.toml of the manifest we're
-            // benchmarking, so as to not refresh dependencies, which may be
-            // in-tree (e.g., in the case of the servo crates there are a lot of
-            // other components).
-            if let Some(file) = &self.touch_file {
-                touch(&self.cwd, Path::new(&file))?;
-            } else {
-                touch_all(
-                    &self.cwd.join(
-                        Path::new(&self.manifest_path)
-                            .parent()
-                            .expect("manifest has parent"),
-                    ),
-                )?;
-            }
 
             let output = command_output(&mut cmd)?;
             if let Some((ref mut processor, run_kind, run_kind_str, patch)) = self.processor_etc {
