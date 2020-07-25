@@ -10,11 +10,11 @@ PING_LOOP_PID=$!
 trap 'kill $PING_LOOP_PID' ERR 1 2 3 6
 
 # Install a toolchain.
-RUST_BACKTRACE=1 RUST_LOG=collector_raw_cargo=trace,collector=debug,rust_sysroot=debug \
+RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
     bindir=`cargo run -p collector --bin collector install_next`
 
 # Profile with eprintln.
-RUST_BACKTRACE=1 RUST_LOG=collector_raw_cargo=trace,collector=debug,rust_sysroot=debug \
+RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
     cargo run -p collector --bin collector -- \
     profile_local eprintln $bindir/rustc Test \
         --cargo $bindir/cargo \
@@ -29,7 +29,7 @@ test -f results/eprintln-Test-helloworld-Opt-Full
 test ! -e results/eprintln-Test-helloworld-Doc-Full
 
 # Profile with llvm-lines.
-RUST_BACKTRACE=1 RUST_LOG=collector_raw_cargo=trace,collector=debug,rust_sysroot=debug \
+RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
     cargo run -p collector --bin collector -- \
     profile_local llvm-lines $bindir/rustc Test \
         --builds Debug \
