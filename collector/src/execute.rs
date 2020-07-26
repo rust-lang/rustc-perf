@@ -233,10 +233,11 @@ impl<'a> CargoProcess<'a> {
             // env vars set, but it doesn't hurt to have them.
             .env("RUSTC", &*FAKE_RUSTC)
             .env("RUSTC_REAL", &self.compiler.rustc)
-            .env(
-                "CARGO_INCREMENTAL",
-                &format!("{}", self.incremental as usize),
-            )
+            // We separately pass -Cincremental to the leaf crate --
+            // CARGO_INCREMENTAL is cached separately for both the leaf crate
+            // and any in-tree dependencies, and we don't want that; it wastes
+            // time.
+            .env("CARGO_INCREMENTAL", "0")
             .current_dir(cwd)
             .arg(subcommand)
             .arg("--manifest-path")
@@ -258,6 +259,13 @@ impl<'a> CargoProcess<'a> {
     }
 
     fn run_rustc(&mut self) -> anyhow::Result<()> {
+        log::info!(
+            "run_rustc with incremental={}, run_kind={:?}, patch={:?}",
+            self.incremental,
+            self.processor_etc.as_ref().map(|v| v.1),
+            self.processor_etc.as_ref().and_then(|v| v.3)
+        );
+
         loop {
             // Get the subcommand. If it's not `rustc` it must should be a
             // subcommand that itself invokes `rustc` (so that the `FAKE_RUSTC`
@@ -297,7 +305,7 @@ impl<'a> CargoProcess<'a> {
                 }
             }
             cmd.args(&self.cargo_args);
-            if log::log_enabled!(target: "raw_cargo_messages", log::Level::Trace) {
+            if env::var_os("CARGO_RECORD_TIMING").is_some() {
                 cmd.arg("-Zunstable-options");
                 cmd.arg("-Ztimings");
             }
@@ -310,6 +318,10 @@ impl<'a> CargoProcess<'a> {
             // we want to wrap rustc.
             if let Some((ref mut processor, ..)) = self.processor_etc {
                 let profiler = processor.profiler(self.build_kind).name();
+                // If we're using a processor, we expect that only the crate
+                // we're interested in benchmarking will be built, not any
+                // dependencies.
+                cmd.env("EXPECT_ONLY_WRAPPED_RUSTC", "1");
                 cmd.arg("--wrap-rustc-with");
                 cmd.arg(profiler);
                 cmd.args(&self.rustc_args);
@@ -333,6 +345,13 @@ impl<'a> CargoProcess<'a> {
                         ),
                     )?;
                 }
+            }
+
+            if self.incremental {
+                cmd.arg("-C");
+                let mut incr_arg = std::ffi::OsString::from("incremental=");
+                incr_arg.push(self.cwd.join("incremental-state"));
+                cmd.arg(incr_arg);
             }
 
             log::debug!("{:?}", cmd);

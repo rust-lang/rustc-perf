@@ -34,6 +34,18 @@ jobs:
         if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/deploy'
 
   test_benchmarks:
+    strategy:
+      matrix:
+        BENCH_INCLUDE_EXCLUDE_OPTS: [
+          "--exclude script-servo,webrender-wrench,style-servo",
+          "--include webrender-wrench,style-servo",
+          "--include script-servo",
+        ]
+        BUILD_KINDS: [
+          "Check,Doc",
+          "Debug",
+          "Opt",
+        ]
     name: Test benchmarks
     runs-on: ubuntu-latest
     steps:
@@ -54,37 +66,8 @@ jobs:
           sudo apt-get install -y linux-tools-common linux-tools-generic linux-tools-`uname -r`
           echo -1 | sudo tee /proc/sys/kernel/perf_event_paranoid
 
-      - name: Build collector
-        run: cargo build -p collector
-
-      - name: Check benchmarks
-        run: sh -x -c "ci/check-benchmarks.sh"
-        env:
-          BENCH_INCLUDE_EXCLUDE_OPTS: "--exclude script-servo"
-
-  test_script_servo:
-    name: Test benchmark script-servo
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout the source code
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: 1
-
-      - name: Install latest beta
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: beta
-          override: true
-
-      - name: Configure environment
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y linux-tools-common linux-tools-generic linux-tools-`uname -r`
-          echo -1 | sudo tee /proc/sys/kernel/perf_event_paranoid
-
       - name: Install servo dependencies
-        run: sudo apt-get install -y llvm-dev clang libx11-dev python2.7 autoconf2.13
+        run: sudo apt-get install -y llvm-dev clang libx11-dev python2.7 autoconf2.13 libjemalloc-dev
 
       - name: Build collector
         run: cargo build -p collector
@@ -92,7 +75,9 @@ jobs:
       - name: Check benchmarks
         run: sh -x -c "ci/check-benchmarks.sh"
         env:
-          BENCH_INCLUDE_EXCLUDE_OPTS: "--include script-servo"
+          JEMALLOC_OVERRIDE: /usr/lib/x86_64-linux-gnu/libjemalloc.so
+          BENCH_INCLUDE_EXCLUDE_OPTS: ${{ matrix.BENCH_INCLUDE_EXCLUDE_OPTS }}
+          BUILD_KINDS: ${{ matrix.BUILD_KINDS }}
           SHELL: "/bin/bash"
 
   test_profiling:

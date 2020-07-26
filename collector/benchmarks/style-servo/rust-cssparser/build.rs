@@ -36,5 +36,5 @@ fn main() {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
     let tokenizer_rs = Path::new(&manifest_dir).join("src/tokenizer.rs");
     codegen::main(&tokenizer_rs);
-    println!("cargo:rerun-if-changed={}", tokenizer_rs.display());
+    println!("cargo:rerun-if-changed=build.rs");
 }

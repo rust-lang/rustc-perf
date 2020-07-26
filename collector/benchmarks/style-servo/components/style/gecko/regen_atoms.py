@@ -121,7 +121,6 @@ def collect_atoms(objdir):
     atoms = []
     for source in SOURCES:
         path = os.path.abspath(os.path.join(objdir, source.FILE))
-        print("cargo:rerun-if-changed={}".format(path))
         with open(path) as f:
             for line in f.readlines():
                 result = re.match(source.PATTERN, line)
@@ -242,7 +241,6 @@ def write_pseudo_elements(atoms, target_filename):
             pseudos.append(atom)
 
     pseudo_definition_template = os.path.join(GECKO_DIR, "pseudo_element_definition.mako.rs")
-    print("cargo:rerun-if-changed={}".format(pseudo_definition_template))
     contents = build.render(pseudo_definition_template, PSEUDOS=pseudos)
 
     with FileAvoidWrite(target_filename) as f:

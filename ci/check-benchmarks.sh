@@ -7,14 +7,17 @@ PING_LOOP_PID=$!
 trap 'kill $PING_LOOP_PID' ERR 1 2 3 6
 
 # Install a toolchain.
-RUST_BACKTRACE=1 RUST_LOG=collector_raw_cargo=trace,collector=debug,rust_sysroot=debug \
+RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
     bindir=`cargo run -p collector --bin collector install_next`
 
 # Do some benchmarking.
-RUST_BACKTRACE=1 RUST_LOG=collector_raw_cargo=trace,collector=debug,rust_sysroot=debug \
+RUST_BACKTRACE=1 \
+    RUST_LIB_BACKTRACE=0 \
+    CARGO_LOG=cargo::core::compiler::fingerprint=info \
+    RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
     cargo run -p collector --bin collector -- \
     bench_local $bindir/rustc Test \
-        --builds Check,Doc \
+        --builds $BUILD_KINDS \
         --cargo $bindir/cargo \
         --runs All \
         --rustdoc $bindir/rustdoc \

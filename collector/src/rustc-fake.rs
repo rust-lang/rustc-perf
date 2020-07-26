@@ -215,6 +215,12 @@ fn main() {
             }
         }
     } else {
+        if env::var_os("EXPECT_ONLY_WRAPPED_RUSTC").is_some() {
+            eprintln!("{:?} {:?}", tool, args);
+            eprintln!("exiting -- non-wrapped rustc");
+            std::process::exit(1);
+        }
+
         let mut cmd = Command::new(&tool);
         cmd.args(&args);
         exec(&mut cmd);
