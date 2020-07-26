@@ -233,10 +233,11 @@ impl<'a> CargoProcess<'a> {
             // env vars set, but it doesn't hurt to have them.
             .env("RUSTC", &*FAKE_RUSTC)
             .env("RUSTC_REAL", &self.compiler.rustc)
-            .env(
-                "CARGO_INCREMENTAL",
-                &format!("{}", self.incremental as usize),
-            )
+            // We separately pass -Cincremental to the leaf crate --
+            // CARGO_INCREMENTAL is cached separately for both the leaf crate
+            // and any in-tree dependencies, and we don't want that; it wastes
+            // time.
+            .env("CARGO_INCREMENTAL", "0")
             .current_dir(cwd)
             .arg(subcommand)
             .arg("--manifest-path")
@@ -344,6 +345,13 @@ impl<'a> CargoProcess<'a> {
                         ),
                     )?;
                 }
+            }
+
+            if self.incremental {
+                cmd.arg("-C");
+                let mut incr_arg = std::ffi::OsString::from("incremental=");
+                incr_arg.push(self.cwd.join("incremental-state"));
+                cmd.arg(incr_arg);
             }
 
             log::debug!("{:?}", cmd);
@@ -969,13 +977,8 @@ impl Benchmark {
         // Build everything, including all dependent crates, in a temp dir with
         // the first build kind we're building for. The intent is to cache build
         // dependencies at least between runs.
-        //
-        // Cache with both incremental and non-incremental.
         let prep_dir = self.make_temp_dir(&self.path)?;
         self.mk_cargo_process(compiler, prep_dir.path(), build_kinds[0])
-            .run_rustc()?;
-        self.mk_cargo_process(compiler, prep_dir.path(), build_kinds[0])
-            .incremental(true)
             .run_rustc()?;
 
         for &build_kind in build_kinds {
