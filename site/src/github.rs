@@ -599,7 +599,7 @@ pub async fn post_finished(data: &InputData) {
     for aid in conn.in_progress_artifacts().await {
         match aid {
             ArtifactId::Commit(c) => {
-                commits.insert(c.sha);
+                commits.remove(&c.sha);
             }
             ArtifactId::Artifact(_) => {
                 // do nothing, for now, though eventually we'll want an artifact
