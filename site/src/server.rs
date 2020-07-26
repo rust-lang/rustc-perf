@@ -249,35 +249,12 @@ fn prettify_log(log: &str) -> Option<String> {
 
 pub async fn handle_status_page(data: Arc<InputData>) -> status::Response {
     let idx = data.index.load();
-    let last_commit = idx.commits().last().unwrap().clone();
-
-    let mut benchmark_state = data
-        .conn()
-        .await
-        .get_error(ArtifactId::from(last_commit.clone()).lookup(&idx).unwrap())
-        .await
-        .into_iter()
-        .map(|(name, error)| {
-            let msg = if let Some(error) = error {
-                Some(prettify_log(&error).unwrap_or(error))
-            } else {
-                None
-            };
-            status::BenchmarkStatus {
-                name,
-                success: msg.is_none(),
-                error: msg,
-            }
-        })
-        .collect::<Vec<_>>();
-
-    benchmark_state.sort_by_key(|s| s.error.is_some());
-    benchmark_state.reverse();
+    let last_commit = idx.commits().last().cloned();
 
     let missing = data.missing_commits().await;
     // FIXME: no current builds
     let conn = data.conn().await;
-    let current = if let Some(artifact) = conn.in_progress_artifact().await {
+    let current = if let Some(artifact) = conn.in_progress_artifacts().await.pop() {
         let steps = conn
             .in_progress_steps(&artifact)
             .await
@@ -297,6 +274,33 @@ pub async fn handle_status_page(data: Arc<InputData>) -> status::Response {
     } else {
         None
     };
+
+    let errors = if let Some(last) = &last_commit {
+        data.conn()
+            .await
+            .get_error(ArtifactId::from(last.clone()).lookup(&idx).unwrap())
+            .await
+    } else {
+        Default::default()
+    };
+    let mut benchmark_state = errors
+        .into_iter()
+        .map(|(name, error)| {
+            let msg = if let Some(error) = error {
+                Some(prettify_log(&error).unwrap_or(error))
+            } else {
+                None
+            };
+            status::BenchmarkStatus {
+                name,
+                success: msg.is_none(),
+                error: msg,
+            }
+        })
+        .collect::<Vec<_>>();
+
+    benchmark_state.sort_by_key(|s| s.error.is_some());
+    benchmark_state.reverse();
 
     status::Response {
         last_commit,

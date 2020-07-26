@@ -190,7 +190,7 @@ pub mod status {
 
     #[derive(Serialize, Debug)]
     pub struct Response {
-        pub last_commit: Commit,
+        pub last_commit: Option<Commit>,
         pub benchmarks: Vec<BenchmarkStatus>,
         pub missing: Vec<(Commit, MissingReason)>,
         pub current: Option<CurrentState>,

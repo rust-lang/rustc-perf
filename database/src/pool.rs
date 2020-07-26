@@ -71,8 +71,7 @@ pub trait Connection: Send + Sync {
     async fn collector_start_step(&self, aid: ArtifactIdNumber, step: &str) -> bool;
     async fn collector_end_step(&self, aid: ArtifactIdNumber, step: &str);
 
-    // Returns an artifact that is in progress.
-    async fn in_progress_artifact(&self) -> Option<ArtifactId>;
+    async fn in_progress_artifacts(&self) -> Vec<ArtifactId>;
 
     async fn in_progress_steps(&self, aid: &ArtifactId) -> Vec<Step>;
 }

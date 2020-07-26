@@ -207,14 +207,23 @@ fn bench(
         );
     }
 
-    let interned_cid = rt.block_on(conn.artifact_id(&cid));
-
-    let start = Instant::now();
     let steps = benchmarks
         .iter()
         .map(|b| b.name.to_string())
         .collect::<Vec<_>>();
-    rt.block_on(conn.collector_start(interned_cid, &steps));
+
+    // Make sure there is no observable time when the artifact ID is available
+    // but the in-progress steps are not.
+    let interned_cid = {
+        let mut tx = rt.block_on(conn.transaction());
+        let interned_cid = rt.block_on(tx.conn().artifact_id(&cid));
+        rt.block_on(tx.conn().collector_start(interned_cid, &steps));
+
+        rt.block_on(tx.commit()).unwrap();
+        interned_cid
+    };
+
+    let start = Instant::now();
     let mut skipped = false;
     for (nth_benchmark, benchmark) in benchmarks.iter().enumerate() {
         let is_fresh =
