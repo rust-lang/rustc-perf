@@ -863,7 +863,7 @@ where
             log::error!("did not end {} for {:?}", step, aid);
         }
     }
-    async fn in_progress_artifact(&self) -> Option<ArtifactId> {
+    async fn in_progress_artifacts(&self) -> Vec<ArtifactId> {
         let rows = self
             .conn()
             .query(
@@ -872,34 +872,46 @@ where
             )
             .await
             .unwrap();
-        let aid = rows.into_iter().next().map(|row| row.get::<_, i16>(0))?;
+        let aids = rows
+            .into_iter()
+            .map(|row| row.get::<_, i16>(0))
+            .collect::<Vec<_>>();
 
-        let row = self
-            .conn()
-            .query_one(
-                "select name, date, type from artifact where id = $1",
-                &[&aid],
-            )
-            .await
-            // If we couldn't find the row, early exit with `None`. This is a
-            // transition state -- wouldn't be needed in the long run.
-            .ok()?;
+        let mut artifacts = Vec::new();
+        for aid in aids {
+            let row = self
+                .conn()
+                .query_one(
+                    "select name, date, type from artifact where id = $1",
+                    &[&aid],
+                )
+                .await;
 
-        let ty = row.get::<_, String>(2);
-        Some(match ty.as_str() {
-            "try" | "master" => ArtifactId::Commit(Commit {
-                sha: row.get(0),
-                date: row
-                    .get::<_, Option<_>>(1)
-                    .map(Date)
-                    .unwrap_or_else(|| Date::ymd_hms(2001, 01, 01, 0, 0, 0)),
-            }),
-            "release" => ArtifactId::Artifact(row.get(0)),
-            _ => {
-                log::error!("unknown ty {:?}", ty);
-                return None;
-            }
-        })
+            let row = match row {
+                Ok(row) => row,
+                Err(err) => {
+                    log::error!("skipping aid={} -- no such artifact: {:?}", aid, err);
+                    continue;
+                }
+            };
+
+            let ty = row.get::<_, String>(2);
+            artifacts.push(match ty.as_str() {
+                "try" | "master" => ArtifactId::Commit(Commit {
+                    sha: row.get(0),
+                    date: row
+                        .get::<_, Option<_>>(1)
+                        .map(Date)
+                        .unwrap_or_else(|| Date::ymd_hms(2001, 01, 01, 0, 0, 0)),
+                }),
+                "release" => ArtifactId::Artifact(row.get(0)),
+                _ => {
+                    log::error!("unknown ty {:?}", ty);
+                    continue;
+                }
+            });
+        }
+        artifacts
     }
     async fn in_progress_steps(&self, artifact: &ArtifactId) -> Vec<crate::Step> {
         let aid = self.artifact_id(artifact).await;

@@ -675,46 +675,50 @@ impl Connection for SqliteConnection {
             log::error!("did not end {} for {:?}", step, aid);
         }
     }
-    async fn in_progress_artifact(&self) -> Option<ArtifactId> {
-        let aid = self
-            .raw_ref()
-            .query_row(
-                "select distinct aid from collector_progress where end is null order by aid limit 1",
-                params![],
-                |r| r.get::<_, i16>(0),
-            )
-            .optional()
-            .unwrap()?;
-
-        let (name, date, ty) = self
-            .raw_ref()
-            .query_row(
-                "select name, date, type from artifact where id = ?",
-                params![&aid],
-                |r| {
-                    Ok((
-                        r.get::<_, String>(0)?,
-                        r.get::<_, Option<i64>>(1)?,
-                        r.get::<_, String>(2)?,
-                    ))
-                },
+    async fn in_progress_artifacts(&self) -> Vec<ArtifactId> {
+        let conn = self.raw_ref();
+        let mut aids = conn
+            .prepare(
+                "select distinct aid from collector_progress \
+                where end is null order by aid limit 1",
             )
             .unwrap();
 
-        Some(match ty.as_str() {
-            "try" | "master" => ArtifactId::Commit(Commit {
-                sha: name,
-                date: date
-                    .map(|d| Utc.timestamp(d, 0))
-                    .map(Date)
-                    .unwrap_or_else(|| Date::ymd_hms(2001, 01, 01, 0, 0, 0)),
-            }),
-            "release" => ArtifactId::Artifact(name),
-            _ => {
-                log::error!("unknown ty {:?}", ty);
-                return None;
-            }
-        })
+        let aids = aids.query_map(params![], |r| r.get::<_, i16>(0)).unwrap();
+
+        let mut artifacts = Vec::new();
+        for aid in aids {
+            let aid = aid.unwrap();
+            let (name, date, ty) = conn
+                .query_row(
+                    "select name, date, type from artifact where id = ?",
+                    params![&aid],
+                    |r| {
+                        Ok((
+                            r.get::<_, String>(0)?,
+                            r.get::<_, Option<i64>>(1)?,
+                            r.get::<_, String>(2)?,
+                        ))
+                    },
+                )
+                .unwrap();
+
+            artifacts.push(match ty.as_str() {
+                "try" | "master" => ArtifactId::Commit(Commit {
+                    sha: name,
+                    date: date
+                        .map(|d| Utc.timestamp(d, 0))
+                        .map(Date)
+                        .unwrap_or_else(|| Date::ymd_hms(2001, 01, 01, 0, 0, 0)),
+                }),
+                "release" => ArtifactId::Artifact(name),
+                _ => {
+                    log::error!("unknown ty {:?}", ty);
+                    continue;
+                }
+            });
+        }
+        artifacts
     }
     async fn in_progress_steps(&self, artifact: &ArtifactId) -> Vec<crate::Step> {
         let aid = self.artifact_id(artifact).await;

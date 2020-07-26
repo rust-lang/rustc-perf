@@ -201,23 +201,24 @@ impl InputData {
             .chain(missing)
             .collect::<Vec<_>>();
 
-        match self.conn().await.in_progress_artifact().await {
-            None => {}
-            Some(ArtifactId::Commit(c)) => {
-                commits.insert(
-                    0,
-                    (
-                        rustc_artifacts::Commit {
-                            sha: c.sha,
-                            time: c.date.0,
-                        },
-                        MissingReason::InProgress,
-                    ),
-                );
-            }
-            Some(ArtifactId::Artifact(_)) => {
-                // do nothing, for now, though eventually we'll want an artifact
-                // queue
+        for aid in self.conn().await.in_progress_artifacts().await {
+            match aid {
+                ArtifactId::Commit(c) => {
+                    commits.insert(
+                        0,
+                        (
+                            rustc_artifacts::Commit {
+                                sha: c.sha,
+                                time: c.date.0,
+                            },
+                            MissingReason::InProgress,
+                        ),
+                    );
+                }
+                ArtifactId::Artifact(_) => {
+                    // do nothing, for now, though eventually we'll want an artifact
+                    // queue
+                }
             }
         }
 

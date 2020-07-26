@@ -277,7 +277,7 @@ pub async fn handle_status_page(data: Arc<InputData>) -> status::Response {
     let missing = data.missing_commits().await;
     // FIXME: no current builds
     let conn = data.conn().await;
-    let current = if let Some(artifact) = conn.in_progress_artifact().await {
+    let current = if let Some(artifact) = conn.in_progress_artifacts().await.pop() {
         let steps = conn
             .in_progress_steps(&artifact)
             .await
