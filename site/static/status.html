@@ -19,7 +19,7 @@
     <div>&gt; <a href="index.html">graphs</a>, <a href="compare.html">compare</a>,
         <a href="dashboard.html">dashboard</a>, <a href="status.html">status</a>.</div>
     <div id="data">
-        <div id="missing-commits"></div>
+        <div id="data-insert-js"></div>
         Benchmarks for last commit:
         <div id="benchmark-state"></div>
     </div>
@@ -32,7 +32,7 @@
 
     function populate_data(data) {
         let state_div = document.querySelector("#benchmark-state");
-        {
+        if (data.last_commit) {
             let element = document.createElement("p");
             element.innerHTML = `SHA: ${data.last_commit.sha}, date: ${data.last_commit.date}`;
             state_div.appendChild(element);
@@ -54,7 +54,7 @@
             }
             state_div.appendChild(element);
         }
-        let missing_div = document.querySelector("#missing-commits");
+        let missing_div = document.querySelector("#data-insert-js");
         if (data.current !== null) {
             let table = document.createElement("table");
             let tr = document.createElement("tr");
@@ -87,9 +87,11 @@
                 td = document.createElement("td");
                 td.innerHTML = step.current_progress == 0 ? "" :
                     format_duration(step.current_progress);
+                td.style.textAlign = "right";
                 tr.appendChild(td);
                 td = document.createElement("td");
                 td.innerHTML = format_duration(step.expected_duration);
+                td.style.textAlign = "right";
                 tr.appendChild(td);
                 if (!step.is_done) {
                     left += step.expected_duration - step.current_progress;
@@ -109,7 +111,14 @@
             missing_div.appendChild(table);
         } else {
             let element = document.createElement("p");
-            element.innerHTML = `(Current work is not currently displayed; this is being worked on)`;
+            if (data.most_recent_end) {
+                let end = new Date(data.most_recent_end * 1000);
+                element.innerHTML = `No current collection in progress. Last one
+                    finished at ${end.toLocaleString()} local time,
+                    ${format_duration(Math.trunc((new Date() - end)/1000))} ago.`;
+            } else {
+                element.innerHTML = "No current collection in progress.";
+            }
             missing_div.appendChild(element);
         }
         {
@@ -118,6 +127,7 @@
             missing_div.appendChild(element);
         }
         let table = document.createElement("table");
+        table.id = "missing-commits";
         {
             let row = document.createElement("tr");
             row.innerHTML = `<th>Commit Date</th><th>SHA</th><th>Reason</th>`;
@@ -161,9 +171,11 @@
         let hours = Math.trunc(mins / 60);
         mins -= hours*60;
 
-        let s = `${mins < 10 ? "&nbsp;" + mins : mins}m${secs < 10 ? "0" + secs : secs}s`;
+        let s = "";
         if (hours > 0) {
-            s = `${hours}h ${s}`;
+            s = `${hours}h${mins < 10 ? "0" + mins : mins}m${secs < 10 ? "0" + secs : secs}s`;
+        } else {
+            s = `${mins < 10 ? " " + mins : mins}m${secs < 10 ? "0" + secs : secs}s`;
         }
         return s;
     }

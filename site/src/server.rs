@@ -307,6 +307,7 @@ pub async fn handle_status_page(data: Arc<InputData>) -> status::Response {
         benchmarks: benchmark_state,
         missing,
         current,
+        most_recent_end: conn.last_end_time().await.map(|d| d.timestamp()),
     }
 }
 

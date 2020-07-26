@@ -1,7 +1,7 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{ArtifactId, CollectionId, Commit, Crate, Date, Profile};
 use crate::{ArtifactIdNumber, Index, QueryDatum, QueuedCommit};
-use chrono::{TimeZone, Utc};
+use chrono::{DateTime, TimeZone, Utc};
 use hashbrown::HashMap;
 use rusqlite::params;
 use rusqlite::OptionalExtension;
@@ -753,5 +753,18 @@ impl Connection for SqliteConnection {
             .unwrap()
             .map(|r| r.unwrap())
             .collect()
+    }
+    async fn last_end_time(&self) -> Option<DateTime<Utc>> {
+        self.raw_ref()
+            .query_row(
+                "select date_recorded + duration \
+                from artifact_collection_duration \
+                order by date_recorded desc \
+                limit 1;",
+                params![],
+                |r| Ok(Utc.timestamp(r.get(0)?, 0)),
+            )
+            .optional()
+            .unwrap()
     }
 }
