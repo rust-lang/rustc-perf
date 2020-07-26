@@ -1,4 +1,5 @@
 {
     "cargo_opts": "--lib",
-    "runs": 1
+    "runs": 1,
+    "touch_file": "src/cargo/lib.rs"
 }

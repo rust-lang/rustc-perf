@@ -1,4 +1,3 @@
 {
-    "supports_stable": true,
     "touch_file": "src/main.rs"
 }
