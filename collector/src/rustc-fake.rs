@@ -1,4 +1,6 @@
 use std::env;
+use std::ffi::OsString;
+use std::fs;
 use std::path::Path;
 use std::process::Command;
 use std::time::{Duration, Instant};
@@ -21,11 +23,11 @@ fn main() {
         .ok()
         .and_then(|v| v.parse::<u32>().ok())
     {
-        args.push(std::ffi::OsString::from(format!("-Zthreads={}", count)));
+        args.push(OsString::from(format!("-Zthreads={}", count)));
     }
 
-    args.push(std::ffi::OsString::from("-Adeprecated"));
-    args.push(std::ffi::OsString::from("-Aunknown-lints"));
+    args.push(OsString::from("-Adeprecated"));
+    args.push(OsString::from("-Aunknown-lints"));
 
     if let Some(pos) = args.iter().position(|arg| arg == "--wrap-rustc-with") {
         // Strip out the flag and its argument, and run rustc under the wrapper
@@ -56,8 +58,8 @@ fn main() {
                         "-Zself-profile={}",
                         prof_out_dir.to_str().unwrap()
                     ));
-                    let _ = std::fs::remove_dir_all(&prof_out_dir);
-                    let _ = std::fs::create_dir_all(&prof_out_dir);
+                    let _ = fs::remove_dir_all(&prof_out_dir);
+                    let _ = fs::create_dir_all(&prof_out_dir);
                 }
 
                 let start = Instant::now();
@@ -75,7 +77,7 @@ fn main() {
                     let mut prefix = None;
                     // We don't know the pid of rustc, and can't easily get it -- we only know the
                     // `perf` pid. So just blindly look in the directory to hopefully find it.
-                    for entry in std::fs::read_dir(&prof_out_dir).unwrap() {
+                    for entry in fs::read_dir(&prof_out_dir).unwrap() {
                         let entry = entry.unwrap();
                         if entry
                             .file_name()
@@ -109,8 +111,8 @@ fn main() {
             }
 
             "time-passes" => {
-                let mut cmd = Command::new(&tool);
-                cmd.arg("-Ztime-passes").args(&args);
+                args.insert(0, "-Ztime-passes".into());
+                let mut cmd = bash_command(tool, args, "> Ztp");
 
                 assert!(cmd.status().expect("failed to spawn").success());
             }
@@ -203,7 +205,20 @@ fn main() {
                 assert!(cmd.status().expect("failed to spawn").success());
             }
 
-            "eprintln" | "llvm-lines" => {
+            "eprintln" => {
+                let mut cmd = bash_command(tool, args, "2> eprintln");
+
+                assert!(cmd.status().expect("failed to spawn").success());
+            }
+
+            "llvm-lines" => {
+                // `cargo llvm-lines` writes its output to stdout. But we can't
+                // redirect it to a file here like we do for "time-passes" and
+                // "eprintln". This is because `cargo llvm-lines` invokes rustc
+                // as part of its processing and then it does some analysis of
+                // its output and then it prints out some results. Because
+                // `rustc` (which this file wraps) doesn't produce the output,
+                // this file can't redirect that output.
                 let mut cmd = Command::new(&tool);
                 cmd.args(&args);
 
@@ -225,6 +240,24 @@ fn main() {
         cmd.args(&args);
         exec(&mut cmd);
     }
+}
+
+/// Run a command via bash, in order to redirect its output to a file.
+/// `redirect` should be something like "> out" or "2> out".
+fn bash_command(tool: OsString, args: Vec<OsString>, redirect: &str) -> Command {
+    let mut bash_cmd = String::new();
+    bash_cmd.push_str(&format!("{} ", tool.to_str().unwrap()));
+    for arg in args {
+        // Args with double quotes (e.g. `--cfg feature="foo"`)
+        // will be munged by bash if we don't protect them. So we
+        // wrap every arg in single quotes.
+        bash_cmd.push_str(&format!("'{}' ", arg.to_str().unwrap()));
+    }
+    bash_cmd.push_str(redirect);
+
+    let mut cmd = Command::new("bash");
+    cmd.args(&["-c", &bash_cmd]);
+    cmd
 }
 
 #[cfg(unix)]
@@ -289,7 +322,7 @@ fn run_summarize(name: &str, prof_out_dir: &Path, prefix: &str) -> std::io::Resu
             "Failed to run successfully",
         ));
     }
-    std::fs::read_to_string(prof_out_dir.join(&format!("{}.json", prefix)))
+    fs::read_to_string(prof_out_dir.join(&format!("{}.json", prefix)))
 }
 
 #[cfg(windows)]
