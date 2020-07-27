@@ -372,7 +372,8 @@ impl PostgresConnection {
                         (select end_time - start_time
                         from collector_progress as cp
                             where
-                                cp.step = collector_progress.step
+                                cp.aid != $1
+                                and cp.step = collector_progress.step
                                 and cp.start_time is not null
                                 and cp.end_time is not null
                             order by start_time desc
@@ -931,5 +932,18 @@ where
                 expected: Duration::from_secs(row.get::<_, i32>(3) as u64),
             })
             .collect()
+    }
+    async fn last_end_time(&self) -> Option<DateTime<Utc>> {
+        self.conn()
+            .query_opt(
+                "select date_recorded + (duration || 'seconds')::interval \
+                from artifact_collection_duration \
+                order by date_recorded desc \
+                limit 1;",
+                &[],
+            )
+            .await
+            .unwrap()
+            .map(|r| r.get(0))
     }
 }

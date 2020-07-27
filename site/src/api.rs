@@ -194,6 +194,8 @@ pub mod status {
         pub benchmarks: Vec<BenchmarkStatus>,
         pub missing: Vec<(Commit, MissingReason)>,
         pub current: Option<CurrentState>,
+        // None if no recent end, otherwise seconds since epoch
+        pub most_recent_end: Option<i64>,
     }
 }
 

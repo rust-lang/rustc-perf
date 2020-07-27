@@ -1,5 +1,6 @@
 use crate::{ArtifactId, ArtifactIdNumber};
 use crate::{Cache, CollectionId, Index, Profile, QueryDatum, QueuedCommit, Step};
+use chrono::{DateTime, Utc};
 use hashbrown::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -74,6 +75,8 @@ pub trait Connection: Send + Sync {
     async fn in_progress_artifacts(&self) -> Vec<ArtifactId>;
 
     async fn in_progress_steps(&self, aid: &ArtifactId) -> Vec<Step>;
+
+    async fn last_end_time(&self) -> Option<DateTime<Utc>>;
 }
 
 #[async_trait::async_trait]
