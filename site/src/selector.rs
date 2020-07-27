@@ -665,6 +665,14 @@ impl SelfProfile {
             .collect::<Vec<_>>();
         for cid in cids.iter() {
             let mut queries = Vec::new();
+            log::trace!("Fetching {} self-profile-query series", labels.len());
+            let conn = tx.conn();
+            let cid_id = if let Some(c) = cid.lookup(&idx) {
+                c
+            } else {
+                res.push(None);
+                continue;
+            };
             for label in labels.iter() {
                 let query = crate::db::DbLabel::SelfProfileQuery {
                     krate,
@@ -672,10 +680,12 @@ impl SelfProfile {
                     cache,
                     query: *label,
                 };
-                if let Some(qd) = idx
-                    .get::<crate::db::QueryDatum>(tx.conn(), &query, cid)
-                    .await
-                {
+                let qid = if let Some(qid) = query.lookup(&idx) {
+                    qid
+                } else {
+                    continue;
+                };
+                if let Some(qd) = conn.get_self_profile_query(qid, cid_id).await {
                     queries.push(QueryData {
                         label: *label,
                         self_time: qd.self_time.as_nanos().try_into().unwrap(),
