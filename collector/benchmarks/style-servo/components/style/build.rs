@@ -63,6 +63,7 @@ fn generate_properties() {
         let entry = entry.unwrap();
         match entry.path().extension().and_then(|e| e.to_str()) {
             Some("mako") | Some("rs") | Some("py") | Some("zip") => {
+                println!("cargo:rerun-if-changed={}", entry.path().display());
             }
             _ => {}
         }
