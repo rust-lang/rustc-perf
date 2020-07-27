@@ -665,30 +665,31 @@ impl SelfProfile {
             .collect::<Vec<_>>();
         for cid in cids.iter() {
             let mut queries = Vec::new();
-            for label in labels.iter() {
-                let query = crate::db::DbLabel::SelfProfileQuery {
-                    krate,
-                    profile,
-                    cache,
-                    query: *label,
-                };
-                if let Some(qd) = idx
-                    .get::<crate::db::QueryDatum>(tx.conn(), &query, cid)
-                    .await
-                {
-                    queries.push(QueryData {
-                        label: *label,
-                        self_time: qd.self_time.as_nanos().try_into().unwrap(),
-                        number_of_cache_hits: qd.number_of_cache_hits,
-                        invocation_count: qd.invocation_count,
-                        blocked_time: qd.blocked_time.as_nanos().try_into().unwrap(),
-                        incremental_load_time: qd
-                            .incremental_load_time
-                            .as_nanos()
-                            .try_into()
-                            .unwrap(),
-                    });
-                }
+            log::trace!("Fetching {} self-profile-query series", labels.len());
+            let conn = tx.conn();
+            let cid_id = if let Some(c) = cid.lookup(&idx) {
+                c
+            } else {
+                res.push(None);
+                continue;
+            };
+            let cid_data = conn
+                .get_self_profile(
+                    cid_id,
+                    krate.as_str(),
+                    &profile.to_string(),
+                    &cache.to_string(),
+                )
+                .await;
+            for (label, qd) in cid_data {
+                queries.push(QueryData {
+                    label,
+                    self_time: qd.self_time.as_nanos().try_into().unwrap(),
+                    number_of_cache_hits: qd.number_of_cache_hits,
+                    invocation_count: qd.invocation_count,
+                    blocked_time: qd.blocked_time.as_nanos().try_into().unwrap(),
+                    incremental_load_time: qd.incremental_load_time.as_nanos().try_into().unwrap(),
+                });
             }
             if queries.is_empty() {
                 res.push(None);

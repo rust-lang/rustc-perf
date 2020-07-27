@@ -50,6 +50,13 @@ pub trait Connection: Send + Sync {
         series: &[u32],
         cid: &[Option<ArtifactIdNumber>],
     ) -> Vec<Vec<Option<f64>>>;
+    async fn get_self_profile(
+        &self,
+        cid: ArtifactIdNumber,
+        crate_: &str,
+        profile: &str,
+        cache: &str,
+    ) -> HashMap<crate::QueryLabel, QueryDatum>;
     async fn get_self_profile_query(
         &self,
         series: u32,

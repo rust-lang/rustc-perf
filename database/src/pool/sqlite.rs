@@ -397,6 +397,45 @@ impl Connection for SqliteConnection {
             .optional()
             .unwrap()
     }
+    async fn get_self_profile(
+        &self,
+        cid: ArtifactIdNumber,
+        crate_: &str,
+        profile: &str,
+        cache: &str,
+    ) -> HashMap<crate::QueryLabel, crate::QueryDatum> {
+        self.raw_ref()
+            .prepare_cached("
+                select
+                    query, self_time, blocked_time, incremental_load_time, number_of_cache_hits, invocation_count
+                from self_profile_query_series
+                join self_profile_query on self_profile_query_series.id = self_profile_query.series
+                where
+                    crate = ?
+                    and profile = ?
+                    and cache = ?
+                    and aid = ?
+                ")
+            .unwrap()
+            .query_map(params![&crate_, &profile, &cache, &cid.0], |r| {
+                let self_time: i64 = r.get(1)?;
+                let blocked_time: i64 = r.get(2)?;
+                let incremental_load_time: i64 = r.get(3)?;
+                Ok((
+                    r.get::<_, String>(0)?.as_str().into(),
+                    crate::QueryDatum {
+                        self_time: Duration::from_nanos(self_time as u64),
+                        blocked_time: Duration::from_nanos(blocked_time as u64),
+                        incremental_load_time: Duration::from_nanos(incremental_load_time as u64),
+                        number_of_cache_hits: r.get::<_, i32>(4)? as u32,
+                        invocation_count: r.get::<_, i32>(5)? as u32,
+                    },
+                ))
+            })
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap()
+    }
     async fn get_error(&self, cid: crate::ArtifactIdNumber) -> HashMap<String, Option<String>> {
         self.raw_ref()
             .prepare_cached(

@@ -671,6 +671,7 @@ impl Index {
             .keys()
             .filter(move |path| path.0 == krate && path.1 == profile && path.2 == cache)
             .map(|path| path.3)
+            .filter(|q| !q.as_str().starts_with("codegen passes ["))
     }
 }
 
