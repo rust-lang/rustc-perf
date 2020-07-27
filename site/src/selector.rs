@@ -673,32 +673,23 @@ impl SelfProfile {
                 res.push(None);
                 continue;
             };
-            for label in labels.iter() {
-                let query = crate::db::DbLabel::SelfProfileQuery {
-                    krate,
-                    profile,
-                    cache,
-                    query: *label,
-                };
-                let qid = if let Some(qid) = query.lookup(&idx) {
-                    qid
-                } else {
-                    continue;
-                };
-                if let Some(qd) = conn.get_self_profile_query(qid, cid_id).await {
-                    queries.push(QueryData {
-                        label: *label,
-                        self_time: qd.self_time.as_nanos().try_into().unwrap(),
-                        number_of_cache_hits: qd.number_of_cache_hits,
-                        invocation_count: qd.invocation_count,
-                        blocked_time: qd.blocked_time.as_nanos().try_into().unwrap(),
-                        incremental_load_time: qd
-                            .incremental_load_time
-                            .as_nanos()
-                            .try_into()
-                            .unwrap(),
-                    });
-                }
+            let cid_data = conn
+                .get_self_profile(
+                    cid_id,
+                    krate.as_str(),
+                    &profile.to_string(),
+                    &cache.to_string(),
+                )
+                .await;
+            for (label, qd) in cid_data {
+                queries.push(QueryData {
+                    label,
+                    self_time: qd.self_time.as_nanos().try_into().unwrap(),
+                    number_of_cache_hits: qd.number_of_cache_hits,
+                    invocation_count: qd.invocation_count,
+                    blocked_time: qd.blocked_time.as_nanos().try_into().unwrap(),
+                    incremental_load_time: qd.incremental_load_time.as_nanos().try_into().unwrap(),
+                });
             }
             if queries.is_empty() {
                 res.push(None);

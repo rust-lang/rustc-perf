@@ -232,6 +232,7 @@ pub struct CachedStatements {
     get_pstat: Statement,
     insert_pstat: Statement,
     get_self_profile_query: Statement,
+    get_self_profile: Statement,
     insert_self_profile_query: Statement,
     select_self_query_series: Statement,
     insert_self_query_series: Statement,
@@ -333,6 +334,17 @@ impl PostgresConnection {
                     )
                     .await
                     .unwrap(),
+                get_self_profile: conn.prepare("
+                    select
+                        query, self_time, blocked_time, incremental_load_time, number_of_cache_hits, invocation_count
+                    from self_profile_query_series
+                    join self_profile_query on self_profile_query_series.id = self_profile_query.series
+                    where
+                        crate = $1
+                        and profile = $2
+                        and cache = $3
+                        and aid = $4
+                ").await.unwrap(),
                 insert_self_profile_query: conn
                     .prepare(
                         "insert into self_profile_query(
@@ -562,6 +574,40 @@ where
             number_of_cache_hits: row.get::<_, i32>(3) as u32,
             invocation_count: row.get::<_, i32>(4) as u32,
         })
+    }
+    async fn get_self_profile(
+        &self,
+        cid: ArtifactIdNumber,
+        crate_: &str,
+        profile: &str,
+        cache: &str,
+    ) -> HashMap<crate::QueryLabel, crate::QueryDatum> {
+        let rows = self
+            .conn()
+            .query(
+                &self.statements().get_self_profile,
+                &[&crate_, &profile, &cache, &(cid.0 as i16)],
+            )
+            .await
+            .unwrap();
+
+        rows.into_iter()
+            .map(|r| {
+                let self_time: i64 = r.get(1);
+                let blocked_time: i64 = r.get(2);
+                let incremental_load_time: i64 = r.get(3);
+                (
+                    r.get::<_, &str>(0).into(),
+                    crate::QueryDatum {
+                        self_time: Duration::from_nanos(self_time as u64),
+                        blocked_time: Duration::from_nanos(blocked_time as u64),
+                        incremental_load_time: Duration::from_nanos(incremental_load_time as u64),
+                        number_of_cache_hits: r.get::<_, i32>(4) as u32,
+                        invocation_count: r.get::<_, i32>(5) as u32,
+                    },
+                )
+            })
+            .collect()
     }
     async fn get_error(&self, cid: crate::ArtifactIdNumber) -> HashMap<String, Option<String>> {
         let rows = self
