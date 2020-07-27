@@ -97,6 +97,7 @@ jobs:
 
       - name: Install profilers
         run: |
+          sudo apt install -y valgrind
           cargo install cargo-llvm-lines
 
       - name: Configure environment
