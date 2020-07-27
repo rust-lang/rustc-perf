@@ -372,7 +372,8 @@ impl PostgresConnection {
                         (select end_time - start_time
                         from collector_progress as cp
                             where
-                                cp.step = collector_progress.step
+                                cp.aid != $1
+                                and cp.step = collector_progress.step
                                 and cp.start_time is not null
                                 and cp.end_time is not null
                             order by start_time desc
