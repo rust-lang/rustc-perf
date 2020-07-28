@@ -28,9 +28,21 @@ RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=
 test -f results/Ztp-Test-helloworld-Check-Full
 grep -q "time:.*total" results/Ztp-Test-helloworld-Check-Full
 
-# perf-record: TODO
+# perf-record: untested because we get "The instructions:u event is not
+# supported" on GitHub Actions when the code below is run. Maybe because the
+# hardware is virtualized and performance counters aren't available?
+#RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
+#    cargo run -p collector --bin collector -- \
+#    profile_local perf-record $bindir/rustc Test \
+#        --builds Check \
+#        --cargo $bindir/cargo \
+#        --include helloworld \
+#        --runs Full
+#test -f results/perf-Test-helloworld-Check-Full
+#grep -q "PERFILE" results/perf-Test-helloworld-Check-Full
 
-# oprofile: TODO
+# oprofile: untested... it's not used much, and might have the same problems
+# that `perf` has due to virtualized hardware.
 
 # Cachegrind.
 RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
@@ -58,7 +70,16 @@ grep -q "creator: callgrind" results/clgout-Test-helloworld-Check-Full
 test -f results/clgann-Test-helloworld-Check-Full
 grep -q "Profile data file" results/clgann-Test-helloworld-Check-Full
 
-# DHAT: needs Valgrind 3.15, but only Valgrind 3.13 is available on GitHub.
+# DHAT.
+RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
+    cargo run -p collector --bin collector -- \
+    profile_local dhat $bindir/rustc Test \
+        --builds Check \
+        --cargo $bindir/cargo \
+        --include helloworld \
+        --runs Full
+test -f results/dhout-Test-helloworld-Check-Full
+grep -q "dhatFileVersion" results/dhout-Test-helloworld-Check-Full
 
 # Massif.
 RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
