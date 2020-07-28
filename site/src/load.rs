@@ -152,51 +152,44 @@ impl InputData {
             .iter()
             .map(|commit| commit.sha.clone())
             .collect::<HashSet<_>>();
+
         let now = Utc::now();
         let mut missing = commits
             .iter()
             .cloned()
             .filter(|c| now.signed_duration_since(c.time) < Duration::days(29))
-            .filter_map(|c| {
-                if have.contains(&c.sha) {
-                    None
-                } else {
-                    Some((c, MissingReason::Sha))
-                }
+            .map(|c| {
+                (
+                    Commit {
+                        sha: c.sha,
+                        date: Date(c.time),
+                    },
+                    MissingReason::Sha,
+                )
             })
             .collect::<Vec<_>>();
         missing.reverse();
-
-        let mut commits = queued_commits
-            .into_iter()
-            .flat_map(
-                |database::QueuedCommit {
-                     sha, parent_sha, ..
-                 }| {
-                    let mut ret = Vec::new();
-                    // Enqueue the `TryParent` commit before the `TryCommit` itself, so that
-                    // all of the `try` run's data is complete when the benchmark results
-                    // of that commit are available.
-                    if let Some(commit) = commits.iter().find(|c| c.sha == *parent_sha.as_str()) {
-                        ret.push((commit.clone(), MissingReason::TryParent));
-                    } else {
-                        // could not find parent SHA
-                        // Unfortunately this just means that the parent commit is older than 168
-                        // days for the most part so we don't have artifacts for it anymore anyway;
-                        // in that case, just ignore this "error".
-                    }
-                    ret.push((
-                        rustc_artifacts::Commit {
-                            sha: sha.to_string(),
-                            time: Date::ymd_hms(2001, 01, 01, 0, 0, 0).0,
-                        },
-                        MissingReason::TryCommit,
-                    ));
-                    ret
+        let mut commits = Vec::new();
+        commits.reserve(queued_commits.len() * 2); // Two commits per every try commit
+        for database::QueuedCommit {
+            sha, parent_sha, ..
+        } in queued_commits
+        {
+            // Enqueue the `TryParent` commit before the `TryCommit` itself, so that
+            // all of the `try` run's data is complete when the benchmark results
+            // of that commit are available.
+            if let Some((commit, _)) = missing.iter().find(|c| c.0.sha == *parent_sha.as_str()) {
+                commits.push((commit.clone(), MissingReason::TryParent));
+            }
+            commits.push((
+                Commit {
+                    sha: sha.to_string(),
+                    date: Date::ymd_hms(2001, 01, 01, 0, 0, 0),
                 },
-            )
-            .chain(missing)
-            .collect::<Vec<_>>();
+                MissingReason::TryCommit,
+            ));
+        }
+        commits.extend(missing);
 
         for aid in in_progress_artifacts {
             match aid {
@@ -206,16 +199,7 @@ impl InputData {
                         .find(|(i, _)| i.sha == c.sha)
                         .map(|v| Box::new(v.1.clone()));
                     have.remove(&c.sha);
-                    commits.insert(
-                        0,
-                        (
-                            rustc_artifacts::Commit {
-                                sha: c.sha,
-                                time: c.date.0,
-                            },
-                            MissingReason::InProgress(previous),
-                        ),
-                    );
+                    commits.insert(0, (c, MissingReason::InProgress(previous)));
                 }
                 ArtifactId::Artifact(_) => {
                     // do nothing, for now, though eventually we'll want an artifact
@@ -238,17 +222,6 @@ impl InputData {
         }
 
         commits
-            .into_iter()
-            .map(|(c, mr)| {
-                (
-                    Commit {
-                        sha: c.sha.as_str().into(),
-                        date: Date(c.time),
-                    },
-                    mr,
-                )
-            })
-            .collect()
     }
 }
 
