@@ -156,7 +156,7 @@
                 if (typeof reason == 'string') {
                     element.innerText = reason;
                 } else if (reason.InProgress) {
-                    element.innerText = `{reason.InProgress} - in progress`;
+                    element.innerText = `${reason.InProgress} - in progress`;
                 } else if (reason["Try"] != undefined && reason.Try.pr) {
                     console.log(reason);
                     element.innerHTML = `Try for <a
