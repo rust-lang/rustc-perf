@@ -229,6 +229,8 @@ fn main() {
                 panic!("unknown wrapper: {}", wrapper);
             }
         }
+    } else if let Some(pos) = args.iter().position(|arg| arg == "--skip-this-rustc") {
+        // do nothing
     } else {
         if env::var_os("EXPECT_ONLY_WRAPPED_RUSTC").is_some() {
             eprintln!("{:?} {:?}", tool, args);
