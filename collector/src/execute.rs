@@ -345,6 +345,12 @@ impl<'a> CargoProcess<'a> {
                         ),
                     )?;
                 }
+            } else {
+                // If we're not going to record the final rustc, then there's
+                // absolutely no point in waiting for it to build. This will
+                // have the final rustc just immediately exit(0) without
+                // actually running it.
+                cmd.arg("--skip-this-rustc");
             }
 
             if self.incremental {
