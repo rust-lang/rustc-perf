@@ -31,9 +31,11 @@ pub use database::{ArtifactId, Commit, Crate};
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum MissingReason {
     /// This commmit has not yet been benchmarked
-    Sha,
+    Master,
     TryParent,
-    TryCommit,
+    Try {
+        pr: u32,
+    },
     InProgress(Option<Box<MissingReason>>),
 }
 
@@ -164,7 +166,7 @@ impl InputData {
                         sha: c.sha,
                         date: Date(c.time),
                     },
-                    MissingReason::Sha,
+                    MissingReason::Master,
                 )
             })
             .collect::<Vec<_>>();
@@ -172,7 +174,9 @@ impl InputData {
         let mut commits = Vec::new();
         commits.reserve(queued_commits.len() * 2); // Two commits per every try commit
         for database::QueuedCommit {
-            sha, parent_sha, ..
+            sha,
+            parent_sha,
+            pr,
         } in queued_commits
         {
             // Enqueue the `TryParent` commit before the `TryCommit` itself, so that
@@ -186,7 +190,7 @@ impl InputData {
                     sha: sha.to_string(),
                     date: Date::ymd_hms(2001, 01, 01, 0, 0, 0),
                 },
-                MissingReason::TryCommit,
+                MissingReason::Try { pr },
             ));
         }
         commits.extend(missing);
