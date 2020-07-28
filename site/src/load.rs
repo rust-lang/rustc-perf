@@ -31,10 +31,12 @@ pub use database::{ArtifactId, Commit, Crate};
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum MissingReason {
     /// This commmit has not yet been benchmarked
-    Sha,
+    Master,
     TryParent,
-    TryCommit,
-    InProgress,
+    Try {
+        pr: u32,
+    },
+    InProgress(Option<Box<MissingReason>>),
 }
 
 #[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq)]
@@ -135,85 +137,73 @@ impl InputData {
     }
 
     pub async fn missing_commits(&self) -> Vec<(Commit, MissingReason)> {
-        if self.config.keys.github.is_none() {
-            println!("Skipping collection of missing commits, no github token configured");
-            return Vec::new();
-        }
-        let commits = rustc_artifacts::master_commits()
-            .await
+        let conn = self.conn().await;
+        let (master_commits, queued_commits, in_progress_artifacts) = futures::join!(
+            rustc_artifacts::master_commits(),
+            conn.queued_commits(),
+            conn.in_progress_artifacts()
+        );
+        let commits = master_commits
             .map_err(|e| anyhow::anyhow!("{:?}", e))
             .context("getting master commit list")
             .unwrap();
 
         let index = self.index.load();
-        let have = index
+        let mut have = index
             .commits()
             .iter()
             .map(|commit| commit.sha.clone())
             .collect::<HashSet<_>>();
+
         let now = Utc::now();
-        let missing = commits
+        let mut missing = commits
             .iter()
             .cloned()
             .filter(|c| now.signed_duration_since(c.time) < Duration::days(29))
-            .filter_map(|c| {
-                if have.contains(&c.sha) {
-                    None
-                } else {
-                    Some((c, MissingReason::Sha))
-                }
+            .map(|c| {
+                (
+                    Commit {
+                        sha: c.sha,
+                        date: Date(c.time),
+                    },
+                    MissingReason::Master,
+                )
             })
             .collect::<Vec<_>>();
-
-        let mut commits = self
-            .conn()
-            .await
-            .queued_commits()
-            .await
-            .into_iter()
-            .flat_map(
-                |database::QueuedCommit {
-                     sha, parent_sha, ..
-                 }| {
-                    let mut ret = Vec::new();
-                    // Enqueue the `TryParent` commit before the `TryCommit` itself, so that
-                    // all of the `try` run's data is complete when the benchmark results
-                    // of that commit are available.
-                    if let Some(commit) = commits.iter().find(|c| c.sha == *parent_sha.as_str()) {
-                        ret.push((commit.clone(), MissingReason::TryParent));
-                    } else {
-                        // could not find parent SHA
-                        // Unfortunately this just means that the parent commit is older than 168
-                        // days for the most part so we don't have artifacts for it anymore anyway;
-                        // in that case, just ignore this "error".
-                    }
-                    ret.push((
-                        rustc_artifacts::Commit {
-                            sha: sha.to_string(),
-                            time: Date::ymd_hms(2001, 01, 01, 0, 0, 0).0,
-                        },
-                        MissingReason::TryCommit,
-                    ));
-                    ret
+        missing.reverse();
+        let mut commits = Vec::new();
+        commits.reserve(queued_commits.len() * 2); // Two commits per every try commit
+        for database::QueuedCommit {
+            sha,
+            parent_sha,
+            pr,
+        } in queued_commits
+        {
+            // Enqueue the `TryParent` commit before the `TryCommit` itself, so that
+            // all of the `try` run's data is complete when the benchmark results
+            // of that commit are available.
+            if let Some((commit, _)) = missing.iter().find(|c| c.0.sha == *parent_sha.as_str()) {
+                commits.push((commit.clone(), MissingReason::TryParent));
+            }
+            commits.push((
+                Commit {
+                    sha: sha.to_string(),
+                    date: Date::ymd_hms(2001, 01, 01, 0, 0, 0),
                 },
-            )
-            .filter(|c| !have.contains(&c.0.sha)) // we may have not updated the try-commits file
-            .chain(missing)
-            .collect::<Vec<_>>();
+                MissingReason::Try { pr },
+            ));
+        }
+        commits.extend(missing);
 
-        for aid in self.conn().await.in_progress_artifacts().await {
+        for aid in in_progress_artifacts {
             match aid {
                 ArtifactId::Commit(c) => {
-                    commits.insert(
-                        0,
-                        (
-                            rustc_artifacts::Commit {
-                                sha: c.sha,
-                                time: c.date.0,
-                            },
-                            MissingReason::InProgress,
-                        ),
-                    );
+                    let previous = commits
+                        .iter()
+                        .find(|(i, _)| i.sha == c.sha)
+                        .map(|v| Box::new(v.1.clone()));
+                    have.remove(&c.sha);
+                    commits.insert(0, (c, MissingReason::InProgress(previous)));
                 }
                 ArtifactId::Artifact(_) => {
                     // do nothing, for now, though eventually we'll want an artifact
@@ -223,6 +213,7 @@ impl InputData {
         }
 
         let mut seen = HashSet::with_capacity(commits.len());
+        seen.extend(have);
 
         // FIXME: replace with Vec::drain_filter when it stabilizes
         let mut i = 0;
@@ -235,17 +226,6 @@ impl InputData {
         }
 
         commits
-            .into_iter()
-            .map(|(c, mr)| {
-                (
-                    Commit {
-                        sha: c.sha.as_str().into(),
-                        date: Date(c.time),
-                    },
-                    mr,
-                )
-            })
-            .collect()
     }
 }
 

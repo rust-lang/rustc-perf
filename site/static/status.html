@@ -153,7 +153,17 @@
             }
             {
                 let element = document.createElement("td");
-                element.innerHTML = reason;
+                if (typeof reason == 'string') {
+                    element.innerText = reason;
+                } else if (reason.InProgress) {
+                    element.innerText = `{reason.InProgress} - in progress`;
+                } else if (reason["Try"] != undefined && reason.Try.pr) {
+                    console.log(reason);
+                    element.innerHTML = `Try for <a
+                        href="https://github.com/rust-lang/rust/pull/${reason["Try"].pr}">#${reason["Try"].pr}</a>`;
+                } else {
+                    element.innerText = JSON.stringify(reason);
+                }
                 row.appendChild(element);
             }
             table.appendChild(row);
