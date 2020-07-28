@@ -34,7 +34,7 @@ pub enum MissingReason {
     Sha,
     TryParent,
     TryCommit,
-    InProgress,
+    InProgress(Option<Box<MissingReason>>),
 }
 
 #[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq)]
@@ -135,24 +135,25 @@ impl InputData {
     }
 
     pub async fn missing_commits(&self) -> Vec<(Commit, MissingReason)> {
-        if self.config.keys.github.is_none() {
-            println!("Skipping collection of missing commits, no github token configured");
-            return Vec::new();
-        }
-        let commits = rustc_artifacts::master_commits()
-            .await
+        let conn = self.conn().await;
+        let (master_commits, queued_commits, in_progress_artifacts) = futures::join!(
+            rustc_artifacts::master_commits(),
+            conn.queued_commits(),
+            conn.in_progress_artifacts()
+        );
+        let commits = master_commits
             .map_err(|e| anyhow::anyhow!("{:?}", e))
             .context("getting master commit list")
             .unwrap();
 
         let index = self.index.load();
-        let have = index
+        let mut have = index
             .commits()
             .iter()
             .map(|commit| commit.sha.clone())
             .collect::<HashSet<_>>();
         let now = Utc::now();
-        let missing = commits
+        let mut missing = commits
             .iter()
             .cloned()
             .filter(|c| now.signed_duration_since(c.time) < Duration::days(29))
@@ -164,12 +165,9 @@ impl InputData {
                 }
             })
             .collect::<Vec<_>>();
+        missing.reverse();
 
-        let mut commits = self
-            .conn()
-            .await
-            .queued_commits()
-            .await
+        let mut commits = queued_commits
             .into_iter()
             .flat_map(
                 |database::QueuedCommit {
@@ -197,13 +195,17 @@ impl InputData {
                     ret
                 },
             )
-            .filter(|c| !have.contains(&c.0.sha)) // we may have not updated the try-commits file
             .chain(missing)
             .collect::<Vec<_>>();
 
-        for aid in self.conn().await.in_progress_artifacts().await {
+        for aid in in_progress_artifacts {
             match aid {
                 ArtifactId::Commit(c) => {
+                    let previous = commits
+                        .iter()
+                        .find(|(i, _)| i.sha == c.sha)
+                        .map(|v| Box::new(v.1.clone()));
+                    have.remove(&c.sha);
                     commits.insert(
                         0,
                         (
@@ -211,7 +213,7 @@ impl InputData {
                                 sha: c.sha,
                                 time: c.date.0,
                             },
-                            MissingReason::InProgress,
+                            MissingReason::InProgress(previous),
                         ),
                     );
                 }
@@ -223,6 +225,7 @@ impl InputData {
         }
 
         let mut seen = HashSet::with_capacity(commits.len());
+        seen.extend(have);
 
         // FIXME: replace with Vec::drain_filter when it stabilizes
         let mut i = 0;
