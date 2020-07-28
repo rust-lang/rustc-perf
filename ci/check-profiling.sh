@@ -43,11 +43,7 @@ RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=
 test -f results/cgout-Test-helloworld-Check-Full
 grep -q "events: Ir" results/cgout-Test-helloworld-Check-Full
 test -f results/cgann-Test-helloworld-Check-Full
-# The Valgrind available on on GitHub is 3.13, which doesn't support the
-# `--show-percs=yes` option that we use. So the `cgann` file ends up empty,
-# because `cg_annotate` errors out and produces no stdout, but `collector` does
-# not check its exit code for failure and so does not fail itself.
-#grep -q "PROGRAM TOTALS" results/cgann-Test-helloworld-Check-Full
+grep -q "PROGRAM TOTALS" results/cgann-Test-helloworld-Check-Full
 
 # Callgrind.
 RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
@@ -60,8 +56,7 @@ RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=
 test -f results/clgout-Test-helloworld-Check-Full
 grep -q "creator: callgrind" results/clgout-Test-helloworld-Check-Full
 test -f results/clgann-Test-helloworld-Check-Full
-# See the explanation on the `cgann` file for Cachegrind; it holds here too.
-#grep -q "Profile data file" results/clgann-Test-helloworld-Check-Full
+grep -q "Profile data file" results/clgann-Test-helloworld-Check-Full
 
 # DHAT: needs Valgrind 3.15, but only Valgrind 3.13 is available on GitHub.
 
