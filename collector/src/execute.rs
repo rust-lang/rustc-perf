@@ -207,6 +207,7 @@ struct CargoProcess<'a> {
     cargo_args: Vec<String>,
     rustc_args: Vec<String>,
     touch_file: Option<String>,
+    jobserver: Option<jobserver::Client>,
 }
 
 impl<'a> CargoProcess<'a> {
@@ -258,10 +259,19 @@ impl<'a> CargoProcess<'a> {
         Ok(package_id.trim().to_string())
     }
 
-    fn run_rustc(&mut self) -> anyhow::Result<()> {
+    fn jobserver(mut self, server: jobserver::Client) -> Self {
+        self.jobserver = Some(server);
+        self
+    }
+
+    // FIXME: the needs_final and processor_etc interactions aren't ideal; we
+    // would like to "auto know" when we need final but currently we don't
+    // really.
+    fn run_rustc(&mut self, needs_final: bool) -> anyhow::Result<()> {
         log::info!(
-            "run_rustc with incremental={}, run_kind={:?}, patch={:?}",
+            "run_rustc with incremental={}, build_kind={:?}, run_kind={:?}, patch={:?}",
             self.incremental,
+            self.build_kind,
             self.processor_etc.as_ref().map(|v| v.1),
             self.processor_etc.as_ref().and_then(|v| v.3)
         );
@@ -289,7 +299,10 @@ impl<'a> CargoProcess<'a> {
                     Some(sub) => sub,
                 }
             } else {
-                "rustc"
+                match self.build_kind {
+                    BuildKind::Doc => "rustdoc",
+                    _ => "rustc",
+                }
             };
 
             let mut cmd = self.base_command(self.cwd, subcommand);
@@ -316,7 +329,12 @@ impl<'a> CargoProcess<'a> {
             // out nicely because `cargo rustc` only passes arguments after '--'
             // onto rustc for the final crate, which is exactly the crate for which
             // we want to wrap rustc.
-            if let Some((ref mut processor, ..)) = self.processor_etc {
+            if needs_final {
+                let processor = self
+                    .processor_etc
+                    .as_mut()
+                    .map(|v| &mut v.0)
+                    .expect("needs_final needs a processor");
                 let profiler = processor.profiler(self.build_kind).name();
                 // If we're using a processor, we expect that only the crate
                 // we're interested in benchmarking will be built, not any
@@ -358,6 +376,10 @@ impl<'a> CargoProcess<'a> {
                 let mut incr_arg = std::ffi::OsString::from("incremental=");
                 incr_arg.push(self.cwd.join("incremental-state"));
                 cmd.arg(incr_arg);
+            }
+
+            if let Some(client) = &self.jobserver {
+                client.configure(&mut cmd);
             }
 
             log::debug!("{:?}", cmd);
@@ -958,6 +980,7 @@ impl Benchmark {
                 .map(String::from)
                 .collect(),
             touch_file: self.config.touch_file.clone(),
+            jobserver: None,
         }
     }
 
@@ -977,23 +1000,50 @@ impl Benchmark {
             bail!("disabled benchmark");
         }
 
-        eprintln!("Preparing {} (with {:?})", self.name, build_kinds[0]);
-        // Build everything, including all dependent crates, in a temp dir with
-        // the first build kind we're building for. The intent is to cache build
-        // dependencies at least between runs.
-        let prep_dir = self.make_temp_dir(&self.path)?;
-        self.mk_cargo_process(compiler, prep_dir.path(), build_kinds[0])
-            .run_rustc()?;
+        eprintln!("Preparing {}", self.name);
+        let build_kind_dirs = build_kinds
+            .iter()
+            .map(|kind| Ok((*kind, self.make_temp_dir(&self.path)?)))
+            .collect::<anyhow::Result<Vec<_>>>()?;
 
-        for &build_kind in build_kinds {
+        // In parallel (but with a limit to the number of CPUs), prepare all
+        // builds kinds. This is done in parallel vs. sequentially because:
+        //  * We don't record any measurements during this phase, so the
+        //    performance need not be consistent.
+        //  * We want to make use of the reality that rustc is single-threaded
+        //    during a good portion of compilation; that means that it is faster
+        //    to run this preparation when we can interleave rustc's as needed
+        //    rather than fully sequentially, where we have long periods of a
+        //    single CPU core being used.
+        //
+        // As one example, with a full (All builds x All run kinds)
+        // configuration, script-servo-2 took 2995s without this parallelization
+        // and 2915s with. This is a small win, admittedly, but even a few
+        // minutes shaved off is important -- and there's not too much mangling
+        // of our code needed to get this to work.
+        //
+        // Ideally we would not separately build build-script's (which are
+        // otherwise shared between the configurations), but there's no good way
+        // to do this in Cargo today. We would also ideally build in the same
+        // target directory, but that's also not possible, as Cargo takes a
+        // target-directory global lock during compilation.
+        crossbeam_utils::thread::scope::<_, anyhow::Result<()>>(|s| {
+            let server = jobserver::Client::new(num_cpus::get()).context("jobserver::new")?;
+            for (build_kind, prep_dir) in &build_kind_dirs {
+                let server = server.clone();
+                s.spawn::<_, anyhow::Result<()>>(move |_| {
+                    self.mk_cargo_process(compiler, prep_dir.path(), *build_kind)
+                        .jobserver(server)
+                        .run_rustc(false)?;
+                    Ok(())
+                });
+            }
+            Ok(())
+        })
+        .unwrap()?;
+
+        for (build_kind, prep_dir) in build_kind_dirs {
             eprintln!("Running {}: {:?} + {:?}", self.name, build_kind, run_kinds);
-
-            // Rebuild the prepared crates for the given profile. This shouldn't
-            // rebuild build dependencies but will likely rebuild everything
-            // else -- that's fine though.
-            let prep_dir = self.make_temp_dir(prep_dir.path())?;
-            self.mk_cargo_process(compiler, prep_dir.path(), build_kind)
-                .run_rustc()?;
 
             // We want at least two runs for all benchmarks (since we run
             // self-profile separately).
@@ -1015,7 +1065,7 @@ impl Benchmark {
                 if run_kinds.contains(&RunKind::Full) {
                     self.mk_cargo_process(compiler, cwd, build_kind)
                         .processor(processor, RunKind::Full, "Full", None)
-                        .run_rustc()?;
+                        .run_rustc(true)?;
                 }
 
                 // Rustdoc does not support incremental compilation
@@ -1029,7 +1079,7 @@ impl Benchmark {
                         self.mk_cargo_process(compiler, cwd, build_kind)
                             .incremental(true)
                             .processor(processor, RunKind::IncrFull, "IncrFull", None)
-                            .run_rustc()?;
+                            .run_rustc(true)?;
                     }
 
                     // An incremental build with no changes (fastest incremental case).
@@ -1037,7 +1087,7 @@ impl Benchmark {
                         self.mk_cargo_process(compiler, cwd, build_kind)
                             .incremental(true)
                             .processor(processor, RunKind::IncrUnchanged, "IncrUnchanged", None)
-                            .run_rustc()?;
+                            .run_rustc(true)?;
                     }
 
                     if run_kinds.contains(&RunKind::IncrPatched) {
@@ -1056,7 +1106,7 @@ impl Benchmark {
                                     &run_kind_str,
                                     Some(&patch),
                                 )
-                                .run_rustc()?;
+                                .run_rustc(true)?;
                         }
                     }
                 }
