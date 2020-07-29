@@ -37,13 +37,12 @@ jobs:
     strategy:
       matrix:
         BENCH_INCLUDE_EXCLUDE_OPTS: [
-          "--exclude script-servo,webrender-wrench,style-servo",
-          "--include webrender-wrench,style-servo",
+          "--exclude script-servo,webrender-wrench,style-servo,cargo",
+          "--include webrender-wrench,style-servo,cargo",
           "--include script-servo",
         ]
         BUILD_KINDS: [
-          "Check,Doc",
-          "Debug",
+          "Check,Doc,Debug",
           "Opt",
         ]
     name: Test benchmarks
