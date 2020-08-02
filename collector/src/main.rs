@@ -354,9 +354,27 @@ fn get_local_toolchain(
     rustdoc: Option<&str>,
     cargo: Option<&str>,
 ) -> anyhow::Result<(PathBuf, Option<PathBuf>, PathBuf)> {
-    let rustc = PathBuf::from(rustc)
-        .canonicalize()
-        .with_context(|| format!("failed to canonicalize rustc executable '{}'", rustc))?;
+    // + prefixed rustc is an indicator to fetch the rustc of the toolchain
+    // specified. This follows the similar pattern used by rustup's binaries
+    // (e.g., `rustc +stage1`).
+    let rustc = if rustc.starts_with('+') {
+        let s = String::from_utf8(
+            Command::new("rustup")
+                .args(&["which", "rustc", "--toolchain", &rustc[1..]])
+                .output()
+                .context("failed to run `rustup which rustc`")?
+                .stdout,
+        )
+        .context("failed to convert `rustup which rustc` output to utf8")?;
+
+        let rustc = PathBuf::from(s.trim());
+        debug!("found rustc: {:?}", &rustc);
+        rustc
+    } else {
+        PathBuf::from(rustc)
+            .canonicalize()
+            .with_context(|| format!("failed to canonicalize rustc executable '{}'", rustc))?
+    };
 
     let rustdoc =
         if let Some(rustdoc) = rustdoc {
