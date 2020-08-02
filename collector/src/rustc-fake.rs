@@ -232,10 +232,14 @@ fn main() {
     } else if let Some(_) = args.iter().position(|arg| arg == "--skip-this-rustc") {
         // do nothing
     } else {
+        // Abort if non-wrapped rustc
         if env::var_os("EXPECT_ONLY_WRAPPED_RUSTC").is_some() {
-            eprintln!("{:?} {:?}", tool, args);
-            eprintln!("exiting -- non-wrapped rustc");
-            std::process::exit(1);
+            // ... but not if we're just getting the rustc version.
+            if !args.iter().any(|arg| arg == "-vV") {
+                eprintln!("{:?} {:?}", tool, args);
+                eprintln!("exiting -- non-wrapped rustc");
+                std::process::exit(1);
+            }
         }
 
         let mut cmd = Command::new(&tool);
