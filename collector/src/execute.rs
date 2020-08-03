@@ -468,7 +468,7 @@ pub trait Processor {
     ///
     /// Return "true" if planning on doing something different for second
     /// iteration.
-    fn finished_first_collection(&mut self) -> bool {
+    fn finished_first_collection(&mut self, _: BuildKind) -> bool {
         false
     }
 }
@@ -573,11 +573,11 @@ impl<'a> Processor for MeasureProcessor<'a> {
         self.is_first_collection = true;
     }
 
-    fn finished_first_collection(&mut self) -> bool {
+    fn finished_first_collection(&mut self, build: BuildKind) -> bool {
+        let original = self.profiler(build);
         self.is_first_collection = false;
-        // The second collection is different from the first only if
-        // self-profile is enabled, otherwise they're the same.
-        self.self_profile
+        // We need to run again if we're going to use a different profiler
+        self.profiler(build) != original
     }
 
     fn process_output(
@@ -1050,7 +1050,7 @@ impl Benchmark {
             processor.start_first_collection();
             for i in 0..cmp::max(iterations, 2) {
                 if i == 1 {
-                    let different = processor.finished_first_collection();
+                    let different = processor.finished_first_collection(build_kind);
                     if iterations == 1 && !different {
                         // Don't run twice if this processor doesn't need it and
                         // we've only been asked to run once.
