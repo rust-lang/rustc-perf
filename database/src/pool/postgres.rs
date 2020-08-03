@@ -993,4 +993,14 @@ where
             .unwrap()
             .map(|r| r.get(0))
     }
+    async fn parent_of(&self, sha: &str) -> Option<String> {
+        self.conn()
+            .query_opt(
+                "select parent_sha from pull_request_build where bors_sha = $1",
+                &[&sha],
+            )
+            .await
+            .unwrap()
+            .map(|r| r.get(0))
+    }
 }

@@ -150,6 +150,7 @@ pub struct Commit {
 impl Commit {
     pub fn is_try(&self) -> bool {
         self.date.0.naive_utc().date() == NaiveDate::from_ymd(2000, 1, 1)
+            || self.date.0.naive_utc().date() == NaiveDate::from_ymd(2001, 1, 1)
     }
 }
 

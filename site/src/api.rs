@@ -154,8 +154,18 @@ pub mod days {
 
     #[derive(Debug, Clone, Serialize)]
     pub struct Response {
+        /// The names for the previous artifact before `a`, if any.
+        pub prev: Option<String>,
+
         pub a: DateData,
         pub b: DateData,
+
+        /// The names for the next artifact after `b`, if any.
+        pub next: Option<String>,
+
+        /// If `a` and `b` are adjacent artifacts (i.e., `a` is the parent of
+        /// `b`).
+        pub is_contiguous: bool,
     }
 }
 

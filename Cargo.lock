@@ -1412,9 +1412,9 @@ dependencies = [
 
 [[package]]
 name = "rustc-artifacts"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f58ddccea513aab99fd215c748ec83d243f7d8ac86e4caf56c8dccbdd60d4ad"
+checksum = "4e29c4b13717ade21f67cfc80a4924de600c8d26abd777f7118b35df1765d269"
 dependencies = [
  "chrono",
  "reqwest",

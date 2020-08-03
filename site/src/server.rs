@@ -542,11 +542,45 @@ pub async fn handle_compare(body: days::Request, data: &InputData) -> ServerResu
             selector::Selector::One(body.stat.clone()),
         );
 
-    let mut responses = data.query::<Option<f64>>(query, cids).await?;
+    let (responses, commits) = futures::join!(
+        data.query::<Option<f64>>(query, cids),
+        rustc_artifacts::master_commits(),
+    );
+    let commits = commits.map_err(|e| e.to_string())?;
+    let mut responses = responses?;
+
+    let prev = match &a {
+        ArtifactId::Commit(a) => commits
+            .iter()
+            .find(|c| c.sha == a.sha)
+            .map(|c| c.parent_sha.clone()),
+        ArtifactId::Artifact(_) => None,
+    };
+    let is_contiguous = match (&a, &b) {
+        (ArtifactId::Commit(a), ArtifactId::Commit(b)) => {
+            if let Some(b) = commits.iter().find(|c| c.sha == b.sha) {
+                b.parent_sha == a.sha
+            } else {
+                let conn = data.conn().await;
+                conn.parent_of(&b.sha).await.map_or(false, |p| p == a.sha)
+            }
+        }
+        _ => false,
+    };
+    let next = match &b {
+        ArtifactId::Commit(b) => commits
+            .iter()
+            .find(|c| c.parent_sha == b.sha)
+            .map(|c| c.sha.clone()),
+        ArtifactId::Artifact(_) => None,
+    };
 
     Ok(days::Response {
+        prev,
         a: DateData::consume_one(a, &mut responses),
         b: DateData::consume_one(b, &mut responses),
+        next,
+        is_contiguous,
     })
 }
 

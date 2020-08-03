@@ -150,10 +150,18 @@ input[type="checkbox"] {
             }
         }
 
-        let html = `<table class="compare" style="font-size: medium !important;">`;
+        let html = "";
+
+        html += `<table class="compare" style="font-size: medium !important;">`;
+        html += "<thead>";
+
+        if (!data.is_contiguous) {
+            html += `<tr><td colspan=4 style="text-align:center;">`;
+            html += `<b>Warning</b>: The start and end are not adjacent!`;
+            html += `</td></tr>`;
+        }
 
         // Heading: the two dates, and the time and rss percent changes.
-        html += "<thead>";
         html += "<tr>";
 
         html += "<th>" + "<a href=\"" +
@@ -161,12 +169,30 @@ input[type="checkbox"] {
             data.b.commit +
             "\">compare</a>" + "</th>";
 
-        html += "<th>" + print_date(new Date(data.a.date))
+        let prev_link = "";
+        if (data.prev) {
+            let params = new URLSearchParams(window.location.search);
+            params.set("end", params.get("start"));
+            params.set("start", data.prev);
+            prev_link = `<a href="/compare.html?${params.toString()}">&larr;</a> `;
+        }
+        let next_link = "";
+        if (data.next) {
+            let params = new URLSearchParams(window.location.search);
+            params.set("start", params.get("end"));
+            params.set("end", data.next);
+            next_link = ` <a href="/compare.html?${params.toString()}">&rarr;</a>`;
+        }
+        html += "<th>"
+            + prev_link + ""
+            + print_date(new Date(data.a.date))
             + ` (<a href="https://github.com/rust-lang/rust/commit/${data.a.commit}"
                 >${data.a.commit.substring(0,8)}</a>)` + "</th>";
         html += "<th>" + print_date(new Date(data.b.date))
             + ` (<a href="https://github.com/rust-lang/rust/commit/${data.b.commit}"
-                >${data.b.commit.substring(0,8)}</a>)` + "</th>";
+                >${data.b.commit.substring(0,8)}</a>)`
+            + next_link
+            + "</th>";
 
         html += "<th>" + "% change" + "</th>";
         html += "</tr>";

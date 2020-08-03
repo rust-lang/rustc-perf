@@ -84,6 +84,11 @@ pub trait Connection: Send + Sync {
     async fn in_progress_steps(&self, aid: &ArtifactId) -> Vec<Step>;
 
     async fn last_end_time(&self) -> Option<DateTime<Utc>>;
+
+    /// Returns the sha of the parent commit, if available.
+    ///
+    /// (Currently only works for try commits)
+    async fn parent_of(&self, sha: &str) -> Option<String>;
 }
 
 #[async_trait::async_trait]

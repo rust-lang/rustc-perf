@@ -31,7 +31,7 @@ jemalloc-ctl = "0.3"
 rust_team_data = { git = "https://github.com/rust-lang/team" }
 parking_lot = "0.10"
 snap = "1"
-rustc-artifacts = "0.2.1"
+rustc-artifacts = "0.2.2"
 itertools = "0.9"
 hashbrown = "0.7"
 arc-swap = "0.4"
