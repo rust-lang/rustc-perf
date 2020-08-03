@@ -1003,4 +1003,14 @@ where
             .unwrap()
             .map(|r| r.get(0))
     }
+    async fn pr_of(&self, sha: &str) -> Option<u32> {
+        self.conn()
+            .query_opt(
+                "select pr from pull_request_build where bors_sha = $1",
+                &[&sha],
+            )
+            .await
+            .unwrap()
+            .map(|r| r.get::<_, i32>(0) as u32)
+    }
 }

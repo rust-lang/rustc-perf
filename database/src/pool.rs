@@ -89,6 +89,11 @@ pub trait Connection: Send + Sync {
     ///
     /// (Currently only works for try commits)
     async fn parent_of(&self, sha: &str) -> Option<String>;
+
+    /// Returns the PR of the parent commit, if available.
+    ///
+    /// (Currently only works for try commits)
+    async fn pr_of(&self, sha: &str) -> Option<u32>;
 }
 
 #[async_trait::async_trait]

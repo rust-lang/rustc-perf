@@ -196,6 +196,15 @@ input[type="checkbox"] {
 
         html += "<th>" + "% change" + "</th>";
         html += "</tr>";
+
+        html += "<tr>";
+        html += "<th></th>";
+        html += `<th style="text-align:left;">${data.a.pr ? `<a
+            href="https://github.com/rust-lang/rust/pull/${data.a.pr}">#${data.a.pr}</a>` : ""}</th>`;
+        html += `<th style="text-align:left;">${data.b.pr ? `<a
+            href="https://github.com/rust-lang/rust/pull/${data.b.pr}">#${data.b.pr}</a>` : ""}</th>`;
+        html += "</tr>";
+
         html += "</thead>";
 
         let test_names = unique([...Object.keys(data.a.data), ...Object.keys(data.b.data)]);

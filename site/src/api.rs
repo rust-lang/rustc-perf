@@ -44,6 +44,7 @@ impl Serialize for StyledBenchmarkName {
 #[derive(Debug, Clone, Serialize)]
 pub struct DateData {
     pub date: Option<Date>,
+    pub pr: Option<u32>,
     pub commit: String,
     pub data: HashMap<String, Vec<(String, f64)>>,
 }

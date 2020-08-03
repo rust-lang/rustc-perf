@@ -822,4 +822,15 @@ impl Connection for SqliteConnection {
             .unwrap();
         shas.pop()
     }
+
+    async fn pr_of(&self, sha: &str) -> Option<u32> {
+        self.raw_ref()
+            .query_row(
+                "select pr from pull_request_builds where bors_sha = ?",
+                params![sha],
+                |row| Ok(row.get(0).unwrap()),
+            )
+            .optional()
+            .unwrap()
+    }
 }

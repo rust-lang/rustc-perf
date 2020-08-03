@@ -549,6 +549,7 @@ pub async fn handle_compare(body: days::Request, data: &InputData) -> ServerResu
     let commits = commits.map_err(|e| e.to_string())?;
     let mut responses = responses?;
 
+    let conn = data.conn().await;
     let prev = match &a {
         ArtifactId::Commit(a) => commits
             .iter()
@@ -561,7 +562,6 @@ pub async fn handle_compare(body: days::Request, data: &InputData) -> ServerResu
             if let Some(b) = commits.iter().find(|c| c.sha == b.sha) {
                 b.parent_sha == a.sha
             } else {
-                let conn = data.conn().await;
                 conn.parent_of(&b.sha).await.map_or(false, |p| p == a.sha)
             }
         }
@@ -575,17 +575,20 @@ pub async fn handle_compare(body: days::Request, data: &InputData) -> ServerResu
         ArtifactId::Artifact(_) => None,
     };
 
+    let a = DateData::consume_one(&*conn, a, &mut responses).await;
+    let b = DateData::consume_one(&*conn, b, &mut responses).await;
     Ok(days::Response {
         prev,
-        a: DateData::consume_one(a, &mut responses),
-        b: DateData::consume_one(b, &mut responses),
+        a,
+        b,
         next,
         is_contiguous,
     })
 }
 
 impl DateData {
-    fn consume_one<'a, T>(
+    async fn consume_one<'a, T>(
+        conn: &dyn database::Connection,
         commit: ArtifactId,
         series: &mut [selector::SeriesResponse<T>],
     ) -> DateData
@@ -615,6 +618,16 @@ impl DateData {
         DateData {
             date: if let ArtifactId::Commit(c) = &commit {
                 Some(c.date)
+            } else {
+                None
+            },
+            pr: if let ArtifactId::Commit(c) = &commit {
+                let master_commits = rustc_artifacts::master_commits().await.unwrap_or_default();
+                if let Some(m) = master_commits.iter().find(|m| m.sha == c.sha) {
+                    m.pr
+                } else {
+                    conn.pr_of(&c.sha).await
+                }
             } else {
                 None
             },
