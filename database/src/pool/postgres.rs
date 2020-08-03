@@ -169,6 +169,7 @@ static MIGRATIONS: &[&str] = &[
     );
     "#,
     r#"alter table collector_progress add unique (aid, step);"#,
+    r#"alter table collector_progress add column perf_commit text;"#,
 ];
 
 #[async_trait::async_trait]
@@ -366,7 +367,7 @@ impl PostgresConnection {
                 insert_self_query_series: conn.prepare("insert into self_profile_query_series (crate, profile, cache, query) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING RETURNING id").await.unwrap(),
                 insert_pstat_series: conn.prepare("insert into pstat_series (crate, profile, cache, statistic) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING RETURNING id").await.unwrap(),
                 select_pstat_series: conn.prepare("select id from pstat_series where crate = $1 and profile = $2 and cache = $3 and statistic = $4").await.unwrap(),
-                collection_id: conn.prepare("insert into collection DEFAULT VALUES returning id").await.unwrap(),
+                collection_id: conn.prepare("insert into collection (perf_commit) VALUES ($1) returning id").await.unwrap(),
                 record_duration: conn.prepare("
                     insert into artifact_collection_duration (
                         aid,
@@ -676,10 +677,10 @@ where
             parent_sha: row.get(2),
         })
     }
-    async fn collection_id(&self) -> CollectionId {
+    async fn collection_id(&self, version: &str) -> CollectionId {
         CollectionId(
             self.conn()
-                .query_one(&self.statements().collection_id, &[])
+                .query_one(&self.statements().collection_id, &[&version])
                 .await
                 .unwrap()
                 .get(0),

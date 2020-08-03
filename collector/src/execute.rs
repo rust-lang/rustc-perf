@@ -513,7 +513,19 @@ impl<'a> MeasureProcessor<'a> {
         build_kind: BuildKind,
         stats: (Stats, Option<SelfProfile>),
     ) {
-        let collection = self.rt.block_on(self.conn.collection_id());
+        let version = String::from_utf8(
+            Command::new("git")
+                .arg("rev-parse")
+                .arg("HEAD")
+                .output()
+                .context("git rev-parse HEAD")
+                .unwrap()
+                .stdout,
+        )
+        .context("utf8")
+        .unwrap();
+
+        let collection = self.rt.block_on(self.conn.collection_id(&version));
         let profile = match build_kind {
             BuildKind::Check => database::Profile::Check,
             BuildKind::Debug => database::Profile::Debug,

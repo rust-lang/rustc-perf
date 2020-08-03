@@ -20,7 +20,7 @@ pub trait Connection: Send + Sync {
     /// the statistics for a particular artifact.
     async fn record_duration(&self, artifact: ArtifactIdNumber, duration: Duration);
 
-    async fn collection_id(&self) -> CollectionId;
+    async fn collection_id(&self, version: &str) -> CollectionId;
     async fn artifact_id(&self, artifact: &ArtifactId) -> ArtifactIdNumber;
     async fn record_benchmark(&self, krate: &str, supports_stable: bool);
     async fn record_statistic(
