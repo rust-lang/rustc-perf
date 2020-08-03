@@ -169,7 +169,7 @@ static MIGRATIONS: &[&str] = &[
     );
     "#,
     r#"alter table collector_progress add unique (aid, step);"#,
-    r#"alter table collector_progress add column perf_commit text;"#,
+    r#"alter table collection add column perf_commit text;"#,
 ];
 
 #[async_trait::async_trait]
