@@ -31,7 +31,9 @@ pub use database::{ArtifactId, Commit, Crate};
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum MissingReason {
     /// This commmit has not yet been benchmarked
-    Master,
+    Master {
+        pr: u32,
+    },
     TryParent,
     Try {
         pr: u32,
@@ -166,7 +168,10 @@ impl InputData {
                         sha: c.sha,
                         date: Date(c.time),
                     },
-                    MissingReason::Master,
+                    // All recent master commits should have an associated PR
+                    MissingReason::Master {
+                        pr: c.pr.unwrap_or(0),
+                    },
                 )
             })
             .collect::<Vec<_>>();

@@ -166,6 +166,11 @@
             return reason;
         } else if (reason.InProgress) {
             return `${reason_to_string(reason.InProgress)} - in progress`;
+        } else if (reason["Master"] != undefined && reason.Master.pr) {
+            return `<a href="https://github.com/rust-lang/rust/pull/${reason["Master"].pr}">
+                    #${reason["Master"].pr}</a>`;
+        } else if (reason["Master"] != undefined && reason.Master.pr == 0) {
+            return "Master";
         } else if (reason["Try"] != undefined && reason.Try.pr) {
             return `
                 Try for
