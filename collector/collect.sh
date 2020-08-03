@@ -23,6 +23,5 @@ while : ; do
         touch todo-artifacts
 
         target/release/collector bench_next $SITE_URL --self-profile --db $DATABASE;
-        echo sleeping for 30sec at `date`;
-        sleep 30;
+        echo finished run at `date`;
 done
