@@ -149,6 +149,7 @@ static MIGRATIONS: &[&str] = &[
         UNIQUE(aid, step)
     );
     "#,
+    r#"alter table collection add column perf_commit text;"#,
 ];
 
 #[async_trait::async_trait]
@@ -516,10 +517,13 @@ impl Connection for SqliteConnection {
             .optional()
             .unwrap()
     }
-    async fn collection_id(&self) -> CollectionId {
+    async fn collection_id(&self, version: &str) -> CollectionId {
         let raw = self.raw_ref();
-        raw.execute("insert into collection default values", params![])
-            .unwrap();
+        raw.execute(
+            "insert into collection (perf_commit) values (?)",
+            params![version],
+        )
+        .unwrap();
         CollectionId(
             raw.query_row(
                 "select id from collection where rowid = last_insert_rowid()",
