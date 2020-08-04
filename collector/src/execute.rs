@@ -323,8 +323,8 @@ impl<'a> CargoProcess<'a> {
                 cmd.arg("-Zunstable-options");
                 cmd.arg("-Ztimings");
             }
-            cmd.arg("--target-dir");
-            cmd.arg(self.target_directory);
+            // --target-dir is not universally read, but this hopefully is.
+            cmd.env("CARGO_TARGET_DIR", self.target_directory);
             cmd.arg("--");
             // --wrap-rustc-with is not a valid rustc flag. But rustc-fake
             // recognizes it, strips it (and its argument) out, and uses it as an
