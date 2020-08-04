@@ -1005,14 +1005,14 @@ impl Benchmark {
     pub fn measure(
         &self,
         processor: &mut dyn Processor,
-        build_kinds: &[BuildKind],
+        build_kinds_and_target_dir: &[(BuildKind, &Path)],
         run_kinds: &[RunKind],
         compiler: Compiler<'_>,
         iterations: usize,
     ) -> anyhow::Result<()> {
         let iterations = cmp::min(iterations, self.config.runs);
 
-        if self.config.disabled || build_kinds.is_empty() {
+        if self.config.disabled || build_kinds_and_target_dir.is_empty() {
             eprintln!("Skipping {}: disabled", self.name);
             bail!("disabled benchmark");
         }
@@ -1020,9 +1020,9 @@ impl Benchmark {
         eprintln!("Preparing {}", self.name);
 
         // These directories are *target* directories.
-        let build_kind_dirs = build_kinds
+        let build_kind_dirs = build_kinds_and_target_dir
             .iter()
-            .map(|kind| Ok((*kind, TempDir::new()?, self.make_temp_dir(&self.path)?)))
+            .map(|(kind, target_dir)| Ok((*kind, target_dir, self.make_temp_dir(&self.path)?)))
             .collect::<anyhow::Result<Vec<_>>>()?;
 
         // In parallel (but with a limit to the number of CPUs), prepare all
@@ -1051,7 +1051,7 @@ impl Benchmark {
             for (build_kind, target_dir, src_dir) in &build_kind_dirs {
                 let server = server.clone();
                 s.spawn::<_, anyhow::Result<()>>(move |_| {
-                    self.mk_cargo_process(compiler, target_dir.path(), src_dir.path(), *build_kind)
+                    self.mk_cargo_process(compiler, target_dir, src_dir.path(), *build_kind)
                         .jobserver(server)
                         .run_rustc(false)?;
                     Ok(())
@@ -1077,7 +1077,7 @@ impl Benchmark {
                     }
                 }
                 log::debug!("Benchmark iteration {}/{}", i + 1, iterations);
-                let target_dir = self.make_temp_dir(target_dir.path())?;
+                let target_dir = self.make_temp_dir(target_dir)?;
                 let target_dir = target_dir.path();
                 let src_dir = self.make_temp_dir(src_dir.path())?;
                 let src_dir = src_dir.path();

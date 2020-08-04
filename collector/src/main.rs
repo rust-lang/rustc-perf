@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 use std::process;
 use std::process::Command;
 use std::{str, time::Instant};
+use tempfile::TempDir;
 use tokio::runtime::Runtime;
 
 mod execute;
@@ -207,6 +208,16 @@ fn bench(
         );
     }
 
+    let bk_and_targets = build_kinds
+        .iter()
+        .map(|kind| Ok((*kind, TempDir::new()?)))
+        .collect::<anyhow::Result<Vec<_>>>()
+        .expect("created temp directories");
+    let bk_and_targets = bk_and_targets
+        .iter()
+        .map(|(k, td)| (*k, td.path()))
+        .collect::<Vec<_>>();
+
     let steps = benchmarks
         .iter()
         .map(|b| b.name.to_string())
@@ -250,8 +261,13 @@ fn bench(
             interned_cid,
             self_profile,
         );
-        let result =
-            benchmark.measure(&mut processor, build_kinds, run_kinds, compiler, iterations);
+        let result = benchmark.measure(
+            &mut processor,
+            &bk_and_targets,
+            run_kinds,
+            compiler,
+            iterations,
+        );
         if let Err(s) = result {
             eprintln!(
                 "collector error: Failed to benchmark '{}', recorded: {}",
@@ -734,12 +750,22 @@ fn main_result() -> anyhow::Result<i32> {
 
             eprintln!("Profiling with {:?}", profiler);
 
+            let bk_and_targets = build_kinds
+                .iter()
+                .map(|kind| Ok((*kind, TempDir::new()?)))
+                .collect::<anyhow::Result<Vec<_>>>()
+                .expect("created temp directories");
+            let bk_and_targets = bk_and_targets
+                .iter()
+                .map(|(k, td)| (*k, td.path()))
+                .collect::<Vec<_>>();
+
             let mut errors = BenchmarkErrors::new();
             for (i, benchmark) in benchmarks.iter().enumerate() {
                 eprintln!("{}", n_benchmarks_remaining(benchmarks.len() - i));
                 let mut processor = execute::ProfileProcessor::new(profiler, &out_dir, &id);
                 let result =
-                    benchmark.measure(&mut processor, &build_kinds, &run_kinds, compiler, 1);
+                    benchmark.measure(&mut processor, &bk_and_targets, &run_kinds, compiler, 1);
                 if let Err(ref s) = result {
                     errors.incr();
                     eprintln!(
