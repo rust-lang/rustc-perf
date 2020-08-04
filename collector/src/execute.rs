@@ -391,7 +391,7 @@ impl<'a> CargoProcess<'a> {
             if let Some((ref mut processor, run_kind, run_kind_str, patch)) = self.processor_etc {
                 let data = ProcessOutputData {
                     name: self.processor_name.clone(),
-                    cwd: self.target_directory,
+                    cwd: self.src_dir,
                     build_kind: self.build_kind,
                     run_kind,
                     run_kind_str,
