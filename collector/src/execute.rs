@@ -198,8 +198,7 @@ impl Profiler {
 
 struct CargoProcess<'a> {
     compiler: Compiler<'a>,
-    src_dir: &'a Path,
-    target_directory: &'a Path,
+    cwd: &'a Path,
     build_kind: BuildKind,
     incremental: bool,
     processor_etc: Option<(&'a mut dyn Processor, RunKind, &'a str, Option<&'a Patch>)>,
@@ -228,7 +227,7 @@ impl<'a> CargoProcess<'a> {
         self
     }
 
-    fn base_command(&self, subcommand: &str) -> Command {
+    fn base_command(&self, cwd: &Path, subcommand: &str) -> Command {
         let mut cmd = Command::new(Path::new(self.compiler.cargo));
         cmd
             // Not all cargo invocations (e.g. `cargo clean`) need all of these
@@ -240,7 +239,7 @@ impl<'a> CargoProcess<'a> {
             // and any in-tree dependencies, and we don't want that; it wastes
             // time.
             .env("CARGO_INCREMENTAL", "0")
-            .current_dir(self.src_dir)
+            .current_dir(cwd)
             .arg(subcommand)
             .arg("--manifest-path")
             .arg(&self.manifest_path);
@@ -251,10 +250,10 @@ impl<'a> CargoProcess<'a> {
         cmd
     }
 
-    fn get_pkgid(&self) -> anyhow::Result<String> {
-        let mut pkgid_cmd = self.base_command("pkgid");
+    fn get_pkgid(&self, cwd: &Path) -> anyhow::Result<String> {
+        let mut pkgid_cmd = self.base_command(cwd, "pkgid");
         let out = command_output(&mut pkgid_cmd)
-            .with_context(|| format!("failed to obtain pkgid in '{:?}'", self.src_dir))?
+            .with_context(|| format!("failed to obtain pkgid in '{:?}'", cwd))?
             .stdout;
         let package_id = str::from_utf8(&out).unwrap();
         Ok(package_id.trim().to_string())
@@ -306,8 +305,8 @@ impl<'a> CargoProcess<'a> {
                 }
             };
 
-            let mut cmd = self.base_command(subcommand);
-            cmd.arg("-p").arg(self.get_pkgid()?);
+            let mut cmd = self.base_command(self.cwd, subcommand);
+            cmd.arg("-p").arg(self.get_pkgid(self.cwd)?);
             match self.build_kind {
                 BuildKind::Check => {
                     cmd.arg("--profile").arg("check");
@@ -323,8 +322,6 @@ impl<'a> CargoProcess<'a> {
                 cmd.arg("-Zunstable-options");
                 cmd.arg("-Ztimings");
             }
-            // --target-dir is not universally read, but this hopefully is.
-            cmd.env("CARGO_TARGET_DIR", self.target_directory);
             cmd.arg("--");
             // --wrap-rustc-with is not a valid rustc flag. But rustc-fake
             // recognizes it, strips it (and its argument) out, and uses it as an
@@ -356,10 +353,10 @@ impl<'a> CargoProcess<'a> {
                 // in-tree (e.g., in the case of the servo crates there are a lot of
                 // other components).
                 if let Some(file) = &self.touch_file {
-                    touch(&self.src_dir, Path::new(&file))?;
+                    touch(&self.cwd, Path::new(&file))?;
                 } else {
                     touch_all(
-                        &self.src_dir.join(
+                        &self.cwd.join(
                             Path::new(&self.manifest_path)
                                 .parent()
                                 .expect("manifest has parent"),
@@ -377,7 +374,7 @@ impl<'a> CargoProcess<'a> {
             if self.incremental {
                 cmd.arg("-C");
                 let mut incr_arg = std::ffi::OsString::from("incremental=");
-                incr_arg.push(self.target_directory.join("incremental-state"));
+                incr_arg.push(self.cwd.join("incremental-state"));
                 cmd.arg(incr_arg);
             }
 
@@ -391,7 +388,7 @@ impl<'a> CargoProcess<'a> {
             if let Some((ref mut processor, run_kind, run_kind_str, patch)) = self.processor_etc {
                 let data = ProcessOutputData {
                     name: self.processor_name.clone(),
-                    cwd: self.src_dir,
+                    cwd: self.cwd,
                     build_kind: self.build_kind,
                     run_kind,
                     run_kind_str,
@@ -955,8 +952,7 @@ impl Benchmark {
     fn mk_cargo_process<'a>(
         &'a self,
         compiler: Compiler<'a>,
-        target_directory: &'a Path,
-        src_dir: &'a Path,
+        cwd: &'a Path,
         build_kind: BuildKind,
     ) -> CargoProcess<'a> {
         let mut cargo_args = self
@@ -977,8 +973,7 @@ impl Benchmark {
         CargoProcess {
             compiler,
             processor_name: self.name.clone(),
-            target_directory,
-            src_dir,
+            cwd,
             build_kind,
             incremental: false,
             processor_etc: None,
@@ -1005,24 +1000,22 @@ impl Benchmark {
     pub fn measure(
         &self,
         processor: &mut dyn Processor,
-        build_kinds_and_target_dir: &[(BuildKind, &Path)],
+        build_kinds: &[BuildKind],
         run_kinds: &[RunKind],
         compiler: Compiler<'_>,
         iterations: usize,
     ) -> anyhow::Result<()> {
         let iterations = cmp::min(iterations, self.config.runs);
 
-        if self.config.disabled || build_kinds_and_target_dir.is_empty() {
+        if self.config.disabled || build_kinds.is_empty() {
             eprintln!("Skipping {}: disabled", self.name);
             bail!("disabled benchmark");
         }
 
         eprintln!("Preparing {}", self.name);
-
-        // These directories are *target* directories.
-        let build_kind_dirs = build_kinds_and_target_dir
+        let build_kind_dirs = build_kinds
             .iter()
-            .map(|(kind, target_dir)| Ok((*kind, target_dir, self.make_temp_dir(&self.path)?)))
+            .map(|kind| Ok((*kind, self.make_temp_dir(&self.path)?)))
             .collect::<anyhow::Result<Vec<_>>>()?;
 
         // In parallel (but with a limit to the number of CPUs), prepare all
@@ -1048,10 +1041,10 @@ impl Benchmark {
         // target-directory global lock during compilation.
         crossbeam_utils::thread::scope::<_, anyhow::Result<()>>(|s| {
             let server = jobserver::Client::new(num_cpus::get()).context("jobserver::new")?;
-            for (build_kind, target_dir, src_dir) in &build_kind_dirs {
+            for (build_kind, prep_dir) in &build_kind_dirs {
                 let server = server.clone();
                 s.spawn::<_, anyhow::Result<()>>(move |_| {
-                    self.mk_cargo_process(compiler, target_dir, src_dir.path(), *build_kind)
+                    self.mk_cargo_process(compiler, prep_dir.path(), *build_kind)
                         .jobserver(server)
                         .run_rustc(false)?;
                     Ok(())
@@ -1061,7 +1054,7 @@ impl Benchmark {
         })
         .unwrap()?;
 
-        for (build_kind, target_dir, src_dir) in build_kind_dirs {
+        for (build_kind, prep_dir) in build_kind_dirs {
             eprintln!("Running {}: {:?} + {:?}", self.name, build_kind, run_kinds);
 
             // We want at least two runs for all benchmarks (since we run
@@ -1077,14 +1070,12 @@ impl Benchmark {
                     }
                 }
                 log::debug!("Benchmark iteration {}/{}", i + 1, iterations);
-                let target_dir = self.make_temp_dir(target_dir)?;
-                let target_dir = target_dir.path();
-                let src_dir = self.make_temp_dir(src_dir.path())?;
-                let src_dir = src_dir.path();
+                let timing_dir = self.make_temp_dir(prep_dir.path())?;
+                let cwd = timing_dir.path();
 
                 // A full non-incremental build.
                 if run_kinds.contains(&RunKind::Full) {
-                    self.mk_cargo_process(compiler, target_dir, src_dir, build_kind)
+                    self.mk_cargo_process(compiler, cwd, build_kind)
                         .processor(processor, RunKind::Full, "Full", None)
                         .run_rustc(true)?;
                 }
@@ -1097,7 +1088,7 @@ impl Benchmark {
                         || run_kinds.contains(&RunKind::IncrUnchanged)
                         || run_kinds.contains(&RunKind::IncrPatched)
                     {
-                        self.mk_cargo_process(compiler, target_dir, src_dir, build_kind)
+                        self.mk_cargo_process(compiler, cwd, build_kind)
                             .incremental(true)
                             .processor(processor, RunKind::IncrFull, "IncrFull", None)
                             .run_rustc(true)?;
@@ -1105,7 +1096,7 @@ impl Benchmark {
 
                     // An incremental build with no changes (fastest incremental case).
                     if run_kinds.contains(&RunKind::IncrUnchanged) {
-                        self.mk_cargo_process(compiler, target_dir, src_dir, build_kind)
+                        self.mk_cargo_process(compiler, cwd, build_kind)
                             .incremental(true)
                             .processor(processor, RunKind::IncrUnchanged, "IncrUnchanged", None)
                             .run_rustc(true)?;
@@ -1114,12 +1105,12 @@ impl Benchmark {
                     if run_kinds.contains(&RunKind::IncrPatched) {
                         for (i, patch) in self.patches.iter().enumerate() {
                             log::debug!("applying patch {}", patch.name);
-                            patch.apply(src_dir).map_err(|s| anyhow::anyhow!("{}", s))?;
+                            patch.apply(cwd).map_err(|s| anyhow::anyhow!("{}", s))?;
 
                             // An incremental build with some changes (realistic
                             // incremental case).
                             let run_kind_str = format!("IncrPatched{}", i);
-                            self.mk_cargo_process(compiler, target_dir, src_dir, build_kind)
+                            self.mk_cargo_process(compiler, cwd, build_kind)
                                 .incremental(true)
                                 .processor(
                                     processor,
