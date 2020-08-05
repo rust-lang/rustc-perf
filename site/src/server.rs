@@ -390,6 +390,7 @@ pub async fn handle_graph(
     body: graph::Request,
     data: &InputData,
 ) -> ServerResult<Arc<graph::Response>> {
+    log::info!("handle_graph({:?})", body);
     let is_default_query = body
         == graph::Request {
             start: Bound::None,
@@ -548,6 +549,7 @@ pub async fn handle_graph(
 }
 
 pub async fn handle_compare(body: days::Request, data: &InputData) -> ServerResult<days::Response> {
+    log::info!("handle_compare({:?})", body);
     let a = data.data_for(true, body.start.clone()).ok_or(format!(
         "could not find start commit for bound {:?}",
         body.start
@@ -778,6 +780,7 @@ pub async fn handle_self_profile(
     body: self_profile::Request,
     data: &InputData,
 ) -> ServerResult<self_profile::Response> {
+    log::info!("handle_self_profile({:?})", body);
     let mut it = body.benchmark.rsplitn(2, '-');
     let bench_ty = it.next().ok_or(format!("no benchmark type"))?;
     let bench_name = it.next().ok_or(format!("no benchmark name"))?;
