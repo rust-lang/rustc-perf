@@ -75,6 +75,8 @@ pub struct Config {
 pub struct InputData {
     pub config: Config,
 
+    pub landing_page: ArcSwap<Option<Arc<crate::api::graph::Response>>>,
+
     pub index: ArcSwap<crate::db::Index>,
     pub pool: Pool,
 }
@@ -131,6 +133,7 @@ impl InputData {
             config,
             index: ArcSwap::new(Arc::new(index)),
             pool,
+            landing_page: ArcSwap::new(Arc::new(None)),
         })
     }
 

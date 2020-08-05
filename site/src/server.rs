@@ -44,6 +44,7 @@ use crate::db::{self, Cache, Crate, Profile};
 use crate::interpolate::Interpolated;
 use crate::load::{Config, InputData};
 use crate::selector::{self, PathComponent, Tag};
+use collector::Bound;
 use db::{ArtifactId, Lookup};
 use parking_lot::RwLock;
 
@@ -385,7 +386,25 @@ fn to_graph_data<'a>(
     })
 }
 
-pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResult<graph::Response> {
+pub async fn handle_graph(
+    body: graph::Request,
+    data: &InputData,
+) -> ServerResult<Arc<graph::Response>> {
+    let is_default_query = body
+        == graph::Request {
+            start: Bound::None,
+            end: Bound::None,
+            stat: String::from("instructions:u"),
+            absolute: true,
+        };
+
+    if is_default_query {
+        match &**data.landing_page.load() {
+            Some(resp) => return Ok(resp.clone()),
+            None => {}
+        }
+    }
+
     let cc = CommitIdxCache::new();
     let range = data.data_range(body.start.clone()..=body.end.clone());
     let commits: Arc<Vec<_>> = Arc::new(range.iter().map(|c| c.clone().into()).collect());
@@ -514,12 +533,18 @@ pub async fn handle_graph(body: graph::Request, data: &InputData) -> ServerResul
             .push((sr.path.get::<Cache>()?.to_string(), sr.series));
     }
 
-    Ok(graph::Response {
+    let resp = Arc::new(graph::Response {
         max: by_krate_max,
         benchmarks: by_krate,
         colors: vec![String::new(), String::from(INTERPOLATED_COLOR)],
         commits: cc.into_commits(),
-    })
+    });
+
+    if is_default_query {
+        data.landing_page.store(Arc::new(Some(resp.clone())));
+    }
+
+    Ok(resp)
 }
 
 pub async fn handle_compare(body: days::Request, data: &InputData) -> ServerResult<days::Response> {
@@ -1016,6 +1041,9 @@ impl Server {
         let index = db::Index::load(&mut *conn).await;
         eprintln!("index has {} commits", index.commits().len());
         data.index.store(Arc::new(index));
+
+        // Refresh the landing page
+        data.landing_page.store(Arc::new(None));
 
         // Spawn off a task to post the results of any commit results that we
         // are now aware of.
