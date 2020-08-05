@@ -1032,7 +1032,8 @@ impl Benchmark {
         // configuration, script-servo-2 took 2995s without this parallelization
         // and 2915s with. This is a small win, admittedly, but even a few
         // minutes shaved off is important -- and there's not too much mangling
-        // of our code needed to get this to work.
+        // of our code needed to get this to work. This benchmark has since been
+        // deleted, but the optimization holds for other crates as well.
         //
         // Ideally we would not separately build build-script's (which are
         // otherwise shared between the configurations), but there's no good way

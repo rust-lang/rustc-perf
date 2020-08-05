@@ -1,6 +1,0 @@
-{
-    "cargo_opts": "--no-default-features",
-    "cargo_toml": "components/script/Cargo.toml",
-    "runs": 1,
-    "touch_file": "components/script/lib.rs"
-}
