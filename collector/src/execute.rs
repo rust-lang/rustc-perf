@@ -19,6 +19,27 @@ use std::time::Duration;
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
 
+fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> anyhow::Result<()> {
+    let (from, to) = (from.as_ref(), to.as_ref());
+    if fs::rename(from, to).is_err() {
+        // This is necessary if from and to are on different
+        // mount points (e.g., if /tmp is in tmpfs instead of on
+        // the same disk). We don't want to implement a full recursive solution
+        // to copying directories, so just shell out to `mv`.
+        let ctx = format!("mv {:?} {:?}", from, to);
+        let status = Command::new("mv")
+            .arg(from)
+            .arg(to)
+            .status()
+            .with_context(|| ctx.clone())?;
+        if !status.success() {
+            anyhow::bail!("mv {:?} {:?}: {:?}", from, to, status);
+        }
+    }
+
+    Ok(())
+}
+
 fn touch(root: &Path, path: &Path) -> anyhow::Result<()> {
     let mut cmd = Command::new("touch");
     cmd.current_dir(root).arg(path);
@@ -719,7 +740,8 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 if zsp_dir.exists() {
                     fs::remove_dir_all(&zsp_dir)?;
                 }
-                fs::rename(&tmp_zsp_dir, &zsp_dir)?;
+
+                rename(&tmp_zsp_dir, &zsp_dir)?;
 
                 // Rename the data files. There should be exactly three.
                 let mut num_files = 0;
@@ -729,11 +751,11 @@ impl<'a> Processor for ProfileProcessor<'a> {
                     let filename_str = filename.to_str().unwrap();
                     let path = filepath(&zsp_dir, filename_str);
                     if filename_str.ends_with(".events") {
-                        fs::rename(path, filepath(&zsp_dir, "Zsp.events"))?;
+                        rename(path, filepath(&zsp_dir, "Zsp.events"))?;
                     } else if filename_str.ends_with(".string_data") {
-                        fs::rename(path, filepath(&zsp_dir, "Zsp.string_data"))?;
+                        rename(path, filepath(&zsp_dir, "Zsp.string_data"))?;
                     } else if filename_str.ends_with(".string_index") {
-                        fs::rename(path, filepath(&zsp_dir, "Zsp.string_index"))?;
+                        rename(path, filepath(&zsp_dir, "Zsp.string_index"))?;
                     } else {
                         panic!("unexpected file {:?}", path);
                     }
@@ -749,13 +771,13 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 let mut flamegraph_cmd = Command::new("flamegraph");
                 flamegraph_cmd.arg(&zsp_files_prefix);
                 flamegraph_cmd.status()?;
-                fs::rename("rustc.svg", flamegraph_file)?;
+                rename("rustc.svg", flamegraph_file)?;
 
                 // Run `crox`.
                 let mut crox_cmd = Command::new("crox");
                 crox_cmd.arg(&zsp_files_prefix);
                 crox_cmd.status()?;
-                fs::rename("chrome_profiler.json", crox_file)?;
+                rename("chrome_profiler.json", crox_file)?;
             }
 
             // `-Ztime-passes` output is redirected (via rustc-fake) to a file
@@ -791,7 +813,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 if opout_dir.exists() {
                     fs::remove_dir_all(&opout_dir)?;
                 }
-                fs::rename(&tmp_opout_dir, &opout_dir)?;
+                rename(&tmp_opout_dir, &opout_dir)?;
 
                 let mut session_dir_arg = "--session-dir=".to_string();
                 session_dir_arg.push_str(opout_dir.to_str().unwrap());
