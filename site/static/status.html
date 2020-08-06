@@ -117,7 +117,7 @@
                 let end = new Date(data.most_recent_end * 1000);
                 element.innerHTML = `No current collection in progress. Last one
                     finished at ${end.toLocaleString()} local time,
-                    ${format_duration(Math.trunc((new Date() - end)/1000))} ago.`;
+                    ${format_duration(Math.trunc((new Date()/1000 - end)))} ago.`;
             } else {
                 element.innerHTML = "No current collection in progress.";
             }
