@@ -37,6 +37,8 @@ pub enum MissingReason {
     TryParent,
     Try {
         pr: u32,
+        include: Option<String>,
+        exclude: Option<String>,
     },
     InProgress(Option<Box<MissingReason>>),
 }
@@ -185,6 +187,8 @@ impl InputData {
             sha,
             parent_sha,
             pr,
+            include,
+            exclude,
         } in queued_commits
         {
             // Enqueue the `TryParent` commit before the `TryCommit` itself, so that
@@ -198,7 +202,11 @@ impl InputData {
                     sha: sha.to_string(),
                     date: Date::ymd_hms(2001, 01, 01, 0, 0, 0),
                 },
-                MissingReason::Try { pr },
+                MissingReason::Try {
+                    pr,
+                    include,
+                    exclude,
+                },
             ));
         }
         commits.extend(missing);

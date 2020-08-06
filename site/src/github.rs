@@ -13,7 +13,7 @@ lazy_static::lazy_static! {
     static ref BODY_TRY_COMMIT: Regex =
         Regex::new(r#"(?:\W|^)@rust-timer\s+build\s+(\w+)(?:\W|$)"#).unwrap();
     static ref BODY_QUEUE: Regex =
-        Regex::new(r#"(?:\W|^)@rust-timer\s+queue(?:\W|$)"#).unwrap();
+        Regex::new(r#"(?:\W|^)@rust-timer\s+queue(?:\W|$)(?:include=(\S+))?(?:\s+)?(?:exclude=(\S+))?"#).unwrap();
     static ref BODY_MAKE_PR_FOR: Regex =
         Regex::new(r#"(?:\W|^)@rust-timer\s+make-pr-for\s+(\w+)(?:\W|$)"#).unwrap();
     static ref BODY_UDPATE_PR_FOR: Regex =
@@ -64,10 +64,12 @@ pub async fn handle_github(
         return Ok(github::Response);
     }
 
-    if BODY_QUEUE.is_match(&request.comment.body) {
+    if let Some(captures) = BODY_QUEUE.captures(&request.comment.body) {
+        let include = captures.get(1).map(|v| v.as_str());
+        let exclude = captures.get(2).map(|v| v.as_str());
         {
             let conn = data.conn().await;
-            conn.queue_pr(request.issue.number).await;
+            conn.queue_pr(request.issue.number, include, exclude).await;
         }
         post_comment(
             &data.config,
@@ -83,7 +85,7 @@ pub async fn handle_github(
             let commit = commit.trim_start_matches("https://github.com/rust-lang/rust/commit/");
             {
                 let conn = data.conn().await;
-                conn.queue_pr(request.issue.number).await;
+                conn.queue_pr(request.issue.number, None, None).await;
             }
             let f = enqueue_sha(request, &data, commit.to_owned());
             return f.await;

@@ -150,6 +150,8 @@ static MIGRATIONS: &[&str] = &[
     );
     "#,
     r#"alter table collection add column perf_commit text;"#,
+    r#"alter table pull_request_builds add column include text;"#,
+    r#"alter table pull_request_builds add column exclude text;"#,
 ];
 
 #[async_trait::async_trait]
@@ -449,13 +451,13 @@ impl Connection for SqliteConnection {
             .collect::<Result<_, _>>()
             .unwrap()
     }
-    async fn queue_pr(&self, pr: u32) {
+    async fn queue_pr(&self, pr: u32, include: Option<&str>, exclude: Option<&str>) {
         self.raw_ref()
             .prepare_cached(
-                "insert into pull_request_builds (pr, complete, requested) VALUES (?, 0, strftime('%s','now'))",
+                "insert into pull_request_builds (pr, complete, requested, include, exclude) VALUES (?, 0, strftime('%s','now'), ?, ?)",
             )
             .unwrap()
-            .execute(params![pr])
+            .execute(params![pr, include, exclude])
             .unwrap();
     }
     async fn pr_attach_commit(&self, pr: u32, sha: &str, parent_sha: &str) -> bool {
@@ -472,7 +474,7 @@ impl Connection for SqliteConnection {
     async fn queued_commits(&self) -> Vec<QueuedCommit> {
         self.raw_ref()
             .prepare_cached(
-                "select pr, bors_sha, parent_sha from pull_request_builds
+                "select pr, bors_sha, parent_sha, include, exclude from pull_request_builds
                 where complete is false and bors_sha is not null
                 order by requested asc",
             )
@@ -484,6 +486,8 @@ impl Connection for SqliteConnection {
                     pr: row.get(0).unwrap(),
                     sha: row.get(1).unwrap(),
                     parent_sha: row.get(2).unwrap(),
+                    include: row.get(3).unwrap(),
+                    exclude: row.get(4).unwrap(),
                 })
             })
             .collect::<Result<Vec<_>, _>>()
@@ -503,7 +507,7 @@ impl Connection for SqliteConnection {
         assert_eq!(count, 1, "sha is unique column");
         self.raw_ref()
             .query_row(
-                "select pr, sha, parent_sha from pull_request_builds
+                "select pr, sha, parent_sha, include, exclude from pull_request_builds
             where sha = ?",
                 params![sha],
                 |row| {
@@ -511,6 +515,8 @@ impl Connection for SqliteConnection {
                         pr: row.get(0).unwrap(),
                         sha: row.get(1).unwrap(),
                         parent_sha: row.get(2).unwrap(),
+                        include: row.get(3).unwrap(),
+                        exclude: row.get(4).unwrap(),
                     })
                 },
             )

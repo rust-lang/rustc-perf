@@ -598,21 +598,25 @@ fn main_result() -> anyhow::Result<i32> {
                 .get(&format!("{}/perf/next_commit", site_url))
                 .send()?
                 .json()?;
-            let commit = if let Some(c) = response.commit {
+            let next = if let Some(c) = response.commit {
                 c
             } else {
                 println!("no commit to benchmark");
                 // no missing commits
                 return Ok(0);
             };
-            let commit = get_commit_or_fake_it(&commit)?;
+            let commit = get_commit_or_fake_it(&next.sha)?;
 
             let pool = database::Pool::open(db);
 
             let sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")
                 .with_context(|| format!("failed to install sysroot for {:?}", commit))?;
 
-            let benchmarks = get_benchmarks(&benchmark_dir, None, None)?;
+            let benchmarks = get_benchmarks(
+                &benchmark_dir,
+                next.include.as_deref(),
+                next.exclude.as_deref(),
+            )?;
 
             let res = bench(
                 &mut rt,
