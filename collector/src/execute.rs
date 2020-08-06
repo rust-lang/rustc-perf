@@ -765,18 +765,21 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 // Run `summarize`.
                 let mut summarize_cmd = Command::new("summarize");
                 summarize_cmd.arg("summarize").arg(&zsp_files_prefix);
-                fs::write(&summarize_file, &summarize_cmd.output()?.stdout)?;
+                fs::write(
+                    &summarize_file,
+                    &summarize_cmd.output().context("summarize")?.stdout,
+                )?;
 
                 // Run `flamegraph`.
                 let mut flamegraph_cmd = Command::new("flamegraph");
                 flamegraph_cmd.arg(&zsp_files_prefix);
-                flamegraph_cmd.status()?;
+                flamegraph_cmd.status().context("flamegraph")?;
                 rename("rustc.svg", flamegraph_file)?;
 
                 // Run `crox`.
                 let mut crox_cmd = Command::new("crox");
                 crox_cmd.arg(&zsp_files_prefix);
-                crox_cmd.status()?;
+                crox_cmd.status().context("crox")?;
                 rename("chrome_profiler.json", crox_file)?;
             }
 
