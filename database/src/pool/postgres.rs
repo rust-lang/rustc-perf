@@ -686,7 +686,7 @@ where
     async fn collection_id(&self, version: &str) -> CollectionId {
         CollectionId(
             self.conn()
-                .query_one(&self.statements().collection_id, &[&version])
+                .query_one(&self.statements().collection_id, &[&version.trim()])
                 .await
                 .unwrap()
                 .get(0),
