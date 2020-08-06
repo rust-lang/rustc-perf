@@ -19,6 +19,25 @@ use std::time::Duration;
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
 
+fn to_s3(local: &Path, remote: &Path) -> anyhow::Result<()> {
+    let status = Command::new("aws")
+        .arg("s3")
+        .arg("cp")
+        .arg(local)
+        .arg(&format!("s3://rustc-perf/{}", remote.to_str().unwrap()))
+        .status()
+        .with_context(|| format!("upload {:?} to s3://rustc-perf/{:?}", local, remote))?;
+    if !status.success() {
+        anyhow::bail!(
+            "upload {:?} to s3://rustc-perf/{:?}: {:?}",
+            local,
+            remote,
+            status
+        );
+    }
+    Ok(())
+}
+
 fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> anyhow::Result<()> {
     let (from, to) = (from.as_ref(), to.as_ref());
     if fs::rename(from, to).is_err() {
@@ -532,7 +551,7 @@ impl<'a> MeasureProcessor<'a> {
         &mut self,
         cache: database::Cache,
         build_kind: BuildKind,
-        stats: (Stats, Option<SelfProfile>),
+        stats: (Stats, Option<SelfProfile>, Option<SelfProfileFiles>),
     ) {
         let version = String::from_utf8(
             Command::new("git")
@@ -588,6 +607,26 @@ impl<'a> MeasureProcessor<'a> {
                 ));
             }
         }
+
+        if let Some(files) = &stats.2 {
+            if env::var_os("RUSTC_PERF_UPLOAD_TO_S3").is_some() {
+                let prefix = self.rt.block_on(self.conn.record_raw_self_profile(
+                    collection,
+                    self.cid,
+                    self.krate.0.as_str(),
+                    profile,
+                    cache,
+                ));
+                let prefix = PathBuf::from(prefix);
+                to_s3(&files.string_index, &prefix.join("Zsp.string_index"))
+                    .expect("s3 upload succeeded");
+                to_s3(&files.string_data, &prefix.join("Zsp.string_index"))
+                    .expect("s3 upload succeeded");
+                to_s3(&files.events, &prefix.join("Zsp.string_index"))
+                    .expect("s3 upload succeeded");
+            }
+        }
+
         self.rt
             .block_on(async move { while let Some(()) = buf.next().await {} });
     }
@@ -619,35 +658,23 @@ impl<'a> Processor for MeasureProcessor<'a> {
         output: process::Output,
     ) -> anyhow::Result<Retry> {
         match process_perf_stat_output(output) {
-            Ok((stats, profile)) => {
+            Ok(res) => {
                 match data.run_kind {
                     RunKind::Full => {
-                        self.insert_stats(
-                            database::Cache::Empty,
-                            data.build_kind,
-                            (stats, profile),
-                        );
+                        self.insert_stats(database::Cache::Empty, data.build_kind, res);
                     }
                     RunKind::IncrFull => {
-                        self.insert_stats(
-                            database::Cache::IncrementalEmpty,
-                            data.build_kind,
-                            (stats, profile),
-                        );
+                        self.insert_stats(database::Cache::IncrementalEmpty, data.build_kind, res);
                     }
                     RunKind::IncrUnchanged => {
-                        self.insert_stats(
-                            database::Cache::IncrementalFresh,
-                            data.build_kind,
-                            (stats, profile),
-                        );
+                        self.insert_stats(database::Cache::IncrementalFresh, data.build_kind, res);
                     }
                     RunKind::IncrPatched => {
                         let patch = data.patch.unwrap();
                         self.insert_stats(
                             database::Cache::IncrementalPatch(patch.name),
                             data.build_kind,
-                            (stats, profile),
+                            res,
                         );
                     }
                 }
@@ -1163,16 +1190,32 @@ enum DeserializeStatError {
     ParseError(String, #[source] ::std::num::ParseFloatError),
 }
 
+struct SelfProfileFiles {
+    string_data: PathBuf,
+    string_index: PathBuf,
+    events: PathBuf,
+}
+
 fn process_perf_stat_output(
     output: process::Output,
-) -> Result<(Stats, Option<SelfProfile>), DeserializeStatError> {
+) -> Result<(Stats, Option<SelfProfile>, Option<SelfProfileFiles>), DeserializeStatError> {
     let stdout = String::from_utf8(output.stdout.clone()).expect("utf8 output");
     let mut stats = Stats::new();
 
     let mut profile: Option<SelfProfile> = None;
+    let mut dir: Option<PathBuf> = None;
+    let mut prefix: Option<String> = None;
     for line in stdout.lines() {
         if line.starts_with("!self-profile-output:") {
             profile = Some(serde_json::from_str(&line["!self-profile-output:".len()..]).unwrap());
+            continue;
+        }
+        if line.starts_with("!self-profile-dir:") {
+            dir = Some(PathBuf::from(&line["!self-profile-dir:".len()..]));
+            continue;
+        }
+        if line.starts_with("!self-profile-prefix:") {
+            prefix = Some(String::from(&line["!self-profile-prefix:".len()..]));
             continue;
         }
 
@@ -1210,11 +1253,44 @@ fn process_perf_stat_output(
         );
     }
 
+    let files = if let (Some(prefix), Some(dir)) = (prefix, dir) {
+        let mut files = SelfProfileFiles {
+            string_index: PathBuf::new(),
+            string_data: PathBuf::new(),
+            events: PathBuf::new(),
+        };
+        // Rename the data files. There should be exactly three.
+        let mut num_files = 0;
+        for entry in fs::read_dir(&dir).unwrap() {
+            num_files += 1;
+            let filename = entry.unwrap().file_name();
+            let filename_str = filename.to_str().unwrap();
+            let path = dir.join(filename_str);
+            if filename_str.ends_with(".events") {
+                assert!(filename_str.contains(&prefix), "{:?}", path);
+                files.events = path;
+            } else if filename_str.ends_with(".string_data") {
+                assert!(filename_str.contains(&prefix), "{:?}", path);
+                files.string_data = path;
+            } else if filename_str.ends_with(".string_index") {
+                assert!(filename_str.contains(&prefix), "{:?}", path);
+                files.string_index = path;
+            } else {
+                panic!("unexpected file {:?}", path);
+            }
+        }
+        assert_eq!(num_files, 3);
+
+        Some(files)
+    } else {
+        None
+    };
+
     if stats.is_empty() {
         return Err(DeserializeStatError::NoOutput(output));
     }
 
-    Ok((stats, profile))
+    Ok((stats, profile, files))
 }
 
 #[derive(Clone)]

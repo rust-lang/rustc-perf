@@ -839,4 +839,18 @@ impl Connection for SqliteConnection {
             .optional()
             .unwrap()
     }
+    async fn record_raw_self_profile(
+        &self,
+        _collection: CollectionId,
+        _artifact: ArtifactIdNumber,
+        _krate: &str,
+        _profile: Profile,
+        _cache: crate::Cache,
+    ) -> String {
+        // FIXME: this is left for the future, if we ever need to support it. It
+        // shouldn't be too hard, but we may also want to just intern the raw
+        // self profile files into sqlite database or something like that, not
+        // yet clear.
+        unimplemented!("recording raw self profile files is not implemented for sqlite")
+    }
 }

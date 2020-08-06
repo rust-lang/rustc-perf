@@ -172,6 +172,17 @@ static MIGRATIONS: &[&str] = &[
     r#"alter table collection add column perf_commit text;"#,
     r#"alter table pull_request_build add column include text;"#,
     r#"alter table pull_request_build add column exclude text;"#,
+    r#"
+    create table raw_self_profile(
+        aid smallint references artifact(id) on delete cascade on update cascade,
+        cid integer references collection(id) on delete cascade on update cascade,
+        crate text not null references benchmark(name) on delete cascade on update cascade,
+        profile text not null,
+        cache text not null,
+        prefix integer,
+        PRIMARY KEY(aid, cid, crate, profile, cache)
+    );
+    "#,
 ];
 
 #[async_trait::async_trait]
@@ -1018,5 +1029,20 @@ where
             .await
             .unwrap()
             .map(|r| r.get::<_, i32>(0) as u32)
+    }
+    async fn record_raw_self_profile(
+        &self,
+        collection: CollectionId,
+        artifact: ArtifactIdNumber,
+        krate: &str,
+        profile: Profile,
+        cache: Cache,
+    ) -> String {
+        let profile = profile.to_string();
+        let cache = cache.to_string();
+        self.conn().query_one(
+            "insert into raw_self_profile (aid, cid, crate, profile, cache) VALUES ($1, $2, $3, $4, $5) RETURNING prefix",
+            &[&(artifact.0 as i16), &collection.0, &krate, &profile, &cache],
+        ).await.unwrap().get::<_, i32>(0).to_string()
     }
 }
