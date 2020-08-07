@@ -179,7 +179,7 @@ static MIGRATIONS: &[&str] = &[
         crate text not null references benchmark(name) on delete cascade on update cascade,
         profile text not null,
         cache text not null,
-        prefix integer,
+        prefix integer not null generated always as identity,
         PRIMARY KEY(aid, cid, crate, profile, cache)
     );
     "#,
