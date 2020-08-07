@@ -26,12 +26,18 @@ fn to_s3(local: &Path, remote: &Path) -> anyhow::Result<()> {
         .arg(local)
         .arg(&format!("s3://rustc-perf/{}", remote.to_str().unwrap()))
         .status()
-        .with_context(|| format!("upload {:?} to s3://rustc-perf/{}", local, remote))?;
+        .with_context(|| {
+            format!(
+                "upload {:?} to s3://rustc-perf/{}",
+                local,
+                remote.to_str().unwrap()
+            )
+        })?;
     if !status.success() {
         anyhow::bail!(
             "upload {:?} to s3://rustc-perf/{}: {:?}",
             local,
-            remote,
+            remote.to_str().unwrap(),
             status
         );
     }
