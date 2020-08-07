@@ -12,7 +12,6 @@ use std::env;
 use std::fmt;
 use std::fs::{self, File};
 use std::hash;
-use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{self, Command, Stdio};
 use std::str;
@@ -21,34 +20,25 @@ use tempfile::TempDir;
 use tokio::runtime::Runtime;
 
 fn to_s3(local: &Path, remote: &Path) -> anyhow::Result<()> {
-    let data = fs::read(local).with_context(|| format!("reading {:?}", local))?;
-    let mut compressor = snap::read::FrameEncoder::new(&data[..]);
-    let mut compressed_file = tempfile::NamedTempFile::new().context("create temporary file")?;
-    {
-        let mut buffered = std::io::BufWriter::new(&mut compressed_file);
-        std::io::copy(&mut compressor, &mut buffered).context("compressed and written")?;
-        buffered.flush()?;
-    }
-
     let start = std::time::Instant::now();
     let status = Command::new("aws")
         .arg("s3")
         .arg("cp")
         .arg("--only-show-errors")
-        .arg(compressed_file.path())
-        .arg(&format!("s3://rustc-perf/{}.sz", remote.to_str().unwrap()))
+        .arg(local)
+        .arg(&format!("s3://rustc-perf/{}", remote.to_str().unwrap()))
         .status()
         .with_context(|| {
             format!(
                 "upload {:?} to s3://rustc-perf/{}",
-                compressed_file.path(),
+                local,
                 remote.to_str().unwrap()
             )
         })?;
     if !status.success() {
         anyhow::bail!(
             "upload {:?} to s3://rustc-perf/{}: {:?}",
-            compressed_file.path(),
+            local,
             remote.to_str().unwrap(),
             status
         );
@@ -637,13 +627,41 @@ impl<'a> MeasureProcessor<'a> {
                     .join(self.krate.0.as_str())
                     .join(profile.to_string())
                     .join(cache.to_id());
-                let filename = |ext| format!("self-profile-{}.{}", collection, ext);
-                to_s3(&files.string_index, &prefix.join(filename("string_index")))
-                    .expect("s3 upload succeeded");
-                to_s3(&files.string_data, &prefix.join(filename("string_data")))
-                    .expect("s3 upload succeeded");
-                to_s3(&files.events, &prefix.join(filename("events")))
-                    .expect("s3 upload succeeded");
+                let tarball = snap::write::FrameEncoder::new(Vec::new());
+                let mut builder = tar::Builder::new(tarball);
+                builder.mode(tar::HeaderMode::Deterministic);
+
+                let append_file = |builder: &mut tar::Builder<_>,
+                                   file: &Path,
+                                   name: &str|
+                 -> anyhow::Result<()> {
+                    builder.append_path_with_name(file, name)?;
+                    Ok(())
+                };
+                append_file(&mut builder, &files.string_index, "string_index")
+                    .expect("append string index");
+                append_file(&mut builder, &files.string_data, "string_data")
+                    .expect("append string data");
+                append_file(&mut builder, &files.events, "events").expect("append events");
+
+                let upload = tempfile::NamedTempFile::new()
+                    .context("create temporary file")
+                    .unwrap();
+                builder.finish().expect("complete tarball");
+                std::fs::write(
+                    upload.path(),
+                    builder
+                        .into_inner()
+                        .expect("get")
+                        .into_inner()
+                        .expect("snap success"),
+                )
+                .expect("wrote tarball");
+                to_s3(
+                    upload.path(),
+                    &prefix.join(format!("self-profile-{}.tar.sz", collection)),
+                )
+                .expect("s3 upload succeeded");
 
                 self.rt.block_on(self.conn.record_raw_self_profile(
                     collection,
