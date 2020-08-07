@@ -7,12 +7,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use bytes::buf::BufExt;
 use parking_lot::Mutex;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
 use std::fs;
+use std::io::Read;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::str;
@@ -783,9 +785,96 @@ fn get_self_profile_data(
     Ok(profile)
 }
 
+pub async fn handle_self_profile_raw_download(
+    body: self_profile_raw::Request,
+    data: &InputData,
+) -> Response {
+    let res = handle_self_profile_raw(body, data, false).await;
+    let url = match res {
+        Ok(v) => v.url,
+        Err(e) => {
+            let mut resp = Response::new(e.into());
+            *resp.status_mut() = StatusCode::BAD_REQUEST;
+            return resp;
+        }
+    };
+    log::trace!("downloading {}", url);
+
+    let resp = match reqwest::get(&url).await {
+        Ok(r) => r,
+        Err(e) => {
+            let mut resp = Response::new(format!("{:?}", e).into());
+            *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+            return resp;
+        }
+    };
+
+    if !resp.status().is_success() {
+        let mut resp =
+            Response::new(format!("upstream status {:?} is not successful", resp.status()).into());
+        *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+        return resp;
+    }
+
+    let (sender, body) = hyper::Body::channel();
+    let mut server_resp = Response::new(body);
+    let mut header = vec![];
+    ContentType::octet_stream().encode(&mut header);
+    server_resp
+        .headers_mut()
+        .insert(hyper::header::CONTENT_TYPE, header.pop().unwrap());
+    server_resp.headers_mut().insert(
+        hyper::header::CONTENT_DISPOSITION,
+        hyper::header::HeaderValue::from_maybe_shared(format!(
+            "attachment; filename=\"self-profile.tar\""
+        ))
+        .expect("valid header"),
+    );
+    *server_resp.status_mut() = StatusCode::OK;
+    tokio::spawn(tarball(resp, sender));
+    server_resp
+}
+
+async fn tarball(resp: reqwest::Response, mut sender: hyper::body::Sender) {
+    // Ideally, we would stream the response though the snappy decoding, but
+    // snappy doesn't support that AFAICT -- we'd need it to implement AsyncRead
+    // or correctly handle WouldBlock, and neither is true.
+    let input = match resp.bytes().await {
+        Ok(b) => b,
+        Err(e) => {
+            log::error!("failed to receive data: {:?}", e);
+            sender.abort();
+            return;
+        }
+    };
+    let mut decoder = snap::read::FrameDecoder::new(input.reader());
+    let mut buffer = vec![0; 32 * 1024];
+    loop {
+        match decoder.read(&mut buffer[..]) {
+            Ok(0) => return,
+            Ok(length) => {
+                if let Err(e) = sender
+                    .send_data(bytes::Bytes::copy_from_slice(&buffer[..length]))
+                    .await
+                {
+                    log::error!("failed to send data: {:?}", e);
+                    sender.abort();
+                    return;
+                }
+            }
+            Err(e) => {
+                log::error!("failed to fill buffer: {:?}", e);
+                sender.abort();
+                return;
+            }
+        }
+    }
+}
+
 pub async fn handle_self_profile_raw(
     body: self_profile_raw::Request,
     data: &InputData,
+    validate: bool,
 ) -> ServerResult<self_profile_raw::Response> {
     log::info!("handle_self_profile_raw({:?})", body);
     let mut it = body.benchmark.rsplitn(2, '-');
@@ -835,16 +924,18 @@ pub async fn handle_self_profile_raw(
         cid
     );
 
-    let resp = reqwest::Client::new()
-        .head(&url)
-        .send()
-        .await
-        .map_err(|e| format!("fetching artifact: {:?}", e))?;
-    if !resp.status().is_success() {
-        return Err(format!(
-            "Artifact did not resolve successfully: {:?} received",
-            resp.status()
-        ));
+    if validate {
+        let resp = reqwest::Client::new()
+            .head(&url)
+            .send()
+            .await
+            .map_err(|e| format!("fetching artifact: {:?}", e))?;
+        if !resp.status().is_success() {
+            return Err(format!(
+                "Artifact did not resolve successfully: {:?} received",
+                resp.status()
+            ));
+        }
     }
 
     Ok(self_profile_raw::Response {
@@ -1195,6 +1286,61 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
     if req.uri().path() == "/perf/onpush" {
         return Ok(ctx.handle_push(req).await);
     }
+    if req.uri().path() == "/perf/download-raw-self-profile" {
+        // FIXME: how should this look?
+        let url = match url::Url::parse(&format!("http://example.com{}", req.uri())) {
+            Ok(v) => v,
+            Err(e) => {
+                error!("failed to parse url {}: {:?}", req.uri(), e);
+                return Ok(http::Response::builder()
+                    .header_typed(ContentType::text_utf8())
+                    .status(StatusCode::BAD_REQUEST)
+                    .body(hyper::Body::from(format!(
+                        "failed to parse url {}: {:?}",
+                        req.uri(),
+                        e
+                    )))
+                    .unwrap());
+            }
+        };
+        let mut parts = url
+            .query_pairs()
+            .into_owned()
+            .collect::<HashMap<String, String>>();
+        macro_rules! key_or_error {
+            ($ident:ident) => {
+                if let Some(v) = parts.remove(stringify!($ident)) {
+                    v
+                } else {
+                    error!(
+                        "failed to deserialize request {}: missing {} in query string",
+                        req.uri(),
+                        stringify!($ident)
+                    );
+                    return Ok(http::Response::builder()
+                        .header_typed(ContentType::text_utf8())
+                        .status(StatusCode::BAD_REQUEST)
+                        .body(hyper::Body::from(format!(
+                            "failed to deserialize request {}: missing {} in query string",
+                            req.uri(),
+                            stringify!($ident)
+                        )))
+                        .unwrap());
+                }
+            };
+        }
+        let data: Arc<InputData> = ctx.data.read().as_ref().unwrap().clone();
+        return Ok(handle_self_profile_raw_download(
+            self_profile_raw::Request {
+                commit: key_or_error!(commit),
+                benchmark: key_or_error!(benchmark),
+                run_name: key_or_error!(run_name),
+                cid: None,
+            },
+            &data,
+        )
+        .await);
+    }
 
     let (req, mut body_stream) = req.into_parts();
     let p = req.uri.path();
@@ -1277,7 +1423,7 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
         ))
     } else if p == "/perf/self-profile-raw" {
         Ok(to_response(
-            handle_self_profile_raw(body!(parse_body(&body)), &data).await,
+            handle_self_profile_raw(body!(parse_body(&body)), &data, true).await,
         ))
     } else {
         return Ok(http::Response::builder()

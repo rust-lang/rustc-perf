@@ -54,6 +54,7 @@
         <a href="dashboard.html">dashboard</a>, <a href="status.html">status</a>.</div>
     <div id="content">
         <h3 id="title"></h3>
+        <div id="raw-urls"></div>
         <p>'Time (%)' is the percentage of the cpu-clock time spent on this query (we do not use
         wall-time as we want to account for parallelism).</p>
         <p>Executions do not include cached executions.</p>
@@ -119,6 +120,18 @@
                 txt += `<br><a href="${self_href}">query info for just this commit</a>`;
             }
             document.querySelector("#title").innerHTML = txt;
+            let dl_url = (commit, bench, run) => {
+                return `/perf/download-raw-self-profile?commit=${commit}&benchmark=${bench}&run_name=${run}`
+            };
+            let dl_link = (commit, bench, run) => {
+                let url = dl_url(commit, bench, run);
+                return `<a href="${url}">Download raw results for ${commit.substring(0, 10)}</a>`;
+            };
+            txt = dl_link(state.commit, state.benchmark, state.run_name);
+            if (state.base_commit) {
+                txt += dl_link(state.base_commit, state.benchmark, state.run_name);
+            }
+            document.querySelector("#raw-urls").innerHTML = txt;
             let sort_idx = state.sort_idx;
             if (!data.base_profile) {
                 document.body.classList.add("hide-delta");

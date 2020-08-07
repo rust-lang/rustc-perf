@@ -38,6 +38,8 @@ arc-swap = "0.4"
 rusqlite = { version = "0.23", features = ["bundled"] }
 async-trait = "0.1"
 database = { path = "../database" }
+bytes = "0.5.6"
+url = "2"
 
 [dependencies.collector]
 path = "../collector"
