@@ -37,8 +37,6 @@ pub trait Connection: Send + Sync {
     ///
     /// The upload is a separate step (which may fail or be canceled, but that's
     /// fine, the database just stores that the files *may* be there).
-    ///
-    /// Returns a prefix in the S3 bucket -- should be globally unique.
     async fn record_raw_self_profile(
         &self,
         collection: CollectionId,
@@ -46,7 +44,7 @@ pub trait Connection: Send + Sync {
         krate: &str,
         profile: Profile,
         cache: Cache,
-    ) -> String;
+    );
     async fn record_self_profile_query(
         &self,
         collection: CollectionId,

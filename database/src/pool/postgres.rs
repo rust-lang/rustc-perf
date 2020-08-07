@@ -1037,12 +1037,12 @@ where
         krate: &str,
         profile: Profile,
         cache: Cache,
-    ) -> String {
+    ) {
         let profile = profile.to_string();
         let cache = cache.to_string();
-        self.conn().query_one(
-            "insert into raw_self_profile (aid, cid, crate, profile, cache) VALUES ($1, $2, $3, $4, $5) RETURNING prefix",
+        self.conn().execute(
+            "insert into raw_self_profile (aid, cid, crate, profile, cache) VALUES ($1, $2, $3, $4, $5)",
             &[&(artifact.0 as i16), &collection.0, &krate, &profile, &cache],
-        ).await.unwrap().get::<_, i32>(0).to_string()
+        ).await.unwrap();
     }
 }

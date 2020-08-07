@@ -846,7 +846,7 @@ impl Connection for SqliteConnection {
         _krate: &str,
         _profile: Profile,
         _cache: crate::Cache,
-    ) -> String {
+    ) {
         // FIXME: this is left for the future, if we ever need to support it. It
         // shouldn't be too hard, but we may also want to just intern the raw
         // self profile files into sqlite database or something like that, not

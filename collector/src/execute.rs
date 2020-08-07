@@ -616,19 +616,29 @@ impl<'a> MeasureProcessor<'a> {
 
         if let Some(files) = &stats.2 {
             if env::var_os("RUSTC_PERF_UPLOAD_TO_S3").is_some() {
-                let prefix = self.rt.block_on(self.conn.record_raw_self_profile(
+                // Files are placed at
+                //  * self-profile/<artifact id>/<krate>/<profile>/<cache>
+                //    /self-profile-<collection-id>.{extension}
+                let prefix = PathBuf::from("self-profile")
+                    .join(self.cid.0.to_string())
+                    .join(self.krate.0.as_str())
+                    .join(profile.to_string())
+                    .join(cache.to_id());
+                let filename = |ext| format!("self-profile-{}.{}", collection, ext);
+                to_s3(&files.string_index, &prefix.join(filename("string_index")))
+                    .expect("s3 upload succeeded");
+                to_s3(&files.string_data, &prefix.join(filename("string_data")))
+                    .expect("s3 upload succeeded");
+                to_s3(&files.events, &prefix.join(filename("events")))
+                    .expect("s3 upload succeeded");
+
+                self.rt.block_on(self.conn.record_raw_self_profile(
                     collection,
                     self.cid,
                     self.krate.0.as_str(),
                     profile,
                     cache,
                 ));
-                let prefix = PathBuf::from(prefix);
-                to_s3(&files.string_index, &prefix.join("Zsp.string_index"))
-                    .expect("s3 upload succeeded");
-                to_s3(&files.string_data, &prefix.join("Zsp.string_data"))
-                    .expect("s3 upload succeeded");
-                to_s3(&files.events, &prefix.join("Zsp.events")).expect("s3 upload succeeded");
             }
         }
 

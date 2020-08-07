@@ -267,6 +267,17 @@ impl fmt::Display for Cache {
     }
 }
 
+impl Cache {
+    pub fn to_id(&self) -> String {
+        match self {
+            Cache::Empty => format!("full"),
+            Cache::IncrementalEmpty => format!("incr-full"),
+            Cache::IncrementalFresh => format!("incr-unchanged"),
+            Cache::IncrementalPatch(name) => format!("incr-patched-{}", name),
+        }
+    }
+}
+
 use std::cmp::Ordering;
 
 // We sort println before all other patches.
@@ -689,3 +700,9 @@ pub struct Step {
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct CollectionId(i32);
+
+impl fmt::Display for CollectionId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
