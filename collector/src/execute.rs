@@ -1275,11 +1275,8 @@ fn process_perf_stat_output(
             } else if filename_str.ends_with(".string_index") {
                 assert!(filename_str.contains(&prefix), "{:?}", path);
                 files.string_index = path;
-            } else {
-                panic!("unexpected file {:?}", path);
             }
         }
-        assert_eq!(num_files, 3);
 
         Some(files)
     } else {
