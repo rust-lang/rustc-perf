@@ -20,23 +20,28 @@ use tempfile::TempDir;
 use tokio::runtime::Runtime;
 
 fn to_s3(local: &Path, remote: &Path) -> anyhow::Result<()> {
+    let data = fs::read(local).with_context(|| format!("reading {:?}", local))?;
+    let mut compressor = snap::read::FrameEncoder::new(&data[..]);
+    let mut compressed_file = tempfile::NamedTempFile::new().context("create temporary file")?;
+    std::io::copy(&mut compressor, &mut compressed_file).context("compressed and written")?;
+
     let status = Command::new("aws")
         .arg("s3")
         .arg("cp")
-        .arg(local)
-        .arg(&format!("s3://rustc-perf/{}", remote.to_str().unwrap()))
+        .arg(compressed_file.path())
+        .arg(&format!("s3://rustc-perf/{}.sz", remote.to_str().unwrap()))
         .status()
         .with_context(|| {
             format!(
                 "upload {:?} to s3://rustc-perf/{}",
-                local,
+                compressed_file.path(),
                 remote.to_str().unwrap()
             )
         })?;
     if !status.success() {
         anyhow::bail!(
             "upload {:?} to s3://rustc-perf/{}: {:?}",
-            local,
+            compressed_file.path(),
             remote.to_str().unwrap(),
             status
         );
