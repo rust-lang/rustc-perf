@@ -30,9 +30,11 @@ fn to_s3(local: &Path, remote: &Path) -> anyhow::Result<()> {
         buffered.flush()?;
     }
 
+    let start = std::time::Instant::now();
     let status = Command::new("aws")
         .arg("s3")
         .arg("cp")
+        .arg("--only-show-errors")
         .arg(compressed_file.path())
         .arg(&format!("s3://rustc-perf/{}.sz", remote.to_str().unwrap()))
         .status()
@@ -51,6 +53,7 @@ fn to_s3(local: &Path, remote: &Path) -> anyhow::Result<()> {
             status
         );
     }
+    log::trace!("uploaded {:?} to S3 in {:?}", local, start.elapsed());
     Ok(())
 }
 
