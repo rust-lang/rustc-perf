@@ -274,8 +274,9 @@ fn bench(
 
     eprintln!("collection took {:?}", end);
 
-    if !skipped {
+    if skipped {
         log::info!("skipping duration record -- skipped parts of run");
+    } else {
         rt.block_on(conn.record_duration(interned_cid, end));
     }
 
