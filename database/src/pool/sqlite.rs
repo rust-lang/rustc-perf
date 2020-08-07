@@ -853,4 +853,13 @@ impl Connection for SqliteConnection {
         // yet clear.
         unimplemented!("recording raw self profile files is not implemented for sqlite")
     }
+    async fn list_self_profile(
+        &self,
+        _aid: ArtifactId,
+        _crate_: &str,
+        _profile: &str,
+        _cache: &str,
+    ) -> Vec<(ArtifactIdNumber, i32)> {
+        Vec::new()
+    }
 }

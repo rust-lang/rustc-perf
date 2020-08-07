@@ -106,6 +106,18 @@ pub trait Connection: Send + Sync {
     ///
     /// (Currently only works for try commits)
     async fn pr_of(&self, sha: &str) -> Option<u32>;
+
+    /// Returns the collection ids corresponding to the query. Usually just one.
+    ///
+    /// Currently only supported by postgres (sqlite does not store self-profile
+    /// results in the raw format).
+    async fn list_self_profile(
+        &self,
+        aid: ArtifactId,
+        crate_: &str,
+        profile: &str,
+        cache: &str,
+    ) -> Vec<(ArtifactIdNumber, i32)>;
 }
 
 #[async_trait::async_trait]

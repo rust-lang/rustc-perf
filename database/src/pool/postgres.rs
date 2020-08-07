@@ -179,7 +179,6 @@ static MIGRATIONS: &[&str] = &[
         crate text not null references benchmark(name) on delete cascade on update cascade,
         profile text not null,
         cache text not null,
-        prefix integer not null generated always as identity,
         PRIMARY KEY(aid, cid, crate, profile, cache)
     );
     "#,
@@ -1044,5 +1043,37 @@ where
             "insert into raw_self_profile (aid, cid, crate, profile, cache) VALUES ($1, $2, $3, $4, $5)",
             &[&(artifact.0 as i16), &collection.0, &krate, &profile, &cache],
         ).await.unwrap();
+    }
+    async fn list_self_profile(
+        &self,
+        aid: ArtifactId,
+        crate_: &str,
+        profile: &str,
+        cache: &str,
+    ) -> Vec<(ArtifactIdNumber, i32)> {
+        self.conn()
+            .query(
+                "
+            select aid, cid from raw_self_profile where
+                crate = $1
+                and profile = $2
+                and cache = $3
+                and aid = (select id from artifact where name = $4);
+        ",
+                &[
+                    &crate_,
+                    &profile,
+                    &cache,
+                    &match aid {
+                        ArtifactId::Commit(c) => c.sha,
+                        ArtifactId::Artifact(a) => a,
+                    },
+                ],
+            )
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|r| (ArtifactIdNumber(r.get::<_, i16>(0) as u32), r.get(1)))
+            .collect()
     }
 }

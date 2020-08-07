@@ -67,6 +67,10 @@ impl Date {
         Date(Utc.ymd(year, month, day).and_hms(h, m, s))
     }
 
+    pub fn empty() -> Date {
+        Date::ymd_hms(2000, 1, 1, 1, 1, 1)
+    }
+
     pub fn start_of_week(&self) -> Date {
         let weekday = self.0.weekday();
         // num_days_from_sunday is 0 for Sunday

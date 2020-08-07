@@ -210,6 +210,25 @@ pub mod status {
     }
 }
 
+pub mod self_profile_raw {
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+    pub struct Request {
+        pub commit: String,
+        pub benchmark: String,
+        pub run_name: String,
+        pub cid: Option<i32>,
+    }
+
+    #[derive(Debug, Clone, Serialize)]
+    pub struct Response {
+        pub cids: Vec<i32>,
+        pub cid: i32,
+        pub url: String,
+    }
+}
+
 pub mod self_profile {
     use database::QueryLabel;
     use serde::{Deserialize, Serialize};

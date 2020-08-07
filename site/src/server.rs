@@ -37,8 +37,8 @@ type Request = http::Request<hyper::Body>;
 type Response = http::Response<hyper::Body>;
 
 pub use crate::api::{
-    self, dashboard, data, days, github, graph, info, self_profile, status, CommitResponse,
-    DateData, ServerResult, StyledBenchmarkName,
+    self, dashboard, data, days, github, graph, info, self_profile, self_profile_raw, status,
+    CommitResponse, DateData, ServerResult, StyledBenchmarkName,
 };
 use crate::db::{self, Cache, Crate, Profile};
 use crate::interpolate::Interpolated;
@@ -783,6 +783,77 @@ fn get_self_profile_data(
     Ok(profile)
 }
 
+pub async fn handle_self_profile_raw(
+    body: self_profile_raw::Request,
+    data: &InputData,
+) -> ServerResult<self_profile_raw::Response> {
+    log::info!("handle_self_profile_raw({:?})", body);
+    let mut it = body.benchmark.rsplitn(2, '-');
+    let bench_ty = it.next().ok_or(format!("no benchmark type"))?;
+    let bench_name = it.next().ok_or(format!("no benchmark name"))?;
+
+    let cache = body
+        .run_name
+        .parse::<database::Cache>()
+        .map_err(|e| format!("invalid run name: {:?}", e))?;
+
+    let conn = data.conn().await;
+
+    let aids_and_cids = conn
+        .list_self_profile(
+            ArtifactId::Commit(database::Commit {
+                sha: body.commit,
+                date: database::Date::empty(),
+            }),
+            bench_name,
+            bench_ty,
+            &body.run_name,
+        )
+        .await;
+    let (aid, first_cid) = aids_and_cids
+        .first()
+        .copied()
+        .ok_or_else(|| format!("No results for this commit"))?;
+
+    let cid = match body.cid {
+        Some(cid) => {
+            if aids_and_cids.iter().any(|(_, v)| *v == cid) {
+                cid
+            } else {
+                return Err(format!("{} is not a collection ID at this artifact", cid));
+            }
+        }
+        _ => first_cid,
+    };
+
+    let url = format!(
+        "https://perf-data.rust-lang.org/self-profile/{}/{}/{}/{}/self-profile-{}.tar.sz",
+        aid.0,
+        bench_name,
+        bench_ty,
+        cache.to_id(),
+        cid
+    );
+
+    let resp = reqwest::Client::new()
+        .head(&url)
+        .send()
+        .await
+        .map_err(|e| format!("fetching artifact: {:?}", e))?;
+    if !resp.status().is_success() {
+        return Err(format!(
+            "Artifact did not resolve successfully: {:?} received",
+            resp.status()
+        ));
+    }
+
+    Ok(self_profile_raw::Response {
+        cids: aids_and_cids.into_iter().map(|(_, cid)| cid).collect(),
+        cid,
+        url,
+    })
+}
+
 pub async fn handle_self_profile(
     body: self_profile::Request,
     data: &InputData,
@@ -1203,6 +1274,10 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
     } else if p == "/perf/self-profile" {
         Ok(to_response(
             handle_self_profile(body!(parse_body(&body)), &data).await,
+        ))
+    } else if p == "/perf/self-profile-raw" {
+        Ok(to_response(
+            handle_self_profile_raw(body!(parse_body(&body)), &data).await,
         ))
     } else {
         return Ok(http::Response::builder()
