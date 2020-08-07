@@ -1260,9 +1260,7 @@ fn process_perf_stat_output(
             events: PathBuf::new(),
         };
         // Rename the data files. There should be exactly three.
-        let mut num_files = 0;
         for entry in fs::read_dir(&dir).unwrap() {
-            num_files += 1;
             let filename = entry.unwrap().file_name();
             let filename_str = filename.to_str().unwrap();
             let path = dir.join(filename_str);
