@@ -71,7 +71,7 @@ struct SysrootDownload {
     triple: String,
 }
 
-const BASE_URL: &str = "https://rust-lang-ci2.s3.amazonaws.com/rustc-builds";
+const BASE_URL: &str = "https://ci-artifacts.rust-lang.org/rustc-builds";
 
 // FIXME(eddyb) rename to just `Component`.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
