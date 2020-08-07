@@ -26,10 +26,10 @@ fn to_s3(local: &Path, remote: &Path) -> anyhow::Result<()> {
         .arg(local)
         .arg(&format!("s3://rustc-perf/{}", remote.to_str().unwrap()))
         .status()
-        .with_context(|| format!("upload {:?} to s3://rustc-perf/{:?}", local, remote))?;
+        .with_context(|| format!("upload {:?} to s3://rustc-perf/{}", local, remote))?;
     if !status.success() {
         anyhow::bail!(
-            "upload {:?} to s3://rustc-perf/{:?}: {:?}",
+            "upload {:?} to s3://rustc-perf/{}: {:?}",
             local,
             remote,
             status
@@ -620,10 +620,9 @@ impl<'a> MeasureProcessor<'a> {
                 let prefix = PathBuf::from(prefix);
                 to_s3(&files.string_index, &prefix.join("Zsp.string_index"))
                     .expect("s3 upload succeeded");
-                to_s3(&files.string_data, &prefix.join("Zsp.string_index"))
+                to_s3(&files.string_data, &prefix.join("Zsp.string_data"))
                     .expect("s3 upload succeeded");
-                to_s3(&files.events, &prefix.join("Zsp.string_index"))
-                    .expect("s3 upload succeeded");
+                to_s3(&files.events, &prefix.join("Zsp.events")).expect("s3 upload succeeded");
             }
         }
 
