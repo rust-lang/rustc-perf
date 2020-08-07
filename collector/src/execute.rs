@@ -12,6 +12,7 @@ use std::env;
 use std::fmt;
 use std::fs::{self, File};
 use std::hash;
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{self, Command, Stdio};
 use std::str;
@@ -23,7 +24,11 @@ fn to_s3(local: &Path, remote: &Path) -> anyhow::Result<()> {
     let data = fs::read(local).with_context(|| format!("reading {:?}", local))?;
     let mut compressor = snap::read::FrameEncoder::new(&data[..]);
     let mut compressed_file = tempfile::NamedTempFile::new().context("create temporary file")?;
-    std::io::copy(&mut compressor, &mut compressed_file).context("compressed and written")?;
+    {
+        let mut buffered = std::io::BufWriter::new(&mut compressed_file);
+        std::io::copy(&mut compressor, &mut buffered).context("compressed and written")?;
+        buffered.flush()?;
+    }
 
     let status = Command::new("aws")
         .arg("s3")
