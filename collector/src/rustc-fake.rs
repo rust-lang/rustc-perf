@@ -99,6 +99,8 @@ fn main() {
                     let json = run_summarize("summarize", &prof_out_dir, &prefix)
                         .or_else(|_| run_summarize("summarize-0.7", &prof_out_dir, &prefix))
                         .expect("able to run summarize or summarize-0.7");
+                    println!("!self-profile-dir:{}", prof_out_dir.to_str().unwrap());
+                    println!("!self-profile-prefix:{}", prefix);
                     println!("!self-profile-output:{}", json);
                 }
             }

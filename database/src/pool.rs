@@ -33,6 +33,20 @@ pub trait Connection: Send + Sync {
         statistic: &str,
         value: f64,
     );
+    /// Records a self-profile artifact in S3.
+    ///
+    /// The upload is a separate step (which may fail or be canceled, but that's
+    /// fine, the database just stores that the files *may* be there).
+    ///
+    /// Returns a prefix in the S3 bucket -- should be globally unique.
+    async fn record_raw_self_profile(
+        &self,
+        collection: CollectionId,
+        artifact: ArtifactIdNumber,
+        krate: &str,
+        profile: Profile,
+        cache: Cache,
+    ) -> String;
     async fn record_self_profile_query(
         &self,
         collection: CollectionId,
