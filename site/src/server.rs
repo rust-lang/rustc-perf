@@ -1399,7 +1399,7 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
         return Ok(Response::new(hyper::Body::from("no data yet, please wait")));
     }
 
-    if req.method() != http::Method::OPTIONS {
+    if req.method() == http::Method::OPTIONS {
         return Ok(http::Response::builder()
             .status(StatusCode::NO_CONTENT)
             .body(hyper::Body::empty())
