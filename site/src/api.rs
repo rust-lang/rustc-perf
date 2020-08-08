@@ -111,7 +111,7 @@ pub mod data {
 pub mod graph {
     use collector::Bound;
     use serde::{Deserialize, Serialize};
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct Request {
@@ -137,6 +137,21 @@ pub mod graph {
         pub max: HashMap<String, f32>,
         pub colors: Vec<String>,
         pub commits: Vec<String>,
+    }
+
+    #[derive(Debug, PartialEq, Clone, Serialize)]
+    pub struct Series {
+        // y-values
+        pub points: Vec<f32>,
+        // The index of interpolated coordinates
+        pub is_interpolated: HashSet<u16>,
+    }
+
+    #[derive(Debug, PartialEq, Clone, Serialize)]
+    pub struct NewResponse {
+        // (UTC timestamp in seconds, sha)
+        pub commits: Vec<(i64, String)>,
+        pub benchmarks: HashMap<String, HashMap<database::Profile, HashMap<String, Series>>>,
     }
 }
 

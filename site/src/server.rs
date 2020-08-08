@@ -395,6 +395,58 @@ fn to_graph_data<'a>(
     })
 }
 
+pub async fn handle_graph_new(
+    body: graph::Request,
+    data: &InputData,
+) -> ServerResult<Arc<graph::NewResponse>> {
+    log::info!("handle_graph_new({:?})", body);
+    let range = data.data_range(body.start.clone()..=body.end.clone());
+    let commits: Arc<Vec<ArtifactId>> = Arc::new(range.iter().map(|c| c.clone().into()).collect());
+
+    let mut benchmarks = HashMap::new();
+
+    let raw = handle_graph(body, data).await?;
+
+    for (crate_, crate_data) in raw.benchmarks.iter() {
+        let mut by_profile = HashMap::with_capacity(3);
+
+        for (profile, series) in crate_data.iter() {
+            let mut by_run = HashMap::with_capacity(3);
+
+            for (name, points) in series.iter() {
+                let mut series = graph::Series {
+                    points: Vec::new(),
+                    is_interpolated: Default::default(),
+                };
+
+                for (idx, point) in points.iter().enumerate() {
+                    series.points.push(point.y);
+                    if point.is_interpolated {
+                        series.is_interpolated.insert(idx as u16);
+                    }
+                }
+
+                by_run.insert(name.clone(), series);
+            }
+
+            by_profile.insert(profile.parse::<Profile>().unwrap(), by_run);
+        }
+
+        benchmarks.insert(crate_.clone(), by_profile);
+    }
+
+    Ok(Arc::new(graph::NewResponse {
+        commits: commits
+            .iter()
+            .map(|c| match c {
+                ArtifactId::Commit(c) => (c.date.0.timestamp(), c.sha.clone()),
+                ArtifactId::Artifact(_) => unreachable!(),
+            })
+            .collect(),
+        benchmarks,
+    }))
+}
+
 pub async fn handle_graph(
     body: graph::Request,
     data: &InputData,
@@ -1405,7 +1457,6 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
             Err(e) => return Ok(e),
         }
     }
-
     let (req, mut body_stream) = req.into_parts();
     let p = req.uri.path();
     check_http_method!(req.method, http::Method::POST);
@@ -1489,6 +1540,28 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
         Ok(to_response(
             handle_self_profile_raw(body!(parse_body(&body)), &data, true).await,
         ))
+    } else if p == "/perf/graph-new" {
+        Ok(
+            match handle_graph_new(body!(parse_body(&body)), &data).await {
+                Ok(result) => {
+                    let mut response = http::Response::builder()
+                        .header_typed(ContentType::json())
+                        .header_typed(CacheControl::new().with_no_cache().with_no_store());
+                    response.headers_mut().unwrap().insert(
+                        hyper::header::ACCESS_CONTROL_ALLOW_ORIGIN,
+                        hyper::header::HeaderValue::from_static("*"),
+                    );
+                    let body = serde_json::to_vec(&result).unwrap();
+                    response.body(hyper::Body::from(body)).unwrap()
+                }
+                Err(err) => http::Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .header_typed(ContentType::text_utf8())
+                    .header_typed(CacheControl::new().with_no_cache().with_no_store())
+                    .body(hyper::Body::from(err))
+                    .unwrap(),
+            },
+        )
     } else {
         return Ok(http::Response::builder()
             .header_typed(ContentType::html())
