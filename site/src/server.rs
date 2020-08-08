@@ -842,7 +842,12 @@ pub async fn handle_self_profile_processed_download(
     params: HashMap<String, String>,
     data: &InputData,
 ) -> Response {
-    let title = format!("{}: {} {}", body.commit, body.benchmark, body.run_name);
+    let title = format!(
+        "{}: {} {}",
+        &body.commit[..std::cmp::min(7, body.commit.len())],
+        body.benchmark,
+        body.run_name
+    );
     let start = Instant::now();
     let pieces = match crate::self_profile::get_pieces(body, data).await {
         Ok(v) => v,
