@@ -1399,6 +1399,13 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
         return Ok(Response::new(hyper::Body::from("no data yet, please wait")));
     }
 
+    if req.method() != http::Method::OPTIONS {
+        return Ok(http::Response::builder()
+            .status(StatusCode::NO_CONTENT)
+            .body(hyper::Body::empty())
+            .unwrap());
+    }
+
     let fs_path = format!(
         "site/static{}",
         if req.uri().path() == "" || req.uri().path() == "/" {
@@ -1651,10 +1658,20 @@ async fn run_server(data: Arc<RwLock<Option<Arc<InputData>>>>, addr: SocketAddr)
             Ok::<_, hyper::Error>(hyper::service::service_fn(move |req| {
                 let start = std::time::Instant::now();
                 let desc = format!("{} {}", req.method(), req.uri());
-                serve_req(ctx.clone(), req).inspect(move |r| {
-                    let dur = start.elapsed();
-                    info!("{}: {:?} {:?}", desc, r.as_ref().map(|r| r.status()), dur)
-                })
+                serve_req(ctx.clone(), req)
+                    .inspect(move |r| {
+                        let dur = start.elapsed();
+                        info!("{}: {:?} {:?}", desc, r.as_ref().map(|r| r.status()), dur)
+                    })
+                    .map(|mut r| {
+                        if let Ok(r) = &mut r {
+                            r.headers_mut().insert(
+                                hyper::header::ACCESS_CONTROL_ALLOW_ORIGIN,
+                                hyper::header::HeaderValue::from_static("*"),
+                            );
+                        }
+                        r
+                    })
             }))
         }
     });
