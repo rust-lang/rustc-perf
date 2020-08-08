@@ -825,6 +825,12 @@ pub async fn handle_self_profile_processed_download(
             .expect("valid header"),
         );
     }
+
+    builder.headers_mut().unwrap().insert(
+        hyper::header::ACCESS_CONTROL_ALLOW_ORIGIN,
+        hyper::header::HeaderValue::from_static("https://profiler.firefox.com"),
+    );
+
     builder.body(hyper::Body::from(output.data)).unwrap()
 }
 
