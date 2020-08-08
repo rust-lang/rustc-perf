@@ -42,7 +42,7 @@ bytes = "0.5.6"
 url = "2"
 analyzeme = { git = "https://github.com/rust-lang/measureme" }
 tar = "0.4"
-inferno = { version="0.9.1", default-features = false }
+inferno = { version="0.10", default-features = false }
 mime = "0.3"
 
 [dependencies.collector]

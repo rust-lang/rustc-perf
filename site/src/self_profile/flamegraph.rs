@@ -5,7 +5,7 @@ use inferno::flamegraph::{from_lines, Options as FlamegraphOptions};
 #[derive(serde::Deserialize, Debug)]
 pub struct Opt {}
 
-pub fn generate(pieces: super::Pieces, _: Opt) -> anyhow::Result<Vec<u8>> {
+pub fn generate(title: &str, pieces: super::Pieces, _: Opt) -> anyhow::Result<Vec<u8>> {
     let profiling_data =
         ProfilingData::from_buffers(pieces.string_data, pieces.string_index, pieces.events)
             .map_err(|e| anyhow::format_err!("{:?}", e))?;
@@ -17,6 +17,7 @@ pub fn generate(pieces: super::Pieces, _: Opt) -> anyhow::Result<Vec<u8>> {
 
     let mut file = Vec::new();
     let mut flamegraph_options = FlamegraphOptions::default();
+    flamegraph_options.title = title.to_owned();
 
     from_lines(
         &mut flamegraph_options,

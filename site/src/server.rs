@@ -790,6 +790,7 @@ pub async fn handle_self_profile_processed_download(
     params: HashMap<String, String>,
     data: &InputData,
 ) -> Response {
+    let title = format!("{}: {} {}", body.commit, body.benchmark, body.run_name);
     let start = Instant::now();
     let pieces = match crate::self_profile::get_pieces(body, data).await {
         Ok(v) => v,
@@ -797,7 +798,7 @@ pub async fn handle_self_profile_processed_download(
     };
     log::trace!("got pieces {:?} in {:?}", pieces, start.elapsed());
 
-    let (filename, json) = match crate::self_profile::generate(pieces, params) {
+    let output = match crate::self_profile::generate(&title, pieces, params) {
         Ok(c) => c,
         Err(e) => {
             log::error!("Failed to generate json {:?}", e);
@@ -807,22 +808,24 @@ pub async fn handle_self_profile_processed_download(
         }
     };
     let mut builder = http::Response::builder()
-        .header_typed(if filename.ends_with("json") {
+        .header_typed(if output.filename.ends_with("json") {
             ContentType::json()
         } else {
             ContentType::from("image/svg+xml".parse::<mime::Mime>().unwrap())
         })
         .status(StatusCode::OK);
 
-    builder.headers_mut().unwrap().insert(
-        hyper::header::CONTENT_DISPOSITION,
-        hyper::header::HeaderValue::from_maybe_shared(format!(
-            "attachment; filename=\"{}\"",
-            filename,
-        ))
-        .expect("valid header"),
-    );
-    builder.body(hyper::Body::from(json)).unwrap()
+    if output.is_download {
+        builder.headers_mut().unwrap().insert(
+            hyper::header::CONTENT_DISPOSITION,
+            hyper::header::HeaderValue::from_maybe_shared(format!(
+                "attachment; filename=\"{}\"",
+                output.filename,
+            ))
+            .expect("valid header"),
+        );
+    }
+    builder.body(hyper::Body::from(output.data)).unwrap()
 }
 
 pub async fn handle_self_profile_raw_download(

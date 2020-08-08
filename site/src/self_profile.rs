@@ -14,27 +14,36 @@ type Response = http::Response<hyper::Body>;
 pub mod crox;
 pub mod flamegraph;
 
+pub struct Output {
+    pub data: Vec<u8>,
+    pub filename: &'static str,
+    pub is_download: bool,
+}
+
 pub fn generate(
+    title: &str,
     pieces: Pieces,
     mut params: HashMap<String, String>,
-) -> anyhow::Result<(&'static str, Vec<u8>)> {
+) -> anyhow::Result<Output> {
     let removed = params.remove("type");
     match removed.as_deref() {
         Some("crox") => {
             let opt = serde_json::from_str(&serde_json::to_string(&params).unwrap())
                 .context("crox opts")?;
-            Ok((
-                "chrome_profiler.json",
-                crox::generate(pieces, opt).context("crox")?,
-            ))
+            Ok(Output {
+                filename: "chrome_profiler.json",
+                data: crox::generate(pieces, opt).context("crox")?,
+                is_download: true,
+            })
         }
         Some("flamegraph") => {
             let opt = serde_json::from_str(&serde_json::to_string(&params).unwrap())
                 .context("flame opts")?;
-            Ok((
-                "flamegraph.svg",
-                flamegraph::generate(pieces, opt).context("flame")?,
-            ))
+            Ok(Output {
+                filename: "flamegraph.svg",
+                data: flamegraph::generate(title, pieces, opt).context("flame")?,
+                is_download: false,
+            })
         }
         _ => anyhow::bail!("Unknown type, specify type={crox,flamegraph}"),
     }

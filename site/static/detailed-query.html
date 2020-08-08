@@ -127,9 +127,22 @@
                 let url = dl_url(commit, bench, run);
                 return `<a href="${url}">Download raw results for ${commit.substring(0, 10)}</a>`;
             };
+            let processed_link = (commit, bench, run, ty) => {
+                let url = `/perf/processed-self-profile?commit=${commit}&benchmark=${bench}&run_name=${run}&type=${ty}`;
+                return `<a href="${url}">Download/view ${ty} results for ${commit.substring(0, 10)}</a>`;
+            };
             txt = dl_link(state.commit, state.benchmark, state.run_name);
+            txt += "<br>";
+            txt += processed_link(state.commit, state.benchmark, state.run_name, "flamegraph");
+            txt += "<br>";
+            txt += processed_link(state.commit, state.benchmark, state.run_name, "crox");
             if (state.base_commit) {
+                txt += "<br>";
                 txt += dl_link(state.base_commit, state.benchmark, state.run_name);
+                txt += "<br>";
+                txt += processed_link(state.base_commit, state.benchmark, state.run_name, "flamegraph");
+                txt += "<br>";
+                txt += processed_link(state.base_commit, state.benchmark, state.run_name, "crox");
             }
             document.querySelector("#raw-urls").innerHTML = txt;
             let sort_idx = state.sort_idx;
