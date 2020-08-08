@@ -9,4 +9,4 @@ debug = 1
 debug = 1
 
 [patch."https://github.com/rust-lang/measureme"]
-analyzeme = { path = "../measureme/analyzeme" }
+analyzeme = { git = "https://github.com/Mark-Simulacrum/measureme" }
