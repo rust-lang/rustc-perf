@@ -26,5 +26,6 @@ pub mod db;
 mod interpolate;
 pub mod load;
 mod selector;
+mod self_profile;
 pub mod server;
 pub mod util;

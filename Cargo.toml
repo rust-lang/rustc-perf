@@ -7,3 +7,6 @@ debug = 1
 
 [profile.release.package.collector]
 debug = 1
+
+[patch."https://github.com/rust-lang/measureme"]
+analyzeme = { path = "../measureme/analyzeme" }

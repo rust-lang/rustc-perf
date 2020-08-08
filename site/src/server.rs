@@ -785,6 +785,42 @@ fn get_self_profile_data(
     Ok(profile)
 }
 
+pub async fn handle_self_profile_processed_download(
+    body: self_profile_raw::Request,
+    params: HashMap<String, String>,
+    data: &InputData,
+) -> Response {
+    let start = Instant::now();
+    let pieces = match crate::self_profile::get_pieces(body, data).await {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    log::trace!("got pieces {:?} in {:?}", pieces, start.elapsed());
+
+    let json = crate::self_profile::generate(pieces, params);
+    let json = match json {
+        Ok(c) => c,
+        Err(e) => {
+            log::error!("Failed to generate json {:?}", e);
+            let mut resp = Response::new(format!("{:?}", e).into());
+            *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+            return resp;
+        }
+    };
+    let mut builder = http::Response::builder()
+        .header_typed(ContentType::json())
+        .status(StatusCode::OK);
+
+    builder.headers_mut().unwrap().insert(
+        hyper::header::CONTENT_DISPOSITION,
+        hyper::header::HeaderValue::from_maybe_shared(format!(
+            "attachment; filename=\"chrome_profiler.json\""
+        ))
+        .expect("valid header"),
+    );
+    builder.body(hyper::Body::from(json)).unwrap()
+}
+
 pub async fn handle_self_profile_raw_download(
     body: self_profile_raw::Request,
     data: &InputData,
@@ -833,6 +869,60 @@ pub async fn handle_self_profile_raw_download(
     *server_resp.status_mut() = StatusCode::OK;
     tokio::spawn(tarball(resp, sender));
     server_resp
+}
+
+fn get_self_profile_raw(
+    req: &Request,
+) -> Result<(HashMap<String, String>, self_profile_raw::Request), Response> {
+    // FIXME: how should this look?
+    let url = match url::Url::parse(&format!("http://example.com{}", req.uri())) {
+        Ok(v) => v,
+        Err(e) => {
+            error!("failed to parse url {}: {:?}", req.uri(), e);
+            return Err(http::Response::builder()
+                .header_typed(ContentType::text_utf8())
+                .status(StatusCode::BAD_REQUEST)
+                .body(hyper::Body::from(format!(
+                    "failed to parse url {}: {:?}",
+                    req.uri(),
+                    e
+                )))
+                .unwrap());
+        }
+    };
+    let mut parts = url
+        .query_pairs()
+        .into_owned()
+        .collect::<HashMap<String, String>>();
+    macro_rules! key_or_error {
+        ($ident:ident) => {
+            if let Some(v) = parts.remove(stringify!($ident)) {
+                v
+            } else {
+                error!(
+                    "failed to deserialize request {}: missing {} in query string",
+                    req.uri(),
+                    stringify!($ident)
+                );
+                return Err(http::Response::builder()
+                    .header_typed(ContentType::text_utf8())
+                    .status(StatusCode::BAD_REQUEST)
+                    .body(hyper::Body::from(format!(
+                        "failed to deserialize request {}: missing {} in query string",
+                        req.uri(),
+                        stringify!($ident)
+                    )))
+                    .unwrap());
+            }
+        };
+    }
+    let request = self_profile_raw::Request {
+        commit: key_or_error!(commit),
+        benchmark: key_or_error!(benchmark),
+        run_name: key_or_error!(run_name),
+        cid: None,
+    };
+    return Ok((parts, request));
 }
 
 async fn tarball(resp: reqwest::Response, mut sender: hyper::body::Sender) {
@@ -1287,59 +1377,20 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
         return Ok(ctx.handle_push(req).await);
     }
     if req.uri().path() == "/perf/download-raw-self-profile" {
-        // FIXME: how should this look?
-        let url = match url::Url::parse(&format!("http://example.com{}", req.uri())) {
-            Ok(v) => v,
-            Err(e) => {
-                error!("failed to parse url {}: {:?}", req.uri(), e);
-                return Ok(http::Response::builder()
-                    .header_typed(ContentType::text_utf8())
-                    .status(StatusCode::BAD_REQUEST)
-                    .body(hyper::Body::from(format!(
-                        "failed to parse url {}: {:?}",
-                        req.uri(),
-                        e
-                    )))
-                    .unwrap());
-            }
-        };
-        let mut parts = url
-            .query_pairs()
-            .into_owned()
-            .collect::<HashMap<String, String>>();
-        macro_rules! key_or_error {
-            ($ident:ident) => {
-                if let Some(v) = parts.remove(stringify!($ident)) {
-                    v
-                } else {
-                    error!(
-                        "failed to deserialize request {}: missing {} in query string",
-                        req.uri(),
-                        stringify!($ident)
-                    );
-                    return Ok(http::Response::builder()
-                        .header_typed(ContentType::text_utf8())
-                        .status(StatusCode::BAD_REQUEST)
-                        .body(hyper::Body::from(format!(
-                            "failed to deserialize request {}: missing {} in query string",
-                            req.uri(),
-                            stringify!($ident)
-                        )))
-                        .unwrap());
-                }
-            };
-        }
         let data: Arc<InputData> = ctx.data.read().as_ref().unwrap().clone();
-        return Ok(handle_self_profile_raw_download(
-            self_profile_raw::Request {
-                commit: key_or_error!(commit),
-                benchmark: key_or_error!(benchmark),
-                run_name: key_or_error!(run_name),
-                cid: None,
-            },
-            &data,
-        )
-        .await);
+        match get_self_profile_raw(&req) {
+            Ok((_, v)) => return Ok(handle_self_profile_raw_download(v, &data).await),
+            Err(e) => return Ok(e),
+        }
+    }
+    if req.uri().path() == "/perf/download-crox-self-profile" {
+        let data: Arc<InputData> = ctx.data.read().as_ref().unwrap().clone();
+        match get_self_profile_raw(&req) {
+            Ok((parts, v)) => {
+                return Ok(handle_self_profile_processed_download(v, parts, &data).await)
+            }
+            Err(e) => return Ok(e),
+        }
     }
 
     let (req, mut body_stream) = req.into_parts();
