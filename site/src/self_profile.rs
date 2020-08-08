@@ -12,16 +12,31 @@ use std::io::Read;
 type Response = http::Response<hyper::Body>;
 
 pub mod crox;
+pub mod flamegraph;
 
-pub fn generate(pieces: Pieces, mut params: HashMap<String, String>) -> anyhow::Result<Vec<u8>> {
+pub fn generate(
+    pieces: Pieces,
+    mut params: HashMap<String, String>,
+) -> anyhow::Result<(&'static str, Vec<u8>)> {
     let removed = params.remove("type");
     match removed.as_deref() {
         Some("crox") => {
             let opt = serde_json::from_str(&serde_json::to_string(&params).unwrap())
                 .context("crox opts")?;
-            Ok(crox::generate(pieces, opt).context("crox")?)
+            Ok((
+                "chrome_profiler.json",
+                crox::generate(pieces, opt).context("crox")?,
+            ))
         }
-        _ => anyhow::bail!("Unknown type, specify type={crox}"),
+        Some("flamegraph") => {
+            let opt = serde_json::from_str(&serde_json::to_string(&params).unwrap())
+                .context("flame opts")?;
+            Ok((
+                "flamegraph.svg",
+                flamegraph::generate(pieces, opt).context("flame")?,
+            ))
+        }
+        _ => anyhow::bail!("Unknown type, specify type={crox,flamegraph}"),
     }
 }
 

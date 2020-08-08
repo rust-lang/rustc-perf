@@ -797,8 +797,7 @@ pub async fn handle_self_profile_processed_download(
     };
     log::trace!("got pieces {:?} in {:?}", pieces, start.elapsed());
 
-    let json = crate::self_profile::generate(pieces, params);
-    let json = match json {
+    let (filename, json) = match crate::self_profile::generate(pieces, params) {
         Ok(c) => c,
         Err(e) => {
             log::error!("Failed to generate json {:?}", e);
@@ -808,13 +807,18 @@ pub async fn handle_self_profile_processed_download(
         }
     };
     let mut builder = http::Response::builder()
-        .header_typed(ContentType::json())
+        .header_typed(if filename.ends_with("json") {
+            ContentType::json()
+        } else {
+            ContentType::from("image/svg+xml".parse::<mime::Mime>().unwrap())
+        })
         .status(StatusCode::OK);
 
     builder.headers_mut().unwrap().insert(
         hyper::header::CONTENT_DISPOSITION,
         hyper::header::HeaderValue::from_maybe_shared(format!(
-            "attachment; filename=\"chrome_profiler.json\""
+            "attachment; filename=\"{}\"",
+            filename,
         ))
         .expect("valid header"),
     );
@@ -1383,7 +1387,7 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
             Err(e) => return Ok(e),
         }
     }
-    if req.uri().path() == "/perf/download-crox-self-profile" {
+    if req.uri().path() == "/perf/processed-self-profile" {
         let data: Arc<InputData> = ctx.data.read().as_ref().unwrap().clone();
         match get_self_profile_raw(&req) {
             Ok((parts, v)) => {
