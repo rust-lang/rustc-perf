@@ -125,24 +125,24 @@
             };
             let dl_link = (commit, bench, run) => {
                 let url = dl_url(commit, bench, run);
-                return `<a href="${url}">Download raw results for ${commit.substring(0, 10)}</a>`;
+                return `<a href="${url}">raw</a>`;
             };
             let processed_link = (commit, bench, run, ty) => {
                 let url = `/perf/processed-self-profile?commit=${commit}&benchmark=${bench}&run_name=${run}&type=${ty}`;
-                return `<a href="${url}">Download/view ${ty} results for ${commit.substring(0, 10)}</a>`;
+                return `<a href="${url}">${ty}</a>`;
             };
-            txt = dl_link(state.commit, state.benchmark, state.run_name);
-            txt += "<br>";
-            txt += processed_link(state.commit, state.benchmark, state.run_name, "flamegraph");
-            txt += "<br>";
-            txt += processed_link(state.commit, state.benchmark, state.run_name, "crox");
+            txt = `Download/view
+                ${dl_link(state.commit, state.benchmark, state.run_name)},
+                ${processed_link(state.commit, state.benchmark, state.run_name, "flamegraph")},
+                ${processed_link(state.commit, state.benchmark, state.run_name, "crox")}
+                results for ${state.commit.substring(0, 10)}`;
             if (state.base_commit) {
                 txt += "<br>";
-                txt += dl_link(state.base_commit, state.benchmark, state.run_name);
-                txt += "<br>";
-                txt += processed_link(state.base_commit, state.benchmark, state.run_name, "flamegraph");
-                txt += "<br>";
-                txt += processed_link(state.base_commit, state.benchmark, state.run_name, "crox");
+                txt += `Download/view
+                    ${dl_link(state.base_commit, state.benchmark, state.run_name)},
+                    ${processed_link(state.base_commit, state.benchmark, state.run_name, "flamegraph")},
+                    ${processed_link(state.base_commit, state.benchmark, state.run_name, "crox")}
+                    results for ${state.base_commit.substring(0, 10)}`;
             }
             document.querySelector("#raw-urls").innerHTML = txt;
             let sort_idx = state.sort_idx;
