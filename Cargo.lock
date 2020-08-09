@@ -21,7 +21,7 @@ dependencies = [
 [[package]]
 name = "analyzeme"
 version = "0.7.1"
-source = "git+https://github.com/Mark-Simulacrum/measureme#c74fe8af754334a71d5841af18818c5767847d84"
+source = "git+https://github.com/rust-lang/measureme#de3edc5cfb6961580dc04b720de963510c209fc4"
 dependencies = [
  "byteorder",
  "measureme",
@@ -951,7 +951,7 @@ checksum = "490cc448043f947bae3cbee9c203358d62dbee0db12107a74be5c30ccfd09771"
 [[package]]
 name = "measureme"
 version = "0.7.1"
-source = "git+https://github.com/Mark-Simulacrum/measureme#c74fe8af754334a71d5841af18818c5767847d84"
+source = "git+https://github.com/rust-lang/measureme#de3edc5cfb6961580dc04b720de963510c209fc4"
 dependencies = [
  "byteorder",
  "memmap",

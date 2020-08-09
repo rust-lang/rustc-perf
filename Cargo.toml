@@ -7,6 +7,3 @@ debug = 1
 
 [profile.release.package.collector]
 debug = 1
-
-[patch."https://github.com/rust-lang/measureme"]
-analyzeme = { git = "https://github.com/Mark-Simulacrum/measureme" }
