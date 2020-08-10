@@ -237,7 +237,10 @@ fn main() {
         // Abort if non-wrapped rustc
         if env::var_os("EXPECT_ONLY_WRAPPED_RUSTC").is_some() {
             // ... but not if we're just getting the rustc version.
-            if !args.iter().any(|arg| arg == "-vV") {
+            if !args
+                .iter()
+                .any(|arg| arg == "-vV" || arg == "--print=file-names")
+            {
                 eprintln!("{:?} {:?}", tool, args);
                 eprintln!("exiting -- non-wrapped rustc");
                 std::process::exit(1);
