@@ -19,6 +19,7 @@ pub fn generate(title: &str, pieces: super::Pieces, _: Opt) -> anyhow::Result<Ve
     let mut flamegraph_options = FlamegraphOptions::default();
     flamegraph_options.count_name = "nanoseconds".to_owned();
     flamegraph_options.title = title.to_owned();
+    flamegraph_options.min_width = 0.0;
 
     from_lines(
         &mut flamegraph_options,
