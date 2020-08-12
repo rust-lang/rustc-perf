@@ -17,6 +17,7 @@ pub fn generate(title: &str, pieces: super::Pieces, _: Opt) -> anyhow::Result<Ve
 
     let mut file = Vec::new();
     let mut flamegraph_options = FlamegraphOptions::default();
+    flamegraph_options.count_name = "nanoseconds".to_owned();
     flamegraph_options.title = title.to_owned();
 
     from_lines(
