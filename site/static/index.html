@@ -76,7 +76,7 @@
         const seriesColors = ["#7cb5ec", "#434348", "#90ed7d", "#f7a35c", "#8085e9", "#f15c80", "#e4d354", "#2b908f", "#f45b5b", "#91e8e1"];
         const interpolatedColor = "#fcb0f1";
 
-        function tooltipPlugin({onclick, commits, isInterpolated, shiftX = 10, shiftY = 10}) {
+        function tooltipPlugin({onclick, commits, isInterpolated, absoluteMode, shiftX = 10, shiftY = 10}) {
             let tooltipLeftOffset = 0;
             let tooltipTopOffset = 0;
 
@@ -96,10 +96,17 @@
                 tooltip.style.left = (tooltipLeftOffset + lft + shiftY) + "px";
 
                 tooltip.style.borderColor = isInterpolated(dataIdx) ? interpolatedColor : seriesColors[seriesIdx - 1];
-                let pctSinceStart = (((u.data[seriesIdx][dataIdx] - u.data[seriesIdx][0]) / u.data[seriesIdx][0]) * 100).toFixed(2);
+                let trailer = "";
+                if (absoluteMode) {
+                    let pctSinceStart = (((u.data[seriesIdx][dataIdx] - u.data[seriesIdx][0]) / u.data[seriesIdx][0]) * 100).toFixed(2);
+                    trailer = uPlot.fmtNum(u.data[seriesIdx][dataIdx]) + "(" +
+                        pctSinceStart + "% since start)";
+                } else {
+                    trailer = uPlot.fmtNum(u.data[seriesIdx][dataIdx]) + "% since start";
+                }
                 tooltip.textContent = (
-                    fmtDate(new Date(u.data[0][dataIdx] * 1e3)) + " - " + commits[dataIdx][1].slice(0,10) + "\n" +
-                    uPlot.fmtNum(u.data[seriesIdx][dataIdx]) + "(" + pctSinceStart + "% since start)"
+                    fmtDate(new Date(u.data[0][dataIdx] * 1e3)) + " - " +
+                    commits[dataIdx][1].slice(0,10) + "\n" + trailer
                 );
             }
 
@@ -160,7 +167,8 @@
             };
         }
 
-        function genPlotOpts({title, width, height, yAxisLabel, series, commits, stat, isInterpolated, alpha = 0.3, prox = 5}) {
+        function genPlotOpts({title, width, height, yAxisLabel, series, commits,
+            stat, isInterpolated, alpha = 0.3, prox = 5, absoluteMode}) {
             return {
                 title,
                 width,
@@ -183,7 +191,7 @@
                 },
                 scales: {
                     y: {
-                        range: (self, dataMin, dataMax) => uPlot.rangeNum(0, dataMax, 0.2, true)
+                        range: (self, dataMin, dataMax) => uPlot.rangeNum(absoluteMode ? 0 : dataMin, dataMax, 0.2, true)
                     }
                 },
                 axes: [
@@ -245,6 +253,7 @@
                         },
                         commits,
                         isInterpolated,
+                        absoluteMode,
                     }),
                 ],
             };
@@ -272,6 +281,9 @@
                         yAxis = "Maximum resident set size (kb)";
                     } else if (state.stat == "faults") {
                         yAxis = "Faults";
+                    }
+                    if (!state.absolute) {
+                        yAxis = "% change from baseline";
                     }
 
                     let yAxisLabel = i == 0 ? yAxis : null;
@@ -309,6 +321,7 @@
                         isInterpolated(dataIdx) {
                             return cacheStates.full.is_interpolated.has(dataIdx);
                         },
+                        absoluteMode: state.absolute,
                     });
 
                     let u = new uPlot(plotOpts, plotData,
