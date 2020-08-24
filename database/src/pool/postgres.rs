@@ -999,7 +999,7 @@ where
     async fn last_end_time(&self) -> Option<DateTime<Utc>> {
         self.conn()
             .query_opt(
-                "select date_recorded + (duration || 'seconds')::interval \
+                "select date_recorded \
                 from artifact_collection_duration \
                 order by date_recorded desc \
                 limit 1;",
