@@ -25,12 +25,13 @@ async fn main() {
 
     let data: Arc<RwLock<Option<Arc<load::InputData>>>> = Arc::new(RwLock::new(None));
     let data_ = data.clone();
-    let db_url = env::var("DATABASE_URL").ok().or_else(|| {
-        env::args().nth(1)
-    }).unwrap_or_else(|| {
-        eprintln!("Either $DATABASE_URL or first argument must be a filepath to sqlite database or postgres:// URL");
-        std::process::exit(1);
-    });
+    let db_url = env::var("DATABASE_URL")
+        .ok()
+        .or_else(|| env::args().nth(1))
+        .unwrap_or_else(|| {
+            eprintln!("Defaulting to loading from `results.db`");
+            String::from("results.db")
+        });
     let fut = tokio::task::spawn_blocking(move || {
         tokio::task::spawn(async move {
             let res = Arc::new(load::InputData::from_fs(&db_url).await.unwrap());
