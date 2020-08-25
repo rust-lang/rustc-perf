@@ -183,6 +183,13 @@ impl BenchmarkErrors {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+struct BenchOpts {
+    iterations: usize,
+    self_profile: bool,
+    append: bool,
+}
+
 fn bench(
     rt: &mut Runtime,
     pool: database::Pool,
@@ -191,15 +198,14 @@ fn bench(
     run_kinds: &[RunKind],
     compiler: Compiler<'_>,
     benchmarks: &[Benchmark],
-    iterations: usize,
-    self_profile: bool,
+    opts: BenchOpts,
 ) -> BenchmarkErrors {
     let mut conn = rt.block_on(pool.connection());
     let mut errors = BenchmarkErrors::new();
     eprintln!("Benchmarking {} for triple {}", cid, compiler.triple);
 
     let has_measureme = Command::new("summarize").output().is_ok();
-    if self_profile {
+    if opts.self_profile {
         assert!(
             has_measureme,
             "needs `summarize` in PATH for self profile.\n\
@@ -211,6 +217,13 @@ fn bench(
         .iter()
         .map(|b| b.name.to_string())
         .collect::<Vec<_>>();
+
+    // Clear out previous results for this artifact ID. Eventually we may want
+    // an --append mode, but most of the time users just want results for the
+    // new compiler, rather than combining more than one run into the database.
+    if !opts.append {
+        rt.block_on(conn.purge_previous_results(&cid));
+    }
 
     // Make sure there is no observable time when the artifact ID is available
     // but the in-progress steps are not.
@@ -248,10 +261,15 @@ fn bench(
             tx.conn(),
             &benchmark.name,
             interned_cid,
-            self_profile,
+            opts.self_profile,
         );
-        let result =
-            benchmark.measure(&mut processor, build_kinds, run_kinds, compiler, iterations);
+        let result = benchmark.measure(
+            &mut processor,
+            build_kinds,
+            run_kinds,
+            compiler,
+            opts.iterations,
+        );
         if let Err(s) = result {
             eprintln!(
                 "collector error: Failed to benchmark '{}', recorded: {}",
@@ -578,8 +596,11 @@ fn main_result() -> anyhow::Result<i32> {
                     is_nightly: true,
                 },
                 &benchmarks,
-                1,
-                self_profile,
+                BenchOpts {
+                    iterations: 1,
+                    self_profile,
+                    append: false,
+                },
             );
             res.fail_if_nonzero()?;
             Ok(0)
@@ -627,8 +648,13 @@ fn main_result() -> anyhow::Result<i32> {
                 &RunKind::all(),
                 Compiler::from_sysroot(&sysroot),
                 &benchmarks,
-                3,
-                self_profile,
+                BenchOpts {
+                    iterations: 3,
+                    self_profile,
+                    // On CI, always append to the previously collected results.
+                    // This permits easily restarting collection after Ctrl+C.
+                    append: true,
+                },
             );
 
             client.post(&format!("{}/perf/onpush", site_url)).send()?;
@@ -703,8 +729,11 @@ fn main_result() -> anyhow::Result<i32> {
                     triple: "x86_64-unknown-linux-gnu",
                 },
                 &benchmarks,
-                3,
-                /* self_profile */ false,
+                BenchOpts {
+                    iterations: 3,
+                    self_profile: false,
+                    append: false,
+                },
             );
             res.fail_if_nonzero()?;
             Ok(0)

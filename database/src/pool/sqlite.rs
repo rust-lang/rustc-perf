@@ -862,4 +862,15 @@ impl Connection for SqliteConnection {
     ) -> Vec<(ArtifactIdNumber, i32)> {
         Vec::new()
     }
+
+    async fn purge_previous_results(&self, artifact: &ArtifactId) {
+        let name = match artifact {
+            ArtifactId::Commit(commit) => commit.sha.to_string(),
+            ArtifactId::Artifact(a) => a.clone(),
+        };
+
+        self.raw_ref()
+            .execute("delete from artifact where name = ?", params![&name])
+            .unwrap();
+    }
 }

@@ -118,6 +118,8 @@ pub trait Connection: Send + Sync {
         profile: &str,
         cache: &str,
     ) -> Vec<(ArtifactIdNumber, i32)>;
+
+    async fn purge_previous_results(&self, aid: &ArtifactId);
 }
 
 #[async_trait::async_trait]

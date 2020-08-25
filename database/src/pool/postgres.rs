@@ -1076,4 +1076,16 @@ where
             .map(|r| (ArtifactIdNumber(r.get::<_, i16>(0) as u32), r.get(1)))
             .collect()
     }
+
+    async fn purge_previous_results(&self, artifact: &ArtifactId) {
+        let name = match artifact {
+            ArtifactId::Commit(commit) => commit.sha.to_string(),
+            ArtifactId::Artifact(a) => a.clone(),
+        };
+
+        self.conn()
+            .execute("delete from artifact where name = $1", &[&name])
+            .await
+            .unwrap();
+    }
 }
