@@ -44,6 +44,10 @@ fn main() {
                 let has_perf = cmd.output().is_ok();
                 assert!(has_perf);
                 cmd.arg("stat")
+                    // perf respects this environment variable for e.g., percents in
+                    // the output, but we want standard output on all systems.
+                    // See #753 for more details.
+                    .env("LC_MEASUREMENT", "C")
                     .arg("-x;")
                     .arg("-e")
                     .arg("instructions:u,cycles:u,task-clock,cpu-clock,faults")
