@@ -47,7 +47,7 @@ fn main() {
                     // perf respects this environment variable for e.g., percents in
                     // the output, but we want standard output on all systems.
                     // See #753 for more details.
-                    .env("LC_MEASUREMENT", "C")
+                    .env("LC_NUMERIC", "C")
                     .arg("-x;")
                     .arg("-e")
                     .arg("instructions:u,cycles:u,task-clock,cpu-clock,faults")
