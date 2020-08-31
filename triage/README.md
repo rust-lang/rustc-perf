@@ -5,7 +5,7 @@ usage.
 
 ## Roster
 
-- Tuesday morning (Melbourne time): njn
+- Monday evening (North American time): TBD
 
 This is a good time to do it because This Week in Rust (see below) is usually
 published on Tuesday, US time, and so it means the PR to include the triage
