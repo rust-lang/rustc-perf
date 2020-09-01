@@ -5,9 +5,10 @@ usage.
 
 ## Roster
 
-- Monday evening (North American time): TBD
+- ecstatic-morse
+- Mark-Simulacrum
 
-This is a good time to do it because This Week in Rust (see below) is usually
+Monday evening in North America is a good time to do it because This Week in Rust (see below) is usually
 published on Tuesday, US time, and so it means the PR to include the triage
 details in TWiR can be merged shortly before publication. This time is also
 shortly before the weekly Rust compiler meeting, where the results are looked
