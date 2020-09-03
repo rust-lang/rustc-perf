@@ -272,7 +272,10 @@ fn bench(
     }
     let end = start.elapsed();
 
-    eprintln!("collection took {:?}", end);
+    eprintln!(
+        "collection took {:?} with {} failed benchmarks",
+        end, errors.0
+    );
 
     if skipped {
         log::info!("skipping duration record -- skipped parts of run");
