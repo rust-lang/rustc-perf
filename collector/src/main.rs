@@ -343,6 +343,11 @@ fn get_benchmarks(
         benchmarks.push(Benchmark::new(name, path)?);
     }
     benchmarks.sort_by_key(|benchmark| benchmark.name.clone());
+
+    if benchmarks.is_empty() {
+        eprintln!("Warning: no benchmarks selected! Try less strict filters.");
+    }
+
     Ok(benchmarks)
 }
 
