@@ -639,7 +639,11 @@ impl Upload {
 
         let append_file =
             |builder: &mut tar::Builder<_>, file: &Path, name: &str| -> anyhow::Result<()> {
-                builder.append_path_with_name(file, name)?;
+                if file.exists() {
+                    // Silently ignore missing files, the new self-profile
+                    // experiment with one file has a different structure.
+                    builder.append_path_with_name(file, name)?;
+                }
                 Ok(())
             };
         append_file(
