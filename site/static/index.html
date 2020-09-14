@@ -73,7 +73,14 @@
     </a>
 
     <script>
-        const seriesColors = ["#7cb5ec", "#434348", "#90ed7d", "#f7a35c", "#8085e9", "#f15c80", "#e4d354", "#2b908f", "#f45b5b", "#91e8e1"];
+        const commonCacheStateColors = {
+            "full": "#7cb5ec",
+            "incr-full": "#434348",
+            "incr-unchanged": "#f7a35c",
+            "incr-patched: println": "#90ed7d",
+        };
+
+        const otherCacheStateColors = ["#8085e9", "#f15c80", "#e4d354", "#2b908f", "#f45b5b", "#91e8e1"];
         const interpolatedColor = "#fcb0f1";
 
         function tooltipPlugin({onclick, commits, isInterpolated, absoluteMode, shiftX = 10, shiftY = 10}) {
@@ -95,7 +102,7 @@
                 tooltip.style.top  = (tooltipTopOffset  + top + shiftX) + "px";
                 tooltip.style.left = (tooltipLeftOffset + lft + shiftY) + "px";
 
-                tooltip.style.borderColor = isInterpolated(dataIdx) ? interpolatedColor : seriesColors[seriesIdx - 1];
+                tooltip.style.borderColor = isInterpolated(dataIdx) ? interpolatedColor : "#000000";
                 let trailer = "";
                 if (absoluteMode) {
                     let pctSinceStart = (((u.data[seriesIdx][dataIdx] - u.data[seriesIdx][0]) / u.data[seriesIdx][0]) * 100).toFixed(2);
@@ -267,6 +274,8 @@
 
                 for (let benchKind in benchKinds) {
                     let cacheStates = benchKinds[benchKind];
+                    let cacheStateNames = Object.keys(cacheStates);
+                    cacheStateNames.sort();
 
                     let yAxis = "Value";
                     if (state.stat == "instructions:u") {
@@ -294,20 +303,19 @@
 
                     let plotData = [xVals];
 
-                    let j = 0;
+                    let otherColorIdx = 0;
 
-                    for (let cacheState in cacheStates) {
+                    for (let cacheState of cacheStateNames) {
                         let yVals = cacheStates[cacheState].points;
+                        let color = commonCacheStateColors[cacheState] || otherCacheStateColors[otherColorIdx++];
 
                         plotData.push(yVals);
 
                         seriesOpts.push({
                             label: cacheState,
                             width: devicePixelRatio,
-                            stroke: seriesColors[j]
+                            stroke: color
                         });
-
-                        j++;
                     }
 
                     let plotOpts = genPlotOpts({
