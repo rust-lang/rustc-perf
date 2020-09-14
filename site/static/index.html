@@ -102,7 +102,10 @@
                 tooltip.style.top  = (tooltipTopOffset  + top + shiftX) + "px";
                 tooltip.style.left = (tooltipLeftOffset + lft + shiftY) + "px";
 
-                tooltip.style.borderColor = isInterpolated(dataIdx) ? interpolatedColor : "#000000";
+                tooltip.style.borderColor = isInterpolated(dataIdx) ?
+                    interpolatedColor :
+                    u.series[seriesIdx].stroke;
+
                 let trailer = "";
                 if (absoluteMode) {
                     let pctSinceStart = (((u.data[seriesIdx][dataIdx] - u.data[seriesIdx][0]) / u.data[seriesIdx][0]) * 100).toFixed(2);
