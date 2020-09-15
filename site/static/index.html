@@ -131,7 +131,7 @@
                 let trailer = "";
                 if (absoluteMode) {
                     let pctSinceStart = (((u.data[seriesIdx][dataIdx] - u.data[seriesIdx][0]) / u.data[seriesIdx][0]) * 100).toFixed(2);
-                    trailer = uPlot.fmtNum(u.data[seriesIdx][dataIdx]) + "(" +
+                    trailer = uPlot.fmtNum(u.data[seriesIdx][dataIdx]) + " (" +
                         pctSinceStart + "% since start)";
                 } else {
                     trailer = uPlot.fmtNum(u.data[seriesIdx][dataIdx]) + "% since start";
