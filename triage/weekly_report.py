@@ -1,14 +1,27 @@
 #!/usr/bin/env python3
 
+from dataclasses import dataclass
 from datetime import date
+from enum import Enum
 from math import log
+from pathlib import Path
 from pprint import pp
 from sys import exit
+from typing import ClassVar, List
 import argparse
 import json
-import msgpack
 import sys
 import urllib.request
+
+def eprint(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
+
+try:
+    import msgpack
+except ImportError as e:
+    eprint(e)
+    eprint('Try `pip3 install --user msgpack')
+    sys.exit(1)
 
 report = '''
 {date} Triage Log
@@ -40,42 +53,173 @@ TODO: Nags
 '''
 
 results = {
-    'regressed': [],
-    'improved': [],
+    'regression': [],
+    'improvement': [],
     'mixed': [],
 }
 
 
-def relative_change(a, b):
-    '''Returns `ln(a / b)`
+def get_username():
+    usernames = {'mackendy': 'ecstaticmorse'}
 
-    This is prefereable to percentage change, since order doesn't matter and it
-    scales equally for positive or negative changes.
+    home_dir = Path.home().name
 
-    For small changes, `ln(a / b) ≈ (b - a) / b`
+    return usernames.get(home_dir) or home_dir
+
+
+class Metric(Enum):
+    INSTRUCTIONS = 'instructions:u'
+
+    def human_readable(self):
+        if self == Metric.INSTRUCTIONS:
+            return 'instruction count'
+        else:
+            raise NotImplementedError
+
+    def direction(self, change):
+        if self == Metric.INSTRUCTIONS:
+            return 'regression' if change > 0 else 'improvement'
+        else:
+            raise NotImplementedError
+
+
+def relative_change(expected, actual):
+    '''Returns (actual - expected) / expected
+
+    This is the standard definition of relative change.
     '''
 
-    return log(a / b)
+    return (actual - expected) / expected
+
+
+def log_change(expected, actual):
+    '''Returns `ln(actual / expected)`
+
+    This is prefereable to percentage change because it scales equally for
+    positive or negative changes. This means that the order of the arguments
+    only affects the sign of the output
+
+    For small changes, `log_change(a, b) ≈ relative_change(a, b)`
+    '''
+
+    return log(actual / expected)
+
+
+@dataclass
+class BenchmarkComparison:
+    SIGNIFICANCE_THRESHOLD: ClassVar[float] = 0.01
+
+    results: List[float]
+    bench_name: str
+    cache_state: str
+
+    metric: Metric = Metric.INSTRUCTIONS
+
+    def log_change(self):
+        return log_change(*self.results)
+
+    def relative_change(self):
+        return relative_change(*self.results)
+
+    def is_significant(self):
+        return abs(self.log_change()) > self.__class__.SIGNIFICANCE_THRESHOLD
+
+    def is_increase(self):
+        return self.results[1] > self.results[0]
+
+    def direction(self):
+        return self.metric.direction(self.log_change())
+
+    def summary_line(self, link):
+        magnitude = abs(self.log_change())
+        if magnitude > 0.10:
+            size = 'Very large'
+        elif magnitude > 0.05:
+            size = 'Large'
+        elif magnitude > 0.01:
+            size = 'Moderate'
+        elif magnitude > 0.005:
+            size = 'Small'
+        else:
+            size = 'Very small'
+
+        percent = self.relative_change() * 100
+        return (
+            f'{size} {self.direction()} in [{self.metric.human_readable()}s]({link})'
+            f' (up to {percent:.1f}% on `{self.cache_state}` builds of `{self.bench_name}`)'
+        )
+
+
+def get_benchmarks(res):
+    ret = []
+    data = [res[key]['data'] for key in ['a', 'b']]
+    for bench_name in data[0].keys() & data[1].keys():
+        # Ignore rustdoc benchmarks for now
+        if bench_name.endswith('-doc'):
+            continue
+
+        benches = [dict(datum[bench_name]) for datum in data]
+        for cache_state in benches[0].keys() & benches[1].keys():
+            measurements = [bench[cache_state] for bench in benches]
+            comparison = BenchmarkComparison(measurements, bench_name,
+                                             cache_state)
+            ret.append(comparison)
+
+    return ret
 
 
 def gh_link(pr):
     return f'https://github.com/rust-lang/rust/issues/{pr}'
 
 
-def compare_link(start, end, stat='instructions:u'):
-    return f'https://perf.rust-lang.org/compare.html?start={start}&end={end}&stat={stat}'
+def compare_link(start, end, stat):
+    return f'https://perf.rust-lang.org/compare.html?start={start}&end={end}&stat={stat.value}'
 
 
-def change_summary(change, status):
-    pr = change['b']['pr']
-    direction = status.capitalize()
-    stat = 'instruction counts'
-    start = change['a']['commit']
-    end = change['b']['commit']
+def write_section(res, *changes):
+    pr = res['b']['pr']
+    start = res['a']['commit']
+    end = res['b']['commit']
 
-    return '\n'.join([
-        f'[#{pr}]({gh_link(pr)})'
-        f'- {direction} results in [{stat}]({compare_link(start, end)}).'])
+    msg = f'[#{pr}]({gh_link(pr)})'
+
+    for change in changes:
+        msg += '\n- '
+        msg += change.summary_line(compare_link(start, end, change.metric))
+
+    return msg
+
+
+def handle_compare(res):
+    eprint(f"Comparing {res['b']['commit']} to {res['a']['commit']}")
+
+    benchmarks = get_benchmarks(res)
+
+    lo = min(benchmarks, key=lambda x: x.log_change())
+    hi = max(benchmarks, key=lambda x: x.log_change())
+
+    changes = []
+    if hi.is_increase():
+        changes.append(hi)
+
+    if not lo.is_increase():
+        changes.append(lo)
+
+    changes = [c for c in changes if c.is_significant()]
+
+    if len(changes) == 0:
+        return
+
+    # Unless all changes are going the same direction, report these results as "mixed"
+    if len(set(c.is_increase() for c in changes)) == 1:
+        section = changes[0].direction()
+    else:
+        section = 'mixed'
+
+    # Print biggest change first
+    changes.sort(reverse=True, key=lambda x: abs(x.log_change()))
+
+    results[section].append(write_section(res, *changes))
 
 
 def make_request_payload(start, end):
@@ -88,6 +232,8 @@ def make_request_payload(start, end):
 
 
 def make_request(start, end):
+    # FIXME: Add some sort of retry mechanism
+
     req = urllib.request.Request('https://perf.rust-lang.org/perf/get')
     req.add_header('Content-Type', 'application/json')
     req.data = make_request_payload(start, end)
@@ -96,12 +242,12 @@ def make_request(start, end):
         return data
 
 
-def do_triage(start):
+def do_triage(start, end):
     # Get the next commit after `start` by comparing it with itself
     initial_response = make_request(start, start)
 
-    if initial_response['next'] is None:
-        print('Failed to get first commit', file=sys.stderr)
+    if initial_response.get('next') is None:
+        eprint('Failed to get first commit')
         sys.exit(1)
 
     commits = [start, initial_response['next']]
@@ -110,77 +256,49 @@ def do_triage(start):
         try:
             response = make_request(*commits)
         except urllib.error.HTTPError as e:
-            print(e, file=sys.stderr)
+            eprint(e)
             break
 
         if not response['is_contiguous']:
-            print('Reached a commit whose perf run is not yet complete',
-                  file=sys.stderr)
+            eprint('Reached a commit whose perf run is not yet complete')
             break
 
         handle_compare(response)
+        last_reported = commits[1]
 
-        if 'next' not in response:
+        if 'next' not in response or commits[1] == end:
             break
 
         commits[0], commits[1] = commits[1], response['next']
 
-    print(report.format(
-        first_commit=start, last_commit=commits[0],
-        date=date.today().strftime("%Y-%m-%d"),
-        num_regressions=len(results['regressed']),
-        num_improvements=len(results['improved']),
-        num_mixed=len(results['mixed']),
-        num_rollups='???',
-        regressions='\n\n'.join(results['regressed']),
-        improvements='\n\n'.join(results['improved']),
-        mixed='\n\n'.join(results['mixed']),
-        username='ecstaticmorse'
-    ))
+    out = report.format(first_commit=start,
+                        last_commit=last_reported,
+                        date=date.today().strftime("%Y-%m-%d"),
+                        num_regressions=len(results['regression']),
+                        num_improvements=len(results['improvement']),
+                        num_mixed=len(results['mixed']),
+                        num_rollups='???',
+                        regressions='\n\n'.join(results['regression']),
+                        improvements='\n\n'.join(results['improvement']),
+                        mixed='\n\n'.join(results['mixed']),
+                        username=get_username())
 
-
-def handle_compare(res):
-    print(f"Comparing {res['a']['commit']}..{res['b']['commit']}", file=sys.stderr)
-    CHANGE_THRESHOLD = 0.01
-
-    data = [res[key]['data'] for key in ['a', 'b']]
-
-    max_regression = 0
-    max_improvement = 0
-    for bench_name in data[0].keys() & data[1].keys():
-        # Ignore rustdoc benchmarks for now
-        if bench_name.endswith('-doc'):
-            continue
-
-        benches = [dict(datum[bench_name]) for datum in data]
-        for cache_state in benches[0].keys() & benches[0].keys():
-            measurements = [bench[cache_state] for bench in benches]
-            rel_change = relative_change(*measurements)
-            max_regression = min(max_regression, rel_change)
-            max_improvement = max(max_improvement, rel_change)
-
-    improved = abs(max_improvement) > CHANGE_THRESHOLD
-    regressed = abs(max_regression) > CHANGE_THRESHOLD
-
-    if improved and regressed:
-        status = 'mixed'
-    elif improved:
-        status = 'improved'
-    elif regressed:
-        status = 'regressed'
-    else:
-        return
-
-    handle_significant_change(res, status)
-
-
-def handle_significant_change(res, status):
-    results[status].append(change_summary(res, status))
+    print(out)
 
 
 if __name__ == '__main__' and not sys.flags.inspect:
-    parser = argparse.ArgumentParser(description='Generate a weekly triage report')
-    parser.add_argument('first_commit', help="the last commit of last week's triage report")
+    parser = argparse.ArgumentParser(
+        description='Print a weekly triage report to stdout')
+    parser.add_argument(
+        'first_commit',
+        help=
+        'The parent of the earliest commit that will be included in the report'
+    )
+    parser.add_argument(
+        'last_commit',
+        nargs='?',
+        default=None,
+        help='The latest commit that will be included in the report')
     args = parser.parse_args()
 
-    do_triage(start=args.first_commit)
+    do_triage(start=args.first_commit, end=args.last_commit)
