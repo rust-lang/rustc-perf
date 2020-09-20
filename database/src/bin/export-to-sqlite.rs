@@ -5,12 +5,19 @@ use std::time::Instant;
 use tokio_postgres::types::Type;
 use tokio_postgres::Row;
 
+const ARTIFACT_JOIN_AND_WHERE: &str =
+"join artifact on artifact.id = aid where artifact.date > (CURRENT_TIMESTAMP - interval '4 week')";
+const ARTIFACT_WHERE: &str = "where artifact.date > (CURRENT_TIMESTAMP - interval '4 week')";
+
 trait Table {
     fn name() -> &'static str;
     fn copy_out() -> &'static str;
     fn insert() -> &'static str;
     fn types() -> &'static [Type];
     fn execute(statement: &mut rusqlite::Statement, row: Row);
+    fn trailer() -> &'static str {
+        ""
+    }
 }
 
 struct PstatSeries;
@@ -50,6 +57,9 @@ impl Table for Pstat {
     }
     fn insert() -> &'static str {
         "insert into pstat (series, aid, cid, value) VALUES (?, ?, ?, ?)"
+    }
+    fn trailer() -> &'static str {
+        ARTIFACT_JOIN_AND_WHERE
     }
     fn types() -> &'static [Type] {
         &[Type::INT4, Type::INT2, Type::INT4, Type::FLOAT8]
@@ -144,6 +154,9 @@ impl Table for Artifact {
     fn insert() -> &'static str {
         "insert into artifact (id, name, date, type) VALUES (?, ?, ?, ?)"
     }
+    fn trailer() -> &'static str {
+        ARTIFACT_WHERE
+    }
     fn types() -> &'static [Type] {
         &[Type::INT2, Type::TEXT, Type::TIMESTAMPTZ, Type::TEXT]
     }
@@ -217,6 +230,9 @@ impl Table for SelfProfileQuery {
     fn insert() -> &'static str {
         "insert into self_profile_query (series, aid, cid, self_time, blocked_time, incremental_load_time, number_of_cache_hits, invocation_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     }
+    fn trailer() -> &'static str {
+        ARTIFACT_JOIN_AND_WHERE
+    }
     fn types() -> &'static [Type] {
         &[
             Type::INT4,
@@ -287,7 +303,13 @@ async fn copy<R: Table>(
     let mut prepared = sqlite.prepare(R::insert()).unwrap();
     let rows = postgres
         .query_raw(
-            format!("select {} from {}", R::copy_out(), R::name()).as_str(),
+            format!(
+                "select {} from {}{}",
+                R::copy_out(),
+                R::name(),
+                R::trailer()
+            )
+            .as_str(),
             vec![],
         )
         .await
