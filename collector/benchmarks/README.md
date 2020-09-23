@@ -85,6 +85,8 @@ programs.
 - **many-assoc-items**: Contains a struct with many associated items, which
   caused [quadratic behavior](https://github.com/rust-lang/rust/issues/68957)
   in the past.
+- **match-stress-enum**: Contains a match against a huge enum, which used to
+  have [quadratic runtime](https://github.com/rust-lang/rust/issues/7462).
 - **regression-31157**: A small program that caused a [large performance
   regression](https://github.com/rust-lang/rust/issues/31157) from the past.
 - **token-stream-stress**: Constructs a long token stream much like the `quote`
