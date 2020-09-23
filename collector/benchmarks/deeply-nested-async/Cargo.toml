@@ -1,0 +1,9 @@
+[package]
+name = "deeply-nested-async"
+version = "0.1.0"
+authors = ["Bastian Kauschke <bastian_kauschke@hotmail.de>"]
+edition = "2018"
+
+[dependencies]
+
+[workspace]

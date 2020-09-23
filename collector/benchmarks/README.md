@@ -75,6 +75,10 @@ programs.
 - **ctfe-stress-4**: A stress test for compile-time function evaluation.
 - **deeply-nested**: A small program that caused [exponential
   behavior](https://github.com/rust-lang/rust/issues/38528) in the past.
+- **deeply-nested-async**: Another small program that caused [exponential
+  behavior](https://github.com/rust-lang/rust/issues/75992) in the past.
+- **deeply-nested-closures**: A small program that caused [exponential
+  behavior](https://github.com/rust-lang/rust/issues/72408) in the past.
 - **deep-vector**: A test containing a single large vector of zeroes, which
   caused [poor performance](https://github.com/rust-lang/rust/issues/20936) in
   the past.
