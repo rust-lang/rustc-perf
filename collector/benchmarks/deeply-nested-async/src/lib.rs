@@ -1,5 +1,7 @@
 // A regression test for #75992.
 // Nested asnyc blocks produce an exponentially sized type tree with a lot of duplicates.
+//
+// Created by @kellerkindt in https://github.com/rust-lang/rust/issues/75992#issuecomment-682595159.
 
 pub async fn h0(v: &String, x: &u64) { println!("{} {}", v, x) }
 pub async fn h1(v: &String, x: &u64) { h0(v, x).await }
