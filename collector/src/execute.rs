@@ -1122,9 +1122,9 @@ impl Benchmark {
         build_kinds: &[BuildKind],
         run_kinds: &[RunKind],
         compiler: Compiler<'_>,
-        iterations: usize,
+        iterations: Option<usize>,
     ) -> anyhow::Result<()> {
-        let iterations = cmp::min(iterations, self.config.runs);
+        let iterations = iterations.unwrap_or(self.config.runs);
 
         if self.config.disabled || build_kinds.is_empty() {
             eprintln!("Skipping {}: disabled", self.name);

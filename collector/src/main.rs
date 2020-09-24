@@ -7,7 +7,6 @@ use anyhow::{bail, Context};
 use database::{ArtifactId, Commit};
 use log::debug;
 use std::collections::HashSet;
-use std::convert::TryInto;
 use std::fs;
 use std::io::{stderr, Write};
 use std::path::{Path, PathBuf};
@@ -192,7 +191,7 @@ fn bench(
     run_kinds: &[RunKind],
     compiler: Compiler<'_>,
     benchmarks: &[Benchmark],
-    iterations: usize,
+    iterations: Option<usize>,
     self_profile: bool,
 ) -> BenchmarkErrors {
     let mut conn = rt.block_on(pool.connection());
@@ -587,7 +586,7 @@ fn main_result() -> anyhow::Result<i32> {
                     is_nightly: true,
                 },
                 &benchmarks,
-                1,
+                Some(1),
                 self_profile,
             );
             res.fail_if_nonzero()?;
@@ -636,7 +635,7 @@ fn main_result() -> anyhow::Result<i32> {
                 &RunKind::all(),
                 Compiler::from_sysroot(&sysroot),
                 &benchmarks,
-                next.runs.unwrap_or(3).try_into().unwrap(),
+                next.runs.map(|v| v as usize),
                 self_profile,
             );
 
@@ -712,7 +711,7 @@ fn main_result() -> anyhow::Result<i32> {
                     triple: "x86_64-unknown-linux-gnu",
                 },
                 &benchmarks,
-                3,
+                Some(3),
                 /* self_profile */ false,
             );
             res.fail_if_nonzero()?;
@@ -753,7 +752,7 @@ fn main_result() -> anyhow::Result<i32> {
                 eprintln!("{}", n_benchmarks_remaining(benchmarks.len() - i));
                 let mut processor = execute::ProfileProcessor::new(profiler, &out_dir, &id);
                 let result =
-                    benchmark.measure(&mut processor, &build_kinds, &run_kinds, compiler, 1);
+                    benchmark.measure(&mut processor, &build_kinds, &run_kinds, compiler, Some(1));
                 if let Err(ref s) = result {
                     errors.incr();
                     eprintln!(
