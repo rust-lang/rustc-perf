@@ -643,7 +643,7 @@ where
     ) {
         self.conn()
             .execute(
-                "insert into pull_request_build (pr, complete, requested, include, exclude) VALUES ($1, false, CURRENT_TIMESTAMP, $2, $3, $4) ON CONFLICT DO NOTHING",
+                "insert into pull_request_build (pr, complete, requested, include, exclude, runs) VALUES ($1, false, CURRENT_TIMESTAMP, $2, $3, $4) ON CONFLICT DO NOTHING",
                 &[&(pr as i32), &include, &exclude, &runs],
             )
             .await
