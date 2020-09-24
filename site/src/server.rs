@@ -323,6 +323,19 @@ pub async fn handle_next_commit(data: Arc<InputData>) -> collector::api::next_co
                 runs,
                 ..
             } => (include, exclude, runs),
+            crate::load::MissingReason::InProgress(Some(previous)) => {
+                if let crate::load::MissingReason::Try {
+                    include,
+                    exclude,
+                    runs,
+                    ..
+                } = *previous
+                {
+                    (include, exclude, runs)
+                } else {
+                    (None, None, None)
+                }
+            }
             _ => (None, None, None),
         };
         collector::api::next_commit::Commit {
