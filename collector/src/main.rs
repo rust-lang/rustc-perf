@@ -7,6 +7,7 @@ use anyhow::{bail, Context};
 use database::{ArtifactId, Commit};
 use log::debug;
 use std::collections::HashSet;
+use std::convert::TryInto;
 use std::fs;
 use std::io::{stderr, Write};
 use std::path::{Path, PathBuf};
@@ -635,7 +636,7 @@ fn main_result() -> anyhow::Result<i32> {
                 &RunKind::all(),
                 Compiler::from_sysroot(&sysroot),
                 &benchmarks,
-                3,
+                next.runs.unwrap_or(3).try_into().unwrap(),
                 self_profile,
             );
 

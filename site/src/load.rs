@@ -39,6 +39,7 @@ pub enum MissingReason {
         pr: u32,
         include: Option<String>,
         exclude: Option<String>,
+        runs: Option<i32>,
     },
     InProgress(Option<Box<MissingReason>>),
 }
@@ -189,6 +190,7 @@ impl InputData {
             pr,
             include,
             exclude,
+            runs,
         } in queued_commits
         {
             // Enqueue the `TryParent` commit before the `TryCommit` itself, so that
@@ -206,6 +208,7 @@ impl InputData {
                     pr,
                     include,
                     exclude,
+                    runs,
                 },
             ));
         }

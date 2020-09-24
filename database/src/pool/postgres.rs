@@ -182,6 +182,7 @@ static MIGRATIONS: &[&str] = &[
         PRIMARY KEY(aid, cid, crate, profile, cache)
     );
     "#,
+    r#"alter table pull_request_build add column runs integer;"#,
 ];
 
 #[async_trait::async_trait]
@@ -633,11 +634,17 @@ where
             .map(|row| (row.get(0), row.get(1)))
             .collect()
     }
-    async fn queue_pr(&self, pr: u32, include: Option<&str>, exclude: Option<&str>) {
+    async fn queue_pr(
+        &self,
+        pr: u32,
+        include: Option<&str>,
+        exclude: Option<&str>,
+        runs: Option<i32>,
+    ) {
         self.conn()
             .execute(
-                "insert into pull_request_build (pr, complete, requested, include, exclude) VALUES ($1, false, CURRENT_TIMESTAMP, $2, $3) ON CONFLICT DO NOTHING",
-                &[&(pr as i32), &include, &exclude],
+                "insert into pull_request_build (pr, complete, requested, include, exclude) VALUES ($1, false, CURRENT_TIMESTAMP, $2, $3, $4) ON CONFLICT DO NOTHING",
+                &[&(pr as i32), &include, &exclude, &runs],
             )
             .await
             .unwrap();
@@ -657,7 +664,7 @@ where
         let rows = self
             .conn()
             .query(
-                "select pr, bors_sha, parent_sha, include, exclude from pull_request_build
+                "select pr, bors_sha, parent_sha, include, exclude, runs from pull_request_build
                 where complete is false and bors_sha is not null
                 order by requested asc",
                 &[],
@@ -671,6 +678,7 @@ where
                 parent_sha: row.get(2),
                 include: row.get(3),
                 exclude: row.get(4),
+                runs: row.get(5),
             })
             .collect()
     }
@@ -680,7 +688,7 @@ where
             .query_opt(
                 "update pull_request_build SET complete = true
                 where bors_sha = $1
-                returning pr, bors_sha, parent_sha, include, exclude",
+                returning pr, bors_sha, parent_sha, include, exclude, runs",
                 &[&sha],
             )
             .await
@@ -691,6 +699,7 @@ where
             parent_sha: row.get(2),
             include: row.get(3),
             exclude: row.get(4),
+            runs: row.get(5),
         })
     }
     async fn collection_id(&self, version: &str) -> CollectionId {

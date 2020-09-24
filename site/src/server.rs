@@ -316,16 +316,20 @@ pub async fn handle_status_page(data: Arc<InputData>) -> status::Response {
 
 pub async fn handle_next_commit(data: Arc<InputData>) -> collector::api::next_commit::Response {
     let commit = data.missing_commits().await.into_iter().next().map(|c| {
-        let (include, exclude) = match c.1 {
+        let (include, exclude, runs) = match c.1 {
             crate::load::MissingReason::Try {
-                include, exclude, ..
-            } => (include, exclude),
-            _ => (None, None),
+                include,
+                exclude,
+                runs,
+                ..
+            } => (include, exclude, runs),
+            _ => (None, None, None),
         };
         collector::api::next_commit::Commit {
             sha: c.0.sha,
             include,
             exclude,
+            runs,
         }
     });
 

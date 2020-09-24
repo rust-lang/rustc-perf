@@ -22,6 +22,7 @@ pub struct QueuedCommit {
     pub parent_sha: String,
     pub include: Option<String>,
     pub exclude: Option<String>,
+    pub runs: Option<i32>,
 }
 
 #[derive(Debug, Hash, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
