@@ -11,9 +11,9 @@ use std::{sync::Arc, time::Duration};
 
 lazy_static::lazy_static! {
     static ref BODY_TRY_COMMIT: Regex =
-        Regex::new(r#"(?:\W|^)@rust-timer\s+build\s+(\w+)(?:\W|$)(?:include=(\S+))?(?:\s+)?(?:exclude=(\S+))?(?:runs=(\d+))?"#).unwrap();
+        Regex::new(r#"(?:\W|^)@rust-timer\s+build\s+(\w+)(?:\W|$)(?:include=(\S+))?\s*(?:exclude=(\S+))?\s*(?:runs=(\d+))?"#).unwrap();
     static ref BODY_QUEUE: Regex =
-        Regex::new(r#"(?:\W|^)@rust-timer\s+queue(?:\W|$)(?:include=(\S+))?(?:\s+)?(?:exclude=(\S+))?(?:runs=(\d+))?"#).unwrap();
+        Regex::new(r#"(?:\W|^)@rust-timer\s+queue(?:\W|$)(?:include=(\S+))?\s*(?:exclude=(\S+))?\s*(?:runs=(\d+))?"#).unwrap();
     static ref BODY_MAKE_PR_FOR: Regex =
         Regex::new(r#"(?:\W|^)@rust-timer\s+make-pr-for\s+(\w+)(?:\W|$)"#).unwrap();
     static ref BODY_UDPATE_PR_FOR: Regex =
