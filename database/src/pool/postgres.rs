@@ -1036,7 +1036,7 @@ where
                 name: row.get(0),
                 is_done: row.get(1),
                 duration: Duration::from_secs(row.get::<_, Option<i32>>(2).unwrap_or(0) as u64),
-                expected: Duration::from_secs(row.get::<_, i32>(3) as u64),
+                expected: Duration::from_secs(row.get::<_, Option<i32>>(3).unwrap_or(0) as u64),
             })
             .collect()
     }
