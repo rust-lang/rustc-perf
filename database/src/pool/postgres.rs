@@ -349,7 +349,7 @@ impl PostgresConnection {
                     .await
                     .unwrap(),
                 insert_rustc: conn
-                    .prepare("insert into rustc_compilation (aid, cid, krate, duration) VALUES ($1, $2, $3, $4)")
+                    .prepare("insert into rustc_compilation (aid, cid, crate, duration) VALUES ($1, $2, $3, $4)")
                     .await
                     .unwrap(),
                 get_self_profile_query: conn
