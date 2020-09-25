@@ -20,6 +20,23 @@ pub fn measure(
     aid: database::ArtifactIdNumber,
 ) -> anyhow::Result<()> {
     checkout().context("checking out rust-lang/rust")?;
+
+    // Run the compiler twice -- we'll call min(duration) on each crate later
+    // on. This should (hopefully) reduce variance. It's also a 2x bump in
+    // compile times, but we can afford the extra 6 minutes (presuming it
+    // actually benefits us).
+    record(rt, conn, compiler, aid)?;
+    record(rt, conn, compiler, aid)?;
+
+    Ok(())
+}
+
+fn record(
+    rt: &mut Runtime,
+    conn: &mut dyn database::Connection,
+    compiler: Compiler<'_>,
+    aid: database::ArtifactIdNumber,
+) -> anyhow::Result<()> {
     let checkout = Path::new("rust");
 
     // Configure the compiler we're given as the one to use.
