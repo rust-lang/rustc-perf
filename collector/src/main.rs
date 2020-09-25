@@ -296,7 +296,9 @@ fn get_benchmarks(
     exclude: Option<&str>,
 ) -> anyhow::Result<Vec<Benchmark>> {
     let mut benchmarks = Vec::new();
-    'outer: for entry in fs::read_dir(benchmark_dir)
+
+    let mut paths = Vec::new();
+    for entry in fs::read_dir(benchmark_dir)
         .with_context(|| format!("failed to list benchmark dir '{}'", benchmark_dir.display()))?
     {
         let entry = entry?;
@@ -317,6 +319,11 @@ fn get_benchmarks(
             continue;
         }
 
+        paths.push((path, name));
+    }
+    paths.push((PathBuf::from("rustc"), String::from("rustc")));
+
+    'outer: for (path, name) in paths {
         if let Some(include) = include {
             if !include
                 .split(',')

@@ -183,6 +183,15 @@ static MIGRATIONS: &[&str] = &[
     );
     "#,
     r#"alter table pull_request_build add column runs integer;"#,
+    r#"
+    create table rustc_compilation(
+        aid smallint references artifact(id) on delete cascade on update cascade,
+        cid integer references collection(id) on delete cascade on update cascade,
+        crate text not null,
+        duration bigint not null,
+        PRIMARY KEY(aid, cid, crate)
+    );
+    "#,
 ];
 
 #[async_trait::async_trait]
@@ -245,6 +254,7 @@ impl<'a> Transaction for PostgresTransaction<'a> {
 pub struct CachedStatements {
     get_pstat: Statement,
     insert_pstat: Statement,
+    insert_rustc: Statement,
     get_self_profile_query: Statement,
     get_self_profile: Statement,
     insert_self_profile_query: Statement,
@@ -336,6 +346,10 @@ impl PostgresConnection {
                     .unwrap(),
                 insert_pstat: conn
                     .prepare("insert into pstat (series, aid, cid, value) VALUES ($1, $2, $3, $4)")
+                    .await
+                    .unwrap(),
+                insert_rustc: conn
+                    .prepare("insert into rustc_compilation (aid, cid, krate, duration) VALUES ($1, $2, $3, $4)")
                     .await
                     .unwrap(),
                 get_self_profile_query: conn
@@ -748,6 +762,27 @@ where
             .execute(
                 &self.statements().insert_pstat,
                 &[&sid, &(artifact.0 as i16), &(collection.0 as i32), &value],
+            )
+            .await
+            .unwrap();
+    }
+
+    async fn record_rustc_crate(
+        &self,
+        collection: CollectionId,
+        artifact: ArtifactIdNumber,
+        krate: &str,
+        value: Duration,
+    ) {
+        self.conn()
+            .execute(
+                &self.statements().insert_rustc,
+                &[
+                    &(artifact.0 as i16),
+                    &(collection.0 as i32),
+                    &krate,
+                    &(value.as_nanos() as i64),
+                ],
             )
             .await
             .unwrap();

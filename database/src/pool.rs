@@ -56,6 +56,13 @@ pub trait Connection: Send + Sync {
         qd: QueryDatum,
     );
     async fn record_error(&self, artifact: ArtifactIdNumber, krate: &str, error: &str);
+    async fn record_rustc_crate(
+        &self,
+        collection: CollectionId,
+        artifact: ArtifactIdNumber,
+        krate: &str,
+        value: Duration,
+    );
 
     async fn get_pstats(
         &self,

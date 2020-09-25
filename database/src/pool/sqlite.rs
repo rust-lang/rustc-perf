@@ -153,6 +153,15 @@ static MIGRATIONS: &[&str] = &[
     r#"alter table pull_request_builds add column include text;"#,
     r#"alter table pull_request_builds add column exclude text;"#,
     r#"alter table pull_request_builds add column runs integer;"#,
+    r#"
+    create table rustc_compilation(
+        aid integer references artifact(id) on delete cascade on update cascade,
+        cid integer references collection(id) on delete cascade on update cascade,
+        crate text not null,
+        duration integer not null,
+        PRIMARY KEY(aid, cid, crate)
+    );
+    "#,
 ];
 
 #[async_trait::async_trait]
@@ -577,6 +586,26 @@ impl Connection for SqliteConnection {
             .execute(
                 "insert into pstat (series, aid, cid, value) VALUES (?, ?, ?, ?)",
                 params![&sid, &artifact.0, &collection.0, &value],
+            )
+            .unwrap();
+    }
+
+    async fn record_rustc_crate(
+        &self,
+        collection: CollectionId,
+        artifact: ArtifactIdNumber,
+        krate: &str,
+        value: Duration,
+    ) {
+        self.raw_ref()
+            .execute(
+                "insert into rustc_compilation (aid, cid, crate, duration) VALUES (?, ?, ?, ?)",
+                params![
+                    &artifact.0,
+                    &collection.0,
+                    &krate,
+                    &(value.as_nanos() as i64)
+                ],
             )
             .unwrap();
     }
