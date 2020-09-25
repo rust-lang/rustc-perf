@@ -54,6 +54,7 @@ fn main() {
                     .arg("--log-fd")
                     .arg("1")
                     .arg("setarch")
+                    .arg("x86_64")
                     .arg("-R")
                     .arg(&tool)
                     .args(&args);
