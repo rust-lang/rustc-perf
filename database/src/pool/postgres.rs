@@ -253,6 +253,7 @@ impl<'a> Transaction for PostgresTransaction<'a> {
 
 pub struct CachedStatements {
     get_pstat: Statement,
+    get_rustc_compilation: Statement,
     insert_pstat: Statement,
     insert_rustc: Statement,
     get_self_profile_query: Statement,
@@ -344,6 +345,15 @@ impl PostgresConnection {
                      ")
                     .await
                     .unwrap(),
+                get_rustc_compilation: conn.prepare("
+                        select
+                            aid,
+                            crate,
+                            min(duration)
+                        from rustc_compilation
+                        where aid = any($1)
+                        group by (aid, crate)
+                    ").await.unwrap(),
                 insert_pstat: conn
                     .prepare("insert into pstat (series, aid, cid, value) VALUES ($1, $2, $3, $4)")
                     .await
@@ -1119,5 +1129,39 @@ where
             .into_iter()
             .map(|r| (ArtifactIdNumber(r.get::<_, i16>(0) as u32), r.get(1)))
             .collect()
+    }
+
+    async fn get_bootstrap(
+        &self,
+        aids: &[ArtifactIdNumber],
+    ) -> HashMap<String, Vec<Option<Duration>>> {
+        let mut result = HashMap::new();
+        let aid_to_idx = aids
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(idx, v)| (v, idx))
+            .collect::<HashMap<ArtifactIdNumber, usize>>();
+        let rows = self
+            .conn()
+            .query(
+                &self.statements().get_rustc_compilation,
+                &[&aids.iter().map(|v| v.0 as i16).collect::<Vec<_>>()],
+            )
+            .await
+            .unwrap();
+
+        for row in rows {
+            let aid = ArtifactIdNumber(row.get::<_, i16>(0) as u32);
+            let krate = row.get::<_, String>(1);
+            let min_duration = row.get::<_, i64>(2);
+
+            let v = result
+                .entry(krate)
+                .or_insert_with(|| vec![None; aids.len()]);
+            v[aid_to_idx[&aid]] = Some(Duration::from_nanos(min_duration as u64));
+        }
+
+        result
     }
 }

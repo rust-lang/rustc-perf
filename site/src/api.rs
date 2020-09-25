@@ -47,6 +47,8 @@ pub struct DateData {
     pub pr: Option<u32>,
     pub commit: String,
     pub data: HashMap<String, Vec<(String, f64)>>,
+    // crate -> nanoseconds
+    pub bootstrap: HashMap<String, u64>,
 }
 
 pub type ServerResult<T> = StdResult<T, String>;
@@ -152,6 +154,26 @@ pub mod graph {
         // (UTC timestamp in seconds, sha)
         pub commits: Vec<(i64, String)>,
         pub benchmarks: HashMap<String, HashMap<database::Profile, HashMap<String, Series>>>,
+    }
+}
+
+pub mod bootstrap {
+    use collector::Bound;
+    use hashbrown::HashMap;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+    pub struct Request {
+        pub start: Bound,
+        pub end: Bound,
+    }
+
+    #[derive(Debug, Clone, Serialize)]
+    pub struct Response {
+        // (UTC timestamp, sha)
+        pub commits: Vec<(i64, String)>,
+        // Optional nanoseconds
+        pub by_crate: HashMap<String, Vec<Option<u64>>>,
     }
 }
 

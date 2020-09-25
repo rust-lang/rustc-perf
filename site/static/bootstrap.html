@@ -58,9 +58,7 @@
     <div id="settings">
         start: <input placeholder="yyyy-mm-dd or commit" id="start-bound" />
         end: <input placeholder="yyyy-mm-dd or commit" id="end-bound" />
-        Absolute data: <input id='absolute' name="absolute" type="checkbox">
-        <select id='stats' name="stat"></select>
-        <a href="#" onClick="submit_settings(); return false;">Submit</a>
+        <a href="#" onClick="submit(); return false;">Submit</a>
     </div>
     <div>
         See <a href="/compare.html">compare page</a> for descriptions of what
@@ -74,17 +72,7 @@
     </a>
 
     <script>
-        const commonCacheStateColors = {
-            "full": "#7cb5ec",
-            "incr-full": "#434348",
-            "incr-unchanged": "#90ed7d",
-            "incr-patched: println": "#f7a35c",
-        };
-
-        const otherCacheStateColors = ["#8085e9", "#f15c80", "#e4d354", "#2b908f", "#f45b5b", "#91e8e1"];
-        const interpolatedColor = "#fcb0f1";
-
-        function tooltipPlugin({onclick, commits, isInterpolated, absoluteMode, shiftX = 10, shiftY = 10}) {
+        function tooltipPlugin({onclick, commits, shiftX = 10, shiftY = 10}) {
             let tooltipLeftOffset = 0;
             let tooltipTopOffset = 0;
 
@@ -125,21 +113,10 @@
                 tooltip.style.top  = (tooltipTopOffset  + top + shiftX) + "px";
                 tooltip.style.left = (tooltipLeftOffset + lft + shiftY) + "px";
 
-                tooltip.style.borderColor = isInterpolated(dataIdx) ?
-                    interpolatedColor :
-                    u.series[seriesIdx].stroke;
-
-                let trailer = "";
-                if (absoluteMode) {
-                    let pctSinceStart = (((u.data[seriesIdx][dataIdx] - u.data[seriesIdx][0]) / u.data[seriesIdx][0]) * 100).toFixed(2);
-                    trailer = uPlot.fmtNum(u.data[seriesIdx][dataIdx]) + " (" +
-                        pctSinceStart + "% since start)";
-                } else {
-                    trailer = uPlot.fmtNum(u.data[seriesIdx][dataIdx]) + "% since start";
-                }
                 tooltip.textContent = (
                     fmtDate(new Date(u.data[0][dataIdx] * 1e3)) + " - " +
-                    commits[dataIdx][1].slice(0,10) + "\n" + trailer
+                    commits[dataIdx][1].slice(0,10) + "\n" +
+                    u.series[seriesIdx].label
                 );
             }
 
@@ -199,8 +176,7 @@
             };
         }
 
-        function genPlotOpts({title, width, height, yAxisLabel, series, commits,
-            stat, isInterpolated, alpha = 0.3, prox = 5, absoluteMode}) {
+        function genPlotOpts({title, width, height, yAxisLabel, series, commits, alpha = 0.3, prox = 5}) {
             return {
                 title,
                 width,
@@ -221,150 +197,62 @@
                         y: true,
                     },
                 },
-                scales: {
-                    y: {
-                        range: (self, dataMin, dataMax) => uPlot.rangeNum(absoluteMode ? 0 : dataMin, dataMax, 0.2, true)
-                    }
-                },
                 axes: [
-                    {
-                        grid: {
-                            show: false,
-                        }
-                    },
+                    { },
                     {
                         label: yAxisLabel,
                         space: 24,
                         values: (self, splits) => {
-                            return splits.map(v => {
-                                return (
-                                    v >= 1e12 ? v/1e12 + "T" :
-                                    v >= 1e9  ? v/1e9  + "G" :
-                                    v >= 1e6  ? v/1e6  + "M" :
-                                    v >= 1e3  ? v/1e3  + "k" :
-                                    v
-                                );
-                            });
+                            return splits.map(v => v/1e9  + " sec");
                         },
                     },
                 ],
                 plugins: [
-                    {
-                        hooks: {
-                            drawAxes: [
-                                u => {
-                                    let { ctx } = u;
-                                    let { left, top, width, height } = u.bbox;
-
-                                    const interpolatedColorWithAlpha = "#fcb0f15f";
-
-                                    ctx.strokeStyle = interpolatedColorWithAlpha;
-                                    ctx.beginPath();
-
-                                    let [ i0, i1 ] = u.series[0].idxs;
-
-                                    for (let j = i0; j <= i1; j++) {
-                                        let v = u.data[0][j];
-
-                                        if (isInterpolated(j)) {
-                                            let cx = Math.round(u.valToPos(v, 'x', true));
-                                            ctx.moveTo(cx, top);
-                                            ctx.lineTo(cx, top + height);
-                                        }
-                                    }
-
-                                    ctx.closePath();
-                                    ctx.stroke();
-                                },
-                            ]
-                        },
-                    },
                     tooltipPlugin({
                         onclick(u, seriesIdx, dataIdx) {
                             let thisCommit = commits[dataIdx][1];
                             let prevCommit = (commits[dataIdx-1] || [null,null])[1];
-                            window.open(`/compare.html?start=${prevCommit}&end=${thisCommit}&stat=${stat}`);
+                            window.open(`/compare.html?start=${prevCommit}&end=${thisCommit}`);
                         },
                         commits,
-                        isInterpolated,
-                        absoluteMode,
                     }),
                 ],
             };
         }
 
         function renderPlots(data, state) {
-            for (let benchName in data.benchmarks) {
-                let benchKinds = data.benchmarks[benchName];
+            let seriesOpts = [{}];
 
-                let i = 0;
+            let xVals = data.commits.map(c => c[0]);
+            let plotData = [xVals];
+            // https://sashamaps.net/docs/resources/20-colors/
+            let colors = [
+                '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231',
+                '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#fabebe',
+                '#008080', '#e6beff', '#9a6324', '#fffac8', '#800000',
+                '#aaffc3', '#808000', '#ffd8b1', '#000075', '#808080',
+                '#ffffff', '#000000'
+            ];
+            let crates = Object.keys(data.by_crate).sort();
+            for (let crate of crates) {
+                plotData.push(data.by_crate[crate]);
 
-                for (let benchKind in benchKinds) {
-                    let cacheStates = benchKinds[benchKind];
-                    let cacheStateNames = Object.keys(cacheStates);
-                    cacheStateNames.sort();
-
-                    let yAxis = "Value";
-                    if (state.stat == "instructions:u") {
-                        yAxis = "Number of CPU instructions";
-                    } else if (state.stat == "cycles:u") {
-                        yAxis = "Number of CPU cycles";
-                    } else if (state.stat == "cpu-clock") {
-                        yAxis = "Wall time execution (seconds)";
-                    } else if (state.stat == "wall-time") {
-                        yAxis = "Wall time execution (seconds)";
-                    } else if (state.stat == "max-rss") {
-                        yAxis = "Maximum resident set size (kb)";
-                    } else if (state.stat == "faults") {
-                        yAxis = "Faults";
-                    }
-                    if (!state.absolute) {
-                        yAxis = "% change from baseline";
-                    }
-
-                    let yAxisLabel = i == 0 ? yAxis : null;
-
-                    let seriesOpts = [{}];
-
-                    let xVals = data.commits.map(c => c[0]);
-
-                    let plotData = [xVals];
-
-                    let otherColorIdx = 0;
-
-                    for (let cacheState of cacheStateNames) {
-                        let yVals = cacheStates[cacheState].points;
-                        let color = commonCacheStateColors[cacheState] || otherCacheStateColors[otherColorIdx++];
-
-                        plotData.push(yVals);
-
-                        seriesOpts.push({
-                            label: cacheState,
-                            width: devicePixelRatio,
-                            stroke: color
-                        });
-                    }
-
-                    let plotOpts = genPlotOpts({
-                        title: benchName + "-" + benchKind,
-                        width: Math.floor(window.innerWidth / 3) - 16,
-                        height: 300,
-                        yAxisLabel,
-                        series: seriesOpts,
-                        commits: data.commits,
-                        stat: state.stat,
-                        isInterpolated(dataIdx) {
-                            return cacheStates.full.is_interpolated.has(dataIdx);
-                        },
-                        absoluteMode: state.absolute,
-                    });
-
-                    let u = new uPlot(plotOpts, plotData,
-                        document.querySelector("#charts"));
-
-                    i++;
-                }
+                seriesOpts.push({
+                    label: crate,
+                    stroke: colors.pop(),
+                });
             }
+
+            let plotOpts = genPlotOpts({
+                title: "Bootstrap timings for crates >= 10 seconds",
+                width: Math.floor(window.innerWidth) - 16,
+                height: window.innerHeight * 0.75,
+                yAxisLabel: "",
+                series: seriesOpts,
+                commits: data.commits,
+            });
+
+            let u = new uPlot(plotOpts, plotData, document.querySelector("#charts"));
             document.querySelector("#loading").style.display = 'none';
         }
 
@@ -375,43 +263,12 @@
             }).then(r => r.json());
         }
 
-        function prepData(data) {
-            let sortedBenchNames = Object.keys(data.benchmarks).sort();
-
-            let benchmarks = {};
-
-            function optInterpolated(buildKind) {
-                for (let cacheState in buildKind)
-                    buildKind[cacheState].is_interpolated = new Set(buildKind[cacheState].is_interpolated);
-
-                return buildKind;
-            }
-
-            sortedBenchNames.forEach(name => {
-                const { Check, Debug, Opt } = data.benchmarks[name];
-
-                benchmarks[name] = {
-                    check: optInterpolated(Check),
-                    debug: optInterpolated(Debug),
-                    opt:   optInterpolated(Opt),
-                }
-            });
-
-            data.benchmarks = benchmarks;
-
-            return data;
-        }
-
         function submit_settings() {
             let start = document.getElementById("start-bound").value;
             let end = document.getElementById("end-bound").value;
-            let absolute = document.getElementById("absolute").checked;
-            let stat = getSelected("stats");
             let params = new URLSearchParams();
             params.append("start", start);
             params.append("end", end);
-            params.append("absolute", absolute);
-            params.append("stat", stat);
             window.location.search = params.toString();
         }
 
@@ -419,11 +276,8 @@
             let values = Object.assign({}, {
                 start: "",
                 end: "",
-                stat: "instructions:u",
-                absolute: true,
             }, state);
-            post_json("/graph-new", values).then(prepData).then(data =>
-                renderPlots(data, values));
+            post_json("/bootstrap", values).then(data => renderPlots(data, values));
         });
     </script>
 </body>

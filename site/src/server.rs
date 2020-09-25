@@ -39,8 +39,8 @@ type Request = http::Request<hyper::Body>;
 type Response = http::Response<hyper::Body>;
 
 pub use crate::api::{
-    self, dashboard, data, days, github, graph, info, self_profile, self_profile_raw, status,
-    CommitResponse, DateData, ServerResult, StyledBenchmarkName,
+    self, bootstrap, dashboard, data, days, github, graph, info, self_profile, self_profile_raw,
+    status, CommitResponse, DateData, ServerResult, StyledBenchmarkName,
 };
 use crate::db::{self, Cache, Crate, Profile};
 use crate::interpolate::Interpolated;
@@ -720,6 +720,17 @@ impl DateData {
             .push((response.path.get::<Cache>().unwrap().to_string(), point));
         }
 
+        let bootstrap = conn.get_bootstrap(&[conn.artifact_id(&commit).await]).await;
+        let bootstrap = bootstrap
+            .into_iter()
+            .filter_map(|(k, mut v)| {
+                v.pop()
+                    .unwrap_or_default()
+                    .filter(|v| v.as_secs() >= 10)
+                    .map(|v| (k, v.as_nanos() as u64))
+            })
+            .collect::<HashMap<_, _>>();
+
         DateData {
             date: if let ArtifactId::Commit(c) = &commit {
                 Some(c.date)
@@ -741,6 +752,7 @@ impl DateData {
                 ArtifactId::Artifact(i) => i,
             },
             data,
+            bootstrap,
         }
     }
 }
@@ -1230,6 +1242,48 @@ pub async fn handle_self_profile(
     })
 }
 
+pub async fn handle_bootstrap(
+    body: bootstrap::Request,
+    data: &InputData,
+) -> ServerResult<bootstrap::Response> {
+    log::info!("handle_bootstrap({:?})", body);
+    let range = data.data_range(body.start.clone()..=body.end.clone());
+    let commits: Vec<ArtifactId> = range.iter().map(|c| c.clone().into()).collect();
+
+    let conn = data.conn().await;
+    let ids = commits
+        .iter()
+        .map(|c| conn.artifact_id(&c))
+        .collect::<futures::stream::FuturesOrdered<_>>()
+        .collect::<Vec<_>>()
+        .await;
+    let by_crate = conn.get_bootstrap(&ids).await;
+
+    Ok(bootstrap::Response {
+        commits: commits
+            .into_iter()
+            .map(|v| match v {
+                ArtifactId::Commit(c) => (c.date.0.timestamp(), c.sha),
+                ArtifactId::Artifact(_) => todo!(),
+            })
+            .collect(),
+        by_crate: by_crate
+            .into_iter()
+            .filter_map(|(k, v)| {
+                let values: Vec<Option<u64>> = v
+                    .into_iter()
+                    .map(|v| v.filter(|d| d.as_secs() >= 10).map(|d| d.as_nanos() as u64))
+                    .collect();
+                if values.iter().all(|v| v.is_none()) {
+                    None
+                } else {
+                    Some((k, values))
+                }
+            })
+            .collect(),
+    })
+}
+
 struct Server {
     data: Arc<RwLock<Option<Arc<InputData>>>>,
     updating: UpdatingStatus,
@@ -1572,6 +1626,28 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
     } else if p == "/perf/graph-new" {
         Ok(
             match handle_graph_new(body!(parse_body(&body)), &data).await {
+                Ok(result) => {
+                    let mut response = http::Response::builder()
+                        .header_typed(ContentType::json())
+                        .header_typed(CacheControl::new().with_no_cache().with_no_store());
+                    response.headers_mut().unwrap().insert(
+                        hyper::header::ACCESS_CONTROL_ALLOW_ORIGIN,
+                        hyper::header::HeaderValue::from_static("*"),
+                    );
+                    let body = serde_json::to_vec(&result).unwrap();
+                    response.body(hyper::Body::from(body)).unwrap()
+                }
+                Err(err) => http::Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .header_typed(ContentType::text_utf8())
+                    .header_typed(CacheControl::new().with_no_cache().with_no_store())
+                    .body(hyper::Body::from(err))
+                    .unwrap(),
+            },
+        )
+    } else if p == "/perf/bootstrap" {
+        Ok(
+            match handle_bootstrap(body!(parse_body(&body)), &data).await {
                 Ok(result) => {
                     let mut response = http::Response::builder()
                         .header_typed(ContentType::json())

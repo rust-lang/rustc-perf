@@ -20,7 +20,8 @@ input[type="checkbox"] {
 </head>
 <body class="container">
     <div>&gt; <a href="index.html">graphs</a>, <a href="compare.html">compare</a>,
-        <a href="dashboard.html">dashboard</a>, <a href="status.html">status</a>.</div>
+        <a href="dashboard.html">dashboard</a>, <a href="bootstrap.html">bootstrap</a>,
+        <a href="status.html">status</a>.</div>
     <div style=''>
         <p>Warning: although measurements known to have high variation are marked with
             '?'/'??', this does not mean that unmarked measurements are guaranteed to have
@@ -120,7 +121,12 @@ input[type="checkbox"] {
     function populate_data(data) {
         {
             let filter = document.querySelector("#filter").value;
-            let test_names = unique([...Object.keys(data.a.data), ...Object.keys(data.b.data)]);
+            let test_names = unique([
+                ...Object.keys(data.a.data),
+                ...Object.keys(data.b.data),
+                ...Object.keys(data.a.bootstrap),
+                ...Object.keys(data.b.bootstrap),
+            ]);
             let is_copied = false;
             for (let name of test_names) {
                 if (!name.includes(filter)) {
@@ -131,8 +137,10 @@ input[type="checkbox"] {
                         data = JSON.parse(JSON.stringify(DATA)); // deep copy
                         is_copied = true;
                     }
-                    delete data.a.data[name];
-                    delete data.b.data[name];
+                    if (data.a.data[name]) delete data.a.data[name];
+                    if (data.b.data[name]) delete data.b.data[name];
+                    if (data.a.bootstrap[name]) delete data.a.bootstrap[name];
+                    if (data.b.bootstrap[name]) delete data.b.bootstrap[name];
                 }
             }
         }
@@ -209,9 +217,37 @@ input[type="checkbox"] {
 
         html += "</thead>";
 
-        let test_names = unique([...Object.keys(data.a.data), ...Object.keys(data.b.data)]);
+        let test_names = unique([
+            ...Object.keys(data.a.data),
+            ...Object.keys(data.b.data),
+        ]);
+        let bootstrap_names = unique([
+            ...Object.keys(data.a.bootstrap),
+            ...Object.keys(data.b.bootstrap),
+        ]);
 
-        let fields = test_names.map(name => ({name, fields: to_fields(name)}));
+        let fields = [
+            ...bootstrap_names
+                .map(name => name)
+                .map(name => ({name, is_bootstrap: true, fields: to_fields_bootstrap(name)})),
+            ...test_names.map(name => ({name, fields: to_fields(name)})),
+        ];
+
+        function to_fields_bootstrap(name) {
+            let datum_a = data.a.bootstrap[name] || null;
+            let datum_b = data.b.bootstrap[name] || null;
+            datum_a = datum_a ? datum_a / 1e9 : null;
+            datum_b = datum_b ? datum_b / 1e9 : null;
+
+            return [
+                {
+                    casename: name,
+                    datum_a,
+                    datum_b,
+                    percent: percent_chg(datum_a, datum_b),
+                }
+            ];
+        }
 
         function to_fields(name) {
             let source = data.a.data[name] || data.b.data[name];
@@ -283,7 +319,11 @@ input[type="checkbox"] {
         }
 
         fields.sort((a, b) => {
-            return b.farthest_pct - a.farthest_pct;
+            if (a.is_bootstrap != b.is_bootstrap) {
+                return 1;
+            } else {
+                return b.farthest_pct - a.farthest_pct;
+            }
         });
 
         let max_name_width = Math.max(...fields.map(f => f.max_casename_len));
@@ -316,31 +356,49 @@ input[type="checkbox"] {
             return "";
         }
 
+        let is_first_bootstrap = true;
         for (let field of fields) {
-            let dodgy = dodgy_name_title(field.name);
-            html += "<tr><td>&nbsp;</td></tr>";
-            html += "<tr data-field-start=true>";
-            html += `<th style="width: ${max_name_width/2}em;" data-js-name=${field.name}>` +
-                `<details class=toggle-table><summary>` +
-                truncate_name(field.name) + "</summary></details></th>";
-            html += "<td> avg: " + add_percent(field.avg_pct, dodgy, "?") + "</td>";
-            html += "<td text-align=center> min: " + add_percent(field.min_pct, dodgy, "?") +
-                    "</td>";
-            html += "<td> max: " + add_percent(field.max_pct, dodgy, "?") + "</td>";
-            html += "</tr>";
-            for (let i = 0; i < field.fields.length; i++) {
-                let entry = field.fields[i];
-                let dodgy = dodgy_casename_title(field.name, entry.casename);
-                html += "<tr>";
-                html += "<td>" + entry.casename + "</td>";
-                // No base comparison commit for the first datum
+            if (field.is_bootstrap) {
+                if (is_first_bootstrap) {
+                    html += "<tr data-field-start=true><td>&nbsp;</td></tr>";
+                    html += "<tr data-field-start=true><td colspan=4>bootstrap timings; high variance! Values in seconds.</td></tr>";
+                    is_first_bootstrap = false;
+                }
+                let dodgy = dodgy_name_title(field.name);
+                html += "<tr data-field-start=true>";
+                html += `<th style="width: ${max_name_width/2}em;" data-js-name=${field.name}>` + truncate_name(field.name) + "</th>";
+                let entry = field.fields[0];
                 html += add_datum_fields(entry.datum_a, data.a.commit, field.name, entry.casename);
                 html += add_datum_fields(entry.datum_b, data.b.commit, field.name, entry.casename);
                 let pct = add_percent(entry.percent, dodgy, "??");
-                let diff_href =
-                    `/detailed-query.html?commit=${data.b.commit}&base_commit=${data.a.commit}&benchmark=${field.name}&run_name=${entry.casename}`;
-                html += `<td><a href="${diff_href}">${pct}</a></td>`;
+                html += `<td>${pct}</td>`;
                 html += "</tr>";
+            } else {
+                let dodgy = dodgy_name_title(field.name);
+                html += "<tr><td>&nbsp;</td></tr>";
+                html += "<tr data-field-start=true>";
+                html += `<th style="width: ${max_name_width/2}em;" data-js-name=${field.name}>` +
+                    `<details class=toggle-table><summary>` +
+                    truncate_name(field.name) + "</summary></details></th>";
+                html += "<td> avg: " + add_percent(field.avg_pct, dodgy, "?") + "</td>";
+                html += "<td text-align=center> min: " + add_percent(field.min_pct, dodgy, "?") +
+                        "</td>";
+                html += "<td> max: " + add_percent(field.max_pct, dodgy, "?") + "</td>";
+                html += "</tr>";
+                for (let i = 0; i < field.fields.length; i++) {
+                    let entry = field.fields[i];
+                    let dodgy = dodgy_casename_title(field.name, entry.casename);
+                    html += "<tr>";
+                    html += "<td>" + entry.casename + "</td>";
+                    // No base comparison commit for the first datum
+                    html += add_datum_fields(entry.datum_a, data.a.commit, field.name, entry.casename);
+                    html += add_datum_fields(entry.datum_b, data.b.commit, field.name, entry.casename);
+                    let pct = add_percent(entry.percent, dodgy, "??");
+                    let diff_href =
+                        `/detailed-query.html?commit=${data.b.commit}&base_commit=${data.a.commit}&benchmark=${field.name}&run_name=${entry.casename}`;
+                    html += `<td><a href="${diff_href}">${pct}</a></td>`;
+                    html += "</tr>";
+                }
             }
         }
 

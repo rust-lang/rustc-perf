@@ -900,4 +900,36 @@ impl Connection for SqliteConnection {
     ) -> Vec<(ArtifactIdNumber, i32)> {
         Vec::new()
     }
+
+    async fn get_bootstrap(
+        &self,
+        aids: &[ArtifactIdNumber],
+    ) -> HashMap<String, Vec<Option<Duration>>> {
+        let mut results = HashMap::new();
+
+        for (idx, aid) in aids.iter().copied().enumerate() {
+            let rows: Vec<(String, i64)> = self
+                .raw_ref()
+                .prepare("select crate, min(duration) from rustc_compilation where aid = ? group by crate")
+                .unwrap()
+                .query_map(params![&aid.0], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+                })
+                .unwrap()
+                .map(|r| r.unwrap())
+                .collect();
+            for (krate, duration) in rows {
+                let v = results
+                    .entry(krate)
+                    .or_insert_with(|| Vec::with_capacity(aids.len()));
+
+                if v.len() != idx {
+                    v.resize_with(idx, || None);
+                }
+                v.push(Some(Duration::from_nanos(duration as u64)));
+            }
+        }
+
+        results
+    }
 }
