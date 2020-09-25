@@ -53,6 +53,8 @@ fn main() {
                     .arg("instructions:u,cycles:u,task-clock,cpu-clock,faults")
                     .arg("--log-fd")
                     .arg("1")
+                    .arg("setarch")
+                    .arg("-R")
                     .arg(&tool)
                     .args(&args);
 
