@@ -1248,7 +1248,7 @@ pub async fn handle_bootstrap(
 ) -> ServerResult<bootstrap::Response> {
     log::info!("handle_bootstrap({:?})", body);
     let range = data.data_range(body.start.clone()..=body.end.clone());
-    let commits: Vec<ArtifactId> = range.iter().map(|c| c.clone().into()).collect();
+    let mut commits: Vec<ArtifactId> = range.iter().map(|c| c.clone().into()).collect();
 
     let conn = data.conn().await;
     let ids = commits
@@ -1258,6 +1258,32 @@ pub async fn handle_bootstrap(
         .collect::<Vec<_>>()
         .await;
     let by_crate = conn.get_bootstrap(&ids).await;
+    let mut by_crate = by_crate
+        .into_iter()
+        .filter_map(|(k, v)| {
+            let values: Vec<Option<u64>> = v
+                .into_iter()
+                .map(|v| v.filter(|d| d.as_secs() >= 10).map(|d| d.as_nanos() as u64))
+                .collect();
+            if values.iter().all(|v| v.is_none()) {
+                None
+            } else {
+                Some((k, values))
+            }
+        })
+        .collect::<hashbrown::HashMap<String, Vec<Option<u64>>>>();
+
+    // Don't return commits/nulls for completely null commits at the beginning
+    let start: usize = by_crate
+        .values()
+        .filter_map(|series| series.iter().position(|v| v.is_some()))
+        .min()
+        .unwrap_or(0);
+
+    commits = commits.split_off(start);
+    for series in by_crate.values_mut() {
+        *series = series.split_off(start);
+    }
 
     Ok(bootstrap::Response {
         commits: commits
@@ -1267,20 +1293,7 @@ pub async fn handle_bootstrap(
                 ArtifactId::Artifact(_) => todo!(),
             })
             .collect(),
-        by_crate: by_crate
-            .into_iter()
-            .filter_map(|(k, v)| {
-                let values: Vec<Option<u64>> = v
-                    .into_iter()
-                    .map(|v| v.filter(|d| d.as_secs() >= 10).map(|d| d.as_nanos() as u64))
-                    .collect();
-                if values.iter().all(|v| v.is_none()) {
-                    None
-                } else {
-                    Some((k, values))
-                }
-            })
-            .collect(),
+        by_crate,
     })
 }
 
