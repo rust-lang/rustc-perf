@@ -81,7 +81,12 @@ input[type="checkbox"] {
         let html = "";
         if (datum) {
             html += "<td>";
-            let txt = datum.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            let txt = "";
+            if (Number.isInteger(datum)) {
+                txt = datum + "";
+            } else {
+                txt = datum.toLocaleString('en-US', {minimumFractionDigits: 3, maximumFractionDigits: 3});
+            }
             if (selfProfileAvailable) {
                 html += `<a href="/detailed-query.html?commit=${sha}&benchmark=${bench}&run_name=${run}">${txt}</a>`;
             } else {
@@ -103,7 +108,7 @@ input[type="checkbox"] {
     }
 
     function add_percent(pct, dodgy, dodgy_marker) {
-        if (pct && pct != Infinity && pct != -Infinity) {
+        if (pct != null && pct != Infinity && pct != -Infinity) {
             let klass = "";
             if (pct > 1) {
                 klass = 'span class="positive"';
