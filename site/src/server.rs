@@ -726,6 +726,15 @@ impl DateData {
             .filter_map(|(k, mut v)| {
                 v.pop()
                     .unwrap_or_default()
+                    // FIXME: if we're hovering right at the 1 second mark,
+                    // this might mean we end up with a Some for one commit and
+                    // a None for the other commit. Ultimately it doesn't matter
+                    // that much -- we'll mostly just ignore such results.
+                    // Anything less than a second in wall-time measurements is
+                    // always going to be pretty high variance just from process
+                    // startup overheads and such, though, so we definitely
+                    // don't want to compare those values.
+                    .filter(|v| v.as_secs() >= 1)
                     .map(|v| (k, v.as_nanos() as u64))
             })
             .collect::<HashMap<_, _>>();
