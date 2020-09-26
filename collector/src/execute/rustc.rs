@@ -38,6 +38,21 @@ fn record(
     aid: database::ArtifactIdNumber,
 ) -> anyhow::Result<()> {
     let checkout = Path::new("rust");
+    let status = Command::new("git")
+        .current_dir("rust")
+        .arg("reset")
+        .arg("--hard")
+        .arg("origin/master")
+        .status()
+        .context("git reset --hard origin/master")?;
+    assert!(status.success(), "git reset --hard successful");
+    let status = Command::new("git")
+        .current_dir("rust")
+        .arg("clean")
+        .arg("-fxd")
+        .status()
+        .context("git clean -fxd")?;
+    assert!(status.success(), "git clean -fxd successful");
 
     // Configure the compiler we're given as the one to use.
     let status = Command::new(
@@ -121,21 +136,6 @@ fn checkout() -> anyhow::Result<()> {
             .status()
             .context("git fetch origin")?;
         assert!(status.success(), "git fetch successful");
-        let status = Command::new("git")
-            .current_dir("rust")
-            .arg("reset")
-            .arg("--hard")
-            .arg("origin/master")
-            .status()
-            .context("git reset --hard origin/master")?;
-        assert!(status.success(), "git reset --hard successful");
-        let status = Command::new("git")
-            .current_dir("rust")
-            .arg("clean")
-            .arg("-fxd")
-            .status()
-            .context("git clean -fxd")?;
-        assert!(status.success(), "git clean -fxd successful");
     } else {
         let status = Command::new("git")
             .arg("clone")
