@@ -88,6 +88,7 @@ fn record(
                 .context("x.py script canonicalize")?,
         )
         .current_dir(&checkout)
+        .env("RUSTC_PERF_REAL_RUSTC", &compiler.rustc)
         .arg("build")
         .arg("--stage")
         .arg("0")

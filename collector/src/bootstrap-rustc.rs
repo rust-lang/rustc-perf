@@ -6,7 +6,7 @@ fn run() -> i32 {
     let server = Client::new(num_cpus::get()).expect("made jobserver");
 
     let mut cmd = Command::new(env::var_os("RUSTC_PERF_REAL_RUSTC").unwrap());
-    cmd.args(env::args_os());
+    cmd.args(env::args_os().skip(1));
 
     // We want the bootstrap rustc to have access to full parallelism, even
     // though the parent cargo is permitted to spawn at most one rustc (-j1).
