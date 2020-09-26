@@ -504,6 +504,7 @@ pub struct MeasureProcessor<'a> {
     rt: &'a mut Runtime,
     krate: &'a BenchmarkName,
     conn: &'a mut dyn database::Connection,
+    artifact: &'a database::ArtifactId,
     cid: database::ArtifactIdNumber,
     upload: Option<Upload>,
     is_first_collection: bool,
@@ -516,6 +517,7 @@ impl<'a> MeasureProcessor<'a> {
         rt: &'a mut Runtime,
         conn: &'a mut dyn database::Connection,
         krate: &'a BenchmarkName,
+        artifact: &'a database::ArtifactId,
         cid: database::ArtifactIdNumber,
         self_profile: bool,
     ) -> Self {
@@ -528,6 +530,7 @@ impl<'a> MeasureProcessor<'a> {
             upload: None,
             conn,
             krate,
+            artifact,
             cid,
             is_first_collection: true,
             // Command::new("summarize").status().is_ok()
@@ -773,7 +776,7 @@ impl<'a> Processor for MeasureProcessor<'a> {
     }
 
     fn measure_rustc(&mut self, compiler: Compiler<'_>) -> anyhow::Result<()> {
-        rustc::measure(self.rt, self.conn, compiler, self.cid)
+        rustc::measure(self.rt, self.conn, compiler, self.artifact, self.cid)
     }
 }
 

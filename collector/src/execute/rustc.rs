@@ -9,6 +9,7 @@
 
 use crate::Compiler;
 use anyhow::Context;
+use database::ArtifactId;
 use std::env;
 use std::{collections::HashMap, process::Command};
 use std::{path::Path, time::Duration};
@@ -18,6 +19,7 @@ pub fn measure(
     rt: &mut Runtime,
     conn: &mut dyn database::Connection,
     compiler: Compiler<'_>,
+    artifact: &database::ArtifactId,
     aid: database::ArtifactIdNumber,
 ) -> anyhow::Result<()> {
     checkout().context("checking out rust-lang/rust")?;
@@ -26,8 +28,8 @@ pub fn measure(
     // on. This should (hopefully) reduce variance. It's also a 2x bump in
     // compile times, but we can afford the extra 6 minutes (presuming it
     // actually benefits us).
-    record(rt, conn, compiler, aid)?;
-    record(rt, conn, compiler, aid)?;
+    record(rt, conn, compiler, artifact, aid)?;
+    record(rt, conn, compiler, artifact, aid)?;
 
     Ok(())
 }
@@ -36,6 +38,7 @@ fn record(
     rt: &mut Runtime,
     conn: &mut dyn database::Connection,
     compiler: Compiler<'_>,
+    artifact: &database::ArtifactId,
     aid: database::ArtifactIdNumber,
 ) -> anyhow::Result<()> {
     let checkout = Path::new("rust");
@@ -43,9 +46,12 @@ fn record(
         .current_dir("rust")
         .arg("reset")
         .arg("--hard")
-        .arg("origin/master")
+        .arg(match artifact {
+            ArtifactId::Commit(c) => c.sha.as_str(),
+            ArtifactId::Artifact(id) => id.as_str(),
+        })
         .status()
-        .context("git reset --hard origin/master")?;
+        .context("git reset --hard")?;
     assert!(status.success(), "git reset --hard successful");
     let status = Command::new("git")
         .current_dir("rust")

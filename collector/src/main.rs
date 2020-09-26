@@ -247,6 +247,7 @@ fn bench(
             rt,
             tx.conn(),
             &benchmark.name,
+            &cid,
             interned_cid,
             self_profile,
         );
