@@ -726,7 +726,6 @@ impl DateData {
             .filter_map(|(k, mut v)| {
                 v.pop()
                     .unwrap_or_default()
-                    .filter(|v| v.as_secs() >= 10)
                     .map(|v| (k, v.as_nanos() as u64))
             })
             .collect::<HashMap<_, _>>();
