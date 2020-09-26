@@ -1261,14 +1261,17 @@ pub async fn handle_bootstrap(
     let mut by_crate = by_crate
         .into_iter()
         .filter_map(|(k, v)| {
-            let values: Vec<Option<u64>> = v
-                .into_iter()
-                .map(|v| v.filter(|d| d.as_secs() >= 10).map(|d| d.as_nanos() as u64))
-                .collect();
-            if values.iter().all(|v| v.is_none()) {
-                None
+            // We show any line that has at least one point exceeding the
+            // critical line.
+            if v.iter().any(|v| v.map_or(false, |v| v.as_secs() >= 30)) {
+                Some((
+                    k,
+                    v.into_iter()
+                        .map(|v| v.map(|d| d.as_nanos() as u64))
+                        .collect(),
+                ))
             } else {
-                Some((k, values))
+                None
             }
         })
         .collect::<hashbrown::HashMap<String, Vec<Option<u64>>>>();
