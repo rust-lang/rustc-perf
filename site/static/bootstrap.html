@@ -116,7 +116,8 @@
                 tooltip.textContent = (
                     fmtDate(new Date(u.data[0][dataIdx] * 1e3)) + " - " +
                     commits[dataIdx][1].slice(0,10) + "\n" +
-                    u.series[seriesIdx].label
+                    u.series[seriesIdx].label + ": " +
+                    u.data[seriesIdx][dataIdx]/1e9 + " seconds"
                 );
             }
 
@@ -228,10 +229,8 @@
             // https://sashamaps.net/docs/resources/20-colors/
             let colors = [
                 '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231',
-                '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#fabebe',
-                '#008080', '#e6beff', '#9a6324', '#fffac8', '#800000',
-                '#aaffc3', '#808000', '#ffd8b1', '#000075', '#808080',
-                '#ffffff', '#000000'
+                '#911eb4', '#46f0f0', '#f032e6', '#a09b13', '#0ab0be',
+                'red', 'green', 'blue', 'purple'
             ];
             let crates = Object.keys(data.by_crate).sort();
             for (let crate of crates) {
@@ -239,12 +238,12 @@
 
                 seriesOpts.push({
                     label: crate,
-                    stroke: colors.pop(),
+                    stroke: colors.length ? colors.pop() : 'black',
                 });
             }
 
             let plotOpts = genPlotOpts({
-                title: "Bootstrap timings for crates >= 10 seconds",
+                title: "Bootstrap timings for crates >= 30 seconds",
                 width: Math.floor(window.innerWidth) - 16,
                 height: window.innerHeight * 0.75,
                 yAxisLabel: "",
