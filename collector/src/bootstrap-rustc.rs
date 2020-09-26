@@ -3,7 +3,7 @@ use std::env;
 use std::process::Command;
 
 fn run() -> i32 {
-    let server = Client::new(num_cpus::get()).expect("made jobserver");
+    let server = Client::new(num_cpus::get_physical() / 2).expect("made jobserver");
 
     let mut cmd = Command::new(env::var_os("RUSTC_PERF_REAL_RUSTC").unwrap());
     cmd.args(env::args_os().skip(1));

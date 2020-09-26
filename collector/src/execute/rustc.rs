@@ -96,7 +96,7 @@ fn record(
         // if multiple rustcs are competing for jobserver tokens, we introduce
         // quite a bit of variance. Instead, we configure -j1 here, and then
         // full all vCPU parallelism for each rustc.
-        .arg("-j1")
+        .arg("-j2")
         .arg("compiler/rustc"),
     )
     .context("building rustc")?;
