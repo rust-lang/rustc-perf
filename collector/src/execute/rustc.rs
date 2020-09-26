@@ -9,6 +9,7 @@
 
 use crate::Compiler;
 use anyhow::Context;
+use std::env;
 use std::{collections::HashMap, process::Command};
 use std::{path::Path, time::Duration};
 use tokio::runtime::Runtime;
@@ -54,6 +55,10 @@ fn record(
         .context("git clean -fxd")?;
     assert!(status.success(), "git clean -fxd successful");
 
+    let mut fake_rustc = env::current_exe().unwrap();
+    fake_rustc.pop();
+    fake_rustc.push("bootstrap-rustc");
+
     // Configure the compiler we're given as the one to use.
     let status = Command::new(
         checkout
@@ -67,7 +72,8 @@ fn record(
     .arg("--set")
     .arg("build.print-step-timings=true")
     .arg("--set")
-    .arg(&format!("build.rustc={}", compiler.rustc.to_str().unwrap()))
+    .arg(&format!("build.rustc={}", fake_rustc.to_str().unwrap()))
+    .env("RUSTC_PERF_REAL_RUSTC", &compiler.rustc)
     .arg("--set")
     .arg(&format!("build.cargo={}", compiler.cargo.to_str().unwrap()))
     .status()
@@ -85,6 +91,11 @@ fn record(
         .arg("build")
         .arg("--stage")
         .arg("0")
+        // We want bootstrap and the Cargos it spawns to have no parallelism --
+        // if multiple rustcs are competing for jobserver tokens, we introduce
+        // quite a bit of variance. Instead, we configure -j1 here, and then
+        // full all vCPU parallelism for each rustc.
+        .arg("-j1")
         .arg("compiler/rustc"),
     )
     .context("building rustc")?;

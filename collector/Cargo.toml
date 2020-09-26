@@ -37,3 +37,7 @@ path = "src/main.rs"
 [[bin]]
 name = "rustc-fake"
 path = "src/rustc-fake.rs"
+
+[[bin]]
+name = "bootstrap-rustc"
+path = "src/bootstrap-rustc.rs"
