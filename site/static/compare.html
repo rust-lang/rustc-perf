@@ -77,12 +77,16 @@ input[type="checkbox"] {
         return arr.filter((value, idx) => arr.indexOf(value) == idx);
     }
 
-    function add_datum_fields(datum, sha, bench, run) {
+    function add_datum_fields(datum, sha, bench, run, selfProfileAvailable) {
         let html = "";
         if (datum) {
             html += "<td>";
             let txt = datum.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-            html += `<a href="/detailed-query.html?commit=${sha}&benchmark=${bench}&run_name=${run}">${txt}</a>`;
+            if (selfProfileAvailable) {
+                html += `<a href="/detailed-query.html?commit=${sha}&benchmark=${bench}&run_name=${run}">${txt}</a>`;
+            } else {
+                html += txt;
+            }
             html += "</td>";
         } else {
             html += "<td>-</td>";
@@ -368,8 +372,10 @@ input[type="checkbox"] {
                 html += "<tr data-field-start=true>";
                 html += `<th style="width: ${max_name_width/2}em;" data-js-name=${field.name}>` + truncate_name(field.name) + "</th>";
                 let entry = field.fields[0];
-                html += add_datum_fields(entry.datum_a, data.a.commit, field.name, entry.casename);
-                html += add_datum_fields(entry.datum_b, data.b.commit, field.name, entry.casename);
+                html += add_datum_fields(entry.datum_a, data.a.commit,
+                    field.name, entry.casename, false);
+                html += add_datum_fields(entry.datum_b, data.b.commit,
+                    field.name, entry.casename, false);
                 let pct = add_percent(entry.percent, dodgy, "??");
                 html += `<td>${pct}</td>`;
                 html += "</tr>";
@@ -391,8 +397,10 @@ input[type="checkbox"] {
                     html += "<tr>";
                     html += "<td>" + entry.casename + "</td>";
                     // No base comparison commit for the first datum
-                    html += add_datum_fields(entry.datum_a, data.a.commit, field.name, entry.casename);
-                    html += add_datum_fields(entry.datum_b, data.b.commit, field.name, entry.casename);
+                    html += add_datum_fields(entry.datum_a, data.a.commit,
+                             field.name, entry.casename, true);
+                    html += add_datum_fields(entry.datum_b, data.b.commit,
+                             field.name, entry.casename, true);
                     let pct = add_percent(entry.percent, dodgy, "??");
                     let diff_href =
                         `/detailed-query.html?commit=${data.b.commit}&base_commit=${data.a.commit}&benchmark=${field.name}&run_name=${entry.casename}`;
