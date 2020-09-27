@@ -22,7 +22,7 @@ pub fn measure(
     artifact: &database::ArtifactId,
     aid: database::ArtifactIdNumber,
 ) -> anyhow::Result<()> {
-    checkout().context("checking out rust-lang/rust")?;
+    checkout(&artifact).context("checking out rust-lang/rust")?;
 
     // Run the compiler multiple times -- we'll call min(duration) on each crate
     // later on. This should (hopefully) reduce variance.
@@ -144,12 +144,16 @@ fn record(
     Ok(())
 }
 
-fn checkout() -> anyhow::Result<()> {
+fn checkout(artifact: &ArtifactId) -> anyhow::Result<()> {
     if Path::new("rust").exists() {
         let status = Command::new("git")
             .current_dir("rust")
             .arg("fetch")
             .arg("origin")
+            .arg(match artifact {
+                ArtifactId::Commit(c) => c.sha.as_str(),
+                ArtifactId::Artifact(id) => id.as_str(),
+            })
             .status()
             .context("git fetch origin")?;
         assert!(status.success(), "git fetch successful");
