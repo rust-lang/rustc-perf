@@ -24,10 +24,9 @@ pub fn measure(
 ) -> anyhow::Result<()> {
     checkout().context("checking out rust-lang/rust")?;
 
-    // Run the compiler twice -- we'll call min(duration) on each crate later
-    // on. This should (hopefully) reduce variance. It's also a 2x bump in
-    // compile times, but we can afford the extra 6 minutes (presuming it
-    // actually benefits us).
+    // Run the compiler multiple times -- we'll call min(duration) on each crate
+    // later on. This should (hopefully) reduce variance.
+    record(rt, conn, compiler, artifact, aid)?;
     record(rt, conn, compiler, artifact, aid)?;
     record(rt, conn, compiler, artifact, aid)?;
 
@@ -100,9 +99,9 @@ fn record(
         .arg("0")
         // We want bootstrap and the Cargos it spawns to have no parallelism --
         // if multiple rustcs are competing for jobserver tokens, we introduce
-        // quite a bit of variance. Instead, we configure -j1 here, and then
-        // full all vCPU parallelism for each rustc.
-        .arg("-j2")
+        // quite a bit of variance. Instead, we configure -j3 here, and then
+        // 1/3 all vCPU parallelism for each rustc.
+        .arg("-j3")
         .arg("compiler/rustc"),
     )
     .context("building rustc")?;
