@@ -37,8 +37,8 @@ jobs:
     strategy:
       matrix:
         BENCH_INCLUDE_EXCLUDE_OPTS: [
-          "--exclude webrender-wrench,style-servo,cargo",
-          "--include webrender-wrench,style-servo,cargo",
+          "--exclude webrender-wrench,style-servo,cargo,rustc",
+          "--include webrender-wrench,style-servo,cargo --exclude rustc",
         ]
         BUILD_KINDS: [
           "Check,Doc,Debug",
