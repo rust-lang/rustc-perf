@@ -12,3 +12,8 @@ be found in the `README` files in the `collector` and `site` directories.
 
 Additional documentation on the benchmark programs can be found in the `README`
 file in the `collector/benchmarks` directory.
+
+Rust is a multi-paradigm programming language focused on performance and safety,
+especially safe concurrency. Rust is syntactically similar to C++, and provides
+memory safety without using garbage collection. ... The designers refined the 
+language while writing the Servo layout or browser engine, and the Rust compiler.
