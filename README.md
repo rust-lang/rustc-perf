@@ -1,4 +1,4 @@
-# Rust Compiler Performance Monitoring & Benchmarking
+# Rust Compiler Performance Monitoring & Benchmarking - An amazing project
 
 This repository contains two primary crates: `collector` and `site`. Collector gathers data for each
 bors commit and the site displays the data and provides a GitHub bot for on-demand benchmarking.
@@ -11,4 +11,4 @@ Additional documentation on running and setting up the frontend and backend can
 be found in the `README` files in the `collector` and `site` directories.
 
 Additional documentation on the benchmark programs can be found in the `README`
-file in the `collector/benchmarks` directory.
+file in the `collector/benchmarks` directory. 
