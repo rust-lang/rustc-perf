@@ -82,6 +82,7 @@ fn main() {
                         .and_then(|args| args[1].to_str())
                         .expect("rustc to be invoked with crate name");
                     let mut prefix = None;
+                    let mut full_path = None;
                     // We don't know the pid of rustc, and can't easily get it -- we only know the
                     // `perf` pid. So just blindly look in the directory to hopefully find it.
                     for entry in fs::read_dir(&prof_out_dir).unwrap() {
@@ -91,6 +92,10 @@ fn main() {
                             .to_str()
                             .map_or(false, |s| s.starts_with(crate_name))
                         {
+                            if entry.file_name().to_str().unwrap().ends_with("mm_profdata") {
+                                full_path = Some(entry.path());
+                                break;
+                            }
                             let file = entry.file_name().to_str().unwrap().to_owned();
                             let new_prefix = Some(file[..file.find('.').unwrap()].to_owned());
                             assert!(
@@ -102,13 +107,23 @@ fn main() {
                             prefix = new_prefix;
                         }
                     }
-                    let prefix = prefix.expect(&format!("found prefix {:?}", prof_out_dir));
-                    let json = run_summarize("summarize", &prof_out_dir, &prefix)
-                        .or_else(|_| run_summarize("summarize-0.7", &prof_out_dir, &prefix))
-                        .expect("able to run summarize or summarize-0.7");
-                    println!("!self-profile-dir:{}", prof_out_dir.to_str().unwrap());
-                    println!("!self-profile-prefix:{}", prefix);
-                    println!("!self-profile-output:{}", json);
+                    if let Some(profile_data) = full_path {
+                        // measureme 0.8 has a single file
+                        println!("!self-profile-file:{}", profile_data.to_str().unwrap());
+                        let filename = profile_data.file_name().unwrap().to_str().unwrap();
+                        let json = run_summarize("summarize", &prof_out_dir, filename)
+                            .or_else(|_| run_summarize("summarize-0.8", &prof_out_dir, filename))
+                            .expect("able to run summarize or summarize-0.7");
+                        println!("!self-profile-output:{}", json);
+                    } else {
+                        let prefix = prefix.expect(&format!("found prefix {:?}", prof_out_dir));
+                        let json = run_summarize("summarize", &prof_out_dir, &prefix)
+                            .or_else(|_| run_summarize("summarize-0.7", &prof_out_dir, &prefix))
+                            .expect("able to run summarize or summarize-0.7");
+                        println!("!self-profile-dir:{}", prof_out_dir.to_str().unwrap());
+                        println!("!self-profile-prefix:{}", prefix);
+                        println!("!self-profile-output:{}", json);
+                    }
                 }
             }
 

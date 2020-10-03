@@ -12,6 +12,7 @@ use std::env;
 use std::fmt;
 use std::fs::{self, File};
 use std::hash;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{self, Command, Stdio};
 use std::str;
@@ -642,42 +643,58 @@ impl Upload {
         // Files are placed at
         //  * self-profile/<artifact id>/<krate>/<profile>/<cache>
         //    /self-profile-<collection-id>.{extension}
-        let tarball = snap::write::FrameEncoder::new(Vec::new());
-        let mut builder = tar::Builder::new(tarball);
-        builder.mode(tar::HeaderMode::Deterministic);
-
-        let append_file =
-            |builder: &mut tar::Builder<_>, file: &Path, name: &str| -> anyhow::Result<()> {
-                if file.exists() {
-                    // Silently ignore missing files, the new self-profile
-                    // experiment with one file has a different structure.
-                    builder.append_path_with_name(file, name)?;
-                }
-                Ok(())
-            };
-        append_file(
-            &mut builder,
-            &files.string_index,
-            "self-profile.string_index",
-        )
-        .expect("append string index");
-        append_file(&mut builder, &files.string_data, "self-profile.string_data")
-            .expect("append string data");
-        append_file(&mut builder, &files.events, "self-profile.events").expect("append events");
-
         let upload = tempfile::NamedTempFile::new()
             .context("create temporary file")
             .unwrap();
-        builder.finish().expect("complete tarball");
-        std::fs::write(
-            upload.path(),
-            builder
-                .into_inner()
-                .expect("get")
-                .into_inner()
-                .expect("snap success"),
-        )
-        .expect("wrote tarball");
+        let filename = match files {
+            SelfProfileFiles::Seven {
+                string_index,
+                string_data,
+                events,
+            } => {
+                let tarball = snap::write::FrameEncoder::new(Vec::new());
+                let mut builder = tar::Builder::new(tarball);
+                builder.mode(tar::HeaderMode::Deterministic);
+
+                let append_file = |builder: &mut tar::Builder<_>,
+                                   file: &Path,
+                                   name: &str|
+                 -> anyhow::Result<()> {
+                    if file.exists() {
+                        // Silently ignore missing files, the new self-profile
+                        // experiment with one file has a different structure.
+                        builder.append_path_with_name(file, name)?;
+                    }
+                    Ok(())
+                };
+
+                append_file(&mut builder, &string_index, "self-profile.string_index")
+                    .expect("append string index");
+                append_file(&mut builder, &string_data, "self-profile.string_data")
+                    .expect("append string data");
+                append_file(&mut builder, &events, "self-profile.events").expect("append events");
+                builder.finish().expect("complete tarball");
+                std::fs::write(
+                    upload.path(),
+                    builder
+                        .into_inner()
+                        .expect("get")
+                        .into_inner()
+                        .expect("snap success"),
+                )
+                .expect("wrote tarball");
+                format!("self-profile-{}.tar.sz", collection)
+            }
+            SelfProfileFiles::Eight { file } => {
+                let data = std::fs::read(&file).expect("read profile data");
+                let mut data = snap::read::FrameEncoder::new(&data[..]);
+                let mut compressed = Vec::new();
+                data.read_to_end(&mut compressed).expect("compressed");
+                std::fs::write(upload.path(), &compressed).expect("write compressed profile data");
+
+                format!("self-profile-{}.mm_profdata.sz", collection)
+            }
+        };
 
         let child = Command::new("aws")
             .arg("s3")
@@ -686,10 +703,7 @@ impl Upload {
             .arg(upload.path())
             .arg(&format!(
                 "s3://rustc-perf/{}",
-                &prefix
-                    .join(format!("self-profile-{}.tar.sz", collection))
-                    .to_str()
-                    .unwrap()
+                &prefix.join(&filename).to_str().unwrap()
             ))
             .spawn()
             .expect("spawn aws");
@@ -1283,10 +1297,15 @@ enum DeserializeStatError {
     ParseError(String, #[source] ::std::num::ParseFloatError),
 }
 
-struct SelfProfileFiles {
-    string_data: PathBuf,
-    string_index: PathBuf,
-    events: PathBuf,
+enum SelfProfileFiles {
+    Seven {
+        string_data: PathBuf,
+        string_index: PathBuf,
+        events: PathBuf,
+    },
+    Eight {
+        file: PathBuf,
+    },
 }
 
 fn process_perf_stat_output(
@@ -1298,6 +1317,7 @@ fn process_perf_stat_output(
     let mut profile: Option<SelfProfile> = None;
     let mut dir: Option<PathBuf> = None;
     let mut prefix: Option<String> = None;
+    let mut file: Option<PathBuf> = None;
     for line in stdout.lines() {
         if line.starts_with("!self-profile-output:") {
             profile = Some(serde_json::from_str(&line["!self-profile-output:".len()..]).unwrap());
@@ -1309,6 +1329,10 @@ fn process_perf_stat_output(
         }
         if line.starts_with("!self-profile-prefix:") {
             prefix = Some(String::from(&line["!self-profile-prefix:".len()..]));
+            continue;
+        }
+        if line.starts_with("!self-profile-file:") {
+            file = Some(PathBuf::from(&line["!self-profile-file:".len()..]));
             continue;
         }
 
@@ -1347,29 +1371,32 @@ fn process_perf_stat_output(
     }
 
     let files = if let (Some(prefix), Some(dir)) = (prefix, dir) {
-        let mut files = SelfProfileFiles {
-            string_index: PathBuf::new(),
-            string_data: PathBuf::new(),
-            events: PathBuf::new(),
-        };
-        // Rename the data files. There should be exactly three.
+        let mut string_index = PathBuf::new();
+        let mut string_data = PathBuf::new();
+        let mut events = PathBuf::new();
         for entry in fs::read_dir(&dir).unwrap() {
             let filename = entry.unwrap().file_name();
             let filename_str = filename.to_str().unwrap();
             let path = dir.join(filename_str);
             if filename_str.ends_with(".events") {
                 assert!(filename_str.contains(&prefix), "{:?}", path);
-                files.events = path;
+                events = path;
             } else if filename_str.ends_with(".string_data") {
                 assert!(filename_str.contains(&prefix), "{:?}", path);
-                files.string_data = path;
+                string_data = path;
             } else if filename_str.ends_with(".string_index") {
                 assert!(filename_str.contains(&prefix), "{:?}", path);
-                files.string_index = path;
+                string_index = path;
             }
         }
 
-        Some(files)
+        Some(SelfProfileFiles::Seven {
+            string_index,
+            string_data,
+            events,
+        })
+    } else if let Some(file) = file {
+        Some(SelfProfileFiles::Eight { file })
     } else {
         None
     };
