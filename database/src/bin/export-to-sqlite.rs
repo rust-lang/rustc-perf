@@ -68,7 +68,7 @@ impl Table for Pstat {
         statement
             .execute(params![
                 row.get::<_, i32>(0),
-                row.get::<_, i16>(1),
+                row.get::<_, i32>(1),
                 row.get::<_, i32>(2),
                 row.get::<_, f64>(3),
             ])
@@ -115,7 +115,7 @@ impl Table for Error {
         statement
             .execute(params![
                 row.get::<_, i32>(0),
-                row.get::<_, i16>(1),
+                row.get::<_, i32>(1),
                 row.get::<_, &str>(2),
             ])
             .unwrap();
@@ -163,7 +163,7 @@ impl Table for Artifact {
     fn execute(statement: &mut rusqlite::Statement, row: Row) {
         statement
             .execute(params![
-                row.get::<_, i16>(0),
+                row.get::<_, i32>(0),
                 row.get::<_, &str>(1),
                 row.get::<_, Option<chrono::DateTime<chrono::Utc>>>(2)
                     .map(|d| d.timestamp()),
@@ -249,7 +249,7 @@ impl Table for SelfProfileQuery {
         statement
             .execute(params![
                 row.get::<_, i32>(0),
-                row.get::<_, i16>(1),
+                row.get::<_, i32>(1),
                 row.get::<_, i32>(2),
                 row.get::<_, i64>(3),
                 row.get::<_, i64>(4),

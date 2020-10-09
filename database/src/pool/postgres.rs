@@ -192,6 +192,16 @@ static MIGRATIONS: &[&str] = &[
         PRIMARY KEY(aid, cid, crate)
     );
     "#,
+    r#"alter table artifact alter column id set data type integer;"#,
+    r#"
+    alter table artifact_collection_duration alter column aid set data type integer;
+    alter table collector_progress alter column aid set data type integer;
+    alter table error alter column aid set data type integer;
+    alter table pstat alter column aid set data type integer;
+    alter table raw_self_profile alter column aid set data type integer;
+    alter table rustc_compilation alter column aid set data type integer;
+    alter table self_profile_query alter column aid set data type integer;
+    "#,
 ];
 
 #[async_trait::async_trait]
@@ -456,7 +466,7 @@ where
         self.conn()
             .execute(
                 &self.statements().record_duration,
-                &[&(artifact.0 as i16), &(duration.as_secs() as i32)],
+                &[&(artifact.0 as i32), &(duration.as_secs() as i32)],
             )
             .await
             .unwrap();
@@ -475,7 +485,7 @@ where
                 .into_iter()
                 .map(|row| {
                     (
-                        row.get::<_, i16>(0) as u32,
+                        row.get::<_, i32>(0) as u32,
                         Commit {
                             sha: row.get::<_, String>(1).as_str().into(),
                             date: {
@@ -497,7 +507,7 @@ where
                 .into_iter()
                 .map(|row| {
                     (
-                        row.get::<_, i16>(0) as u32,
+                        row.get::<_, i32>(0) as u32,
                         row.get::<_, String>(1).as_str().into(),
                     )
                 })
@@ -599,7 +609,7 @@ where
             .conn()
             .query_opt(
                 &self.statements().get_self_profile_query,
-                &[&(series as i32), &(cid.0 as i16)],
+                &[&(series as i32), &(cid.0 as i32)],
             )
             .await
             .unwrap()?;
@@ -625,7 +635,7 @@ where
             .conn()
             .query(
                 &self.statements().get_self_profile,
-                &[&crate_, &profile, &cache, &(cid.0 as i16)],
+                &[&crate_, &profile, &cache, &(cid.0 as i32)],
             )
             .await
             .unwrap();
@@ -651,7 +661,7 @@ where
     async fn get_error(&self, cid: crate::ArtifactIdNumber) -> HashMap<String, Option<String>> {
         let rows = self
             .conn()
-            .query(&self.statements().get_error, &[&(cid.0 as i16)])
+            .query(&self.statements().get_error, &[&(cid.0 as i32)])
             .await
             .unwrap();
         rows.into_iter()
@@ -771,7 +781,7 @@ where
         self.conn()
             .execute(
                 &self.statements().insert_pstat,
-                &[&sid, &(artifact.0 as i16), &(collection.0 as i32), &value],
+                &[&sid, &(artifact.0 as i32), &(collection.0 as i32), &value],
             )
             .await
             .unwrap();
@@ -788,7 +798,7 @@ where
             .execute(
                 &self.statements().insert_rustc,
                 &[
-                    &(artifact.0 as i16),
+                    &(artifact.0 as i32),
                     &(collection.0 as i32),
                     &krate,
                     &(value.as_nanos() as i64),
@@ -821,14 +831,14 @@ where
             .await
             .unwrap();
         if let Some(row) = aid {
-            return ArtifactIdNumber(row.get::<_, i16>(0) as u32);
+            return ArtifactIdNumber(row.get::<_, i32>(0) as u32);
         }
         ArtifactIdNumber(
             self.conn()
                 .query_one("select id from artifact where name = $1", &[&name])
                 .await
                 .unwrap()
-                .get::<_, i16>(0) as u32,
+                .get::<_, i32>(0) as u32,
         )
     }
 
@@ -869,7 +879,7 @@ where
                 &self.statements().insert_self_profile_query,
                 &[
                     &(sid as i32),
-                    &(artifact.0 as i16),
+                    &(artifact.0 as i32),
                     &(collection.0 as i32),
                     &i64::try_from(qd.self_time.as_nanos()).unwrap(),
                     &i64::try_from(qd.blocked_time.as_nanos()).unwrap(),
@@ -903,7 +913,7 @@ where
         self.conn()
             .execute(
                 "insert into error (series, aid, error) VALUES ($1, $2, $3)",
-                &[&sid, &(artifact.0 as i16), &error],
+                &[&sid, &(artifact.0 as i32), &error],
             )
             .await
             .unwrap();
@@ -947,7 +957,7 @@ where
                 .execute(
                     "insert into collector_progress(aid, step) VALUES ($1, $2)
                     ON CONFLICT DO NOTHING",
-                    &[&(aid.0 as i16), &step],
+                    &[&(aid.0 as i32), &step],
                 )
                 .await
                 .unwrap();
@@ -960,7 +970,7 @@ where
             .execute(
                 "update collector_progress set start_time = statement_timestamp() \
                 where aid = $1 and step = $2 and end_time is null;",
-                &[&(aid.0 as i16), &step],
+                &[&(aid.0 as i32), &step],
             )
             .await
             .unwrap()
@@ -972,7 +982,7 @@ where
             .execute(
                 "update collector_progress set end_time = statement_timestamp() \
                 where aid = $1 and step = $2 and start_time is not null and end_time is null;",
-                &[&(aid.0 as i16), &step],
+                &[&(aid.0 as i32), &step],
             )
             .await
             .unwrap()
@@ -992,7 +1002,7 @@ where
             .unwrap();
         let aids = rows
             .into_iter()
-            .map(|row| row.get::<_, i16>(0))
+            .map(|row| row.get::<_, i32>(0))
             .collect::<Vec<_>>();
 
         let mut artifacts = Vec::new();
@@ -1036,7 +1046,7 @@ where
 
         let steps = self
             .conn()
-            .query(&self.statements().in_progress_steps, &[&(aid.0 as i16)])
+            .query(&self.statements().in_progress_steps, &[&(aid.0 as i32)])
             .await
             .unwrap();
 
@@ -1095,7 +1105,7 @@ where
         let cache = cache.to_string();
         self.conn().execute(
             "insert into raw_self_profile (aid, cid, crate, profile, cache) VALUES ($1, $2, $3, $4, $5)",
-            &[&(artifact.0 as i16), &collection.0, &krate, &profile, &cache],
+            &[&(artifact.0 as i32), &collection.0, &krate, &profile, &cache],
         ).await.unwrap();
     }
     async fn list_self_profile(
@@ -1127,7 +1137,7 @@ where
             .await
             .unwrap()
             .into_iter()
-            .map(|r| (ArtifactIdNumber(r.get::<_, i16>(0) as u32), r.get(1)))
+            .map(|r| (ArtifactIdNumber(r.get::<_, i32>(0) as u32), r.get(1)))
             .collect()
     }
 
@@ -1146,13 +1156,13 @@ where
             .conn()
             .query(
                 &self.statements().get_rustc_compilation,
-                &[&aids.iter().map(|v| v.0 as i16).collect::<Vec<_>>()],
+                &[&aids.iter().map(|v| v.0 as i32).collect::<Vec<_>>()],
             )
             .await
             .unwrap();
 
         for row in rows {
-            let aid = ArtifactIdNumber(row.get::<_, i16>(0) as u32);
+            let aid = ArtifactIdNumber(row.get::<_, i32>(0) as u32);
             let krate = row.get::<_, String>(1);
             let min_duration = row.get::<_, i64>(2);
 
