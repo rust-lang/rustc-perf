@@ -223,6 +223,10 @@ def handle_compare(res):
 
 
 def make_request_payload(start, end):
+    if start is None:
+        start = ""
+    if end is None:
+        end = ""
     payload = {
         'start': start,
         'end': end,
@@ -260,7 +264,7 @@ def do_triage(start, end):
             break
 
         if not response['is_contiguous']:
-            eprint('Reached a commit whose perf run is not yet complete')
+            eprint(f"Reached pair {start} to {initial_response['next']} whose perf run is not yet complete")
             break
 
         handle_compare(response)
