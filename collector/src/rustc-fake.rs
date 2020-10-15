@@ -112,7 +112,7 @@ fn main() {
                         println!("!self-profile-file:{}", profile_data.to_str().unwrap());
                         let filename = profile_data.file_name().unwrap().to_str().unwrap();
                         let json = run_summarize("summarize", &prof_out_dir, filename)
-                            .or_else(|_| run_summarize("summarize-0.8", &prof_out_dir, filename))
+                            .or_else(|_| run_summarize("summarize-9.0", &prof_out_dir, filename))
                             .expect("able to run summarize or summarize-0.7");
                         println!("!self-profile-output:{}", json);
                     } else {
