@@ -1525,7 +1525,18 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
 
     if Path::new(&fs_path).is_file() {
         let source = fs::read(&fs_path).unwrap();
-        return Ok(Response::new(hyper::Body::from(source)));
+        let mut response = http::Response::builder();
+        let p = Path::new(&fs_path);
+        match p.extension().and_then(|x| x.to_str()) {
+            Some("html") => response = response.header_typed(ContentType::html()),
+            Some("png") => response = response.header_typed(ContentType::png()),
+            Some("json") => response = response.header_typed(ContentType::json()),
+            Some("svg") => response = response.header("Content-Type", "image/svg+xml"),
+            Some("css") => response = response.header("Content-Type", "text/css"),
+            Some("js") => response = response.header("Content-Type", "application/javascript"),
+            _ => (),
+        }
+        return Ok(response.body(hyper::Body::from(source)).unwrap());
     }
 
     match req.uri().path() {
