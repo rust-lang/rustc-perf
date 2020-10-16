@@ -761,22 +761,30 @@ where
         let sid = self
             .conn()
             .query_opt(
-                &self.statements().insert_pstat_series,
+                &self.statements().select_pstat_series,
                 &[&krate, &profile, &cache, &statistic],
             )
             .await
             .unwrap();
         let sid: i32 = match sid {
             Some(id) => id.get(0),
-            None => self
-                .conn()
-                .query_one(
-                    &self.statements().select_pstat_series,
-                    &[&krate, &profile, &cache, &statistic],
-                )
-                .await
-                .unwrap()
-                .get(0),
+            None => {
+                self.conn()
+                    .query_opt(
+                        &self.statements().insert_pstat_series,
+                        &[&krate, &profile, &cache, &statistic],
+                    )
+                    .await
+                    .unwrap();
+                self.conn()
+                    .query_one(
+                        &self.statements().select_pstat_series,
+                        &[&krate, &profile, &cache, &statistic],
+                    )
+                    .await
+                    .unwrap()
+                    .get(0)
+            }
         };
         self.conn()
             .execute(
@@ -821,8 +829,16 @@ where
             ),
             ArtifactId::Artifact(a) => (a.clone(), None, "release"),
         };
+        let aid = self
+            .conn()
+            .query_opt("select id from artifact where name = $1", &[&name])
+            .await
+            .unwrap();
 
-        let aid = self.conn()
+        let aid = match aid {
+            Some(aid) => aid.get::<_, i32>(0) as u32,
+            None => {
+                self.conn()
             .query_opt("insert into artifact (name, date, type) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING RETURNING id", &[
                 &name,
                 &date,
@@ -830,16 +846,15 @@ where
             ])
             .await
             .unwrap();
-        if let Some(row) = aid {
-            return ArtifactIdNumber(row.get::<_, i32>(0) as u32);
-        }
-        ArtifactIdNumber(
-            self.conn()
-                .query_one("select id from artifact where name = $1", &[&name])
-                .await
-                .unwrap()
-                .get::<_, i32>(0) as u32,
-        )
+                self.conn()
+                    .query_one("select id from artifact where name = $1", &[&name])
+                    .await
+                    .unwrap()
+                    .get::<_, i32>(0) as u32
+            }
+        };
+
+        ArtifactIdNumber(aid)
     }
 
     async fn record_self_profile_query(
@@ -857,22 +872,30 @@ where
         let sid = self
             .conn()
             .query_opt(
-                &self.statements().insert_self_query_series,
+                &self.statements().select_self_query_series,
                 &[&krate, &profile, &cache, &query],
             )
             .await
             .unwrap();
         let sid: i32 = match sid {
             Some(id) => id.get(0),
-            None => self
-                .conn()
-                .query_one(
-                    &self.statements().select_self_query_series,
-                    &[&krate, &profile, &cache, &query],
-                )
-                .await
-                .unwrap()
-                .get(0),
+            None => {
+                self.conn()
+                    .query_one(
+                        &self.statements().insert_self_query_series,
+                        &[&krate, &profile, &cache, &query],
+                    )
+                    .await
+                    .unwrap();
+                self.conn()
+                    .query_one(
+                        &self.statements().select_self_query_series,
+                        &[&krate, &profile, &cache, &query],
+                    )
+                    .await
+                    .unwrap()
+                    .get(0)
+            }
         };
         self.conn()
             .execute(
