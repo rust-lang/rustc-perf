@@ -112,9 +112,17 @@ fn main() {
                         // measureme 0.8 has a single file
                         println!("!self-profile-file:{}", profile_data.to_str().unwrap());
                         let filename = profile_data.file_name().unwrap().to_str().unwrap();
-                        let json = run_summarize("summarize", &prof_out_dir, filename)
-                            .or_else(|_| run_summarize("summarize-9.0", &prof_out_dir, filename))
-                            .expect("able to run summarize or summarize-9.0");
+                        let json = match run_summarize("summarize", &prof_out_dir, filename) {
+                            Ok(s) => s,
+                            Err(e1) => {
+                                match run_summarize("summarize-9.0", &prof_out_dir, filename) {
+                                    Ok(s) => s,
+                                    Err(e2) => {
+                                        panic!("failed to run summarize and summarize-9.0. Errors:\nsummarize: {:?}\nsummarize-9.0: {:?}", e1, e2);
+                                    }
+                                }
+                            }
+                        };
                         println!("!self-profile-output:{}", json);
                     } else {
                         let prefix = prefix.expect(&format!("found prefix {:?}", prof_out_dir));
@@ -349,7 +357,9 @@ fn run_summarize(name: &str, prof_out_dir: &Path, prefix: &str) -> anyhow::Resul
     cmd.current_dir(&prof_out_dir);
     cmd.arg("summarize").arg("--json");
     cmd.arg(&prefix);
-    let status = cmd.status()?;
+    let status = cmd
+        .status()
+        .with_context(|| format!("Command::new({}).status() failed", name))?;
     if !status.success() {
         anyhow::bail!(
             "failed to run {} in {:?} with prefix {:?}",
@@ -358,7 +368,10 @@ fn run_summarize(name: &str, prof_out_dir: &Path, prefix: &str) -> anyhow::Resul
             prefix
         )
     }
-    let json = prof_out_dir.join(&format!("{}.json", prefix));
+    let json = prof_out_dir.join(&format!(
+        "{}.json",
+        prefix.strip_suffix(".mm_profdata").unwrap_or(prefix)
+    ));
     fs::read_to_string(&json).with_context(|| format!("failed to read {:?}", json))
 }
 
