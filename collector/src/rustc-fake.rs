@@ -1,3 +1,4 @@
+use anyhow::Context;
 use std::env;
 use std::ffi::OsString;
 use std::fs;
@@ -113,7 +114,7 @@ fn main() {
                         let filename = profile_data.file_name().unwrap().to_str().unwrap();
                         let json = run_summarize("summarize", &prof_out_dir, filename)
                             .or_else(|_| run_summarize("summarize-9.0", &prof_out_dir, filename))
-                            .expect("able to run summarize or summarize-0.7");
+                            .expect("able to run summarize or summarize-9.0");
                         println!("!self-profile-output:{}", json);
                     } else {
                         let prefix = prefix.expect(&format!("found prefix {:?}", prof_out_dir));
@@ -343,19 +344,22 @@ fn print_time(dur: Duration) {
     );
 }
 
-fn run_summarize(name: &str, prof_out_dir: &Path, prefix: &str) -> std::io::Result<String> {
+fn run_summarize(name: &str, prof_out_dir: &Path, prefix: &str) -> anyhow::Result<String> {
     let mut cmd = Command::new(name);
     cmd.current_dir(&prof_out_dir);
     cmd.arg("summarize").arg("--json");
     cmd.arg(&prefix);
     let status = cmd.status()?;
     if !status.success() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "Failed to run successfully",
-        ));
+        anyhow::bail!(
+            "failed to run {} in {:?} with prefix {:?}",
+            name,
+            prof_out_dir,
+            prefix
+        )
     }
-    fs::read_to_string(prof_out_dir.join(&format!("{}.json", prefix)))
+    let json = prof_out_dir.join(&format!("{}.json", prefix));
+    fs::read_to_string(&json).with_context(|| format!("failed to read {:?}", json))
 }
 
 #[cfg(windows)]
