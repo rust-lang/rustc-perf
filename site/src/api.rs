@@ -263,6 +263,7 @@ pub mod self_profile_raw {
         pub cids: Vec<i32>,
         pub cid: i32,
         pub url: String,
+        pub is_tarball: bool,
     }
 }
 

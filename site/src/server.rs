@@ -932,9 +932,9 @@ pub async fn handle_self_profile_raw_download(
     body: self_profile_raw::Request,
     data: &InputData,
 ) -> Response {
-    let res = handle_self_profile_raw(body, data, false).await;
-    let url = match res {
-        Ok(v) => v.url,
+    let res = handle_self_profile_raw(body, data).await;
+    let (url, is_tarball) = match res {
+        Ok(v) => (v.url, v.is_tarball),
         Err(e) => {
             let mut resp = Response::new(e.into());
             *resp.status_mut() = StatusCode::BAD_REQUEST;
@@ -969,7 +969,12 @@ pub async fn handle_self_profile_raw_download(
     server_resp.headers_mut().insert(
         hyper::header::CONTENT_DISPOSITION,
         hyper::header::HeaderValue::from_maybe_shared(format!(
-            "attachment; filename=\"self-profile.tar\""
+            "attachment; filename=\"{}\"",
+            if is_tarball {
+                "self-profile.tar"
+            } else {
+                "self-profile.mm_profdata"
+            }
         ))
         .expect("valid header"),
     );
@@ -1071,7 +1076,6 @@ async fn tarball(resp: reqwest::Response, mut sender: hyper::body::Sender) {
 pub async fn handle_self_profile_raw(
     body: self_profile_raw::Request,
     data: &InputData,
-    validate: bool,
 ) -> ServerResult<self_profile_raw::Response> {
     log::info!("handle_self_profile_raw({:?})", body);
     let mut it = body.benchmark.rsplitn(2, '-');
@@ -1112,16 +1116,42 @@ pub async fn handle_self_profile_raw(
         _ => first_cid,
     };
 
-    let url = format!(
-        "https://perf-data.rust-lang.org/self-profile/{}/{}/{}/{}/self-profile-{}.tar.sz",
+    let url_prefix = format!(
+        "https://perf-data.rust-lang.org/self-profile/{}/{}/{}/{}/self-profile-{}",
         aid.0,
         bench_name,
         bench_ty,
         cache.to_id(),
-        cid
+        cid,
     );
 
-    if validate {
+    let cids = aids_and_cids
+        .into_iter()
+        .map(|(_, cid)| cid)
+        .collect::<Vec<_>>();
+
+    return match fetch(&cids, cid, format!("{}.mm_profdata.sz", url_prefix), false).await {
+        Ok(fetched) => Ok(fetched),
+        Err(new_error) => {
+            match fetch(&cids, cid, format!("{}.tar.sz", url_prefix), true).await {
+                Ok(fetched) => Ok(fetched),
+                Err(old_error) => {
+                    // Both files failed to fetch; return the errors for both:
+                    Err(format!(
+                        "mm_profdata download failed: {:?}, tarball download failed: {:?}",
+                        new_error, old_error
+                    ))
+                }
+            }
+        }
+    };
+
+    async fn fetch(
+        cids: &[i32],
+        cid: i32,
+        url: String,
+        is_tarball: bool,
+    ) -> ServerResult<self_profile_raw::Response> {
         let resp = reqwest::Client::new()
             .head(&url)
             .send()
@@ -1133,13 +1163,14 @@ pub async fn handle_self_profile_raw(
                 resp.status()
             ));
         }
-    }
 
-    Ok(self_profile_raw::Response {
-        cids: aids_and_cids.into_iter().map(|(_, cid)| cid).collect(),
-        cid,
-        url,
-    })
+        Ok(self_profile_raw::Response {
+            cids: cids.to_vec(),
+            cid,
+            url,
+            is_tarball,
+        })
+    }
 }
 
 pub async fn handle_self_profile(
@@ -1656,7 +1687,7 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
         ))
     } else if p == "/perf/self-profile-raw" {
         Ok(to_response(
-            handle_self_profile_raw(body!(parse_body(&body)), &data, true).await,
+            handle_self_profile_raw(body!(parse_body(&body)), &data).await,
         ))
     } else if p == "/perf/graph-new" {
         Ok(

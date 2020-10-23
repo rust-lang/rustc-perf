@@ -69,7 +69,7 @@ pub async fn get_pieces(
     body: crate::api::self_profile_raw::Request,
     data: &InputData,
 ) -> Result<Pieces, Response> {
-    let res = crate::server::handle_self_profile_raw(body, data, false).await;
+    let res = crate::server::handle_self_profile_raw(body, data).await;
     let url = match res {
         Ok(v) => v.url,
         Err(e) => {
