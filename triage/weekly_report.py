@@ -264,7 +264,7 @@ def do_triage(start, end):
             break
 
         if not response['is_contiguous']:
-            eprint(f"Reached pair {start} to {initial_response['next']} whose perf run is not yet complete")
+            eprint(f"Reached pair start: {commits[0]} to next: {commits[1]} whose perf run is not yet complete")
             break
 
         handle_compare(response)
