@@ -645,7 +645,8 @@ Importantly, though, if the results of this run are \
 non-neutral **do not** roll this PR up -- it will mask other \
 regressions or improvements in the roll up.
 
-@bors rollup=never",
+@bors rollup=never
+@rustbot modify labels: +S-waiting-on-review -S-waiting-on-perf",
                     commit.sha, comparison_url
                 ),
             )
