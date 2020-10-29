@@ -21,10 +21,23 @@ dependencies = [
 [[package]]
 name = "analyzeme"
 version = "0.7.1"
-source = "git+https://github.com/rust-lang/measureme#de3edc5cfb6961580dc04b720de963510c209fc4"
+source = "git+https://github.com/rust-lang/measureme?rev=de3edc5cfb6961580dc04b720de963510c209fc4#de3edc5cfb6961580dc04b720de963510c209fc4"
 dependencies = [
  "byteorder",
- "measureme",
+ "measureme 0.7.1",
+ "memchr",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "analyzeme"
+version = "9.0.0"
+source = "git+https://github.com/rust-lang/measureme?rev=2c45b109a98ff143be39bc0c14ae2153fa0ca8ca#2c45b109a98ff143be39bc0c14ae2153fa0ca8ca"
+dependencies = [
+ "byteorder",
+ "measureme 9.0.0",
  "memchr",
  "rustc-hash",
  "serde",
@@ -951,12 +964,22 @@ checksum = "490cc448043f947bae3cbee9c203358d62dbee0db12107a74be5c30ccfd09771"
 [[package]]
 name = "measureme"
 version = "0.7.1"
-source = "git+https://github.com/rust-lang/measureme#de3edc5cfb6961580dc04b720de963510c209fc4"
+source = "git+https://github.com/rust-lang/measureme?rev=de3edc5cfb6961580dc04b720de963510c209fc4#de3edc5cfb6961580dc04b720de963510c209fc4"
 dependencies = [
  "byteorder",
  "memmap",
  "parking_lot 0.11.0",
  "rustc-hash",
+]
+
+[[package]]
+name = "measureme"
+version = "9.0.0"
+source = "git+https://github.com/rust-lang/measureme?rev=2c45b109a98ff143be39bc0c14ae2153fa0ca8ca#2c45b109a98ff143be39bc0c14ae2153fa0ca8ca"
+dependencies = [
+ "parking_lot 0.11.0",
+ "rustc-hash",
+ "smallvec",
 ]
 
 [[package]]
@@ -1738,7 +1761,8 @@ checksum = "fa8f3741c7372e75519bd9346068370c9cdaabcc1f9599cbcf2a2719352286b7"
 name = "site"
 version = "0.1.0"
 dependencies = [
- "analyzeme",
+ "analyzeme 0.7.1",
+ "analyzeme 9.0.0",
  "anyhow",
  "arc-swap",
  "async-trait",

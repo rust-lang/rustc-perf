@@ -40,10 +40,11 @@ async-trait = "0.1"
 database = { path = "../database" }
 bytes = "0.5.6"
 url = "2"
-analyzeme = { git = "https://github.com/rust-lang/measureme" }
 tar = "0.4"
 inferno = { version="0.10", default-features = false }
 mime = "0.3"
+analyzeme-7 = { package = "analyzeme", git = "https://github.com/rust-lang/measureme", rev = "de3edc5cfb6961580dc04b720de963510c209fc4" }
+analyzeme-9 = { package = "analyzeme", git = "https://github.com/rust-lang/measureme", rev = "2c45b109a98ff143be39bc0c14ae2153fa0ca8ca" }
 
 [dependencies.collector]
 path = "../collector"

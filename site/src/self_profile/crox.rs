@@ -4,7 +4,7 @@
 use hashbrown::HashMap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use analyzeme::{ProfilingData, Timestamp};
+use super::versioning::ProfilingData;
 
 use serde::ser::SerializeSeq;
 use serde::{Serialize, Serializer};
@@ -65,11 +65,11 @@ fn generate_thread_to_collapsed_thread_mapping(
             thread_start_and_end
                 .entry(event.thread_id)
                 .and_modify(|(thread_start, thread_end)| {
-                    let (event_min, event_max) = timestamp_to_min_max(event.timestamp);
+                    let (event_min, event_max) = event.timestamp.to_min_max();
                     *thread_start = cmp::min(*thread_start, event_min);
                     *thread_end = cmp::max(*thread_end, event_max);
                 })
-                .or_insert_with(|| timestamp_to_min_max(event.timestamp));
+                .or_insert_with(|| event.timestamp.to_min_max());
         }
         // collect the the threads in order of the end time
         let mut end_and_thread = thread_start_and_end
@@ -109,29 +109,13 @@ fn generate_thread_to_collapsed_thread_mapping(
     thread_to_collapsed_thread
 }
 
-fn get_args(full_event: &analyzeme::Event) -> Option<HashMap<String, String>> {
-    if !full_event.additional_data.is_empty() {
-        Some(
-            full_event
-                .additional_data
-                .iter()
-                .enumerate()
-                .map(|(i, arg)| (format!("arg{}", i).to_string(), arg.to_string()))
-                .collect(),
-        )
-    } else {
-        None
-    }
-}
-
 /// Returns JSON blob fit, `chrome_profiler.json`.
 pub fn generate(pieces: super::Pieces, opt: Opt) -> anyhow::Result<Vec<u8>> {
     let mut serializer = serde_json::Serializer::new(Vec::new());
 
     let mut seq = serializer.serialize_seq(None)?;
 
-    let data = ProfilingData::from_buffers(pieces.string_data, pieces.string_index, pieces.events)
-        .map_err(|e| anyhow::format_err!("{:?}", e))?;
+    let data = pieces.into_profiling_data()?;
 
     let thread_to_collapsed_thread =
         generate_thread_to_collapsed_thread_mapping(opt.collapse_threads, &data);
@@ -156,7 +140,7 @@ pub fn generate(pieces: super::Pieces, opt: Opt) -> anyhow::Result<Vec<u8>> {
             thread_id: *thread_to_collapsed_thread
                 .get(&event.thread_id)
                 .unwrap_or(&event.thread_id),
-            args: get_args(&full_event),
+            args: full_event.get_args(),
         };
         seq.serialize_element(&crox_event)?;
     }
@@ -200,15 +184,4 @@ pub fn generate(pieces: super::Pieces, opt: Opt) -> anyhow::Result<Vec<u8>> {
     seq.end()?;
 
     Ok(serializer.into_inner())
-}
-
-fn timestamp_to_min_max(timestamp: Timestamp) -> (SystemTime, SystemTime) {
-    match timestamp {
-        Timestamp::Instant(t) => (t, t),
-        Timestamp::Interval { start, end } => {
-            // Usually start should always be greater than end, but let's not
-            // choke on invalid data here.
-            (cmp::min(start, end), cmp::max(start, end))
-        }
-    }
 }

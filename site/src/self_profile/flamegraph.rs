@@ -1,4 +1,3 @@
-use analyzeme::{collapse_stacks, ProfilingData};
 use anyhow::Context;
 use inferno::flamegraph::{from_lines, Options as FlamegraphOptions};
 
@@ -6,14 +5,7 @@ use inferno::flamegraph::{from_lines, Options as FlamegraphOptions};
 pub struct Opt {}
 
 pub fn generate(title: &str, pieces: super::Pieces, _: Opt) -> anyhow::Result<Vec<u8>> {
-    let profiling_data =
-        ProfilingData::from_buffers(pieces.string_data, pieces.string_index, pieces.events)
-            .map_err(|e| anyhow::format_err!("{:?}", e))?;
-
-    let recorded_stacks = collapse_stacks(&profiling_data)
-        .iter()
-        .map(|(unique_stack, count)| format!("{} {}", unique_stack, count))
-        .collect::<Vec<_>>();
+    let recorded_stacks = pieces.into_collapsed_stacks()?;
 
     let mut file = Vec::new();
     let mut flamegraph_options = FlamegraphOptions::default();

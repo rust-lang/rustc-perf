@@ -6,13 +6,14 @@ use anyhow::Context;
 use bytes::buf::BufExt;
 use hyper::StatusCode;
 use std::collections::HashMap;
-use std::fmt;
-use std::io::Read;
 
 type Response = http::Response<hyper::Body>;
 
+mod versioning;
 pub mod crox;
 pub mod flamegraph;
+
+use versioning::Pieces;
 
 pub struct Output {
     pub data: Vec<u8>,
@@ -46,22 +47,6 @@ pub fn generate(
             })
         }
         _ => anyhow::bail!("Unknown type, specify type={crox,flamegraph}"),
-    }
-}
-
-pub struct Pieces {
-    pub string_data: Vec<u8>,
-    pub string_index: Vec<u8>,
-    pub events: Vec<u8>,
-}
-
-impl fmt::Debug for Pieces {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Pieces")
-            .field("string_data", &self.string_data.len())
-            .field("string_index", &self.string_index.len())
-            .field("events", &self.events.len())
-            .finish()
     }
 }
 
@@ -117,34 +102,4 @@ pub async fn get_pieces(
         }
     };
     Ok(pieces)
-}
-
-impl Pieces {
-    fn from_tarball<R: std::io::Read>(mut tarball: tar::Archive<R>) -> anyhow::Result<Pieces> {
-        let mut pieces = Pieces {
-            string_data: Vec::new(),
-            string_index: Vec::new(),
-            events: Vec::new(),
-        };
-
-        for entry in tarball.entries().context("entries")? {
-            let mut entry = entry.context("tarball entry")?;
-            let path = entry.path_bytes();
-            if *path == *b"self-profile.string_index" {
-                entry
-                    .read_to_end(&mut pieces.string_index)
-                    .context("reading string index")?;
-            } else if *path == *b"self-profile.string_data" {
-                entry
-                    .read_to_end(&mut pieces.string_data)
-                    .context("reading string data")?;
-            } else if *path == *b"self-profile.events" {
-                entry
-                    .read_to_end(&mut pieces.events)
-                    .context("reading events")?;
-            }
-        }
-
-        Ok(pieces)
-    }
 }
