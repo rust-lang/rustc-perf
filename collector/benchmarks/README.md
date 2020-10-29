@@ -109,3 +109,4 @@ programs.
 - **wf-projection-stress-65510**: A stress test which showcases [quadratic
   behavior](https://github.com/rust-lang/rust/issues/65510) (in the number of
   associated type bounds).
+- **externs**: A large amount of extern functions has caused [slowdowns in the past](https://github.com/rust-lang/rust/pull/78448).
