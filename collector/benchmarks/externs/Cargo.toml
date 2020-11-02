@@ -1,5 +1,6 @@
 [package]
-name = "issue-58319"
+name = "externs"
 version = "0.1.0"
 edition = "2018"
 
+[workspace]
