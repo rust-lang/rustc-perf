@@ -101,7 +101,10 @@ pub async fn handle_dashboard(data: Arc<InputData>) -> ServerResult<dashboard::R
         return Ok(dashboard::Response::default());
     }
 
-    let mut versions = index.artifacts().collect::<Vec<_>>();
+    let mut versions = index
+        .artifacts()
+        .filter(|a| a.starts_with("1.") || a.starts_with("beta"))
+        .collect::<Vec<_>>();
     versions.sort_by(|a, b| {
         match (
             a.parse::<semver::Version>().ok(),

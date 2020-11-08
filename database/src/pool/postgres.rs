@@ -941,7 +941,7 @@ where
             .await
             .unwrap();
     }
-    async fn record_benchmark(&self, krate: &str, supports_stable: bool) {
+    async fn record_benchmark(&self, krate: &str, supports_stable: Option<bool>) {
         if let Some(r) = self
             .conn()
             .query_opt(
@@ -951,18 +951,29 @@ where
             .await
             .unwrap()
         {
-            if r.get::<_, bool>(0) == supports_stable {
+            if Some(r.get::<_, bool>(0)) == supports_stable {
                 return;
             }
         }
-        self.conn()
-            .execute(
-                "insert into benchmark (name, stabilized) VALUES ($1, $2)
+        if let Some(stable) = supports_stable {
+            self.conn()
+                .execute(
+                    "insert into benchmark (name, stabilized) VALUES ($1, $2)
                 ON CONFLICT (name) DO UPDATE SET stabilized = EXCLUDED.stabilized",
-                &[&krate, &supports_stable],
-            )
-            .await
-            .unwrap();
+                    &[&krate, &stable],
+                )
+                .await
+                .unwrap();
+        } else {
+            self.conn()
+                .execute(
+                    "insert into benchmark (name, stabilized) VALUES ($1, $2)
+                ON CONFLICT DO NOTHING",
+                    &[&krate, &false],
+                )
+                .await
+                .unwrap();
+        }
     }
 
     async fn collector_start(&self, aid: ArtifactIdNumber, steps: &[String]) {
@@ -1196,5 +1207,31 @@ where
         }
 
         result
+    }
+
+    async fn artifact_by_name(&self, artifact: &str) -> Option<ArtifactId> {
+        let row = self
+            .conn()
+            .query_opt(
+                "select date, type from artifact where name = $1",
+                &[&artifact],
+            )
+            .await
+            .unwrap()?;
+        let date = row.get::<_, Option<DateTime<Utc>>>(0);
+        let ty = row.get::<_, String>(1);
+
+        match ty.as_str() {
+            "master" => Some(ArtifactId::Commit(Commit {
+                sha: artifact.to_owned(),
+                date: Date(date.expect("date present for master commits")),
+            })),
+            "try" => Some(ArtifactId::Commit(Commit {
+                sha: artifact.to_owned(),
+                date: Date::ymd_hms(2000, 1, 1, 0, 0, 0),
+            })),
+            "release" => Some(ArtifactId::Artifact(artifact.to_owned())),
+            _ => panic!("unknown artifact type: {:?}", ty),
+        }
     }
 }

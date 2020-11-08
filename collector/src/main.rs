@@ -236,7 +236,7 @@ fn bench(
         let mut tx = rt.block_on(conn.transaction());
         rt.block_on(
             tx.conn()
-                .record_benchmark(benchmark.name.0.as_str(), benchmark.supports_stable()),
+                .record_benchmark(benchmark.name.0.as_str(), Some(benchmark.supports_stable())),
         );
         eprintln!(
             "{}",

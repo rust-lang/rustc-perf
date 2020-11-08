@@ -255,7 +255,7 @@ impl Connection for SqliteConnection {
             .unwrap()
             .query_map(params![], |row| {
                 Ok((
-                    row.get::<_, i16>(0)? as u32,
+                    row.get::<_, i32>(0)? as u32,
                     Commit {
                         sha: row.get::<_, String>(1)?.as_str().into(),
                         date: {
@@ -277,7 +277,7 @@ impl Connection for SqliteConnection {
             .unwrap()
             .query_map(params![], |row| {
                 Ok((
-                    row.get::<_, i16>(0)? as u32,
+                    row.get::<_, i32>(0)? as u32,
                     row.get::<_, String>(1)?.into_boxed_str(),
                 ))
             })
@@ -635,7 +635,7 @@ impl Connection for SqliteConnection {
                 .query_row(
                     "select id from artifact where name = $1",
                     params![&name],
-                    |r| r.get::<_, i16>(0),
+                    |r| r.get::<_, i32>(0),
                 )
                 .unwrap() as u32,
         )
@@ -713,14 +713,24 @@ impl Connection for SqliteConnection {
             )
             .unwrap();
     }
-    async fn record_benchmark(&self, krate: &str, supports_stable: bool) {
-        self.raw_ref()
-            .execute(
-                "insert into benchmark (name, stabilized) VALUES (?, ?)
+    async fn record_benchmark(&self, krate: &str, supports_stable: Option<bool>) {
+        if let Some(stable) = supports_stable {
+            self.raw_ref()
+                .execute(
+                    "insert into benchmark (name, stabilized) VALUES (?, ?)
                 ON CONFLICT (name) do update set stabilized = excluded.stabilized",
-                params![krate, supports_stable],
-            )
-            .unwrap();
+                    params![krate, stable],
+                )
+                .unwrap();
+        } else {
+            self.raw_ref()
+                .execute(
+                    "insert into benchmark (name, stabilized) VALUES (?, ?)
+                ON CONFLICT DO NOTHING",
+                    params![krate, false],
+                )
+                .unwrap();
+        }
     }
     async fn collector_start(&self, aid: ArtifactIdNumber, steps: &[String]) {
         // Clean out any leftover unterminated steps.
@@ -771,7 +781,7 @@ impl Connection for SqliteConnection {
             )
             .unwrap();
 
-        let aids = aids.query_map(params![], |r| r.get::<_, i16>(0)).unwrap();
+        let aids = aids.query_map(params![], |r| r.get::<_, i32>(0)).unwrap();
 
         let mut artifacts = Vec::new();
         for aid in aids {
@@ -931,5 +941,32 @@ impl Connection for SqliteConnection {
         }
 
         results
+    }
+
+    async fn artifact_by_name(&self, artifact: &str) -> Option<ArtifactId> {
+        let (date, ty) = self
+            .raw_ref()
+            .prepare("select date, type from artifact where name = ?")
+            .unwrap()
+            .query_row(params![&artifact], |r| {
+                let date = r.get::<_, Option<i64>>(0)?;
+                let ty = r.get::<_, String>(1)?;
+                Ok((date, ty))
+            })
+            .optional()
+            .unwrap()?;
+
+        match ty.as_str() {
+            "master" => Some(ArtifactId::Commit(Commit {
+                sha: artifact.to_owned(),
+                date: Date(Utc.timestamp(date.expect("master has date"), 0)),
+            })),
+            "try" => Some(ArtifactId::Commit(Commit {
+                sha: artifact.to_owned(),
+                date: Date::ymd_hms(2000, 1, 1, 0, 0, 0),
+            })),
+            "release" => Some(ArtifactId::Artifact(artifact.to_owned())),
+            _ => panic!("unknown artifact type: {:?}", ty),
+        }
     }
 }
