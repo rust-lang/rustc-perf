@@ -110,3 +110,4 @@ programs.
   behavior](https://github.com/rust-lang/rust/issues/65510) (in the number of
   associated type bounds).
 - **externs**: A large amount of extern functions has caused [slowdowns in the past](https://github.com/rust-lang/rust/pull/78448).
+- **derive**: A large amount of simple structs with a `#[derive]` attribute for common built-in traits such as Copy and Debug. 
