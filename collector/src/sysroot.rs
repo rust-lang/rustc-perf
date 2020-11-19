@@ -94,17 +94,18 @@ impl fmt::Display for ModuleVariant {
 }
 
 impl ModuleVariant {
-    fn url(&self, sysroot: &SysrootDownload, triple: &str) -> String {
+    fn url(&self, channel: &str, sysroot: &SysrootDownload, triple: &str) -> String {
         let suffix = if *self == ModuleVariant::RustSrc {
             String::new()
         } else {
             format!("-{}", triple)
         };
         format!(
-            "{base}/{sha}/{module}-nightly{suffix}.tar.xz",
+            "{base}/{sha}/{module}-{channel}{suffix}.tar.xz",
             base = BASE_URL,
             module = self,
             sha = sysroot.rust_sha,
+            channel = channel,
             suffix = suffix,
         )
     }
@@ -151,26 +152,34 @@ impl SysrootDownload {
             }
         }
 
-        let url = variant.url(self, &self.triple);
-        log::debug!("requesting: {}", url);
-        let resp = reqwest::blocking::get(&url)?;
-        log::debug!("{}", resp.status());
-        if resp.status().is_success() {
-            let reader = XzDecoder::new(BufReader::new(resp));
-            match self.extract(variant, reader) {
-                Ok(()) => return Ok(()),
-                Err(err) => {
-                    log::warn!("extracting {} failed: {:?}", url, err);
+        // We usually have nightlies but we want to avoid breaking down if we
+        // accidentally end up with a beta or stable commit.
+        let urls = [
+            variant.url("nightly", self, &self.triple),
+            variant.url("beta", self, &self.triple),
+            variant.url("stable", self, &self.triple),
+        ];
+        for url in &urls {
+            log::debug!("requesting: {}", url);
+            let resp = reqwest::blocking::get(url)?;
+            log::debug!("{}", resp.status());
+            if resp.status().is_success() {
+                let reader = XzDecoder::new(BufReader::new(resp));
+                match self.extract(variant, reader) {
+                    Ok(()) => return Ok(()),
+                    Err(err) => {
+                        log::warn!("extracting {} failed: {:?}", url, err);
+                    }
                 }
             }
         }
 
         return Err(anyhow!(
-            "unable to download sha {} triple {} module {} from {}",
+            "unable to download sha {} triple {} module {} from any of {:?}",
             self.rust_sha,
             self.triple,
             variant,
-            url
+            urls
         ));
     }
 
