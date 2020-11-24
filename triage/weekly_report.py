@@ -195,6 +195,10 @@ def handle_compare(res):
 
     benchmarks = get_benchmarks(res)
 
+    # Skip empty commits, sometimes happens if there's a compiler bug or so.
+    if len(benchmarks) == 0:
+        return
+
     lo = min(benchmarks, key=lambda x: x.log_change())
     hi = max(benchmarks, key=lambda x: x.log_change())
 
