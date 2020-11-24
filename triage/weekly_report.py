@@ -20,7 +20,7 @@ try:
     import msgpack
 except ImportError as e:
     eprint(e)
-    eprint('Try `pip3 install --user msgpack')
+    eprint('Try `pip3 install --user msgpack`')
     sys.exit(1)
 
 report = '''
@@ -60,7 +60,7 @@ results = {
 
 
 def get_username():
-    usernames = {'mackendy': 'ecstaticmorse'}
+    usernames = {'mackendy': 'ecstaticmorse', 'joshua': 'jyn514'}
 
     home_dir = Path.home().name
 
