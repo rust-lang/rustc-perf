@@ -54,7 +54,7 @@ Easy cases: there is only a single PR in the merge.
   the comments to see if any perf CI runs were done, and whether the
   regression was expected.
 - Add an entry to the triage log. Include the PR title and number, a link to
-  the PR comment you added mentioning the performange effect, and a link to the
+  the PR comment you added mentioning the performance effect, and a link to the
   performance results. Include useful details, such as the size of the
   regression/improvement, and any promises of follow-up action from authors in
   the case of a regression.
