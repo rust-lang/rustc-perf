@@ -1,0 +1,4 @@
+{
+    "supports_stable": false,
+    "touch_file": "src/lib.rs"
+}
