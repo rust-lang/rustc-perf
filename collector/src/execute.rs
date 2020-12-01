@@ -724,8 +724,8 @@ impl Upload {
 }
 
 impl<'a> Processor for MeasureProcessor<'a> {
-    fn profiler(&self, build: BuildKind) -> Profiler {
-        if self.is_first_collection && self.self_profile && build != BuildKind::Doc {
+    fn profiler(&self, _build: BuildKind) -> Profiler {
+        if self.is_first_collection && self.self_profile {
             Profiler::PerfStatSelfProfile
         } else {
             Profiler::PerfStat
