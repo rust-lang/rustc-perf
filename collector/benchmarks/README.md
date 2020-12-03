@@ -41,6 +41,10 @@ These are real programs that are important in some way, and worth tracking.
 These are real programs that are known to stress the compiler in interesting
 ways.
 
+- **diesel**: A type save SQL query builder. Utilizes the type system to
+  ensure a lot of invariants. Stresses anything related to resolving 
+  trait bounds, by having a lot of trait impls for a large number of different
+  types.
 - **encoding**: Character encoding support. Contains some large tables.
 - **html5ever**: An HTML parser. Stresses macro parsing code significantly.
 - **inflate**: An old implementation of the DEFLATE algorithm. Stresses the
