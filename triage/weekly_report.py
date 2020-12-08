@@ -58,6 +58,8 @@ results = {
     'mixed': [],
 }
 
+pr_titles = dict()
+
 
 def get_username():
     usernames = {'mackendy': 'ecstaticmorse', 'joshua': 'jyn514'}
@@ -95,7 +97,7 @@ def relative_change(expected, actual):
 def log_change(expected, actual):
     '''Returns `ln(actual / expected)`
 
-    This is prefereable to percentage change because it scales equally for
+    This is preferable to percentage change because it scales equally for
     positive or negative changes. This means that the order of the arguments
     only affects the sign of the output
 
@@ -172,6 +174,17 @@ def gh_link(pr):
     return f'https://github.com/rust-lang/rust/issues/{pr}'
 
 
+def gh_pr_title(pr):
+    if pr in pr_titles:
+        return pr_titles.get(pr)
+
+    url = f'https://api.github.com/repos/rust-lang/rust/pulls/{pr}'
+    with urllib.request.urlopen(url) as f:
+        data = json.loads(f.read())
+        pr_titles[pr] = data['title']
+        return pr_titles[pr]
+
+
 def compare_link(start, end, stat):
     return f'https://perf.rust-lang.org/compare.html?start={start}&end={end}&stat={stat.value}'
 
@@ -180,8 +193,9 @@ def write_section(res, *changes):
     pr = res['b']['pr']
     start = res['a']['commit']
     end = res['b']['commit']
+    title = gh_pr_title(pr)
 
-    msg = f'[#{pr}]({gh_link(pr)})'
+    msg = f'{title} [#{pr}]({gh_link(pr)})'
 
     for change in changes:
         msg += '\n- '
