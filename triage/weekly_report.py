@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import date
 from enum import Enum
 from math import log
+from os import getenv
 from pathlib import Path
 from pprint import pp
 from sys import exit
@@ -57,8 +58,6 @@ results = {
     'improvement': [],
     'mixed': [],
 }
-
-pr_titles = dict()
 
 
 def get_username():
@@ -175,14 +174,23 @@ def gh_link(pr):
 
 
 def gh_pr_title(pr):
-    if pr in pr_titles:
-        return pr_titles.get(pr)
+    def make_req():
+        url = f'https://api.github.com/repos/rust-lang/rust/pulls/{pr}'
+        req = urllib.request.Request(url)
+        req.add_header('Content-Type', 'application/json')
+        req.add_header('Authorization', f'token {getenv("GITHUB_TOKEN")}')
 
-    url = f'https://api.github.com/repos/rust-lang/rust/pulls/{pr}'
-    with urllib.request.urlopen(url) as f:
-        data = json.loads(f.read())
-        pr_titles[pr] = data['title']
-        return pr_titles[pr]
+        with urllib.request.urlopen(req) as f:
+            data = json.loads(f.read())
+            return data.get('title', '')
+
+    result = ''
+    try:
+        result = make_req()
+    except urllib.error.HTTPError as e:
+        eprint(e)
+    finally:
+        return result
 
 
 def compare_link(start, end, stat):
@@ -195,7 +203,7 @@ def write_section(res, *changes):
     end = res['b']['commit']
     title = gh_pr_title(pr)
 
-    msg = f'{title} [#{pr}]({gh_link(pr)})'
+    msg = f'{title}[#{pr}]({gh_link(pr)})'
 
     for change in changes:
         msg += '\n- '
