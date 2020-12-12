@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import date
 from enum import Enum
 from math import log
+from os import getenv
 from pathlib import Path
 from pprint import pp
 from sys import exit
@@ -95,7 +96,7 @@ def relative_change(expected, actual):
 def log_change(expected, actual):
     '''Returns `ln(actual / expected)`
 
-    This is prefereable to percentage change because it scales equally for
+    This is preferable to percentage change because it scales equally for
     positive or negative changes. This means that the order of the arguments
     only affects the sign of the output
 
@@ -172,6 +173,27 @@ def gh_link(pr):
     return f'https://github.com/rust-lang/rust/issues/{pr}'
 
 
+def gh_pr_title(pr):
+    def make_req():
+        url = f'https://api.github.com/repos/rust-lang/rust/pulls/{pr}'
+        req = urllib.request.Request(url)
+        req.add_header('Content-Type', 'application/json')
+        if getenv("GITHUB_TOKEN") is not None:
+            req.add_header('Authorization', f'token {getenv("GITHUB_TOKEN")}')
+
+        with urllib.request.urlopen(req) as f:
+            data = json.loads(f.read())
+            return data.get('title', '')
+
+    result = ''
+    try:
+        result = make_req()
+    except urllib.error.HTTPError as e:
+        eprint(e)
+    finally:
+        return result
+
+
 def compare_link(start, end, stat):
     return f'https://perf.rust-lang.org/compare.html?start={start}&end={end}&stat={stat.value}'
 
@@ -180,8 +202,9 @@ def write_section(res, *changes):
     pr = res['b']['pr']
     start = res['a']['commit']
     end = res['b']['commit']
+    title = gh_pr_title(pr)
 
-    msg = f'[#{pr}]({gh_link(pr)})'
+    msg = f'{title}[#{pr}]({gh_link(pr)})'
 
     for change in changes:
         msg += '\n- '
