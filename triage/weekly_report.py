@@ -262,14 +262,18 @@ def make_request_payload(start, end):
 
 
 def make_request(start, end):
-    # FIXME: Add some sort of retry mechanism
+    # Retry request twice
+    try:
+        req = urllib.request.Request('https://perf.rust-lang.org/perf/get')
+    except:
+        req = urllib.request.Request('https://perf.rust-lang.org/perf/get')
 
-    req = urllib.request.Request('https://perf.rust-lang.org/perf/get')
     req.add_header('Content-Type', 'application/json')
     req.data = make_request_payload(start, end)
     with urllib.request.urlopen(req) as f:
         data = msgpack.unpack(f, raw=False)
         return data
+
 
 
 def do_triage(start, end):
@@ -286,7 +290,10 @@ def do_triage(start, end):
         try:
             response = make_request(*commits)
         except urllib.error.HTTPError as e:
+            eprint(f"Failed to make request for {commits[0]} and {commits[1]}")
             eprint(e)
+            eprint("URL: " + e.geturl())
+            eprint("Data: " + e.read().decode())
             break
 
         if not response['is_contiguous']:
