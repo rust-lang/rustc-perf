@@ -16,6 +16,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{self, Command, Stdio};
 use std::str;
+use std::mem::ManuallyDrop;
 use std::time::Duration;
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
@@ -1230,7 +1231,8 @@ impl Benchmark {
                     }
                 }
                 log::debug!("Benchmark iteration {}/{}", i + 1, iterations);
-                let timing_dir = self.make_temp_dir(prep_dir.path())?;
+                // Don't delete the directory on error.
+                let timing_dir = ManuallyDrop::new(self.make_temp_dir(prep_dir.path())?);
                 let cwd = timing_dir.path();
 
                 // A full non-incremental build.
@@ -1282,6 +1284,7 @@ impl Benchmark {
                         }
                     }
                 }
+                drop(ManuallyDrop::into_inner(timing_dir));
             }
         }
 
