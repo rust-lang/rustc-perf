@@ -178,7 +178,8 @@ def gh_pr_title(pr):
         url = f'https://api.github.com/repos/rust-lang/rust/pulls/{pr}'
         req = urllib.request.Request(url)
         req.add_header('Content-Type', 'application/json')
-        req.add_header('Authorization', f'token {getenv("GITHUB_TOKEN")}')
+        if getenv("GITHUB_TOKEN") is not None:
+            req.add_header('Authorization', f'token {getenv("GITHUB_TOKEN")}')
 
         with urllib.request.urlopen(req) as f:
             data = json.loads(f.read())
