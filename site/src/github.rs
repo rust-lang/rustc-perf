@@ -525,9 +525,9 @@ async fn enqueue_sha(
     };
     if queued {
         let msg = format!(
-            "Queued {} with parent {}, future [comparison URL]({}).\
-            
-            @rustbot label: +S-waiting-on-perf",
+            "Queued {} with parent {}, future [comparison URL]({}).
+
+@rustbot label: +S-waiting-on-perf",
             commit_response.sha,
             commit_response.parents[0].sha,
             try_commit.comparison_url(),
