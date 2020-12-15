@@ -76,7 +76,7 @@ pub async fn handle_github(
         post_comment(
             &data.config,
             request.issue.number,
-            "Awaiting bors try build completion",
+            "Awaiting bors try build completion.",
         )
         .await;
         return Ok(github::Response);
@@ -525,7 +525,9 @@ async fn enqueue_sha(
     };
     if queued {
         let msg = format!(
-            "Queued {} with parent {}, future [comparison URL]({}).",
+            "Queued {} with parent {}, future [comparison URL]({}).\
+            
+            @rustbot label: +S-waiting-on-perf",
             commit_response.sha,
             commit_response.parents[0].sha,
             try_commit.comparison_url(),
@@ -646,7 +648,7 @@ non-neutral **do not** roll this PR up -- it will mask other \
 regressions or improvements in the roll up.
 
 @bors rollup=never
-@rustbot modify labels: +S-waiting-on-review -S-waiting-on-perf",
+@rustbot label: +S-waiting-on-review -S-waiting-on-perf",
                     commit.sha, comparison_url
                 ),
             )
