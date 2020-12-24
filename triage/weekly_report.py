@@ -204,7 +204,7 @@ def write_section(res, *changes):
     end = res['b']['commit']
     title = gh_pr_title(pr)
 
-    msg = f'{title}[#{pr}]({gh_link(pr)})'
+    msg = f'{title} [#{pr}]({gh_link(pr)})'
 
     for change in changes:
         msg += '\n- '
