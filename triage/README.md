@@ -7,6 +7,7 @@ usage.
 
 - ecstatic-morse
 - Mark-Simulacrum
+- rylev
 
 Monday evening in North America is a good time to do it because This Week in Rust (see below) is usually
 published on Tuesday, US time, and so it means the PR to include the triage
@@ -17,7 +18,7 @@ at.
 ## Instructions
 
 First, check the previous triage log entry. Look for responses in PRs, and
-follow up on any promised actions. (I.e. nag people!)
+follow up on any promised actions. (i.e. nag people!)
 
 Start the new triage log entry in a new file using a `YYYY-MM-DD.md`-form name.
 Follow the format of the previous entries.
