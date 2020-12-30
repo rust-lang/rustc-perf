@@ -114,9 +114,9 @@ input[type="checkbox"] {
         if (pct != null && pct != Infinity && pct != -Infinity) {
             let klass = "";
             if (pct > 1) {
-                klass = 'span class="positive"';
+                klass = 'class="positive"';
             } else if (pct < -1) {
-                klass = 'span class="negative"';
+                klass = 'class="negative"';
             }
             let title = "";
             let marker = "";
@@ -375,6 +375,18 @@ input[type="checkbox"] {
                     html += "<tr data-field-start=true><td>&nbsp;</td></tr>";
                     html += "<tr data-field-start=true><td colspan=4>bootstrap timings; variance is 1-3% on smaller benchmarks! Values in seconds.</td></tr>";
                     is_first_bootstrap = false;
+
+                    let dodgy = dodgy_name_title("Total");
+                    html += "<tr data-field-start=true>";
+                    html += `<th style="width: ${max_name_width/2}em;" data-js-name=Total>` + truncate_name("total") + "</th>";
+                    let sum = (acc, value) => acc + value;
+                    let a_total = fields.filter(f => f.is_bootstrap).map(f => f.fields[0].datum_a).reduce(sum);
+                    let b_total = fields.filter(f => f.is_bootstrap).map(f => f.fields[0].datum_b).reduce(sum);
+                    html += add_datum_fields(a_total, data.a.commit, "Total", "", false);
+                    html += add_datum_fields(b_total, data.b.commit, "Total", "", false);
+                    let pct = add_percent(percent_chg(a_total, b_total), dodgy, "??");
+                    html += `<td>${pct}</td>`;
+                    html += "</tr>";
                 }
                 let dodgy = dodgy_name_title(field.name);
                 html += "<tr data-field-start=true>";
