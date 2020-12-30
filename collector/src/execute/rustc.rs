@@ -73,6 +73,8 @@ fn record(
     .arg("--set")
     .arg("build.print-step-timings=true")
     .arg("--set")
+    .arg("rust.deny-warnings=false")
+    .arg("--set")
     .arg(&format!("build.rustc={}", fake_rustc.to_str().unwrap()))
     .env("RUSTC_PERF_REAL_RUSTC", &compiler.rustc)
     .arg("--set")
