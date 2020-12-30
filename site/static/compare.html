@@ -373,7 +373,7 @@ input[type="checkbox"] {
             if (field.is_bootstrap) {
                 if (is_first_bootstrap) {
                     html += "<tr data-field-start=true><td>&nbsp;</td></tr>";
-                    html += "<tr data-field-start=true><td colspan=4>bootstrap timings; high variance! Values in seconds.</td></tr>";
+                    html += "<tr data-field-start=true><td colspan=4>bootstrap timings; variance is 1-3% on smaller benchmarks! Values in seconds.</td></tr>";
                     is_first_bootstrap = false;
                 }
                 let dodgy = dodgy_name_title(field.name);
