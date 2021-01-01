@@ -84,22 +84,23 @@ fn record(
     assert!(status.success(), "configure successful");
 
     let output = collector::command_output(
-        Command::new(
-            checkout
-                .join("x.py")
-                .canonicalize()
-                .context("x.py script canonicalize")?,
-        )
-        .current_dir(&checkout)
-        .env("RUSTC_PERF_REAL_RUSTC", &compiler.rustc)
-        .arg("build")
-        .arg("--stage")
-        .arg("0")
-        // We want bootstrap and the Cargos it spawns to have no parallelism --
-        // if multiple rustcs are competing for jobserver tokens, we introduce
-        // quite a bit of variance.
-        .arg("-j1")
-        .arg("compiler/rustc"),
+        Command::new("python3")
+            .arg(
+                checkout
+                    .join("x.py")
+                    .canonicalize()
+                    .context("x.py script canonicalize")?,
+            )
+            .current_dir(&checkout)
+            .env("RUSTC_PERF_REAL_RUSTC", &compiler.rustc)
+            .arg("build")
+            .arg("--stage")
+            .arg("0")
+            // We want bootstrap and the Cargos it spawns to have no parallelism --
+            // if multiple rustcs are competing for jobserver tokens, we introduce
+            // quite a bit of variance.
+            .arg("-j1")
+            .arg("compiler/rustc"),
     )
     .context("building rustc")?;
 
