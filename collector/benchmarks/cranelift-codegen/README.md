@@ -15,15 +15,15 @@ into executable machine code.
 For more information, see [the
 documentation](https://cranelift.readthedocs.io/en/latest/?badge=latest).
 
-For an example of how to use the JIT, see the [SimpleJIT Demo], which
+For an example of how to use the JIT, see the [Cranelift JIT Demo], which
 implements a toy language.
 
-[SimpleJIT Demo]: https://github.com/CraneStation/simplejit-demo
+[Cranelift JIT Demo]: https://github.com/bytecodealliance/cranelift-jit-demo
 
 For an example of how to use Cranelift to run WebAssembly code, see
 [Wasmtime], which implements a standalone, embeddable, VM using Cranelift.
 
-[Wasmtime]: https://github.com/CraneStation/wasmtime
+[Wasmtime]: https://github.com/bytecodealliance/wasmtime
 
 Status
 ------
@@ -171,4 +171,4 @@ Editor Support
 
 Editor support for working with Cranelift IR (clif) files:
 
- - Vim: https://github.com/CraneStation/cranelift.vim
+ - Vim: https://github.com/bytecodealliance/cranelift.vim
