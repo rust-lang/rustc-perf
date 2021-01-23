@@ -87,13 +87,13 @@ img {
   color: red;
 }
 .slightly-positive {
-  color: #ee9090;
+  color: #ff5050;
 }
 .negative {
   color: green;
 }
 .slightly-negative {
-  color: #90ee90;
+  color: #10ff10;
 }
 .neutral {
   color: black;
