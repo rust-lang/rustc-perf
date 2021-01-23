@@ -115,8 +115,12 @@ input[type="checkbox"] {
             let klass = "";
             if (pct > 1) {
                 klass = 'class="positive"';
+            } else if (pct > 0.1) {
+                klass = 'class="slightly-positive"';
             } else if (pct < -1) {
                 klass = 'class="negative"';
+            } else if (pct < -0.1) {
+                klass = 'class="slightly-negative"';
             }
             let title = "";
             let marker = "";
