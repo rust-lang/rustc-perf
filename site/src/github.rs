@@ -76,7 +76,9 @@ pub async fn handle_github(
         post_comment(
             &data.config,
             request.issue.number,
-            "Awaiting bors try build completion.",
+            "Awaiting bors try build completion.
+
+@rustbot label: +S-waiting-on-perf",
         )
         .await;
         return Ok(github::Response);
@@ -525,9 +527,7 @@ async fn enqueue_sha(
     };
     if queued {
         let msg = format!(
-            "Queued {} with parent {}, future [comparison URL]({}).
-
-@rustbot label: +S-waiting-on-perf",
+            "Queued {} with parent {}, future [comparison URL]({}).",
             commit_response.sha,
             commit_response.parents[0].sha,
             try_commit.comparison_url(),
