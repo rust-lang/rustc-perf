@@ -46,7 +46,6 @@ input[type="checkbox"] {
                 the addition of a `println!` macro somewhere in the source code.</li>
         </ul>
     </div>
-    <div id="content" style="display: none"></div>
     <form id="settings" action="">
         <fieldset id="commits">
             <legend>Commits</legend>
@@ -60,6 +59,7 @@ input[type="checkbox"] {
         </select><br>
         <input type="submit" value="Submit" onclick="submit_settings(); return false;">
     </form>
+    <div id="content" style="display: none; margin-top: 15px"></div>
     <br>
     <div id="as-of"></div>
     <a href="https://github.com/rust-lang-nursery/rustc-perf">
