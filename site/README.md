@@ -24,17 +24,6 @@ Launching
 If you've collected data locally, you will likely want to point the site at that
 local database.
 
-Alternatively, if you want to get the data used by the server on
-perf.rust-lang.org, you can download an export of the database by running `cargo
-run --release --bin fetch-latest <database>`, providing the location to save the
-database to (this currently just downloads and decompresses a file, but this may
-become more sophisticated in the future); be warned that the database is fairly
-large -- 3.8 GB as of this writing, and growing gradually.
-
-We may eventually provide support for partial downloads; please file an issue if
-you have a specific use case and we may be able to accommodate it.
-
-
 ```
 cargo run --bin site --release <database>
 ```
