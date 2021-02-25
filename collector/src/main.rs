@@ -558,6 +558,9 @@ fn main_result() -> anyhow::Result<i32> {
     let default_db = "results.db";
     let default_out_dir = std::ffi::OsStr::new("results");
 
+    // XXX: This doesn't necessarily work for all archs
+    let target_triple = format!("{}-unknown-linux-gnu", std::env::consts::ARCH);
+
     let ret = match matches.subcommand() {
         ("bench_local", Some(sub_m)) => {
             // Mandatory arguments
@@ -590,7 +593,7 @@ fn main_result() -> anyhow::Result<i32> {
                     rustc: &rustc,
                     rustdoc: rustdoc.as_deref(),
                     cargo: &cargo,
-                    triple: "x86_64-unknown-linux-gnu", // XXX: technically not necessarily true
+                    triple: &target_triple,
                     is_nightly: true,
                 },
                 &benchmarks,
@@ -626,7 +629,7 @@ fn main_result() -> anyhow::Result<i32> {
 
             let pool = database::Pool::open(db);
 
-            let sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")
+            let sysroot = Sysroot::install(commit.sha.to_string(), &target_triple)
                 .with_context(|| format!("failed to install sysroot for {:?}", commit))?;
 
             let benchmarks = get_benchmarks(
@@ -716,7 +719,7 @@ fn main_result() -> anyhow::Result<i32> {
                     rustdoc: Some(Path::new(rustdoc.trim())),
                     cargo: Path::new(cargo.trim()),
                     is_nightly: false,
-                    triple: "x86_64-unknown-linux-gnu",
+                    triple: &target_triple,
                 },
                 &benchmarks,
                 Some(3),
@@ -747,7 +750,7 @@ fn main_result() -> anyhow::Result<i32> {
                 rustc: &rustc,
                 rustdoc: rustdoc.as_deref(),
                 cargo: &cargo,
-                triple: "x86_64-unknown-linux-gnu", // XXX: technically not necessarily true
+                triple: &target_triple,
                 is_nightly: true,
             };
 
@@ -787,7 +790,7 @@ fn main_result() -> anyhow::Result<i32> {
             let last_sha = String::from_utf8(last_sha.stdout).expect("utf8");
             let last_sha = last_sha.split_whitespace().next().expect(&last_sha);
             let commit = get_commit_or_fake_it(&last_sha).expect("success");
-            let mut sysroot = Sysroot::install(commit.sha.to_string(), "x86_64-unknown-linux-gnu")?;
+            let mut sysroot = Sysroot::install(commit.sha.to_string(), &target_triple)?;
             sysroot.preserve(); // don't delete it
 
             // Print the directory containing the toolchain.

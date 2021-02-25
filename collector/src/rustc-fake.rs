@@ -55,7 +55,7 @@ fn main() {
                     .arg("--log-fd")
                     .arg("1")
                     .arg("setarch")
-                    .arg("x86_64")
+                    .arg(std::env::consts::ARCH)
                     .arg("-R")
                     .arg(&tool)
                     .args(&args);
