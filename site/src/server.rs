@@ -1466,7 +1466,8 @@ impl Server {
         let mut buffer = Vec::new();
         let r = prometheus::Registry::new();
 
-        let queue_length = prometheus::IntGauge::new("queue_length", "queue length").unwrap();
+        let queue_length =
+            prometheus::IntGauge::new("rustc_perf_queue_length", "queue length").unwrap();
         queue_length.set(data.missing_commits().await.len() as i64);
 
         r.register(Box::new(queue_length)).unwrap();
