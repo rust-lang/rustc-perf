@@ -44,6 +44,7 @@ analyzeme = { git = "https://github.com/rust-lang/measureme" }
 tar = "0.4"
 inferno = { version="0.10", default-features = false }
 mime = "0.3"
+prometheus = "0.11"
 
 [dependencies.collector]
 path = "../collector"

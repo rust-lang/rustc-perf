@@ -1459,6 +1459,25 @@ impl Server {
         false
     }
 
+    async fn handle_metrics(&self, _req: Request) -> Response {
+        use prometheus::Encoder;
+        let data: Arc<InputData> = self.data.read().as_ref().unwrap().clone();
+
+        let mut buffer = Vec::new();
+        let r = prometheus::Registry::new();
+
+        let queue_length = prometheus::IntGauge::new("queue_length", "queue length").unwrap();
+        queue_length.set(data.missing_commits().await.len() as i64);
+
+        r.register(Box::new(queue_length)).unwrap();
+
+        let encoder = prometheus::TextEncoder::new();
+        let metric_families = r.gather();
+        encoder.encode(&metric_families, &mut buffer).unwrap();
+
+        Response::new(buffer.into())
+    }
+
     async fn handle_push(&self, _req: Request) -> Response {
         lazy_static::lazy_static! {
             static ref LAST_UPDATE: Mutex<Option<Instant>> = Mutex::new(None);
@@ -1590,6 +1609,9 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
         _ => {}
     }
 
+    if req.uri().path() == "/perf/metrics" {
+        return Ok(ctx.handle_metrics(req).await);
+    }
     if req.uri().path() == "/perf/onpush" {
         return Ok(ctx.handle_push(req).await);
     }
