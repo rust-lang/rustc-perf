@@ -246,7 +246,7 @@ input[type="checkbox"] {
             ...bootstrap_names
                 .map(name => name)
                 .map(name => ({name, is_bootstrap: true, fields: to_fields_bootstrap(name)})),
-            ...test_names.map(name => ({name, fields: to_fields(name)})),
+            ...test_names.map(name => ({name, is_bootstrap: false, fields: to_fields(name)})),
         ];
 
         function to_fields_bootstrap(name) {
@@ -335,10 +335,16 @@ input[type="checkbox"] {
         }
 
         fields.sort((a, b) => {
-            if (a.is_bootstrap != b.is_bootstrap) {
-                return 1;
-            } else {
+            if (a.is_bootstrap == b.is_bootstrap){
                 return b.farthest_pct - a.farthest_pct;
+            }
+            else{
+                if (a.is_bootstrap){
+                    return 0;
+                }
+                else{
+                    return 1;
+                }
             }
         });
 
