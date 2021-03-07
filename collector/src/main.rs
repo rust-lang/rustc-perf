@@ -255,7 +255,7 @@ fn bench(
             benchmark.measure(&mut processor, build_kinds, run_kinds, compiler, iterations);
         if let Err(s) = result {
             eprintln!(
-                "collector error: Failed to benchmark '{}', recorded: {}",
+                "collector error: Failed to benchmark '{}', recorded: {:#}",
                 benchmark.name, s
             );
             errors.incr();
