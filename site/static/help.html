@@ -34,7 +34,7 @@
         <ul>
             <li><code>include=&lt;INCLUDE&gt;</code> only runs benchmarks with <code>&lt;INCLUDE&gt;</code> in their title. For example, if you just want to run rustdoc benchmarks, do <code>@bors try @rust-timer queue include=-doc</code>; the <code>-doc</code> matches the <code>-doc</code> appended to rustdoc benchmarks. <code>&lt;INCLUDE&gt;</code> is a comma-separated list of substrings; only one of the items in the list of substrings must match.</li>
             <li><code>exclude=&lt;EXCLUDE&gt;</code> is similar to <code>include=</code>, but instead skips any benchmarks that have one of the items in the list of substrings as a substring of its name.</li>
-            <li><code>runs=&lt;RUNS&gt;</code> configures how many times the benchmark is run. <code>&lt;RUNS&gt;</code> is an integer.</li>
+            <li><code>runs=&lt;RUNS&gt;</code> configures how many times the benchmark is run. <code>&lt;RUNS&gt;</code> is an integer. All benchmarks run at least once by default, but some run more than one time. You can use the <code>runs</code> option to override the default run count and make every benchmark run for <code>&lt;RUNS&gt;</code> times.</li>
         </ul>
         <p><code>@rust-timer</code> has more commands than just <code>@rust-timer queue</code>, but the <code>queue</code> command is the most used.</p>
     <script src="shared.js"></script>
