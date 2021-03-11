@@ -1,0 +1,3 @@
+{
+    "cargo_opts": "--features=stm32f405"
+}

@@ -26,6 +26,7 @@ These are real programs that are important in some way, and worth tracking.
 - **ripgrep**: A line-oriented search tool. A widely-used utility.
 - **serde**: A serialization/deserialization crate. Used by many other
   Rust programs.
+- **stm32f4**: A crate that has many thousands of blanket impl blocks.
 - **style-servo**: Servo's `style` crate. A large crate, and one used by
   Firefox.
 - **syn**: A library for parsing Rust code. An important part of the Rust
