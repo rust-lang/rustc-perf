@@ -30,6 +30,10 @@ jobserver = "0.1.21"
 crossbeam-utils = "0.7"
 snap = "1"
 
+[target.'cfg(windows)'.dependencies]
+miow = "0.3"
+winapi = { version = "0.3", features = ["winerror"] }
+
 [[bin]]
 name = "collector"
 path = "src/main.rs"

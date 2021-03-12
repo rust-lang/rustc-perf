@@ -305,6 +305,14 @@ fn bash_command(tool: OsString, args: Vec<OsString>, redirect: &str) -> Command 
     cmd
 }
 
+#[cfg(windows)]
+fn exec(cmd: &mut Command) {
+    let cmd_d = format!("{:?}", cmd);
+    if let Err(e) = cmd.status() {
+        panic!("failed to execute `{}`: {}", cmd_d, e);
+    }
+}
+
 #[cfg(unix)]
 fn exec(cmd: &mut Command) -> ! {
     use std::os::unix::prelude::*;
