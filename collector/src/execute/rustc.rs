@@ -47,7 +47,19 @@ fn record(
         })
         .status()
         .context("git reset --hard")?;
-    assert!(status.success(), "git reset --hard successful");
+
+    if !status.success() {
+        log::warn!("git reset --hard {} failed - trying default branch", artifact);
+        let status = Command::new("git")
+            .current_dir("rust")
+            .arg("reset")
+            .arg("--hard")
+            .arg("origin/HEAD")
+            .status()
+            .context("git reset --hard")?;
+        assert!(status.success(), "git reset --hard successful");
+    }
+
     let status = Command::new("git")
         .current_dir("rust")
         .arg("clean")
@@ -154,7 +166,20 @@ fn checkout(artifact: &ArtifactId) -> anyhow::Result<()> {
             })
             .status()
             .context("git fetch origin")?;
-        assert!(status.success(), "git fetch successful");
+
+        if !status.success() {
+            log::warn!("git fetch origin {} failed - trying default branch", artifact);
+            let status = Command::new("git")
+                .current_dir("rust")
+                .arg("fetch")
+                .arg("origin")
+                .arg("HEAD")
+                .status()
+                .context("git fetch origin HEAD")?;
+
+            assert!(status.success(), "git fetch successful");
+        }
+
     } else {
         let status = Command::new("git")
             .arg("clone")
