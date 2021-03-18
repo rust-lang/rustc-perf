@@ -1114,15 +1114,25 @@ impl Benchmark {
         self.config.supports_stable
     }
 
+    #[cfg(windows)]
+    fn copy(from: &Path, to: &Path) -> anyhow::Result<()> {
+        robocopy(from, to, &[])
+    }
+
+    #[cfg(unix)]
+    fn copy(from: &Path, to: &Path) -> anyhow::Result<()> {
+        let mut cmd = Command::new("cp");
+        cmd.arg("-pLR").arg(from).arg(to);
+        command_output(&mut cmd)
+    }
+
     fn make_temp_dir(&self, base: &Path) -> anyhow::Result<TempDir> {
         // Appending `.` means we copy just the contents of `base` into
         // `tmp_dir`, rather than `base` itself.
         let mut base_dot = base.to_path_buf();
         base_dot.push(".");
         let tmp_dir = TempDir::new()?;
-        let mut cmd = Command::new("cp");
-        cmd.arg("-pLR").arg(base_dot).arg(tmp_dir.path());
-        command_output(&mut cmd).with_context(|| format!("copying {} to tmp dir", self.name))?;
+        Self::copy(&base_dot, tmp_dir.path()).with_context(|| format!("copying {} to tmp dir", self.name))?;
         Ok(tmp_dir)
     }
 
