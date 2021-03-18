@@ -1,7 +1,7 @@
 use chrono::NaiveDate;
 pub use database::{Commit, PatchName, QueryLabel};
 use serde::Deserialize;
-use std::cmp::PartialOrd;
+use std::{cmp::PartialOrd, ffi::OsStr, path::Path};
 use std::fmt;
 use std::process::{self, Command};
 
@@ -144,7 +144,31 @@ pub fn run_command(cmd: &mut Command) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn command_output(cmd: &mut Command) -> anyhow::Result<process::Output> {
+#[cfg(windows)]
+pub fn robocopy(from: &Path, to: &Path, extra_args: &[&dyn AsRef<OsStr>]) -> anyhow::Result<()> {
+    let mut cmd = Command::new("robocopy");
+    cmd.arg(from).arg(to).arg("/s").arg("/e");
+
+    for arg in extra_args {
+        cmd.arg(arg.as_ref());
+    }
+
+    let output = run_command_with_output(&mut cmd)?;
+
+    if output.status.code() >= Some(8) {
+        // robocopy returns 0-7 on success
+        return Err(anyhow::anyhow!(
+            "expected success, got {}\n\nstderr={}\n\n stdout={}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr),
+            String::from_utf8_lossy(&output.stdout)
+        ));
+    }
+
+    Ok(())
+}
+
+fn run_command_with_output(cmd: &mut Command) -> anyhow::Result<process::Output> {
     log::trace!("running: {:?}", cmd);
     let mut child = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
 
@@ -174,19 +198,25 @@ pub fn command_output(cmd: &mut Command) -> anyhow::Result<process::Output> {
     )?;
 
     let status = child.wait()?;
-    if !status.success() {
-        return Err(anyhow::anyhow!(
-            "expected success, got {}\n\nstderr={}\n\n stdout={}",
-            status,
-            String::from_utf8_lossy(&stderr),
-            String::from_utf8_lossy(&stdout)
-        ));
-    }
 
-    let output = process::Output {
+    Ok(process::Output {
         status,
         stdout: stdout,
         stderr: stderr,
-    };
+    })
+}
+
+pub fn command_output(cmd: &mut Command) -> anyhow::Result<process::Output> {
+    let output = run_command_with_output(cmd)?;
+
+    if !output.status.success() {
+        return Err(anyhow::anyhow!(
+            "expected success, got {}\n\nstderr={}\n\n stdout={}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr),
+            String::from_utf8_lossy(&output.stdout)
+        )); 
+    }
+
     Ok(output)
 }

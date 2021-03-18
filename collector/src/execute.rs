@@ -2,7 +2,7 @@
 
 use crate::{BuildKind, Compiler, RunKind};
 use anyhow::{anyhow, bail, Context};
-use collector::command_output;
+use collector::{command_output, robocopy};
 use database::{PatchName, QueryLabel};
 use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt;
@@ -23,6 +23,20 @@ use tokio::runtime::Runtime;
 
 mod rustc;
 
+#[cfg(windows)]
+fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> anyhow::Result<()> {
+    let (from, to) = (from.as_ref(), to.as_ref());
+
+    let ctx = format!("renaming file {:?} to {:?}", from, to);
+
+    if fs::metadata(from)?.is_file() {
+        return Ok(fs::rename(from, to).with_context(|| ctx.clone())?);
+    }
+
+    robocopy(from, to, &[&"/move"]).with_context(|| ctx.clone())
+}
+
+#[cfg(unix)]
 fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> anyhow::Result<()> {
     let (from, to) = (from.as_ref(), to.as_ref());
     if fs::rename(from, to).is_err() {
