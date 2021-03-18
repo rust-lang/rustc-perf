@@ -45,9 +45,12 @@ fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> anyhow::Result<()> 
 }
 
 fn touch(root: &Path, path: &Path) -> anyhow::Result<()> {
-    let mut cmd = Command::new("touch");
-    cmd.current_dir(root).arg(path);
-    command_output(&mut cmd).with_context(|| format!("touching {:?} in {:?}", path, root))?;
+    let joined = root.join(path);
+
+    log::info!("touching file {:?}", joined);
+
+    filetime::set_file_mtime(&joined, filetime::FileTime::now()).with_context(|| format!("touching file {:?}", joined))?;
+
     Ok(())
 }
 
