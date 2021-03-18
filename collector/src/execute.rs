@@ -880,11 +880,13 @@ impl<'a> Processor for ProfileProcessor<'a> {
                         rename(path, filepath(&zsp_dir, "Zsp.string_data"))?;
                     } else if filename_str.ends_with(".string_index") {
                         rename(path, filepath(&zsp_dir, "Zsp.string_index"))?;
+                    } else if filename_str.ends_with(".mm_profdata") {
+                        rename(path, filepath(&zsp_dir, "Zsp.mm_profdata"))?;
                     } else {
                         panic!("unexpected file {:?}", path);
                     }
                 }
-                assert_eq!(num_files, 3);
+                assert!(num_files == 3 || num_files == 1);
 
                 // Run `summarize`.
                 let mut summarize_cmd = Command::new("summarize");
