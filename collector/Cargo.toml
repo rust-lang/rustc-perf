@@ -30,6 +30,7 @@ jobserver = "0.1.21"
 crossbeam-utils = "0.7"
 snap = "1"
 filetime = "0.2.14"
+walkdir = "2"
 
 [target.'cfg(windows)'.dependencies]
 miow = "0.3"
