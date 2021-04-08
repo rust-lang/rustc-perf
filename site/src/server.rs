@@ -1462,6 +1462,7 @@ impl Server {
     async fn handle_metrics(&self, _req: Request) -> Response {
         use prometheus::Encoder;
         let data: Arc<InputData> = self.data.read().as_ref().unwrap().clone();
+        let idx = data.index.load();
 
         let mut buffer = Vec::new();
         let r = prometheus::Registry::new();
@@ -1469,8 +1470,29 @@ impl Server {
         let queue_length =
             prometheus::IntGauge::new("rustc_perf_queue_length", "queue length").unwrap();
         queue_length.set(data.missing_commits().await.len() as i64);
-
         r.register(Box::new(queue_length)).unwrap();
+
+        if let Some(last_commit) = idx.commits().last().cloned() {
+            let conn = data.conn().await;
+            let steps = conn.in_progress_steps(&ArtifactId::from(last_commit)).await;
+            let g = prometheus::IntGaugeVec::new(
+                prometheus::core::Opts {
+                    namespace: format!("rustc_perf"),
+                    subsystem: String::new(),
+                    name: String::from("step_duration_seconds"),
+                    help: String::from("step duration"),
+                    const_labels: HashMap::new(),
+                    variable_labels: vec![],
+                },
+                &["step"],
+            )
+            .unwrap();
+            for step in steps {
+                g.with_label_values(&[&step.name])
+                    .set(step.expected.as_secs() as i64);
+            }
+            r.register(Box::new(g)).unwrap();
+        }
 
         let encoder = prometheus::TextEncoder::new();
         let metric_families = r.gather();
