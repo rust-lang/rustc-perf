@@ -13,6 +13,8 @@ trap 'kill $PING_LOOP_PID' ERR 1 2 3 6
 RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
     bindir=`cargo run -p collector --bin collector install_next`
 
+cargo build -p collector --bin rustc-fake
+
 #----------------------------------------------------------------------------
 # Test the profilers
 #----------------------------------------------------------------------------

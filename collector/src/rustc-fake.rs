@@ -145,8 +145,11 @@ fn main() {
 
             "time-passes" => {
                 args.insert(0, "-Ztime-passes".into());
-                let mut cmd = bash_command(tool, args, "> Ztp");
 
+                let mut cmd = Command::new(&tool);
+                cmd.args(args).stderr(std::process::Stdio::from(
+                    std::fs::File::create("Ztp").unwrap(),
+                ));
                 assert!(cmd.status().expect("failed to spawn").success());
             }
 
