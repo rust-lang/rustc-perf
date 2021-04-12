@@ -37,7 +37,7 @@ fn record(
     aid: database::ArtifactIdNumber,
 ) -> anyhow::Result<()> {
     let checkout = Path::new("rust");
-    let status = Command::new("git")
+    let mut status = Command::new("git")
         .current_dir("rust")
         .arg("reset")
         .arg("--hard")
@@ -48,17 +48,17 @@ fn record(
         .status()
         .context("git reset --hard")?;
 
-    if !status.success() {
+    if !status.success() && matches!(artifact, ArtifactId::Artifact(_)) {
         log::warn!("git reset --hard {} failed - trying default branch", artifact);
-        let status = Command::new("git")
+        status = Command::new("git")
             .current_dir("rust")
             .arg("reset")
             .arg("--hard")
             .arg("origin/HEAD")
             .status()
             .context("git reset --hard")?;
-        assert!(status.success(), "git reset --hard successful");
     }
+    assert!(status.success(), "git reset --hard successful");
 
     let status = Command::new("git")
         .current_dir("rust")
@@ -156,7 +156,7 @@ fn record(
 
 fn checkout(artifact: &ArtifactId) -> anyhow::Result<()> {
     if Path::new("rust").exists() {
-        let status = Command::new("git")
+        let mut status = Command::new("git")
             .current_dir("rust")
             .arg("fetch")
             .arg("origin")
@@ -167,18 +167,17 @@ fn checkout(artifact: &ArtifactId) -> anyhow::Result<()> {
             .status()
             .context("git fetch origin")?;
 
-        if !status.success() {
+        if !status.success() && matches!(artifact, ArtifactId::Artifact(_)) {
             log::warn!("git fetch origin {} failed - trying default branch", artifact);
-            let status = Command::new("git")
+            status = Command::new("git")
                 .current_dir("rust")
                 .arg("fetch")
                 .arg("origin")
                 .arg("HEAD")
                 .status()
                 .context("git fetch origin HEAD")?;
-
-            assert!(status.success(), "git fetch successful");
         }
+        assert!(status.success(), "git fetch successful");
 
     } else {
         let status = Command::new("git")
