@@ -61,7 +61,7 @@ results = {
 
 
 def get_username():
-    usernames = {'mackendy': 'ecstaticmorse', 'joshua': 'jyn514'}
+    usernames = {'mackendy': 'ecstaticmorse', 'joshua': 'jyn514', 'mark': 'simulacrum'}
 
     home_dir = Path.home().name
 
@@ -123,7 +123,12 @@ class BenchmarkComparison:
         return relative_change(*self.results)
 
     def is_significant(self):
-        return abs(self.log_change()) > self.__class__.SIGNIFICANCE_THRESHOLD
+        if self.bench_name.startswith("coercions-debug") and self.cache_state == "incr-patched: println":
+            # This particular (benchmark, cache) combination frequently varies
+            # by up to 2% up and down.
+            return abs(self.relative_change()) > 2
+        else:
+            return abs(self.log_change()) > self.__class__.SIGNIFICANCE_THRESHOLD
 
     def is_increase(self):
         return self.results[1] > self.results[0]
