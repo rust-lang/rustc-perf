@@ -1546,14 +1546,14 @@ impl Patch {
         }
     }
 
-    pub fn apply(&self, dir: &Path) -> Result<(), String> {
+    pub fn apply(&self, dir: &Path) -> anyhow::Result<()> {
         log::debug!("applying {} to {:?}", self.name, dir);
-        let mut cmd = Command::new("patch");
-        cmd.current_dir(dir).args(&["-Np1", "-i"]).arg(&*self.path);
-        cmd.stdout(Stdio::null());
-        if cmd.status().map(|s| !s.success()).unwrap_or(false) {
-            return Err(format!("could not execute {:?}.", cmd));
-        }
+
+        let mut cmd = Command::new("git");
+        cmd.current_dir(dir).args(&["apply"]).args(&["-Np1"]).arg(&*self.path);
+
+        command_output(&mut cmd)?;
+
         Ok(())
     }
 }
