@@ -2,7 +2,7 @@
 
 use crate::{BuildKind, Compiler, RunKind};
 use anyhow::{anyhow, bail, Context};
-use collector::{command_output, robocopy};
+use collector::command_output;
 use database::{PatchName, QueryLabel};
 use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt;
@@ -33,7 +33,7 @@ fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> anyhow::Result<()> 
         return Ok(fs::rename(from, to).with_context(|| ctx.clone())?);
     }
 
-    robocopy(from, to, &[&"/move"]).with_context(|| ctx.clone())
+    collector::robocopy(from, to, &[&"/move"]).with_context(|| ctx.clone())
 }
 
 #[cfg(unix)]
@@ -1135,14 +1135,15 @@ impl Benchmark {
 
     #[cfg(windows)]
     fn copy(from: &Path, to: &Path) -> anyhow::Result<()> {
-        robocopy(from, to, &[])
+        collector::robocopy(from, to, &[])
     }
 
     #[cfg(unix)]
     fn copy(from: &Path, to: &Path) -> anyhow::Result<()> {
         let mut cmd = Command::new("cp");
         cmd.arg("-pLR").arg(from).arg(to);
-        command_output(&mut cmd)
+        command_output(&mut cmd)?;
+        Ok(())
     }
 
     fn make_temp_dir(&self, base: &Path) -> anyhow::Result<TempDir> {

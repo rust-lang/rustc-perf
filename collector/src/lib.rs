@@ -1,7 +1,7 @@
 use chrono::NaiveDate;
 pub use database::{Commit, PatchName, QueryLabel};
 use serde::Deserialize;
-use std::{cmp::PartialOrd, ffi::OsStr, path::Path};
+use std::cmp::PartialOrd;
 use std::fmt;
 use std::process::{self, Command};
 
@@ -145,7 +145,11 @@ pub fn run_command(cmd: &mut Command) -> anyhow::Result<()> {
 }
 
 #[cfg(windows)]
-pub fn robocopy(from: &Path, to: &Path, extra_args: &[&dyn AsRef<OsStr>]) -> anyhow::Result<()> {
+pub fn robocopy(
+    from: &std::path::Path,
+    to: &std::path::Path,
+    extra_args: &[&dyn AsRef<std::ffi::OsStr>]
+) -> anyhow::Result<()> {
     let mut cmd = Command::new("robocopy");
     cmd.arg(from).arg(to).arg("/s").arg("/e");
 
