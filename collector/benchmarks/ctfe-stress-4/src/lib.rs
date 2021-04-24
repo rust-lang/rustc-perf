@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-#![feature(const_fn, const_eval_limit)]
+#![feature(const_fn, const_fn_trait_bound, const_fn_unsize, const_eval_limit)]
 #![const_eval_limit = "10000000"]
 use std::mem::MaybeUninit;
 
