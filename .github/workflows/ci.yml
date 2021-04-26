@@ -33,6 +33,24 @@ jobs:
           aws_secret_access_key: "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
         if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/deploy'
 
+  test_on_windows:
+    name: Test on Windows
+    runs-on: windows-latest
+    steps:
+      - name: Checkout the source code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 1
+
+      - name: Install latest beta
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: beta
+          override: true
+
+      - name: cargo check
+        run: cargo check
+
   test_benchmarks:
     strategy:
       matrix:
