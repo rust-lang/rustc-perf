@@ -201,7 +201,6 @@
 
 #![feature(
     repr_simd,
-    const_fn,
     platform_intrinsics,
     stdsimd,
     aarch64_target_feature,
