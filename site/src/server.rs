@@ -1467,10 +1467,17 @@ impl Server {
         let mut buffer = Vec::new();
         let r = prometheus::Registry::new();
 
+        let missing_commits = data.missing_commits().await;
         let queue_length =
             prometheus::IntGauge::new("rustc_perf_queue_length", "queue length").unwrap();
-        queue_length.set(data.missing_commits().await.len() as i64);
+        queue_length.set(missing_commits.len() as i64);
         r.register(Box::new(queue_length)).unwrap();
+
+        let queue_try_commits =
+            prometheus::IntGauge::new("rustc_perf_queue_try_commits", "queued try commits")
+                .unwrap();
+        queue_try_commits.set(missing_commits.iter().filter(|(c, _)| c.is_try()).count() as i64);
+        r.register(Box::new(queue_try_commits)).unwrap();
 
         if let Some(last_commit) = idx.commits().last().cloned() {
             let conn = data.conn().await;
