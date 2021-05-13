@@ -429,7 +429,7 @@ impl PostgresConnection {
                         coalesce(end_time, statement_timestamp()) - start_time)::int4,
                     extract(
                         epoch from interval '0 seconds'::interval +
-                        (select end_time - start_time
+                        (select cp.end_time - cp.start_time
                         from collector_progress as cp
                             where
                                 cp.aid != $1
