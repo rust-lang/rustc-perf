@@ -43,7 +43,7 @@ These are real programs that are known to stress the compiler in interesting
 ways.
 
 - **diesel**: A type save SQL query builder. Utilizes the type system to
-  ensure a lot of invariants. Stresses anything related to resolving 
+  ensure a lot of invariants. Stresses anything related to resolving
   trait bounds, by having a lot of trait impls for a large number of different
   types.
 - **encoding**: Character encoding support. Contains some large tables.
@@ -52,8 +52,6 @@ ways.
   compiler in certain ways.
 - **keccak**: A cryptography algorithm. Contains a very high number of locals
   and basic blocks.
-- **packed-simd**: Portable packed SIMD vectors. Exercises SIMD features
-  heavily, and uses a compiler plugin.
 - **ucd**: A Unicode crate. Contains large statics that
   [stress](https://github.com/rust-lang/rust/issues/53643) the borrow checker's
   implementation of NLL.
@@ -118,4 +116,4 @@ programs.
   behavior](https://github.com/rust-lang/rust/issues/65510) (in the number of
   associated type bounds).
 - **externs**: A large amount of extern functions has caused [slowdowns in the past](https://github.com/rust-lang/rust/pull/78448).
-- **derive**: A large amount of simple structs with a `#[derive]` attribute for common built-in traits such as Copy and Debug. 
+- **derive**: A large amount of simple structs with a `#[derive]` attribute for common built-in traits such as Copy and Debug.
