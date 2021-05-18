@@ -18,4 +18,4 @@ index 3fb7c5f..775773b 100644
 +    "",
  ];
  
- fn main() { }
+ fn main() { println!("test"); }
