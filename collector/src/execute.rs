@@ -59,7 +59,7 @@ fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> anyhow::Result<()> 
 }
 
 fn touch(path: &Path) -> anyhow::Result<()> {
-    log::info!("touching file {:?}", path);
+    log::trace!("touching file {:?}", path);
 
     filetime::set_file_mtime(path, filetime::FileTime::now()).with_context(|| format!("touching file {:?}", path))?;
 
