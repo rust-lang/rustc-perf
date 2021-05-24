@@ -8,6 +8,7 @@ usage.
 - ecstatic-morse
 - Mark-Simulacrum
 - rylev
+- pnkfelix
 
 Monday evening in North America is a good time to do it because This Week in Rust (see below) is usually
 published on Tuesday, US time, and so it means the PR to include the triage
@@ -20,10 +21,20 @@ at.
 First, check the previous triage log entry. Look for responses in PRs, and
 follow up on any promised actions. (i.e. nag people!)
 
+While looking at the previous triage log entry, take note of the final commit in
+the revision range from that triage period. The noted final commit `$PARENT` will
+be the parent commit that we use for the current round of triage.
+
 Start the new triage log entry in a new file using a `YYYY-MM-DD.md`-form name.
 Follow the format of the previous entries.
 
-View the [perf website](https://perf.rust-lang.org).
+Use the provided script to automate building the file:
+
+```
+% ./weekly-report.py PARENT > YYYY-MM-DD.md
+```
+
+You can also do it manually, starting by viewing the [perf website](https://perf.rust-lang.org).
 
 - Determine the revision range. The start revision corresponds to the end
   revision from the previous log entry. The end revision is the latest measured
