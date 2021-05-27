@@ -15,12 +15,15 @@ use site::load;
 use std::env;
 use std::sync::Arc;
 
+#[cfg(unix)]
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 #[tokio::main]
 async fn main() {
     env_logger::init();
+
+    #[cfg(unix)]
     let _ = jemalloc_ctl::background_thread::write(true);
 
     let data: Arc<RwLock<Option<Arc<load::InputData>>>> = Arc::new(RwLock::new(None));
