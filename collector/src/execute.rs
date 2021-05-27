@@ -1550,7 +1550,7 @@ impl Patch {
         log::debug!("applying {} to {:?}", self.name, dir);
 
         let mut cmd = Command::new("git");
-        cmd.current_dir(dir).args(&["apply"]).args(&["-Np1"]).arg(&*self.path);
+        cmd.current_dir(dir).args(&["apply"]).arg(&*self.path);
 
         command_output(&mut cmd)?;
 
