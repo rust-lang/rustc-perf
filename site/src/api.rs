@@ -380,3 +380,19 @@ pub mod github {
         pub body: String,
     }
 }
+
+pub mod triage {
+    use collector::Bound;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct Request {
+        pub start: Bound,
+        pub end: Option<Bound>,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct Response {
+        pub report: String,
+    }
+}

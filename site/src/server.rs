@@ -40,7 +40,7 @@ type Response = http::Response<hyper::Body>;
 
 pub use crate::api::{
     self, bootstrap, dashboard, data, days, github, graph, info, self_profile, self_profile_raw,
-    status, CommitResponse, DateData, ServerResult, StyledBenchmarkName,
+    status, triage, CommitResponse, DateData, ServerResult, StyledBenchmarkName,
 };
 use crate::db::{self, Cache, Crate, Profile};
 use crate::interpolate::Interpolated;
@@ -352,6 +352,155 @@ pub async fn handle_next_commit(data: Arc<InputData>) -> collector::api::next_co
     collector::api::next_commit::Response { commit }
 }
 
+async fn handle_triage(
+    body: triage::Request,
+    data: &InputData,
+) -> ServerResult<api::triage::Response> {
+    let start = body.start;
+    let end = body.end;
+    // Compare against self to get next
+    let (comparison, master_commits) = futures::join!(
+        compare(
+            start.clone(),
+            start.clone(),
+            "instructions:u".to_owned(),
+            data
+        ),
+        rustc_artifacts::master_commits(),
+    );
+    let comparison = comparison?;
+    let master_commits = master_commits.map_err(|e| e.to_string())?;
+    let mut after = Bound::Commit(comparison.next(&master_commits).unwrap()); // TODO: handle no next commit
+
+    let mut summary = HashMap::new();
+    let mut before = start.clone();
+
+    loop {
+        let comparison = compare(before, after.clone(), "instructions:u".to_owned(), data).await?;
+        before = after;
+
+        // handle results of comparison
+        handle_comparison(&comparison, &mut summary).await;
+
+        match comparison.next(&master_commits).map(Bound::Commit) {
+            Some(n) if Some(&n) != end.as_ref() => {
+                after = n;
+            }
+            _ => break,
+        }
+    }
+    let end = end.unwrap_or(before);
+
+    Ok(api::triage::Response {
+        report: generate_report(&start, &end, summary),
+    })
+}
+
+fn generate_report(
+    start: &Bound,
+    end: &Bound,
+    mut report: HashMap<Direction, Vec<String>>,
+) -> String {
+    fn fmt_bound(bound: &Bound) -> String {
+        match bound {
+            Bound::Commit(s) => s.to_owned(),
+            Bound::Date(s) => s.format("%Y-%m-%d").to_string(),
+            _ => "???".to_owned(),
+        }
+    }
+    let start = fmt_bound(start);
+    let end = fmt_bound(end);
+    let regressions = report.remove(&Direction::Regression).unwrap_or_default();
+    let improvements = report.remove(&Direction::Improvement).unwrap_or_default();
+    let mixed = report.remove(&Direction::Mixed).unwrap_or_default();
+    let username =
+        home::home_dir().and_then(|s| s.file_name().map(|s| s.to_string_lossy().to_string()));
+    format!(
+        r#####"
+# {date} Triage Log
+
+TODO: Summary
+
+Triage done by **@{username}**.
+Revision range: [{first_commit}..{last_commit}](https://perf.rust-lang.org/?start={first_commit}&end={last_commit}&absolute=false&stat=instructions%3Au)
+
+{num_regressions} Regressions, {num_improvements} Improvements, {num_mixed} Mixed
+??? of them in rollups
+
+#### Regressions
+
+{regressions}
+
+#### Improvements
+
+{improvements}
+
+#### Mixed
+
+{mixed}
+
+#### Nags requiring follow up
+
+TODO: Nags
+
+"#####,
+        date = chrono::Utc::today().format("%Y-%m-%d"),
+        username = username.as_deref().unwrap_or("???"),
+        first_commit = start,
+        last_commit = end,
+        num_regressions = regressions.len(),
+        num_improvements = improvements.len(),
+        num_mixed = mixed.len(),
+        regressions = regressions.join("\n\n"),
+        improvements = improvements.join("\n\n"),
+        mixed = mixed.join("\n\n"),
+    )
+}
+
+async fn handle_comparison(comparison: &Comparison, report: &mut HashMap<Direction, Vec<String>>) {
+    let benchmarks = comparison.get_benchmarks();
+    // Skip empty commits, sometimes happens if there's a compiler bug or so.
+    if benchmarks.len() == 0 {
+        return;
+    }
+
+    let lo = benchmarks
+        .iter()
+        // TODO: what to do when partial_cmp returns `None`?
+        .min_by(|b1, b2| b1.log_change().partial_cmp(&b2.log_change()).unwrap())
+        .filter(|c| c.is_significant() && !c.is_increase());
+    let hi = benchmarks
+        .iter()
+        // TODO: what to do when partial_cmp returns `None`?
+        .max_by(|b1, b2| b1.log_change().partial_cmp(&b2.log_change()).unwrap())
+        .filter(|c| c.is_significant() && c.is_increase());
+
+    let direction = match (lo, hi) {
+        (None, None) => return,
+        (Some(a), None) => a.direction(),
+        (None, Some(b)) => b.direction(),
+        (Some(a), Some(b)) if a.is_increase() == b.is_increase() => a.direction(),
+        _ => Direction::Mixed,
+    };
+
+    let entry = report.entry(direction).or_default();
+    let mut changes = Vec::new();
+    if let Some(hi) = hi {
+        changes.push(hi);
+    }
+    if let Some(lo) = lo {
+        changes.push(lo);
+    }
+    changes.sort_by(|a, b| {
+        a.log_change()
+            .abs()
+            .partial_cmp(&b.log_change().abs())
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    entry.push(comparison.write_summary(&changes[..]).await)
+}
+
 struct CommitIdxCache {
     commit_idx: RefCell<HashMap<String, u16>>,
     commits: RefCell<Vec<String>>,
@@ -630,65 +779,22 @@ pub async fn handle_graph(
 }
 
 pub async fn handle_compare(body: days::Request, data: &InputData) -> ServerResult<days::Response> {
-    log::info!("handle_compare({:?})", body);
-    let a = data.data_for(true, body.start.clone()).ok_or(format!(
-        "could not find start commit for bound {:?}",
-        body.start
-    ))?;
-    let b = data.data_for(false, body.end.clone()).ok_or(format!(
-        "could not find end commit for bound {:?}",
-        body.end
-    ))?;
-    let cids = Arc::new(vec![a.clone().into(), b.clone().into()]);
-
-    let query = selector::Query::new()
-        .set::<String>(Tag::Crate, selector::Selector::All)
-        .set::<String>(Tag::Cache, selector::Selector::All)
-        .set::<String>(Tag::Profile, selector::Selector::All)
-        .set(
-            Tag::ProcessStatistic,
-            selector::Selector::One(body.stat.clone()),
-        );
-
-    let (responses, commits) = futures::join!(
-        data.query::<Option<f64>>(query, cids),
+    let (comparison, commits) = futures::join!(
+        compare(body.start, body.end, body.stat, data),
         rustc_artifacts::master_commits(),
     );
+    let comparison = comparison?;
     let commits = commits.map_err(|e| e.to_string())?;
-    let mut responses = responses?;
 
     let conn = data.conn().await;
-    let prev = match &a {
-        ArtifactId::Commit(a) => commits
-            .iter()
-            .find(|c| c.sha == a.sha)
-            .map(|c| c.parent_sha.clone()),
-        ArtifactId::Artifact(_) => None,
-    };
-    let is_contiguous = match (&a, &b) {
-        (ArtifactId::Commit(a), ArtifactId::Commit(b)) => {
-            if let Some(b) = commits.iter().find(|c| c.sha == b.sha) {
-                b.parent_sha == a.sha
-            } else {
-                conn.parent_of(&b.sha).await.map_or(false, |p| p == a.sha)
-            }
-        }
-        _ => false,
-    };
-    let next = match &b {
-        ArtifactId::Commit(b) => commits
-            .iter()
-            .find(|c| c.parent_sha == b.sha)
-            .map(|c| c.sha.clone()),
-        ArtifactId::Artifact(_) => None,
-    };
+    let prev = comparison.prev(&commits);
+    let next = comparison.next(&commits);
+    let is_contiguous = comparison.is_contiguous(&*conn, &commits).await;
 
-    let a = DateData::consume_one(&*conn, a, &mut responses).await;
-    let b = DateData::consume_one(&*conn, b, &mut responses).await;
     Ok(days::Response {
         prev,
-        a,
-        b,
+        a: comparison.a,
+        b: comparison.b,
         next,
         is_contiguous,
     })
@@ -765,6 +871,266 @@ impl DateData {
             data,
             bootstrap,
         }
+    }
+}
+
+// A comparison of two artifacts
+struct Comparison {
+    a_id: ArtifactId,
+    a: DateData,
+    b_id: ArtifactId,
+    b: DateData,
+}
+
+impl Comparison {
+    /// Gets the previous commit before `a`
+    fn prev(&self, master_commits: &[rustc_artifacts::Commit]) -> Option<String> {
+        match &self.a_id {
+            ArtifactId::Commit(a) => master_commits
+                .iter()
+                .find(|c| c.sha == a.sha)
+                .map(|c| c.parent_sha.clone()),
+            ArtifactId::Artifact(_) => None,
+        }
+    }
+
+    /// Determines if `a` and `b` are contiguous
+    async fn is_contiguous(
+        &self,
+        conn: &dyn database::Connection,
+        master_commits: &[rustc_artifacts::Commit],
+    ) -> bool {
+        match (&self.a_id, &self.b_id) {
+            (ArtifactId::Commit(a), ArtifactId::Commit(b)) => {
+                if let Some(b) = master_commits.iter().find(|c| c.sha == b.sha) {
+                    b.parent_sha == a.sha
+                } else {
+                    conn.parent_of(&b.sha).await.map_or(false, |p| p == a.sha)
+                }
+            }
+            _ => false,
+        }
+    }
+
+    /// Gets the sha of the next commit after `b`
+    fn next(&self, master_commits: &[rustc_artifacts::Commit]) -> Option<String> {
+        match &self.b_id {
+            ArtifactId::Commit(b) => master_commits
+                .iter()
+                .find(|c| c.parent_sha == b.sha)
+                .map(|c| c.sha.clone()),
+            ArtifactId::Artifact(_) => None,
+        }
+    }
+
+    fn get_benchmarks<'a>(&'a self) -> Vec<BenchmarkComparison<'a>> {
+        let mut result = Vec::new();
+        for (bench_name, a) in self.a.data.iter() {
+            if bench_name.ends_with("-doc") {
+                continue;
+            }
+            if let Some(b) = self.b.data.get(bench_name) {
+                for (cache_state, a) in a.iter() {
+                    if let Some(b) = b.iter().find(|(cs, _)| cs == cache_state).map(|(_, b)| b) {
+                        result.push(BenchmarkComparison {
+                            bench_name,
+                            cache_state,
+                            results: (a.clone(), b.clone()),
+                        })
+                    }
+                }
+            }
+        }
+
+        result
+    }
+
+    async fn write_summary(&self, changes: &[&BenchmarkComparison<'_>]) -> String {
+        use std::fmt::Write;
+        // TODO: what to do when `pr` is `None`?
+        let pr = self.b.pr.unwrap();
+        let title = gh_pr_title(pr).await;
+        let mut result = format!(
+            "{} [#{}](https://github.com/rust-lang/rust/issues/{})",
+            title, pr, pr
+        );
+        let start = &self.a.commit;
+        let end = &self.b.commit;
+        let link = &compare_link(start, end);
+
+        for change in changes {
+            write!(result, "\n- ").unwrap();
+            change.summary_line(&mut result, link)
+        }
+        result
+    }
+}
+
+fn compare_link(start: &str, end: &str) -> String {
+    format!(
+        "https://perf.rust-lang.org/compare.html?start={}&end={}&stat=instructions:u",
+        start, end
+    )
+}
+
+async fn gh_pr_title(pr: u32) -> String {
+    let url = format!("https://api.github.com/repos/rust-lang/rust/pulls/{}", pr);
+    let client = reqwest::Client::new();
+    let mut request = client.get(&url).header("Content-Type", "application/json");
+
+    if let Some(token) = std::env::var("GITHUB_TOKEN").ok() {
+        request = request.header("Authorization", token);
+    }
+
+    async fn send(request: reqwest::RequestBuilder) -> Result<String, Box<dyn std::error::Error>> {
+        Ok(request
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<serde_json::Value>()
+            .await?
+            .get("title")
+            .ok_or_else(|| "JSON was malformed".to_owned())?
+            .as_str()
+            .ok_or_else(|| "JSON was malformed".to_owned())?
+            .to_owned())
+    }
+    match send(request).await {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("Error fetching url: {}", e);
+            String::from("<UNKNOWN>")
+        }
+    }
+}
+
+async fn compare(
+    start: Bound,
+    end: Bound,
+    stat: String,
+    data: &InputData,
+) -> ServerResult<Comparison> {
+    let a = data
+        .data_for(true, start.clone())
+        .ok_or(format!("could not find start commit for bound {:?}", start))?;
+    let b = data
+        .data_for(false, end.clone())
+        .ok_or(format!("could not find end commit for bound {:?}", end))?;
+    let cids = Arc::new(vec![a.clone().into(), b.clone().into()]);
+
+    let query = selector::Query::new()
+        .set::<String>(Tag::Crate, selector::Selector::All)
+        .set::<String>(Tag::Cache, selector::Selector::All)
+        .set::<String>(Tag::Profile, selector::Selector::All)
+        .set(Tag::ProcessStatistic, selector::Selector::One(stat.clone()));
+
+    let responses = data.query::<Option<f64>>(query, cids).await;
+    let mut responses = responses?;
+
+    let conn = data.conn().await;
+
+    Ok(Comparison {
+        a: DateData::consume_one(&*conn, a.clone(), &mut responses).await,
+        a_id: a,
+        b: DateData::consume_one(&*conn, b.clone(), &mut responses).await,
+        b_id: b,
+    })
+}
+
+// A single benchmark comparison based on both benchmark and cache state
+struct BenchmarkComparison<'a> {
+    bench_name: &'a str,
+    cache_state: &'a str,
+    results: (f64, f64),
+}
+
+const SIGNIFICANCE_THRESHOLD: f64 = 0.01;
+impl BenchmarkComparison<'_> {
+    fn log_change(&self) -> f64 {
+        let (a, b) = self.results;
+        (a / b).ln()
+    }
+
+    fn is_increase(&self) -> bool {
+        let (a, b) = self.results;
+        b > a
+    }
+
+    fn is_significant(&self) -> bool {
+        // This particular (benchmark, cache) combination frequently varies
+        if self.bench_name.starts_with("coercions-debug")
+            && self.cache_state == "incr-patched: println"
+        {
+            self.relative_change().abs() > 2.0
+        } else {
+            self.log_change() > SIGNIFICANCE_THRESHOLD
+        }
+        //     # by up to 2% up and down.
+        //     return abs(self.relative_change()) > 2
+        // else:
+        //     return abs(self.log_change()) > self.__class__.SIGNIFICANCE_THRESHOLD
+    }
+
+    fn relative_change(&self) -> f64 {
+        let (a, b) = self.results;
+        b - a / a
+    }
+
+    fn direction(&self) -> Direction {
+        if self.log_change() > 0.0 {
+            Direction::Regression
+        } else {
+            Direction::Improvement
+        }
+    }
+
+    fn summary_line(&self, summary: &mut String, link: &str) {
+        use std::fmt::Write;
+        let magnitude = self.log_change().abs();
+        let size = if magnitude > 0.10 {
+            "Very large"
+        } else if magnitude > 0.05 {
+            "Large"
+        } else if magnitude > 0.01 {
+            "Moderate"
+        } else if magnitude > 0.005 {
+            "Small"
+        } else {
+            "Very small"
+        };
+
+        let percent = self.relative_change() * 100.0;
+        writeln!(
+            summary,
+            "{} {} in [instruction counts]({})",
+            size,
+            self.direction(),
+            link
+        )
+        .unwrap();
+        writeln!(
+            summary,
+            " (up to {}% on `{}` builds of {})",
+            percent, self.cache_state, self.bench_name
+        )
+        .unwrap();
+    }
+}
+
+#[derive(PartialEq, Eq, Hash)]
+enum Direction {
+    Improvement,
+    Regression,
+    Mixed,
+}
+impl std::fmt::Display for Direction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let description = match self {
+            Direction::Improvement => "improvement",
+            Direction::Regression => "regression",
+            Direction::Mixed => "mixed",
+        };
+        write!(f, "{}", description)
     }
 }
 
@@ -1696,6 +2062,10 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
     if p == "/perf/graph" {
         Ok(to_response(
             handle_graph(body!(parse_body(&body)), &data).await,
+        ))
+    } else if p == "/perf/triage" {
+        Ok(to_response(
+            handle_triage(body!(parse_body(&body)), &data).await,
         ))
     } else if p == "/perf/get" {
         Ok(to_response(
