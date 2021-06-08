@@ -472,12 +472,12 @@ async fn handle_comparison(comparison: &Comparison, report: &mut HashMap<Directi
     let lo = benchmarks
         .iter()
         // TODO: what to do when partial_cmp returns `None`?
-        .min_by(|b1, b2| b2.log_change().partial_cmp(&b1.log_change()).unwrap())
+        .min_by(|b1, b2| b1.log_change().partial_cmp(&b2.log_change()).unwrap())
         .filter(|c| c.is_significant() && !c.is_increase());
     let hi = benchmarks
         .iter()
         // TODO: what to do when partial_cmp returns `None`?
-        .max_by(|b1, b2| b2.log_change().partial_cmp(&b1.log_change()).unwrap())
+        .max_by(|b1, b2| b1.log_change().partial_cmp(&b2.log_change()).unwrap())
         .filter(|c| c.is_significant() && c.is_increase());
 
     let direction = match (lo, hi) {
@@ -497,9 +497,9 @@ async fn handle_comparison(comparison: &Comparison, report: &mut HashMap<Directi
         changes.push(lo);
     }
     changes.sort_by(|a, b| {
-        a.log_change()
+        b.log_change()
             .abs()
-            .partial_cmp(&b.log_change().abs())
+            .partial_cmp(&a.log_change().abs())
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
@@ -956,7 +956,7 @@ impl Comparison {
         let pr = self.b.pr.unwrap();
         let title = gh_pr_title(pr).await;
         let mut result = format!(
-            "{} [#{}](https://github.com/rust-lang/rust/issues/{})",
+            "{} [#{}](https://github.com/rust-lang/rust/issues/{})\n",
             title, pr, pr
         );
         let start = &self.a.commit;
@@ -964,7 +964,7 @@ impl Comparison {
         let link = &compare_link(start, end);
 
         for change in changes {
-            write!(result, "\n- ").unwrap();
+            write!(result, "- ").unwrap();
             change.summary_line(&mut result, link)
         }
         result
@@ -1057,7 +1057,7 @@ const SIGNIFICANCE_THRESHOLD: f64 = 0.01;
 impl BenchmarkComparison<'_> {
     fn log_change(&self) -> f64 {
         let (a, b) = self.results;
-        (a / b).ln()
+        (b / a).ln()
     }
 
     fn is_increase(&self) -> bool {
@@ -1105,7 +1105,7 @@ impl BenchmarkComparison<'_> {
         };
 
         let percent = self.relative_change() * 100.0;
-        writeln!(
+        write!(
             summary,
             "{} {} in [instruction counts]({})",
             size,
@@ -1115,7 +1115,7 @@ impl BenchmarkComparison<'_> {
         .unwrap();
         writeln!(
             summary,
-            " (up to {}% on `{}` builds of {})",
+            " (up to {:.1}% on `{}` builds of `{}`)",
             percent, self.cache_state, self.bench_name
         )
         .unwrap();
