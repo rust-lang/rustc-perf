@@ -392,7 +392,5 @@ pub mod triage {
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct Response {
-        pub report: String,
-    }
+    pub struct Response(pub String);
 }

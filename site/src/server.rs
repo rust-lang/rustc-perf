@@ -377,23 +377,24 @@ async fn handle_triage(
 
     loop {
         let comparison = compare(before, after.clone(), "instructions:u".to_owned(), data).await?;
-        before = after;
 
         // handle results of comparison
         handle_comparison(&comparison, &mut summary).await;
 
+        // Check that there is a next commit and that the
+        // after commit is not equal to `end`
         match comparison.next(&master_commits).map(Bound::Commit) {
-            Some(n) if Some(&n) != end.as_ref() => {
-                after = n;
+            Some(next) if Some(&after) != end.as_ref() => {
+                before = after;
+                after = next;
             }
             _ => break,
         }
     }
-    let end = end.unwrap_or(before);
+    let end = end.unwrap_or(after);
 
-    Ok(api::triage::Response {
-        report: generate_report(&start, &end, summary),
-    })
+    let report = generate_report(&start, &end, summary);
+    Ok(api::triage::Response(report))
 }
 
 fn generate_report(
@@ -416,8 +417,7 @@ fn generate_report(
     let username =
         home::home_dir().and_then(|s| s.file_name().map(|s| s.to_string_lossy().to_string()));
     format!(
-        r#####"
-# {date} Triage Log
+        r#####"# {date} Triage Log
 
 TODO: Summary
 
@@ -458,6 +458,11 @@ TODO: Nags
 }
 
 async fn handle_comparison(comparison: &Comparison, report: &mut HashMap<Direction, Vec<String>>) {
+    log::info!(
+        "Comparing {} to {}",
+        comparison.b.commit,
+        comparison.a.commit
+    );
     let benchmarks = comparison.get_benchmarks();
     // Skip empty commits, sometimes happens if there's a compiler bug or so.
     if benchmarks.len() == 0 {
@@ -467,12 +472,12 @@ async fn handle_comparison(comparison: &Comparison, report: &mut HashMap<Directi
     let lo = benchmarks
         .iter()
         // TODO: what to do when partial_cmp returns `None`?
-        .min_by(|b1, b2| b1.log_change().partial_cmp(&b2.log_change()).unwrap())
+        .min_by(|b1, b2| b2.log_change().partial_cmp(&b1.log_change()).unwrap())
         .filter(|c| c.is_significant() && !c.is_increase());
     let hi = benchmarks
         .iter()
         // TODO: what to do when partial_cmp returns `None`?
-        .max_by(|b1, b2| b1.log_change().partial_cmp(&b2.log_change()).unwrap())
+        .max_by(|b1, b2| b2.log_change().partial_cmp(&b1.log_change()).unwrap())
         .filter(|c| c.is_significant() && c.is_increase());
 
     let direction = match (lo, hi) {
@@ -976,10 +981,13 @@ fn compare_link(start: &str, end: &str) -> String {
 async fn gh_pr_title(pr: u32) -> String {
     let url = format!("https://api.github.com/repos/rust-lang/rust/pulls/{}", pr);
     let client = reqwest::Client::new();
-    let mut request = client.get(&url).header("Content-Type", "application/json");
+    let mut request = client
+        .get(&url)
+        .header("Content-Type", "application/json")
+        .header("User-Agent", "rustc-pef");
 
     if let Some(token) = std::env::var("GITHUB_TOKEN").ok() {
-        request = request.header("Authorization", token);
+        request = request.header("Authorization", format!("token {}", token));
     }
 
     async fn send(request: reqwest::RequestBuilder) -> Result<String, Box<dyn std::error::Error>> {
@@ -1038,6 +1046,7 @@ async fn compare(
 }
 
 // A single benchmark comparison based on both benchmark and cache state
+#[derive(Debug)]
 struct BenchmarkComparison<'a> {
     bench_name: &'a str,
     cache_state: &'a str,
@@ -1063,17 +1072,13 @@ impl BenchmarkComparison<'_> {
         {
             self.relative_change().abs() > 2.0
         } else {
-            self.log_change() > SIGNIFICANCE_THRESHOLD
+            self.log_change().abs() > SIGNIFICANCE_THRESHOLD
         }
-        //     # by up to 2% up and down.
-        //     return abs(self.relative_change()) > 2
-        // else:
-        //     return abs(self.log_change()) > self.__class__.SIGNIFICANCE_THRESHOLD
     }
 
     fn relative_change(&self) -> f64 {
         let (a, b) = self.results;
-        b - a / a
+        (b - a) / a
     }
 
     fn direction(&self) -> Direction {
@@ -2064,9 +2069,18 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
             handle_graph(body!(parse_body(&body)), &data).await,
         ))
     } else if p == "/perf/triage" {
-        Ok(to_response(
-            handle_triage(body!(parse_body(&body)), &data).await,
-        ))
+        let response = handle_triage(body!(parse_body(&body)), &data).await;
+        match response {
+            Ok(result) => {
+                let response = http::Response::builder().header_typed(ContentType::text());
+                Ok(response.body(hyper::Body::from(result.0)).unwrap())
+            }
+            Err(err) => Ok(http::Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .header_typed(ContentType::text_utf8())
+                .body(hyper::Body::from(err))
+                .unwrap()),
+        }
     } else if p == "/perf/get" {
         Ok(to_response(
             handle_compare(body!(parse_body(&body)), &data).await,
