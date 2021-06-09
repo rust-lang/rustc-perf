@@ -631,11 +631,14 @@ pub async fn post_finished(data: &InputData) {
                 "https://perf.rust-lang.org/compare.html?start={}&end={}",
                 commit.parent_sha, commit.sha
             );
+            let summary = categorize_benchmark(&commit, data).await;
             post_comment(
                 &data.config,
                 commit.pr,
                 format!(
                     "Finished benchmarking try commit ({}): [comparison url]({}).
+
+                    Summary: {}
 
 Benchmarking this pull request likely means that it is \
 perf-sensitive, so we're automatically marking it as not fit \
@@ -649,10 +652,36 @@ regressions or improvements in the roll up.
 
 @bors rollup=never
 @rustbot label: +S-waiting-on-review -S-waiting-on-perf",
-                    commit.sha, comparison_url
+                    commit.sha, comparison_url, summary
                 ),
             )
             .await;
         }
     }
+}
+
+async fn categorize_benchmark(commit: &database::QueuedCommit, data: &InputData) -> String {
+    let comparison = match crate::comparison::compare(
+        collector::Bound::Commit(commit.parent_sha.clone()),
+        collector::Bound::Commit(commit.sha.clone()),
+        "instructions:u".to_owned(),
+        data,
+    )
+    .await
+    {
+        Ok(Some(c)) => c,
+        _ => return String::from("ERROR categorizing benchmark run!"),
+    };
+    let summary = match crate::comparison::ComparisonSummary::summarize_comparison(&comparison) {
+        Some(s) => s,
+        None => return String::from("This benchmark run did not return any significant changes"),
+    };
+
+    let mut result = format!("This change led to significant changes in compiler performance.\n");
+    for change in summary.ordered_changes() {
+        use std::fmt::Write;
+        write!(result, "- ").unwrap();
+        change.summary_line(&mut result, None)
+    }
+    result
 }

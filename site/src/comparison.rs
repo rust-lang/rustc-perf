@@ -25,7 +25,7 @@ pub async fn handle_triage(
     let end = body.end;
     // Compare against self to get next
     let master_commits = collector::master_commits().await?;
-    let comparison = compare(
+    let comparison = compare_given_commits(
         start.clone(),
         start.clone(),
         "instructions:u".to_owned(),
@@ -40,7 +40,7 @@ pub async fn handle_triage(
     let mut before = start.clone();
 
     loop {
-        let comparison = match compare(
+        let comparison = match compare_given_commits(
             before,
             after.clone(),
             "instructions:u".to_owned(),
@@ -87,16 +87,17 @@ pub async fn handle_compare(
     body: api::days::Request,
     data: &InputData,
 ) -> Result<api::days::Response, BoxedError> {
-    let commits = collector::master_commits().await?;
+    let master_commits = collector::master_commits().await?;
     let end = body.end;
-    let comparison = crate::comparison::compare(body.start, end.clone(), body.stat, data, &commits)
-        .await?
-        .ok_or_else(|| format!("could not find end commit for bound {:?}", end))?;
+    let comparison =
+        compare_given_commits(body.start, end.clone(), body.stat, data, &master_commits)
+            .await?
+            .ok_or_else(|| format!("could not find end commit for bound {:?}", end))?;
 
     let conn = data.conn().await;
-    let prev = comparison.prev(&commits);
-    let next = comparison.next(&commits);
-    let is_contiguous = comparison.is_contiguous(&*conn, &commits).await;
+    let prev = comparison.prev(&master_commits);
+    let next = comparison.next(&master_commits);
+    let is_contiguous = comparison.is_contiguous(&*conn, &master_commits).await;
 
     Ok(api::days::Response {
         prev,
@@ -108,7 +109,7 @@ pub async fn handle_compare(
 }
 
 async fn populate_report(comparison: &Comparison, report: &mut HashMap<Direction, Vec<String>>) {
-    if let Some(summary) = summarize_comparison(comparison) {
+    if let Some(summary) = ComparisonSummary::summarize_comparison(comparison) {
         if let Some(direction) = summary.direction() {
             let entry = report.entry(direction).or_default();
 
@@ -117,42 +118,43 @@ async fn populate_report(comparison: &Comparison, report: &mut HashMap<Direction
     }
 }
 
-fn summarize_comparison<'a>(comparison: &'a Comparison) -> Option<ComparisonSummary<'a>> {
-    let mut benchmarks = comparison.get_benchmarks();
-    // Skip empty commits, sometimes happens if there's a compiler bug or so.
-    if benchmarks.len() == 0 {
-        return None;
-    }
-
-    let cmp = |b1: &BenchmarkComparison, b2: &BenchmarkComparison| {
-        b1.log_change()
-            .partial_cmp(&b2.log_change())
-            .unwrap_or(std::cmp::Ordering::Equal)
-    };
-    let lo = benchmarks
-        .iter()
-        .enumerate()
-        .min_by(|&(_, b1), &(_, b2)| cmp(b1, b2))
-        .filter(|(_, c)| c.is_significant() && !c.is_increase())
-        .map(|(i, _)| i);
-    let lo = lo.map(|lo| benchmarks.remove(lo));
-    let hi = benchmarks
-        .iter()
-        .enumerate()
-        .max_by(|&(_, b1), &(_, b2)| cmp(b1, b2))
-        .filter(|(_, c)| c.is_significant() && c.is_increase())
-        .map(|(i, _)| i);
-    let hi = hi.map(|hi| benchmarks.remove(hi));
-
-    Some(ComparisonSummary { hi, lo })
-}
-
-struct ComparisonSummary<'a> {
+pub struct ComparisonSummary<'a> {
     hi: Option<BenchmarkComparison<'a>>,
     lo: Option<BenchmarkComparison<'a>>,
 }
 
 impl ComparisonSummary<'_> {
+    pub fn summarize_comparison<'a>(comparison: &'a Comparison) -> Option<ComparisonSummary<'a>> {
+        let mut benchmarks = comparison.get_benchmarks();
+        // Skip empty commits, sometimes happens if there's a compiler bug or so.
+        if benchmarks.len() == 0 {
+            return None;
+        }
+
+        let cmp = |b1: &BenchmarkComparison, b2: &BenchmarkComparison| {
+            b1.log_change()
+                .partial_cmp(&b2.log_change())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        };
+        let lo = benchmarks
+            .iter()
+            .enumerate()
+            .min_by(|&(_, b1), &(_, b2)| cmp(b1, b2))
+            .filter(|(_, c)| c.is_significant() && !c.is_increase())
+            .map(|(i, _)| i);
+        let lo = lo.map(|lo| benchmarks.remove(lo));
+        let hi = benchmarks
+            .iter()
+            .enumerate()
+            .max_by(|&(_, b1), &(_, b2)| cmp(b1, b2))
+            .filter(|(_, c)| c.is_significant() && c.is_increase())
+            .map(|(i, _)| i);
+        let hi = hi.map(|hi| benchmarks.remove(hi));
+
+        benchmarks.clear();
+
+        Some(ComparisonSummary { hi, lo })
+    }
     /// The direction of the changes
     fn direction(&self) -> Option<Direction> {
         let d = match (&self.hi, &self.lo) {
@@ -166,7 +168,7 @@ impl ComparisonSummary<'_> {
     }
 
     /// The changes ordered by their signficance (most significant first)
-    fn ordered_changes(&self) -> Vec<&BenchmarkComparison<'_>> {
+    pub fn ordered_changes(&self) -> Vec<&BenchmarkComparison<'_>> {
         match (&self.hi, &self.lo) {
             (None, None) => Vec::new(),
             (Some(b), None) => vec![b],
@@ -202,7 +204,7 @@ impl ComparisonSummary<'_> {
 
         for change in self.ordered_changes() {
             write!(result, "- ").unwrap();
-            change.summary_line(&mut result, link)
+            change.summary_line(&mut result, Some(link))
         }
         result
     }
@@ -212,6 +214,17 @@ impl ComparisonSummary<'_> {
 ///
 /// Returns Ok(None) when no data for the end bound is present
 pub async fn compare(
+    start: Bound,
+    end: Bound,
+    stat: String,
+    data: &InputData,
+) -> Result<Option<Comparison>, BoxedError> {
+    let master_commits = collector::master_commits().await?;
+    compare_given_commits(start, end, stat, data, &master_commits).await
+}
+
+/// Compare two bounds on a given stat
+pub async fn compare_given_commits(
     start: Bound,
     end: Bound,
     stat: String,
@@ -404,7 +417,7 @@ impl Comparison {
 
 // A single comparison based on benchmark and cache state
 #[derive(Debug)]
-struct BenchmarkComparison<'a> {
+pub struct BenchmarkComparison<'a> {
     bench_name: &'a str,
     cache_state: &'a str,
     results: (f64, f64),
@@ -446,7 +459,7 @@ impl BenchmarkComparison<'_> {
         }
     }
 
-    fn summary_line(&self, summary: &mut String, link: &str) {
+    pub fn summary_line(&self, summary: &mut String, link: Option<&str>) {
         use std::fmt::Write;
         let magnitude = self.log_change().abs();
         let size = if magnitude > 0.10 {
@@ -467,7 +480,10 @@ impl BenchmarkComparison<'_> {
             "{} {} in [instruction counts]({})",
             size,
             self.direction(),
-            link
+            match link {
+                Some(l) => l,
+                None => "",
+            }
         )
         .unwrap();
         writeln!(
