@@ -14,7 +14,7 @@ use std::fs::{self, File};
 use std::hash;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{self, Command, Stdio};
+use std::process::{self, Command};
 use std::str;
 use std::mem::ManuallyDrop;
 use std::time::Duration;

@@ -1369,7 +1369,10 @@ impl UpdatingStatus {
 
     // Returns previous state
     fn set_updating(&self) -> bool {
-        self.0.compare_and_swap(false, true, AtomicOrdering::SeqCst)
+        match self.0.compare_exchange(false, true, AtomicOrdering::SeqCst, AtomicOrdering::SeqCst) {
+            Ok(b) => b,
+            Err(b) => b
+        }
     }
 
     fn release_on_drop(&self, channel: hyper::body::Sender) -> IsUpdating {
