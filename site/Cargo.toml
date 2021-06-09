@@ -30,7 +30,6 @@ toml = "0.5"
 rust_team_data = { git = "https://github.com/rust-lang/team" }
 parking_lot = "0.11"
 snap = "1"
-rustc-artifacts = { path = "../../rustc-artifacts"}
 itertools = "0.10"
 hashbrown = { version = "0.11", features = ["serde"] }
 arc-swap = "1.3"

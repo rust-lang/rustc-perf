@@ -147,7 +147,7 @@ impl InputData {
     pub async fn missing_commits(&self) -> Vec<(Commit, MissingReason)> {
         let conn = self.conn().await;
         let (master_commits, queued_commits, in_progress_artifacts) = futures::join!(
-            rustc_artifacts::master_commits(),
+            collector::master_commits(),
             conn.queued_commits(),
             conn.in_progress_artifacts()
         );

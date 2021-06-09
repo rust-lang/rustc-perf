@@ -811,7 +811,7 @@ fn main_result() -> anyhow::Result<i32> {
 pub fn get_commit_or_fake_it(sha: &str) -> anyhow::Result<Commit> {
     let rt = tokio::runtime::Runtime::new().unwrap();
     Ok(rt
-        .block_on(rustc_artifacts::master_commits())
+        .block_on(collector::master_commits())
         .map_err(|e| anyhow::anyhow!("{:?}", e))
         .context("getting master commit list")?
         .into_iter()

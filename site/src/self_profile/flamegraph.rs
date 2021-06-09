@@ -7,7 +7,7 @@ pub struct Opt {}
 
 pub fn generate(title: &str, pieces: super::Pieces, _: Opt) -> anyhow::Result<Vec<u8>> {
     let profiling_data =
-        ProfilingData::from_buffers(pieces.string_data, pieces.string_index, pieces.events)
+        ProfilingData::from_buffers(pieces.string_data, pieces.string_index, pieces.events, None)
             .map_err(|e| anyhow::format_err!("{:?}", e))?;
 
     let recorded_stacks = collapse_stacks(&profiling_data)

@@ -67,7 +67,7 @@ async fn main() {
     futures::pin_mut!(fut);
     loop {
         futures::select! {
-            s = server => {
+            _s = server => {
                 eprintln!("Server completed unexpectedly.");
                 return;
             }

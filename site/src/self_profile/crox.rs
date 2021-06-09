@@ -130,7 +130,7 @@ pub fn generate(pieces: super::Pieces, opt: Opt) -> anyhow::Result<Vec<u8>> {
 
     let mut seq = serializer.serialize_seq(None)?;
 
-    let data = ProfilingData::from_buffers(pieces.string_data, pieces.string_index, pieces.events)
+    let data = ProfilingData::from_buffers(pieces.string_data, pieces.string_index, pieces.events, None)
         .map_err(|e| anyhow::format_err!("{:?}", e))?;
 
     let thread_to_collapsed_thread =

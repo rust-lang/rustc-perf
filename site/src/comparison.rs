@@ -24,7 +24,7 @@ pub async fn handle_triage(
     let start = body.start;
     let end = body.end;
     // Compare against self to get next
-    let master_commits = rustc_artifacts::master_commits().await?;
+    let master_commits = collector::master_commits().await?;
     let comparison = compare(
         start.clone(),
         start.clone(),
@@ -76,7 +76,7 @@ pub async fn handle_compare(
     body: api::days::Request,
     data: &InputData,
 ) -> Result<api::days::Response, BoxedError> {
-    let commits = rustc_artifacts::master_commits().await?;
+    let commits = collector::master_commits().await?;
     let comparison =
         crate::comparison::compare(body.start, body.end, body.stat, data, &commits).await?;
 
@@ -201,7 +201,7 @@ pub async fn compare(
     end: Bound,
     stat: String,
     data: &InputData,
-    master_commits: &[rustc_artifacts::Commit],
+    master_commits: &[collector::MasterCommit],
 ) -> Result<Comparison, BoxedError> {
     let a = data
         .data_for(true, start.clone())
@@ -245,7 +245,7 @@ impl DateData {
         conn: &dyn database::Connection,
         commit: ArtifactId,
         series: &mut [selector::SeriesResponse<T>],
-        master_commits: &[rustc_artifacts::Commit],
+        master_commits: &[collector::MasterCommit],
     ) -> Self
     where
         T: Iterator<Item = (db::ArtifactId, Option<f64>)>,
@@ -324,7 +324,7 @@ pub struct Comparison {
 
 impl Comparison {
     /// Gets the previous commit before `a`
-    pub fn prev(&self, master_commits: &[rustc_artifacts::Commit]) -> Option<String> {
+    pub fn prev(&self, master_commits: &[collector::MasterCommit]) -> Option<String> {
         match &self.a_id {
             ArtifactId::Commit(a) => master_commits
                 .iter()
@@ -338,7 +338,7 @@ impl Comparison {
     pub async fn is_contiguous(
         &self,
         conn: &dyn database::Connection,
-        master_commits: &[rustc_artifacts::Commit],
+        master_commits: &[collector::MasterCommit],
     ) -> bool {
         match (&self.a_id, &self.b_id) {
             (ArtifactId::Commit(a), ArtifactId::Commit(b)) => {
@@ -353,7 +353,7 @@ impl Comparison {
     }
 
     /// Gets the sha of the next commit after `b`
-    pub fn next(&self, master_commits: &[rustc_artifacts::Commit]) -> Option<String> {
+    pub fn next(&self, master_commits: &[collector::MasterCommit]) -> Option<String> {
         match &self.b_id {
             ArtifactId::Commit(b) => master_commits
                 .iter()
