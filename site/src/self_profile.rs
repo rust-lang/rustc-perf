@@ -3,7 +3,7 @@
 
 use crate::load::InputData;
 use anyhow::Context;
-use bytes::buf::BufExt;
+use bytes::Buf;
 use hyper::StatusCode;
 use std::collections::HashMap;
 use std::fmt;

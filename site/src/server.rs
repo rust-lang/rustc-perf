@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use bytes::buf::BufExt;
+use bytes::Buf;
 use parking_lot::Mutex;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -1773,7 +1773,7 @@ async fn run_server(data: Arc<RwLock<Option<Arc<InputData>>>>, addr: SocketAddr)
             }))
         }
     });
-    let server = hyper::Server::bind(&addr).serve(svc);
+    let server = hyper::server::Server::bind(&addr).serve(svc);
     if let Err(e) = server.await {
         eprintln!("server error: {:?}", e);
     }

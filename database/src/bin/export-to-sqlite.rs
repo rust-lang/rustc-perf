@@ -310,7 +310,7 @@ async fn copy<R: Table>(
                 R::trailer()
             )
             .as_str(),
-            vec![],
+            Vec::<u32>::new(),
         )
         .await
         .unwrap();

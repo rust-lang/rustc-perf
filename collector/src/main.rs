@@ -546,13 +546,12 @@ fn main_result() -> anyhow::Result<i32> {
 
     let benchmark_dir = PathBuf::from("collector/benchmarks");
 
-    let mut builder = tokio::runtime::Builder::new();
+    let mut builder = tokio::runtime::Builder::new_multi_thread();
     // We want to minimize noise from the runtime
     builder
-        .core_threads(1)
-        .max_threads(1)
-        .enable_io()
-        .basic_scheduler();
+        .worker_threads(1)
+        .max_blocking_threads(1)
+        .enable_io();
     let mut rt = builder.build().expect("built runtime");
 
     let default_db = "results.db";
@@ -810,7 +809,7 @@ fn main_result() -> anyhow::Result<i32> {
 }
 
 pub fn get_commit_or_fake_it(sha: &str) -> anyhow::Result<Commit> {
-    let mut rt = tokio::runtime::Runtime::new().unwrap();
+    let rt = tokio::runtime::Runtime::new().unwrap();
     Ok(rt
         .block_on(rustc_artifacts::master_commits())
         .map_err(|e| anyhow::anyhow!("{:?}", e))

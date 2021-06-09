@@ -289,14 +289,14 @@ impl Ingesting for Sqlite<'_> {
         let mut exact = series.chunks_exact(9);
         for series in exact.by_ref() {
             cached
-                .execute(series.iter().flat_map(|v| {
+                .execute(rusqlite::params_from_iter(series.iter().flat_map(|v| {
                     vec![
                         ToSqlOutput::Borrowed(ValueRef::Text(v.krate.as_bytes())),
                         ToSqlOutput::Borrowed(ValueRef::Text(v.profile.as_bytes())),
                         ToSqlOutput::Borrowed(ValueRef::Text(v.cache.as_bytes())),
                         ToSqlOutput::Borrowed(ValueRef::Text(v.statistic.as_bytes())),
                     ]
-                }))
+                })))
                 .unwrap();
         }
         for v in exact.remainder() {
@@ -357,14 +357,14 @@ impl Ingesting for Sqlite<'_> {
         let mut exact = series.chunks_exact(21);
         for series in exact.by_ref() {
             cached
-                .execute(series.iter().flat_map(|v| {
+                .execute(rusqlite::params_from_iter(series.iter().flat_map(|v| {
                     vec![
                         ToSqlOutput::Borrowed(ValueRef::Text(v.krate.as_bytes())),
                         ToSqlOutput::Borrowed(ValueRef::Text(v.profile.as_bytes())),
                         ToSqlOutput::Borrowed(ValueRef::Text(v.cache.as_bytes())),
                         ToSqlOutput::Borrowed(ValueRef::Text(v.query.as_bytes())),
                     ]
-                }))
+                })))
                 .unwrap();
         }
         for v in exact.remainder() {

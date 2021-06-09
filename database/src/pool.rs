@@ -210,7 +210,7 @@ where
     }
 
     async fn get(&self) -> ManagedConnection<T> {
-        let permit = self.permits.clone().acquire_owned().await;
+        let permit = self.permits.clone().acquire_owned().await.unwrap();
         let conn = {
             let mut slots = self.connections.lock().unwrap_or_else(|e| e.into_inner());
             slots.pop()
