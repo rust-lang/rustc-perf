@@ -24,24 +24,29 @@ pub async fn handle_triage(
     let start = body.start;
     let end = body.end;
     // Compare against self to get next
-    let (comparison, master_commits) = futures::join!(
-        compare(
-            start.clone(),
-            start.clone(),
-            "instructions:u".to_owned(),
-            data
-        ),
-        rustc_artifacts::master_commits(),
-    );
-    let comparison = comparison?;
-    let master_commits = master_commits.map_err(|e| e.to_string())?;
+    let master_commits = rustc_artifacts::master_commits().await?;
+    let comparison = compare(
+        start.clone(),
+        start.clone(),
+        "instructions:u".to_owned(),
+        data,
+        &master_commits,
+    )
+    .await?;
     let mut after = Bound::Commit(comparison.next(&master_commits).unwrap()); // TODO: handle no next commit
 
     let mut report = HashMap::new();
     let mut before = start.clone();
 
     loop {
-        let comparison = compare(before, after.clone(), "instructions:u".to_owned(), data).await?;
+        let comparison = compare(
+            before,
+            after.clone(),
+            "instructions:u".to_owned(),
+            data,
+            &master_commits,
+        )
+        .await?;
         log::info!(
             "Comparing {} to {}",
             comparison.b.commit,
@@ -71,12 +76,9 @@ pub async fn handle_compare(
     body: api::days::Request,
     data: &InputData,
 ) -> Result<api::days::Response, BoxedError> {
-    let (comparison, commits) = futures::join!(
-        crate::comparison::compare(body.start, body.end, body.stat, data),
-        rustc_artifacts::master_commits(),
-    );
-    let comparison = comparison?;
-    let commits = commits?;
+    let commits = rustc_artifacts::master_commits().await?;
+    let comparison =
+        crate::comparison::compare(body.start, body.end, body.stat, data, &commits).await?;
 
     let conn = data.conn().await;
     let prev = comparison.prev(&commits);
@@ -201,6 +203,7 @@ pub async fn compare(
     end: Bound,
     stat: String,
     data: &InputData,
+    master_commits: &[rustc_artifacts::Commit],
 ) -> Result<Comparison, BoxedError> {
     let a = data
         .data_for(true, start.clone())
@@ -221,9 +224,9 @@ pub async fn compare(
     let conn = data.conn().await;
 
     Ok(Comparison {
-        a: DateData::consume_one(&*conn, a.clone(), &mut responses).await,
+        a: DateData::consume_one(&*conn, a.clone(), &mut responses, master_commits).await,
         a_id: a,
-        b: DateData::consume_one(&*conn, b.clone(), &mut responses).await,
+        b: DateData::consume_one(&*conn, b.clone(), &mut responses, master_commits).await,
         b_id: b,
     })
 }
@@ -244,6 +247,7 @@ impl DateData {
         conn: &dyn database::Connection,
         commit: ArtifactId,
         series: &mut [selector::SeriesResponse<T>],
+        master_commits: &[rustc_artifacts::Commit],
     ) -> Self
     where
         T: Iterator<Item = (db::ArtifactId, Option<f64>)>,
@@ -294,7 +298,6 @@ impl DateData {
                 None
             },
             pr: if let ArtifactId::Commit(c) = &commit {
-                let master_commits = rustc_artifacts::master_commits().await.unwrap_or_default();
                 if let Some(m) = master_commits.iter().find(|m| m.sha == c.sha) {
                     m.pr
                 } else {
