@@ -13,9 +13,8 @@
 //!
 //! The responses are calculated in the server.rs file.
 
-use database::{Crate, Date};
+use database::Crate;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fmt;
 use std::result::Result as StdResult;
 
@@ -38,17 +37,6 @@ impl Serialize for StyledBenchmarkName {
     {
         serializer.collect_str(&self)
     }
-}
-
-/// Data associated with a specific date
-#[derive(Debug, Clone, Serialize)]
-pub struct DateData {
-    pub date: Option<Date>,
-    pub pr: Option<u32>,
-    pub commit: String,
-    pub data: HashMap<String, Vec<(String, f64)>>,
-    // crate -> nanoseconds
-    pub bootstrap: HashMap<String, u64>,
 }
 
 pub type ServerResult<T> = StdResult<T, String>;
@@ -92,7 +80,7 @@ pub struct CommitResponse {
 }
 
 pub mod data {
-    use crate::api::DateData;
+    use crate::comparison::DateData;
     use collector::Bound;
     use serde::{Deserialize, Serialize};
 
@@ -178,7 +166,7 @@ pub mod bootstrap {
 }
 
 pub mod days {
-    use crate::api::DateData;
+    use crate::comparison::DateData;
     use collector::Bound;
     use serde::{Deserialize, Serialize};
 
