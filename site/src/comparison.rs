@@ -131,8 +131,6 @@ fn summarize_comparison<'a>(comparison: &'a Comparison) -> Option<ComparisonSumm
         .map(|(i, _)| i);
     let hi = hi.map(|hi| benchmarks.remove(hi));
 
-    benchmarks.clear();
-
     Some(ComparisonSummary { hi, lo })
 }
 
