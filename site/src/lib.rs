@@ -22,6 +22,7 @@ pub mod github;
 
 pub mod api;
 mod average;
+mod comparison;
 pub mod db;
 mod interpolate;
 pub mod load;

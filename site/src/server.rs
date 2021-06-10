@@ -40,7 +40,7 @@ type Response = http::Response<hyper::Body>;
 
 pub use crate::api::{
     self, bootstrap, dashboard, data, days, github, graph, info, self_profile, self_profile_raw,
-    status, CommitResponse, DateData, ServerResult, StyledBenchmarkName,
+    status, triage, CommitResponse, ServerResult, StyledBenchmarkName,
 };
 use crate::db::{self, Cache, Crate, Profile};
 use crate::interpolate::Interpolated;
@@ -627,145 +627,6 @@ pub async fn handle_graph(
     }
 
     Ok(resp)
-}
-
-pub async fn handle_compare(body: days::Request, data: &InputData) -> ServerResult<days::Response> {
-    log::info!("handle_compare({:?})", body);
-    let a = data.data_for(true, body.start.clone()).ok_or(format!(
-        "could not find start commit for bound {:?}",
-        body.start
-    ))?;
-    let b = data.data_for(false, body.end.clone()).ok_or(format!(
-        "could not find end commit for bound {:?}",
-        body.end
-    ))?;
-    let cids = Arc::new(vec![a.clone().into(), b.clone().into()]);
-
-    let query = selector::Query::new()
-        .set::<String>(Tag::Crate, selector::Selector::All)
-        .set::<String>(Tag::Cache, selector::Selector::All)
-        .set::<String>(Tag::Profile, selector::Selector::All)
-        .set(
-            Tag::ProcessStatistic,
-            selector::Selector::One(body.stat.clone()),
-        );
-
-    let (responses, commits) = futures::join!(
-        data.query::<Option<f64>>(query, cids),
-        rustc_artifacts::master_commits(),
-    );
-    let commits = commits.map_err(|e| e.to_string())?;
-    let mut responses = responses?;
-
-    let conn = data.conn().await;
-    let prev = match &a {
-        ArtifactId::Commit(a) => commits
-            .iter()
-            .find(|c| c.sha == a.sha)
-            .map(|c| c.parent_sha.clone()),
-        ArtifactId::Artifact(_) => None,
-    };
-    let is_contiguous = match (&a, &b) {
-        (ArtifactId::Commit(a), ArtifactId::Commit(b)) => {
-            if let Some(b) = commits.iter().find(|c| c.sha == b.sha) {
-                b.parent_sha == a.sha
-            } else {
-                conn.parent_of(&b.sha).await.map_or(false, |p| p == a.sha)
-            }
-        }
-        _ => false,
-    };
-    let next = match &b {
-        ArtifactId::Commit(b) => commits
-            .iter()
-            .find(|c| c.parent_sha == b.sha)
-            .map(|c| c.sha.clone()),
-        ArtifactId::Artifact(_) => None,
-    };
-
-    let a = DateData::consume_one(&*conn, a, &mut responses).await;
-    let b = DateData::consume_one(&*conn, b, &mut responses).await;
-    Ok(days::Response {
-        prev,
-        a,
-        b,
-        next,
-        is_contiguous,
-    })
-}
-
-impl DateData {
-    async fn consume_one<'a, T>(
-        conn: &dyn database::Connection,
-        commit: ArtifactId,
-        series: &mut [selector::SeriesResponse<T>],
-    ) -> DateData
-    where
-        T: Iterator<Item = (db::ArtifactId, Option<f64>)>,
-    {
-        let mut data = HashMap::new();
-
-        for response in series {
-            let (id, point) = response.series.next().expect("must have element");
-            assert_eq!(commit, id);
-
-            let point = if let Some(pt) = point {
-                pt
-            } else {
-                continue;
-            };
-            data.entry(format!(
-                "{}-{}",
-                response.path.get::<Crate>().unwrap(),
-                response.path.get::<Profile>().unwrap(),
-            ))
-            .or_insert_with(Vec::new)
-            .push((response.path.get::<Cache>().unwrap().to_string(), point));
-        }
-
-        let bootstrap = conn.get_bootstrap(&[conn.artifact_id(&commit).await]).await;
-        let bootstrap = bootstrap
-            .into_iter()
-            .filter_map(|(k, mut v)| {
-                v.pop()
-                    .unwrap_or_default()
-                    // FIXME: if we're hovering right at the 1 second mark,
-                    // this might mean we end up with a Some for one commit and
-                    // a None for the other commit. Ultimately it doesn't matter
-                    // that much -- we'll mostly just ignore such results.
-                    // Anything less than a second in wall-time measurements is
-                    // always going to be pretty high variance just from process
-                    // startup overheads and such, though, so we definitely
-                    // don't want to compare those values.
-                    .filter(|v| v.as_secs() >= 1)
-                    .map(|v| (k, v.as_nanos() as u64))
-            })
-            .collect::<HashMap<_, _>>();
-
-        DateData {
-            date: if let ArtifactId::Commit(c) = &commit {
-                Some(c.date)
-            } else {
-                None
-            },
-            pr: if let ArtifactId::Commit(c) = &commit {
-                let master_commits = rustc_artifacts::master_commits().await.unwrap_or_default();
-                if let Some(m) = master_commits.iter().find(|m| m.sha == c.sha) {
-                    m.pr
-                } else {
-                    conn.pr_of(&c.sha).await
-                }
-            } else {
-                None
-            },
-            commit: match commit {
-                ArtifactId::Commit(c) => c.sha,
-                ArtifactId::Artifact(i) => i,
-            },
-            data,
-            bootstrap,
-        }
-    }
 }
 
 pub async fn handle_github(
@@ -1700,9 +1561,24 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
         Ok(to_response(
             handle_graph(body!(parse_body(&body)), &data).await,
         ))
+    } else if p == "/perf/triage" {
+        let response = crate::comparison::handle_triage(body!(parse_body(&body)), &data).await;
+        match response {
+            Ok(result) => {
+                let response = http::Response::builder().header_typed(ContentType::text());
+                Ok(response.body(hyper::Body::from(result.0)).unwrap())
+            }
+            Err(err) => Ok(http::Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .header_typed(ContentType::text_utf8())
+                .body(hyper::Body::from(err.to_string()))
+                .unwrap()),
+        }
     } else if p == "/perf/get" {
         Ok(to_response(
-            handle_compare(body!(parse_body(&body)), &data).await,
+            crate::comparison::handle_compare(body!(parse_body(&body)), &data)
+                .await
+                .map_err(|e| e.to_string()),
         ))
     } else if p == "/perf/collected" {
         if !ctx.check_auth(&req) {
