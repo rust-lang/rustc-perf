@@ -252,3 +252,13 @@ function make_request(path, body) {
         console.log("error fetching ", path, ": ", err);
     });
 }
+
+// https://stackoverflow.com/questions/6234773
+function escapeHtml(unsafe) {
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
