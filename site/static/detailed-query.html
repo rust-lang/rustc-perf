@@ -273,7 +273,8 @@
         function to_object(element) {
             if (!element.length) {
                 element = [
-                    element.label,
+                    // escape html, to prevent rendering queries like <unknown> as tags
+                    escapeHtml(element.label),
                     [ element.self_time.secs, element.self_time.nanos ],
                     element.percent_total_time,
                     element.number_of_cache_misses,
