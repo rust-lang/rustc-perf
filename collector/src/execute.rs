@@ -3,6 +3,7 @@
 use crate::{BuildKind, Compiler, RunKind};
 use anyhow::{anyhow, bail, Context};
 use collector::command_output;
+use collector::etw_parser;
 use database::{PatchName, QueryLabel};
 use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt;
@@ -165,6 +166,8 @@ pub struct Benchmark {
 pub enum Profiler {
     PerfStat,
     PerfStatSelfProfile,
+    XperfStat,
+    XperfStatSelfProfile,
     SelfProfile,
     TimePasses,
     PerfRecord,
@@ -184,6 +187,7 @@ impl Profiler {
             // is rejected because it can't be used with the `profiler`
             // subcommand. (It's used with `bench_local` instead.)
             "perf-stat" => Err(anyhow!("'perf-stat' cannot be used as the profiler")),
+            "xperf-stat" => Err(anyhow!("'xperf-stat' cannot be used as the profiler")),
             "self-profile" => Ok(Profiler::SelfProfile),
             "time-passes" => Ok(Profiler::TimePasses),
             "perf-record" => Ok(Profiler::PerfRecord),
@@ -202,6 +206,8 @@ impl Profiler {
         match self {
             Profiler::PerfStat => "perf-stat",
             Profiler::PerfStatSelfProfile => "perf-stat-self-profile",
+            Profiler::XperfStat => "xperf-stat",
+            Profiler::XperfStatSelfProfile => "xperf-stat-self-profile",
             Profiler::SelfProfile => "self-profile",
             Profiler::TimePasses => "time-passes",
             Profiler::PerfRecord => "perf-record",
@@ -221,6 +227,8 @@ impl Profiler {
         match self {
             Profiler::PerfStat
             | Profiler::PerfStatSelfProfile
+            | Profiler::XperfStat
+            | Profiler::XperfStatSelfProfile
             | Profiler::SelfProfile
             | Profiler::TimePasses
             | Profiler::PerfRecord
@@ -247,6 +255,8 @@ impl Profiler {
         match self {
             Profiler::PerfStat
             | Profiler::PerfStatSelfProfile
+            | Profiler::XperfStat
+            | Profiler::XperfStatSelfProfile
             | Profiler::SelfProfile
             | Profiler::TimePasses
             | Profiler::PerfRecord
@@ -563,9 +573,17 @@ impl<'a> MeasureProcessor<'a> {
         cid: database::ArtifactIdNumber,
         self_profile: bool,
     ) -> Self {
-        // Check we have `perf` available.
-        let has_perf = Command::new("perf").output().is_ok();
-        assert!(has_perf);
+        // Check we have `perf` or (`xperf.exe` and `tracelog.exe`)  available.
+        if cfg!(unix) {
+            let has_perf = Command::new("perf").output().is_ok();
+            assert!(has_perf);
+        } else {
+            let has_xperf = Command::new(env::var("XPERF").unwrap_or("xperf.exe".to_string())).output().is_ok();
+            assert!(has_xperf);
+
+            let has_tracelog = Command::new(env::var("TRACELOG").unwrap_or("tracelog.exe".to_string())).output().is_ok();
+            assert!(has_tracelog);
+        }
 
         MeasureProcessor {
             rt,
@@ -766,9 +784,9 @@ impl Upload {
 impl<'a> Processor for MeasureProcessor<'a> {
     fn profiler(&self, _build: BuildKind) -> Profiler {
         if self.is_first_collection && self.self_profile {
-            Profiler::PerfStatSelfProfile
+            if cfg!(unix) { Profiler::PerfStatSelfProfile} else { Profiler::XperfStatSelfProfile }
         } else {
-            Profiler::PerfStat
+            if cfg!(unix) { Profiler::PerfStat } else { Profiler::XperfStat }
         }
     }
 
@@ -788,7 +806,7 @@ impl<'a> Processor for MeasureProcessor<'a> {
         data: &ProcessOutputData<'_>,
         output: process::Output,
     ) -> anyhow::Result<Retry> {
-        match process_perf_stat_output(output) {
+        match process_stat_output(output) {
             Ok(res) => {
                 match data.run_kind {
                     RunKind::Full => {
@@ -824,7 +842,7 @@ impl<'a> Processor for MeasureProcessor<'a> {
                     panic!("failed to collect statistics after 5 tries");
                 }
             }
-            Err(e @ DeserializeStatError::ParseError { .. }) => {
+            Err(e @ (DeserializeStatError::ParseError { .. } | DeserializeStatError::XperfError(..))) => {
                 panic!("process_perf_stat_output failed: {:?}", e);
             }
         }
@@ -879,7 +897,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
         };
 
         match self.profiler {
-            Profiler::PerfStat | Profiler::PerfStatSelfProfile => {
+            Profiler::PerfStat | Profiler::PerfStatSelfProfile | Profiler::XperfStat | Profiler::XperfStatSelfProfile => {
                 panic!("unexpected profiler");
             }
 
@@ -1346,12 +1364,14 @@ impl Benchmark {
     }
 }
 
-#[derive(thiserror::Error, PartialEq, Eq, Debug)]
+#[derive(thiserror::Error, Debug)]
 enum DeserializeStatError {
     #[error("could not deserialize empty output to stats, output: {:?}", .0)]
     NoOutput(process::Output),
     #[error("could not parse `{}` as a float", .0)]
     ParseError(String, #[source] ::std::num::ParseFloatError),
+    #[error("could not process xperf data")]
+    XperfError(#[from] anyhow::Error)
 }
 
 enum SelfProfileFiles {
@@ -1365,7 +1385,7 @@ enum SelfProfileFiles {
     },
 }
 
-fn process_perf_stat_output(
+fn process_stat_output(
     output: process::Output,
 ) -> Result<(Stats, Option<SelfProfile>, Option<SelfProfileFiles>), DeserializeStatError> {
     let stdout = String::from_utf8(output.stdout.clone()).expect("utf8 output");
@@ -1390,6 +1410,20 @@ fn process_perf_stat_output(
         }
         if line.starts_with("!self-profile-file:") {
             file = Some(PathBuf::from(&line["!self-profile-file:".len()..]));
+            continue;
+        }
+        if line.starts_with("!counters-file:") {
+            let counter_file = &line["!counters-file:".len()..];
+            let counters = etw_parser::parse_etw_file(counter_file).unwrap();
+
+            stats.insert("cycles".into(), counters.total_cycles as f64);
+            stats.insert("instructions:u".into(), counters.instructions_retired as f64);
+            continue;
+        }
+
+        // The rest of the loop body handles processing output from the Linux `perf` tool
+        // so on Windows, we just skip it and go to the next line.
+        if cfg!(windows) {
             continue;
         }
 
