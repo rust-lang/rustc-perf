@@ -32,21 +32,32 @@ pub async fn handle_triage(
         data,
         &master_commits,
     )
-    .await?;
+    .await?
+    .unwrap();
     let mut after = Bound::Commit(comparison.next(&master_commits).unwrap()); // TODO: handle no next commit
 
     let mut report = HashMap::new();
     let mut before = start.clone();
 
     loop {
-        let comparison = compare(
+        let comparison = match compare(
             before,
             after.clone(),
             "instructions:u".to_owned(),
             data,
             &master_commits,
         )
-        .await?;
+        .await?
+        {
+            Some(c) => c,
+            None => {
+                log::info!(
+                    "No data found for end bound {:?}. Ending comparison...",
+                    after
+                );
+                break;
+            }
+        };
         log::info!(
             "Comparing {} to {}",
             comparison.b.commit,
@@ -77,8 +88,10 @@ pub async fn handle_compare(
     data: &InputData,
 ) -> Result<api::days::Response, BoxedError> {
     let commits = collector::master_commits().await?;
-    let comparison =
-        crate::comparison::compare(body.start, body.end, body.stat, data, &commits).await?;
+    let end = body.end;
+    let comparison = crate::comparison::compare(body.start, end.clone(), body.stat, data, &commits)
+        .await?
+        .ok_or_else(|| format!("could not find end commit for bound {:?}", end))?;
 
     let conn = data.conn().await;
     let prev = comparison.prev(&commits);
@@ -196,19 +209,22 @@ impl ComparisonSummary<'_> {
 }
 
 /// Compare two bounds on a given stat
+///
+/// Returns Ok(None) when no data for the end bound is present
 pub async fn compare(
     start: Bound,
     end: Bound,
     stat: String,
     data: &InputData,
     master_commits: &[collector::MasterCommit],
-) -> Result<Comparison, BoxedError> {
+) -> Result<Option<Comparison>, BoxedError> {
     let a = data
         .data_for(true, start.clone())
         .ok_or(format!("could not find start commit for bound {:?}", start))?;
-    let b = data
-        .data_for(false, end.clone())
-        .ok_or(format!("could not find end commit for bound {:?}", end))?;
+    let b = match data.data_for(false, end.clone()) {
+        Some(b) => b,
+        None => return Ok(None),
+    };
     let cids = Arc::new(vec![a.clone().into(), b.clone().into()]);
 
     let query = selector::Query::new()
@@ -221,12 +237,12 @@ pub async fn compare(
 
     let conn = data.conn().await;
 
-    Ok(Comparison {
+    Ok(Some(Comparison {
         a: DateData::consume_one(&*conn, a.clone(), &mut responses, master_commits).await,
         a_id: a,
         b: DateData::consume_one(&*conn, b.clone(), &mut responses, master_commits).await,
         b_id: b,
-    })
+    }))
 }
 
 /// Data associated with a specific date
