@@ -287,10 +287,11 @@ fn parse_events(r: &mut dyn BufRead, headers: Vec<EventHeader>) -> anyhow::Resul
     Ok(events)
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct Counters {
     pub instructions_retired: u64,
     pub total_cycles: u64,
+    pub cpu_clock: f64,
 }
 
 impl std::ops::Add for Counters {
@@ -300,6 +301,7 @@ impl std::ops::Add for Counters {
         Self {
             instructions_retired: self.instructions_retired + rhs.instructions_retired,
             total_cycles: self.total_cycles + rhs.total_cycles,
+            cpu_clock: self.cpu_clock + rhs.cpu_clock,
         }
     }
 }
@@ -314,6 +316,7 @@ impl std::ops::Sub for Counters {
         Self {
             instructions_retired: self.instructions_retired - rhs.instructions_retired,
             total_cycles: self.total_cycles - rhs.total_cycles,
+            cpu_clock: self.cpu_clock - rhs.cpu_clock,
         }
     }
 }
@@ -323,6 +326,11 @@ impl Default for Counters {
         Self {
             instructions_retired: 0,
             total_cycles: 0,
+            // FIXME(wesleywiser): We should be properly calculating this value by taking the total time
+            // each rustc thread runs per core and adding them togther. This placeholder value is here
+            // so that we can still render the detailed query statistics page (although the "Time (%)"
+            // column will show the wrong value).
+            cpu_clock: 1.0,
         }
     }
 }
@@ -332,6 +340,8 @@ impl From<&Pmc> for Counters {
         Self {
             instructions_retired: pmc.instructions_retired,
             total_cycles: pmc.total_cycles,
+            // FIXME(wesleywiser): see comment in `<Counters as Default>::default()`.
+            cpu_clock: 0.0,
         }
     }
 }
@@ -593,9 +603,10 @@ FirstReliableCSwitchEventTimeStamp, 6016
             })
         ];
 
-        let expected= Counters {
+        let expected = Counters {
             instructions_retired: 1561453,
             total_cycles: 366237,
+            cpu_clock: 1.0,
         };
 
         assert_eq!(expected, super::process_events(&events)?);

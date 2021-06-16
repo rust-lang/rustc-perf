@@ -3,6 +3,7 @@ use std::env;
 use std::ffi::OsString;
 use std::fs;
 use std::path::Path;
+use std::path::PathBuf;
 use std::process::Command;
 use std::time::{Duration, Instant};
 
@@ -77,67 +78,11 @@ fn main() {
                 print_memory();
                 print_time(dur);
                 if wrapper == "perf-stat-self-profile" {
-                    let crate_name = args
-                        .windows(2)
-                        .find(|args| args[0] == "--crate-name")
-                        .and_then(|args| args[1].to_str())
-                        .expect("rustc to be invoked with crate name");
-                    let mut prefix = None;
-                    let mut full_path = None;
-                    // We don't know the pid of rustc, and can't easily get it -- we only know the
-                    // `perf` pid. So just blindly look in the directory to hopefully find it.
-                    for entry in fs::read_dir(&prof_out_dir).unwrap() {
-                        let entry = entry.unwrap();
-                        if entry
-                            .file_name()
-                            .to_str()
-                            .map_or(false, |s| s.starts_with(crate_name))
-                        {
-                            if entry.file_name().to_str().unwrap().ends_with("mm_profdata") {
-                                full_path = Some(entry.path());
-                                break;
-                            }
-                            let file = entry.file_name().to_str().unwrap().to_owned();
-                            let new_prefix = Some(file[..file.find('.').unwrap()].to_owned());
-                            assert!(
-                                prefix.is_none() || prefix == new_prefix,
-                                "prefix={:?}, new_prefix={:?}",
-                                prefix,
-                                new_prefix
-                            );
-                            prefix = new_prefix;
-                        }
-                    }
-                    if let Some(profile_data) = full_path {
-                        // measureme 0.8 has a single file
-                        println!("!self-profile-file:{}", profile_data.to_str().unwrap());
-                        let filename = profile_data.file_name().unwrap().to_str().unwrap();
-                        let json = match run_summarize("summarize", &prof_out_dir, filename) {
-                            Ok(s) => s,
-                            Err(e1) => {
-                                match run_summarize("summarize-9.0", &prof_out_dir, filename) {
-                                    Ok(s) => s,
-                                    Err(e2) => {
-                                        panic!("failed to run summarize and summarize-9.0. Errors:\nsummarize: {:?}\nsummarize-9.0: {:?}", e1, e2);
-                                    }
-                                }
-                            }
-                        };
-                        println!("!self-profile-output:{}", json);
-                    } else {
-                        let prefix = prefix.expect(&format!("found prefix {:?}", prof_out_dir));
-                        let json = run_summarize("summarize", &prof_out_dir, &prefix)
-                            .or_else(|_| run_summarize("summarize-0.7", &prof_out_dir, &prefix))
-                            .expect("able to run summarize or summarize-0.7");
-                        println!("!self-profile-dir:{}", prof_out_dir.to_str().unwrap());
-                        println!("!self-profile-prefix:{}", prefix);
-                        println!("!self-profile-output:{}", json);
-                    }
+                    process_self_profile_output(prof_out_dir, &args[..]);
                 }
             }
 
             "xperf-stat" | "xperf-stat-self-profile" => {
-                // TODO handle self-profiling
                 // Read the path to tracelog.exe from either an environment variable, falling back to assuming it's on the PATH.
                 let tracelog = std::env::var("TRACELOG").unwrap_or("tracelog.exe".to_string());
                 let mut cmd = Command::new(tracelog);
@@ -148,7 +93,17 @@ fn main() {
                 assert!(status.success(), "tracelog did not complete successfully");
 
                 let mut tool = Command::new(tool);
-                tool.args(args);
+                tool.args(&args);
+
+                let prof_out_dir = std::env::current_dir().unwrap().join("self-profile-output");
+                if wrapper == "xperf-stat-self-profile" {
+                    tool.arg(&format!(
+                        "-Zself-profile={}",
+                        prof_out_dir.to_str().unwrap()
+                    ));
+                    let _ = fs::remove_dir_all(&prof_out_dir);
+                    let _ = fs::create_dir_all(&prof_out_dir);
+                }
 
                 let start = Instant::now();
                 let status = tool.status().expect("tool failed to start");
@@ -172,6 +127,10 @@ fn main() {
 
                 let counters_file = std::env::current_dir().unwrap().join("pmc_counters.txt");
                 println!("!counters-file:{}", counters_file.to_str().unwrap());
+
+                if wrapper == "xperf-stat-self-profile" {
+                    process_self_profile_output(prof_out_dir, &args[..]);
+                }
             }
 
             "self-profile" => {
@@ -322,6 +281,65 @@ fn main() {
         let mut cmd = Command::new(&tool);
         cmd.args(&args);
         exec(&mut cmd);
+    }
+}
+
+fn process_self_profile_output(prof_out_dir: PathBuf, args: &[OsString]) {
+    let crate_name = args
+        .windows(2)
+        .find(|args| args[0] == "--crate-name")
+        .and_then(|args| args[1].to_str())
+        .expect("rustc to be invoked with crate name");
+    let mut prefix = None;
+    let mut full_path = None;
+    // We don't know the pid of rustc, and can't easily get it -- we only know the
+    // `perf` pid. So just blindly look in the directory to hopefully find it.
+    for entry in fs::read_dir(&prof_out_dir).unwrap() {
+        let entry = entry.unwrap();
+        if entry
+            .file_name()
+            .to_str()
+            .map_or(false, |s| s.starts_with(crate_name))
+        {
+            if entry.file_name().to_str().unwrap().ends_with("mm_profdata") {
+                full_path = Some(entry.path());
+                break;
+            }
+            let file = entry.file_name().to_str().unwrap().to_owned();
+            let new_prefix = Some(file[..file.find('.').unwrap()].to_owned());
+            assert!(
+                prefix.is_none() || prefix == new_prefix,
+                "prefix={:?}, new_prefix={:?}",
+                prefix,
+                new_prefix
+            );
+            prefix = new_prefix;
+        }
+    }
+    if let Some(profile_data) = full_path {
+        // measureme 0.8 has a single file
+        println!("!self-profile-file:{}", profile_data.to_str().unwrap());
+        let filename = profile_data.file_name().unwrap().to_str().unwrap();
+        let json = match run_summarize("summarize", &prof_out_dir, filename) {
+            Ok(s) => s,
+            Err(e1) => {
+                match run_summarize("summarize-9.0", &prof_out_dir, filename) {
+                    Ok(s) => s,
+                    Err(e2) => {
+                        panic!("failed to run summarize and summarize-9.0. Errors:\nsummarize: {:?}\nsummarize-9.0: {:?}", e1, e2);
+                    }
+                }
+            }
+        };
+        println!("!self-profile-output:{}", json);
+    } else {
+        let prefix = prefix.expect(&format!("found prefix {:?}", prof_out_dir));
+        let json = run_summarize("summarize", &prof_out_dir, &prefix)
+            .or_else(|_| run_summarize("summarize-0.7", &prof_out_dir, &prefix))
+            .expect("able to run summarize or summarize-0.7");
+        println!("!self-profile-dir:{}", prof_out_dir.to_str().unwrap());
+        println!("!self-profile-prefix:{}", prefix);
+        println!("!self-profile-output:{}", json);
     }
 }
 

@@ -1418,6 +1418,7 @@ fn process_stat_output(
 
             stats.insert("cycles".into(), counters.total_cycles as f64);
             stats.insert("instructions:u".into(), counters.instructions_retired as f64);
+            stats.insert("cpu-clock".into(), counters.cpu_clock);
             continue;
         }
 
