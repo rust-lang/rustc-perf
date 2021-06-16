@@ -638,7 +638,7 @@ pub async fn post_finished(data: &InputData) {
                 format!(
                     "Finished benchmarking try commit ({}): [comparison url]({}).
 
-                    Summary: {}
+                    **Summary**: {}
 
 Benchmarking this pull request likely means that it is \
 perf-sensitive, so we're automatically marking it as not fit \
@@ -672,12 +672,25 @@ async fn categorize_benchmark(commit: &database::QueuedCommit, data: &InputData)
         Ok(Some(c)) => c,
         _ => return String::from("ERROR categorizing benchmark run!"),
     };
-    let summary = match crate::comparison::ComparisonSummary::summarize_comparison(&comparison) {
-        Some(s) => s,
-        None => return String::from("This benchmark run did not return any significant changes"),
-    };
+    let (summary, direction) =
+        match crate::comparison::ComparisonSummary::summarize_comparison(&comparison) {
+            Some(s) if s.direction().is_some() => {
+                let direction = s.direction().unwrap();
+                (s, direction)
+            }
+            _ => return String::from("This benchmark run did not return any significant changes"),
+        };
 
-    let mut result = format!("This change led to significant changes in compiler performance.\n");
+    use crate::comparison::Direction;
+    let category = match direction {
+        Direction::Improvement => "improvements 🎉",
+        Direction::Regression => "regressions 😿",
+        Direction::Mixed => "mixed results 🤷",
+    };
+    let mut result = format!(
+        "This change led to significant {} in compiler performance.\n",
+        category
+    );
     for change in summary.ordered_changes() {
         use std::fmt::Write;
         write!(result, "- ").unwrap();

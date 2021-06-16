@@ -151,12 +151,11 @@ impl ComparisonSummary<'_> {
             .map(|(i, _)| i);
         let hi = hi.map(|hi| benchmarks.remove(hi));
 
-        benchmarks.clear();
-
         Some(ComparisonSummary { hi, lo })
     }
+
     /// The direction of the changes
-    fn direction(&self) -> Option<Direction> {
+    pub fn direction(&self) -> Option<Direction> {
         let d = match (&self.hi, &self.lo) {
             (None, None) => return None,
             (Some(b), None) => b.direction(),
@@ -497,7 +496,7 @@ impl BenchmarkComparison<'_> {
 
 // The direction of a performance change
 #[derive(PartialEq, Eq, Hash)]
-enum Direction {
+pub enum Direction {
     Improvement,
     Regression,
     Mixed,
