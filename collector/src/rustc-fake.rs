@@ -109,7 +109,11 @@ fn main() {
                 let status = tool.status().expect("tool failed to start");
                 let dur = start.elapsed();
                 assert!(status.success(), "tool did not run successfully");
-                print_time(dur);
+                println!(
+                    "!wall-time:{}.{:09}",
+                    dur.as_secs(),
+                    dur.subsec_nanos()
+                );
 
                 let xperf = std::env::var("XPERF").unwrap_or("xperf.exe".to_string());
                 let mut cmd = Command::new(&xperf);

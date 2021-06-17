@@ -1421,6 +1421,14 @@ fn process_stat_output(
             stats.insert("cpu-clock".into(), counters.cpu_clock);
             continue;
         }
+        if line.starts_with("!wall-time:") {
+            let d = &line["!wall-time:".len()..];
+            stats.insert(
+                "wall-time".into(),
+                d.parse().map_err(|e| DeserializeStatError::ParseError(d.to_string(), e))?
+            );
+            continue;
+        }
 
         // The rest of the loop body handles processing output from the Linux `perf` tool
         // so on Windows, we just skip it and go to the next line.
