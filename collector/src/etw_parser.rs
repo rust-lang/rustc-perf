@@ -376,15 +376,15 @@ fn process_events(event_data: EventData) -> anyhow::Result<Counters> {
 /// Given the path to the ETW results file, process it and calculate the
 /// hardware performance counter totals for the rustc process.
 pub fn parse_etw_file(path: &str) -> anyhow::Result<Counters> {
-    let mut file = std::io::BufReader::new(std::fs::File::open(path).unwrap());
+    let mut file = std::io::BufReader::new(std::fs::File::open(path)?);
 
-    let headers = parse_header(&mut file).unwrap();
+    let headers = parse_header(&mut file)?;
 
-    validate_os_header_line(&mut file).unwrap();
+    validate_os_header_line(&mut file)?;
 
-    let events = parse_events(&mut file, headers).unwrap();
+    let events = parse_events(&mut file, headers)?;
 
-    Ok(process_events(events).unwrap())
+    Ok(process_events(events)?)
 }
 
 #[cfg(test)]
