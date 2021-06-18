@@ -156,6 +156,39 @@ If you've collected new data, you can run `curl -X POST
 localhost:2346/perf/onpush` to update the site's view of the data, or just
 restart the server.
 
+### Benchmarking on Windows
+
+To benchmark on Windows, you will need to run the collector in a elevated context
+so that it can access the hardware performance counters. Note: some virtualized
+environments do not permit access to these counters for guest VMs.
+
+You will also need to provide the paths to the xperf and tracelog tools (or have them
+available on your PATH). Some common paths to these tools look like:
+
+```
+$env:XPERF="C:\Program Files (x86)\Windows Kits\10\Windows Performance Toolkit\xperf.exe"
+$env:TRACELOG="C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x64\tracelog.exe"
+```
+
+Finally, while most of the options you can pass to the collector are supported, the majority of
+the profilers used in the `profile_local` command are not. In Windows, the only currently supported
+profiler is the `self-profiler`.
+
+As a complete example, let's run just the `regex` benchmark in the `Debug` build with
+self-profiling results available:
+
+```
+$env:XPERF="C:\Program Files (x86)\Windows Kits\10\Windows Performance Toolkit\xperf.exe"
+$env:TRACELOG="C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x64\tracelog.exe"
+.\target\release\collector.exe bench_local $env:RUST_ORIGINAL Original --builds Debug --include regex --self-profile
+.\target\release\collector.exe bench_local $env:RUST_MODIFIED Modified --builds Debug --include regex --self-profile
+.\target\release\site.exe .\results.db
+```
+
+The open a web browser to `http://localhost:2346/compare.html?start=Original&end=Modified&stat=instructions%3Au`.
+
+Note: This example uses Powershell syntax.
+
 ### Technical details of the benchmark server
 
 We download the artifacts (rustc, rust-std, cargo) produced by CI and properly
