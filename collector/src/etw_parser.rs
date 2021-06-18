@@ -137,23 +137,8 @@ struct CSwitch {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-enum Event {
-    Pmc(Pmc),
-    CSwitch(CSwitch),
-}
-
-impl Event {
-    fn timestamp(&self) -> u64 {
-        match self {
-            Event::Pmc(info) => info.timestamp,
-            Event::CSwitch(info) => info.timestamp,
-        }
-    }
-}
-
-#[derive(Debug, Eq, PartialEq)]
 struct EventData {
-    events: Vec<Event>,
+    events: Vec<(Pmc, CSwitch)>,
     watched_processes: HashSet<u64>,
 }
 
@@ -188,6 +173,7 @@ fn parse_events(r: &mut dyn BufRead, headers: Vec<EventHeader>) -> anyhow::Resul
 
     let mut events = Vec::new();
     let mut rustc_process = None;
+    let mut last_pmc = None;
     let mut currently_watched_processes = HashSet::new();
     let mut all_watched_processes = HashSet::new();
 
@@ -206,7 +192,7 @@ fn parse_events(r: &mut dyn BufRead, headers: Vec<EventHeader>) -> anyhow::Resul
         let line = String::from_utf8_lossy(&buffer[..]);
         let columns: Vec<_> = line.trim().split(',').collect();
 
-        events.push(match columns[0].trim() {
+        match columns[0].trim() {
             PROCESS_START => {
                 let process_name = columns[pstart_process_name].trim();
 
@@ -236,8 +222,6 @@ fn parse_events(r: &mut dyn BufRead, headers: Vec<EventHeader>) -> anyhow::Resul
                         }
                     }
                 }
-
-                continue;
             }
             PROCESS_END => {
                 let process_name = columns[pend_process_name].trim();
@@ -252,16 +236,14 @@ fn parse_events(r: &mut dyn BufRead, headers: Vec<EventHeader>) -> anyhow::Resul
                         break;
                     }
                 }
-
-                continue;
             }
             PMC => {
-                Event::Pmc(Pmc {
+                last_pmc = Some(Pmc {
                     timestamp: columns[pmc_timestamp].trim().parse()?,
                     thread_id: columns[pmc_thread_id].trim().parse()?,
                     instructions_retired: columns[pmc_instructions_retired].trim().parse()?,
                     total_cycles: columns[pmc_total_cycles].trim().parse()?,
-                })
+                });
             }
             CSWITCH => {
                 let timestamp = columns[cswitch_timestamp].trim().parse()?;
@@ -274,23 +256,23 @@ fn parse_events(r: &mut dyn BufRead, headers: Vec<EventHeader>) -> anyhow::Resul
                     // In this case, the previous Pmc event at this same timestamp isn't relevant.
                     // There might not be a previous event if the CSwitch event occurs before the
                     // Pmc events start recording.
-                    if let Some(previous_event) = events.pop() {
-                        assert!(matches!(previous_event, Event::Pmc(_)));
-                        assert_eq!(timestamp, previous_event.timestamp());
+                    if let Some(pmc) = &last_pmc {
+                        assert_eq!(timestamp, pmc.timestamp);
+                        last_pmc = None;
                     }
 
                     continue;
                 }
 
-                Event::CSwitch(CSwitch {
+                events.push((std::mem::take(&mut last_pmc).unwrap(), CSwitch {
                     timestamp,
                     old_process_pid: old_pid,
                     new_process_pid: new_pid,
                     cpu: columns[cswitch_cpu].trim().parse()?,
-                })
+                }));
             }
-            _ => continue
-        });
+            _ => { }
+        }
     }
 
     Ok(EventData {
@@ -360,15 +342,6 @@ impl From<&Pmc> for Counters {
 
 fn process_events(event_data: EventData) -> anyhow::Result<Counters> {
     let EventData { events, watched_processes } = event_data;
-    anyhow::ensure!(events.len() % 2 == 0, "events must have an even count");
-
-    let pmc_and_cswitch_events =
-        events.chunks(2).map(|s| {
-            match s {
-                [Event::Pmc(pmc), Event::CSwitch(cswitch)] => Ok((pmc, cswitch)),
-                other => anyhow::bail!("unexpected events: {:?}", other),
-            }
-        });
 
     // We need to keep track of when the rustc process is running on a given CPU or not.
     // The basic algorithm here is to note the counters when rustc is moved onto the CPU and
@@ -376,8 +349,7 @@ fn process_events(event_data: EventData) -> anyhow::Result<Counters> {
     let mut total = Counters::default();
     let mut cpus = HashMap::new();
 
-    for result in pmc_and_cswitch_events {
-        let (pmc, cswitch) = result?;
+    for (pmc, cswitch) in events {
         anyhow::ensure!(pmc.timestamp == cswitch.timestamp, "event timestamps did not match");
 
         // Handle if the rustc process (or a sub process) is moving on the cpu or off the CPU.
@@ -387,14 +359,14 @@ fn process_events(event_data: EventData) -> anyhow::Result<Counters> {
         if watched_processes.contains(&cswitch.old_process_pid) {
             if let Some(last_counters) = cpus.remove(&cswitch.cpu) {
                 // record the delta between the starting and ending counters in the overall total
-                total = total + (Counters::from(pmc) - last_counters);
+                total = total + (Counters::from(&pmc) - last_counters);
             } else {
                 anyhow::bail!("no existing record when rustc moved off CPU")
             }
         }
 
         if watched_processes.contains(&cswitch.new_process_pid) {
-            anyhow::ensure!(cpus.insert(cswitch.cpu, Counters::from(pmc)).is_none(), "existing record when rustc moved onto CPU");
+            anyhow::ensure!(cpus.insert(cswitch.cpu, Counters::from(&pmc)).is_none(), "existing record when rustc moved onto CPU");
         }
     }
 
@@ -404,7 +376,6 @@ fn process_events(event_data: EventData) -> anyhow::Result<Counters> {
 /// Given the path to the ETW results file, process it and calculate the
 /// hardware performance counter totals for the rustc process.
 pub fn parse_etw_file(path: &str) -> anyhow::Result<Counters> {
-    log::trace!("path = {}", path);
     let mut file = std::io::BufReader::new(std::fs::File::open(path).unwrap());
 
     let headers = parse_header(&mut file).unwrap();
@@ -419,7 +390,7 @@ pub fn parse_etw_file(path: &str) -> anyhow::Result<Counters> {
 #[cfg(test)]
 mod tests {
     use std::io::BufReader;
-    use super::{Counters, CSwitch, Event, EventData, EventHeader, Pmc};
+    use super::{Counters, CSwitch, EventData, EventHeader, Pmc};
 
     #[test]
     fn parse_header() -> anyhow::Result<()> {
@@ -517,25 +488,26 @@ FirstReliableCSwitchEventTimeStamp, 6016
 
         let expected = EventData {
             events: vec![
-                Event::Pmc(Pmc {
+                (Pmc {
                     timestamp: 106082,
                     thread_id: 15340,
                     instructions_retired: 3184489,
                     total_cycles: 3416818,
-                }),
-                Event::CSwitch(CSwitch {
+                },
+                CSwitch {
                     timestamp: 106082,
                     new_process_pid: 10612, // rustc.exe
                     old_process_pid: 0, // Idle
                     cpu: 0,
                 }),
-                Event::Pmc(Pmc {
+
+                (Pmc {
                     timestamp: 107179,
                     thread_id: 15340,
                     instructions_retired: 4205942,
                     total_cycles: 3779655,
-                }),
-                Event::CSwitch(CSwitch {
+                },
+                CSwitch {
                     timestamp: 107179,
                     new_process_pid: 0, // Idle
                     old_process_pid: 10612, // rustc.exe
@@ -554,49 +526,52 @@ FirstReliableCSwitchEventTimeStamp, 6016
     fn process_events() -> anyhow::Result<()> {
         let events = EventData {
             events: vec![
-                Event::Pmc(Pmc {
+                (Pmc {
                     timestamp: 106082,
                     thread_id: 15340,
                     instructions_retired: 3184489,
                     total_cycles: 3416818,
-                }),
-                Event::CSwitch(CSwitch {
+                },
+                CSwitch {
                     timestamp: 106082,
                     old_process_pid: 0, // Idle
                     new_process_pid: 10612, // rustc.exe
                     cpu: 0,
                 }),
-                Event::Pmc(Pmc {
+
+                (Pmc {
                     timestamp: 106085,
                     thread_id: 99999,
                     instructions_retired: 1000000,
                     total_cycles: 20000,
-                }),
-                Event::CSwitch(CSwitch {
+                },
+                CSwitch {
                     timestamp: 106085,
                     old_process_pid: 1234, // foobar.exe
                     new_process_pid: 10612, // rustc.exe
                     cpu: 3,
                 }),
-                Event::Pmc(Pmc {
+
+                (Pmc {
                     timestamp: 107179,
                     thread_id: 15340,
                     instructions_retired: 4205942,
                     total_cycles: 3779655,
-                }),
-                Event::CSwitch(CSwitch {
+                },
+                CSwitch {
                     timestamp: 107179,
                     old_process_pid: 10612, // rustc.exe
                     new_process_pid: 0, // Idle
                     cpu: 0,
                 }),
-                Event::Pmc(Pmc {
+
+                (Pmc {
                     timestamp: 1259540,
                     thread_id: 99999,
                     instructions_retired: 1540000,
                     total_cycles: 23400,
-                }),
-                Event::CSwitch(CSwitch {
+                },
+                CSwitch {
                     timestamp: 1259540,
                     old_process_pid: 10612, // rustc.exe
                     new_process_pid: 0, // Idle
@@ -621,65 +596,65 @@ FirstReliableCSwitchEventTimeStamp, 6016
     fn process_events_child_process() -> anyhow::Result<()> {
         let events = EventData {
             events: vec![
-                Event::Pmc(Pmc {
+                (Pmc {
                     timestamp: 100,
                     thread_id: 15340,
                     instructions_retired: 1000,
                     total_cycles: 5000,
-                }),
-                Event::CSwitch(CSwitch {
+                },
+                CSwitch {
                     timestamp: 100,
                     old_process_pid: 0, // Idle
                     new_process_pid: 10612, // rustc.exe
                     cpu: 0,
                 }),
 
-                Event::Pmc(Pmc {
+                (Pmc {
                     timestamp: 200,
                     thread_id: 99999,
                     instructions_retired: 100_000,
                     total_cycles: 300_000,
-                }),
-                Event::CSwitch(CSwitch {
+                },
+                CSwitch {
                     timestamp: 200,
                     old_process_pid: 0, // Idle
                     new_process_pid: 12345, // rustc.exe -> link.exe
                     cpu: 3,
                 }),
 
-                Event::Pmc(Pmc {
+                (Pmc {
                     timestamp: 300,
                     thread_id: 99999,
                     instructions_retired: 200_000,
                     total_cycles: 600_000,
-                }),
-                Event::CSwitch(CSwitch {
+                },
+                CSwitch {
                     timestamp: 300,
                     old_process_pid: 12345, // rustc.exe -> link.exe
                     new_process_pid: 10612, // rustc.exe
                     cpu: 3,
                 }),
 
-                Event::Pmc(Pmc {
+                (Pmc {
                     timestamp: 400,
                     thread_id: 15340,
                     instructions_retired: 2500,
                     total_cycles: 20000,
-                }),
-                Event::CSwitch(CSwitch {
+                },
+                CSwitch {
                     timestamp: 400,
                     old_process_pid: 10612, // rustc.exe
                     new_process_pid: 0, // Idle
                     cpu: 0
                 }),
 
-                Event::Pmc(Pmc {
+                (Pmc {
                     timestamp: 500,
                     thread_id: 15341,
                     instructions_retired: 300_000,
                     total_cycles: 700_000,
-                }),
-                Event::CSwitch(CSwitch {
+                },
+                CSwitch {
                     timestamp: 500,
                     old_process_pid: 10612, // rustc.exe
                     new_process_pid: 0, // Idle
