@@ -7,7 +7,7 @@ use serde::Deserialize;
 use database::ArtifactId;
 use regex::Regex;
 use reqwest::header::USER_AGENT;
-use std::{sync::Arc, time::Duration};
+use std::{fmt::Write, sync::Arc, time::Duration};
 
 lazy_static::lazy_static! {
     static ref BODY_TRY_COMMIT: Regex =
@@ -631,11 +631,14 @@ pub async fn post_finished(data: &InputData) {
                 "https://perf.rust-lang.org/compare.html?start={}&end={}",
                 commit.parent_sha, commit.sha
             );
+            let summary = categorize_benchmark(&commit, data).await;
             post_comment(
                 &data.config,
                 commit.pr,
                 format!(
                     "Finished benchmarking try commit ({}): [comparison url]({}).
+
+**Summary**: {}
 
 Benchmarking this pull request likely means that it is \
 perf-sensitive, so we're automatically marking it as not fit \
@@ -649,10 +652,56 @@ regressions or improvements in the roll up.
 
 @bors rollup=never
 @rustbot label: +S-waiting-on-review -S-waiting-on-perf",
-                    commit.sha, comparison_url
+                    commit.sha, comparison_url, summary
                 ),
             )
             .await;
         }
     }
+}
+
+async fn categorize_benchmark(commit: &database::QueuedCommit, data: &InputData) -> String {
+    let comparison = match crate::comparison::compare(
+        collector::Bound::Commit(commit.parent_sha.clone()),
+        collector::Bound::Commit(commit.sha.clone()),
+        "instructions:u".to_owned(),
+        data,
+    )
+    .await
+    {
+        Ok(Some(c)) => c,
+        _ => return String::from("ERROR categorizing benchmark run!"),
+    };
+    const DISAGREEMENT: &str = "If you disagree with this performance assessment, \
+    please file an issue in [rust-lang/rustc-perf](https://github.com/rust-lang/rustc-perf/issues/new).";
+    let (summary, direction) =
+        match crate::comparison::ComparisonSummary::summarize_comparison(&comparison) {
+            Some(s) if s.direction().is_some() => {
+                let direction = s.direction().unwrap();
+                (s, direction)
+            }
+            _ => {
+                return format!(
+                    "This benchmark run did not return any significant changes.\n\n{}",
+                    DISAGREEMENT
+                )
+            }
+        };
+
+    use crate::comparison::Direction;
+    let category = match direction {
+        Direction::Improvement => "improvements 🎉",
+        Direction::Regression => "regressions 😿",
+        Direction::Mixed => "mixed results 🤷",
+    };
+    let mut result = format!(
+        "This change led to significant {} in compiler performance.\n",
+        category
+    );
+    for change in summary.ordered_changes() {
+        write!(result, "- ").unwrap();
+        change.summary_line(&mut result, None)
+    }
+    write!(result, "\n{}", DISAGREEMENT).unwrap();
+    result
 }
