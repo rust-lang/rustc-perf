@@ -7,7 +7,7 @@ use serde::Deserialize;
 use database::ArtifactId;
 use regex::Regex;
 use reqwest::header::USER_AGENT;
-use std::{sync::Arc, time::Duration};
+use std::{fmt::Write, sync::Arc, time::Duration};
 
 lazy_static::lazy_static! {
     static ref BODY_TRY_COMMIT: Regex =
@@ -638,7 +638,7 @@ pub async fn post_finished(data: &InputData) {
                 format!(
                     "Finished benchmarking try commit ({}): [comparison url]({}).
 
-                    **Summary**: {}
+**Summary**: {}
 
 Benchmarking this pull request likely means that it is \
 perf-sensitive, so we're automatically marking it as not fit \
@@ -672,13 +672,20 @@ async fn categorize_benchmark(commit: &database::QueuedCommit, data: &InputData)
         Ok(Some(c)) => c,
         _ => return String::from("ERROR categorizing benchmark run!"),
     };
+    const DISAGREEMENT: &str = "If you disagree with this performance assessment, \
+    please file an issue in [rust-lang/rustc-perf](https://github.com/rust-lang/rustc-perf/issues/new).";
     let (summary, direction) =
         match crate::comparison::ComparisonSummary::summarize_comparison(&comparison) {
             Some(s) if s.direction().is_some() => {
                 let direction = s.direction().unwrap();
                 (s, direction)
             }
-            _ => return String::from("This benchmark run did not return any significant changes"),
+            _ => {
+                return format!(
+                    "This benchmark run did not return any significant changes.\n\n{}",
+                    DISAGREEMENT
+                )
+            }
         };
 
     use crate::comparison::Direction;
@@ -692,9 +699,9 @@ async fn categorize_benchmark(commit: &database::QueuedCommit, data: &InputData)
         category
     );
     for change in summary.ordered_changes() {
-        use std::fmt::Write;
         write!(result, "- ").unwrap();
         change.summary_line(&mut result, None)
     }
+    write!(result, "\n{}", DISAGREEMENT).unwrap();
     result
 }
