@@ -1,4 +1,5 @@
 use crate::api::{github, ServerResult};
+use crate::comparison::{ComparisonSummary, Direction};
 use crate::load::{Config, InputData, TryCommit};
 use anyhow::Context as _;
 use hashbrown::HashSet;
@@ -631,7 +632,23 @@ pub async fn post_finished(data: &InputData) {
                 "https://perf.rust-lang.org/compare.html?start={}&end={}",
                 commit.parent_sha, commit.sha
             );
-            let summary = categorize_benchmark(&commit, data).await;
+            let (summary, direction) = categorize_benchmark(&commit, data).await;
+            let label = match direction {
+                Some(Direction::Regression | Direction::Mixed) => "+perf-regression",
+                Some(Direction::Improvement) | None => "-perf-regression",
+            };
+
+            let rollup = if let Some(_) = direction {
+                "Benchmarking this pull request showed some changes in performance \
+                so we're automatically marking it as not fit for rolling up. 
+
+@bors rollup=never"
+            } else {
+                "Even though no performance changes were detected, if you still believe\
+                this pull request to potentially be performance sensitive, consider running\
+                `@bors rollup=never` or `@bors rollup=iffy`.\n"
+            };
+
             post_comment(
                 &data.config,
                 commit.pr,
@@ -640,19 +657,9 @@ pub async fn post_finished(data: &InputData) {
 
 **Summary**: {}
 
-Benchmarking this pull request likely means that it is \
-perf-sensitive, so we're automatically marking it as not fit \
-for rolling up. Please note that if the perf results are \
-neutral, you should likely undo the rollup=never given below \
-by specifying `rollup-` to bors.
-
-Importantly, though, if the results of this run are \
-non-neutral **do not** roll this PR up -- it will mask other \
-regressions or improvements in the roll up.
-
-@bors rollup=never
-@rustbot label: +S-waiting-on-review -S-waiting-on-perf",
-                    commit.sha, comparison_url, summary
+{}
+@rustbot label: +S-waiting-on-review -S-waiting-on-perf {}",
+                    commit.sha, comparison_url, summary, rollup, label
                 ),
             )
             .await;
@@ -660,7 +667,10 @@ regressions or improvements in the roll up.
     }
 }
 
-async fn categorize_benchmark(commit: &database::QueuedCommit, data: &InputData) -> String {
+async fn categorize_benchmark(
+    commit: &database::QueuedCommit,
+    data: &InputData,
+) -> (String, Option<Direction>) {
     let comparison = match crate::comparison::compare(
         collector::Bound::Commit(commit.parent_sha.clone()),
         collector::Bound::Commit(commit.sha.clone()),
@@ -670,25 +680,26 @@ async fn categorize_benchmark(commit: &database::QueuedCommit, data: &InputData)
     .await
     {
         Ok(Some(c)) => c,
-        _ => return String::from("ERROR categorizing benchmark run!"),
+        _ => return (String::from("ERROR categorizing benchmark run!"), None),
     };
     const DISAGREEMENT: &str = "If you disagree with this performance assessment, \
     please file an issue in [rust-lang/rustc-perf](https://github.com/rust-lang/rustc-perf/issues/new).";
-    let (summary, direction) =
-        match crate::comparison::ComparisonSummary::summarize_comparison(&comparison) {
-            Some(s) if s.direction().is_some() => {
-                let direction = s.direction().unwrap();
-                (s, direction)
-            }
-            _ => {
-                return format!(
+    let (summary, direction) = match ComparisonSummary::summarize_comparison(&comparison) {
+        Some(s) if s.direction().is_some() => {
+            let direction = s.direction().unwrap();
+            (s, direction)
+        }
+        _ => {
+            return (
+                format!(
                     "This benchmark run did not return any significant changes.\n\n{}",
                     DISAGREEMENT
-                )
-            }
-        };
+                ),
+                None,
+            )
+        }
+    };
 
-    use crate::comparison::Direction;
     let category = match direction {
         Direction::Improvement => "improvements 🎉",
         Direction::Regression => "regressions 😿",
@@ -703,5 +714,5 @@ async fn categorize_benchmark(commit: &database::QueuedCommit, data: &InputData)
         change.summary_line(&mut result, None)
     }
     write!(result, "\n{}", DISAGREEMENT).unwrap();
-    result
+    (result, Some(direction))
 }
