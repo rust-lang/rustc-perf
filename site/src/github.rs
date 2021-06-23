@@ -637,18 +637,6 @@ pub async fn post_finished(data: &InputData) {
                 Some(Direction::Regression | Direction::Mixed) => "+perf-regression",
                 Some(Direction::Improvement) | None => "-perf-regression",
             };
-
-            let rollup = if let Some(_) = direction {
-                "Benchmarking this pull request showed some changes in performance \
-                so we're automatically marking it as not fit for rolling up. 
-
-@bors rollup=never"
-            } else {
-                "Even though no performance changes were detected, if you still believe\
-                this pull request to potentially be performance sensitive, consider running\
-                `@bors rollup=never` or `@bors rollup=iffy`.\n"
-            };
-
             post_comment(
                 &data.config,
                 commit.pr,
@@ -657,9 +645,19 @@ pub async fn post_finished(data: &InputData) {
 
 **Summary**: {}
 
-{}
+Benchmarking this pull request likely means that it is \
+perf-sensitive, so we're automatically marking it as not fit \
+for rolling up. Please note that if the perf results are \
+neutral, you should likely undo the rollup=never given below \
+by specifying `rollup-` to bors.
+
+Importantly, though, if the results of this run are \
+non-neutral **do not** roll this PR up -- it will mask other \
+regressions or improvements in the roll up.
+
+@bors rollup=never
 @rustbot label: +S-waiting-on-review -S-waiting-on-perf {}",
-                    commit.sha, comparison_url, summary, rollup, label
+                    commit.sha, comparison_url, summary, label
                 ),
             )
             .await;
