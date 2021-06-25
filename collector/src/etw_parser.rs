@@ -120,6 +120,7 @@ fn validate_os_header_line(r: &mut dyn BufRead) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// An instance of a Performance Monitoring Counter event.
 #[derive(Debug, Eq, PartialEq)]
 struct Pmc {
     timestamp: u64,
@@ -128,6 +129,7 @@ struct Pmc {
     total_cycles: u64,
 }
 
+/// An instance of a Context Switch event.
 #[derive(Debug, Eq, PartialEq)]
 struct CSwitch {
     timestamp: u64,

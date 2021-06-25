@@ -165,7 +165,7 @@ environments do not permit access to these counters for guest VMs.
 You will also need to provide the paths to the xperf and tracelog tools (or have them
 available on your PATH). Some common paths to these tools look like:
 
-```
+```pwsh
 $env:XPERF="C:\Program Files (x86)\Windows Kits\10\Windows Performance Toolkit\xperf.exe"
 $env:TRACELOG="C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x64\tracelog.exe"
 ```
@@ -177,7 +177,7 @@ profiler is the `self-profiler`.
 As a complete example, let's run just the `regex` benchmark in the `Debug` build with
 self-profiling results available:
 
-```
+```pwsh
 $env:XPERF="C:\Program Files (x86)\Windows Kits\10\Windows Performance Toolkit\xperf.exe"
 $env:TRACELOG="C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x64\tracelog.exe"
 .\target\release\collector.exe bench_local $env:RUST_ORIGINAL Original --builds Debug --include regex --self-profile
