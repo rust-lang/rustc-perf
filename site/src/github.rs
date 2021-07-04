@@ -651,17 +651,11 @@ pub async fn post_finished(data: &InputData) {
                 sufficient written justification. If you cannot justify the regressions \
                 please fix the regressions and do another perf run. If the next run shows \
                 neutral or positive results, the label will be automatically removed.",
-                            _ => "",
+                            Direction::Improvement => "",
                         }
                     )
                 })
-                .unwrap_or(
-                    "Please note that since \
-            performance does not seem to be significantly changed, you may *consider* undoing the \
-            rollup directive by specifying `@bors rollup-`. Only do this if you strongly believe \
-            the PR will continue to not lead to performance changes after merging."
-                        .to_owned(),
-                );
+                .unwrap_or(String::new());
 
             post_comment(
                 &data.config,
