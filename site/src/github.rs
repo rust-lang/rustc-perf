@@ -637,6 +637,26 @@ pub async fn post_finished(data: &InputData) {
                 Some(Direction::Regression | Direction::Mixed) => "+perf-regression",
                 Some(Direction::Improvement) | None => "-perf-regression",
             };
+            let msg = direction
+                .map(|d| {
+                    format!(
+                        "While you can manually mark this PR as fit \
+            for rollup, we strongly recommend not doing so since this PR led to changes in \
+            compiler perf.{}",
+                        match d {
+                            Direction::Regression | Direction::Mixed =>
+                                "\n\n**Next Steps**: If you can justify the \
+                regressions found in this perf run, please indicate this with \
+                `@rustbot label: +perf-regression-justified` along with \
+                sufficient written justification. If you cannot justify the regressions \
+                please fix the regressions and do another perf run. If the next run shows \
+                neutral or positive results, the label will be automatically removed.",
+                            Direction::Improvement => "",
+                        }
+                    )
+                })
+                .unwrap_or(String::new());
+
             post_comment(
                 &data.config,
                 commit.pr,
@@ -647,17 +667,11 @@ pub async fn post_finished(data: &InputData) {
 
 Benchmarking this pull request likely means that it is \
 perf-sensitive, so we're automatically marking it as not fit \
-for rolling up. Please note that if the perf results are \
-neutral, you should likely undo the rollup=never given below \
-by specifying `rollup-` to bors.
-
-Importantly, though, if the results of this run are \
-non-neutral **do not** roll this PR up -- it will mask other \
-regressions or improvements in the roll up.
+for rolling up. {} 
 
 @bors rollup=never
 @rustbot label: +S-waiting-on-review -S-waiting-on-perf {}",
-                    commit.sha, comparison_url, summary, label
+                    commit.sha, comparison_url, summary, msg, label
                 ),
             )
             .await;
