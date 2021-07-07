@@ -434,11 +434,11 @@ pub struct LabelId(pub u8, pub u32);
 #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct ArtifactIdNumber(pub u32);
 
+/// Cached results of various queries.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Index {
     commits: Indexed<Commit>,
     artifacts: Indexed<Box<str>>,
-
     errors: Indexed<Crate>,
     pstats: Indexed<(Crate, Profile, Cache, ProcessStatistic)>,
     queries: Indexed<(Crate, Profile, Cache, QueryLabel)>,
