@@ -18,6 +18,9 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Formatting check
+        run: cargo fmt --all -- --check
+
       - name: Test and build
         run: docker build -t rustc-perf .
 

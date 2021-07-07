@@ -1230,9 +1230,12 @@ impl UpdatingStatus {
 
     // Returns previous state
     fn set_updating(&self) -> bool {
-        match self.0.compare_exchange(false, true, AtomicOrdering::SeqCst, AtomicOrdering::SeqCst) {
+        match self
+            .0
+            .compare_exchange(false, true, AtomicOrdering::SeqCst, AtomicOrdering::SeqCst)
+        {
             Ok(b) => b,
-            Err(b) => b
+            Err(b) => b,
         }
     }
 

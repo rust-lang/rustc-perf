@@ -6,18 +6,18 @@ use collector::command_output;
 use database::{PatchName, QueryLabel};
 use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt;
-use std::{cmp, ffi::OsStr, path::Component};
 use std::collections::HashMap;
 use std::env;
 use std::fmt;
 use std::fs::{self, File};
 use std::hash;
 use std::io::Read;
+use std::mem::ManuallyDrop;
 use std::path::{Path, PathBuf};
 use std::process::{self, Command};
 use std::str;
-use std::mem::ManuallyDrop;
 use std::time::Duration;
+use std::{cmp, ffi::OsStr, path::Component};
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
 
@@ -61,7 +61,8 @@ fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> anyhow::Result<()> 
 fn touch(path: &Path) -> anyhow::Result<()> {
     log::trace!("touching file {:?}", path);
 
-    filetime::set_file_mtime(path, filetime::FileTime::now()).with_context(|| format!("touching file {:?}", path))?;
+    filetime::set_file_mtime(path, filetime::FileTime::now())
+        .with_context(|| format!("touching file {:?}", path))?;
 
     Ok(())
 }
@@ -92,7 +93,8 @@ fn touch_all(path: &Path) -> anyhow::Result<()> {
         // We also delete the cmake caches to avoid errors when moving directories around.
         // This might be a bit slower but at least things build
         if path.file_name() == Some(OsStr::new("CMakeCache.txt")) {
-            fs::remove_file(path).with_context(|| format!("deleting cmake caches in {:?}", path))?;
+            fs::remove_file(path)
+                .with_context(|| format!("deleting cmake caches in {:?}", path))?;
         }
 
         if is_valid(path) {
@@ -1152,7 +1154,8 @@ impl Benchmark {
         let mut base_dot = base.to_path_buf();
         base_dot.push(".");
         let tmp_dir = TempDir::new()?;
-        Self::copy(&base_dot, tmp_dir.path()).with_context(|| format!("copying {} to tmp dir", self.name))?;
+        Self::copy(&base_dot, tmp_dir.path())
+            .with_context(|| format!("copying {} to tmp dir", self.name))?;
         Ok(tmp_dir)
     }
 

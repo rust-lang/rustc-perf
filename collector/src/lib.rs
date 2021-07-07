@@ -148,7 +148,7 @@ pub fn run_command(cmd: &mut Command) -> anyhow::Result<()> {
 pub fn robocopy(
     from: &std::path::Path,
     to: &std::path::Path,
-    extra_args: &[&dyn AsRef<std::ffi::OsStr>]
+    extra_args: &[&dyn AsRef<std::ffi::OsStr>],
 ) -> anyhow::Result<()> {
     let mut cmd = Command::new("robocopy");
     cmd.arg(from).arg(to).arg("/s").arg("/e");
@@ -219,7 +219,7 @@ pub fn command_output(cmd: &mut Command) -> anyhow::Result<process::Output> {
             output.status,
             String::from_utf8_lossy(&output.stderr),
             String::from_utf8_lossy(&output.stdout)
-        )); 
+        ));
     }
 
     Ok(output)
@@ -246,7 +246,8 @@ pub struct MasterCommit {
 /// Note that this does not contain try commits today, so it should not be used
 /// to validate hashes or expand them generally speaking. This may also change
 /// in the future.
-pub async fn master_commits() -> Result<Vec<MasterCommit>, Box<dyn std::error::Error + Sync + Send>> {
+pub async fn master_commits() -> Result<Vec<MasterCommit>, Box<dyn std::error::Error + Sync + Send>>
+{
     let response = reqwest::get("https://triage.rust-lang.org/bors-commit-list").await?;
     Ok(response.json().await?)
 }
