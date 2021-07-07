@@ -197,6 +197,7 @@ fn parse_events(r: &mut dyn BufRead, headers: Vec<EventHeader>) -> anyhow::Resul
         match columns[0].trim() {
             PROCESS_START => {
                 let process_name = columns[pstart_process_name].trim();
+                log::trace!("saw P-Start for {}", process_name);
 
                 match (process_name.contains("rustc.exe"), &rustc_process) {
                     (true, None) =>{
@@ -239,6 +240,7 @@ fn parse_events(r: &mut dyn BufRead, headers: Vec<EventHeader>) -> anyhow::Resul
                 // because sometimes C-Switch events come in after the P-End event and we
                 // don't want to miss them. (If PID reuse occurs for a watched process, we
                 // detect this in PROCESS_START).
+                log::trace!("saw P-End for {}", columns[pend_process_name].trim());
             }
             PMC => {
                 last_pmc = Some(Pmc {
@@ -251,8 +253,11 @@ fn parse_events(r: &mut dyn BufRead, headers: Vec<EventHeader>) -> anyhow::Resul
             CSWITCH => {
                 let timestamp = columns[cswitch_timestamp].trim().parse()?;
                 let old_process = columns[cswitch_old_process].trim();
-                let old_pid = extract_pid(old_process);
                 let new_process = columns[cswitch_new_process].trim();
+
+                log::trace!("saw CSwitch from {} to {}", old_process, new_process);
+
+                let old_pid = extract_pid(old_process);
                 let new_pid = extract_pid(new_process);
 
                 if !currently_watched_processes.contains(&old_pid) && !currently_watched_processes.contains(&new_pid) {
