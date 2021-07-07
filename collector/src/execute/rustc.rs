@@ -49,7 +49,10 @@ fn record(
         .context("git reset --hard")?;
 
     if !status.success() && matches!(artifact, ArtifactId::Artifact(_)) {
-        log::warn!("git reset --hard {} failed - trying default branch", artifact);
+        log::warn!(
+            "git reset --hard {} failed - trying default branch",
+            artifact
+        );
         status = Command::new("git")
             .current_dir("rust")
             .arg("reset")
@@ -168,7 +171,10 @@ fn checkout(artifact: &ArtifactId) -> anyhow::Result<()> {
             .context("git fetch origin")?;
 
         if !status.success() && matches!(artifact, ArtifactId::Artifact(_)) {
-            log::warn!("git fetch origin {} failed - trying default branch", artifact);
+            log::warn!(
+                "git fetch origin {} failed - trying default branch",
+                artifact
+            );
             status = Command::new("git")
                 .current_dir("rust")
                 .arg("fetch")
@@ -178,7 +184,6 @@ fn checkout(artifact: &ArtifactId) -> anyhow::Result<()> {
                 .context("git fetch origin HEAD")?;
         }
         assert!(status.success(), "git fetch successful");
-
     } else {
         let status = Command::new("git")
             .arg("clone")
