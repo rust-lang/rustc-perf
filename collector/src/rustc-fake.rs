@@ -83,6 +83,15 @@ fn main() {
             }
 
             "xperf-stat" | "xperf-stat-self-profile" => {
+                // For Windows, we use a combination of xperf and tracelog to capture ETW events including hardware performance counters.
+                // To do this, we start an ETW trace using tracelog, telling it to include the InstructionRetired and TotalCycles PMCs
+                // for each CSwitch event that is recorded. Then when ETW records a context switch event, it will be preceeded by a
+                // PMC event which contains the raw counters at that instant. After we've finished compilation, we then use xperf
+                // to stop the trace and dump the results to a plain text file. This file is then processed by the `etw_parser` module
+                // which finds events related to the rustc process and calculates the total values for those performance counters.
+                // Conceptually, this is similar to how `perf` works on Linux except we have to do more of the work ourselves as there
+                // isn't an out of the box way to get the data we care about.
+
                 // Read the path to xperf.exe and tracelog.exe from an environment variable, falling back to assuming it's on the PATH.
                 let xperf = std::env::var("XPERF").unwrap_or("xperf.exe".to_string());
                 let mut cmd = Command::new(&xperf);
