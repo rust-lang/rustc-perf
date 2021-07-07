@@ -647,7 +647,7 @@ pub async fn post_finished(data: &InputData) {
                             Direction::Regression | Direction::Mixed =>
                                 "\n\n**Next Steps**: If you can justify the \
                 regressions found in this perf run, please indicate this with \
-                `@rustbot label: +perf-regression-justified` along with \
+                `@rustbot label: +perf-regression-triaged` along with \
                 sufficient written justification. If you cannot justify the regressions \
                 please fix the regressions and do another perf run. If the next run shows \
                 neutral or positive results, the label will be automatically removed.",
