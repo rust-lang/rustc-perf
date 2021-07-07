@@ -378,9 +378,12 @@ pub enum Label {
     Query(QueryLabel),
 }
 
+/// An identifier for a built version of the compiler
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum ArtifactId {
+    /// A built version of the compiler at an exact commit
     Commit(Commit),
+    /// A symbolic tag for a built compiler like "1.51.0"
     Artifact(String),
 }
 
