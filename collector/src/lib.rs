@@ -15,24 +15,33 @@ pub use self_profile::{QueryData, SelfProfile};
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Deserialize)]
 pub struct DeltaTime(#[serde(with = "round_float")] pub f64);
 
+/// The bound of a range changes in codebase
+///
+/// This can either be the upper or lower bound
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Bound {
-    // sha, unverified
+    /// An unverified git commit (in sha form)
     Commit(String),
+    /// A date in time
     Date(NaiveDate),
+    /// No bound
     None,
 }
 
 impl Bound {
+    /// Tests whether self bounds the commit to the left
     pub fn left_match(&self, commit: &Commit) -> bool {
-        let last_month = chrono::Utc::now().date().naive_utc() - chrono::Duration::days(30);
         match self {
             Bound::Commit(sha) => commit.sha == **sha,
             Bound::Date(date) => commit.date.0.naive_utc().date() >= *date,
-            Bound::None => last_month <= commit.date.0.naive_utc().date(),
+            Bound::None => {
+                let last_month = chrono::Utc::now().date().naive_utc() - chrono::Duration::days(30);
+                last_month <= commit.date.0.naive_utc().date()
+            }
         }
     }
 
+    /// Tests whether self bounds the commit to the right
     pub fn right_match(&self, commit: &Commit) -> bool {
         match self {
             Bound::Commit(sha) => commit.sha == **sha,
@@ -148,7 +157,7 @@ pub fn run_command(cmd: &mut Command) -> anyhow::Result<()> {
 pub fn robocopy(
     from: &std::path::Path,
     to: &std::path::Path,
-    extra_args: &[&dyn AsRef<std::ffi::OsStr>]
+    extra_args: &[&dyn AsRef<std::ffi::OsStr>],
 ) -> anyhow::Result<()> {
     let mut cmd = Command::new("robocopy");
     cmd.arg(from).arg(to).arg("/s").arg("/e");
@@ -219,7 +228,7 @@ pub fn command_output(cmd: &mut Command) -> anyhow::Result<process::Output> {
             output.status,
             String::from_utf8_lossy(&output.stderr),
             String::from_utf8_lossy(&output.stdout)
-        )); 
+        ));
     }
 
     Ok(output)
@@ -246,7 +255,8 @@ pub struct MasterCommit {
 /// Note that this does not contain try commits today, so it should not be used
 /// to validate hashes or expand them generally speaking. This may also change
 /// in the future.
-pub async fn master_commits() -> Result<Vec<MasterCommit>, Box<dyn std::error::Error + Sync + Send>> {
+pub async fn master_commits() -> Result<Vec<MasterCommit>, Box<dyn std::error::Error + Sync + Send>>
+{
     let response = reqwest::get("https://triage.rust-lang.org/bors-commit-list").await?;
     Ok(response.json().await?)
 }
