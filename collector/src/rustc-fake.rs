@@ -83,12 +83,21 @@ fn main() {
             }
 
             "xperf-stat" | "xperf-stat-self-profile" => {
-                // Read the path to tracelog.exe from either an environment variable, falling back to assuming it's on the PATH.
+                // Read the path to xperf.exe and tracelog.exe from an environment variable, falling back to assuming it's on the PATH.
+                let xperf = std::env::var("XPERF").unwrap_or("xperf.exe".to_string());
+                let mut cmd = Command::new(&xperf);
+                assert!(cmd.output().is_ok(), "xperf.exe could not be started");
+
+                // go ahead and run `xperf -stop rustc-perf-counters` in case there are leftover counters running from a failed prior attempt
+                let mut cmd = Command::new(&xperf);
+                cmd.args(&["-stop", "rustc-perf-counters"]);
+                cmd.status().expect("failed to spawn xperf");
+
                 let tracelog = std::env::var("TRACELOG").unwrap_or("tracelog.exe".to_string());
                 let mut cmd = Command::new(tracelog);
                 assert!(cmd.output().is_ok(), "tracelog.exe could not be started");
 
-                cmd.args(&["-start", "counters", "-f", "counters.etl", "-eflag", "CSWITCH+PROC_THREAD+LOADER", "-PMC", "InstructionRetired,TotalCycles:CSWITCH"]);
+                cmd.args(&["-start", "rustc-perf-counters", "-f", "counters.etl", "-eflag", "CSWITCH+PROC_THREAD+LOADER", "-PMC", "InstructionRetired,TotalCycles:CSWITCH"]);
                 let status = cmd.status().expect("failed to spawn tracelog");
                 assert!(status.success(), "tracelog did not complete successfully");
 
@@ -115,17 +124,13 @@ fn main() {
                     dur.subsec_nanos()
                 );
 
-                let xperf = std::env::var("XPERF").unwrap_or("xperf.exe".to_string());
-                let mut cmd = Command::new(&xperf);
-                assert!(cmd.output().is_ok(), "xperf.exe could not be started");
-
                 let xperf = |args: &[&str]| {
                     let mut cmd = Command::new(&xperf);
                     cmd.args(args);
                     assert!(cmd.status().expect("failed to spawn xperf").success(), "xperf did not complete successfully");
                 };
 
-                xperf(&["-stop", "counters"]);
+                xperf(&["-stop", "rustc-perf-counters"]);
                 xperf(&["-merge", "counters.etl", "pmc_counters_merged.etl"]);
                 xperf(&["-i", "pmc_counters_merged.etl", "-o", "pmc_counters.txt"]);
 
