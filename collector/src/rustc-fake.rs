@@ -106,7 +106,16 @@ fn main() {
                 let mut cmd = Command::new(tracelog);
                 assert!(cmd.output().is_ok(), "tracelog.exe could not be started");
 
-                cmd.args(&["-start", "rustc-perf-counters", "-f", "counters.etl", "-eflag", "CSWITCH+PROC_THREAD+LOADER", "-PMC", "InstructionRetired,TotalCycles:CSWITCH"]);
+                cmd.args(&[
+                    "-start",
+                    "rustc-perf-counters",
+                    "-f",
+                    "counters.etl",
+                    "-eflag",
+                    "CSWITCH+PROC_THREAD+LOADER",
+                    "-PMC",
+                    "InstructionRetired,TotalCycles:CSWITCH",
+                ]);
                 let status = cmd.status().expect("failed to spawn tracelog");
                 assert!(status.success(), "tracelog did not complete successfully");
 
@@ -127,16 +136,15 @@ fn main() {
                 let status = tool.status().expect("tool failed to start");
                 let dur = start.elapsed();
                 assert!(status.success(), "tool did not run successfully");
-                println!(
-                    "!wall-time:{}.{:09}",
-                    dur.as_secs(),
-                    dur.subsec_nanos()
-                );
+                println!("!wall-time:{}.{:09}", dur.as_secs(), dur.subsec_nanos());
 
                 let xperf = |args: &[&str]| {
                     let mut cmd = Command::new(&xperf);
                     cmd.args(args);
-                    assert!(cmd.status().expect("failed to spawn xperf").success(), "xperf did not complete successfully");
+                    assert!(
+                        cmd.status().expect("failed to spawn xperf").success(),
+                        "xperf did not complete successfully"
+                    );
                 };
 
                 xperf(&["-stop", "rustc-perf-counters"]);
@@ -340,14 +348,12 @@ fn process_self_profile_output(prof_out_dir: PathBuf, args: &[OsString]) {
         let filename = profile_data.file_name().unwrap().to_str().unwrap();
         let json = match run_summarize("summarize", &prof_out_dir, filename) {
             Ok(s) => s,
-            Err(e1) => {
-                match run_summarize("summarize-9.0", &prof_out_dir, filename) {
-                    Ok(s) => s,
-                    Err(e2) => {
-                        panic!("failed to run summarize and summarize-9.0. Errors:\nsummarize: {:?}\nsummarize-9.0: {:?}", e1, e2);
-                    }
+            Err(e1) => match run_summarize("summarize-9.0", &prof_out_dir, filename) {
+                Ok(s) => s,
+                Err(e2) => {
+                    panic!("failed to run summarize and summarize-9.0. Errors:\nsummarize: {:?}\nsummarize-9.0: {:?}", e1, e2);
                 }
-            }
+            },
         };
         println!("!self-profile-output:{}", json);
     } else {

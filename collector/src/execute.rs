@@ -578,10 +578,15 @@ impl<'a> MeasureProcessor<'a> {
             let has_perf = Command::new("perf").output().is_ok();
             assert!(has_perf);
         } else {
-            let has_xperf = Command::new(env::var("XPERF").unwrap_or("xperf.exe".to_string())).output().is_ok();
+            let has_xperf = Command::new(env::var("XPERF").unwrap_or("xperf.exe".to_string()))
+                .output()
+                .is_ok();
             assert!(has_xperf);
 
-            let has_tracelog = Command::new(env::var("TRACELOG").unwrap_or("tracelog.exe".to_string())).output().is_ok();
+            let has_tracelog =
+                Command::new(env::var("TRACELOG").unwrap_or("tracelog.exe".to_string()))
+                    .output()
+                    .is_ok();
             assert!(has_tracelog);
         }
 
@@ -784,9 +789,17 @@ impl Upload {
 impl<'a> Processor for MeasureProcessor<'a> {
     fn profiler(&self, _build: BuildKind) -> Profiler {
         if self.is_first_collection && self.self_profile {
-            if cfg!(unix) { Profiler::PerfStatSelfProfile} else { Profiler::XperfStatSelfProfile }
+            if cfg!(unix) {
+                Profiler::PerfStatSelfProfile
+            } else {
+                Profiler::XperfStatSelfProfile
+            }
         } else {
-            if cfg!(unix) { Profiler::PerfStat } else { Profiler::XperfStat }
+            if cfg!(unix) {
+                Profiler::PerfStat
+            } else {
+                Profiler::XperfStat
+            }
         }
     }
 
@@ -842,7 +855,10 @@ impl<'a> Processor for MeasureProcessor<'a> {
                     panic!("failed to collect statistics after 5 tries");
                 }
             }
-            Err(e @ (DeserializeStatError::ParseError { .. } | DeserializeStatError::XperfError(..))) => {
+            Err(
+                e
+                @ (DeserializeStatError::ParseError { .. } | DeserializeStatError::XperfError(..)),
+            ) => {
                 panic!("process_perf_stat_output failed: {:?}", e);
             }
         }
@@ -897,7 +913,10 @@ impl<'a> Processor for ProfileProcessor<'a> {
         };
 
         match self.profiler {
-            Profiler::PerfStat | Profiler::PerfStatSelfProfile | Profiler::XperfStat | Profiler::XperfStatSelfProfile => {
+            Profiler::PerfStat
+            | Profiler::PerfStatSelfProfile
+            | Profiler::XperfStat
+            | Profiler::XperfStatSelfProfile => {
                 panic!("unexpected profiler");
             }
 
@@ -1371,7 +1390,7 @@ enum DeserializeStatError {
     #[error("could not parse `{}` as a float", .0)]
     ParseError(String, #[source] ::std::num::ParseFloatError),
     #[error("could not process xperf data")]
-    XperfError(#[from] anyhow::Error)
+    XperfError(#[from] anyhow::Error),
 }
 
 enum SelfProfileFiles {
@@ -1417,7 +1436,10 @@ fn process_stat_output(
             let counters = etw_parser::parse_etw_file(counter_file).unwrap();
 
             stats.insert("cycles".into(), counters.total_cycles as f64);
-            stats.insert("instructions:u".into(), counters.instructions_retired as f64);
+            stats.insert(
+                "instructions:u".into(),
+                counters.instructions_retired as f64,
+            );
             stats.insert("cpu-clock".into(), counters.cpu_clock);
             continue;
         }
@@ -1425,7 +1447,8 @@ fn process_stat_output(
             let d = &line["!wall-time:".len()..];
             stats.insert(
                 "wall-time".into(),
-                d.parse().map_err(|e| DeserializeStatError::ParseError(d.to_string(), e))?
+                d.parse()
+                    .map_err(|e| DeserializeStatError::ParseError(d.to_string(), e))?,
             );
             continue;
         }
