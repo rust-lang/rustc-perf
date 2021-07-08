@@ -80,7 +80,7 @@ pub struct CommitResponse {
 }
 
 pub mod data {
-    use crate::comparison::DateData;
+    use crate::comparison::ArtifactData;
     use collector::Bound;
     use serde::{Deserialize, Serialize};
 
@@ -95,7 +95,7 @@ pub mod data {
 
     /// List of DateData's from oldest to newest
     #[derive(Debug, Clone, Serialize)]
-    pub struct Response(pub Vec<DateData>);
+    pub struct Response(pub Vec<ArtifactData>);
 }
 
 pub mod graph {
@@ -165,10 +165,11 @@ pub mod bootstrap {
     }
 }
 
-pub mod days {
-    use crate::comparison::DateData;
+pub mod comparison {
     use collector::Bound;
+    use database::Date;
     use serde::{Deserialize, Serialize};
+    use std::collections::HashMap;
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct Request {
@@ -183,8 +184,8 @@ pub mod days {
         /// The names for the previous artifact before `a`, if any.
         pub prev: Option<String>,
 
-        pub a: DateData,
-        pub b: DateData,
+        pub a: ArtifactData,
+        pub b: ArtifactData,
 
         /// The names for the next artifact after `b`, if any.
         pub next: Option<String>,
@@ -192,6 +193,16 @@ pub mod days {
         /// If `a` and `b` are adjacent artifacts (i.e., `a` is the parent of
         /// `b`).
         pub is_contiguous: bool,
+    }
+
+    /// A serializable wrapper for `comparison::ArtifactData`
+    #[derive(Debug, Clone, Serialize)]
+    pub struct ArtifactData {
+        pub commit: String,
+        pub date: Option<Date>,
+        pub pr: Option<u32>,
+        pub data: HashMap<String, Vec<(String, f64)>>,
+        pub bootstrap: HashMap<String, u64>,
     }
 }
 

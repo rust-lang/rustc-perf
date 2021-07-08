@@ -39,8 +39,8 @@ type Request = http::Request<hyper::Body>;
 type Response = http::Response<hyper::Body>;
 
 pub use crate::api::{
-    self, bootstrap, dashboard, data, days, github, graph, info, self_profile, self_profile_raw,
-    status, triage, CommitResponse, ServerResult, StyledBenchmarkName,
+    self, bootstrap, comparison, dashboard, data, github, graph, info, self_profile,
+    self_profile_raw, status, triage, CommitResponse, ServerResult, StyledBenchmarkName,
 };
 use crate::db::{self, Cache, Crate, Profile};
 use crate::interpolate::Interpolated;
