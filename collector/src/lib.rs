@@ -6,6 +6,7 @@ use std::fmt;
 use std::process::{self, Command};
 
 pub mod api;
+pub mod etw_parser;
 mod read2;
 pub mod self_profile;
 
