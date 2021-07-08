@@ -189,13 +189,18 @@ impl Ord for Commit {
     }
 }
 
+/// The compilation profile (i.e., how the crate was built)
 #[derive(
     Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
 )]
 pub enum Profile {
+    /// A checked build (i.e., no codegen)
     Check,
+    /// A debug build (i.e., low optimizations)
     Debug,
+    /// A doc build
     Doc,
+    /// An optimized "release" build
     Opt,
 }
 
@@ -227,15 +232,23 @@ impl fmt::Display for Profile {
     }
 }
 
+/// The incremental cache state
+///
+/// These are usually reported to users in a "flipped" way. For example,
+/// `Cache::Empty` means we're doing a "full" build. We present this to users as "full".
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "variant", content = "name")]
 pub enum Cache {
+    /// Empty cache (i.e., full build)
     #[serde(rename = "full")]
     Empty,
+    /// Empty cache but still incremental (i.e., a full incremental build)
     #[serde(rename = "incr-full")]
     IncrementalEmpty,
+    /// Cache is fully up-to-date (i.e., nothing has changed)
     #[serde(rename = "incr-unchanged")]
     IncrementalFresh,
+    /// Cache is mostly up-to-date but something has been changed
     #[serde(rename = "incr-patched")]
     IncrementalPatch(PatchName),
 }
@@ -437,16 +450,26 @@ pub struct LabelId(pub u8, pub u32);
 #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct ArtifactIdNumber(pub u32);
 
-/// Cached results of various queries.
+/// Id lookups for various things
+///
+/// This is a quick way to find what the database id for something
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Index {
+    /// Id look for a commit
     commits: Indexed<Commit>,
+    /// Id lookup of the errors for a crate
     artifacts: Indexed<Box<str>>,
+    /// Id lookup of the errors for a crate
     errors: Indexed<Crate>,
+    /// Id lookup of a given process stastic profile
     pstats: Indexed<(Crate, Profile, Cache, ProcessStatistic)>,
+    /// Id lookup of a given process query label
     queries: Indexed<(Crate, Profile, Cache, QueryLabel)>,
 }
 
+/// An index lookup
+///
+/// Given a `T` find what its database id is
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Indexed<T> {
     #[serde(with = "index_serde")]

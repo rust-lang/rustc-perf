@@ -239,14 +239,15 @@ pub async fn compare_given_commits(
     };
     let cids = Arc::new(vec![a.clone(), b.clone()]);
 
+    // get all crates, cache, and profile combinations for the given stat
     let query = selector::Query::new()
         .set::<String>(Tag::Crate, selector::Selector::All)
         .set::<String>(Tag::Cache, selector::Selector::All)
         .set::<String>(Tag::Profile, selector::Selector::All)
         .set(Tag::ProcessStatistic, selector::Selector::One(stat.clone()));
 
-    // This contains a series iterators. The first element in the iterator is the data for `a` and the
-    // second is the data for `b`
+    // `responses` contains a series iterators. The first element in the iterator is the data
+    // for `a` and the second is the data for `b`
     let mut responses = data.query::<Option<f64>>(query, cids).await?;
 
     let conn = data.conn().await;
