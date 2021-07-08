@@ -4,7 +4,7 @@
 
 use crate::api;
 use crate::db::{self, ArtifactId, Cache, Crate, Profile};
-use crate::load::InputData;
+use crate::load::SiteCtxt;
 use crate::selector::{self, Tag};
 
 use collector::Bound;
@@ -18,7 +18,7 @@ type BoxedError = Box<dyn Error + Send + Sync>;
 
 pub async fn handle_triage(
     body: api::triage::Request,
-    data: &InputData,
+    data: &SiteCtxt,
 ) -> Result<api::triage::Response, BoxedError> {
     let start = body.start;
     let end = body.end;
@@ -84,7 +84,7 @@ pub async fn handle_triage(
 
 pub async fn handle_compare(
     body: api::comparison::Request,
-    data: &InputData,
+    data: &SiteCtxt,
 ) -> Result<api::comparison::Response, BoxedError> {
     let master_commits = collector::master_commits().await?;
     let end = body.end;
@@ -241,7 +241,7 @@ pub async fn compare(
     start: Bound,
     end: Bound,
     stat: String,
-    data: &InputData,
+    data: &SiteCtxt,
 ) -> Result<Option<Comparison>, BoxedError> {
     let master_commits = collector::master_commits().await?;
     compare_given_commits(start, end, stat, data, &master_commits).await
@@ -252,7 +252,7 @@ pub async fn compare_given_commits(
     start: Bound,
     end: Bound,
     stat: String,
-    data: &InputData,
+    data: &SiteCtxt,
     master_commits: &[collector::MasterCommit],
 ) -> Result<Option<Comparison>, BoxedError> {
     let a = data

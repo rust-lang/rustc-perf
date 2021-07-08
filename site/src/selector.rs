@@ -24,7 +24,7 @@
 
 use crate::db::{ArtifactId, Cache, Profile};
 use crate::interpolate::Interpolate;
-use crate::load::InputData as Db;
+use crate::load::SiteCtxt as Db;
 use async_trait::async_trait;
 use collector::Bound;
 use database::{Commit, Crate, Index, Lookup, ProcessStatistic, QueryLabel};

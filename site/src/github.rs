@@ -1,6 +1,6 @@
 use crate::api::{github, ServerResult};
 use crate::comparison::{ComparisonSummary, Direction};
-use crate::load::{Config, InputData, TryCommit};
+use crate::load::{Config, SiteCtxt, TryCommit};
 use anyhow::Context as _;
 use hashbrown::HashSet;
 use serde::Deserialize;
@@ -39,7 +39,7 @@ async fn get_authorized_users() -> ServerResult<Vec<usize>> {
 
 pub async fn handle_github(
     request: github::Request,
-    data: Arc<InputData>,
+    data: Arc<SiteCtxt>,
 ) -> ServerResult<github::Response> {
     if request.comment.body.contains(" homu: ") {
         if let Some(sha) = handle_homu_res(&request).await {
@@ -152,7 +152,7 @@ pub async fn handle_github(
 // Returns the PR number
 async fn pr_and_try_for_rollup(
     client: &reqwest::Client,
-    data: Arc<InputData>,
+    data: Arc<SiteCtxt>,
     repository_url: &str,
     rollup_merge_sha: &str,
     origin_url: &str,
@@ -231,7 +231,7 @@ struct RollupBranch {
 
 async fn branch_for_rollup(
     client: &reqwest::Client,
-    data: &InputData,
+    data: &SiteCtxt,
     repository_url: &str,
     rollup_merge_sha: &str,
 ) -> anyhow::Result<RollupBranch> {
@@ -328,7 +328,7 @@ struct CreateRefRequest<'a> {
 
 pub async fn create_ref(
     client: &reqwest::Client,
-    data: &InputData,
+    data: &SiteCtxt,
     repository_url: &str,
     ref_: &str,
     sha: &str,
@@ -375,7 +375,7 @@ pub struct CreatePrResponse {
 
 pub async fn create_pr(
     client: &reqwest::Client,
-    data: &InputData,
+    data: &SiteCtxt,
     repository_url: &str,
     title: &str,
     head: &str,
@@ -423,7 +423,7 @@ struct CreateCommitResponse {
 
 pub async fn create_commit(
     client: &reqwest::Client,
-    data: &InputData,
+    data: &SiteCtxt,
     repository_url: &str,
     message: &str,
     tree: &str,
@@ -461,7 +461,7 @@ pub async fn create_commit(
 
 pub async fn get_commit(
     client: &reqwest::Client,
-    data: &InputData,
+    data: &SiteCtxt,
     repository_url: &str,
     sha: &str,
 ) -> anyhow::Result<github::Commit> {
@@ -497,7 +497,7 @@ pub async fn get_commit(
 
 async fn enqueue_sha(
     request: github::Request,
-    data: &InputData,
+    data: &SiteCtxt,
     commit: String,
 ) -> ServerResult<github::Response> {
     let client = reqwest::Client::new();
@@ -592,7 +592,7 @@ where
     }
 }
 
-pub async fn post_finished(data: &InputData) {
+pub async fn post_finished(data: &SiteCtxt) {
     // If the github token is not configured, do not run this -- we don't want
     // to mark things as complete without posting the comment.
     if data.config.keys.github.is_none() {
@@ -681,7 +681,7 @@ for rolling up. {}
 
 async fn categorize_benchmark(
     commit: &database::QueuedCommit,
-    data: &InputData,
+    data: &SiteCtxt,
 ) -> (String, Option<Direction>) {
     let comparison = match crate::comparison::compare(
         collector::Bound::Commit(commit.parent_sha.clone()),

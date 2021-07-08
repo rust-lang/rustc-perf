@@ -26,7 +26,7 @@ async fn main() {
     #[cfg(unix)]
     let _ = jemalloc_ctl::background_thread::write(true);
 
-    let data: Arc<RwLock<Option<Arc<load::InputData>>>> = Arc::new(RwLock::new(None));
+    let data: Arc<RwLock<Option<Arc<load::SiteCtxt>>>> = Arc::new(RwLock::new(None));
     let data_ = data.clone();
     let db_url = env::var("DATABASE_URL")
         .ok()
@@ -37,7 +37,7 @@ async fn main() {
         });
     let fut = tokio::task::spawn_blocking(move || {
         tokio::task::spawn(async move {
-            let res = Arc::new(load::InputData::from_fs(&db_url).await.unwrap());
+            let res = Arc::new(load::SiteCtxt::from_db_url(&db_url).await.unwrap());
             *data_.write() = Some(res.clone());
             let commits = res.index.load().commits().len();
             let artifacts = res.index.load().artifacts().count();

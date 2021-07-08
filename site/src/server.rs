@@ -44,7 +44,7 @@ pub use crate::api::{
 };
 use crate::db::{self, Cache, Crate, Profile};
 use crate::interpolate::Interpolated;
-use crate::load::{Config, InputData};
+use crate::load::{Config, SiteCtxt};
 use crate::selector::{self, PathComponent, Tag};
 use collector::Bound;
 use db::{ArtifactId, Lookup};
@@ -52,7 +52,7 @@ use parking_lot::RwLock;
 
 static INTERPOLATED_COLOR: &str = "#fcb0f1";
 
-pub fn handle_info(data: &InputData) -> info::Response {
+pub fn handle_info(data: &SiteCtxt) -> info::Response {
     let mut stats = data.index.load().stats();
     stats.sort();
     info::Response {
@@ -95,7 +95,7 @@ impl<T> std::ops::Index<Profile> for ByProfile<T> {
     }
 }
 
-pub async fn handle_dashboard(data: Arc<InputData>) -> ServerResult<dashboard::Response> {
+pub async fn handle_dashboard(data: Arc<SiteCtxt>) -> ServerResult<dashboard::Response> {
     let index = data.index.load();
     if index.artifacts().next().is_none() {
         return Ok(dashboard::Response::default());
@@ -253,7 +253,7 @@ fn prettify_log(log: &str) -> Option<String> {
     Some(log.replace("\\n", "\n"))
 }
 
-pub async fn handle_status_page(data: Arc<InputData>) -> status::Response {
+pub async fn handle_status_page(data: Arc<SiteCtxt>) -> status::Response {
     let idx = data.index.load();
     let last_commit = idx.commits().last().cloned();
 
@@ -317,7 +317,7 @@ pub async fn handle_status_page(data: Arc<InputData>) -> status::Response {
     }
 }
 
-pub async fn handle_next_commit(data: Arc<InputData>) -> collector::api::next_commit::Response {
+pub async fn handle_next_commit(data: Arc<SiteCtxt>) -> collector::api::next_commit::Response {
     let commit = data.missing_commits().await.into_iter().next().map(|c| {
         let (include, exclude, runs) = match c.1 {
             crate::load::MissingReason::Try {
@@ -417,7 +417,7 @@ fn to_graph_data<'a>(
 
 pub async fn handle_graph_new(
     body: graph::Request,
-    data: &InputData,
+    data: &SiteCtxt,
 ) -> ServerResult<Arc<graph::NewResponse>> {
     log::info!("handle_graph_new({:?})", body);
     let range = data.data_range(body.start.clone()..=body.end.clone());
@@ -469,7 +469,7 @@ pub async fn handle_graph_new(
 
 pub async fn handle_graph(
     body: graph::Request,
-    data: &InputData,
+    data: &SiteCtxt,
 ) -> ServerResult<Arc<graph::Response>> {
     log::info!("handle_graph({:?})", body);
     let is_default_query = body
@@ -631,7 +631,7 @@ pub async fn handle_graph(
 
 pub async fn handle_github(
     request: github::Request,
-    data: Arc<InputData>,
+    data: Arc<SiteCtxt>,
 ) -> ServerResult<github::Response> {
     crate::github::handle_github(request, data).await
 }
@@ -741,7 +741,7 @@ fn get_self_profile_data(
 pub async fn handle_self_profile_processed_download(
     body: self_profile_raw::Request,
     params: HashMap<String, String>,
-    data: &InputData,
+    data: &SiteCtxt,
 ) -> Response {
     let title = format!(
         "{}: {} {}",
@@ -794,7 +794,7 @@ pub async fn handle_self_profile_processed_download(
 
 pub async fn handle_self_profile_raw_download(
     body: self_profile_raw::Request,
-    data: &InputData,
+    data: &SiteCtxt,
 ) -> Response {
     let res = handle_self_profile_raw(body, data).await;
     let (url, is_tarball) = match res {
@@ -939,7 +939,7 @@ async fn tarball(resp: reqwest::Response, mut sender: hyper::body::Sender) {
 
 pub async fn handle_self_profile_raw(
     body: self_profile_raw::Request,
-    data: &InputData,
+    data: &SiteCtxt,
 ) -> ServerResult<self_profile_raw::Response> {
     log::info!("handle_self_profile_raw({:?})", body);
     let mut it = body.benchmark.rsplitn(2, '-');
@@ -1039,7 +1039,7 @@ pub async fn handle_self_profile_raw(
 
 pub async fn handle_self_profile(
     body: self_profile::Request,
-    data: &InputData,
+    data: &SiteCtxt,
 ) -> ServerResult<self_profile::Response> {
     log::info!("handle_self_profile({:?})", body);
     let mut it = body.benchmark.rsplitn(2, '-');
@@ -1147,7 +1147,7 @@ pub async fn handle_self_profile(
 
 pub async fn handle_bootstrap(
     body: bootstrap::Request,
-    data: &InputData,
+    data: &SiteCtxt,
 ) -> ServerResult<bootstrap::Response> {
     log::info!("handle_bootstrap({:?})", body);
     let range = data.data_range(body.start.clone()..=body.end.clone());
@@ -1204,7 +1204,7 @@ pub async fn handle_bootstrap(
 }
 
 struct Server {
-    data: Arc<RwLock<Option<Arc<InputData>>>>,
+    data: Arc<RwLock<Option<Arc<SiteCtxt>>>>,
     updating: UpdatingStatus,
 }
 
@@ -1273,7 +1273,7 @@ impl ResponseHeaders for http::response::Builder {
 impl Server {
     fn handle_get<F, S>(&self, req: &Request, handler: F) -> Result<Response, ServerError>
     where
-        F: FnOnce(&InputData) -> S,
+        F: FnOnce(&SiteCtxt) -> S,
         S: Serialize,
     {
         check_http_method!(*req.method(), http::Method::GET);
@@ -1293,7 +1293,7 @@ impl Server {
         handler: F,
     ) -> Result<Response, ServerError>
     where
-        F: FnOnce(Arc<InputData>) -> R,
+        F: FnOnce(Arc<SiteCtxt>) -> R,
         R: std::future::Future<Output = S> + Send,
         S: Serialize,
     {
@@ -1328,7 +1328,7 @@ impl Server {
 
     async fn handle_metrics(&self, _req: Request) -> Response {
         use prometheus::Encoder;
-        let data: Arc<InputData> = self.data.read().as_ref().unwrap().clone();
+        let data: Arc<SiteCtxt> = self.data.read().as_ref().unwrap().clone();
         let idx = data.index.load();
 
         let mut buffer = Vec::new();
@@ -1412,7 +1412,7 @@ impl Server {
 
         let (channel, body) = hyper::Body::channel();
 
-        let data: Arc<InputData> = self.data.read().as_ref().unwrap().clone();
+        let data: Arc<SiteCtxt> = self.data.read().as_ref().unwrap().clone();
         let _updating = self.updating.release_on_drop(channel);
         let mut conn = data.conn().await;
         let index = db::Index::load(&mut *conn).await;
@@ -1513,14 +1513,14 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
         return Ok(ctx.handle_push(req).await);
     }
     if req.uri().path() == "/perf/download-raw-self-profile" {
-        let data: Arc<InputData> = ctx.data.read().as_ref().unwrap().clone();
+        let data: Arc<SiteCtxt> = ctx.data.read().as_ref().unwrap().clone();
         match get_self_profile_raw(&req) {
             Ok((_, v)) => return Ok(handle_self_profile_raw_download(v, &data).await),
             Err(e) => return Ok(e),
         }
     }
     if req.uri().path() == "/perf/processed-self-profile" {
-        let data: Arc<InputData> = ctx.data.read().as_ref().unwrap().clone();
+        let data: Arc<SiteCtxt> = ctx.data.read().as_ref().unwrap().clone();
         match get_self_profile_raw(&req) {
             Ok((parts, v)) => {
                 return Ok(handle_self_profile_processed_download(v, parts, &data).await)
@@ -1531,7 +1531,7 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
     let (req, mut body_stream) = req.into_parts();
     let p = req.uri.path();
     check_http_method!(req.method, http::Method::POST);
-    let data: Arc<InputData> = ctx.data.read().as_ref().unwrap().clone();
+    let data: Arc<SiteCtxt> = ctx.data.read().as_ref().unwrap().clone();
     let mut body = Vec::new();
     while let Some(chunk) = body_stream.next().await {
         let chunk = match chunk {
@@ -1748,7 +1748,7 @@ where
     }
 }
 
-async fn run_server(data: Arc<RwLock<Option<Arc<InputData>>>>, addr: SocketAddr) {
+async fn run_server(data: Arc<RwLock<Option<Arc<SiteCtxt>>>>, addr: SocketAddr) {
     let ctx = Arc::new(Server {
         data,
         updating: UpdatingStatus::new(),
@@ -1782,7 +1782,7 @@ async fn run_server(data: Arc<RwLock<Option<Arc<InputData>>>>, addr: SocketAddr)
     }
 }
 
-pub async fn start(data: Arc<RwLock<Option<Arc<InputData>>>>, port: u16) {
+pub async fn start(data: Arc<RwLock<Option<Arc<SiteCtxt>>>>, port: u16) {
     let mut server_address: SocketAddr = "0.0.0.0:2346".parse().unwrap();
     server_address.set_port(port);
     run_server(data, server_address).await;

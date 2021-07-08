@@ -82,7 +82,7 @@ pub struct Config {
 }
 
 /// Site context object that contains global data
-pub struct InputData {
+pub struct SiteCtxt {
     /// Site configuration
     pub config: Config,
     /// Cached site landing page
@@ -93,7 +93,7 @@ pub struct InputData {
     pub pool: Pool,
 }
 
-impl InputData {
+impl SiteCtxt {
     pub fn summary_patches(&self) -> Vec<crate::db::Cache> {
         vec![
             crate::db::Cache::Empty,
@@ -111,9 +111,9 @@ impl InputData {
         crate::selector::range_subset(self.index.load().commits(), range)
     }
 
-    /// Initialize `InputData from the file system.
-    pub async fn from_fs(db: &str) -> anyhow::Result<InputData> {
-        if Path::new(db).join("times").exists() {
+    /// Initialize `SiteCtxt` from database url
+    pub async fn from_db_url(db_url: &str) -> anyhow::Result<Self> {
+        if Path::new(db_url).join("times").exists() {
             eprintln!("It looks like you're running the site off of the old data format");
             eprintln!(
                 "Please utilize the ingest-json script to convert the data into the new database format."
@@ -125,7 +125,7 @@ impl InputData {
             std::process::exit(1);
         }
 
-        let pool = Pool::open(db);
+        let pool = Pool::open(db_url);
 
         let mut conn = pool.connection().await;
         let index = db::Index::load(&mut *conn).await;
@@ -141,7 +141,7 @@ impl InputData {
             }
         };
 
-        Ok(InputData {
+        Ok(Self {
             config,
             index: ArcSwap::new(Arc::new(index)),
             pool,
