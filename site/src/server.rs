@@ -1303,7 +1303,7 @@ impl Server {
                 &mut Some(auth).into_iter(),
             )
             .unwrap();
-            if auth.0.token() == *ctxt.config.keys.secret.as_ref().unwrap() {
+            if auth.0.token() == *ctxt.config.keys.github_webhook_secret.as_ref().unwrap() {
                 return true;
             }
         }
@@ -1701,7 +1701,7 @@ fn verify_gh(config: &Config, req: &http::request::Parts, body: &[u8]) -> bool {
 fn verify_gh_sig(cfg: &Config, header: &str, body: &[u8]) -> Option<bool> {
     let key = hmac::Key::new(
         hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY,
-        cfg.keys.secret.as_ref().unwrap().as_bytes(),
+        cfg.keys.github_webhook_secret.as_ref().unwrap().as_bytes(),
     );
     let sha = header.get(5..)?; // strip sha1=
     let sha = hex::decode(sha).ok()?;

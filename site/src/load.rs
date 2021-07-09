@@ -60,9 +60,11 @@ impl TryCommit {
 #[derive(Debug, Default, Deserialize)]
 pub struct Keys {
     /// GitHub API token from the `GITHUB_API_TOKEN` env variable
-    pub github: Option<String>,
+    #[serde(rename = "github")]
+    pub github_api_token: Option<String>,
     /// GitHub webhook secret from the `GITHUB_WEBHOOK_SECRET` env variable
-    pub secret: Option<String>,
+    #[serde(rename = "secret")]
+    pub github_webhook_secret: Option<String>,
 }
 
 /// Site configuration
@@ -125,8 +127,8 @@ impl SiteCtxt {
         } else {
             Config {
                 keys: Keys {
-                    github: std::env::var("GITHUB_API_TOKEN").ok(),
-                    secret: std::env::var("GITHUB_WEBHOOK_SECRET").ok(),
+                    github_api_token: std::env::var("GITHUB_API_TOKEN").ok(),
+                    github_webhook_secret: std::env::var("GITHUB_WEBHOOK_SECRET").ok(),
                 },
             }
         };

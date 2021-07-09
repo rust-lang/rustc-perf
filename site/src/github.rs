@@ -336,9 +336,9 @@ pub async fn create_ref(
     let timer_token = ctxt
         .config
         .keys
-        .github
+        .github_api_token
         .clone()
-        .expect("needs rust-timer token");
+        .expect("needs github API token");
     let url = format!("{}/git/refs", repository_url);
     let response = client
         .post(&url)
@@ -385,9 +385,9 @@ pub async fn create_pr(
     let timer_token = ctxt
         .config
         .keys
-        .github
+        .github_api_token
         .clone()
-        .expect("needs rust-timer token");
+        .expect("needs github API token");
     let url = format!("{}/pulls", repository_url);
     let response = client
         .post(&url)
@@ -432,9 +432,9 @@ pub async fn create_commit(
     let timer_token = ctxt
         .config
         .keys
-        .github
+        .github_api_token
         .clone()
-        .expect("needs rust-timer token");
+        .expect("needs github API token");
     let url = format!("{}/git/commits", repository_url);
     let commit_response = client
         .post(&url)
@@ -468,9 +468,9 @@ pub async fn get_commit(
     let timer_token = ctxt
         .config
         .keys
-        .github
+        .github_api_token
         .clone()
-        .expect("needs rust-timer token");
+        .expect("needs github API token");
     let url = format!("{}/commits/{}", repository_url, sha);
     let commit_response = client
         .get(&url)
@@ -574,7 +574,11 @@ where
     B: Into<String>,
 {
     let body = body.into();
-    let timer_token = cfg.keys.github.clone().expect("needs rust-timer token");
+    let timer_token = cfg
+        .keys
+        .github_api_token
+        .clone()
+        .expect("needs github API token");
     let client = reqwest::Client::new();
     let req = client
         .post(&format!(
@@ -595,7 +599,7 @@ where
 pub async fn post_finished(ctxt: &SiteCtxt) {
     // If the github token is not configured, do not run this -- we don't want
     // to mark things as complete without posting the comment.
-    if ctxt.config.keys.github.is_none() {
+    if ctxt.config.keys.github_api_token.is_none() {
         return;
     }
     let conn = ctxt.conn().await;
