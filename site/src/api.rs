@@ -166,7 +166,6 @@ pub mod comparison {
     pub struct Request {
         pub start: Bound,
         pub end: Bound,
-
         pub stat: String,
     }
 
@@ -186,7 +185,7 @@ pub mod comparison {
         pub is_contiguous: bool,
     }
 
-    /// A serializable wrapper for `comparison::ArtifactData`
+    /// A serializable wrapper for `comparison::ArtifactData`.
     #[derive(Debug, Clone, Serialize)]
     pub struct ArtifactData {
         pub commit: String,

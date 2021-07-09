@@ -100,34 +100,8 @@ pub async fn handle_compare(
 
     Ok(api::comparison::Response {
         prev,
-        a: api::comparison::ArtifactData {
-            commit: match comparison.a.artifact.clone() {
-                ArtifactId::Commit(c) => c.sha,
-                ArtifactId::Artifact(t) => t,
-            },
-            date: if let ArtifactId::Commit(c) = &comparison.a.artifact {
-                Some(c.date)
-            } else {
-                None
-            },
-            pr: comparison.a.pr,
-            data: comparison.a.data,
-            bootstrap: comparison.a.bootstrap,
-        },
-        b: api::comparison::ArtifactData {
-            commit: match comparison.b.artifact.clone() {
-                ArtifactId::Commit(c) => c.sha,
-                ArtifactId::Artifact(t) => t,
-            },
-            date: if let ArtifactId::Commit(c) = &comparison.b.artifact {
-                Some(c.date)
-            } else {
-                None
-            },
-            pr: comparison.b.pr,
-            data: comparison.b.data,
-            bootstrap: comparison.b.bootstrap,
-        },
+        a: comparison.a.into(),
+        b: comparison.b.into(),
         next,
         is_contiguous,
     })
@@ -370,6 +344,25 @@ impl ArtifactData {
             artifact,
             data,
             bootstrap,
+        }
+    }
+}
+
+impl From<ArtifactData> for api::comparison::ArtifactData {
+    fn from(data: ArtifactData) -> Self {
+        api::comparison::ArtifactData {
+            commit: match data.artifact.clone() {
+                ArtifactId::Commit(c) => c.sha,
+                ArtifactId::Artifact(t) => t,
+            },
+            date: if let ArtifactId::Commit(c) = &data.artifact {
+                Some(c.date)
+            } else {
+                None
+            },
+            pr: data.pr,
+            data: data.data,
+            bootstrap: data.bootstrap,
         }
     }
 }
