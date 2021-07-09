@@ -1,12 +1,3 @@
-// Copyright 2016 The rustc-perf Project Developers. See the COPYRIGHT
-// file at the top-level directory.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
 use arc_swap::ArcSwap;
 use std::collections::HashSet;
 use std::fs;
@@ -19,7 +10,6 @@ use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::db;
-use crate::util;
 use collector::Bound;
 use database::Date;
 
@@ -259,4 +249,4 @@ impl SiteCtxt {
 
 /// One decimal place rounded percent
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Percent(#[serde(with = "util::round_float")] pub f64);
+pub struct Percent(#[serde(with = "collector::round_float")] pub f64);
