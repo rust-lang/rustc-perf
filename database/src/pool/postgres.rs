@@ -584,16 +584,16 @@ where
     async fn get_pstats(
         &self,
         series: &[u32],
-        cids: &[Option<crate::ArtifactIdNumber>],
+        artifact_row_ids: &[Option<crate::ArtifactIdNumber>],
     ) -> Vec<Vec<Option<f64>>> {
         let series = series.iter().map(|sid| *sid as i32).collect::<Vec<_>>();
-        let cids = cids
+        let artifact_row_ids = artifact_row_ids
             .iter()
             .map(|id| id.map(|id| id.0 as i32))
             .collect::<Vec<_>>();
         let rows = self
             .conn()
-            .query(&self.statements().get_pstat, &[&series, &cids])
+            .query(&self.statements().get_pstat, &[&series, &artifact_row_ids])
             .await
             .unwrap();
         rows.into_iter()
@@ -603,13 +603,13 @@ where
     async fn get_self_profile_query(
         &self,
         series: u32,
-        cid: crate::ArtifactIdNumber,
+        artifact_row_id: crate::ArtifactIdNumber,
     ) -> Option<crate::QueryDatum> {
         let row = self
             .conn()
             .query_opt(
                 &self.statements().get_self_profile_query,
-                &[&(series as i32), &(cid.0 as i32)],
+                &[&(series as i32), &(artifact_row_id.0 as i32)],
             )
             .await
             .unwrap()?;
@@ -626,7 +626,7 @@ where
     }
     async fn get_self_profile(
         &self,
-        cid: ArtifactIdNumber,
+        artifact_row_id: ArtifactIdNumber,
         crate_: &str,
         profile: &str,
         cache: &str,
@@ -635,7 +635,7 @@ where
             .conn()
             .query(
                 &self.statements().get_self_profile,
-                &[&crate_, &profile, &cache, &(cid.0 as i32)],
+                &[&crate_, &profile, &cache, &(artifact_row_id.0 as i32)],
             )
             .await
             .unwrap();
@@ -658,10 +658,13 @@ where
             })
             .collect()
     }
-    async fn get_error(&self, cid: crate::ArtifactIdNumber) -> HashMap<String, Option<String>> {
+    async fn get_error(
+        &self,
+        artifact_row_id: crate::ArtifactIdNumber,
+    ) -> HashMap<String, Option<String>> {
         let rows = self
             .conn()
-            .query(&self.statements().get_error, &[&(cid.0 as i32)])
+            .query(&self.statements().get_error, &[&(artifact_row_id.0 as i32)])
             .await
             .unwrap();
         rows.into_iter()

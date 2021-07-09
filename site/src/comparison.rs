@@ -236,7 +236,7 @@ pub async fn compare_given_commits(
         Some(b) => b,
         None => return Ok(None),
     };
-    let cids = Arc::new(vec![a.clone(), b.clone()]);
+    let aids = Arc::new(vec![a.clone(), b.clone()]);
 
     // get all crates, cache, and profile combinations for the given stat
     let query = selector::Query::new()
@@ -247,7 +247,7 @@ pub async fn compare_given_commits(
 
     // `responses` contains series iterators. The first element in the iterator is the data
     // for `a` and the second is the data for `b`
-    let mut responses = ctxt.query::<Option<f64>>(query, cids).await?;
+    let mut responses = ctxt.query::<Option<f64>>(query, aids).await?;
 
     let conn = ctxt.conn().await;
 

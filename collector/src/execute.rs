@@ -557,10 +557,10 @@ pub struct MeasureProcessor<'a> {
     krate: &'a BenchmarkName,
     conn: &'a mut dyn database::Connection,
     artifact: &'a database::ArtifactId,
-    cid: database::ArtifactIdNumber,
+    artifact_row_id: database::ArtifactIdNumber,
     upload: Option<Upload>,
     is_first_collection: bool,
-    self_profile: bool,
+    is_self_profile: bool,
     tries: u8,
 }
 
@@ -570,8 +570,8 @@ impl<'a> MeasureProcessor<'a> {
         conn: &'a mut dyn database::Connection,
         krate: &'a BenchmarkName,
         artifact: &'a database::ArtifactId,
-        cid: database::ArtifactIdNumber,
-        self_profile: bool,
+        artifact_row_id: database::ArtifactIdNumber,
+        is_self_profile: bool,
     ) -> Self {
         // Check we have `perf` or (`xperf.exe` and `tracelog.exe`)  available.
         if cfg!(unix) {
@@ -596,10 +596,9 @@ impl<'a> MeasureProcessor<'a> {
             conn,
             krate,
             artifact,
-            cid,
+            artifact_row_id,
             is_first_collection: true,
-            // Command::new("summarize").status().is_ok()
-            self_profile,
+            is_self_profile,
             tries: 0,
         }
     }
@@ -644,14 +643,14 @@ impl<'a> MeasureProcessor<'a> {
                     u.wait();
                 }
                 let prefix = PathBuf::from("self-profile")
-                    .join(self.cid.0.to_string())
+                    .join(self.artifact_row_id.0.to_string())
                     .join(self.krate.0.as_str())
                     .join(profile.to_string())
                     .join(cache.to_id());
                 self.upload = Some(Upload::new(prefix, collection, files));
                 self.rt.block_on(self.conn.record_raw_self_profile(
                     collection,
-                    self.cid,
+                    self.artifact_row_id,
                     self.krate.0.as_str(),
                     profile,
                     cache,
@@ -663,7 +662,7 @@ impl<'a> MeasureProcessor<'a> {
         for (stat, value) in stats.0.iter() {
             buf.push(self.conn.record_statistic(
                 collection,
-                self.cid,
+                self.artifact_row_id,
                 self.krate.0.as_str(),
                 profile,
                 cache,
@@ -674,12 +673,12 @@ impl<'a> MeasureProcessor<'a> {
 
         if let Some(sp) = &stats.1 {
             let conn = &*self.conn;
-            let cid = self.cid;
+            let artifact_row_id = self.artifact_row_id;
             let krate = self.krate.0.as_str();
             for qd in &sp.query_data {
                 buf.push(conn.record_self_profile_query(
                     collection,
-                    cid,
+                    artifact_row_id,
                     krate,
                     profile,
                     cache,
@@ -788,7 +787,7 @@ impl Upload {
 
 impl<'a> Processor for MeasureProcessor<'a> {
     fn profiler(&self, _build: BuildKind) -> Profiler {
-        if self.is_first_collection && self.self_profile {
+        if self.is_first_collection && self.is_self_profile {
             if cfg!(unix) {
                 Profiler::PerfStatSelfProfile
             } else {
@@ -865,7 +864,13 @@ impl<'a> Processor for MeasureProcessor<'a> {
     }
 
     fn measure_rustc(&mut self, compiler: Compiler<'_>) -> anyhow::Result<()> {
-        rustc::measure(self.rt, self.conn, compiler, self.artifact, self.cid)
+        rustc::measure(
+            self.rt,
+            self.conn,
+            compiler,
+            self.artifact,
+            self.artifact_row_id,
+        )
     }
 }
 
