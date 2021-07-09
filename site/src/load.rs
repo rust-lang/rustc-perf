@@ -64,23 +64,32 @@ impl TryCommit {
     }
 }
 
+/// Keys for accessing various services
+///
+/// At the moment only used for accessing GitHub
 #[derive(Debug, Default, Deserialize)]
 pub struct Keys {
+    /// GitHub API token from the `GITHUB_API_TOKEN` env variable
     pub github: Option<String>,
+    /// GitHub webhook secret from the `GITHUB_WEBHOOK_SECRET` env variable
     pub secret: Option<String>,
 }
 
+/// Site configuration
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub keys: Keys,
 }
 
+/// Site context object that contains global data
 pub struct InputData {
+    /// Site configuration
     pub config: Config,
-
+    /// Cached site landing page
     pub landing_page: ArcSwap<Option<Arc<crate::api::graph::Response>>>,
-
+    /// Index of various common queries
     pub index: ArcSwap<crate::db::Index>,
+    /// Database connection pool
     pub pool: Pool,
 }
 

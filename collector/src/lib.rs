@@ -16,24 +16,33 @@ pub use self_profile::{QueryData, SelfProfile};
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Deserialize)]
 pub struct DeltaTime(#[serde(with = "round_float")] pub f64);
 
+/// The bound of a range changes in codebase
+///
+/// This can either be the upper or lower bound
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Bound {
-    // sha, unverified
+    /// An unverified git commit (in sha form)
     Commit(String),
+    /// A date in time
     Date(NaiveDate),
+    /// No bound
     None,
 }
 
 impl Bound {
+    /// Tests whether self bounds the commit to the left
     pub fn left_match(&self, commit: &Commit) -> bool {
-        let last_month = chrono::Utc::now().date().naive_utc() - chrono::Duration::days(30);
         match self {
             Bound::Commit(sha) => commit.sha == **sha,
             Bound::Date(date) => commit.date.0.naive_utc().date() >= *date,
-            Bound::None => last_month <= commit.date.0.naive_utc().date(),
+            Bound::None => {
+                let last_month = chrono::Utc::now().date().naive_utc() - chrono::Duration::days(30);
+                last_month <= commit.date.0.naive_utc().date()
+            }
         }
     }
 
+    /// Tests whether self bounds the commit to the right
     pub fn right_match(&self, commit: &Commit) -> bool {
         match self {
             Bound::Commit(sha) => commit.sha == **sha,

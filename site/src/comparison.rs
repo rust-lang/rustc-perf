@@ -237,14 +237,17 @@ pub async fn compare_given_commits(
         Some(b) => b,
         None => return Ok(None),
     };
-    let cids = Arc::new(vec![a.clone().into(), b.clone().into()]);
+    let cids = Arc::new(vec![a.clone(), b.clone()]);
 
+    // get all crates, cache, and profile combinations for the given stat
     let query = selector::Query::new()
         .set::<String>(Tag::Crate, selector::Selector::All)
         .set::<String>(Tag::Cache, selector::Selector::All)
         .set::<String>(Tag::Profile, selector::Selector::All)
         .set(Tag::ProcessStatistic, selector::Selector::One(stat.clone()));
 
+    // `responses` contains a series iterators. The first element in the iterator is the data
+    // for `a` and the second is the data for `b`
     let mut responses = data.query::<Option<f64>>(query, cids).await?;
 
     let conn = data.conn().await;
@@ -257,18 +260,30 @@ pub async fn compare_given_commits(
     }))
 }
 
-/// Data associated with a specific date
+/// Data associated with a specific artifact
 #[derive(Debug, Clone, Serialize)]
 pub struct DateData {
-    pub date: Option<Date>,
-    pub pr: Option<u32>,
+    /// The artifact in question
     pub commit: String,
+    /// The date of the artifact if known
+    pub date: Option<Date>,
+    /// The pr of the artifact if known
+    pub pr: Option<u32>,
+    /// Benchmark data in the form "$crate-$profile" -> Vec<("$cache", nanoseconds)>
+    ///
+    /// * $profile refers to the flavor of compilation like debug, doc, opt(timized), etc.
+    /// * $cache refers to how much of the compilation must be done and how much is cached
+    /// (e.g., "incr-unchanged" == compiling with full incremental cache and no code having changed)
     pub data: HashMap<String, Vec<(String, f64)>>,
-    // crate -> nanoseconds
+    /// Bootstrap data in the form "$crate" -> nanoseconds
     pub bootstrap: HashMap<String, u64>,
 }
 
 impl DateData {
+    /// For the given `ArtifactId`, consume the first datapoint in each of the given `SeriesResponse`
+    ///
+    /// It is assumed that the provided ArtifactId is the same as artifact id returned as the next data
+    /// point from all of the series `SeriesResponse`s. If this is not true, this function will panic.
     async fn consume_one<'a, T>(
         conn: &dyn database::Connection,
         commit: ArtifactId,

@@ -33,22 +33,26 @@ use std::fmt;
 use std::ops::RangeInclusive;
 use std::sync::Arc;
 
-pub fn data_for(data: &Index, is_left: bool, query: Bound) -> Option<ArtifactId> {
+/// Finds the most appropriate `ArtifactId` for a given bound.
+///
+/// Searches the commits in the index either from the left or the right.
+/// If not found in those commits, searches through the artifacts in the index.
+pub fn data_for(data: &Index, is_left: bool, bound: Bound) -> Option<ArtifactId> {
     let commits = data.commits();
     let commit = if is_left {
         commits
             .iter()
-            .find(|commit| query.left_match(commit))
+            .find(|commit| bound.left_match(commit))
             .cloned()
     } else {
         commits
             .iter()
-            .rfind(|commit| query.left_match(commit))
+            .rfind(|commit| bound.left_match(commit))
             .cloned()
     };
     commit.map(|c| ArtifactId::Commit(c)).or_else(|| {
         data.artifacts()
-            .find(|aid| match &query {
+            .find(|aid| match &bound {
                 Bound::Commit(c) => *c == **aid,
                 Bound::Date(_) => false,
                 Bound::None => false,
