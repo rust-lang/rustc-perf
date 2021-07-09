@@ -1,12 +1,3 @@
-// Copyright 2016 The rustc-perf Project Developers. See the COPYRIGHT
-// file at the top-level directory.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
 use arc_swap::ArcSwap;
 use std::collections::HashSet;
 use std::fs;
@@ -19,7 +10,6 @@ use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::db;
-use crate::util;
 use collector::Bound;
 use database::Date;
 
@@ -70,9 +60,11 @@ impl TryCommit {
 #[derive(Debug, Default, Deserialize)]
 pub struct Keys {
     /// GitHub API token from the `GITHUB_API_TOKEN` env variable
-    pub github: Option<String>,
+    #[serde(rename = "github")]
+    pub github_api_token: Option<String>,
     /// GitHub webhook secret from the `GITHUB_WEBHOOK_SECRET` env variable
-    pub secret: Option<String>,
+    #[serde(rename = "secret")]
+    pub github_webhook_secret: Option<String>,
 }
 
 /// Site configuration
@@ -82,7 +74,7 @@ pub struct Config {
 }
 
 /// Site context object that contains global data
-pub struct InputData {
+pub struct SiteCtxt {
     /// Site configuration
     pub config: Config,
     /// Cached site landing page
@@ -93,7 +85,7 @@ pub struct InputData {
     pub pool: Pool,
 }
 
-impl InputData {
+impl SiteCtxt {
     pub fn summary_patches(&self) -> Vec<crate::db::Cache> {
         vec![
             crate::db::Cache::Empty,
@@ -103,17 +95,17 @@ impl InputData {
         ]
     }
 
-    pub fn data_for(&self, is_left: bool, query: Bound) -> Option<ArtifactId> {
-        crate::selector::data_for(&self.index.load(), is_left, query)
+    pub fn artifact_id_for_bound(&self, query: Bound, is_left: bool) -> Option<ArtifactId> {
+        crate::selector::artifact_id_for_bound(&self.index.load(), query, is_left)
     }
 
     pub fn data_range(&self, range: RangeInclusive<Bound>) -> Vec<Commit> {
         crate::selector::range_subset(self.index.load().commits(), range)
     }
 
-    /// Initialize `InputData from the file system.
-    pub async fn from_fs(db: &str) -> anyhow::Result<InputData> {
-        if Path::new(db).join("times").exists() {
+    /// Initialize `SiteCtxt` from database url
+    pub async fn from_db_url(db_url: &str) -> anyhow::Result<Self> {
+        if Path::new(db_url).join("times").exists() {
             eprintln!("It looks like you're running the site off of the old data format");
             eprintln!(
                 "Please utilize the ingest-json script to convert the data into the new database format."
@@ -125,7 +117,7 @@ impl InputData {
             std::process::exit(1);
         }
 
-        let pool = Pool::open(db);
+        let pool = Pool::open(db_url);
 
         let mut conn = pool.connection().await;
         let index = db::Index::load(&mut *conn).await;
@@ -135,13 +127,13 @@ impl InputData {
         } else {
             Config {
                 keys: Keys {
-                    github: std::env::var("GITHUB_API_TOKEN").ok(),
-                    secret: std::env::var("GITHUB_WEBHOOK_SECRET").ok(),
+                    github_api_token: std::env::var("GITHUB_API_TOKEN").ok(),
+                    github_webhook_secret: std::env::var("GITHUB_WEBHOOK_SECRET").ok(),
                 },
             }
         };
 
-        Ok(InputData {
+        Ok(Self {
             config,
             index: ArcSwap::new(Arc::new(index)),
             pool,
@@ -259,4 +251,4 @@ impl InputData {
 
 /// One decimal place rounded percent
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Percent(#[serde(with = "util::round_float")] pub f64);
+pub struct Percent(#[serde(with = "collector::round_float")] pub f64);

@@ -1,7 +1,7 @@
 //! This module handles self-profile "rich" APIs (e.g., chrome profiler JSON)
 //! generation from the raw artifacts on demand.
 
-use crate::load::InputData;
+use crate::load::SiteCtxt;
 use anyhow::Context;
 use bytes::Buf;
 use hyper::StatusCode;
@@ -67,9 +67,9 @@ impl fmt::Debug for Pieces {
 
 pub async fn get_pieces(
     body: crate::api::self_profile_raw::Request,
-    data: &InputData,
+    ctxt: &SiteCtxt,
 ) -> Result<Pieces, Response> {
-    let res = crate::server::handle_self_profile_raw(body, data).await;
+    let res = crate::server::handle_self_profile_raw(body, ctxt).await;
     let url = match res {
         Ok(v) => v.url,
         Err(e) => {

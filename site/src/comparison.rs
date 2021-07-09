@@ -3,12 +3,11 @@
 //! comparison endpoints
 
 use crate::api;
-use crate::db::{self, ArtifactId, Cache, Crate, Profile};
-use crate::load::InputData;
+use crate::db::{ArtifactId, Cache, Crate, Profile};
+use crate::load::SiteCtxt;
 use crate::selector::{self, Tag};
 
 use collector::Bound;
-use database::Date;
 use serde::Serialize;
 
 use std::collections::HashMap;
@@ -19,7 +18,7 @@ type BoxedError = Box<dyn Error + Send + Sync>;
 
 pub async fn handle_triage(
     body: api::triage::Request,
-    data: &InputData,
+    ctxt: &SiteCtxt,
 ) -> Result<api::triage::Response, BoxedError> {
     let start = body.start;
     let end = body.end;
@@ -29,7 +28,7 @@ pub async fn handle_triage(
         start.clone(),
         start.clone(),
         "instructions:u".to_owned(),
-        data,
+        ctxt,
         &master_commits,
     )
     .await?
@@ -44,7 +43,7 @@ pub async fn handle_triage(
             before,
             after.clone(),
             "instructions:u".to_owned(),
-            data,
+            ctxt,
             &master_commits,
         )
         .await?
@@ -60,8 +59,8 @@ pub async fn handle_triage(
         };
         log::info!(
             "Comparing {} to {}",
-            comparison.b.commit,
-            comparison.a.commit
+            comparison.b.artifact,
+            comparison.a.artifact
         );
 
         // handle results of comparison
@@ -84,25 +83,25 @@ pub async fn handle_triage(
 }
 
 pub async fn handle_compare(
-    body: api::days::Request,
-    data: &InputData,
-) -> Result<api::days::Response, BoxedError> {
+    body: api::comparison::Request,
+    ctxt: &SiteCtxt,
+) -> Result<api::comparison::Response, BoxedError> {
     let master_commits = collector::master_commits().await?;
     let end = body.end;
     let comparison =
-        compare_given_commits(body.start, end.clone(), body.stat, data, &master_commits)
+        compare_given_commits(body.start, end.clone(), body.stat, ctxt, &master_commits)
             .await?
             .ok_or_else(|| format!("could not find end commit for bound {:?}", end))?;
 
-    let conn = data.conn().await;
+    let conn = ctxt.conn().await;
     let prev = comparison.prev(&master_commits);
     let next = comparison.next(&master_commits);
     let is_contiguous = comparison.is_contiguous(&*conn, &master_commits).await;
 
-    Ok(api::days::Response {
+    Ok(api::comparison::Response {
         prev,
-        a: comparison.a,
-        b: comparison.b,
+        a: comparison.a.into(),
+        b: comparison.b.into(),
         next,
         is_contiguous,
     })
@@ -197,8 +196,8 @@ impl ComparisonSummary<'_> {
         } else {
             String::from("<Unknown Change>\n")
         };
-        let start = &comparison.a.commit;
-        let end = &comparison.b.commit;
+        let start = &comparison.a.artifact;
+        let end = &comparison.b.artifact;
         let link = &compare_link(start, end);
 
         for change in self.ordered_changes() {
@@ -216,10 +215,10 @@ pub async fn compare(
     start: Bound,
     end: Bound,
     stat: String,
-    data: &InputData,
+    ctxt: &SiteCtxt,
 ) -> Result<Option<Comparison>, BoxedError> {
     let master_commits = collector::master_commits().await?;
-    compare_given_commits(start, end, stat, data, &master_commits).await
+    compare_given_commits(start, end, stat, ctxt, &master_commits).await
 }
 
 /// Compare two bounds on a given stat
@@ -227,13 +226,13 @@ pub async fn compare_given_commits(
     start: Bound,
     end: Bound,
     stat: String,
-    data: &InputData,
+    ctxt: &SiteCtxt,
     master_commits: &[collector::MasterCommit],
 ) -> Result<Option<Comparison>, BoxedError> {
-    let a = data
-        .data_for(true, start.clone())
+    let a = ctxt
+        .artifact_id_for_bound(start.clone(), true)
         .ok_or(format!("could not find start commit for bound {:?}", start))?;
-    let b = match data.data_for(false, end.clone()) {
+    let b = match ctxt.artifact_id_for_bound(end.clone(), false) {
         Some(b) => b,
         None => return Ok(None),
     };
@@ -246,27 +245,23 @@ pub async fn compare_given_commits(
         .set::<String>(Tag::Profile, selector::Selector::All)
         .set(Tag::ProcessStatistic, selector::Selector::One(stat.clone()));
 
-    // `responses` contains a series iterators. The first element in the iterator is the data
+    // `responses` contains series iterators. The first element in the iterator is the data
     // for `a` and the second is the data for `b`
-    let mut responses = data.query::<Option<f64>>(query, cids).await?;
+    let mut responses = ctxt.query::<Option<f64>>(query, cids).await?;
 
-    let conn = data.conn().await;
+    let conn = ctxt.conn().await;
 
     Ok(Some(Comparison {
-        a: DateData::consume_one(&*conn, a.clone(), &mut responses, master_commits).await,
-        a_id: a,
-        b: DateData::consume_one(&*conn, b.clone(), &mut responses, master_commits).await,
-        b_id: b,
+        a: ArtifactData::consume_one(&*conn, a.clone(), &mut responses, master_commits).await,
+        b: ArtifactData::consume_one(&*conn, b.clone(), &mut responses, master_commits).await,
     }))
 }
 
 /// Data associated with a specific artifact
 #[derive(Debug, Clone, Serialize)]
-pub struct DateData {
+pub struct ArtifactData {
     /// The artifact in question
-    pub commit: String,
-    /// The date of the artifact if known
-    pub date: Option<Date>,
+    pub artifact: ArtifactId,
     /// The pr of the artifact if known
     pub pr: Option<u32>,
     /// Benchmark data in the form "$crate-$profile" -> Vec<("$cache", nanoseconds)>
@@ -279,25 +274,25 @@ pub struct DateData {
     pub bootstrap: HashMap<String, u64>,
 }
 
-impl DateData {
+impl ArtifactData {
     /// For the given `ArtifactId`, consume the first datapoint in each of the given `SeriesResponse`
     ///
-    /// It is assumed that the provided ArtifactId is the same as artifact id returned as the next data
-    /// point from all of the series `SeriesResponse`s. If this is not true, this function will panic.
+    /// It is assumed that the provided `ArtifactId` matches the artifact id of the next data
+    /// point for all of `SeriesResponse<T>`. If this is not true, this function will panic.
     async fn consume_one<'a, T>(
         conn: &dyn database::Connection,
-        commit: ArtifactId,
+        artifact: ArtifactId,
         series: &mut [selector::SeriesResponse<T>],
         master_commits: &[collector::MasterCommit],
     ) -> Self
     where
-        T: Iterator<Item = (db::ArtifactId, Option<f64>)>,
+        T: Iterator<Item = (ArtifactId, Option<f64>)>,
     {
         let mut data = HashMap::new();
 
         for response in series {
             let (id, point) = response.series.next().expect("must have element");
-            assert_eq!(commit, id);
+            assert_eq!(artifact, id);
 
             let point = if let Some(pt) = point {
                 pt
@@ -313,7 +308,9 @@ impl DateData {
             .push((response.path.get::<Cache>().unwrap().to_string(), point));
         }
 
-        let bootstrap = conn.get_bootstrap(&[conn.artifact_id(&commit).await]).await;
+        let bootstrap = conn
+            .get_bootstrap(&[conn.artifact_id(&artifact).await])
+            .await;
         let bootstrap = bootstrap
             .into_iter()
             .filter_map(|(k, mut v)| {
@@ -332,43 +329,54 @@ impl DateData {
             })
             .collect::<HashMap<_, _>>();
 
+        let pr = if let ArtifactId::Commit(c) = &artifact {
+            if let Some(m) = master_commits.iter().find(|m| m.sha == c.sha) {
+                m.pr
+            } else {
+                conn.pr_of(&c.sha).await
+            }
+        } else {
+            None
+        };
+
         Self {
-            date: if let ArtifactId::Commit(c) = &commit {
-                Some(c.date)
-            } else {
-                None
-            },
-            pr: if let ArtifactId::Commit(c) = &commit {
-                if let Some(m) = master_commits.iter().find(|m| m.sha == c.sha) {
-                    m.pr
-                } else {
-                    conn.pr_of(&c.sha).await
-                }
-            } else {
-                None
-            },
-            commit: match commit {
-                ArtifactId::Commit(c) => c.sha,
-                ArtifactId::Artifact(i) => i,
-            },
+            pr,
+            artifact,
             data,
             bootstrap,
         }
     }
 }
 
+impl From<ArtifactData> for api::comparison::ArtifactData {
+    fn from(data: ArtifactData) -> Self {
+        api::comparison::ArtifactData {
+            commit: match data.artifact.clone() {
+                ArtifactId::Commit(c) => c.sha,
+                ArtifactId::Artifact(t) => t,
+            },
+            date: if let ArtifactId::Commit(c) = &data.artifact {
+                Some(c.date)
+            } else {
+                None
+            },
+            pr: data.pr,
+            data: data.data,
+            bootstrap: data.bootstrap,
+        }
+    }
+}
+
 // A comparison of two artifacts
 pub struct Comparison {
-    pub a_id: ArtifactId,
-    pub a: DateData,
-    pub b_id: ArtifactId,
-    pub b: DateData,
+    pub a: ArtifactData,
+    pub b: ArtifactData,
 }
 
 impl Comparison {
     /// Gets the previous commit before `a`
     pub fn prev(&self, master_commits: &[collector::MasterCommit]) -> Option<String> {
-        match &self.a_id {
+        match &self.a.artifact {
             ArtifactId::Commit(a) => master_commits
                 .iter()
                 .find(|c| c.sha == a.sha)
@@ -383,7 +391,7 @@ impl Comparison {
         conn: &dyn database::Connection,
         master_commits: &[collector::MasterCommit],
     ) -> bool {
-        match (&self.a_id, &self.b_id) {
+        match (&self.a.artifact, &self.b.artifact) {
             (ArtifactId::Commit(a), ArtifactId::Commit(b)) => {
                 if let Some(b) = master_commits.iter().find(|c| c.sha == b.sha) {
                     b.parent_sha == a.sha
@@ -397,7 +405,7 @@ impl Comparison {
 
     /// Gets the sha of the next commit after `b`
     pub fn next(&self, master_commits: &[collector::MasterCommit]) -> Option<String> {
-        match &self.b_id {
+        match &self.b.artifact {
             ArtifactId::Commit(b) => master_commits
                 .iter()
                 .find(|c| c.parent_sha == b.sha)
@@ -585,7 +593,15 @@ TODO: Nags
     )
 }
 
-fn compare_link(start: &str, end: &str) -> String {
+fn compare_link(start: &ArtifactId, end: &ArtifactId) -> String {
+    let start = match &start {
+        ArtifactId::Artifact(a) => a,
+        ArtifactId::Commit(c) => &c.sha,
+    };
+    let end = match &end {
+        ArtifactId::Artifact(a) => a,
+        ArtifactId::Commit(c) => &c.sha,
+    };
     format!(
         "https://perf.rust-lang.org/compare.html?start={}&end={}&stat=instructions:u",
         start, end

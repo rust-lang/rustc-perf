@@ -450,9 +450,11 @@ pub struct LabelId(pub u8, pub u32);
 #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct ArtifactIdNumber(pub u32);
 
-/// Id lookups for various things
+/// Cached Id lookups for many database tables.
 ///
-/// This is a quick way to find what the database id for something
+/// This is a quick way to find what the database id for something.
+/// Essentially duplicates of the various database tables (artifacts,
+/// error_series, pstat_series, etc.) so that we can avoid a network round-trip.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Index {
     /// Id look for a commit

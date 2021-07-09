@@ -1,6 +1,6 @@
 use crate::api::{github, ServerResult};
 use crate::comparison::{ComparisonSummary, Direction};
-use crate::load::{Config, InputData, TryCommit};
+use crate::load::{Config, SiteCtxt, TryCommit};
 use anyhow::Context as _;
 use hashbrown::HashSet;
 use serde::Deserialize;
@@ -39,11 +39,11 @@ async fn get_authorized_users() -> ServerResult<Vec<usize>> {
 
 pub async fn handle_github(
     request: github::Request,
-    data: Arc<InputData>,
+    ctxt: Arc<SiteCtxt>,
 ) -> ServerResult<github::Response> {
     if request.comment.body.contains(" homu: ") {
         if let Some(sha) = handle_homu_res(&request).await {
-            return enqueue_sha(request, &data, sha).await;
+            return enqueue_sha(request, &ctxt, sha).await;
         }
     }
 
@@ -57,7 +57,7 @@ pub async fn handle_github(
             .contains(&request.comment.user.id)
     {
         post_comment(
-            &data.config,
+            &ctxt.config,
             request.issue.number,
             "Insufficient permissions to issue commands to rust-timer.",
         )
@@ -70,12 +70,12 @@ pub async fn handle_github(
         let exclude = captures.get(2).map(|v| v.as_str());
         let runs = captures.get(3).and_then(|v| v.as_str().parse::<i32>().ok());
         {
-            let conn = data.conn().await;
+            let conn = ctxt.conn().await;
             conn.queue_pr(request.issue.number, include, exclude, runs)
                 .await;
         }
         post_comment(
-            &data.config,
+            &ctxt.config,
             request.issue.number,
             "Awaiting bors try build completion.
 
@@ -92,11 +92,11 @@ pub async fn handle_github(
             let runs = captures.get(4).and_then(|v| v.as_str().parse::<i32>().ok());
             let commit = commit.trim_start_matches("https://github.com/rust-lang/rust/commit/");
             {
-                let conn = data.conn().await;
+                let conn = ctxt.conn().await;
                 conn.queue_pr(request.issue.number, include, exclude, runs)
                     .await;
             }
-            let f = enqueue_sha(request, &data, commit.to_owned());
+            let f = enqueue_sha(request, &ctxt, commit.to_owned());
             return f.await;
         }
     }
@@ -111,7 +111,7 @@ pub async fn handle_github(
             let client = reqwest::Client::new();
             pr_and_try_for_rollup(
                 &client,
-                data.clone(),
+                ctxt.clone(),
                 &request.issue.repository_url,
                 &rollup_merge,
                 &request.comment.html_url,
@@ -134,11 +134,11 @@ pub async fn handle_github(
             // between us updating the commit and merging things.
             let client = reqwest::Client::new();
             let branch =
-                branch_for_rollup(&client, &data, &request.issue.repository_url, rollup_merge)
+                branch_for_rollup(&client, &ctxt, &request.issue.repository_url, rollup_merge)
                     .await
                     .map_err(|e| e.to_string())?;
             post_comment(
-                &data.config,
+                &ctxt.config,
                 request.issue.number,
                 &format!("Master base SHA: {}", branch.master_base_sha),
             )
@@ -152,7 +152,7 @@ pub async fn handle_github(
 // Returns the PR number
 async fn pr_and_try_for_rollup(
     client: &reqwest::Client,
-    data: Arc<InputData>,
+    ctxt: Arc<SiteCtxt>,
     repository_url: &str,
     rollup_merge_sha: &str,
     origin_url: &str,
@@ -162,11 +162,11 @@ async fn pr_and_try_for_rollup(
         repository_url,
         rollup_merge_sha
     );
-    let branch = branch_for_rollup(client, &data, repository_url, rollup_merge_sha).await?;
+    let branch = branch_for_rollup(client, &ctxt, repository_url, rollup_merge_sha).await?;
 
     let pr = create_pr(
         client,
-        &data,
+        &ctxt,
         repository_url,
         &format!(
             "[DO NOT MERGE] perf-test for #{}",
@@ -199,7 +199,7 @@ r? @ghost",
         // off: we'd need to store the state in the database and handle the try
         // build starting and generally that's a lot of work for not too much gain.
         post_comment(
-            &data.config,
+            &ctxt.config,
             pr.number,
             &format!(
                 "@bors try @rust-timer queue
@@ -231,11 +231,11 @@ struct RollupBranch {
 
 async fn branch_for_rollup(
     client: &reqwest::Client,
-    data: &InputData,
+    ctxt: &SiteCtxt,
     repository_url: &str,
     rollup_merge_sha: &str,
 ) -> anyhow::Result<RollupBranch> {
-    let rollup_merge = get_commit(&client, &data, repository_url, rollup_merge_sha)
+    let rollup_merge = get_commit(&client, &ctxt, repository_url, rollup_merge_sha)
         .await
         .context("got rollup merge")?;
 
@@ -246,19 +246,19 @@ async fn branch_for_rollup(
             break;
         }
         assert_eq!(current.parents.len(), 2);
-        current = get_commit(&client, &data, repository_url, &current.parents[0].sha)
+        current = get_commit(&client, &ctxt, repository_url, &current.parents[0].sha)
             .await
             .context("success master get")?;
     }
     let old_master_commit = current;
 
-    let current_master_commit = get_commit(&client, &data, repository_url, "master")
+    let current_master_commit = get_commit(&client, &ctxt, repository_url, "master")
         .await
         .context("success master get")?;
 
     let revert_sha = create_commit(
         &client,
-        &data,
+        &ctxt,
         "https://api.github.com/repos/rust-timer/rust",
         &format!("Revert to {}", old_master_commit.sha),
         &old_master_commit.commit.tree.sha,
@@ -269,7 +269,7 @@ async fn branch_for_rollup(
 
     let merge_sha = create_commit(
         &client,
-        &data,
+        &ctxt,
         "https://api.github.com/repos/rust-timer/rust",
         &format!(
             "rust-timer simulated merge of {}\n\nOriginal message:\n{}",
@@ -302,7 +302,7 @@ async fn branch_for_rollup(
     let branch = format!("try-for-{}", rolled_up_pr_number);
     create_ref(
         &client,
-        &data,
+        &ctxt,
         "https://api.github.com/repos/rust-timer/rust",
         &format!("refs/heads/{}", branch),
         &merge_sha,
@@ -328,17 +328,17 @@ struct CreateRefRequest<'a> {
 
 pub async fn create_ref(
     client: &reqwest::Client,
-    data: &InputData,
+    ctxt: &SiteCtxt,
     repository_url: &str,
     ref_: &str,
     sha: &str,
 ) -> anyhow::Result<()> {
-    let timer_token = data
+    let timer_token = ctxt
         .config
         .keys
-        .github
+        .github_api_token
         .clone()
-        .expect("needs rust-timer token");
+        .expect("needs github API token");
     let url = format!("{}/git/refs", repository_url);
     let response = client
         .post(&url)
@@ -375,19 +375,19 @@ pub struct CreatePrResponse {
 
 pub async fn create_pr(
     client: &reqwest::Client,
-    data: &InputData,
+    ctxt: &SiteCtxt,
     repository_url: &str,
     title: &str,
     head: &str,
     base: &str,
     description: &str,
 ) -> anyhow::Result<CreatePrResponse> {
-    let timer_token = data
+    let timer_token = ctxt
         .config
         .keys
-        .github
+        .github_api_token
         .clone()
-        .expect("needs rust-timer token");
+        .expect("needs github API token");
     let url = format!("{}/pulls", repository_url);
     let response = client
         .post(&url)
@@ -423,18 +423,18 @@ struct CreateCommitResponse {
 
 pub async fn create_commit(
     client: &reqwest::Client,
-    data: &InputData,
+    ctxt: &SiteCtxt,
     repository_url: &str,
     message: &str,
     tree: &str,
     parents: &[&str],
 ) -> anyhow::Result<String> {
-    let timer_token = data
+    let timer_token = ctxt
         .config
         .keys
-        .github
+        .github_api_token
         .clone()
-        .expect("needs rust-timer token");
+        .expect("needs github API token");
     let url = format!("{}/git/commits", repository_url);
     let commit_response = client
         .post(&url)
@@ -461,16 +461,16 @@ pub async fn create_commit(
 
 pub async fn get_commit(
     client: &reqwest::Client,
-    data: &InputData,
+    ctxt: &SiteCtxt,
     repository_url: &str,
     sha: &str,
 ) -> anyhow::Result<github::Commit> {
-    let timer_token = data
+    let timer_token = ctxt
         .config
         .keys
-        .github
+        .github_api_token
         .clone()
-        .expect("needs rust-timer token");
+        .expect("needs github API token");
     let url = format!("{}/commits/{}", repository_url, sha);
     let commit_response = client
         .get(&url)
@@ -497,11 +497,11 @@ pub async fn get_commit(
 
 async fn enqueue_sha(
     request: github::Request,
-    data: &InputData,
+    ctxt: &SiteCtxt,
     commit: String,
 ) -> ServerResult<github::Response> {
     let client = reqwest::Client::new();
-    let commit_response = get_commit(&client, data, &request.issue.repository_url, &commit)
+    let commit_response = get_commit(&client, ctxt, &request.issue.repository_url, &commit)
         .await
         .map_err(|e| e.to_string())?;
     if commit_response.parents.len() != 2 {
@@ -518,7 +518,7 @@ async fn enqueue_sha(
         issue: request.issue.clone(),
     };
     let queued = {
-        let conn = data.conn().await;
+        let conn = ctxt.conn().await;
         conn.pr_attach_commit(
             request.issue.number,
             &commit_response.sha,
@@ -533,7 +533,7 @@ async fn enqueue_sha(
             commit_response.parents[0].sha,
             try_commit.comparison_url(),
         );
-        post_comment(&data.config, request.issue.number, msg).await;
+        post_comment(&ctxt.config, request.issue.number, msg).await;
     }
     Ok(github::Response)
 }
@@ -574,7 +574,11 @@ where
     B: Into<String>,
 {
     let body = body.into();
-    let timer_token = cfg.keys.github.clone().expect("needs rust-timer token");
+    let timer_token = cfg
+        .keys
+        .github_api_token
+        .clone()
+        .expect("needs github API token");
     let client = reqwest::Client::new();
     let req = client
         .post(&format!(
@@ -592,14 +596,14 @@ where
     }
 }
 
-pub async fn post_finished(data: &InputData) {
+pub async fn post_finished(ctxt: &SiteCtxt) {
     // If the github token is not configured, do not run this -- we don't want
     // to mark things as complete without posting the comment.
-    if data.config.keys.github.is_none() {
+    if ctxt.config.keys.github_api_token.is_none() {
         return;
     }
-    let conn = data.conn().await;
-    let index = data.index.load();
+    let conn = ctxt.conn().await;
+    let index = ctxt.index.load();
     let mut commits = index
         .commits()
         .into_iter()
@@ -632,7 +636,7 @@ pub async fn post_finished(data: &InputData) {
                 "https://perf.rust-lang.org/compare.html?start={}&end={}",
                 commit.parent_sha, commit.sha
             );
-            let (summary, direction) = categorize_benchmark(&commit, data).await;
+            let (summary, direction) = categorize_benchmark(&commit, ctxt).await;
             let label = match direction {
                 Some(Direction::Regression | Direction::Mixed) => "+perf-regression",
                 Some(Direction::Improvement) | None => "-perf-regression",
@@ -658,7 +662,7 @@ pub async fn post_finished(data: &InputData) {
                 .unwrap_or(String::new());
 
             post_comment(
-                &data.config,
+                &ctxt.config,
                 commit.pr,
                 format!(
                     "Finished benchmarking try commit ({}): [comparison url]({}).
@@ -681,13 +685,13 @@ for rolling up. {}
 
 async fn categorize_benchmark(
     commit: &database::QueuedCommit,
-    data: &InputData,
+    ctxt: &SiteCtxt,
 ) -> (String, Option<Direction>) {
     let comparison = match crate::comparison::compare(
         collector::Bound::Commit(commit.parent_sha.clone()),
         collector::Bound::Commit(commit.sha.clone()),
         "instructions:u".to_owned(),
-        data,
+        ctxt,
     )
     .await
     {
