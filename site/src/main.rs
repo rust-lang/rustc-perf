@@ -26,8 +26,8 @@ async fn main() {
     #[cfg(unix)]
     let _ = jemalloc_ctl::background_thread::write(true);
 
-    let data: Arc<RwLock<Option<Arc<load::SiteCtxt>>>> = Arc::new(RwLock::new(None));
-    let data_ = data.clone();
+    let ctxt: Arc<RwLock<Option<Arc<load::SiteCtxt>>>> = Arc::new(RwLock::new(None));
+    let ctxt_ = ctxt.clone();
     let db_url = env::var("DATABASE_URL")
         .ok()
         .or_else(|| env::args().nth(1))
@@ -38,7 +38,7 @@ async fn main() {
     let fut = tokio::task::spawn_blocking(move || {
         tokio::task::spawn(async move {
             let res = Arc::new(load::SiteCtxt::from_db_url(&db_url).await.unwrap());
-            *data_.write() = Some(res.clone());
+            *ctxt_.write() = Some(res.clone());
             let commits = res.index.load().commits().len();
             let artifacts = res.index.load().artifacts().count();
             if commits + artifacts == 0 {
@@ -62,7 +62,7 @@ async fn main() {
         .unwrap_or(2346);
     println!("Starting server with port={:?}", port);
 
-    let server = site::server::start(data, port).fuse();
+    let server = site::server::start(ctxt, port).fuse();
     futures::pin_mut!(server);
     futures::pin_mut!(fut);
     loop {

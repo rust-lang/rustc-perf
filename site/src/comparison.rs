@@ -3,7 +3,7 @@
 //! comparison endpoints
 
 use crate::api;
-use crate::db::{self, ArtifactId, Cache, Crate, Profile};
+use crate::db::{ArtifactId, Cache, Crate, Profile};
 use crate::load::SiteCtxt;
 use crate::selector::{self, Tag};
 
@@ -18,7 +18,7 @@ type BoxedError = Box<dyn Error + Send + Sync>;
 
 pub async fn handle_triage(
     body: api::triage::Request,
-    data: &SiteCtxt,
+    ctxt: &SiteCtxt,
 ) -> Result<api::triage::Response, BoxedError> {
     let start = body.start;
     let end = body.end;
@@ -28,7 +28,7 @@ pub async fn handle_triage(
         start.clone(),
         start.clone(),
         "instructions:u".to_owned(),
-        data,
+        ctxt,
         &master_commits,
     )
     .await?
@@ -43,7 +43,7 @@ pub async fn handle_triage(
             before,
             after.clone(),
             "instructions:u".to_owned(),
-            data,
+            ctxt,
             &master_commits,
         )
         .await?
@@ -84,16 +84,16 @@ pub async fn handle_triage(
 
 pub async fn handle_compare(
     body: api::comparison::Request,
-    data: &SiteCtxt,
+    ctxt: &SiteCtxt,
 ) -> Result<api::comparison::Response, BoxedError> {
     let master_commits = collector::master_commits().await?;
     let end = body.end;
     let comparison =
-        compare_given_commits(body.start, end.clone(), body.stat, data, &master_commits)
+        compare_given_commits(body.start, end.clone(), body.stat, ctxt, &master_commits)
             .await?
             .ok_or_else(|| format!("could not find end commit for bound {:?}", end))?;
 
-    let conn = data.conn().await;
+    let conn = ctxt.conn().await;
     let prev = comparison.prev(&master_commits);
     let next = comparison.next(&master_commits);
     let is_contiguous = comparison.is_contiguous(&*conn, &master_commits).await;
@@ -241,10 +241,10 @@ pub async fn compare(
     start: Bound,
     end: Bound,
     stat: String,
-    data: &SiteCtxt,
+    ctxt: &SiteCtxt,
 ) -> Result<Option<Comparison>, BoxedError> {
     let master_commits = collector::master_commits().await?;
-    compare_given_commits(start, end, stat, data, &master_commits).await
+    compare_given_commits(start, end, stat, ctxt, &master_commits).await
 }
 
 /// Compare two bounds on a given stat
@@ -252,13 +252,13 @@ pub async fn compare_given_commits(
     start: Bound,
     end: Bound,
     stat: String,
-    data: &SiteCtxt,
+    ctxt: &SiteCtxt,
     master_commits: &[collector::MasterCommit],
 ) -> Result<Option<Comparison>, BoxedError> {
-    let a = data
+    let a = ctxt
         .data_for(true, start.clone())
         .ok_or(format!("could not find start commit for bound {:?}", start))?;
-    let b = match data.data_for(false, end.clone()) {
+    let b = match ctxt.data_for(false, end.clone()) {
         Some(b) => b,
         None => return Ok(None),
     };
@@ -273,9 +273,9 @@ pub async fn compare_given_commits(
 
     // `responses` contains series iterators. The first element in the iterator is the data
     // for `a` and the second is the data for `b`
-    let mut responses = data.query::<Option<f64>>(query, cids).await?;
+    let mut responses = ctxt.query::<Option<f64>>(query, cids).await?;
 
-    let conn = data.conn().await;
+    let conn = ctxt.conn().await;
 
     Ok(Some(Comparison {
         a: ArtifactData::consume_one(&*conn, a.clone(), &mut responses, master_commits).await,
@@ -312,7 +312,7 @@ impl ArtifactData {
         master_commits: &[collector::MasterCommit],
     ) -> Self
     where
-        T: Iterator<Item = (db::ArtifactId, Option<f64>)>,
+        T: Iterator<Item = (ArtifactId, Option<f64>)>,
     {
         let mut data = HashMap::new();
 

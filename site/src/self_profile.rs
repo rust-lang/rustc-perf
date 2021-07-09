@@ -67,9 +67,9 @@ impl fmt::Debug for Pieces {
 
 pub async fn get_pieces(
     body: crate::api::self_profile_raw::Request,
-    data: &SiteCtxt,
+    ctxt: &SiteCtxt,
 ) -> Result<Pieces, Response> {
-    let res = crate::server::handle_self_profile_raw(body, data).await;
+    let res = crate::server::handle_self_profile_raw(body, ctxt).await;
     let url = match res {
         Ok(v) => v.url,
         Err(e) => {

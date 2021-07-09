@@ -7,57 +7,50 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use bytes::Buf;
-use parking_lot::Mutex;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::TryInto;
-use std::fmt;
-use std::fs;
 use std::io::Read;
 use std::net::SocketAddr;
 use std::path::Path;
-use std::str;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::sync::Arc;
 use std::time::Instant;
+use std::{fmt, fs, str};
 
+use bytes::Buf;
+use collector::Bound;
 use futures::{future::FutureExt, stream::StreamExt};
-
 use headers::CacheControl;
-use headers::Header;
-use headers::{Authorization, ContentType};
+use headers::{Authorization, ContentType, Header};
 use hyper::StatusCode;
 use log::{debug, error, info};
+use parking_lot::{Mutex, RwLock};
 use ring::hmac;
 use rmp_serde;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use serde_json;
-
-type Request = http::Request<hyper::Body>;
-type Response = http::Response<hyper::Body>;
 
 pub use crate::api::{
     self, bootstrap, comparison, dashboard, data, github, graph, info, self_profile,
     self_profile_raw, status, triage, CommitResponse, ServerResult, StyledBenchmarkName,
 };
-use crate::db::{self, Cache, Crate, Profile};
+use crate::db::{self, ArtifactId, Cache, Crate, Lookup, Profile};
 use crate::interpolate::Interpolated;
 use crate::load::{Config, SiteCtxt};
 use crate::selector::{self, PathComponent, Tag};
-use collector::Bound;
-use db::{ArtifactId, Lookup};
-use parking_lot::RwLock;
+
+type Request = http::Request<hyper::Body>;
+type Response = http::Response<hyper::Body>;
 
 static INTERPOLATED_COLOR: &str = "#fcb0f1";
 
-pub fn handle_info(data: &SiteCtxt) -> info::Response {
-    let mut stats = data.index.load().stats();
+pub fn handle_info(ctxt: &SiteCtxt) -> info::Response {
+    let mut stats = ctxt.index.load().stats();
     stats.sort();
     info::Response {
         stats,
-        as_of: data.index.load().commits().last().map(|d| d.date),
+        as_of: ctxt.index.load().commits().last().map(|d| d.date),
     }
 }
 
@@ -95,8 +88,8 @@ impl<T> std::ops::Index<Profile> for ByProfile<T> {
     }
 }
 
-pub async fn handle_dashboard(data: Arc<SiteCtxt>) -> ServerResult<dashboard::Response> {
-    let index = data.index.load();
+pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Response> {
+    let index = ctxt.index.load();
     if index.artifacts().next().is_none() {
         return Ok(dashboard::Response::default());
     }
@@ -160,9 +153,9 @@ pub async fn handle_dashboard(data: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
     let cids = Arc::new(
         versions
             .into_iter()
-            .map(|v| db::ArtifactId::Artifact(v.to_string()))
+            .map(|v| ArtifactId::Artifact(v.to_string()))
             .chain(std::iter::once(
-                data.index.load().commits().last().unwrap().clone().into(),
+                ctxt.index.load().commits().last().unwrap().clone().into(),
             ))
             .collect::<Vec<_>>(),
     );
@@ -187,16 +180,16 @@ pub async fn handle_dashboard(data: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
         )
         .set(Tag::ProcessStatistic, selector::Selector::One("wall-time"));
 
-    let summary_patches = data.summary_patches();
+    let summary_patches = ctxt.summary_patches();
     let by_profile = ByProfile::new::<String, _, _>(|profile| {
         let summary_patches = &summary_patches;
-        let data = &data;
+        let ctxt = &ctxt;
         let query = &query;
         let cids = &cids;
         async move {
             let mut cases = dashboard::Cases::default();
             for patch in summary_patches.iter() {
-                let responses = data
+                let responses = ctxt
                     .query::<Option<f64>>(
                         query
                             .clone()
@@ -235,8 +228,8 @@ pub async fn handle_dashboard(data: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
         versions: cids
             .iter()
             .map(|cid| match cid {
-                db::ArtifactId::Commit(c) => format!("master: {}", &c.sha.to_string()[0..8]),
-                db::ArtifactId::Artifact(aid) => aid.clone(),
+                ArtifactId::Commit(c) => format!("master: {}", &c.sha.to_string()[0..8]),
+                ArtifactId::Artifact(aid) => aid.clone(),
             })
             .collect::<Vec<_>>(),
         check: by_profile.check,
@@ -253,13 +246,13 @@ fn prettify_log(log: &str) -> Option<String> {
     Some(log.replace("\\n", "\n"))
 }
 
-pub async fn handle_status_page(data: Arc<SiteCtxt>) -> status::Response {
-    let idx = data.index.load();
+pub async fn handle_status_page(ctxt: Arc<SiteCtxt>) -> status::Response {
+    let idx = ctxt.index.load();
     let last_commit = idx.commits().last().cloned();
 
-    let missing = data.missing_commits().await;
+    let missing = ctxt.missing_commits().await;
     // FIXME: no current builds
-    let conn = data.conn().await;
+    let conn = ctxt.conn().await;
     let current = if let Some(artifact) = conn.in_progress_artifacts().await.pop() {
         let steps = conn
             .in_progress_steps(&artifact)
@@ -282,7 +275,7 @@ pub async fn handle_status_page(data: Arc<SiteCtxt>) -> status::Response {
     };
 
     let errors = if let Some(last) = &last_commit {
-        data.conn()
+        ctxt.conn()
             .await
             .get_error(ArtifactId::from(last.clone()).lookup(&idx).unwrap())
             .await
@@ -317,8 +310,8 @@ pub async fn handle_status_page(data: Arc<SiteCtxt>) -> status::Response {
     }
 }
 
-pub async fn handle_next_commit(data: Arc<SiteCtxt>) -> collector::api::next_commit::Response {
-    let commit = data.missing_commits().await.into_iter().next().map(|c| {
+pub async fn handle_next_commit(ctxt: Arc<SiteCtxt>) -> collector::api::next_commit::Response {
+    let commit = ctxt.missing_commits().await.into_iter().next().map(|c| {
         let (include, exclude, runs) = match c.1 {
             crate::load::MissingReason::Try {
                 include,
@@ -387,11 +380,11 @@ impl CommitIdxCache {
 fn to_graph_data<'a>(
     cc: &'a CommitIdxCache,
     is_absolute: bool,
-    points: impl Iterator<Item = ((db::ArtifactId, Option<f64>), Interpolated)> + 'a,
+    points: impl Iterator<Item = ((ArtifactId, Option<f64>), Interpolated)> + 'a,
 ) -> impl Iterator<Item = graph::GraphData> + 'a {
     let mut first = None;
     points.map(move |((cid, point), interpolated)| {
-        let commit = if let db::ArtifactId::Commit(commit) = cid {
+        let commit = if let ArtifactId::Commit(commit) = cid {
             commit
         } else {
             unimplemented!()
@@ -417,15 +410,15 @@ fn to_graph_data<'a>(
 
 pub async fn handle_graph_new(
     body: graph::Request,
-    data: &SiteCtxt,
+    ctxt: &SiteCtxt,
 ) -> ServerResult<Arc<graph::NewResponse>> {
     log::info!("handle_graph_new({:?})", body);
-    let range = data.data_range(body.start.clone()..=body.end.clone());
+    let range = ctxt.data_range(body.start.clone()..=body.end.clone());
     let commits: Arc<Vec<ArtifactId>> = Arc::new(range.iter().map(|c| c.clone().into()).collect());
 
     let mut benchmarks = HashMap::new();
 
-    let raw = handle_graph(body, data).await?;
+    let raw = handle_graph(body, ctxt).await?;
 
     for (crate_, crate_data) in raw.benchmarks.iter() {
         let mut by_profile = HashMap::with_capacity(3);
@@ -469,7 +462,7 @@ pub async fn handle_graph_new(
 
 pub async fn handle_graph(
     body: graph::Request,
-    data: &SiteCtxt,
+    ctxt: &SiteCtxt,
 ) -> ServerResult<Arc<graph::Response>> {
     log::info!("handle_graph({:?})", body);
     let is_default_query = body
@@ -481,19 +474,19 @@ pub async fn handle_graph(
         };
 
     if is_default_query {
-        match &**data.landing_page.load() {
+        match &**ctxt.landing_page.load() {
             Some(resp) => return Ok(resp.clone()),
             None => {}
         }
     }
 
     let cc = CommitIdxCache::new();
-    let range = data.data_range(body.start.clone()..=body.end.clone());
+    let range = ctxt.data_range(body.start.clone()..=body.end.clone());
     let commits: Arc<Vec<_>> = Arc::new(range.iter().map(|c| c.clone().into()).collect());
 
     let stat_selector = selector::Selector::One(body.stat.clone());
 
-    let series = data
+    let series = ctxt
         .query::<Option<f64>>(
             selector::Query::new()
                 .set::<String>(selector::Tag::Crate, selector::Selector::All)
@@ -517,7 +510,7 @@ pub async fn handle_graph(
     let baselines = &mut baselines;
 
     let summary_queries = iproduct!(
-        data.summary_patches(),
+        ctxt.summary_patches(),
         vec![Profile::Check, Profile::Debug, Profile::Opt],
         vec![body.stat.clone()]
     )
@@ -559,7 +552,7 @@ pub async fn handle_graph(
             std::collections::hash_map::Entry::Occupied(o) => *o.get(),
             std::collections::hash_map::Entry::Vacant(v) => {
                 let value = db::average(
-                    data.query::<Option<f64>>(q, c.clone())
+                    ctxt.query::<Option<f64>>(q, c.clone())
                         .await?
                         .into_iter()
                         .map(|sr| sr.interpolate().series)
@@ -571,7 +564,7 @@ pub async fn handle_graph(
             }
         };
         let averaged = db::average(
-            data.query::<Option<f64>>(query.clone(), commits.clone())
+            ctxt.query::<Option<f64>>(query.clone(), commits.clone())
                 .await?
                 .into_iter()
                 .map(|sr| sr.interpolate().series)
@@ -623,7 +616,7 @@ pub async fn handle_graph(
     });
 
     if is_default_query {
-        data.landing_page.store(Arc::new(Some(resp.clone())));
+        ctxt.landing_page.store(Arc::new(Some(resp.clone())));
     }
 
     Ok(resp)
@@ -631,9 +624,9 @@ pub async fn handle_graph(
 
 pub async fn handle_github(
     request: github::Request,
-    data: Arc<SiteCtxt>,
+    ctxt: Arc<SiteCtxt>,
 ) -> ServerResult<github::Response> {
-    crate::github::handle_github(request, data).await
+    crate::github::handle_github(request, ctxt).await
 }
 
 pub async fn handle_collected() -> ServerResult<()> {
@@ -741,7 +734,7 @@ fn get_self_profile_data(
 pub async fn handle_self_profile_processed_download(
     body: self_profile_raw::Request,
     params: HashMap<String, String>,
-    data: &SiteCtxt,
+    ctxt: &SiteCtxt,
 ) -> Response {
     let title = format!(
         "{}: {} {}",
@@ -750,7 +743,7 @@ pub async fn handle_self_profile_processed_download(
         body.run_name
     );
     let start = Instant::now();
-    let pieces = match crate::self_profile::get_pieces(body, data).await {
+    let pieces = match crate::self_profile::get_pieces(body, ctxt).await {
         Ok(v) => v,
         Err(e) => return e,
     };
@@ -794,9 +787,9 @@ pub async fn handle_self_profile_processed_download(
 
 pub async fn handle_self_profile_raw_download(
     body: self_profile_raw::Request,
-    data: &SiteCtxt,
+    ctxt: &SiteCtxt,
 ) -> Response {
-    let res = handle_self_profile_raw(body, data).await;
+    let res = handle_self_profile_raw(body, ctxt).await;
     let (url, is_tarball) = match res {
         Ok(v) => (v.url, v.is_tarball),
         Err(e) => {
@@ -939,7 +932,7 @@ async fn tarball(resp: reqwest::Response, mut sender: hyper::body::Sender) {
 
 pub async fn handle_self_profile_raw(
     body: self_profile_raw::Request,
-    data: &SiteCtxt,
+    ctxt: &SiteCtxt,
 ) -> ServerResult<self_profile_raw::Response> {
     log::info!("handle_self_profile_raw({:?})", body);
     let mut it = body.benchmark.rsplitn(2, '-');
@@ -951,7 +944,7 @@ pub async fn handle_self_profile_raw(
         .parse::<database::Cache>()
         .map_err(|e| format!("invalid run name: {:?}", e))?;
 
-    let conn = data.conn().await;
+    let conn = ctxt.conn().await;
 
     let aids_and_cids = conn
         .list_self_profile(
@@ -1039,13 +1032,13 @@ pub async fn handle_self_profile_raw(
 
 pub async fn handle_self_profile(
     body: self_profile::Request,
-    data: &SiteCtxt,
+    ctxt: &SiteCtxt,
 ) -> ServerResult<self_profile::Response> {
     log::info!("handle_self_profile({:?})", body);
     let mut it = body.benchmark.rsplitn(2, '-');
     let bench_ty = it.next().ok_or(format!("no benchmark type"))?;
     let bench_name = it.next().ok_or(format!("no benchmark name"))?;
-    let index = data.index.load();
+    let index = ctxt.index.load();
 
     let sort_idx = body
         .sort_idx
@@ -1062,12 +1055,12 @@ pub async fn handle_self_profile(
         .commits()
         .into_iter()
         .find(|c| c.sha == *body.commit.as_str())
-        .map(|c| database::ArtifactId::Commit(c))
+        .map(|c| ArtifactId::Commit(c))
         .or_else(|| {
             index
                 .artifacts()
                 .find(|a| **a == body.commit)
-                .map(|a| database::ArtifactId::Artifact(a.to_owned()))
+                .map(|a| ArtifactId::Artifact(a.to_owned()))
         })
         .ok_or(format!("could not find artifact {}", body.commit))?];
 
@@ -1077,19 +1070,19 @@ pub async fn handle_self_profile(
                 .commits()
                 .into_iter()
                 .find(|c| c.sha == *bc.as_str())
-                .map(|c| database::ArtifactId::Commit(c))
+                .map(|c| ArtifactId::Commit(c))
                 .or_else(|| {
                     index
                         .artifacts()
                         .find(|a| **a == *bc.as_str())
-                        .map(|a| database::ArtifactId::Artifact(a.to_owned()))
+                        .map(|a| ArtifactId::Artifact(a.to_owned()))
                 })
                 .ok_or(format!("could not find artifact {}", body.commit))?,
         );
     }
 
     let commits = Arc::new(commits);
-    let mut sp_responses = data
+    let mut sp_responses = ctxt
         .query::<Option<selector::SelfProfileData>>(query.clone(), commits.clone())
         .await?;
 
@@ -1108,7 +1101,7 @@ pub async fn handle_self_profile(
     );
     let mut sp_response = sp_responses.remove(0).series;
 
-    let mut cpu_responses = data
+    let mut cpu_responses = ctxt
         .query::<Option<f64>>(
             query.clone().set(
                 Tag::ProcessStatistic,
@@ -1147,13 +1140,13 @@ pub async fn handle_self_profile(
 
 pub async fn handle_bootstrap(
     body: bootstrap::Request,
-    data: &SiteCtxt,
+    ctxt: &SiteCtxt,
 ) -> ServerResult<bootstrap::Response> {
     log::info!("handle_bootstrap({:?})", body);
-    let range = data.data_range(body.start.clone()..=body.end.clone());
+    let range = ctxt.data_range(body.start.clone()..=body.end.clone());
     let mut commits: Vec<ArtifactId> = range.iter().map(|c| c.clone().into()).collect();
 
-    let conn = data.conn().await;
+    let conn = ctxt.conn().await;
     let ids = commits
         .iter()
         .map(|c| conn.artifact_id(&c))
@@ -1203,8 +1196,9 @@ pub async fn handle_bootstrap(
     })
 }
 
+/// Server state
 struct Server {
-    data: Arc<RwLock<Option<Arc<SiteCtxt>>>>,
+    ctxt: Arc<RwLock<Option<Arc<SiteCtxt>>>>,
     updating: UpdatingStatus,
 }
 
@@ -1277,10 +1271,10 @@ impl Server {
         S: Serialize,
     {
         check_http_method!(*req.method(), http::Method::GET);
-        let data = self.data.clone();
-        let data = data.read();
-        let data = data.as_ref().unwrap();
-        let result = handler(&data);
+        let ctxt = self.ctxt.clone();
+        let ctxt = ctxt.read();
+        let ctxt = ctxt.as_ref().unwrap();
+        let result = handler(&ctxt);
         Ok(http::Response::builder()
             .header_typed(ContentType::json())
             .body(hyper::Body::from(serde_json::to_string(&result).unwrap()))
@@ -1298,9 +1292,9 @@ impl Server {
         S: Serialize,
     {
         check_http_method!(*req.method(), http::Method::GET);
-        let data = self.data.clone();
-        let data = data.read().as_ref().unwrap().clone();
-        let result = handler(data).await;
+        let ctxt = self.ctxt.clone();
+        let ctxt = ctxt.read().as_ref().unwrap().clone();
+        let result = handler(ctxt).await;
         Ok(http::Response::builder()
             .header_typed(ContentType::json())
             .body(hyper::Body::from(serde_json::to_string(&result).unwrap()))
@@ -1312,13 +1306,13 @@ impl Server {
             .headers
             .get(Authorization::<headers::authorization::Bearer>::name())
         {
-            let data = self.data.read();
-            let data = data.as_ref().unwrap();
+            let ctxt = self.ctxt.read();
+            let ctxt = ctxt.as_ref().unwrap();
             let auth = Authorization::<headers::authorization::Bearer>::decode(
                 &mut Some(auth).into_iter(),
             )
             .unwrap();
-            if auth.0.token() == *data.config.keys.secret.as_ref().unwrap() {
+            if auth.0.token() == *ctxt.config.keys.secret.as_ref().unwrap() {
                 return true;
             }
         }
@@ -1328,13 +1322,13 @@ impl Server {
 
     async fn handle_metrics(&self, _req: Request) -> Response {
         use prometheus::Encoder;
-        let data: Arc<SiteCtxt> = self.data.read().as_ref().unwrap().clone();
-        let idx = data.index.load();
+        let ctxt: Arc<SiteCtxt> = self.ctxt.read().as_ref().unwrap().clone();
+        let idx = ctxt.index.load();
 
         let mut buffer = Vec::new();
         let r = prometheus::Registry::new();
 
-        let missing_commits = data.missing_commits().await;
+        let missing_commits = ctxt.missing_commits().await;
         let queue_length =
             prometheus::IntGauge::new("rustc_perf_queue_length", "queue length").unwrap();
         queue_length.set(missing_commits.len() as i64);
@@ -1347,7 +1341,7 @@ impl Server {
         r.register(Box::new(queue_try_commits)).unwrap();
 
         if let Some(last_commit) = idx.commits().last().cloned() {
-            let conn = data.conn().await;
+            let conn = ctxt.conn().await;
             let steps = conn.in_progress_steps(&ArtifactId::from(last_commit)).await;
             let g = prometheus::IntGaugeVec::new(
                 prometheus::core::Opts {
@@ -1412,20 +1406,20 @@ impl Server {
 
         let (channel, body) = hyper::Body::channel();
 
-        let data: Arc<SiteCtxt> = self.data.read().as_ref().unwrap().clone();
+        let ctxt: Arc<SiteCtxt> = self.ctxt.read().as_ref().unwrap().clone();
         let _updating = self.updating.release_on_drop(channel);
-        let mut conn = data.conn().await;
+        let mut conn = ctxt.conn().await;
         let index = db::Index::load(&mut *conn).await;
         eprintln!("index has {} commits", index.commits().len());
-        data.index.store(Arc::new(index));
+        ctxt.index.store(Arc::new(index));
 
         // Refresh the landing page
-        data.landing_page.store(Arc::new(None));
+        ctxt.landing_page.store(Arc::new(None));
 
         // Spawn off a task to post the results of any commit results that we
         // are now aware of.
         tokio::spawn(async move {
-            crate::github::post_finished(&data).await;
+            crate::github::post_finished(&ctxt).await;
         });
 
         Response::new(body)
@@ -1443,9 +1437,9 @@ impl fmt::Display for ServerError {
 
 impl std::error::Error for ServerError {}
 
-async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerError> {
+async fn serve_req(server: Arc<Server>, req: Request) -> Result<Response, ServerError> {
     // Don't attempt to get lock if we're updating
-    if ctx.data.read().is_none() {
+    if server.ctxt.read().is_none() {
         return Ok(Response::new(hyper::Body::from("no data yet, please wait")));
     }
 
@@ -1490,40 +1484,40 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
     }
 
     match req.uri().path() {
-        "/perf/info" => return ctx.handle_get(&req, handle_info),
+        "/perf/info" => return server.handle_get(&req, handle_info),
         "/perf/dashboard" => {
-            let ret = ctx.handle_get_async(&req, |c| handle_dashboard(c));
+            let ret = server.handle_get_async(&req, |c| handle_dashboard(c));
             return ret.await;
         }
         "/perf/status_page" => {
-            let ret = ctx.handle_get_async(&req, |c| handle_status_page(c));
+            let ret = server.handle_get_async(&req, |c| handle_status_page(c));
             return ret.await;
         }
         "/perf/next_commit" => {
-            let ret = ctx.handle_get_async(&req, |c| handle_next_commit(c));
+            let ret = server.handle_get_async(&req, |c| handle_next_commit(c));
             return ret.await;
         }
         _ => {}
     }
 
     if req.uri().path() == "/perf/metrics" {
-        return Ok(ctx.handle_metrics(req).await);
+        return Ok(server.handle_metrics(req).await);
     }
     if req.uri().path() == "/perf/onpush" {
-        return Ok(ctx.handle_push(req).await);
+        return Ok(server.handle_push(req).await);
     }
     if req.uri().path() == "/perf/download-raw-self-profile" {
-        let data: Arc<SiteCtxt> = ctx.data.read().as_ref().unwrap().clone();
+        let ctxt: Arc<SiteCtxt> = server.ctxt.read().as_ref().unwrap().clone();
         match get_self_profile_raw(&req) {
-            Ok((_, v)) => return Ok(handle_self_profile_raw_download(v, &data).await),
+            Ok((_, v)) => return Ok(handle_self_profile_raw_download(v, &ctxt).await),
             Err(e) => return Ok(e),
         }
     }
     if req.uri().path() == "/perf/processed-self-profile" {
-        let data: Arc<SiteCtxt> = ctx.data.read().as_ref().unwrap().clone();
+        let ctxt: Arc<SiteCtxt> = server.ctxt.read().as_ref().unwrap().clone();
         match get_self_profile_raw(&req) {
             Ok((parts, v)) => {
-                return Ok(handle_self_profile_processed_download(v, parts, &data).await)
+                return Ok(handle_self_profile_processed_download(v, parts, &ctxt).await)
             }
             Err(e) => return Ok(e),
         }
@@ -1531,7 +1525,7 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
     let (req, mut body_stream) = req.into_parts();
     let p = req.uri.path();
     check_http_method!(req.method, http::Method::POST);
-    let data: Arc<SiteCtxt> = ctx.data.read().as_ref().unwrap().clone();
+    let ctxt: Arc<SiteCtxt> = server.ctxt.read().as_ref().unwrap().clone();
     let mut body = Vec::new();
     while let Some(chunk) = body_stream.next().await {
         let chunk = match chunk {
@@ -1562,10 +1556,10 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
     // Can't use match because of https://github.com/rust-lang/rust/issues/57017
     if p == "/perf/graph" {
         Ok(to_response(
-            handle_graph(body!(parse_body(&body)), &data).await,
+            handle_graph(body!(parse_body(&body)), &ctxt).await,
         ))
     } else if p == "/perf/triage" {
-        let response = crate::comparison::handle_triage(body!(parse_body(&body)), &data).await;
+        let response = crate::comparison::handle_triage(body!(parse_body(&body)), &ctxt).await;
         match response {
             Ok(result) => {
                 let response = http::Response::builder().header_typed(ContentType::text());
@@ -1579,12 +1573,12 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
         }
     } else if p == "/perf/get" {
         Ok(to_response(
-            crate::comparison::handle_compare(body!(parse_body(&body)), &data)
+            crate::comparison::handle_compare(body!(parse_body(&body)), &ctxt)
                 .await
                 .map_err(|e| e.to_string()),
         ))
     } else if p == "/perf/collected" {
-        if !ctx.check_auth(&req) {
+        if !server.check_auth(&req) {
             return Ok(http::Response::builder()
                 .status(StatusCode::UNAUTHORIZED)
                 .body(hyper::Body::empty())
@@ -1592,7 +1586,7 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
         }
         Ok(to_response(handle_collected().await))
     } else if p == "/perf/github-hook" {
-        if !verify_gh(&data.config, &req, &body) {
+        if !verify_gh(&ctxt.config, &req, &body) {
             return Ok(http::Response::builder()
                 .status(StatusCode::UNAUTHORIZED)
                 .body(hyper::Body::empty())
@@ -1611,7 +1605,7 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
         };
         match event.as_str() {
             "issue_comment" => Ok(to_response(
-                handle_github(body!(parse_body(&body)), data.clone()).await,
+                handle_github(body!(parse_body(&body)), ctxt.clone()).await,
             )),
             _ => Ok(http::Response::builder()
                 .status(StatusCode::OK)
@@ -1620,15 +1614,15 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
         }
     } else if p == "/perf/self-profile" {
         Ok(to_response(
-            handle_self_profile(body!(parse_body(&body)), &data).await,
+            handle_self_profile(body!(parse_body(&body)), &ctxt).await,
         ))
     } else if p == "/perf/self-profile-raw" {
         Ok(to_response(
-            handle_self_profile_raw(body!(parse_body(&body)), &data).await,
+            handle_self_profile_raw(body!(parse_body(&body)), &ctxt).await,
         ))
     } else if p == "/perf/graph-new" {
         Ok(
-            match handle_graph_new(body!(parse_body(&body)), &data).await {
+            match handle_graph_new(body!(parse_body(&body)), &ctxt).await {
                 Ok(result) => {
                     let mut response = http::Response::builder()
                         .header_typed(ContentType::json())
@@ -1650,7 +1644,7 @@ async fn serve_req(ctx: Arc<Server>, req: Request) -> Result<Response, ServerErr
         )
     } else if p == "/perf/bootstrap" {
         Ok(
-            match handle_bootstrap(body!(parse_body(&body)), &data).await {
+            match handle_bootstrap(body!(parse_body(&body)), &ctxt).await {
                 Ok(result) => {
                     let mut response = http::Response::builder()
                         .header_typed(ContentType::json())
@@ -1748,13 +1742,13 @@ where
     }
 }
 
-async fn run_server(data: Arc<RwLock<Option<Arc<SiteCtxt>>>>, addr: SocketAddr) {
-    let ctx = Arc::new(Server {
-        data,
+async fn run_server(ctxt: Arc<RwLock<Option<Arc<SiteCtxt>>>>, addr: SocketAddr) {
+    let server = Arc::new(Server {
+        ctxt,
         updating: UpdatingStatus::new(),
     });
     let svc = hyper::service::make_service_fn(move |_conn| {
-        let ctx = ctx.clone();
+        let ctx = server.clone();
         async move {
             Ok::<_, hyper::Error>(hyper::service::service_fn(move |req| {
                 let start = std::time::Instant::now();
@@ -1782,8 +1776,8 @@ async fn run_server(data: Arc<RwLock<Option<Arc<SiteCtxt>>>>, addr: SocketAddr) 
     }
 }
 
-pub async fn start(data: Arc<RwLock<Option<Arc<SiteCtxt>>>>, port: u16) {
+pub async fn start(ctxt: Arc<RwLock<Option<Arc<SiteCtxt>>>>, port: u16) {
     let mut server_address: SocketAddr = "0.0.0.0:2346".parse().unwrap();
     server_address.set_port(port);
-    run_server(data, server_address).await;
+    run_server(ctxt, server_address).await;
 }

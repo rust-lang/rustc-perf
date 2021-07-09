@@ -24,10 +24,12 @@
 
 use crate::db::{ArtifactId, Cache, Profile};
 use crate::interpolate::Interpolate;
-use crate::load::SiteCtxt as Db;
+use crate::load::SiteCtxt;
+
 use async_trait::async_trait;
 use collector::Bound;
 use database::{Commit, Crate, Index, Lookup, ProcessStatistic, QueryLabel};
+
 use std::convert::TryInto;
 use std::fmt;
 use std::ops::RangeInclusive;
@@ -368,7 +370,7 @@ impl Query {
 #[async_trait]
 pub trait SeriesElement: Sized {
     async fn query<'a>(
-        db: &'a Db,
+        ctxt: &'a SiteCtxt,
         collection_ids: Arc<Vec<ArtifactId>>,
         query: Query,
     ) -> Result<Vec<SeriesResponse<Box<dyn Iterator<Item = (ArtifactId, Self)> + Send + 'a>>>, String>;
@@ -441,7 +443,7 @@ impl QueryData {
 #[async_trait]
 impl SeriesElement for Option<SelfProfileData> {
     async fn query<'a>(
-        db: &'a Db,
+        ctxt: &'a SiteCtxt,
         collection_ids: Arc<Vec<ArtifactId>>,
         query: Query,
     ) -> Result<
@@ -453,7 +455,7 @@ impl SeriesElement for Option<SelfProfileData> {
         String,
     > {
         let results = vec![
-            SelfProfile::expand_query(collection_ids.clone(), db, query.clone())
+            SelfProfile::expand_query(collection_ids.clone(), ctxt, query.clone())
                 .await
                 .map(|sr| {
                     sr.into_iter()
@@ -476,7 +478,7 @@ impl SeriesElement for Option<SelfProfileData> {
 #[async_trait]
 impl SeriesElement for Option<f64> {
     async fn query<'a>(
-        db: &'a Db,
+        ctxt: &'a SiteCtxt,
         collection_ids: Arc<Vec<ArtifactId>>,
         query: Query,
     ) -> Result<
@@ -484,7 +486,7 @@ impl SeriesElement for Option<f64> {
         String,
     > {
         let results = vec![
-            ProcessStatisticSeries::expand_query(collection_ids.clone(), db, query.clone())
+            ProcessStatisticSeries::expand_query(collection_ids.clone(), ctxt, query.clone())
                 .await
                 .map(|sr| {
                     sr.into_iter()
@@ -496,7 +498,7 @@ impl SeriesElement for Option<f64> {
                         })
                         .collect()
                 }),
-            SelfProfileQueryTime::expand_query(collection_ids.clone(), db, query.clone())
+            SelfProfileQueryTime::expand_query(collection_ids.clone(), ctxt, query.clone())
                 .await
                 .map(|sr| {
                     sr.into_iter()
@@ -514,7 +516,7 @@ impl SeriesElement for Option<f64> {
     }
 }
 
-impl Db {
+impl SiteCtxt {
     pub async fn query<'a, E: SeriesElement>(
         &'a self,
         query: Query,
@@ -527,7 +529,7 @@ impl Db {
 
 #[derive(Clone)]
 pub struct Source<'a> {
-    db: &'a Db,
+    ctxt: &'a SiteCtxt,
 }
 
 pub struct ProcessStatisticSeries {
@@ -542,7 +544,7 @@ impl Series for ProcessStatisticSeries {
 impl ProcessStatisticSeries {
     async fn expand_query(
         collection_ids: Arc<Vec<ArtifactId>>,
-        db: &Db,
+        ctxt: &SiteCtxt,
         mut query: Query,
     ) -> Result<Vec<SeriesResponse<Self>>, String> {
         let dumped = format!("{:?}", query);
@@ -561,7 +563,7 @@ impl ProcessStatisticSeries {
             .try_map(|p| p.parse::<ProcessStatistic>())?;
         query.assert_empty()?;
 
-        let index = db.index.load();
+        let index = ctxt.index.load();
         let mut series = index
             .all_pstat_series()
             .filter(|tup| {
@@ -591,7 +593,7 @@ impl ProcessStatisticSeries {
             .map(|cid| cid.lookup(&index))
             .collect::<Vec<_>>();
 
-        let mut conn = db.conn().await;
+        let mut conn = ctxt.conn().await;
         let mut tx = conn.transaction().await;
 
         let start = std::time::Instant::now();
@@ -655,14 +657,14 @@ pub struct SelfProfile {
 impl SelfProfile {
     async fn new(
         cids: Arc<Vec<ArtifactId>>,
-        db: &Db,
+        ctxt: &SiteCtxt,
         krate: Crate,
         profile: Profile,
         cache: Cache,
     ) -> Self {
         let mut res = Vec::with_capacity(cids.len());
-        let idx = db.index.load();
-        let mut conn = db.conn().await;
+        let idx = ctxt.index.load();
+        let mut conn = ctxt.conn().await;
         let mut tx = conn.transaction().await;
         let labels = idx
             .filtered_queries(krate, profile, cache)
@@ -730,7 +732,7 @@ impl Series for SelfProfile {
 impl SelfProfile {
     async fn expand_query(
         collection_ids: Arc<Vec<ArtifactId>>,
-        db: &Db,
+        ctxt: &SiteCtxt,
         mut query: Query,
     ) -> Result<Vec<SeriesResponse<Self>>, String> {
         let krate = query.extract(Tag::Crate)?.raw;
@@ -744,7 +746,7 @@ impl SelfProfile {
             .try_map(|p| p.parse::<Cache>())?;
         query.assert_empty()?;
 
-        let mut series = db
+        let mut series = ctxt
             .index
             .load()
             .all_query_series()
@@ -758,7 +760,8 @@ impl SelfProfile {
         let mut res = Vec::with_capacity(series.len());
         for path in series {
             res.push(SeriesResponse {
-                series: SelfProfile::new(collection_ids.clone(), db, path.0, path.1, path.2).await,
+                series: SelfProfile::new(collection_ids.clone(), ctxt, path.0, path.1, path.2)
+                    .await,
                 path: Path::new()
                     .set(PathComponent::Crate(path.0))
                     .set(PathComponent::Profile(path.1))
@@ -777,15 +780,15 @@ pub struct SelfProfileQueryTime {
 impl SelfProfileQueryTime {
     async fn new(
         collection_ids: Arc<Vec<ArtifactId>>,
-        db: &Db,
+        ctxt: &SiteCtxt,
         krate: Crate,
         profile: Profile,
         cache: Cache,
         query: QueryLabel,
     ) -> Self {
         let mut res = Vec::with_capacity(collection_ids.len());
-        let idx = db.index.load();
-        let mut conn = db.conn().await;
+        let idx = ctxt.index.load();
+        let mut conn = ctxt.conn().await;
         let mut tx = conn.transaction().await;
         let query = crate::db::DbLabel::SelfProfileQuery {
             krate,
@@ -826,7 +829,7 @@ impl Series for SelfProfileQueryTime {
 impl SelfProfileQueryTime {
     async fn expand_query(
         collection_ids: Arc<Vec<ArtifactId>>,
-        db: &Db,
+        ctxt: &SiteCtxt,
         mut query: Query,
     ) -> Result<Vec<SeriesResponse<Self>>, String> {
         let krate = query.extract(Tag::Crate)?.raw;
@@ -844,7 +847,7 @@ impl SelfProfileQueryTime {
             .map(|p| QueryLabel::from(p.as_str()));
         query.assert_empty()?;
 
-        let index = db.index.load();
+        let index = ctxt.index.load();
         let mut series = index
             .all_query_series()
             .filter(|tup| {
@@ -862,7 +865,7 @@ impl SelfProfileQueryTime {
             res.push(SeriesResponse {
                 series: SelfProfileQueryTime::new(
                     collection_ids.clone(),
-                    db,
+                    ctxt,
                     path.0,
                     path.1,
                     path.2,
