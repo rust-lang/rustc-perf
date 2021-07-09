@@ -356,7 +356,7 @@ impl Connection for SqliteConnection {
     async fn get_pstats(
         &self,
         series: &[u32],
-        cids: &[Option<ArtifactIdNumber>],
+        artifact_row_ids: &[Option<ArtifactIdNumber>],
     ) -> Vec<Vec<Option<f64>>> {
         let conn = self.raw_ref();
         let mut query = conn
@@ -365,20 +365,20 @@ impl Connection for SqliteConnection {
         series
             .iter()
             .map(|sid| {
-                let elements = cids
+                let elements = artifact_row_ids
                     .iter()
-                    .map(|cid| {
-                        cid.and_then(|cid| {
+                    .map(|aid| {
+                        aid.and_then(|aid| {
                             query
-                                .query_row(params![&sid, &cid.0], |row| row.get(0))
+                                .query_row(params![&sid, &aid.0], |row| row.get(0))
                                 .unwrap_or_else(|e| {
-                                    panic!("{:?}: series={:?}, aid={:?}", e, sid, cid);
+                                    panic!("{:?}: series={:?}, aid={:?}", e, sid, aid);
                                 })
                         })
                     })
                     .collect::<Vec<_>>();
                 if elements.is_empty() {
-                    vec![None; cids.len()]
+                    vec![None; artifact_row_ids.len()]
                 } else {
                     elements
                 }
@@ -388,13 +388,13 @@ impl Connection for SqliteConnection {
     async fn get_self_profile_query(
         &self,
         series: u32,
-        cid: ArtifactIdNumber,
+        aid: ArtifactIdNumber,
     ) -> Option<QueryDatum> {
         self.raw_ref().prepare_cached("
                 select self_time, blocked_time, incremental_load_time, number_of_cache_hits, invocation_count
                     from self_profile_query
                     where series = ? and aid = ? order by self_time asc;").unwrap()
-            .query_row(params![&series, &cid.0], |row| {
+            .query_row(params![&series, &aid.0], |row| {
         let self_time: i64 = row.get(0)?;
         let blocked_time: i64 = row.get(1)?;
         let incremental_load_time: i64 = row.get(2)?;
@@ -412,7 +412,7 @@ impl Connection for SqliteConnection {
     }
     async fn get_self_profile(
         &self,
-        cid: ArtifactIdNumber,
+        aid: ArtifactIdNumber,
         crate_: &str,
         profile: &str,
         cache: &str,
@@ -430,7 +430,7 @@ impl Connection for SqliteConnection {
                     and aid = ?
                 ")
             .unwrap()
-            .query_map(params![&crate_, &profile, &cache, &cid.0], |r| {
+            .query_map(params![&crate_, &profile, &cache, &aid.0], |r| {
                 let self_time: i64 = r.get(1)?;
                 let blocked_time: i64 = r.get(2)?;
                 let incremental_load_time: i64 = r.get(3)?;
@@ -449,14 +449,14 @@ impl Connection for SqliteConnection {
             .collect::<Result<_, _>>()
             .unwrap()
     }
-    async fn get_error(&self, cid: crate::ArtifactIdNumber) -> HashMap<String, Option<String>> {
+    async fn get_error(&self, aid: crate::ArtifactIdNumber) -> HashMap<String, Option<String>> {
         self.raw_ref()
             .prepare_cached(
                 "select crate, error from error_series
                     left join error on error.series = error_series.id and aid = ?",
             )
             .unwrap()
-            .query_map(params![&cid.0], |row| Ok((row.get(0)?, row.get(1)?)))
+            .query_map(params![&aid.0], |row| Ok((row.get(0)?, row.get(1)?)))
             .unwrap()
             .collect::<Result<_, _>>()
             .unwrap()

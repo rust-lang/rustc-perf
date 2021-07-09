@@ -141,7 +141,7 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
         versions.drain(first_beta..last_beta);
     }
 
-    let cids = Arc::new(
+    let artifact_ids = Arc::new(
         versions
             .into_iter()
             .map(|v| ArtifactId::Artifact(v.to_string()))
@@ -176,7 +176,7 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
         let summary_patches = &summary_patches;
         let ctxt = &ctxt;
         let query = &query;
-        let cids = &cids;
+        let aids = &artifact_ids;
         async move {
             let mut cases = dashboard::Cases::default();
             for patch in summary_patches.iter() {
@@ -186,7 +186,7 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
                             .clone()
                             .set(Tag::Profile, selector::Selector::One(profile))
                             .set(Tag::Cache, selector::Selector::One(patch)),
-                        cids.clone(),
+                        aids.clone(),
                     )
                     .await?;
 
@@ -216,9 +216,9 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
     .unwrap();
 
     Ok(dashboard::Response {
-        versions: cids
+        versions: artifact_ids
             .iter()
-            .map(|cid| match cid {
+            .map(|aid| match aid {
                 ArtifactId::Commit(c) => format!("master: {}", &c.sha.to_string()[0..8]),
                 ArtifactId::Artifact(aid) => aid.clone(),
             })
@@ -374,8 +374,8 @@ fn to_graph_data<'a>(
     points: impl Iterator<Item = ((ArtifactId, Option<f64>), Interpolated)> + 'a,
 ) -> impl Iterator<Item = graph::GraphData> + 'a {
     let mut first = None;
-    points.map(move |((cid, point), interpolated)| {
-        let commit = if let ArtifactId::Commit(commit) = cid {
+    points.map(move |((aid, point), interpolated)| {
+        let commit = if let ArtifactId::Commit(commit) = aid {
             commit
         } else {
             unimplemented!()

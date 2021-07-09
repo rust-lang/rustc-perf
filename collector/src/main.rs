@@ -186,20 +186,23 @@ impl BenchmarkErrors {
 fn bench(
     rt: &mut Runtime,
     pool: database::Pool,
-    cid: &ArtifactId,
+    artifact_id: &ArtifactId,
     build_kinds: &[BuildKind],
     run_kinds: &[RunKind],
     compiler: Compiler<'_>,
     benchmarks: &[Benchmark],
     iterations: Option<usize>,
-    self_profile: bool,
+    is_self_profile: bool,
 ) -> BenchmarkErrors {
     let mut conn = rt.block_on(pool.connection());
     let mut errors = BenchmarkErrors::new();
-    eprintln!("Benchmarking {} for triple {}", cid, compiler.triple);
+    eprintln!(
+        "Benchmarking {} for triple {}",
+        artifact_id, compiler.triple
+    );
 
     let has_measureme = Command::new("summarize").output().is_ok();
-    if self_profile {
+    if is_self_profile {
         assert!(
             has_measureme,
             "needs `summarize` in PATH for self profile.\n\
@@ -214,20 +217,20 @@ fn bench(
 
     // Make sure there is no observable time when the artifact ID is available
     // but the in-progress steps are not.
-    let interned_cid = {
+    let artifact_row_id = {
         let mut tx = rt.block_on(conn.transaction());
-        let interned_cid = rt.block_on(tx.conn().artifact_id(&cid));
-        rt.block_on(tx.conn().collector_start(interned_cid, &steps));
+        let artifact_row_id = rt.block_on(tx.conn().artifact_id(&artifact_id));
+        rt.block_on(tx.conn().collector_start(artifact_row_id, &steps));
 
         rt.block_on(tx.commit()).unwrap();
-        interned_cid
+        artifact_row_id
     };
 
     let start = Instant::now();
     let mut skipped = false;
     for (nth_benchmark, benchmark) in benchmarks.iter().enumerate() {
         let is_fresh =
-            rt.block_on(conn.collector_start_step(interned_cid, &benchmark.name.to_string()));
+            rt.block_on(conn.collector_start_step(artifact_row_id, &benchmark.name.to_string()));
         if !is_fresh {
             skipped = true;
             eprintln!("skipping {} -- already benchmarked", benchmark.name);
@@ -247,9 +250,9 @@ fn bench(
             rt,
             tx.conn(),
             &benchmark.name,
-            &cid,
-            interned_cid,
-            self_profile,
+            &artifact_id,
+            artifact_row_id,
+            is_self_profile,
         );
         let result =
             benchmark.measure(&mut processor, build_kinds, run_kinds, compiler, iterations);
@@ -260,14 +263,14 @@ fn bench(
             );
             errors.incr();
             rt.block_on(tx.conn().record_error(
-                interned_cid,
+                artifact_row_id,
                 benchmark.name.0.as_str(),
                 &format!("{:?}", s),
             ));
         };
         rt.block_on(
             tx.conn()
-                .collector_end_step(interned_cid, &benchmark.name.to_string()),
+                .collector_end_step(artifact_row_id, &benchmark.name.to_string()),
         );
         rt.block_on(tx.commit()).expect("committed");
     }
@@ -281,7 +284,7 @@ fn bench(
     if skipped {
         log::info!("skipping duration record -- skipped parts of run");
     } else {
-        rt.block_on(conn.record_duration(interned_cid, end));
+        rt.block_on(conn.record_duration(artifact_row_id, end));
     }
 
     rt.block_on(async move {
@@ -574,7 +577,7 @@ fn main_result() -> anyhow::Result<i32> {
             let include = sub_m.value_of("INCLUDE");
             let run_kinds = run_kinds_from_arg(&sub_m.value_of("RUNS"))?;
             let rustdoc = sub_m.value_of("RUSTDOC");
-            let self_profile = sub_m.is_present("SELF_PROFILE");
+            let is_self_profile = sub_m.is_present("SELF_PROFILE");
 
             let pool = database::Pool::open(db);
 
@@ -597,7 +600,7 @@ fn main_result() -> anyhow::Result<i32> {
                 },
                 &benchmarks,
                 Some(1),
-                self_profile,
+                is_self_profile,
             );
             res.fail_if_nonzero()?;
             Ok(0)
@@ -609,7 +612,7 @@ fn main_result() -> anyhow::Result<i32> {
 
             // Options
             let db = sub_m.value_of("DB").unwrap_or(default_db);
-            let self_profile = sub_m.is_present("SELF_PROFILE");
+            let is_self_profile = sub_m.is_present("SELF_PROFILE");
 
             println!("processing commits");
             let client = reqwest::blocking::Client::new();
@@ -646,7 +649,7 @@ fn main_result() -> anyhow::Result<i32> {
                 Compiler::from_sysroot(&sysroot),
                 &benchmarks,
                 next.runs.map(|v| v as usize),
-                self_profile,
+                is_self_profile,
             );
 
             client.post(&format!("{}/perf/onpush", site_url)).send()?;
@@ -722,7 +725,7 @@ fn main_result() -> anyhow::Result<i32> {
                 },
                 &benchmarks,
                 Some(3),
-                /* self_profile */ false,
+                /* is_self_profile */ false,
             );
             res.fail_if_nonzero()?;
             Ok(0)

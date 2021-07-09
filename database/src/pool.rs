@@ -75,11 +75,11 @@ pub trait Connection: Send + Sync {
     async fn get_pstats(
         &self,
         series: &[u32],
-        cid: &[Option<ArtifactIdNumber>],
+        artifact_row_id: &[Option<ArtifactIdNumber>],
     ) -> Vec<Vec<Option<f64>>>;
     async fn get_self_profile(
         &self,
-        cid: ArtifactIdNumber,
+        artifact_row_id: ArtifactIdNumber,
         crate_: &str,
         profile: &str,
         cache: &str,
@@ -87,9 +87,10 @@ pub trait Connection: Send + Sync {
     async fn get_self_profile_query(
         &self,
         series: u32,
-        cid: ArtifactIdNumber,
+        artifact_row_id: ArtifactIdNumber,
     ) -> Option<QueryDatum>;
-    async fn get_error(&self, cid: ArtifactIdNumber) -> HashMap<String, Option<String>>;
+    async fn get_error(&self, artifact_row_id: ArtifactIdNumber)
+        -> HashMap<String, Option<String>>;
 
     async fn queue_pr(
         &self,

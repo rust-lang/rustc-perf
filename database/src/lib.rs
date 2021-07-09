@@ -417,13 +417,21 @@ impl From<Commit> for ArtifactId {
 
 #[async_trait::async_trait]
 pub trait SeriesType: Sized {
-    async fn get(conn: &dyn pool::Connection, series: u32, cid: ArtifactIdNumber) -> Option<Self>;
+    async fn get(
+        conn: &dyn pool::Connection,
+        series: u32,
+        artifact_row_id: ArtifactIdNumber,
+    ) -> Option<Self>;
 }
 
 #[async_trait::async_trait]
 impl SeriesType for f64 {
-    async fn get(conn: &dyn pool::Connection, series: u32, cid: ArtifactIdNumber) -> Option<Self> {
-        conn.get_pstats(&[series], &[Some(cid)]).await[0][0]
+    async fn get(
+        conn: &dyn pool::Connection,
+        series: u32,
+        artifact_row_id: ArtifactIdNumber,
+    ) -> Option<Self> {
+        conn.get_pstats(&[series], &[Some(artifact_row_id)]).await[0][0]
     }
 }
 
@@ -440,13 +448,18 @@ pub struct QueryDatum {
 
 #[async_trait::async_trait]
 impl SeriesType for QueryDatum {
-    async fn get(conn: &dyn pool::Connection, series: u32, cid: ArtifactIdNumber) -> Option<Self> {
-        conn.get_self_profile_query(series, cid).await
+    async fn get(
+        conn: &dyn pool::Connection,
+        series: u32,
+        artifact_row_id: ArtifactIdNumber,
+    ) -> Option<Self> {
+        conn.get_self_profile_query(series, artifact_row_id).await
     }
 }
 #[derive(Hash, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct LabelId(pub u8, pub u32);
 
+/// A database row ID for an artifact in the artifact table
 #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct ArtifactIdNumber(pub u32);
 
@@ -638,20 +651,24 @@ impl Index {
         conn.load_index().await
     }
 
-    pub fn lookup(&self, path: &DbLabel, cid: &ArtifactId) -> Option<(u32, ArtifactIdNumber)> {
-        let cid = cid.lookup(self)?;
+    pub fn lookup(
+        &self,
+        path: &DbLabel,
+        artifact_id: &ArtifactId,
+    ) -> Option<(u32, ArtifactIdNumber)> {
+        let artifact_row_id = artifact_id.lookup(self)?;
         let series = path.lookup(self)?;
-        Some((series, cid))
+        Some((series, artifact_row_id))
     }
 
     pub async fn get<T: SeriesType>(
         &self,
         db: &mut dyn pool::Connection,
         path: &DbLabel,
-        cid: &ArtifactId,
+        artifact_id: &ArtifactId,
     ) -> Option<T> {
-        let (series, cid) = self.lookup(path, cid)?;
-        T::get(db, series, cid).await
+        let (series, artifact_row_id) = self.lookup(path, artifact_id)?;
+        T::get(db, series, artifact_row_id).await
     }
 
     pub fn artifacts(&self) -> impl Iterator<Item = &'_ str> + '_ {
