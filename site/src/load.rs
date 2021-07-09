@@ -95,8 +95,8 @@ impl SiteCtxt {
         ]
     }
 
-    pub fn data_for(&self, is_left: bool, query: Bound) -> Option<ArtifactId> {
-        crate::selector::data_for(&self.index.load(), is_left, query)
+    pub fn artifact_id_for_bound(&self, query: Bound, is_left: bool) -> Option<ArtifactId> {
+        crate::selector::artifact_id_for_bound(&self.index.load(), query, is_left)
     }
 
     pub fn data_range(&self, range: RangeInclusive<Bound>) -> Vec<Commit> {

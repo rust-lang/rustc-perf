@@ -39,7 +39,7 @@ use std::sync::Arc;
 ///
 /// Searches the commits in the index either from the left or the right.
 /// If not found in those commits, searches through the artifacts in the index.
-pub fn data_for(data: &Index, is_left: bool, bound: Bound) -> Option<ArtifactId> {
+pub fn artifact_id_for_bound(data: &Index, bound: Bound, is_left: bool) -> Option<ArtifactId> {
     let commits = data.commits();
     let commit = if is_left {
         commits

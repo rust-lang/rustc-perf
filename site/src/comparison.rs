@@ -230,9 +230,9 @@ pub async fn compare_given_commits(
     master_commits: &[collector::MasterCommit],
 ) -> Result<Option<Comparison>, BoxedError> {
     let a = ctxt
-        .data_for(true, start.clone())
+        .artifact_id_for_bound(start.clone(), true)
         .ok_or(format!("could not find start commit for bound {:?}", start))?;
-    let b = match ctxt.data_for(false, end.clone()) {
+    let b = match ctxt.artifact_id_for_bound(end.clone(), false) {
         Some(b) => b,
         None => return Ok(None),
     };
