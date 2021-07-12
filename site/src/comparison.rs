@@ -499,12 +499,12 @@ impl BenchmarkComparison<'_> {
         let percent = self.relative_change() * 100.0;
         write!(
             summary,
-            "{} {} in [instruction counts]({})",
+            "{} {} in {}",
             size,
             self.direction(),
             match link {
-                Some(l) => l,
-                None => "",
+                Some(l) => format!("[instruction counts]({})", l),
+                None => "instruction counts".into(),
             }
         )
         .unwrap();
