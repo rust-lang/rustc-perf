@@ -2,6 +2,48 @@
 
 Below is an explanation of the current database schema. This schema is duplicated across the (currently) two database backends we support: sqlite and postgres.
 
+
+## Overview
+
+In general, the database is used to track three groups of things:
+* Performance run statistics (e.g., instruction count) on a per benchmark, profile, and cache-state basis.
+* Self profile data gathered with `-Zself-profile`.
+* State when running GitHub bots and the performance runs (e.g., how long it took for a performance suite to run, errors encountered a long the way, etc.)
+
+Below are some diagrams showing the basic layout of the database schema for these three uses:
+
+### Performance run statistics
+
+```
+  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐   
+  │ benchmarks    │  │ collections   │  │ artifacts     │
+  ├───────────────┤  ├───────────────┤  ├───────────────┤
+┌►│ id *          │  │ id *          │◄┐│ id *          │◄┐
+│ │ name          │  │ commit        │ ││ name          │ │
+│ │ runs_on_stable│  │               │ ││ date          │ │
+│ │               │  │               │ ││ type          │ │
+│ └───────────────┘  └───────────────┘ │└───────────────┘ │
+│                                      │                  │
+│                                      │                  │
+│ ┌───────────────┐  ┌───────────────┐ |                  │
+│ │ pstat_series  │  │ pstats        │ │                  │
+│ ├───────────────┤  ├───────────────┤ │                  │ 
+│ │ id *          │◄┐│ id *          │ │                  │
+└─┤ benchmark_id  │ └┤ series_id     │ │                  │ 
+  │ profile       │  │ artifact_id   ├─┼──────────────────┘
+  │ cache         │  │ collection_id ├─┘
+  │ statistic     │  │ value         │
+  └───────────────┘  └───────────────┘
+```
+
+### Self profile data
+
+**TODO**
+
+### Miscellaneous State
+
+**TODO**
+
 ## Tables
 
 ### benchmark
@@ -22,7 +64,7 @@ helloworld  0
 A description of a rustc compiler artifact being benchmarked. 
 
 This description includes:
-* name: usually a commit sha or a tag like "1.51.0" 
+* name: usually a commit sha or a tag like "1.51.0" but is free-form text so can be anything.
 * date: the date associated with this compiler artifact (usually only when the name is a commit) 
 * type: currently one of "master" (i.e., we're testing a merge commit), "try" (someone is testing a PR), and "release" (usually a release candidate - though local compilers also get labeled like this).
 
@@ -80,9 +122,15 @@ series      aid         cid         value
 
 ### self_profile_query_series
 
+**TODO**
+
 ### self_profile_query
 
+**TODO**
+
 ### pull_request_builds
+
+**TODO**
 
 ### artifact_collection_duration
 
@@ -108,6 +156,12 @@ aid         step        start       end
 
 ### rustc_compilation
 
+**TODO**
+
 ### error_series
 
+**TODO**
+
 ### error
+
+**TODO**
