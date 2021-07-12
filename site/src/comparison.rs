@@ -12,6 +12,7 @@ use serde::Serialize;
 
 use std::collections::HashMap;
 use std::error::Error;
+use std::hash::Hash;
 use std::sync::Arc;
 
 type BoxedError = Box<dyn Error + Send + Sync>;
@@ -222,7 +223,7 @@ pub async fn compare(
 }
 
 /// Compare two bounds on a given stat
-pub async fn compare_given_commits(
+async fn compare_given_commits(
     start: Bound,
     end: Bound,
     stat: String,
@@ -236,6 +237,21 @@ pub async fn compare_given_commits(
         Some(b) => b,
         None => return Ok(None),
     };
+    let mut prevs = Vec::with_capacity(10);
+    let mut commit = a.clone();
+    while prevs.len() < 100 {
+        match prev_commit(&commit, master_commits) {
+            Some(c) => {
+                let new = ArtifactId::Commit(database::Commit {
+                    sha: c.sha.clone(),
+                    date: database::Date(c.time),
+                });
+                commit = new.clone();
+                prevs.push(new);
+            }
+            None => break,
+        }
+    }
     let aids = Arc::new(vec![a.clone(), b.clone()]);
 
     // get all crates, cache, and profile combinations for the given stat
@@ -247,9 +263,50 @@ pub async fn compare_given_commits(
 
     // `responses` contains series iterators. The first element in the iterator is the data
     // for `a` and the second is the data for `b`
-    let mut responses = ctxt.query::<Option<f64>>(query, aids).await?;
+    let mut responses = ctxt.query::<Option<f64>>(query.clone(), aids).await?;
+    let mut rps = ctxt
+        .query::<Option<f64>>(query, Arc::new(prevs.clone()))
+        .await?;
 
     let conn = ctxt.conn().await;
+
+    let mut others = Vec::new();
+    for aid in prevs {
+        others.push(ArtifactData::consume_one(&*conn, aid, &mut rps, master_commits).await)
+    }
+    // println!("{:#?}", others.iter().map(|o| &o.data).collect::<Vec<_>>());
+    let mut h: HashMap<String, Vec<f64>> = HashMap::new();
+    for o in others {
+        let data = &o.data;
+        for (k, v) in data {
+            for (c, val) in v {
+                h.entry(format!("{}-{}", k, c)).or_default().push(*val);
+            }
+        }
+    }
+    for (bench, results) in h {
+        println!("Bechmark: {}", bench);
+        let results_len = results.len();
+        let results_mean = results.iter().sum::<f64>() / results.len() as f64;
+        let mut deltas = results
+            .windows(2)
+            .map(|window| (window[0] - window[1]).abs())
+            .collect::<Vec<_>>();
+        deltas.sort_by(|d1, d2| d1.partial_cmp(d2).unwrap_or(std::cmp::Ordering::Equal));
+        let non_significant = deltas
+            .iter()
+            .zip(results)
+            .take_while(|(&d, r)| d / r < 0.05)
+            .collect::<Vec<_>>();
+        println!(
+            "Significant changes: {}",
+            results_len - non_significant.len()
+        );
+        let mean =
+            non_significant.iter().map(|(&d, _)| d).sum::<f64>() / (non_significant.len() as f64);
+        let coefficient_of_variance = (mean / results_mean) * 100.0;
+        println!("\tCoefficient of variance: {:.3}%", coefficient_of_variance);
+    }
 
     Ok(Some(Comparison {
         a: ArtifactData::consume_one(&*conn, a.clone(), &mut responses, master_commits).await,
@@ -376,13 +433,7 @@ pub struct Comparison {
 impl Comparison {
     /// Gets the previous commit before `a`
     pub fn prev(&self, master_commits: &[collector::MasterCommit]) -> Option<String> {
-        match &self.a.artifact {
-            ArtifactId::Commit(a) => master_commits
-                .iter()
-                .find(|c| c.sha == a.sha)
-                .map(|c| c.parent_sha.clone()),
-            ArtifactId::Artifact(_) => None,
-        }
+        prev_commit(&self.a.artifact, master_commits).map(|c| c.parent_sha.clone())
     }
 
     /// Determines if `a` and `b` are contiguous
@@ -405,13 +456,7 @@ impl Comparison {
 
     /// Gets the sha of the next commit after `b`
     pub fn next(&self, master_commits: &[collector::MasterCommit]) -> Option<String> {
-        match &self.b.artifact {
-            ArtifactId::Commit(b) => master_commits
-                .iter()
-                .find(|c| c.parent_sha == b.sha)
-                .map(|c| c.sha.clone()),
-            ArtifactId::Artifact(_) => None,
-        }
+        next_commit(&self.a.artifact, master_commits).map(|c| c.parent_sha.clone())
     }
 
     fn get_benchmarks<'a>(&'a self) -> Vec<BenchmarkComparison<'a>> {
@@ -434,6 +479,31 @@ impl Comparison {
         }
 
         result
+    }
+}
+
+/// Gets the previous commit
+pub fn prev_commit<'a>(
+    artifact: &ArtifactId,
+    master_commits: &'a [collector::MasterCommit],
+) -> Option<&'a collector::MasterCommit> {
+    match &artifact {
+        ArtifactId::Commit(a) => {
+            let current = master_commits.iter().find(|c| c.sha == a.sha)?;
+            master_commits.iter().find(|c| c.sha == current.parent_sha)
+        }
+        ArtifactId::Artifact(_) => None,
+    }
+}
+
+/// Gets the next commit
+pub fn next_commit<'a>(
+    artifact: &ArtifactId,
+    master_commits: &'a [collector::MasterCommit],
+) -> Option<&'a collector::MasterCommit> {
+    match artifact {
+        ArtifactId::Commit(b) => master_commits.iter().find(|c| c.parent_sha == b.sha),
+        ArtifactId::Artifact(_) => None,
     }
 }
 
