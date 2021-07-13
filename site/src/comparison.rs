@@ -561,8 +561,7 @@ TODO: Summary
 Triage done by **@???**.
 Revision range: [{first_commit}..{last_commit}](https://perf.rust-lang.org/?start={first_commit}&end={last_commit}&absolute=false&stat=instructions%3Au)
 
-{num_regressions} Regressions, {num_improvements} Improvements, {num_mixed} Mixed
-??? of them in rollups
+{num_regressions} Regressions, {num_improvements} Improvements, {num_mixed} Mixed; ??? of them in rollups
 
 #### Regressions
 
