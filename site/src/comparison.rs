@@ -526,7 +526,7 @@ pub struct BenchmarkVariance {
 
 impl BenchmarkVariance {
     /// The ratio of change that we consider significant.
-    const SIGNFICANT_DELTA_THRESHOLD: f64 = 0.02;
+    const SIGNFICANT_DELTA_THRESHOLD: f64 = 0.01;
     /// The percentage of significant changes that we consider too high
     const SIGNFICANT_CHANGE_THRESHOLD: f64 = 5.0;
     /// The percentage of change that constitutes noisy data
@@ -557,13 +557,13 @@ impl BenchmarkVariance {
             .collect::<Vec<_>>();
 
         let percent_significant_changes =
-            ((self.data.len() - non_significant.len()) as f64 / self.data.len() as f64) * 100.0;
+            ((deltas.len() - non_significant.len()) as f64 / deltas.len() as f64) * 100.0;
         debug!(
             "Percent significant changes: {:.1}%",
             percent_significant_changes
         );
 
-        if percent_significant_changes >= Self::SIGNFICANT_CHANGE_THRESHOLD {
+        if percent_significant_changes > Self::SIGNFICANT_CHANGE_THRESHOLD {
             self.description =
                 BenchmarkVarianceDescription::HighlyVariable(percent_significant_changes);
             return;
