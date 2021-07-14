@@ -117,11 +117,26 @@ fn build_kinds_from_arg(arg: &Option<&str>) -> anyhow::Result<Vec<BuildKind>> {
     }
 }
 
-fn run_kinds_from_arg(arg: &Option<&str>) -> anyhow::Result<Vec<RunKind>> {
+fn run_kinds_from_arg(arg: Option<&str>) -> anyhow::Result<Vec<RunKind>> {
     if let Some(arg) = arg {
         kinds_from_arg("run", STRINGS_AND_RUN_KINDS, arg)
     } else {
         Ok(RunKind::default())
+    }
+}
+
+fn iterations_from_arg(arg: Option<&str>) -> anyhow::Result<usize> {
+    if let Some(arg) = arg {
+        if let Ok(iterations) = usize::from_str_radix(arg, 10) {
+            Ok(iterations)
+        } else {
+            anyhow::bail!(
+                "cannot parse iteration count '{}'. Must be a decimal number.",
+                arg
+            );
+        }
+    } else {
+        Ok(1)
     }
 }
 
@@ -483,6 +498,8 @@ fn main_result() -> anyhow::Result<i32> {
             (@arg RUNS:    --runs    +takes_value
              "One or more (comma-separated) of: 'Full',\n\
              'IncrFull', 'IncrUnchanged', 'IncrPatched', 'All'")
+            (@arg ITERATIONS: --iterations    +takes_value
+                "The number of iterations to do for each benchmark")
             (@arg RUSTDOC: --rustdoc +takes_value "The path to the local rustdoc to benchmark")
             (@arg SELF_PROFILE: --("self-profile") "Collect self-profile data")
         )
@@ -575,7 +592,8 @@ fn main_result() -> anyhow::Result<i32> {
             let db = sub_m.value_of("DB").unwrap_or(default_db);
             let exclude = sub_m.value_of("EXCLUDE");
             let include = sub_m.value_of("INCLUDE");
-            let run_kinds = run_kinds_from_arg(&sub_m.value_of("RUNS"))?;
+            let run_kinds = run_kinds_from_arg(sub_m.value_of("RUNS"))?;
+            let iterations = iterations_from_arg(sub_m.value_of("ITERATIONS"))?;
             let rustdoc = sub_m.value_of("RUSTDOC");
             let is_self_profile = sub_m.is_present("SELF_PROFILE");
 
@@ -599,7 +617,7 @@ fn main_result() -> anyhow::Result<i32> {
                     is_nightly: true,
                 },
                 &benchmarks,
-                Some(1),
+                Some(iterations),
                 is_self_profile,
             );
             res.fail_if_nonzero()?;
@@ -743,7 +761,7 @@ fn main_result() -> anyhow::Result<i32> {
             let exclude = sub_m.value_of("EXCLUDE");
             let include = sub_m.value_of("INCLUDE");
             let out_dir = PathBuf::from(sub_m.value_of_os("OUT_DIR").unwrap_or(default_out_dir));
-            let run_kinds = run_kinds_from_arg(&sub_m.value_of("RUNS"))?;
+            let run_kinds = run_kinds_from_arg(sub_m.value_of("RUNS"))?;
             let rustdoc = sub_m.value_of("RUSTDOC");
 
             let (rustc, rustdoc, cargo) = get_local_toolchain(&build_kinds, rustc, rustdoc, cargo)?;
