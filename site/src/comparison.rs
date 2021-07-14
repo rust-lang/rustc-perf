@@ -414,7 +414,7 @@ pub struct Comparison {
 impl Comparison {
     /// Gets the previous commit before `a`
     pub fn prev(&self, master_commits: &[collector::MasterCommit]) -> Option<String> {
-        prev_commit(&self.a.artifact, master_commits).map(|c| c.parent_sha.clone())
+        prev_commit(&self.a.artifact, master_commits).map(|c| c.sha.clone())
     }
 
     /// Determines if `a` and `b` are contiguous
@@ -437,7 +437,7 @@ impl Comparison {
 
     /// Gets the sha of the next commit after `b`
     pub fn next(&self, master_commits: &[collector::MasterCommit]) -> Option<String> {
-        next_commit(&self.a.artifact, master_commits).map(|c| c.parent_sha.clone())
+        next_commit(&self.b.artifact, master_commits).map(|c| c.sha.clone())
     }
 
     fn get_benchmarks<'a>(&'a self) -> Vec<BenchmarkComparison<'a>> {
