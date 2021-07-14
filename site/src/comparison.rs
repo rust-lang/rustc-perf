@@ -8,10 +8,12 @@ use crate::load::SiteCtxt;
 use crate::selector::{self, Tag};
 
 use collector::Bound;
+use log::debug;
 use serde::Serialize;
 
 use std::collections::HashMap;
 use std::error::Error;
+use std::hash::Hash;
 use std::sync::Arc;
 
 type BoxedError = Box<dyn Error + Send + Sync>;
@@ -99,6 +101,7 @@ pub async fn handle_compare(
     let is_contiguous = comparison.is_contiguous(&*conn, &master_commits).await;
 
     Ok(api::comparison::Response {
+        variance: comparison.benchmark_variances.map(|b| b.data),
         prev,
         a: comparison.a.into(),
         b: comparison.b.into(),
@@ -222,7 +225,7 @@ pub async fn compare(
 }
 
 /// Compare two bounds on a given stat
-pub async fn compare_given_commits(
+async fn compare_given_commits(
     start: Bound,
     end: Bound,
     stat: String,
@@ -247,18 +250,41 @@ pub async fn compare_given_commits(
 
     // `responses` contains series iterators. The first element in the iterator is the data
     // for `a` and the second is the data for `b`
-    let mut responses = ctxt.query::<Option<f64>>(query, aids).await?;
+    let mut responses = ctxt.query::<Option<f64>>(query.clone(), aids).await?;
 
     let conn = ctxt.conn().await;
-
     Ok(Some(Comparison {
+        benchmark_variances: BenchmarkVariances::calculate(ctxt, a.clone(), master_commits, stat)
+            .await?,
         a: ArtifactData::consume_one(&*conn, a.clone(), &mut responses, master_commits).await,
         b: ArtifactData::consume_one(&*conn, b.clone(), &mut responses, master_commits).await,
     }))
 }
 
+fn previous_commits(
+    mut from: ArtifactId,
+    n: usize,
+    master_commits: &[collector::MasterCommit],
+) -> Vec<ArtifactId> {
+    let mut prevs = Vec::with_capacity(n);
+    while prevs.len() < n {
+        match prev_commit(&from, master_commits) {
+            Some(c) => {
+                let new = ArtifactId::Commit(database::Commit {
+                    sha: c.sha.clone(),
+                    date: database::Date(c.time),
+                });
+                from = new.clone();
+                prevs.push(new);
+            }
+            None => break,
+        }
+    }
+    prevs
+}
+
 /// Data associated with a specific artifact
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct ArtifactData {
     /// The artifact in question
     pub artifact: ArtifactId,
@@ -288,25 +314,7 @@ impl ArtifactData {
     where
         T: Iterator<Item = (ArtifactId, Option<f64>)>,
     {
-        let mut data = HashMap::new();
-
-        for response in series {
-            let (id, point) = response.series.next().expect("must have element");
-            assert_eq!(artifact, id);
-
-            let point = if let Some(pt) = point {
-                pt
-            } else {
-                continue;
-            };
-            data.entry(format!(
-                "{}-{}",
-                response.path.get::<Crate>().unwrap(),
-                response.path.get::<Profile>().unwrap(),
-            ))
-            .or_insert_with(Vec::new)
-            .push((response.path.get::<Cache>().unwrap().to_string(), point));
-        }
+        let data = data_from_series(series);
 
         let bootstrap = conn
             .get_bootstrap(&[conn.artifact_id(&artifact).await])
@@ -348,6 +356,32 @@ impl ArtifactData {
     }
 }
 
+fn data_from_series<T>(
+    series: &mut [selector::SeriesResponse<T>],
+) -> HashMap<String, Vec<(String, f64)>>
+where
+    T: Iterator<Item = (ArtifactId, Option<f64>)>,
+{
+    let mut data = HashMap::new();
+    for response in series {
+        let (_, point) = response.series.next().expect("must have element");
+
+        let point = if let Some(pt) = point {
+            pt
+        } else {
+            continue;
+        };
+        data.entry(format!(
+            "{}-{}",
+            response.path.get::<Crate>().unwrap(),
+            response.path.get::<Profile>().unwrap(),
+        ))
+        .or_insert_with(Vec::new)
+        .push((response.path.get::<Cache>().unwrap().to_string(), point));
+    }
+    data
+}
+
 impl From<ArtifactData> for api::comparison::ArtifactData {
     fn from(data: ArtifactData) -> Self {
         api::comparison::ArtifactData {
@@ -369,6 +403,10 @@ impl From<ArtifactData> for api::comparison::ArtifactData {
 
 // A comparison of two artifacts
 pub struct Comparison {
+    /// Data on how variable benchmarks have historically been
+    ///
+    /// Is `None` if we cannot determine historical variance
+    pub benchmark_variances: Option<BenchmarkVariances>,
     pub a: ArtifactData,
     pub b: ArtifactData,
 }
@@ -376,13 +414,7 @@ pub struct Comparison {
 impl Comparison {
     /// Gets the previous commit before `a`
     pub fn prev(&self, master_commits: &[collector::MasterCommit]) -> Option<String> {
-        match &self.a.artifact {
-            ArtifactId::Commit(a) => master_commits
-                .iter()
-                .find(|c| c.sha == a.sha)
-                .map(|c| c.parent_sha.clone()),
-            ArtifactId::Artifact(_) => None,
-        }
+        prev_commit(&self.a.artifact, master_commits).map(|c| c.parent_sha.clone())
     }
 
     /// Determines if `a` and `b` are contiguous
@@ -405,13 +437,7 @@ impl Comparison {
 
     /// Gets the sha of the next commit after `b`
     pub fn next(&self, master_commits: &[collector::MasterCommit]) -> Option<String> {
-        match &self.b.artifact {
-            ArtifactId::Commit(b) => master_commits
-                .iter()
-                .find(|c| c.parent_sha == b.sha)
-                .map(|c| c.sha.clone()),
-            ArtifactId::Artifact(_) => None,
-        }
+        next_commit(&self.a.artifact, master_commits).map(|c| c.parent_sha.clone())
     }
 
     fn get_benchmarks<'a>(&'a self) -> Vec<BenchmarkComparison<'a>> {
@@ -434,6 +460,169 @@ impl Comparison {
         }
 
         result
+    }
+}
+
+/// A description of the amount of variance a certain benchmark is historically
+/// experiencing at a given point in time.
+pub struct BenchmarkVariances {
+    /// Variance data on a per benchmark basis
+    /// Key: $benchmark-$profile-$cache
+    /// Value: `BenchmarkVariance`
+    pub data: HashMap<String, BenchmarkVariance>,
+}
+
+impl BenchmarkVariances {
+    async fn calculate(
+        ctxt: &SiteCtxt,
+        from: ArtifactId,
+        master_commits: &[collector::MasterCommit],
+        stat: String,
+    ) -> Result<Option<Self>, BoxedError> {
+        // get all crates, cache, and profile combinations for the given stat
+        let query = selector::Query::new()
+            .set::<String>(Tag::Crate, selector::Selector::All)
+            .set::<String>(Tag::Cache, selector::Selector::All)
+            .set::<String>(Tag::Profile, selector::Selector::All)
+            .set(Tag::ProcessStatistic, selector::Selector::One(stat));
+
+        let num_commits = 100;
+        let previous_commits = Arc::new(previous_commits(from, num_commits, master_commits));
+        if previous_commits.len() < num_commits {
+            return Ok(None);
+        }
+        let mut previous_commit_series = ctxt
+            .query::<Option<f64>>(query, previous_commits.clone())
+            .await?;
+
+        let mut variance_data: HashMap<String, BenchmarkVariance> = HashMap::new();
+        for _ in previous_commits.iter() {
+            let series_data = data_from_series(&mut previous_commit_series);
+            for (bench_and_profile, data) in series_data {
+                for (cache, val) in data {
+                    variance_data
+                        .entry(format!("{}-{}", bench_and_profile, cache))
+                        .or_default()
+                        .push(val);
+                }
+            }
+        }
+
+        for (bench, results) in variance_data.iter_mut() {
+            debug!("Calculating variance for: {}", bench);
+            results.calculate_description();
+        }
+        Ok(Some(Self {
+            data: variance_data,
+        }))
+    }
+}
+
+#[derive(Debug, Default, Clone, Serialize)]
+pub struct BenchmarkVariance {
+    data: Vec<f64>,
+    description: BenchmarkVarianceDescription,
+}
+
+impl BenchmarkVariance {
+    /// The ratio of change that we consider significant.
+    const SIGNFICANT_DELTA_THRESHOLD: f64 = 0.01;
+    /// The percentage of significant changes that we consider too high
+    const SIGNFICANT_CHANGE_THRESHOLD: f64 = 5.0;
+    /// The percentage of change that constitutes noisy data
+    const NOISE_THRESHOLD: f64 = 0.1;
+
+    fn push(&mut self, value: f64) {
+        self.data.push(value);
+    }
+
+    fn mean(&self) -> f64 {
+        self.data.iter().sum::<f64>() / self.data.len() as f64
+    }
+
+    fn calculate_description(&mut self) {
+        self.description = BenchmarkVarianceDescription::Normal;
+
+        let results_mean = self.mean();
+        let mut deltas = self
+            .data
+            .windows(2)
+            .map(|window| (window[0] - window[1]).abs())
+            .collect::<Vec<_>>();
+        deltas.sort_by(|d1, d2| d1.partial_cmp(d2).unwrap_or(std::cmp::Ordering::Equal));
+        let non_significant = deltas
+            .iter()
+            .zip(self.data.iter())
+            .take_while(|(&d, &r)| d / r < Self::SIGNFICANT_DELTA_THRESHOLD)
+            .collect::<Vec<_>>();
+
+        let percent_significant_changes =
+            ((deltas.len() - non_significant.len()) as f64 / deltas.len() as f64) * 100.0;
+        debug!(
+            "Percent significant changes: {:.1}%",
+            percent_significant_changes
+        );
+
+        if percent_significant_changes > Self::SIGNFICANT_CHANGE_THRESHOLD {
+            self.description =
+                BenchmarkVarianceDescription::HighlyVariable(percent_significant_changes);
+            return;
+        }
+
+        let delta_mean =
+            non_significant.iter().map(|(&d, _)| d).sum::<f64>() / (non_significant.len() as f64);
+        let percent_change = (delta_mean / results_mean) * 100.0;
+        debug!("Percent change: {:.3}%", percent_change);
+        if percent_change > Self::NOISE_THRESHOLD {
+            self.description = BenchmarkVarianceDescription::Noisy(percent_change);
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(tag = "type", content = "percent")]
+pub enum BenchmarkVarianceDescription {
+    Normal,
+    /// A highly variable benchmark that produces many significant changes.
+    /// This might indicate a benchmark which is very sensitive to compiler changes.
+    ///
+    /// Cotains the percentage of significant changes.
+    HighlyVariable(f64),
+    /// A noisy benchmark which is likely to see changes in performance simply between
+    /// compiler runs.
+    ///
+    /// Contains the percent change that happens on average
+    Noisy(f64),
+}
+
+impl Default for BenchmarkVarianceDescription {
+    fn default() -> Self {
+        Self::Normal
+    }
+}
+
+/// Gets the previous commit
+pub fn prev_commit<'a>(
+    artifact: &ArtifactId,
+    master_commits: &'a [collector::MasterCommit],
+) -> Option<&'a collector::MasterCommit> {
+    match &artifact {
+        ArtifactId::Commit(a) => {
+            let current = master_commits.iter().find(|c| c.sha == a.sha)?;
+            master_commits.iter().find(|c| c.sha == current.parent_sha)
+        }
+        ArtifactId::Artifact(_) => None,
+    }
+}
+
+/// Gets the next commit
+pub fn next_commit<'a>(
+    artifact: &ArtifactId,
+    master_commits: &'a [collector::MasterCommit],
+) -> Option<&'a collector::MasterCommit> {
+    match artifact {
+        ArtifactId::Commit(b) => master_commits.iter().find(|c| c.parent_sha == b.sha),
+        ArtifactId::Artifact(_) => None,
     }
 }
 

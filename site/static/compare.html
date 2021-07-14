@@ -350,43 +350,34 @@ input[type="checkbox"] {
 
         let max_name_width = Math.max(...fields.map(f => f.max_casename_len));
 
-        function dodgy_name_title(name) {
-            if (name.startsWith("coercions") ||
-                name.startsWith("ctfe-") ||     // all of them
-                name.startsWith("inflate-opt") ||
-                name.startsWith("syn-opt")
-            ) {
+        function dodgy_name_title() {
                 return "One or more of this benchmark's runs have high measurement variation. " +
                        "Treat this value with caution. And see the warning at the bottom of " +
                        "the table.";
-            }
-            return "";
         }
 
-        function dodgy_casename_title(name, casename) {
-            let variation = 0;
-            if (name.startsWith("coercions") && casename.startsWith("incr-patched")) {
-                variation = 4;
+        function dodgy_casename_title(name, casename, variance) {
+            if (variance.type == "HighlyVariable") {
+                return `This measurement varies a lot. Do not trust it!`
             }
-            if (name.startsWith("style-servo") && casename.startsWith("incr-full")) {
-                variation = 20;
-            }
-            if (variation != 0) {
-                return `This measurement is known to vary by ±${variation}%. Do not trust it! ` +
-                       "And see the warning at the bottom of the table."
+            if (variance.type == "Noisy") {
+                return `This measurement is noisy. Do not trust it!`
             }
             return "";
         }
 
         let is_first_bootstrap = true;
         for (let field of fields) {
+            let is_dodgy = Object.keys(data.variance).some(k => {
+                return k.startsWith(field.name) && data.variance[k].description.type != "Normal";
+            });
+            let dodgy = is_dodgy ? dodgy_name_title() : "";
             if (field.is_bootstrap) {
                 if (is_first_bootstrap) {
                     html += "<tr data-field-start=true><td>&nbsp;</td></tr>";
                     html += "<tr data-field-start=true><td colspan=4>bootstrap timings; variance is 1-3% on smaller benchmarks! Values in seconds.</td></tr>";
                     is_first_bootstrap = false;
 
-                    let dodgy = dodgy_name_title("Total");
                     html += "<tr data-field-start=true>";
                     html += `<th style="width: ${max_name_width/2}em;" data-js-name=Total>` + truncate_name("total") + "</th>";
                     let sum = (acc, value) => acc + value;
@@ -398,7 +389,6 @@ input[type="checkbox"] {
                     html += `<td>${pct}</td>`;
                     html += "</tr>";
                 }
-                let dodgy = dodgy_name_title(field.name);
                 html += "<tr data-field-start=true>";
                 html += `<th style="width: ${max_name_width/2}em;" data-js-name=${field.name}>` + truncate_name(field.name) + "</th>";
                 let entry = field.fields[0];
@@ -410,7 +400,6 @@ input[type="checkbox"] {
                 html += `<td>${pct}</td>`;
                 html += "</tr>";
             } else {
-                let dodgy = dodgy_name_title(field.name);
                 html += "<tr><td>&nbsp;</td></tr>";
                 html += "<tr data-field-start=true>";
                 html += `<th style="width: ${max_name_width/2}em;" data-js-name=${field.name}>` +
@@ -423,7 +412,8 @@ input[type="checkbox"] {
                 html += "</tr>";
                 for (let i = 0; i < field.fields.length; i++) {
                     let entry = field.fields[i];
-                    let dodgy = dodgy_casename_title(field.name, entry.casename);
+                    const variance = data.variance[field.name + "-" + entry.casename].description;
+                    let dodgy = dodgy_casename_title(field.name, entry.casename, variance);
                     html += "<tr>";
                     html += "<td>" + entry.casename + "</td>";
                     // No base comparison commit for the first datum

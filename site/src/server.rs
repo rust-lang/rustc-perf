@@ -23,8 +23,8 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 pub use crate::api::{
-    self, bootstrap, comparison, dashboard, data, github, graph, info, self_profile,
-    self_profile_raw, status, triage, CommitResponse, ServerResult, StyledBenchmarkName,
+    self, bootstrap, comparison, dashboard, github, graph, info, self_profile, self_profile_raw,
+    status, triage, CommitResponse, ServerResult, StyledBenchmarkName,
 };
 use crate::db::{self, ArtifactId, Cache, Crate, Lookup, Profile};
 use crate::interpolate::Interpolated;

@@ -70,25 +70,6 @@ pub struct CommitResponse {
     pub commit: Option<String>,
 }
 
-pub mod data {
-    use crate::comparison::ArtifactData;
-    use collector::Bound;
-    use serde::{Deserialize, Serialize};
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct Request {
-        pub start: Bound,
-        pub end: Bound,
-
-        /// Which statistic to return data for
-        pub stat: String,
-    }
-
-    /// List of DateData's from oldest to newest
-    #[derive(Debug, Clone, Serialize)]
-    pub struct Response(pub Vec<ArtifactData>);
-}
-
 pub mod graph {
     use collector::Bound;
     use serde::{Deserialize, Serialize};
@@ -157,6 +138,7 @@ pub mod bootstrap {
 }
 
 pub mod comparison {
+    use crate::comparison;
     use collector::Bound;
     use database::Date;
     use serde::{Deserialize, Serialize};
@@ -171,6 +153,8 @@ pub mod comparison {
 
     #[derive(Debug, Clone, Serialize)]
     pub struct Response {
+        /// The variance data for each benchmark, if any.
+        pub variance: Option<HashMap<String, comparison::BenchmarkVariance>>,
         /// The names for the previous artifact before `a`, if any.
         pub prev: Option<String>,
 
