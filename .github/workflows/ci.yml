@@ -128,9 +128,6 @@ jobs:
       - name: Build collector
         run: cargo build -p collector
 
-      - name: Test automated triage
-        run: sh -x -c "ci/check-triage-script.sh"
-
       - name: Check benchmarks
         run: sh -x -c "ci/check-profiling.sh"
 
