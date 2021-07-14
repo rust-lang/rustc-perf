@@ -16,7 +16,7 @@ and so it means the PR to include the triage details in TWiR can be merged short
 before publication. This time is also shortly before the weekly Rust compiler 
 meeting, where the results are looked at.
 
-## Generating the Report 
+## Generating the report 
 
 First, check the previous triage log entry. Look for responses in PRs, and
 follow up on any promised actions. (i.e. nag people!)
@@ -25,38 +25,21 @@ While looking at the previous triage log entry, take note of the final commit in
 the revision range from that triage period. The noted final commit `$PARENT` will
 be the parent commit that we use for the current round of triage.
 
-Start the new triage log entry in a new file using a `YYYY-MM-DD.md`-form name.
-Follow the format of the previous entries.
-
-Use the provided script to automate building the file:
+Use the API endpoint to automate building the file:
 
 ```
-% ./weekly-report.py PARENT > YYYY-MM-DD.md
+% curl https://perf.rust-lang.org/perf/triage '{"start":"$PARENT","stat":"instructions:u"}' > YYYY-MM-DD.md
 ```
-
-### Manual Generation 
-
-You can also build the report manually, starting by viewing the [perf website](https://perf.rust-lang.org).
-
-- Determine the revision range. The start revision corresponds to the end
-  revision from the previous log entry. The end revision is the latest measured
-  revision on perf.rust-lang.org.
-- Set the range on the graphs by setting the "start" and "end" revisions at
-  the top of the page. Full SHAs must be used.
-- Uncheck the "Absolute data" checkbox, because that makes changes easier to
-  see.
-- Record the revision range, with a link, in the log entry.
 
 ## Analysis
 
 The following is a list of items you should look for when interpreting performance results. 
 
-If you've generated a triage report, you will go through each entry in the report
-and verify that it is properly labeled as a regression, improvement, or a mix
-of the two. For instance, some entries that are labeled as regressions, are actually 
-not regressions and have only been labeled as such due to noise.
+Go through each entry in the report and verify that it is properly labeled as a regression, 
+improvement, or a mix of the two. For instance, some entries that are labeled as regressions, 
+are actually not regressions and have only been labeled as such due to noise.
 
-### Viewing Results
+### Viewing results
 
 Look for significant changes (regressions or improvements) in the following:
 - instruction count
@@ -79,7 +62,7 @@ Understanding the comparison page:
   benchmarks. Clicking on the percentages will open a more specific detail view 
   of timing for queries run during compilation.
 
-### Interpreting Results
+### Interpreting results
 
 *Warning*: max rss is much more variable than instruction count. Recheck the "Absolute
 data" checkbox otherwise the noise becomes unmanageable.
@@ -103,11 +86,6 @@ Single PR in Merge:
   regression, consider requesting the author revert their changes. It may 
   be worth looking through the comments to see if any perf CI runs were done, 
   and whether the regression was expected.
-- If you did not generate the triage report, add an entry. 
-  Include the PR title and number, a link to the PR comment you added mentioning the 
-  performance effect, and a link to the performance results. Include useful details, 
-  such as the size of the regression/improvement, and any promises of follow-up action 
-  from authors in the case of a regression.
 
 Difficult cases: the merge was a rollup of multiple PRs.
 - Look through the PRs and try to determine which was the cause. Often you
@@ -122,16 +100,16 @@ Difficult cases: the merge was a rollup of multiple PRs.
   that are likely to affect performance.
 - Add an entry to the triage log, as for the easy cases.
 
+### Add analysis and follow-ups to report
+
+- For each entry in the report, include useful details, such as the size of the regression/improvement, and any promises of follow-up action 
+  from authors in the case of a regression.
+
 ### This Week in Rust 
 
 Once finished, file a PR adding a link to the log entry in [This Week in
 Rust](https://github.com/emberian/this-week-in-rust/).
-- Add it within the "Updates from Rust Core" section.
-- Add a "Rust Compiler Performance Triage" subsection immediately after the
-  list of notable merged PRs.
-- Within that subsection, add a list containing a single item.
-- That item should be a link to the triage log entry with the form
-  "YYYY-MM-DD", possibly with some brief text about notable things.
+- See the previous This Week in Rust edition for how the log entry should be formatted.
 
 If you have any questions, the `t-compiler/performance` stream on Zulip is the
 best place to ask.
