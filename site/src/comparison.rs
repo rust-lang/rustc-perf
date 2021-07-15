@@ -4,6 +4,7 @@
 
 use crate::api;
 use crate::db::{ArtifactId, Cache, Crate, Profile};
+use crate::github;
 use crate::load::SiteCtxt;
 use crate::selector::{self, Tag};
 
@@ -80,7 +81,7 @@ pub async fn handle_triage(
     }
     let end = end.unwrap_or(after);
 
-    let report = generate_report(&start, &end, report);
+    let report = generate_report(&start, &end, report).await;
     Ok(api::triage::Response(report))
 }
 
@@ -191,7 +192,7 @@ impl ComparisonSummary<'_> {
         use std::fmt::Write;
 
         let mut result = if let Some(pr) = comparison.b.pr {
-            let title = gh_pr_title(pr).await;
+            let title = github::pr_title(pr).await;
             format!(
                 "{} [#{}](https://github.com/rust-lang/rust/issues/{})\n",
                 title, pr, pr
@@ -725,7 +726,7 @@ impl std::fmt::Display for Direction {
     }
 }
 
-fn generate_report(
+async fn generate_report(
     start: &Bound,
     end: &Bound,
     mut report: HashMap<Direction, Vec<String>>,
@@ -742,6 +743,22 @@ fn generate_report(
     let regressions = report.remove(&Direction::Regression).unwrap_or_default();
     let improvements = report.remove(&Direction::Improvement).unwrap_or_default();
     let mixed = report.remove(&Direction::Mixed).unwrap_or_default();
+    let untriaged = match github::untriaged_perf_regressions().await {
+        Ok(u) => u
+            .iter()
+            .map(|github::PullRequest { title, number }| {
+                format!(
+                    "- [#{} {}](https://github.com/rust-lang/rust/pull/{})",
+                    number, title, number
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n"),
+        Err(e) => format!(
+            "An **error** occurred when finding the untriaged PRs: {}",
+            e
+        ),
+    };
     format!(
         r#####"# {date} Triage Log
 
@@ -764,6 +781,10 @@ Revision range: [{first_commit}..{last_commit}](https://perf.rust-lang.org/?star
 
 {mixed}
 
+#### Untriaged Pull Requests
+
+{untriaged}
+
 #### Nags requiring follow up
 
 TODO: Nags
@@ -778,6 +799,7 @@ TODO: Nags
         regressions = regressions.join("\n\n"),
         improvements = improvements.join("\n\n"),
         mixed = mixed.join("\n\n"),
+        untriaged = untriaged
     )
 }
 
@@ -794,38 +816,4 @@ fn compare_link(start: &ArtifactId, end: &ArtifactId) -> String {
         "https://perf.rust-lang.org/compare.html?start={}&end={}&stat=instructions:u",
         start, end
     )
-}
-
-async fn gh_pr_title(pr: u32) -> String {
-    let url = format!("https://api.github.com/repos/rust-lang/rust/pulls/{}", pr);
-    let client = reqwest::Client::new();
-    let mut request = client
-        .get(&url)
-        .header("Content-Type", "application/json")
-        .header("User-Agent", "rustc-perf");
-
-    if let Some(token) = std::env::var("GITHUB_TOKEN").ok() {
-        request = request.header("Authorization", format!("token {}", token));
-    }
-
-    async fn send(request: reqwest::RequestBuilder) -> Result<String, BoxedError> {
-        Ok(request
-            .send()
-            .await?
-            .error_for_status()?
-            .json::<serde_json::Value>()
-            .await?
-            .get("title")
-            .ok_or_else(|| "JSON was malformed".to_owned())?
-            .as_str()
-            .ok_or_else(|| "JSON was malformed".to_owned())?
-            .to_owned())
-    }
-    match send(request).await {
-        Ok(t) => t,
-        Err(e) => {
-            eprintln!("Error fetching url: {}", e);
-            String::from("<UNKNOWN>")
-        }
-    }
 }

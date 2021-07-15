@@ -1,14 +1,17 @@
 use crate::api::{github, ServerResult};
 use crate::comparison::{ComparisonSummary, Direction};
 use crate::load::{Config, SiteCtxt, TryCommit};
-use anyhow::Context as _;
-use hashbrown::HashSet;
-use serde::Deserialize;
 
+use anyhow::Context as _;
 use database::ArtifactId;
+use hashbrown::HashSet;
 use regex::Regex;
 use reqwest::header::USER_AGENT;
+use serde::Deserialize;
+
 use std::{fmt::Write, sync::Arc, time::Duration};
+
+type BoxedError = Box<dyn std::error::Error + Send + Sync>;
 
 lazy_static::lazy_static! {
     static ref BODY_TRY_COMMIT: Regex =
@@ -731,4 +734,85 @@ async fn categorize_benchmark(
     }
     write!(result, "\n{}", DISAGREEMENT).unwrap();
     (result, Some(direction))
+}
+
+pub(crate) struct PullRequest {
+    pub number: u64,
+    pub title: String,
+}
+
+/// Fetch all merged PRs that are labeled with `perf-regression` and not `perf-regression-triaged`
+pub(crate) async fn untriaged_perf_regressions() -> Result<Vec<PullRequest>, BoxedError> {
+    let url = "https://api.github.com/search/issues?q=repo:rust-lang/rust+label:perf-regression+-label:perf-regression-triaged+is:merged".to_owned();
+    let request = github_request(&url);
+    let body = send_request(request).await?;
+    Ok(body
+        .get("items")
+        .ok_or_else(malformed_json_error)?
+        .as_array()
+        .ok_or_else(malformed_json_error)?
+        .iter()
+        .map(|v| {
+            let title = v
+                .get("title")
+                .ok_or_else(malformed_json_error)?
+                .as_str()
+                .ok_or_else(malformed_json_error)?
+                .to_owned();
+            let number = v
+                .get("number")
+                .ok_or_else(malformed_json_error)?
+                .as_u64()
+                .ok_or_else(malformed_json_error)?;
+            Ok(PullRequest { title, number })
+        })
+        .collect::<Result<_, BoxedError>>()?)
+}
+
+/// Get the title of a PR with the given number
+pub(crate) async fn pr_title(pr: u32) -> String {
+    let url = format!("https://api.github.com/repos/rust-lang/rust/pulls/{}", pr);
+    let request = github_request(&url);
+
+    async fn send(request: reqwest::RequestBuilder) -> Result<String, BoxedError> {
+        let body = send_request(request).await?;
+        Ok(body
+            .get("title")
+            .ok_or_else(malformed_json_error)?
+            .as_str()
+            .ok_or_else(malformed_json_error)?
+            .to_owned())
+    }
+    match send(request).await {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("Error fetching url: {}", e);
+            String::from("<UNKNOWN>")
+        }
+    }
+}
+
+fn github_request(url: &str) -> reqwest::RequestBuilder {
+    let client = reqwest::Client::new();
+    let mut request = client
+        .get(url)
+        .header("Content-Type", "application/json")
+        .header("User-Agent", "rustc-perf");
+    if let Some(token) = std::env::var("GITHUB_TOKEN").ok() {
+        request = request.header("Authorization", format!("token {}", token));
+    }
+    request
+}
+
+async fn send_request(request: reqwest::RequestBuilder) -> Result<serde_json::Value, BoxedError> {
+    Ok(request
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?)
+}
+
+fn malformed_json_error() -> String {
+    "JSON was malformed".to_owned()
 }
