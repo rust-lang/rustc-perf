@@ -20,20 +20,83 @@
             left: -2em;
         }
 
-        #filters-toggle {
-            margin: 10px 0px;
-            background: #add8e6;
-            width: 70px;
-            padding: 5px;
-            border-radius: 15px;
+        #settings {
+            border: 2px black;
+            border-style: solid;
+            padding: 14px;
+            border-radius: 10px;
+        }
+
+        #commits {
+            border: none;
+            display: flex;
+            padding: 0px;
+        }
+
+        .commit-input {
+            width: 270px;
+            margin: 10px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .commit-input label {
+            font-size: 18px;
             font-weight: bold;
-            text-align: center;
+            margin-bottom: 6px;
+        }
+
+        #stats {
+            border-radius: 5px;
+            width: 132px;
+            font-size: 16px;
+            margin: 10px;
+            padding: 3px;
+        }
+
+        #filters-toggle {
+            cursor: pointer;
+        }
+
+        .section-heading {
+            font-size: 22px;
+        }
+
+        #filters-content .section-heading {
+            font-size: 18px;
+        }
+
+        #filters-content {
+            margin-top: 16px;
+
         }
 
         #filters {
             padding: 10px;
-            border: 2px black;
-            border-style: solid;
+            border: 1px black;
+            border-style: dotted;
+            margin: 16px 0px;
+        }
+
+        #settings input {
+            border-radius: 5px;
+            padding: 10px;
+            font-size: 14px;
+        }
+
+        #filter {
+            margin: 10px 0;
+        }
+
+        #settings input[type=submit] {
+            width: 100%;
+            font-weight: bold;
+            background: #ADD8E6;
+            margin: 10px 0;
+        }
+
+        .cache-label {
+            font-weight: bold;
         }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
@@ -47,40 +110,56 @@
     <br />
     <form id="settings" action="">
         <fieldset id="commits">
-            <legend>Commits</legend>
-            <label for="start-bound">Commit/Date A:</label>
-            <input width="100em" placeholder="YYYY-MM-DD or SHA" id="start-bound" /><br>
-            <label for="end-bound">Commit/Date B:</label>
-            <input width="100em" placeholder="YYYY-MM-DD or SHA" id="end-bound" /><br>
+            <legend class="section-heading">Commits</legend>
+            <div style="display: flex; width: 100%; justify-content: space-around;">
+                <div class="commit-input">
+                    <label for="start-bound">Before</label>
+                    <input width="100em" placeholder="YYYY-MM-DD or Commit SHA" id="start-bound" /><br>
+                </div>
+                <div class="commit-input">
+                    <label for="end-bound">After</label>
+                    <input width="100em" placeholder="YYYY-MM-DD or Commit SHA" id="end-bound" /><br>
+                </div>
+            </div>
         </fieldset>
-        <label for="stats">Choose a comparison method:</label>
-        <select id='stats' name="stat">
-        </select><br>
-        <input type="submit" value="Submit" onclick="submit_settings(); return false;">
-    </form>
-    <div id="filters-toggle">Filters <span id="filters-toggle-indicator"></span></div>
-    <div id="filters">
-        <div>
-            <p>Filter benchmark builds: <input id="filter" type="text" /> </p>
+        <label class="section-heading" for="stats">Metric</label>
+        <div id="metric" style="display: flex; justify-content: center;">
+            <select id='stats' name="stat"></select>
         </div>
-        <div>
-            <h3>Cache states</h3>
-            <p>Most benchmarks have at least 4 cache states for which we collect data:</p>
-            <ul style="list-style:none;">
-                <li><input type="checkbox" id="build-full" checked /> full: a
-                    non-incremental full build starting with empty cache</li>
-                <li><input type="checkbox" id="build-incremental-full" checked /> incr-full: an incremental build
-                    starting
-                    with empty cache</li>
-                <li><input type="checkbox" id="build-incremental-unchanged" checked /> incr-unchanged: an incremental
-                    build
-                    starting with complete
-                    cache, and unchanged source directory -- the "perfect" scenario for incremental.</li>
-                <li><input type="checkbox" id="build-incremental-patched" checked /> incr-patched: an incremental build
-                    starting with complete cache, and an
-                    altered source directory. The typical variant of this is "println" which represents
-                    the addition of a `println!` macro somewhere in the source code.</li>
-            </ul>
+        <input id="submit" type="submit" value="Submit" onclick="submit_settings(); return false;">
+    </form>
+    <div id="filters">
+        <div id="filters-toggle" class="section-heading">Filters<span id="filters-toggle-indicator"></span></div>
+        <div id="filters-content">
+            <div>
+                <div class="section-heading">Filter by benchmark
+                </div>
+                <input id="filter" type="text" /> </p>
+            </div>
+            <div>
+                <div class="section-heading">Cache states</div>
+                <p>Most benchmarks have at least 4 cache states for which we collect data:</p>
+                <ul style="list-style:none;">
+                    <li><input type="checkbox" id="build-full" checked /><span class="cache-label">full</span>: a
+                        non-incremental full build starting with empty cache</li>
+                    <li><input type="checkbox" id="build-incremental-full" checked /> <span
+                            class="cache-label">incr-full</span>: an incremental build
+                        starting
+                        with empty cache</li>
+                    <li><input type="checkbox" id="build-incremental-unchanged" checked /> <span
+                            class="cache-label">incr-unchanged</span>: an
+                        incremental
+                        build
+                        starting with complete
+                        cache, and unchanged source directory -- the "perfect" scenario for incremental.</li>
+                    <li><input type="checkbox" id="build-incremental-patched" checked /><span
+                            class="cache-label">incr-patched</span> : an incremental
+                        build
+                        starting with complete cache, and an
+                        altered source directory. The typical variant of this is "println" which represents
+                        the addition of a `println!` macro somewhere in the source code.</li>
+                </ul>
+            </div>
         </div>
     </div>
     <div id="content" style="display: none; margin-top: 15px"></div>
@@ -96,7 +175,7 @@
     <script src="shared.js"></script>
     <script>
         function toggle_filters() {
-            let styles = document.getElementById("filters").style;
+            let styles = document.getElementById("filters-content").style;
             let indicator = document.getElementById("filters-toggle-indicator");
             if (styles.display != "none") {
                 indicator.innerHTML = "⯈"
