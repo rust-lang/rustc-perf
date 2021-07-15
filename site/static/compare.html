@@ -122,9 +122,11 @@
                 </div>
             </div>
         </fieldset>
-        <label class="section-heading" for="stats">Metric</label>
-        <div id="metric" style="display: flex; justify-content: center;">
-            <select id='stats' name="stat"></select>
+        <div id="metric" style="position: relative;height: 60px;">
+            <label class="section-heading" for="stats">Metric</label>
+            <div style="width: 100%; position: absolute; top:0; display: flex; justify-content: center;">
+                <select id='stats' name="stat"></select>
+            </div>
         </div>
         <input id="submit" type="submit" value="Submit" onclick="submit_settings(); return false;">
     </form>
