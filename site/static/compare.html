@@ -19,7 +19,24 @@
             top: 0.25em;
             left: -2em;
         }
+
+        #filters-toggle {
+            margin: 10px 0px;
+            background: #add8e6;
+            width: 70px;
+            padding: 5px;
+            border-radius: 15px;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        #filters {
+            padding: 10px;
+            border: 2px black;
+            border-style: solid;
+        }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
 </head>
 
 <body class="container" style="max-width:800px">
@@ -27,33 +44,7 @@
         <a href="dashboard.html">dashboard</a>, <a href="bootstrap.html">bootstrap</a>,
         <a href="status.html">status</a>, <a href="help.html">help</a>.
     </div>
-    <div>
-        <p>Warning: although measurements known to have high variation are marked with
-            '?'/'??', this does not mean that unmarked measurements are guaranteed to have
-            low variation. Verify the measurement against the
-            <a
-                href="compare.html?start=3158857297417566824631a85c4cb3c0615ec6c2&end=7e0241c63755ea28045d512b742f50b307874419&stat=instructions:u">
-                last "noise run"</a> which shows the perf difference of a non-functional change.
-        </p>
-    </div>
-    Filter benchmark builds: <input id="filter" type="text" /><br>
-    <div>
-        <h3>Cache states</h3>
-        <p>Most benchmarks have at least 4 cache states for which we collect data:</p>
-        <ul style="list-style:none;">
-            <li><input type="checkbox" id="build-full" checked /> full: a
-                non-incremental full build starting with empty cache</li>
-            <li><input type="checkbox" id="build-incremental-full" checked /> incr-full: an incremental build starting
-                with empty cache</li>
-            <li><input type="checkbox" id="build-incremental-unchanged" checked /> incr-unchanged: an incremental build
-                starting with complete
-                cache, and unchanged source directory -- the "perfect" scenario for incremental.</li>
-            <li><input type="checkbox" id="build-incremental-patched" checked /> incr-patched: an incremental build
-                starting with complete cache, and an
-                altered source directory. The typical variant of this is "println" which represents
-                the addition of a `println!` macro somewhere in the source code.</li>
-        </ul>
-    </div>
+    <br />
     <form id="settings" action="">
         <fieldset id="commits">
             <legend>Commits</legend>
@@ -67,6 +58,31 @@
         </select><br>
         <input type="submit" value="Submit" onclick="submit_settings(); return false;">
     </form>
+    <div id="filters-toggle">Filters <span id="filters-toggle-indicator"></span></div>
+    <div id="filters">
+        <div>
+            <p>Filter benchmark builds: <input id="filter" type="text" /> </p>
+        </div>
+        <div>
+            <h3>Cache states</h3>
+            <p>Most benchmarks have at least 4 cache states for which we collect data:</p>
+            <ul style="list-style:none;">
+                <li><input type="checkbox" id="build-full" checked /> full: a
+                    non-incremental full build starting with empty cache</li>
+                <li><input type="checkbox" id="build-incremental-full" checked /> incr-full: an incremental build
+                    starting
+                    with empty cache</li>
+                <li><input type="checkbox" id="build-incremental-unchanged" checked /> incr-unchanged: an incremental
+                    build
+                    starting with complete
+                    cache, and unchanged source directory -- the "perfect" scenario for incremental.</li>
+                <li><input type="checkbox" id="build-incremental-patched" checked /> incr-patched: an incremental build
+                    starting with complete cache, and an
+                    altered source directory. The typical variant of this is "println" which represents
+                    the addition of a `println!` macro somewhere in the source code.</li>
+            </ul>
+        </div>
+    </div>
     <div id="content" style="display: none; margin-top: 15px"></div>
     <br>
     <div id="as-of"></div>
@@ -79,6 +95,24 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/msgpack-lite/0.1.26/msgpack.min.js"></script>
     <script src="shared.js"></script>
     <script>
+        function toggle_filters() {
+            let styles = document.getElementById("filters").style;
+            let indicator = document.getElementById("filters-toggle-indicator");
+            if (styles.display != "none") {
+                indicator.innerHTML = "⯈"
+                styles.display = "none";
+            } else {
+                indicator.innerHTML = "▼"
+                styles.display = "block";
+            }
+        }
+        toggle_filters();
+
+        document.getElementById("filters-toggle").onclick = (e) => {
+            toggle_filters();
+        };
+
+
         function print_date(date) {
             function pad_str(i) {
                 return (i < 10) ? "0" + i : "" + i;
