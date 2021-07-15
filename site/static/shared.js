@@ -65,12 +65,12 @@ function addTotalHandler(name) {
     var elements = document.getElementsByName(name);
     for (var i in elements) {
         if (elements[i].id != name + "-total") {
-            elements[i].onclick = function() {
+            elements[i].onclick = function () {
                 document.getElementById(name + "-total").checked = false;
             };
         }
     }
-    document.getElementById(name + "-total").onclick = function() {
+    document.getElementById(name + "-total").onclick = function () {
         for (var i in elements) {
             if (elements[i].id != name + "-total") {
                 elements[i].checked = false;
@@ -83,8 +83,8 @@ function addTotalHandler(name) {
 // the lists of checkboxes and other settings.
 // Assumes the initial graph is total/total/by crate
 function make_settings(callback) {
-    return fetch(BASE_URL + "/info", {}).then(function(response) {
-        response.json().then(function(data) {
+    return fetch(BASE_URL + "/info", {}).then(function (response) {
+        response.json().then(function (data) {
             let phases_html = "";
             for (let stat of data.stats) {
                 phases_html += `<option value="${stat}">${stat}</option>`;
@@ -98,7 +98,7 @@ function make_settings(callback) {
                 "Updated as of: " + (new Date(data.as_of)).toLocaleString();
             callback();
         });
-    }, function(err) {
+    }, function (err) {
         document.getElementById("settings").innerHTML = "Error fetching info";
         console.log("Error fetching info:");
         console.log(err);
@@ -226,7 +226,7 @@ function load_state(callback, skip_settings) {
 
 // This one is for making the request we send to the backend.
 function make_request(path, body) {
-    if(window.msgpack === undefined) {
+    if (window.msgpack === undefined) {
         alert("msgpack is not loaded, maybe allow scripts from cdnjs.cloudflare.com?");
         return Promise.reject("msgpack is not loaded");
     }

@@ -1,17 +1,20 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-<meta charset="utf-8">
-<title>rustc performance data</title>
-<link rel="stylesheet" type="text/css" href="perf.css">
-<link rel="alternate icon" type="image/png" href="/favicon-32x32.png">
-<link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/highcharts/6.0.7/highcharts.js"></script>
+    <meta charset="utf-8">
+    <title>rustc performance data</title>
+    <link rel="stylesheet" type="text/css" href="perf.css">
+    <link rel="alternate icon" type="image/png" href="/favicon-32x32.png">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highcharts/6.0.7/highcharts.js"></script>
 </head>
+
 <body class="container">
     <div>&gt; <a href="index.html">graphs</a>, <a href="compare.html">compare</a>,
         <a href="dashboard.html">dashboard</a>, <a href="bootstrap.html">bootstrap</a>,
-        <a href="status.html">status</a>, <a href="help.html">help</a>.</div>
+        <a href="status.html">status</a>, <a href="help.html">help</a>.
+    </div>
     <div id="check-average-times"></div>
     <div id="debug-average-times"></div>
     <div id="opt-average-times"></div>
@@ -22,64 +25,65 @@
     <script src="shared.js"></script>
     <script>
 
-    function render(element, name, data, versions) {
-        let articles = { "check": "a", "debug": "a", "opt": "an" };
-        new Highcharts.chart(document.getElementById(element), {
-            chart: {
-                zoomType: "xy",
-                renderTo: document.getElementById(element),
-                type: "line",
-            },
-            title: {
-                text: `Average time for ${articles[name]} ${name} build`,
-            },
-            yAxis: {
-                title: { text: "Seconds" },
-                min: 0,
-            },
-            xAxis: {
-                categories: versions,
-                title: { text: "Version" },
-            },
-            series: [
-                {
-                    name: "full",
-                    animation: false,
-                    data: data.clean_averages,
+        function render(element, name, data, versions) {
+            let articles = { "check": "a", "debug": "a", "opt": "an" };
+            new Highcharts.chart(document.getElementById(element), {
+                chart: {
+                    zoomType: "xy",
+                    renderTo: document.getElementById(element),
+                    type: "line",
                 },
-                {
-                    name: "incremental full",
-                    animation: false,
-                    data: data.base_incr_averages,
+                title: {
+                    text: `Average time for ${articles[name]} ${name} build`,
                 },
-                {
-                    name: "incremental unchanged",
-                    animation: false,
-                    data: data.clean_incr_averages,
+                yAxis: {
+                    title: { text: "Seconds" },
+                    min: 0,
                 },
-                {
-                    name: "incremental patched: println",
-                    animation: false,
-                    data: data.println_incr_averages,
+                xAxis: {
+                    categories: versions,
+                    title: { text: "Version" },
                 },
-            ],
-        });
-    }
+                series: [
+                    {
+                        name: "full",
+                        animation: false,
+                        data: data.clean_averages,
+                    },
+                    {
+                        name: "incremental full",
+                        animation: false,
+                        data: data.base_incr_averages,
+                    },
+                    {
+                        name: "incremental unchanged",
+                        animation: false,
+                        data: data.clean_incr_averages,
+                    },
+                    {
+                        name: "incremental patched: println",
+                        animation: false,
+                        data: data.println_incr_averages,
+                    },
+                ],
+            });
+        }
 
-    function populate_data(data) {
-        data = data.Ok;
-        render("check-average-times", "check", data.check, data.versions);
-        render("debug-average-times", "debug", data.debug, data.versions);
-        render("opt-average-times", "opt", data.opt, data.versions);
-    }
+        function populate_data(data) {
+            data = data.Ok;
+            render("check-average-times", "check", data.check, data.versions);
+            render("debug-average-times", "debug", data.debug, data.versions);
+            render("opt-average-times", "opt", data.opt, data.versions);
+        }
 
-    function make_data() {
-        fetch(BASE_URL + "/dashboard", {}).then(function(response) {
-            response.json().then(data => populate_data(data));
-        });
-    }
+        function make_data() {
+            fetch(BASE_URL + "/dashboard", {}).then(function (response) {
+                response.json().then(data => populate_data(data));
+            });
+        }
 
-    make_data();
+        make_data();
     </script>
 </body>
+
 </html>

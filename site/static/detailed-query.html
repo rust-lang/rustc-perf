@@ -1,63 +1,69 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-<meta charset="utf-8">
-<title>rustc performance data</title>
-<link rel="stylesheet" type="text/css" href="perf.css">
-<link rel="alternate icon" type="image/png" href="/favicon-32x32.png">
-<link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<style>
-    table {
-        border-collapse: collapse;
-    }
+    <meta charset="utf-8">
+    <title>rustc performance data</title>
+    <link rel="stylesheet" type="text/css" href="perf.css">
+    <link rel="alternate icon" type="image/png" href="/favicon-32x32.png">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <style>
+        table {
+            border-collapse: collapse;
+        }
 
-    thead th {
-        padding-left: 1em;
-    }
+        thead th {
+            padding-left: 1em;
+        }
 
-    body.hide-incr .incr {
-        display: none;
-    }
+        body.hide-incr .incr {
+            display: none;
+        }
 
-    body.hide-delta .delta {
-        display: none;
-    }
+        body.hide-delta .delta {
+            display: none;
+        }
 
-    #primary-table td,
-    #primary-table th {
-        padding-left: 1.5em;
-    }
+        #primary-table td,
+        #primary-table th {
+            padding-left: 1.5em;
+        }
 
-    #primary-table tr:nth-child(2n+1) {
-        background-color: #F9F9F9;
-    }
-    #primary-table tr:nth-child(1) {
-        background-color: #eee;
-        font-weight: bold;
-        border-top: 1px solid black;
-        border-bottom: 1px solid black;
-    }
+        #primary-table tr:nth-child(2n+1) {
+            background-color: #F9F9F9;
+        }
 
-    [data-sort-idx]::after {
-        content: "⇕";
-    }
-    [data-sorted-by="desc"]::after {
-        content: "▲";
-    }
-    [data-sorted-by="asc"]::after {
-        content: "▼";
-    }
-</style>
+        #primary-table tr:nth-child(1) {
+            background-color: #eee;
+            font-weight: bold;
+            border-top: 1px solid black;
+            border-bottom: 1px solid black;
+        }
+
+        [data-sort-idx]::after {
+            content: "⇕";
+        }
+
+        [data-sorted-by="desc"]::after {
+            content: "▲";
+        }
+
+        [data-sorted-by="asc"]::after {
+            content: "▼";
+        }
+    </style>
 </head>
+
 <body class="container">
     <div>&gt; <a href="index.html">graphs</a>, <a href="compare.html">compare</a>,
         <a href="dashboard.html">dashboard</a>, <a href="bootstrap.html">bootstrap</a>,
-        <a href="status.html">status</a>, <a href="help.html">help</a>.</div>
+        <a href="status.html">status</a>, <a href="help.html">help</a>.
+    </div>
     <div id="content">
         <h3 id="title"></h3>
         <div id="raw-urls"></div>
         <p>'Time (%)' is the percentage of the cpu-clock time spent on this query (we do not use
-        wall-time as we want to account for parallelism).</p>
+            wall-time as we want to account for parallelism).</p>
         <p>Executions do not include cached executions.</p>
         <table>
             <thead>
@@ -68,8 +74,8 @@
                     <th class="delta">Time delta</th>
                     <th data-sort-idx="5" data-default-sort-dir="-1">Executions</th>
                     <th class="delta">Executions delta</th>
-                    <th class="incr" data-sort-idx="7"
-                        data-default-sort-dir="-1" title="Incremental loading time">Incremental loading (s)</th>
+                    <th class="incr" data-sort-idx="7" data-default-sort-dir="-1" title="Incremental loading time">
+                        Incremental loading (s)</th>
                     <th class="incr" class="delta">Incremental loading delta</th>
                 </tr>
             </thead>
@@ -136,7 +142,7 @@
                 return `<a href="${url}">${ty}</a>`;
             };
             let processed_crox_url = (commit, bench, run) => {
-                let crox_url = window.location.origin + processed_url(commit, bench, run, "crox");                
+                let crox_url = window.location.origin + processed_url(commit, bench, run, "crox");
                 return encodeURIComponent(crox_url);
             };
             let speedscope_link = (commit, bench, run) => {
@@ -275,13 +281,13 @@
                 element = [
                     // escape html, to prevent rendering queries like <unknown> as tags
                     escapeHtml(element.label),
-                    [ element.self_time.secs, element.self_time.nanos ],
+                    [element.self_time.secs, element.self_time.nanos],
                     element.percent_total_time,
                     element.number_of_cache_misses,
                     element.number_of_cache_hits,
                     element.invocation_count,
-                    [ element.blocked_time.secs, element.blocked_time.nanos ],
-                    [ element.incremental_load_time.secs, element.incremental_load_time.nanos ],
+                    [element.blocked_time.secs, element.blocked_time.nanos],
+                    [element.incremental_load_time.secs, element.incremental_load_time.nanos],
                 ];
             }
             let [
@@ -303,7 +309,7 @@
             let values = Object.assign({
                 sort_idx: "-2",
             }, state);
-            make_request("/self-profile", values).then(function(data) {
+            make_request("/self-profile", values).then(function (data) {
                 DATA = data;
                 data = JSON.parse(JSON.stringify(DATA)); // deep copy
                 populate_data(data, values);
@@ -313,4 +319,5 @@
         load_state(make_data, true);
     </script>
 </body>
+
 </html>

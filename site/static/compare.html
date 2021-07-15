@@ -1,34 +1,39 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>rustc performance data</title>
-<link rel="stylesheet" type="text/css" href="perf.css">
-<link rel="alternate icon" type="image/png" href="/favicon-32x32.png">
-<link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<style>
-ul li {
-    position: relative;
-    padding-top: 0.5em;
-}
-input[type="checkbox"] {
-    position: absolute;
-    top: 0.25em;
-    left: -2em;
-}
-</style>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>rustc performance data</title>
+    <link rel="stylesheet" type="text/css" href="perf.css">
+    <link rel="alternate icon" type="image/png" href="/favicon-32x32.png">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <style>
+        ul li {
+            position: relative;
+            padding-top: 0.5em;
+        }
+
+        input[type="checkbox"] {
+            position: absolute;
+            top: 0.25em;
+            left: -2em;
+        }
+    </style>
 </head>
+
 <body class="container" style="max-width:800px">
     <div>&gt; <a href="index.html">graphs</a>, <a href="compare.html">compare</a>,
         <a href="dashboard.html">dashboard</a>, <a href="bootstrap.html">bootstrap</a>,
-        <a href="status.html">status</a>, <a href="help.html">help</a>.</div>
-    <div style=''>
+        <a href="status.html">status</a>, <a href="help.html">help</a>.
+    </div>
+    <div>
         <p>Warning: although measurements known to have high variation are marked with
             '?'/'??', this does not mean that unmarked measurements are guaranteed to have
             low variation. Verify the measurement against the
-            <a href="compare.html?start=3158857297417566824631a85c4cb3c0615ec6c2&end=7e0241c63755ea28045d512b742f50b307874419&stat=instructions:u">
-            last "noise run"</a> which shows the perf difference of a non-functional change.
+            <a
+                href="compare.html?start=3158857297417566824631a85c4cb3c0615ec6c2&end=7e0241c63755ea28045d512b742f50b307874419&stat=instructions:u">
+                last "noise run"</a> which shows the perf difference of a non-functional change.
         </p>
     </div>
     Filter benchmark builds: <input id="filter" type="text" /><br>
@@ -38,10 +43,13 @@ input[type="checkbox"] {
         <ul style="list-style:none;">
             <li><input type="checkbox" id="build-full" checked /> full: a
                 non-incremental full build starting with empty cache</li>
-            <li><input type="checkbox" id="build-incremental-full" checked /> incr-full: an incremental build starting with empty cache</li>
-            <li><input type="checkbox" id="build-incremental-unchanged" checked /> incr-unchanged: an incremental build starting with complete
+            <li><input type="checkbox" id="build-incremental-full" checked /> incr-full: an incremental build starting
+                with empty cache</li>
+            <li><input type="checkbox" id="build-incremental-unchanged" checked /> incr-unchanged: an incremental build
+                starting with complete
                 cache, and unchanged source directory -- the "perfect" scenario for incremental.</li>
-            <li><input type="checkbox" id="build-incremental-patched" checked /> incr-patched: an incremental build starting with complete cache, and an
+            <li><input type="checkbox" id="build-incremental-patched" checked /> incr-patched: an incremental build
+                starting with complete cache, and an
                 altered source directory. The typical variant of this is "println" which represents
                 the addition of a `println!` macro somewhere in the source code.</li>
         </ul>
@@ -63,436 +71,440 @@ input[type="checkbox"] {
     <br>
     <div id="as-of"></div>
     <a href="https://github.com/rust-lang-nursery/rustc-perf">
-        <img style="position: absolute; top: 0; right: 0; border: 0;" src="https://camo.githubusercontent.com/38ef81f8aca64bb9a64448d0d70f1308ef5341ab/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f72696768745f6461726b626c75655f3132313632312e706e67" alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_darkblue_121621.png">
+        <img style="position: absolute; top: 0; right: 0; border: 0;"
+            src="https://camo.githubusercontent.com/38ef81f8aca64bb9a64448d0d70f1308ef5341ab/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f72696768745f6461726b626c75655f3132313632312e706e67"
+            alt="Fork me on GitHub"
+            data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_darkblue_121621.png">
     </a>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/msgpack-lite/0.1.26/msgpack.min.js"></script>
     <script src="shared.js"></script>
     <script>
-    function print_date(date) {
-        function pad_str(i) {
-            return (i < 10) ? "0" + i : "" + i;
+        function print_date(date) {
+            function pad_str(i) {
+                return (i < 10) ? "0" + i : "" + i;
+            }
+
+            return `${date.getUTCFullYear()}-${pad_str(date.getUTCMonth() + 1)}-${pad_str(date.getUTCDate())}`;
         }
 
-        return `${date.getUTCFullYear()}-${pad_str(date.getUTCMonth() + 1)}-${pad_str(date.getUTCDate())}`;
-    }
+        function unique(arr) {
+            return arr.filter((value, idx) => arr.indexOf(value) == idx);
+        }
 
-    function unique(arr) {
-        return arr.filter((value, idx) => arr.indexOf(value) == idx);
-    }
-
-    function add_datum_fields(datum, sha, bench, run, selfProfileAvailable) {
-        let html = "";
-        if (datum) {
-            html += "<td>";
-            let txt = "";
-            if (Number.isInteger(datum)) {
-                txt = datum + "";
+        function add_datum_fields(datum, sha, bench, run, selfProfileAvailable) {
+            let html = "";
+            if (datum) {
+                html += "<td>";
+                let txt = "";
+                if (Number.isInteger(datum)) {
+                    txt = datum + "";
+                } else {
+                    txt = datum.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+                }
+                if (selfProfileAvailable) {
+                    html += `<a href="/detailed-query.html?commit=${sha}&benchmark=${bench}&run_name=${run}">${txt}</a>`;
+                } else {
+                    html += txt;
+                }
+                html += "</td>";
             } else {
-                txt = datum.toLocaleString('en-US', {minimumFractionDigits: 3, maximumFractionDigits: 3});
+                html += "<td>-</td>";
             }
-            if (selfProfileAvailable) {
-                html += `<a href="/detailed-query.html?commit=${sha}&benchmark=${bench}&run_name=${run}">${txt}</a>`;
+            return html;
+        }
+
+        function percent_chg(a, b) {
+            if (a && b) {
+                return 100 * (b - a) / a;
             } else {
-                html += txt;
+                return null;
             }
-            html += "</td>";
-        } else {
-            html += "<td>-</td>";
         }
-        return html;
-    }
 
-    function percent_chg(a, b) {
-        if (a && b) {
-            return 100 * (b - a) / a;
-        } else {
-            return null;
-        }
-    }
-
-    function add_percent(pct, dodgy, dodgy_marker) {
-        if (pct != null && pct != Infinity && pct != -Infinity) {
-            let klass = "";
-            if (pct > 1) {
-                klass = 'class="positive"';
-            } else if (pct > 0.1) {
-                klass = 'class="slightly-positive"';
-            } else if (pct < -1) {
-                klass = 'class="negative"';
-            } else if (pct < -0.1) {
-                klass = 'class="slightly-negative"';
+        function add_percent(pct, dodgy, dodgy_marker) {
+            if (pct != null && pct != Infinity && pct != -Infinity) {
+                let klass = "";
+                if (pct > 1) {
+                    klass = 'class="positive"';
+                } else if (pct > 0.1) {
+                    klass = 'class="slightly-positive"';
+                } else if (pct < -1) {
+                    klass = 'class="negative"';
+                } else if (pct < -0.1) {
+                    klass = 'class="slightly-negative"';
+                }
+                let title = "";
+                let marker = "";
+                if (dodgy) {
+                    title = `title="${dodgy}"`;
+                    marker = dodgy_marker;
+                }
+                return `<span ${klass} ${title}>${pct.toFixed(1)}%${marker}</span>`;
+            } else {
+                return "<span>-</span>"
             }
-            let title = "";
-            let marker = "";
-            if (dodgy) {
-                title = `title="${dodgy}"`;
-                marker = dodgy_marker;
-            }
-            return `<span ${klass} ${title}>${pct.toFixed(1)}%${marker}</span>`;
-        } else {
-            return "<span>-</span>"
         }
-    }
 
-    function populate_data(data) {
-        {
-            let filter = document.querySelector("#filter").value;
+        function populate_data(data) {
+            {
+                let filter = document.querySelector("#filter").value;
+                let test_names = unique([
+                    ...Object.keys(data.a.data),
+                    ...Object.keys(data.b.data),
+                    ...Object.keys(data.a.bootstrap),
+                    ...Object.keys(data.b.bootstrap),
+                ]);
+                let is_copied = false;
+                for (let name of test_names) {
+                    if (!name.includes(filter)) {
+                        if (!is_copied) {
+                            // Copying data is very expensive
+                            // This branch ensures that we avoid copying
+                            // if there are no filters (which is the most common case)
+                            data = JSON.parse(JSON.stringify(DATA)); // deep copy
+                            is_copied = true;
+                        }
+                        if (data.a.data[name]) delete data.a.data[name];
+                        if (data.b.data[name]) delete data.b.data[name];
+                        if (data.a.bootstrap[name]) delete data.a.bootstrap[name];
+                        if (data.b.bootstrap[name]) delete data.b.bootstrap[name];
+                    }
+                }
+            }
+
+            function shouldShowBuild(name) {
+                if (name == "full") {
+                    return document.querySelector("#build-full").checked;
+                } else if (name == "incr-full") {
+                    return document.querySelector("#build-incremental-full").checked;
+                } else if (name == "incr-unchanged") {
+                    return document.querySelector("#build-incremental-unchanged").checked;
+                } else if (name.startsWith("incr-patched")) {
+                    return document.querySelector("#build-incremental-patched").checked;
+                } else {
+                    // Unknown, but by default we should show things
+                    return true;
+                }
+            }
+
+            let html = "";
+
+            html += `<table class="compare" style="font-size: medium !important;">`;
+            html += "<thead>";
+
+            if (!data.is_contiguous) {
+                html += `<tr><td colspan=4 style="text-align:center;">`;
+                html += `<b>Warning</b>: The start and end are not adjacent!`;
+                html += `</td></tr>`;
+            }
+
+            // Heading: the two dates, and the time and rss percent changes.
+            html += "<tr>";
+
+            html += "<th>" + "<a href=\"" +
+                "https://github.com/rust-lang/rust/compare/" + data.a.commit + "..." +
+                data.b.commit +
+                "\">compare</a>" + "</th>";
+
+            let prev_link = "";
+            if (data.prev) {
+                let params = new URLSearchParams(window.location.search);
+                params.set("end", params.get("start"));
+                params.set("start", data.prev);
+                prev_link = `<a href="/compare.html?${params.toString()}">&larr;</a> `;
+            }
+            let next_link = "";
+            if (data.next) {
+                let params = new URLSearchParams(window.location.search);
+                params.set("start", params.get("end"));
+                params.set("end", data.next);
+                next_link = ` <a href="/compare.html?${params.toString()}">&rarr;</a>`;
+            }
+            html += "<th>"
+                + prev_link + ""
+                + print_date(new Date(data.a.date))
+                + ` (<a href="https://github.com/rust-lang/rust/commit/${data.a.commit}"
+                >${data.a.commit.substring(0, 8)}</a>)` + "</th>";
+            html += "<th>" + print_date(new Date(data.b.date))
+                + ` (<a href="https://github.com/rust-lang/rust/commit/${data.b.commit}"
+                >${data.b.commit.substring(0, 8)}</a>)`
+                + next_link
+                + "</th>";
+
+            html += "<th>" + "% change" + "</th>";
+            html += "</tr>";
+
+            html += "<tr>";
+            html += "<th></th>";
+            html += `<th style="text-align:left;">${data.a.pr ? `<a
+            href="https://github.com/rust-lang/rust/pull/${data.a.pr}">#${data.a.pr}</a>` : ""}</th>`;
+            html += `<th style="text-align:left;">${data.b.pr ? `<a
+            href="https://github.com/rust-lang/rust/pull/${data.b.pr}">#${data.b.pr}</a>` : ""}</th>`;
+            html += "</tr>";
+
+            html += "</thead>";
+
             let test_names = unique([
                 ...Object.keys(data.a.data),
                 ...Object.keys(data.b.data),
+            ]);
+            let bootstrap_names = unique([
                 ...Object.keys(data.a.bootstrap),
                 ...Object.keys(data.b.bootstrap),
             ]);
-            let is_copied = false;
-            for (let name of test_names) {
-                if (!name.includes(filter)) {
-                    if (!is_copied) {
-                        // Copying data is very expensive
-                        // This branch ensures that we avoid copying
-                        // if there are no filters (which is the most common case)
-                        data = JSON.parse(JSON.stringify(DATA)); // deep copy
-                        is_copied = true;
-                    }
-                    if (data.a.data[name]) delete data.a.data[name];
-                    if (data.b.data[name]) delete data.b.data[name];
-                    if (data.a.bootstrap[name]) delete data.a.bootstrap[name];
-                    if (data.b.bootstrap[name]) delete data.b.bootstrap[name];
-                }
-            }
-        }
 
-        function shouldShowBuild(name) {
-            if (name == "full") {
-                return document.querySelector("#build-full").checked;
-            } else if (name == "incr-full") {
-                return document.querySelector("#build-incremental-full").checked;
-            } else if (name == "incr-unchanged") {
-                return document.querySelector("#build-incremental-unchanged").checked;
-            } else if (name.startsWith("incr-patched")) {
-                return document.querySelector("#build-incremental-patched").checked;
-            } else {
-                // Unknown, but by default we should show things
-                return true;
-            }
-        }
-
-        let html = "";
-
-        html += `<table class="compare" style="font-size: medium !important;">`;
-        html += "<thead>";
-
-        if (!data.is_contiguous) {
-            html += `<tr><td colspan=4 style="text-align:center;">`;
-            html += `<b>Warning</b>: The start and end are not adjacent!`;
-            html += `</td></tr>`;
-        }
-
-        // Heading: the two dates, and the time and rss percent changes.
-        html += "<tr>";
-
-        html += "<th>" + "<a href=\"" +
-            "https://github.com/rust-lang/rust/compare/" + data.a.commit + "..." +
-            data.b.commit +
-            "\">compare</a>" + "</th>";
-
-        let prev_link = "";
-        if (data.prev) {
-            let params = new URLSearchParams(window.location.search);
-            params.set("end", params.get("start"));
-            params.set("start", data.prev);
-            prev_link = `<a href="/compare.html?${params.toString()}">&larr;</a> `;
-        }
-        let next_link = "";
-        if (data.next) {
-            let params = new URLSearchParams(window.location.search);
-            params.set("start", params.get("end"));
-            params.set("end", data.next);
-            next_link = ` <a href="/compare.html?${params.toString()}">&rarr;</a>`;
-        }
-        html += "<th>"
-            + prev_link + ""
-            + print_date(new Date(data.a.date))
-            + ` (<a href="https://github.com/rust-lang/rust/commit/${data.a.commit}"
-                >${data.a.commit.substring(0,8)}</a>)` + "</th>";
-        html += "<th>" + print_date(new Date(data.b.date))
-            + ` (<a href="https://github.com/rust-lang/rust/commit/${data.b.commit}"
-                >${data.b.commit.substring(0,8)}</a>)`
-            + next_link
-            + "</th>";
-
-        html += "<th>" + "% change" + "</th>";
-        html += "</tr>";
-
-        html += "<tr>";
-        html += "<th></th>";
-        html += `<th style="text-align:left;">${data.a.pr ? `<a
-            href="https://github.com/rust-lang/rust/pull/${data.a.pr}">#${data.a.pr}</a>` : ""}</th>`;
-        html += `<th style="text-align:left;">${data.b.pr ? `<a
-            href="https://github.com/rust-lang/rust/pull/${data.b.pr}">#${data.b.pr}</a>` : ""}</th>`;
-        html += "</tr>";
-
-        html += "</thead>";
-
-        let test_names = unique([
-            ...Object.keys(data.a.data),
-            ...Object.keys(data.b.data),
-        ]);
-        let bootstrap_names = unique([
-            ...Object.keys(data.a.bootstrap),
-            ...Object.keys(data.b.bootstrap),
-        ]);
-
-        let fields = [
-            ...bootstrap_names
-                .map(name => name)
-                .map(name => ({name, is_bootstrap: true, fields: to_fields_bootstrap(name)})),
-            ...test_names.map(name => ({name, is_bootstrap: false, fields: to_fields(name)})),
-        ];
-
-        function to_fields_bootstrap(name) {
-            let datum_a = data.a.bootstrap[name] || null;
-            let datum_b = data.b.bootstrap[name] || null;
-            datum_a = datum_a ? datum_a / 1e9 : null;
-            datum_b = datum_b ? datum_b / 1e9 : null;
-
-            return [
-                {
-                    casename: name,
-                    datum_a,
-                    datum_b,
-                    percent: percent_chg(datum_a, datum_b),
-                }
+            let fields = [
+                ...bootstrap_names
+                    .map(name => name)
+                    .map(name => ({ name, is_bootstrap: true, fields: to_fields_bootstrap(name) })),
+                ...test_names.map(name => ({ name, is_bootstrap: false, fields: to_fields(name) })),
             ];
-        }
 
-        function to_fields(name) {
-            let source = data.a.data[name] || data.b.data[name];
-            let max_length = 0;
-            if (data.a.data[name]) {
-                max_length = data.a.data[name].length;
-            }
-            if (data.b.data[name] && data.b.data[name].length > max_length) {
-                max_length = data.b.data[name].length;
-            }
+            function to_fields_bootstrap(name) {
+                let datum_a = data.a.bootstrap[name] || null;
+                let datum_b = data.b.bootstrap[name] || null;
+                datum_a = datum_a ? datum_a / 1e9 : null;
+                datum_b = datum_b ? datum_b / 1e9 : null;
 
-            let keys = {};
-            if (data.a.data[name]) {
-                for (let i = 0; i < data.a.data[name].length; i++) {
-                    if (!keys[data.a.data[name][i][0]]) {
-                        keys[data.a.data[name][i][0]] = {};
-                    }
-                    keys[data.a.data[name][i][0]].a_idx = i;
-                }
-            }
-            if (data.b.data[name]) {
-                for (let i = 0; i < data.b.data[name].length; i++) {
-                    if (!keys[data.b.data[name][i][0]]) {
-                        keys[data.b.data[name][i][0]] = {};
-                    }
-                    keys[data.b.data[name][i][0]].b_idx = i;
-                }
-            }
-
-            let fields = [];
-            for (let key in keys) {
-                let a_idx = keys[key].a_idx;
-                let b_idx = keys[key].b_idx;
-                let datum_a = null;
-                let datum_b = null;
-                if (a_idx != undefined && b_idx != undefined) {
-                    datum_a = data.a.data[name][a_idx][1];
-                    datum_b = data.b.data[name][b_idx][1];
-                } else if (a_idx != undefined) {
-                    datum_a = data.a.data[name][a_idx][1];
-                } else if (b_idx != undefined) {
-                    datum_b = data.b.data[name][b_idx][1];
-                } else {
-                    // should be unreachable
-                }
-                if (shouldShowBuild(key)) {
-                    fields.push({
-                        casename: key,
+                return [
+                    {
+                        casename: name,
                         datum_a,
                         datum_b,
                         percent: percent_chg(datum_a, datum_b),
-                    });
+                    }
+                ];
+            }
+
+            function to_fields(name) {
+                let source = data.a.data[name] || data.b.data[name];
+                let max_length = 0;
+                if (data.a.data[name]) {
+                    max_length = data.a.data[name].length;
                 }
-            }
-
-            return fields;
-        }
-
-        for (let field of fields) {
-            let pcts = field.fields.map(field => field.percent)
-                .filter(p => p != undefined && p != null);
-            field.max_pct = Math.max(...pcts);
-            field.min_pct = Math.min(...pcts);
-            field.farthest_pct = Math.max(...pcts.map(p => Math.abs(p)));
-            let sum = pcts.reduce((a, b) => a + b, 0);
-            let avg = sum / pcts.length;
-            field.avg_pct = avg;
-            field.max_casename_len = Math.max(...field.fields.map(f => f.casename.length));
-        }
-
-        fields.sort((a, b) => {
-            if (a.is_bootstrap == b.is_bootstrap){
-                return b.farthest_pct - a.farthest_pct;
-            }
-            else{
-                if (a.is_bootstrap){
-                    return 1;
+                if (data.b.data[name] && data.b.data[name].length > max_length) {
+                    max_length = data.b.data[name].length;
                 }
-                else{
-                    return -1;
+
+                let keys = {};
+                if (data.a.data[name]) {
+                    for (let i = 0; i < data.a.data[name].length; i++) {
+                        if (!keys[data.a.data[name][i][0]]) {
+                            keys[data.a.data[name][i][0]] = {};
+                        }
+                        keys[data.a.data[name][i][0]].a_idx = i;
+                    }
                 }
-            }
-        });
-
-        let max_name_width = Math.max(...fields.map(f => f.max_casename_len));
-
-        function dodgy_name_title() {
-                return "One or more of this benchmark's runs have high measurement variation. " +
-                       "Treat this value with caution. And see the warning at the bottom of " +
-                       "the table.";
-        }
-
-        function dodgy_casename_title(name, casename, variance) {
-            if (variance.type == "HighlyVariable") {
-                return `This measurement varies a lot. Do not trust it!`
-            }
-            if (variance.type == "Noisy") {
-                return `This measurement is noisy. Do not trust it!`
-            }
-            return "";
-        }
-
-        let is_first_bootstrap = true;
-        for (let field of fields) {
-            let is_dodgy = Object.keys(data.variance).some(k => {
-                return k.startsWith(field.name) && data.variance[k].description.type != "Normal";
-            });
-            let dodgy = is_dodgy ? dodgy_name_title() : "";
-            if (field.is_bootstrap) {
-                if (is_first_bootstrap) {
-                    html += "<tr data-field-start=true><td>&nbsp;</td></tr>";
-                    html += "<tr data-field-start=true><td colspan=4>bootstrap timings; variance is 1-3% on smaller benchmarks! Values in seconds.</td></tr>";
-                    is_first_bootstrap = false;
-
-                    html += "<tr data-field-start=true>";
-                    html += `<th style="width: ${max_name_width/2}em;" data-js-name=Total>` + truncate_name("total") + "</th>";
-                    let sum = (acc, value) => acc + value;
-                    let a_total = fields.filter(f => f.is_bootstrap).map(f => f.fields[0].datum_a).reduce(sum);
-                    let b_total = fields.filter(f => f.is_bootstrap).map(f => f.fields[0].datum_b).reduce(sum);
-                    html += add_datum_fields(a_total, data.a.commit, "Total", "", false);
-                    html += add_datum_fields(b_total, data.b.commit, "Total", "", false);
-                    let pct = add_percent(percent_chg(a_total, b_total), dodgy, "??");
-                    html += `<td>${pct}</td>`;
-                    html += "</tr>";
+                if (data.b.data[name]) {
+                    for (let i = 0; i < data.b.data[name].length; i++) {
+                        if (!keys[data.b.data[name][i][0]]) {
+                            keys[data.b.data[name][i][0]] = {};
+                        }
+                        keys[data.b.data[name][i][0]].b_idx = i;
+                    }
                 }
-                html += "<tr data-field-start=true>";
-                html += `<th style="width: ${max_name_width/2}em;" data-js-name=${field.name}>` + truncate_name(field.name) + "</th>";
-                let entry = field.fields[0];
-                html += add_datum_fields(entry.datum_a, data.a.commit,
-                    field.name, entry.casename, false);
-                html += add_datum_fields(entry.datum_b, data.b.commit,
-                    field.name, entry.casename, false);
-                let pct = add_percent(entry.percent, dodgy, "??");
-                html += `<td>${pct}</td>`;
-                html += "</tr>";
-            } else {
-                html += "<tr><td>&nbsp;</td></tr>";
-                html += "<tr data-field-start=true>";
-                html += `<th style="width: ${max_name_width/2}em;" data-js-name=${field.name}>` +
-                    `<details class=toggle-table><summary>` +
-                    truncate_name(field.name) + "</summary></details></th>";
-                html += "<td> avg: " + add_percent(field.avg_pct, dodgy, "?") + "</td>";
-                html += "<td text-align=center> min: " + add_percent(field.min_pct, dodgy, "?") +
-                        "</td>";
-                html += "<td> max: " + add_percent(field.max_pct, dodgy, "?") + "</td>";
-                html += "</tr>";
-                for (let i = 0; i < field.fields.length; i++) {
-                    let entry = field.fields[i];
-                    const variance = data.variance[field.name + "-" + entry.casename].description;
-                    let dodgy = dodgy_casename_title(field.name, entry.casename, variance);
-                    html += "<tr>";
-                    html += "<td>" + entry.casename + "</td>";
-                    // No base comparison commit for the first datum
-                    html += add_datum_fields(entry.datum_a, data.a.commit,
-                             field.name, entry.casename, true);
-                    html += add_datum_fields(entry.datum_b, data.b.commit,
-                             field.name, entry.casename, true);
-                    let pct = add_percent(entry.percent, dodgy, "??");
-                    let diff_href =
-                        `/detailed-query.html?commit=${data.b.commit}&base_commit=${data.a.commit}&benchmark=${field.name}&run_name=${entry.casename}`;
-                    html += `<td><a href="${diff_href}">${pct}</a></td>`;
-                    html += "</tr>";
-                }
-            }
-        }
 
-        html += "</table>";
-
-        document.getElementById("content").innerHTML = html;
-        document.getElementById("content").style.display = "block";
-        for (let element of document.querySelectorAll(".toggle-table")) {
-            let name = element.parentElement.getAttribute("data-js-name");
-            let in_body = [];
-            let next = element.parentElement.parentElement.nextElementSibling;
-            while (next && next.getAttribute("data-field-start") !== "true") {
-                in_body.push(next);
-                next = next.nextElementSibling;
-            }
-            for (let detail of in_body) {
-                detail.style.display = "none";
-            }
-            element.addEventListener("toggle", evt => {
-                for (let detail of in_body) {
-                    if (element.open) {
-                        detail.style.display = "";
+                let fields = [];
+                for (let key in keys) {
+                    let a_idx = keys[key].a_idx;
+                    let b_idx = keys[key].b_idx;
+                    let datum_a = null;
+                    let datum_b = null;
+                    if (a_idx != undefined && b_idx != undefined) {
+                        datum_a = data.a.data[name][a_idx][1];
+                        datum_b = data.b.data[name][b_idx][1];
+                    } else if (a_idx != undefined) {
+                        datum_a = data.a.data[name][a_idx][1];
+                    } else if (b_idx != undefined) {
+                        datum_b = data.b.data[name][b_idx][1];
                     } else {
-                        detail.style.display = "none";
+                        // should be unreachable
+                    }
+                    if (shouldShowBuild(key)) {
+                        fields.push({
+                            casename: key,
+                            datum_a,
+                            datum_b,
+                            percent: percent_chg(datum_a, datum_b),
+                        });
+                    }
+                }
+
+                return fields;
+            }
+
+            for (let field of fields) {
+                let pcts = field.fields.map(field => field.percent)
+                    .filter(p => p != undefined && p != null);
+                field.max_pct = Math.max(...pcts);
+                field.min_pct = Math.min(...pcts);
+                field.farthest_pct = Math.max(...pcts.map(p => Math.abs(p)));
+                let sum = pcts.reduce((a, b) => a + b, 0);
+                let avg = sum / pcts.length;
+                field.avg_pct = avg;
+                field.max_casename_len = Math.max(...field.fields.map(f => f.casename.length));
+            }
+
+            fields.sort((a, b) => {
+                if (a.is_bootstrap == b.is_bootstrap) {
+                    return b.farthest_pct - a.farthest_pct;
+                }
+                else {
+                    if (a.is_bootstrap) {
+                        return 1;
+                    }
+                    else {
+                        return -1;
                     }
                 }
             });
+
+            let max_name_width = Math.max(...fields.map(f => f.max_casename_len));
+
+            function dodgy_name_title() {
+                return "One or more of this benchmark's runs have high measurement variation. " +
+                    "Treat this value with caution. And see the warning at the bottom of " +
+                    "the table.";
+            }
+
+            function dodgy_casename_title(name, casename, variance) {
+                if (variance.type == "HighlyVariable") {
+                    return `This measurement varies a lot. Do not trust it!`
+                }
+                if (variance.type == "Noisy") {
+                    return `This measurement is noisy. Do not trust it!`
+                }
+                return "";
+            }
+
+            let is_first_bootstrap = true;
+            for (let field of fields) {
+                let is_dodgy = Object.keys(data.variance).some(k => {
+                    return k.startsWith(field.name) && data.variance[k].description.type != "Normal";
+                });
+                let dodgy = is_dodgy ? dodgy_name_title() : "";
+                if (field.is_bootstrap) {
+                    if (is_first_bootstrap) {
+                        html += "<tr data-field-start=true><td>&nbsp;</td></tr>";
+                        html += "<tr data-field-start=true><td colspan=4>bootstrap timings; variance is 1-3% on smaller benchmarks! Values in seconds.</td></tr>";
+                        is_first_bootstrap = false;
+
+                        html += "<tr data-field-start=true>";
+                        html += `<th style="width: ${max_name_width / 2}em;" data-js-name=Total>` + truncate_name("total") + "</th>";
+                        let sum = (acc, value) => acc + value;
+                        let a_total = fields.filter(f => f.is_bootstrap).map(f => f.fields[0].datum_a).reduce(sum);
+                        let b_total = fields.filter(f => f.is_bootstrap).map(f => f.fields[0].datum_b).reduce(sum);
+                        html += add_datum_fields(a_total, data.a.commit, "Total", "", false);
+                        html += add_datum_fields(b_total, data.b.commit, "Total", "", false);
+                        let pct = add_percent(percent_chg(a_total, b_total), dodgy, "??");
+                        html += `<td>${pct}</td>`;
+                        html += "</tr>";
+                    }
+                    html += "<tr data-field-start=true>";
+                    html += `<th style="width: ${max_name_width / 2}em;" data-js-name=${field.name}>` + truncate_name(field.name) + "</th>";
+                    let entry = field.fields[0];
+                    html += add_datum_fields(entry.datum_a, data.a.commit,
+                        field.name, entry.casename, false);
+                    html += add_datum_fields(entry.datum_b, data.b.commit,
+                        field.name, entry.casename, false);
+                    let pct = add_percent(entry.percent, dodgy, "??");
+                    html += `<td>${pct}</td>`;
+                    html += "</tr>";
+                } else {
+                    html += "<tr><td>&nbsp;</td></tr>";
+                    html += "<tr data-field-start=true>";
+                    html += `<th style="width: ${max_name_width / 2}em;" data-js-name=${field.name}>` +
+                        `<details class=toggle-table><summary>` +
+                        truncate_name(field.name) + "</summary></details></th>";
+                    html += "<td> avg: " + add_percent(field.avg_pct, dodgy, "?") + "</td>";
+                    html += "<td text-align=center> min: " + add_percent(field.min_pct, dodgy, "?") +
+                        "</td>";
+                    html += "<td> max: " + add_percent(field.max_pct, dodgy, "?") + "</td>";
+                    html += "</tr>";
+                    for (let i = 0; i < field.fields.length; i++) {
+                        let entry = field.fields[i];
+                        const variance = data.variance[field.name + "-" + entry.casename].description;
+                        let dodgy = dodgy_casename_title(field.name, entry.casename, variance);
+                        html += "<tr>";
+                        html += "<td>" + entry.casename + "</td>";
+                        // No base comparison commit for the first datum
+                        html += add_datum_fields(entry.datum_a, data.a.commit,
+                            field.name, entry.casename, true);
+                        html += add_datum_fields(entry.datum_b, data.b.commit,
+                            field.name, entry.casename, true);
+                        let pct = add_percent(entry.percent, dodgy, "??");
+                        let diff_href =
+                            `/detailed-query.html?commit=${data.b.commit}&base_commit=${data.a.commit}&benchmark=${field.name}&run_name=${entry.casename}`;
+                        html += `<td><a href="${diff_href}">${pct}</a></td>`;
+                        html += "</tr>";
+                    }
+                }
+            }
+
+            html += "</table>";
+
+            document.getElementById("content").innerHTML = html;
+            document.getElementById("content").style.display = "block";
+            for (let element of document.querySelectorAll(".toggle-table")) {
+                let name = element.parentElement.getAttribute("data-js-name");
+                let in_body = [];
+                let next = element.parentElement.parentElement.nextElementSibling;
+                while (next && next.getAttribute("data-field-start") !== "true") {
+                    in_body.push(next);
+                    next = next.nextElementSibling;
+                }
+                for (let detail of in_body) {
+                    detail.style.display = "none";
+                }
+                element.addEventListener("toggle", evt => {
+                    for (let detail of in_body) {
+                        if (element.open) {
+                            detail.style.display = "";
+                        } else {
+                            detail.style.display = "none";
+                        }
+                    }
+                });
+            }
         }
-    }
 
-    var DATA;
-    function make_data(state) {
-        let values = Object.assign({}, {
-            start: "",
-            end: "",
-            stat: "instructions:u",
-        }, state);
-        make_request("/get", values).then(function(data) {
-            DATA = data;
-            populate_data(data);
-        });
-    }
+        var DATA;
+        function make_data(state) {
+            let values = Object.assign({}, {
+                start: "",
+                end: "",
+                stat: "instructions:u",
+            }, state);
+            make_request("/get", values).then(function (data) {
+                DATA = data;
+                populate_data(data);
+            });
+        }
 
-    function submit_settings() {
-        let start = document.getElementById("start-bound").value;
-        let end = document.getElementById("end-bound").value;
-        let stat = getSelected("stats");
-        let params = new URLSearchParams();
-        params.append("start", start);
-        params.append("end", end);
-        params.append("stat", stat);
-        window.location.search = params.toString();
-    }
+        function submit_settings() {
+            let start = document.getElementById("start-bound").value;
+            let end = document.getElementById("end-bound").value;
+            let stat = getSelected("stats");
+            let params = new URLSearchParams();
+            params.append("start", start);
+            params.append("end", end);
+            params.append("stat", stat);
+            window.location.search = params.toString();
+        }
 
-    load_state(make_data);
+        load_state(make_data);
 
-    function rerender() {
-        populate_data(DATA);
-    }
+        function rerender() {
+            populate_data(DATA);
+        }
 
-    document.querySelector("#filter").addEventListener("change", rerender);
-    document.querySelector("#build-full").addEventListener("change", rerender);
-    document.querySelector("#build-incremental-full").addEventListener("change", rerender);
-    document.querySelector("#build-incremental-unchanged").addEventListener("change", rerender);
-    document.querySelector("#build-incremental-patched").addEventListener("change", rerender);
+        document.querySelector("#filter").addEventListener("change", rerender);
+        document.querySelector("#build-full").addEventListener("change", rerender);
+        document.querySelector("#build-incremental-full").addEventListener("change", rerender);
+        document.querySelector("#build-incremental-unchanged").addEventListener("change", rerender);
+        document.querySelector("#build-incremental-patched").addEventListener("change", rerender);
 
     </script>
 </body>
+
 </html>
