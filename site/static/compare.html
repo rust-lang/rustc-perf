@@ -62,6 +62,10 @@
             font-size: 22px;
         }
 
+        #search-content {
+            margin-top: 16px;
+        }
+
         #filters-content .section-heading {
             font-size: 18px;
         }
@@ -75,6 +79,7 @@
             border: 1px black;
             border-style: dotted;
             margin: 16px 0px;
+            border-radius: 10px;
         }
 
         #settings input {
@@ -132,7 +137,6 @@
             opacity: 1;
         }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
 </head>
 
 <body class="container" style="max-width:800px">
@@ -141,27 +145,33 @@
         <a href="status.html">status</a>, <a href="help.html">help</a>.
     </div>
     <br />
+    <h1>Comparing <span id="stat-header">instructions:u</span> between <span id="before">???</span> and <span
+            id="after">???</span></h1>
     <form id="settings" action="">
-        <fieldset id="commits">
-            <legend class="section-heading">Commits</legend>
-            <div style="display: flex; width: 100%; justify-content: space-around;">
-                <div class="commit-input">
-                    <label for="start-bound">Before</label>
-                    <input width="100em" placeholder="YYYY-MM-DD or Commit SHA" id="start-bound" /><br>
-                </div>
-                <div class="commit-input">
-                    <label for="end-bound">After</label>
-                    <input width="100em" placeholder="YYYY-MM-DD or Commit SHA" id="end-bound" /><br>
-                </div>
-            </div>
-        </fieldset>
-        <div id="metric" style="position: relative;height: 60px;">
-            <label class="section-heading" for="stats">Metric</label>
-            <div style="width: 100%; position: absolute; top:0; display: flex; justify-content: center;">
-                <select id='stats' name="stat"></select>
-            </div>
+        <div id="search-toggle" class="section-heading">Compare Other Commits<span id="search-toggle-indicator"></span>
         </div>
-        <input id="submit" type="submit" value="Submit" onclick="submit_settings(); return false;">
+        <div id="search-content">
+            <fieldset id="commits">
+                <legend class="section-heading">Commits</legend>
+                <div style="display: flex; width: 100%; justify-content: space-around;">
+                    <div class="commit-input">
+                        <label for="start-bound">Before</label>
+                        <input width="100em" placeholder="YYYY-MM-DD or Commit SHA" id="start-bound" /><br>
+                    </div>
+                    <div class="commit-input">
+                        <label for="end-bound">After</label>
+                        <input width="100em" placeholder="YYYY-MM-DD or Commit SHA" id="end-bound" /><br>
+                    </div>
+                </div>
+            </fieldset>
+            <div id="metric" style="position: relative;height: 60px;">
+                <label class="section-heading" for="stats">Metric</label>
+                <div style="width: 100%; position: absolute; top:0; display: flex; justify-content: center;">
+                    <select id='stats' name="stat"></select>
+                </div>
+            </div>
+            <input id="submit" type="submit" value="Submit" onclick="submit_settings(); return false;">
+        </div>
     </form>
     <div id="filters">
         <div id="filters-toggle" class="section-heading">Filters<span id="filters-toggle-indicator"></span></div>
@@ -219,9 +229,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/msgpack-lite/0.1.26/msgpack.min.js"></script>
     <script src="shared.js"></script>
     <script>
-        function toggle_filters() {
-            let styles = document.getElementById("filters-content").style;
-            let indicator = document.getElementById("filters-toggle-indicator");
+        function toggle_filters(id, toggle) {
+            let styles = document.getElementById(id).style;
+            let indicator = document.getElementById(toggle);
             if (styles.display != "none") {
                 indicator.innerHTML = "⯈"
                 styles.display = "none";
@@ -230,10 +240,14 @@
                 styles.display = "block";
             }
         }
-        toggle_filters();
+        toggle_filters("filters-content", "filters-toggle-indicator");
+        toggle_filters("search-content", "search-toggle-indicator");
 
         document.getElementById("filters-toggle").onclick = (e) => {
-            toggle_filters();
+            toggle_filters("filters-content", "filters-toggle-indicator");
+        };
+        document.getElementById("search-toggle").onclick = (e) => {
+            toggle_filters("search-content", "search-toggle-indicator");
         };
 
 
@@ -641,9 +655,30 @@
             }, state);
             make_request("/get", values).then(function (data) {
                 DATA = data;
+                update_header(data.a.commit, data.b.commit);
                 populate_data(data);
             });
         }
+
+        function update_header(a, b, stat) {
+            let shorten = (text) => {
+                return text.substring(0, 7);
+            }
+            a && (document.getElementById("before").innerHTML = shorten(a));
+            b && (document.getElementById("after").innerHTML = shorten(b));
+            stat && (document.getElementById("stat-header").innerHTML = stat);
+        }
+        function findQueryParam(name) {
+            let urlParams = window.location.search.substring(1).split("&").map(x => x.split("="));
+            let pair = urlParams.find(x => x[0] === name)
+            if (pair) {
+                return unescape(pair[1]);
+            }
+        }
+        let start = findQueryParam("start");
+        let end = findQueryParam("end");
+        let stat = findQueryParam("stat")
+        update_header(start, end, stat);
 
         function submit_settings() {
             let start = document.getElementById("start-bound").value;
