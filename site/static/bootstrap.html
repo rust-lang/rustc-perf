@@ -1,5 +1,6 @@
 <!doctype html>
 <html>
+
 <head>
     <meta charset="utf-8">
     <link rel="stylesheet" href="uPlot.min.css">
@@ -42,6 +43,7 @@
             white-space: pre;
             font-family: monospace;
         }
+
         body {
             padding: 1em;
             margin: 0;
@@ -51,10 +53,12 @@
     <script src="shared.js"></script>
     <title>rustc performance data</title>
 </head>
+
 <body>
     <div>&gt; <a href="index.html">graphs</a>, <a href="compare.html">compare</a>,
         <a href="dashboard.html">dashboard</a>, <a href="bootstrap.html">bootstrap</a>,
-        <a href="status.html">status</a>, <a href="help.html">help</a>.</div>
+        <a href="status.html">status</a>, <a href="help.html">help</a>.
+    </div>
     <div id="settings">
         start: <input placeholder="yyyy-mm-dd or commit" id="start-bound" />
         end: <input placeholder="yyyy-mm-dd or commit" id="end-bound" />
@@ -64,15 +68,21 @@
         See <a href="/compare.html">compare page</a> for descriptions of what
         the names mean.
     </div>
-    <div id="loading"><h2>Loading &amp; rendering data..</h2><h3>This may take a while!</h3></div>
+    <div id="loading">
+        <h2>Loading &amp; rendering data..</h2>
+        <h3>This may take a while!</h3>
+    </div>
     <div id="charts"></div>
     <div id="as-of"></div>
     <a href="https://github.com/rust-lang-nursery/rustc-perf">
-        <img style="position: absolute; top: 0; right: 0; border: 0;" src="https://camo.githubusercontent.com/38ef81f8aca64bb9a64448d0d70f1308ef5341ab/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f72696768745f6461726b626c75655f3132313632312e706e67" alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_darkblue_121621.png">
+        <img style="position: absolute; top: 0; right: 0; border: 0;"
+            src="https://camo.githubusercontent.com/38ef81f8aca64bb9a64448d0d70f1308ef5341ab/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f72696768745f6461726b626c75655f3132313632312e706e67"
+            alt="Fork me on GitHub"
+            data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_darkblue_121621.png">
     </a>
 
     <script>
-        function tooltipPlugin({onclick, commits, shiftX = 10, shiftY = 10}) {
+        function tooltipPlugin({ onclick, commits, shiftX = 10, shiftY = 10 }) {
             let tooltipLeftOffset = 0;
             let tooltipTopOffset = 0;
 
@@ -108,16 +118,16 @@
                 showTooltip();
 
                 let top = u.valToPos(u.data[seriesIdx][dataIdx], 'y');
-                let lft = u.valToPos(u.data[        0][dataIdx], 'x');
+                let lft = u.valToPos(u.data[0][dataIdx], 'x');
 
-                tooltip.style.top  = (tooltipTopOffset  + top + shiftX) + "px";
+                tooltip.style.top = (tooltipTopOffset + top + shiftX) + "px";
                 tooltip.style.left = (tooltipLeftOffset + lft + shiftY) + "px";
 
                 tooltip.textContent = (
                     fmtDate(new Date(u.data[0][dataIdx] * 1e3)) + " - " +
-                    commits[dataIdx][1].slice(0,10) + "\n" +
+                    commits[dataIdx][1].slice(0, 10) + "\n" +
                     u.series[seriesIdx].label + ": " +
-                    u.data[seriesIdx][dataIdx]/1e9 + " seconds"
+                    u.data[seriesIdx][dataIdx] / 1e9 + " seconds"
                 );
             }
 
@@ -177,7 +187,7 @@
             };
         }
 
-        function genPlotOpts({title, width, height, yAxisLabel, series, commits, alpha = 0.3, prox = 5}) {
+        function genPlotOpts({ title, width, height, yAxisLabel, series, commits, alpha = 0.3, prox = 5 }) {
             return {
                 title,
                 width,
@@ -199,12 +209,12 @@
                     },
                 },
                 axes: [
-                    { },
+                    {},
                     {
                         label: yAxisLabel,
                         space: 24,
                         values: (self, splits) => {
-                            return splits.map(v => v/1e9  + " sec");
+                            return splits.map(v => v / 1e9 + " sec");
                         },
                     },
                 ],
@@ -212,7 +222,7 @@
                     tooltipPlugin({
                         onclick(u, seriesIdx, dataIdx) {
                             let thisCommit = commits[dataIdx][1];
-                            let prevCommit = (commits[dataIdx-1] || [null,null])[1];
+                            let prevCommit = (commits[dataIdx - 1] || [null, null])[1];
                             window.open(`/compare.html?start=${prevCommit}&end=${thisCommit}`);
                         },
                         commits,
@@ -280,4 +290,5 @@
         });
     </script>
 </body>
+
 </html>

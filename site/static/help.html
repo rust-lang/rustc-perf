@@ -1,42 +1,63 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-<meta charset="utf-8">
-<title>rustc performance data</title>
-<link rel="stylesheet" type="text/css" href="perf.css">
-<link rel="alternate icon" type="image/png" href="/favicon-32x32.png">
-<link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<style>
-    .help-content {
-        font-family: Helvetica, Arial, sans-serif;
-        line-height: 140%;
-        font-size: 16px;
-        max-width: 50em;
-    }
-    .help-content code {
-        background: #eee;
-        border-radius: 5px;
-        padding: 2px;
-    }
-</style>
+    <meta charset="utf-8">
+    <title>rustc performance data</title>
+    <link rel="stylesheet" type="text/css" href="perf.css">
+    <link rel="alternate icon" type="image/png" href="/favicon-32x32.png">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <style>
+        .help-content {
+            font-family: Helvetica, Arial, sans-serif;
+            line-height: 140%;
+            font-size: 16px;
+            max-width: 50em;
+        }
+
+        .help-content code {
+            background: #eee;
+            border-radius: 5px;
+            padding: 2px;
+        }
+    </style>
 </head>
+
 <body class="container">
     <div>&gt; <a href="index.html">graphs</a>, <a href="compare.html">compare</a>,
         <a href="dashboard.html">dashboard</a>, <a href="bootstrap.html">bootstrap</a>,
-        <a href="status.html">status</a>, <a href="help.html">help</a>.</div>
+        <a href="status.html">status</a>, <a href="help.html">help</a>.
+    </div>
     <div style="text-align: center;">
         <a href="https://github.com/rust-lang-nursery/rustc-perf">Contribute on GitHub</a>
     </div>
     <div class="help-content">
         <h3><b><code>@rust-timer</code> commands</b></h3>
-        <p><code>@rust-timer</code> supports several commands, the most common (and simple) being <code>@rust-timer queue</code>. This command is usually invoked as <code>@bors try @rust-timer queue</code>, which starts a bors "try" run (not a merge). <code>@rust-timer</code> will wait for the try run to finish, and if it succeeds will then queue a perf run.</p>
+        <p><code>@rust-timer</code> supports several commands, the most common (and simple) being
+            <code>@rust-timer queue</code>. This command is usually invoked as <code>@bors try @rust-timer queue</code>,
+            which starts a bors "try" run (not a merge). <code>@rust-timer</code> will wait for the try run to finish,
+            and if it succeeds will then queue a perf run.
+        </p>
         <p><code>@rust-timer queue</code> has a few extra options that can be useful:</p>
         <ul>
-            <li><code>include=&lt;INCLUDE&gt;</code> only runs benchmarks with <code>&lt;INCLUDE&gt;</code> in their title. For example, if you just want to run rustdoc benchmarks, do <code>@bors try @rust-timer queue include=-doc</code>; the <code>-doc</code> matches the <code>-doc</code> appended to rustdoc benchmarks. <code>&lt;INCLUDE&gt;</code> is a comma-separated list of substrings; only one of the items in the list of substrings must match.</li>
-            <li><code>exclude=&lt;EXCLUDE&gt;</code> is similar to <code>include=</code>, but instead skips any benchmarks that have one of the items in the list of substrings as a substring of its name.</li>
-            <li><code>runs=&lt;RUNS&gt;</code> configures how many times the benchmark is run. <code>&lt;RUNS&gt;</code> is an integer. All benchmarks run at least once by default, but some run more than one time. You can use the <code>runs</code> option to override the default run count and make every benchmark run for <code>&lt;RUNS&gt;</code> times.</li>
+            <li><code>include=&lt;INCLUDE&gt;</code> only runs benchmarks with <code>&lt;INCLUDE&gt;</code> in their
+                title. For example, if you just want to run rustdoc benchmarks, do
+                <code>@bors try @rust-timer queue include=-doc</code>; the <code>-doc</code> matches the
+                <code>-doc</code> appended to rustdoc benchmarks. <code>&lt;INCLUDE&gt;</code> is a comma-separated list
+                of substrings; only one of the items in the list of substrings must match.
+            </li>
+            <li><code>exclude=&lt;EXCLUDE&gt;</code> is similar to <code>include=</code>, but instead skips any
+                benchmarks that have one of the items in the list of substrings as a substring of its name.</li>
+            <li><code>runs=&lt;RUNS&gt;</code> configures how many times the benchmark is run. <code>&lt;RUNS&gt;</code>
+                is an integer. All benchmarks run at least once by default, but some run more than one time. You can use
+                the <code>runs</code> option to override the default run count and make every benchmark run for
+                <code>&lt;RUNS&gt;</code> times.
+            </li>
         </ul>
-        <p><code>@rust-timer</code> has more commands than just <code>@rust-timer queue</code>, but the <code>queue</code> command is the most used.</p>
-    <script src="shared.js"></script>
+        <p><code>@rust-timer</code> has more commands than just <code>@rust-timer queue</code>, but the
+            <code>queue</code> command is the most used.
+        </p>
+        <script src="shared.js"></script>
 </body>
+
 </html>
