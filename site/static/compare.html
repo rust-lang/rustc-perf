@@ -68,7 +68,6 @@
 
         #filters-content {
             margin-top: 16px;
-
         }
 
         #filters {
@@ -97,6 +96,40 @@
 
         .cache-label {
             font-weight: bold;
+        }
+
+        .tooltip {
+            position: relative;
+            border-radius: 50%;
+            border: 1px solid #7d6969;
+            width: 16px;
+            text-align: center;
+            font-weight: bold;
+            background: #d6d3d3;
+            cursor: pointer;
+            display: inline-block;
+        }
+
+        .tooltip .tooltiptext {
+            width: 180px;
+            visibility: hidden;
+            color: white;
+            background-color: #524d4d;
+            text-align: center;
+            padding: 5px;
+            border-radius: 6px;
+
+            position: absolute;
+            bottom: 125%;
+            margin-left: -60px;
+
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
         }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
@@ -132,7 +165,7 @@
     </form>
     <div id="filters">
         <div id="filters-toggle" class="section-heading">Filters<span id="filters-toggle-indicator"></span></div>
-        <div id="filters-content">
+        <div id="filters-content" style="display: none;">
             <div>
                 <div class="section-heading">Filter by benchmark
                 </div>
@@ -141,25 +174,35 @@
             <div>
                 <div class="section-heading">Cache states</div>
                 <p>Most benchmarks have at least 4 cache states for which we collect data:</p>
-                <ul style="list-style:none;">
-                    <li><input type="checkbox" id="build-full" checked /><span class="cache-label">full</span>: a
-                        non-incremental full build starting with empty cache</li>
+                <ul style="display: flex; justify-content: space-around; list-style:none;">
+                    <li><input type="checkbox" id="build-full" checked /><span class="cache-label">full</span>
+                        <div class="tooltip">?<span class="tooltiptext">A
+                                non-incremental full build starting with empty cache</span></div>
+                    </li>
                     <li><input type="checkbox" id="build-incremental-full" checked /> <span
-                            class="cache-label">incr-full</span>: an incremental build
-                        starting
-                        with empty cache</li>
+                            class="cache-label">incr-full</span>
+                        <div class="tooltip">?<span class="tooltiptext">An incremental build
+                                starting
+                                with empty cache
+                            </span></div>
+                    </li>
                     <li><input type="checkbox" id="build-incremental-unchanged" checked /> <span
-                            class="cache-label">incr-unchanged</span>: an
-                        incremental
-                        build
-                        starting with complete
-                        cache, and unchanged source directory -- the "perfect" scenario for incremental.</li>
+                            class="cache-label">incr-unchanged</span>
+                        <div class="tooltip">?<span class="tooltiptext">An
+                                incremental
+                                build
+                                starting with complete
+                                cache, and unchanged source directory -- the "perfect" scenario for incremental.</span>
+                        </div>
+                    </li>
                     <li><input type="checkbox" id="build-incremental-patched" checked /><span
-                            class="cache-label">incr-patched</span> : an incremental
-                        build
-                        starting with complete cache, and an
-                        altered source directory. The typical variant of this is "println" which represents
-                        the addition of a `println!` macro somewhere in the source code.</li>
+                            class="cache-label">incr-patched</span>
+                        <div class="tooltip">?<span class="tooltiptext">An incremental
+                                build
+                                starting with complete cache, and an
+                                altered source directory. The typical variant of this is "println" which represents
+                                the addition of a `println!` macro somewhere in the source code.</span></div>
+                    </li>
                 </ul>
             </div>
         </div>
