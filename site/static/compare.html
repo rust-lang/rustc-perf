@@ -368,6 +368,10 @@
             }
 
             function dodgy_casename_title(name, casename, variance) {
+                if (!variance) {
+                    return "";
+                }
+
                 if (variance.type == "HighlyVariable") {
                     return `This measurement varies a lot. Do not trust it!`
                 }
@@ -379,8 +383,9 @@
 
             let is_first_bootstrap = true;
             for (let field of fields) {
-                let is_dodgy = Object.keys(data.variance).some(k => {
-                    return k.startsWith(field.name) && data.variance[k].description.type != "Normal";
+                let is_dodgy = Object.keys(data.variance || {}).some(k => {
+                    let variance = data.variance[k];
+                    return k.startsWith(field.name) && variance && variance.description.type != "Normal";
                 });
                 let dodgy = is_dodgy ? dodgy_name_title() : "";
                 if (field.is_bootstrap) {
@@ -423,7 +428,8 @@
                     html += "</tr>";
                     for (let i = 0; i < field.fields.length; i++) {
                         let entry = field.fields[i];
-                        const variance = data.variance[field.name + "-" + entry.casename].description;
+                        const varianceKey = field.name + "-" + entry.casename;
+                        const variance = data.variance && data.variance[varianceKey] && data.variance[varianceKey].description;
                         let dodgy = dodgy_casename_title(field.name, entry.casename, variance);
                         html += "<tr>";
                         html += "<td>" + entry.casename + "</td>";
