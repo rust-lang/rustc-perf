@@ -10,21 +10,18 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <style>
         ul li {
-            position: relative;
-            padding-top: 0.5em;
+            margin: 0;
         }
 
-        input[type="checkbox"] {
-            position: absolute;
-            top: 0.25em;
-            left: -2em;
+        ul li input {
+            vertical-align: middle;
+            margin: 0 2px;
+
         }
 
-        #settings {
-            border: 2px black;
-            border-style: solid;
-            padding: 14px;
-            border-radius: 10px;
+        .section {
+            display: flex;
+            margin: 4px 0;
         }
 
         #commits {
@@ -35,23 +32,26 @@
 
         .commit-input {
             width: 270px;
-            margin: 10px;
             display: flex;
             flex-direction: column;
         }
 
         .commit-input label {
-            font-size: 18px;
+            font-size: 12px;
             font-weight: bold;
             margin-bottom: 6px;
         }
 
+        #metric {
+            position: relative;
+            height: 40px;
+        }
+
         #stats {
             border-radius: 5px;
-            width: 132px;
-            font-size: 16px;
-            margin: 10px;
-            padding: 3px;
+            width: 200px;
+            font-size: 14px;
+            margin-left: 52px;
         }
 
         #filters-toggle {
@@ -59,37 +59,39 @@
         }
 
         .section-heading {
-            font-size: 22px;
+            font-size: 16px;
         }
 
-        #search-content {
-            margin-top: 16px;
+        .section .section-heading {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
         }
 
         #filters-content .section-heading {
-            font-size: 18px;
-        }
-
-        #filters-content {
-            margin-top: 16px;
+            font-size: 16px;
         }
 
         #filters {
-            padding: 10px;
             border: 1px black;
             border-style: dotted;
             margin: 16px 0px;
             border-radius: 10px;
         }
 
-        #settings input {
-            border-radius: 5px;
-            padding: 10px;
-            font-size: 14px;
+        #filter {
+            margin-left: 52px;
         }
 
-        #filter {
-            margin: 10px 0;
+        input {
+            border-radius: 5px;
+            padding: 4px;
+            font-size: 12px;
+            height: 100%;
+        }
+
+        input[type="checkbox"] {
+            height: auto;
         }
 
         #settings input[type=submit] {
@@ -103,9 +105,20 @@
             font-weight: bold;
         }
 
+        #states-list {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            width: 80%;
+            list-style: none;
+            margin: 0;
+        }
+
         .tooltip {
             position: relative;
             border-radius: 50%;
+            font-size: 12px;
+            margin: 0 -6px;
             border: 1px solid #7d6969;
             width: 16px;
             text-align: center;
@@ -147,44 +160,50 @@
     <br />
     <h1>Comparing <span id="stat-header">instructions:u</span> between <span id="before">???</span> and <span
             id="after">???</span></h1>
-    <form id="settings" action="">
-        <div id="search-toggle" class="section-heading">Compare Other Commits<span id="search-toggle-indicator"></span>
-        </div>
+    <fieldset id="settings">
+        <legend id="search-toggle" class="section-heading">Compare other commits<span
+                id="search-toggle-indicator"></span></legend>
         <div id="search-content">
-            <fieldset id="commits">
-                <legend class="section-heading">Commits</legend>
+            <div id="commits" class="section">
+                <div class="section-heading">Commits</div>
                 <div style="display: flex; width: 100%; justify-content: space-around;">
                     <div class="commit-input">
                         <label for="start-bound">Before</label>
-                        <input width="100em" placeholder="YYYY-MM-DD or Commit SHA" id="start-bound" /><br>
+                        <input width="100em" placeholder="YYYY-MM-DD or Commit SHA" id="start-bound" />
                     </div>
                     <div class="commit-input">
                         <label for="end-bound">After</label>
-                        <input width="100em" placeholder="YYYY-MM-DD or Commit SHA" id="end-bound" /><br>
+                        <input width="100em" placeholder="YYYY-MM-DD or Commit SHA" id="end-bound" />
                     </div>
                 </div>
-            </fieldset>
-            <div id="metric" style="position: relative;height: 60px;">
-                <label class="section-heading" for="stats">Metric</label>
-                <div style="width: 100%; position: absolute; top:0; display: flex; justify-content: center;">
+            </div>
+            <div id="metric" class="section">
+                <div class="section-heading" for="stats">Metric</div>
+                <div style="display: flex; flex-direction: column; justify-content: center;">
                     <select id='stats' name="stat"></select>
                 </div>
             </div>
             <input id="submit" type="submit" value="Submit" onclick="submit_settings(); return false;">
-        </div>
-    </form>
-    <div id="filters">
-        <div id="filters-toggle" class="section-heading">Filters<span id="filters-toggle-indicator"></span></div>
+    </fieldset>
+    </div>
+    <fieldset id="filters">
+        <legend id="filters-toggle" class="section-heading">Filters<span id="filters-toggle-indicator"></span></legend>
         <div id="filters-content" style="display: none;">
-            <div>
+            <div class="section">
                 <div class="section-heading">Filter by benchmark
                 </div>
                 <input id="filter" type="text" /> </p>
             </div>
-            <div>
-                <div class="section-heading">Cache states</div>
-                <p>Most benchmarks have at least 4 cache states for which we collect data:</p>
-                <ul style="display: flex; justify-content: space-around; list-style:none;">
+            <div class="section">
+                <div class="section-heading">
+                    <div>
+                        <span>Cache states</span>
+                        <div class="tooltip">?<span class="tooltiptext">
+                                Most benchmarks have at least 4 cache states for which we collect data
+                        </div>
+                    </div>
+                </div>
+                <ul id="states-list">
                     <li><input type="checkbox" id="build-full" checked /><span class="cache-label">full</span>
                         <div class="tooltip">?<span class="tooltiptext">A
                                 non-incremental full build starting with empty cache</span></div>
@@ -216,7 +235,7 @@
                 </ul>
             </div>
         </div>
-    </div>
+    </fieldset>
     <div id="content" style="display: none; margin-top: 15px"></div>
     <br>
     <div id="as-of"></div>
@@ -229,7 +248,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/msgpack-lite/0.1.26/msgpack.min.js"></script>
     <script src="shared.js"></script>
     <script>
-        function toggle_filters(id, toggle) {
+        function toggleFilters(id, toggle) {
             let styles = document.getElementById(id).style;
             let indicator = document.getElementById(toggle);
             if (styles.display != "none") {
@@ -240,14 +259,14 @@
                 styles.display = "block";
             }
         }
-        toggle_filters("filters-content", "filters-toggle-indicator");
-        toggle_filters("search-content", "search-toggle-indicator");
+        toggleFilters("filters-content", "filters-toggle-indicator");
+        toggleFilters("search-content", "search-toggle-indicator");
 
         document.getElementById("filters-toggle").onclick = (e) => {
-            toggle_filters("filters-content", "filters-toggle-indicator");
+            toggleFilters("filters-content", "filters-toggle-indicator");
         };
         document.getElementById("search-toggle").onclick = (e) => {
-            toggle_filters("search-content", "search-toggle-indicator");
+            toggleFilters("search-content", "search-toggle-indicator");
         };
 
 
