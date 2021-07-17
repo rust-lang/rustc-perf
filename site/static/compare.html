@@ -150,6 +150,7 @@
             opacity: 1;
         }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
 </head>
 
 <body class="container" style="max-width:800px">
@@ -236,7 +237,24 @@
             </div>
         </div>
     </fieldset>
-    <div id="content" style="display: none; margin-top: 15px"></div>
+    <div id="content" style="margin-top: 15px">
+        <div v-if="data">
+            <div v-if="notContinuous">Warning: The start and end are not adjacent!</div>
+            <a v-bind:href="compareLink">compare</a>
+            <a v-if="data.prev" v-bind:href="prevLink">&larr;</a>
+            <div>
+                <span>{{data.a.date}}</span>
+                <span>({{short(data.a)}})</span>
+            </div>
+            <div>
+                <span>{{data.b.date}}</span>
+                <span>({{short(data.b)}})</span>
+            </div>
+        </div>
+        <a v-if="data.next" v-bind:href="nextLink">&rarr;</a>
+        <a v-if="data.a.pr" v-bind:href="prLink(data.a.pr)">#{{data.a.pr}}</a>
+        <a v-if="data.b.pr" v-bind:href="prLink(data.b.pr)">#{{data.b.pr}}</a>
+    </div>
     <br>
     <div id="as-of"></div>
     <a href="https://github.com/rust-lang-nursery/rustc-perf">
@@ -248,6 +266,34 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/msgpack-lite/0.1.26/msgpack.min.js"></script>
     <script src="shared.js"></script>
     <script>
+        let app = new Vue({
+            el: '#content',
+            data: {
+                data: null
+            },
+            computed: {
+                notContinuous: function () {
+                    return !this.data.is_contiguous;
+                },
+                prevLink: function () {
+                    return `/compare.html?start=${this.data.prev}&end=${this.data.a.commit}`;
+                },
+                nextLink: function () {
+                    return `/compare.html?start=${this.data.b.commit}&end=${this.data.next}`;
+                },
+                compareLink: function () {
+                    return `https://github.com/rust-lang/rust/compare/${this.data.a.commit}...${this.data.b.commit}`;
+                }
+            },
+            methods: {
+                short: function (comparison) {
+                    return shortCommit(comparison.commit);
+                },
+                prLink: function (pr) {
+                    return `https://github.com/rust-lang/rust/pull/${pr}`;
+                }
+            }
+        })
         function toggleFilters(id, toggle) {
             let styles = document.getElementById(id).style;
             let indicator = document.getElementById(toggle);
@@ -275,7 +321,7 @@
                 return (i < 10) ? "0" + i : "" + i;
             }
 
-            return `${date.getUTCFullYear()}-${pad_str(date.getUTCMonth() + 1)}-${pad_str(date.getUTCDate())}`;
+            return `${date.getUTCFullYear()} -${pad_str(date.getUTCMonth() + 1)} -${pad_str(date.getUTCDate())} `;
         }
 
         function unique(arr) {
@@ -293,7 +339,7 @@
                     txt = datum.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
                 }
                 if (selfProfileAvailable) {
-                    html += `<a href="/detailed-query.html?commit=${sha}&benchmark=${bench}&run_name=${run}">${txt}</a>`;
+                    html += `< a href = "/detailed-query.html?commit=${sha}&benchmark=${bench}&run_name=${run}" > ${txt}</a > `;
                 } else {
                     html += txt;
                 }
@@ -327,16 +373,21 @@
                 let title = "";
                 let marker = "";
                 if (dodgy) {
-                    title = `title="${dodgy}"`;
+                    title = `title = "${dodgy}"`;
                     marker = dodgy_marker;
                 }
-                return `<span ${klass} ${title}>${pct.toFixed(1)}%${marker}</span>`;
+                return `< span ${klass} ${title}> ${pct.toFixed(1)}% ${marker}</span > `;
             } else {
                 return "<span>-</span>"
             }
         }
 
+        function shortCommit(commit) {
+            return commit.substring(0, 8);
+        }
+
         function populate_data(data) {
+            app.data = data;
             {
                 let filter = document.querySelector("#filter").value;
                 let test_names = unique([
@@ -380,13 +431,13 @@
 
             let html = "";
 
-            html += `<table class="compare" style="font-size: medium !important;">`;
+            html += `< table class="compare" style = "font-size: medium !important;" > `;
             html += "<thead>";
 
             if (!data.is_contiguous) {
-                html += `<tr><td colspan=4 style="text-align:center;">`;
-                html += `<b>Warning</b>: The start and end are not adjacent!`;
-                html += `</td></tr>`;
+                html += `< tr > <td colspan=4 style = "text-align:center;" > `;
+                html += `< b > Warning</b >: The start and end are not adjacent!`;
+                html += `</td ></tr > `;
             }
 
             // Heading: the two dates, and the time and rss percent changes.
@@ -402,23 +453,23 @@
                 let params = new URLSearchParams(window.location.search);
                 params.set("end", params.get("start"));
                 params.set("start", data.prev);
-                prev_link = `<a href="/compare.html?${params.toString()}">&larr;</a> `;
+                prev_link = `< a href = "/compare.html?${params.toString()}" >& larr;</a > `;
             }
             let next_link = "";
             if (data.next) {
                 let params = new URLSearchParams(window.location.search);
                 params.set("start", params.get("end"));
                 params.set("end", data.next);
-                next_link = ` <a href="/compare.html?${params.toString()}">&rarr;</a>`;
+                next_link = ` < a href = "/compare.html?${params.toString()}" >& rarr;</a > `;
             }
             html += "<th>"
                 + prev_link + ""
                 + print_date(new Date(data.a.date))
                 + ` (<a href="https://github.com/rust-lang/rust/commit/${data.a.commit}"
-                >${data.a.commit.substring(0, 8)}</a>)` + "</th>";
+                    >${data.a.commit.substring(0, 8)}</a>)` + "</th>";
             html += "<th>" + print_date(new Date(data.b.date))
                 + ` (<a href="https://github.com/rust-lang/rust/commit/${data.b.commit}"
-                >${data.b.commit.substring(0, 8)}</a>)`
+                    >${data.b.commit.substring(0, 8)}</a>)`
                 + next_link
                 + "</th>";
 
@@ -427,10 +478,12 @@
 
             html += "<tr>";
             html += "<th></th>";
-            html += `<th style="text-align:left;">${data.a.pr ? `<a
-            href="https://github.com/rust-lang/rust/pull/${data.a.pr}">#${data.a.pr}</a>` : ""}</th>`;
-            html += `<th style="text-align:left;">${data.b.pr ? `<a
-            href="https://github.com/rust-lang/rust/pull/${data.b.pr}">#${data.b.pr}</a>` : ""}</th>`;
+            html += `< th style = "text-align:left;" > ${data.a.pr ? `<a
+            href="https://github.com/rust-lang/rust/pull/${data.a.pr}">#${data.a.pr}</a>` : ""
+                }</th > `;
+            html += `< th style = "text-align:left;" > ${data.b.pr ? `<a
+            href="https://github.com/rust-lang/rust/pull/${data.b.pr}">#${data.b.pr}</a>` : ""
+                }</th > `;
             html += "</tr>";
 
             html += "</thead>";
@@ -564,10 +617,10 @@
                 }
 
                 if (variance.type == "HighlyVariable") {
-                    return `This measurement varies a lot. Do not trust it!`
+                    return `This measurement varies a lot.Do not trust it!`
                 }
                 if (variance.type == "Noisy") {
-                    return `This measurement is noisy. Do not trust it!`
+                    return `This measurement is noisy.Do not trust it!`
                 }
                 return "";
             }
@@ -586,32 +639,32 @@
                         is_first_bootstrap = false;
 
                         html += "<tr data-field-start=true>";
-                        html += `<th style="width: ${max_name_width / 2}em;" data-js-name=Total>` + truncate_name("total") + "</th>";
+                        html += `< th style = "width: ${max_name_width / 2}em;" data - js - name=Total > ` + truncate_name("total") + "</th>";
                         let sum = (acc, value) => acc + value;
                         let a_total = fields.filter(f => f.is_bootstrap).map(f => f.fields[0].datum_a).reduce(sum);
                         let b_total = fields.filter(f => f.is_bootstrap).map(f => f.fields[0].datum_b).reduce(sum);
                         html += add_datum_fields(a_total, data.a.commit, "Total", "", false);
                         html += add_datum_fields(b_total, data.b.commit, "Total", "", false);
                         let pct = add_percent(percent_chg(a_total, b_total), dodgy, "??");
-                        html += `<td>${pct}</td>`;
+                        html += `< td > ${pct}</td > `;
                         html += "</tr>";
                     }
                     html += "<tr data-field-start=true>";
-                    html += `<th style="width: ${max_name_width / 2}em;" data-js-name=${field.name}>` + truncate_name(field.name) + "</th>";
+                    html += `< th style = "width: ${max_name_width / 2}em;" data - js - name=${field.name}> ` + truncate_name(field.name) + "</th>";
                     let entry = field.fields[0];
                     html += add_datum_fields(entry.datum_a, data.a.commit,
                         field.name, entry.casename, false);
                     html += add_datum_fields(entry.datum_b, data.b.commit,
                         field.name, entry.casename, false);
                     let pct = add_percent(entry.percent, dodgy, "??");
-                    html += `<td>${pct}</td>`;
+                    html += `< td > ${pct}</td > `;
                     html += "</tr>";
                 } else {
                     html += "<tr><td>&nbsp;</td></tr>";
                     html += "<tr data-field-start=true>";
-                    html += `<th style="width: ${max_name_width / 2}em;" data-js-name=${field.name}>` +
-                        `<details class=toggle-table><summary>` +
-                        truncate_name(field.name) + "</summary></details></th>";
+                    html += `< th style = "width: ${max_name_width / 2}em;" data - js - name=${field.name}> ` +
+                        `< details class=toggle - table > <summary>` +
+                        truncate_name(field.name) + "</summary></details ></th > ";
                     html += "<td> avg: " + add_percent(field.avg_pct, dodgy, "?") + "</td>";
                     html += "<td text-align=center> min: " + add_percent(field.min_pct, dodgy, "?") +
                         "</td>";
@@ -640,8 +693,8 @@
 
             html += "</table>";
 
-            document.getElementById("content").innerHTML = html;
-            document.getElementById("content").style.display = "block";
+            // document.getElementById("content").innerHTML = html;
+            // document.getElementById("content").style.display = "block";
             for (let element of document.querySelectorAll(".toggle-table")) {
                 let name = element.parentElement.getAttribute("data-js-name");
                 let in_body = [];
