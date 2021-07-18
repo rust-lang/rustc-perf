@@ -159,153 +159,163 @@
         <a href="status.html">status</a>, <a href="help.html">help</a>.
     </div>
     <br />
-    <h1>Comparing <span id="stat-header">instructions:u</span> between <span id="before">???</span> and <span
-            id="after">???</span></h1>
-    <fieldset id="settings">
-        <legend id="search-toggle" class="section-heading">Do another comparison<span
-                id="search-toggle-indicator"></span></legend>
-        <div id="search-content">
-            <div id="commits" class="section">
-                <div class="section-heading">Commits</div>
-                <div style="display: flex; width: 100%; justify-content: space-around;">
-                    <div class="commit-input">
-                        <label for="start-bound">Before</label>
-                        <input width="100em" placeholder="YYYY-MM-DD or Commit SHA" id="start-bound" />
-                    </div>
-                    <div class="commit-input">
-                        <label for="end-bound">After</label>
-                        <input width="100em" placeholder="YYYY-MM-DD or Commit SHA" id="end-bound" />
-                    </div>
-                </div>
-            </div>
-            <div id="metric" class="section">
-                <div class="section-heading" for="stats">Metric</div>
-                <div style="display: flex; flex-direction: column; justify-content: center;">
-                    <select id='stats' name="stat"></select>
-                </div>
-            </div>
-            <input id="submit" type="submit" value="Submit" onclick="submit_settings(); return false;">
-    </fieldset>
-    </div>
-    <fieldset id="filters">
-        <legend id="filters-toggle" class="section-heading">Filters<span id="filters-toggle-indicator"></span></legend>
-        <div id="filters-content" style="display: none;">
-            <div class="section">
-                <div class="section-heading">Filter by benchmark
-                </div>
-                <input id="filter" type="text" /> </p>
-            </div>
-            <div class="section">
-                <div class="section-heading">
-                    <div>
-                        <span>Cache states</span>
-                        <div class="tooltip">?<span class="tooltiptext">
-                                Most benchmarks have at least 4 cache states for which we collect data
+    <div id="app">
+        <h1>Comparing <span id="stat-header">instructions:u</span> between <span id="before">???</span> and <span
+                id="after">???</span></h1>
+        <fieldset id="settings">
+            <legend id="search-toggle" class="section-heading">Do another comparison<span
+                    id="search-toggle-indicator"></span></legend>
+            <div id="search-content">
+                <div id="commits" class="section">
+                    <div class="section-heading">Commits</div>
+                    <div style="display: flex; width: 100%; justify-content: space-around;">
+                        <div class="commit-input">
+                            <label for="start-bound">Before</label>
+                            <input width="100em" placeholder="YYYY-MM-DD or Commit SHA" id="start-bound" />
+                        </div>
+                        <div class="commit-input">
+                            <label for="end-bound">After</label>
+                            <input width="100em" placeholder="YYYY-MM-DD or Commit SHA" id="end-bound" />
                         </div>
                     </div>
                 </div>
-                <ul id="states-list">
-                    <li><input type="checkbox" id="build-full" checked /><span class="cache-label">full</span>
-                        <div class="tooltip">?<span class="tooltiptext">A
-                                non-incremental full build starting with empty cache</span></div>
-                    </li>
-                    <li><input type="checkbox" id="build-incremental-full" checked /> <span
-                            class="cache-label">incr-full</span>
-                        <div class="tooltip">?<span class="tooltiptext">An incremental build
-                                starting
-                                with empty cache
-                            </span></div>
-                    </li>
-                    <li><input type="checkbox" id="build-incremental-unchanged" checked /> <span
-                            class="cache-label">incr-unchanged</span>
-                        <div class="tooltip">?<span class="tooltiptext">An
-                                incremental
-                                build
-                                starting with complete
-                                cache, and unchanged source directory -- the "perfect" scenario for incremental.</span>
+                <div id="metric" class="section">
+                    <div class="section-heading" for="stats">Metric</div>
+                    <div style="display: flex; flex-direction: column; justify-content: center;">
+                        <select id='stats' name="stat"></select>
+                    </div>
+                </div>
+                <input id="submit" type="submit" value="Submit" onclick="submit_settings(); return false;">
+        </fieldset>
+        <fieldset id="filters">
+            <legend id="filters-toggle" class="section-heading">Filters<span id="filters-toggle-indicator"></span>
+            </legend>
+            <div id="filters-content" style="display: none;">
+                <div class="section">
+                    <div class="section-heading">Filter by benchmark
+                    </div>
+                    <input id="filter" type="text" v-model="filter.name" /> </p>
+                </div>
+                <div class=" section">
+                    <div class="section-heading">
+                        <div>
+                            <span>Cache states</span>
+                            <div class="tooltip">?<span class="tooltiptext">
+                                    Most benchmarks have at least 4 cache states for which we collect data
+                            </div>
                         </div>
-                    </li>
-                    <li><input type="checkbox" id="build-incremental-patched" checked /><span
-                            class="cache-label">incr-patched</span>
-                        <div class="tooltip">?<span class="tooltiptext">An incremental
-                                build
-                                starting with complete cache, and an
-                                altered source directory. The typical variant of this is "println" which represents
-                                the addition of a `println!` macro somewhere in the source code.</span></div>
-                    </li>
-                </ul>
+                    </div>
+                    <ul id="states-list">
+                        <li><input type="checkbox" id="build-full" v-model="filter.cache.full" /><span
+                                class="cache-label">full</span>
+                            <div class="tooltip">?<span class="tooltiptext">A
+                                    non-incremental full build starting with empty cache</span></div>
+                        </li>
+                        <li><input type="checkbox" id="build-incremental-full" v-model="filter.cache.incrFull" /> <span
+                                class="cache-label">incr-full</span>
+                            <div class="tooltip">?<span class="tooltiptext">An incremental build
+                                    starting
+                                    with empty cache
+                                </span></div>
+                        </li>
+                        <li><input type="checkbox" id="build-incremental-unchanged"
+                                v-model="filter.cache.incrUnchanged" />
+                            <span class="cache-label">incr-unchanged</span>
+                            <div class="tooltip">?<span class="tooltiptext">An
+                                    incremental
+                                    build
+                                    starting with complete
+                                    cache, and unchanged source directory -- the "perfect" scenario for
+                                    incremental.</span>
+                            </div>
+                        </li>
+                        <li><input type="checkbox" id="build-incremental-patched"
+                                v-model="filter.cache.incrPatched" /><span class="cache-label">incr-patched</span>
+                            <div class="tooltip">?<span class="tooltiptext">An incremental
+                                    build
+                                    starting with complete cache, and an
+                                    altered source directory. The typical variant of this is "println" which represents
+                                    the addition of a `println!` macro somewhere in the source code.</span></div>
+                        </li>
+                    </ul>
+                </div>
             </div>
-        </div>
-    </fieldset>
-    <div id="content" style="margin-top: 15px">
-        <table v-if="data" class="compare" style="font-size: medium !important;">
-            <thead>
-                <tr>
-                    <td v-if="notContinuous" colspan="4" style="text-align:center;"><b>Warning</b>: The start and end
-                        are not adjacent!</td>
-                </tr>
-                <tr>
-                    <th>
-                        <a v-bind:href="compareLink">compare</a>
-                    </th>
-                    <th>
-                        <a v-if="data.prev" v-bind:href="prevLink">&larr;</a>
-                        {{formatDate(data.a.date)}}
-                        (<a>{{short(data.a)}}</a>)
-                    </th>
-                    <th>
-                        {{formatDate(data.b.date)}}
-                        (<a>{{short(data.b)}}</a>)
-                        <a v-if="data.next" v-bind:href="nextLink">&rarr;</a>
-                    </th>
-                    <th>% change</th>
-                </tr>
-                <tr>
-                    <th></th>
-                    <th style="text-align: left;"><a v-if="data.a.pr" v-bind:href="prLink(data.a.pr)">#{{data.a.pr}}</a>
-                    </th>
-                    <th style="text-align: left;"><a v-if="data.b.pr" v-bind:href="prLink(data.b.pr)">#{{data.b.pr}}</a>
-                    </th>
-                </tr>
-            </thead>
-            <tbody>
-                <template v-for="bench in benches">
-                    <tr data-field-start="true">
-                        <th>
-                            <details class="toggle-table" v-on:toggle="benchGroupToggle">
-                                <summary>{{ trimBenchName(bench.name) }}</summary>
-                            </details>
-                        </th>
-                        <td>avg: <span v-bind:class="percentClass(bench.avg_pct)">{{bench.avg_pct}}</span></td>
-                        <td>min: <span v-bind:class="percentClass(bench.min_pct)">{{bench.min_pct}}</span></td>
-                        <td>max: <span
-                                v-bind:class="percentClass(bench.max_pct)">{{bench.max_pct}}%{{isDodgyBench(bench)
-                                ? "?" : ""}}</span></td>
+        </fieldset>
+        <div id="content" style="margin-top: 15px">
+            <table v-if="data" class="compare" style="font-size: medium !important;">
+                <thead>
+                    <tr>
+                        <td v-if="notContinuous" colspan="4" style="text-align:center;"><b>Warning</b>: The start and
+                            end
+                            are not adjacent!</td>
                     </tr>
-                    <template v-for="run in bench.fields">
-                        <tr>
-                            <td>{{ run.casename }}</td>
-                            <td>
-                                <a v-bind:href="detailedQueryLink(data.a.commit, bench.name, run.casename)">
-                                    {{ run.datum_a }}
-                                </a>
-                            </td>
-                            <td>
-                                <a v-bind:href="detailedQueryLink(data.b.commit, bench.name, run.casename)">
-                                    {{ run.datum_b }}
-                                </a>
-                            </td>
-                            <td>
-                                <a v-bind:href="percentLink(data.b.commit, data.a.commit, bench.name, run.casename)">
-                                    <span v-bind:class="percentClass(run.percent)">{{ run.percent }}%{{run.isDodgy ? "?"
-                                        : ""}}</span>
-                                </a>
-                            </td>
+                    <tr>
+                        <th>
+                            <a v-bind:href="compareLink">compare</a>
+                        </th>
+                        <th>
+                            <a v-if="data.prev" v-bind:href="prevLink">&larr;</a>
+                            {{formatDate(data.a.date)}}
+                            (<a>{{short(data.a)}}</a>)
+                        </th>
+                        <th>
+                            {{formatDate(data.b.date)}}
+                            (<a>{{short(data.b)}}</a>)
+                            <a v-if="data.next" v-bind:href="nextLink">&rarr;</a>
+                        </th>
+                        <th>% change</th>
+                    </tr>
+                    <tr>
+                        <th></th>
+                        <th style="text-align: left;"><a v-if="data.a.pr"
+                                v-bind:href="prLink(data.a.pr)">#{{data.a.pr}}</a>
+                        </th>
+                        <th style="text-align: left;"><a v-if="data.b.pr"
+                                v-bind:href="prLink(data.b.pr)">#{{data.b.pr}}</a>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template v-for="bench in benches">
+                        <tr data-field-start="true">
+                            <th>
+                                <details class="toggle-table" v-on:toggle="benchGroupToggle">
+                                    <summary>{{ trimBenchName(bench.name) }}</summary>
+                                </details>
+                            </th>
+                            <td>avg: <span v-bind:class="percentClass(bench.avg_pct)">{{bench.avg_pct}}</span></td>
+                            <td>min: <span v-bind:class="percentClass(bench.min_pct)">{{bench.min_pct}}</span></td>
+                            <td>max: <span
+                                    v-bind:class="percentClass(bench.max_pct)">{{bench.max_pct}}%{{isDodgyBench(bench)
+                                    ? "?" : ""}}</span></td>
                         </tr>
+                        <template v-for="run in bench.fields">
+                            <tr>
+                                <td>{{ run.casename }}</td>
+                                <td>
+                                    <a v-bind:href="detailedQueryLink(data.a.commit, bench.name, run.casename)">
+                                        {{ run.datum_a }}
+                                    </a>
+                                </td>
+                                <td>
+                                    <a v-bind:href="detailedQueryLink(data.b.commit, bench.name, run.casename)">
+                                        {{ run.datum_b }}
+                                    </a>
+                                </td>
+                                <td>
+                                    <a
+                                        v-bind:href="percentLink(data.b.commit, data.a.commit, bench.name, run.casename)">
+                                        <span v-bind:class="percentClass(run.percent)">{{ run.percent }}%{{run.isDodgy ?
+                                            "?"
+                                            : ""}}</span>
+                                    </a>
+                                </td>
+                            </tr>
+                        </template>
                     </template>
-                </template>
-            </tbody>
-        </table>
+                </tbody>
+            </table>
+        </div>
     </div>
     <br>
     <div id="as-of"></div>
@@ -319,8 +329,17 @@
     <script src="shared.js"></script>
     <script>
         let app = new Vue({
-            el: '#content',
+            el: '#app',
             data: {
+                filter: {
+                    name: null,
+                    cache: {
+                        full: true,
+                        incrFull: true,
+                        incrUnchanged: true,
+                        incrPatched: true
+                    }
+                },
                 data: null
             },
             computed: {
@@ -338,16 +357,17 @@
                 },
                 benches: function () {
                     let data = this.data;
+                    const filter = this.filter;
 
                     function shouldShowBuild(name) {
-                        if (name == "full") {
-                            return document.querySelector("#build-full").checked;
-                        } else if (name == "incr-full") {
-                            return document.querySelector("#build-incremental-full").checked;
-                        } else if (name == "incr-unchanged") {
-                            return document.querySelector("#build-incremental-unchanged").checked;
+                        if (name === "full") {
+                            return filter.cache.full;
+                        } else if (name === "incr-full") {
+                            return filter.cache.incrFull;
+                        } else if (name === "incr-unchanged") {
+                            return filter.cache.incrUnchanged;
                         } else if (name.startsWith("incr-patched")) {
-                            return document.querySelector("#build-incremental-patched").checked;
+                            return filter.cache.incrPatched;
                         } else {
                             // Unknown, but by default we should show things
                             return true;
@@ -430,7 +450,7 @@
                         // ...bootstrap_names
                         //     .map(name => name)
                         //     .map(name => ({ name, is_bootstrap: true, fields: to_fields_bootstrap(name) })),
-                        ...test_names.map(name => { return { name, fields: to_fields(name) } })
+                        ...test_names.filter(n => filter.name && filter.name.trim() ? n.includes(filter.name.trim()) : true).map(name => { return { name, fields: to_fields(name) } }).filter(b => b.fields.length > 0)
                     ];
 
                     for (let field of fields) {
@@ -505,7 +525,7 @@
                 },
                 isDodgyBench(bench) {
                     return bench.fields.some(f => f.isDodgy);
-                }
+                },
             },
             watch: {
                 data: function (newVal, oldVal) {
@@ -1001,17 +1021,6 @@
         }
 
         load_state(make_data);
-
-        function rerender() {
-            populate_data(DATA);
-        }
-
-        document.querySelector("#filter").addEventListener("change", rerender);
-        document.querySelector("#build-full").addEventListener("change", rerender);
-        document.querySelector("#build-incremental-full").addEventListener("change", rerender);
-        document.querySelector("#build-incremental-unchanged").addEventListener("change", rerender);
-        document.querySelector("#build-incremental-patched").addEventListener("change", rerender);
-
     </script>
 </body>
 
