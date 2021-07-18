@@ -21,7 +21,7 @@
 
         .section {
             display: flex;
-            margin: 4px 0;
+            margin: 10px 0;
         }
 
         #commits {
@@ -62,12 +62,6 @@
             font-size: 16px;
         }
 
-        .section .section-heading {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-        }
-
         #filters-content .section-heading {
             font-size: 16px;
         }
@@ -85,7 +79,6 @@
 
         input {
             border-radius: 5px;
-            padding: 4px;
             font-size: 12px;
             height: 100%;
         }
@@ -98,7 +91,6 @@
             width: 100%;
             font-weight: bold;
             background: #ADD8E6;
-            margin: 10px 0;
         }
 
         .cache-label {
@@ -194,15 +186,15 @@
                 <div class="section">
                     <div class="section-heading">Filter by benchmark
                     </div>
-                    <input id="filter" type="text" v-model="filter.name" /> </p>
+                    <input id="filter" type="text" v-model="filter.name" />
                 </div>
                 <div class=" section">
                     <div class="section-heading">
-                        <div>
+                        <div style="width: 160px;">
                             <span>Cache states</span>
-                            <div class="tooltip">?<span class="tooltiptext">
-                                    Most benchmarks have at least 4 cache states for which we collect data
-                            </div>
+                            <span class="tooltip">?<span class="tooltiptext">
+                                    Most benchmarks have at least 4 cache states for which we collect data</span>
+                            </span>
                         </div>
                     </div>
                     <ul id="states-list">
@@ -238,6 +230,16 @@
                                     the addition of a `println!` macro somewhere in the source code.</span></div>
                         </li>
                     </ul>
+                </div>
+                <div class="section">
+                    <div class="section-heading"><span>Show only significant changes</span>
+                        <span class="tooltip">?
+                            <span class="tooltiptext">
+                                Whether to filter out all benchmarks that do not show significant changes.
+                            </span>
+                        </span>
+                    </div>
+                    <input type="checkbox" v-model="filter.showOnlySignificant" style="margin-left: 20px;" />
                 </div>
             </div>
         </fieldset>
@@ -305,9 +307,9 @@
                                 <td>
                                     <a
                                         v-bind:href="percentLink(data.b.commit, data.a.commit, bench.name, run.casename)">
-                                        <span v-bind:class="percentClass(run.percent)">{{ run.percent }}%{{run.isDodgy ?
-                                            "?"
-                                            : ""}}</span>
+                                        <span v-bind:class="percentClass(run.percent)">
+                                            {{ run.percent }}%{{run.isDodgy ? "?" : ""}}
+                                        </span>
                                     </a>
                                 </td>
                             </tr>
@@ -316,7 +318,7 @@
                 </tbody>
             </table>
             <br />
-            <table class="compare" v-if="data && data.a.bootstrap">
+            <table class="compare" v-if="data && data.a.bootstrap.length > 0">
                 <tr>
                     <td colspan="4">bootstrap timings; variance is 1-3% on smaller benchmarks! Values in seconds.</td>
                 </tr>
@@ -354,6 +356,7 @@
             data: {
                 filter: {
                     name: null,
+                    showOnlySignificant: true,
                     cache: {
                         full: true,
                         incrFull: true,
@@ -423,19 +426,26 @@
                     let benches =
                         Object.keys(data.a.data).
                             filter(n => filter.name && filter.name.trim() ? n.includes(filter.name.trim()) : true).
-                            map(name => { return { name, variants: toVariants(name) } }).filter(b => b.variants.length > 0);
+                            map(name => {
+                                const variants = toVariants(name).filter(v => filter.showOnlySignificant ? isSignificant(v) : true);
+                                const pcts = variants.map(field => parseFloat(field.percent));
+                                const maxPct = Math.max(...pcts).toFixed(1);
+                                const minPct = Math.min(...pcts).toFixed(1);
+                                const sum = pcts.reduce((a, b) => a + b, 0);
+                                const avgPct = (sum / pcts.length).toFixed(1);
+                                const maxCasenameLen = Math.max(...variants.map(f => f.casename.length));
+                                return {
+                                    name,
+                                    variants,
+                                    maxPct,
+                                    minPct,
+                                    avgPct,
+                                    maxCasenameLen,
+                                };
+                            }).
+                            filter(b => b.variants.length > 0);
 
-                    for (let bench of benches) {
-                        let pcts = bench.variants.map(field => parseFloat(field.percent))
-                            .filter(p => p != undefined && p != null);
-                        bench.maxPct = Math.max(...pcts).toFixed(1);
-                        bench.minPct = Math.min(...pcts).toFixed(1);
-                        let sum = pcts.reduce((a, b) => a + b, 0);
-                        bench.avgPct = (sum / pcts.length).toFixed(1);
-                        bench.maxCasenameLen = Math.max(...bench.variants.map(f => f.casename.length));
-                    }
                     const largestChange = a => Math.max(Math.abs(a.minPct), Math.abs(a.maxPct));
-
                     benches.sort((a, b) => largestChange(b) - largestChange(a));
 
                     return benches;
@@ -525,6 +535,16 @@
                 }
             }
         });
+
+        function isSignificant(variant) {
+            const percent = Math.abs(variant.percent);
+            if (variant.isDodgy) {
+                return percent > 1.0;
+            } else {
+                return percent > 0.2;
+            }
+
+        }
 
         function toggleBenchGroup(element) {
             let next = element.parentElement.parentElement.nextElementSibling;
