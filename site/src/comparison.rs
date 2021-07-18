@@ -473,6 +473,9 @@ pub struct BenchmarkVariances {
 }
 
 impl BenchmarkVariances {
+    const NUM_PREVIOUS_COMMITS: usize = 100;
+    const MIN_PREVIOUS_COMMITS: usize = 50;
+
     async fn calculate(
         ctxt: &SiteCtxt,
         from: ArtifactId,
@@ -486,11 +489,11 @@ impl BenchmarkVariances {
             .set::<String>(Tag::Profile, selector::Selector::All)
             .set(Tag::ProcessStatistic, selector::Selector::One(stat));
 
-        let num_commits = 100;
-        let previous_commits = Arc::new(previous_commits(from, num_commits, master_commits));
-        if previous_commits.len() < num_commits {
-            return Ok(None);
-        }
+        let previous_commits = Arc::new(previous_commits(
+            from,
+            Self::NUM_PREVIOUS_COMMITS,
+            master_commits,
+        ));
         let mut previous_commit_series = ctxt
             .query::<Option<f64>>(query, previous_commits.clone())
             .await?;
@@ -506,6 +509,9 @@ impl BenchmarkVariances {
                         .push(val);
                 }
             }
+        }
+        if variance_data.len() < Self::MIN_PREVIOUS_COMMITS {
+            return Ok(None);
         }
 
         for (bench, results) in variance_data.iter_mut() {
