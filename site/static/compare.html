@@ -238,59 +238,74 @@
         </div>
     </fieldset>
     <div id="content" style="margin-top: 15px">
-        <div v-if="data">
-            <div v-if="notContinuous">Warning: The start and end are not adjacent!</div>
-            <a v-bind:href="compareLink">compare</a>
-            <a v-if="data.prev" v-bind:href="prevLink">&larr;</a>
-            <div>
-                <span>{{data.a.date}}</span>
-                <span>({{short(data.a)}})</span>
-            </div>
-            <div>
-                <span>{{data.b.date}}</span>
-                <span>({{short(data.b)}})</span>
-            </div>
-            <a v-if="data.next" v-bind:href="nextLink">&rarr;</a>
-            <a v-if="data.a.pr" v-bind:href="prLink(data.a.pr)">#{{data.a.pr}}</a>
-            <a v-if="data.b.pr" v-bind:href="prLink(data.b.pr)">#{{data.b.pr}}</a>
-            <table class="compare" style="font-size: medium !important;">
-                <tbody>
-                    <template v-for="bench in benches">
-                        <tr data-field-start="true">
-                            <th style="width: 19em;">
-                                <details class="toggle-table" v-on:toggle="benchGroupToggle">
-                                    <summary>{{ bench.name }}</summary>
-                                </details>
-                            </th>
-                            <td>avg: <span>??</span></td>
-                            <td>min: <span>??</span></td>
-                            <td>max: <span>??</span></td>
+        <table v-if="data" class="compare" style="font-size: medium !important;">
+            <thead>
+                <tr>
+                    <td v-if="notContinuous" colspan="4" style="text-align:center;"><b>Warning</b>: The start and end
+                        are not adjacent!</td>
+                </tr>
+                <tr>
+                    <th>
+                        <a v-bind:href="compareLink">compare</a>
+                    </th>
+                    <th>
+                        <a v-if="data.prev" v-bind:href="prevLink">&larr;</a>
+                        {{formatDate(data.a.date)}}
+                        (<a>{{short(data.a)}}</a>)
+                    </th>
+                    <th>
+                        {{formatDate(data.b.date)}}
+                        (<a>{{short(data.b)}}</a>)
+                        <a v-if="data.next" v-bind:href="nextLink">&rarr;</a>
+                    </th>
+                    <th>% change</th>
+                </tr>
+                <tr>
+                    <th></th>
+                    <th style="text-align: left;"><a v-if="data.a.pr" v-bind:href="prLink(data.a.pr)">#{{data.a.pr}}</a>
+                    </th>
+                    <th style="text-align: left;"><a v-if="data.b.pr" v-bind:href="prLink(data.b.pr)">#{{data.b.pr}}</a>
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                <template v-for="bench in benches">
+                    <tr data-field-start="true">
+                        <th>
+                            <details class="toggle-table" v-on:toggle="benchGroupToggle">
+                                <summary>{{ trimBenchName(bench.name) }}</summary>
+                            </details>
+                        </th>
+                        <td>avg: <span v-bind:class="percentClass(bench.avg_pct)">{{bench.avg_pct}}</span></td>
+                        <td>min: <span v-bind:class="percentClass(bench.min_pct)">{{bench.min_pct}}</span></td>
+                        <td>max: <span
+                                v-bind:class="percentClass(bench.max_pct)">{{bench.max_pct}}%{{isDodgyBench(bench)
+                                ? "?" : ""}}</span></td>
+                    </tr>
+                    <template v-for="run in bench.fields">
+                        <tr>
+                            <td>{{ run.casename }}</td>
+                            <td>
+                                <a v-bind:href="detailedQueryLink(data.a.commit, bench.name, run.casename)">
+                                    {{ run.datum_a }}
+                                </a>
+                            </td>
+                            <td>
+                                <a v-bind:href="detailedQueryLink(data.b.commit, bench.name, run.casename)">
+                                    {{ run.datum_b }}
+                                </a>
+                            </td>
+                            <td>
+                                <a v-bind:href="percentLink(data.b.commit, data.a.commit, bench.name, run.casename)">
+                                    <span v-bind:class="percentClass(run.percent)">{{ run.percent }}%{{run.isDodgy ? "?"
+                                        : ""}}</span>
+                                </a>
+                            </td>
                         </tr>
-                        <template v-for="run in bench.fields">
-                            <tr>
-                                <td>{{ run.casename }}</td>
-                                <td>
-                                    <a v-bind:href="detailedQueryLink(data.a.commit, bench.name, run.casename)">
-                                        {{ run.datum_a }}
-                                    </a>
-                                </td>
-                                <td>
-                                    <a v-bind:href="detailedQueryLink(data.b.commit, bench.name, run.casename)">
-                                        {{ run.datum_b }}
-                                    </a>
-                                </td>
-                                <td>
-                                    <a v-bind:class="percentClass(run.percent)"
-                                        v-bind:href="percentLink(data.b.commit, data.a.commit, bench.name, run.casename)">
-                                        {{ run.percent }}%
-                                    </a>
-                                </td>
-                            </tr>
-                        </template>
                     </template>
-                </tbody>
-            </table>
-        </div>
+                </template>
+            </tbody>
+        </table>
     </div>
     <br>
     <div id="as-of"></div>
@@ -323,7 +338,6 @@
                 },
                 benches: function () {
                     let data = this.data;
-
 
                     function shouldShowBuild(name) {
                         if (name == "full") {
@@ -383,18 +397,26 @@
                             } else {
                                 // should be unreachable
                             }
+
+                            let isDodgy = false;
+                            if (data.variance) {
+                                let variance = data.variance[name + "-" + key];
+                                isDodgy = !!(variance && variance.description && variance.description.type != "Normal");
+                            }
                             if (shouldShowBuild(key)) {
                                 fields.push({
                                     casename: key,
                                     datum_a,
                                     datum_b,
                                     percent: percent_chg(datum_a, datum_b).toFixed(1),
+                                    isDodgy,
                                 });
                             }
                         }
 
                         return fields;
                     }
+
                     let test_names = unique([
                         ...Object.keys(data.a.data),
                         ...Object.keys(data.b.data),
@@ -410,6 +432,32 @@
                         //     .map(name => ({ name, is_bootstrap: true, fields: to_fields_bootstrap(name) })),
                         ...test_names.map(name => { return { name, fields: to_fields(name) } })
                     ];
+
+                    for (let field of fields) {
+                        let pcts = field.fields.map(field => parseFloat(field.percent))
+                            .filter(p => p != undefined && p != null);
+                        field.max_pct = Math.max(...pcts).toFixed(1);
+                        field.min_pct = Math.min(...pcts).toFixed(1);
+                        field.farthest_pct = Math.max(...pcts.map(p => Math.abs(p)));
+                        let sum = pcts.reduce((a, b) => a + b, 0);
+                        let avg = sum / pcts.length;
+                        field.avg_pct = avg.toFixed(1);
+                        field.max_casename_len = Math.max(...field.fields.map(f => f.casename.length));
+                    }
+
+                    fields.sort((a, b) => {
+                        if (a.is_bootstrap == b.is_bootstrap) {
+                            return b.farthest_pct - a.farthest_pct;
+                        }
+                        else {
+                            if (a.is_bootstrap) {
+                                return 1;
+                            }
+                            else {
+                                return -1;
+                            }
+                        }
+                    });
                     return fields;
                 }
             },
@@ -442,9 +490,22 @@
                 },
                 benchGroupToggle(e) {
                     const element = e.target;
-                    toggleBenchGroup(element)
-                }
+                    toggleBenchGroup(element);
+                },
+                formatDate(date) {
+                    return print_date(new Date(date));
+                },
+                trimBenchName(name) {
+                    let result = name.substring(0, 25)
+                    if (result != name) {
+                        result = result + "...";
 
+                    }
+                    return result;
+                },
+                isDodgyBench(bench) {
+                    return bench.fields.some(f => f.isDodgy);
+                }
             },
             watch: {
                 data: function (newVal, oldVal) {
@@ -497,7 +558,7 @@
                 return (i < 10) ? "0" + i : "" + i;
             }
 
-            return `${date.getUTCFullYear()} -${pad_str(date.getUTCMonth() + 1)} -${pad_str(date.getUTCDate())} `;
+            return `${date.getUTCFullYear()}-${pad_str(date.getUTCMonth() + 1)}-${pad_str(date.getUTCDate())} `;
         }
 
         function unique(arr) {
