@@ -253,23 +253,43 @@
             <a v-if="data.next" v-bind:href="nextLink">&rarr;</a>
             <a v-if="data.a.pr" v-bind:href="prLink(data.a.pr)">#{{data.a.pr}}</a>
             <a v-if="data.b.pr" v-bind:href="prLink(data.b.pr)">#{{data.b.pr}}</a>
-            <div v-for="bench in benches">
-                <div>
-                    <div>
-                        {{ bench.name }} ({{bench.casename}})
-                    </div>
-                    <a v-bind:href="detailedQueryLink(data.a.commit, bench.name, bench.casename)">
-                        {{ bench.datum_a }}
-                    </a>
-                    <a v-bind:href="detailedQueryLink(data.b.commit, bench.name, bench.casename)">
-                        {{ bench.datum_b }}
-                    </a>
-                    <a v-bind:class="percentClass(bench.percent)"
-                        v-bind:href="percentLink(data.b.commit, data.a.commit, bench.name, bench.casename)">
-                        {{ bench.percent }} %
-                    </a>
-                </div>
-            </div>
+            <table class="compare" style="font-size: medium !important;">
+                <tbody>
+                    <template v-for="bench in benches">
+                        <tr data-field-start="true">
+                            <th style="width: 19em;">
+                                <details class="toggle-table" v-on:toggle="benchGroupToggle">
+                                    <summary>{{ bench.name }}</summary>
+                                </details>
+                            </th>
+                            <td>avg: <span>??</span></td>
+                            <td>min: <span>??</span></td>
+                            <td>max: <span>??</span></td>
+                        </tr>
+                        <template v-for="run in bench.fields">
+                            <tr>
+                                <td>{{ run.casename }}</td>
+                                <td>
+                                    <a v-bind:href="detailedQueryLink(data.a.commit, bench.name, run.casename)">
+                                        {{ run.datum_a }}
+                                    </a>
+                                </td>
+                                <td>
+                                    <a v-bind:href="detailedQueryLink(data.b.commit, bench.name, run.casename)">
+                                        {{ run.datum_b }}
+                                    </a>
+                                </td>
+                                <td>
+                                    <a v-bind:class="percentClass(run.percent)"
+                                        v-bind:href="percentLink(data.b.commit, data.a.commit, bench.name, run.casename)">
+                                        {{ run.percent }}%
+                                    </a>
+                                </td>
+                            </tr>
+                        </template>
+                    </template>
+                </tbody>
+            </table>
         </div>
     </div>
     <br>
@@ -365,7 +385,6 @@
                             }
                             if (shouldShowBuild(key)) {
                                 fields.push({
-                                    name,
                                     casename: key,
                                     datum_a,
                                     datum_b,
@@ -389,7 +408,7 @@
                         // ...bootstrap_names
                         //     .map(name => name)
                         //     .map(name => ({ name, is_bootstrap: true, fields: to_fields_bootstrap(name) })),
-                        ...test_names.map(name => to_fields(name)).flat()
+                        ...test_names.map(name => { return { name, fields: to_fields(name) } })
                     ];
                     return fields;
                 }
@@ -420,10 +439,37 @@
                 },
                 percentLink(commit, baseCommit, bench, run) {
                     return `/detailed-query.html?commit=${commit}&base_commit=${baseCommit}&benchmark=${bench}&run_name=${run}`;
+                },
+                benchGroupToggle(e) {
+                    const element = e.target;
+                    toggleBenchGroup(element)
                 }
 
+            },
+            watch: {
+                data: function (newVal, oldVal) {
+                    if (newVal && !oldVal) {
+                        this.$nextTick(() => {
+                            for (let element of document.querySelectorAll(".toggle-table")) {
+                                toggleBenchGroup(element);
+                            }
+                        });
+                    }
+                }
             }
         })
+        function toggleBenchGroup(element) {
+            let next = element.parentElement.parentElement.nextElementSibling;
+            let inBody = []
+            while (next && next.getAttribute("data-field-start") !== "true") {
+                if (element.open) {
+                    next.style.display = "";
+                } else {
+                    next.style.display = "none";
+                }
+                next = next.nextElementSibling;
+            }
+        }
         function toggleFilters(id, toggle) {
             let styles = document.getElementById(id).style;
             let indicator = document.getElementById(toggle);
