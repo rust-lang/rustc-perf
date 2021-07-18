@@ -69,7 +69,7 @@
         #filters {
             border: 1px black;
             border-style: dotted;
-            margin: 16px 0px;
+            margin: 12px 0px;
             border-radius: 10px;
         }
 
@@ -141,6 +141,29 @@
             visibility: visible;
             opacity: 1;
         }
+
+        .description-box {
+            border: 1px solid;
+            display: flex;
+        }
+
+        .description-arrow {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            background: #8dcc8d;
+            padding: 5px;
+        }
+
+        #not-continuous {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            text-align: center;
+            background: #cc3300;
+            border: 1px solid;
+            cursor: help;
+        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
 </head>
@@ -180,6 +203,31 @@
                 </div>
                 <input id="submit" type="submit" value="Submit" onclick="submitSettings(); return false;">
         </fieldset>
+        <div v-if="data" style="margin: 12px 0;">
+            <div style="display: flex;justify-content: center;">
+                <div class="description-box">
+                    <div class="description-arrow"><a v-if="data.prev" v-bind:href="prevLink">&larr;</a></div>
+                    <div style="padding: 10px;">
+                        <a v-if="data.a.pr" v-bind:href="prLink(data.a.pr)">#{{data.a.pr}}</a>
+                        <span>{{formatDate(data.a.date)}}</span>
+                        (<a v-bind:href="commitLink(data.a.commit)">{{short(data.a)}}</a>)
+                    </div>
+                </div>
+                <div v-if="notContinuous" id="not-continuous" title="WARNING! The commits are not continuous.">...
+                </div>
+                <div class="description-box">
+                    <div style="padding: 10px;">
+                        <a v-if="data.b.pr" v-bind:href="prLink(data.b.pr)">#{{data.b.pr}}</a>
+                        <span>{{formatDate(data.b.date)}}</span>
+                        (<a v-bind:href="commitLink(data.b.commit)">{{short(data.b)}}</a>)
+                    </div>
+                    <div class="description-arrow"><a v-if="data.next" v-bind:href="nextLink">&rarr;</a></div>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: center;">
+                <a v-bind:href="compareLink">🔎 compare commits</a>
+            </div>
+        </div>
         <fieldset id="filters">
             <legend id="filters-toggle" class="section-heading">Filters<span id="filters-toggle-indicator"></span>
             </legend>
@@ -234,40 +282,8 @@
                 </div>
             </div>
         </fieldset>
-        <div id="content" style="margin-top: 15px">
-            <table v-if="data" class="compare" style="font-size: medium !important;">
-                <thead>
-                    <tr>
-                        <td v-if="notContinuous" colspan="4" style="text-align:center;"><b>Warning</b>: The start and
-                            end
-                            are not adjacent!</td>
-                    </tr>
-                    <tr>
-                        <th>
-                            <a v-bind:href="compareLink">compare</a>
-                        </th>
-                        <th>
-                            <a v-if="data.prev" v-bind:href="prevLink">&larr;</a>
-                            {{formatDate(data.a.date)}}
-                            (<a>{{short(data.a)}}</a>)
-                        </th>
-                        <th>
-                            {{formatDate(data.b.date)}}
-                            (<a>{{short(data.b)}}</a>)
-                            <a v-if="data.next" v-bind:href="nextLink">&rarr;</a>
-                        </th>
-                        <th>% change</th>
-                    </tr>
-                    <tr>
-                        <th></th>
-                        <th style="text-align: left;"><a v-if="data.a.pr"
-                                v-bind:href="prLink(data.a.pr)">#{{data.a.pr}}</a>
-                        </th>
-                        <th style="text-align: left;"><a v-if="data.b.pr"
-                                v-bind:href="prLink(data.b.pr)">#{{data.b.pr}}</a>
-                        </th>
-                    </tr>
-                </thead>
+        <div v-if="data" id="content" style="margin-top: 15px">
+            <table class="compare" style="width: 80%; margin: 0 auto; font-size: medium !important;">
                 <tbody>
                     <template v-for="bench in benches">
                         <tr data-field-start="true">
@@ -503,6 +519,9 @@
                 },
                 percentLink(commit, baseCommit, bench, run) {
                     return `/detailed-query.html?commit=${commit}&base_commit=${baseCommit}&benchmark=${bench}&run_name=${run}`;
+                },
+                commitLink(commit) {
+                    return `https://github.com/rust-lang/rust/commit/${commit}`;
                 },
                 benchGroupToggle(e) {
                     const element = e.target;
