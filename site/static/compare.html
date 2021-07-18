@@ -175,9 +175,6 @@
     </div>
     <br />
     <div id="app">
-        <h1>Comparing <span id="stat-header">{{stat}}</span> between <span id="before">{{before}}</span> and
-            <span id="after">{{after}}</span>
-        </h1>
         <fieldset id="settings">
             <legend id="search-toggle" class="section-heading">Do another comparison<span
                     id="search-toggle-indicator"></span></legend>
@@ -203,13 +200,16 @@
                 </div>
                 <input id="submit" type="submit" value="Submit" onclick="submitSettings(); return false;">
         </fieldset>
+        <h1>Comparing <span id="stat-header">{{stat}}</span> between <span id="before">{{before}}</span> and
+            <span id="after">{{after}}</span>
+        </h1>
         <div v-if="data" style="margin: 12px 0;">
             <div style="display: flex;justify-content: center;">
                 <div class="description-box">
                     <div class="description-arrow"><a v-if="data.prev" v-bind:href="prevLink">&larr;</a></div>
                     <div style="padding: 10px;">
                         <a v-if="data.a.pr" v-bind:href="prLink(data.a.pr)">#{{data.a.pr}}</a>
-                        <span>{{formatDate(data.a.date)}}</span>
+                        <span v-if="data.a.date">{{formatDate(data.a.date)}}</span>
                         (<a v-bind:href="commitLink(data.a.commit)">{{short(data.a)}}</a>)
                     </div>
                 </div>
@@ -218,7 +218,7 @@
                 <div class="description-box">
                     <div style="padding: 10px;">
                         <a v-if="data.b.pr" v-bind:href="prLink(data.b.pr)">#{{data.b.pr}}</a>
-                        <span>{{formatDate(data.b.date)}}</span>
+                        <span v-if="data.b.date">{{formatDate(data.b.date)}}</span>
                         (<a v-bind:href="commitLink(data.b.commit)">{{short(data.b)}}</a>)
                     </div>
                     <div class="description-arrow"><a v-if="data.next" v-bind:href="nextLink">&rarr;</a></div>
