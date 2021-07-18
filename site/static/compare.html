@@ -160,8 +160,9 @@
     </div>
     <br />
     <div id="app">
-        <h1>Comparing <span id="stat-header">instructions:u</span> between <span id="before">???</span> and <span
-                id="after">???</span></h1>
+        <h1>Comparing <span id="stat-header">{{stat}}</span> between <span id="before">{{before}}</span> and
+            <span id="after">{{after}}</span>
+        </h1>
         <fieldset id="settings">
             <legend id="search-toggle" class="section-heading">Do another comparison<span
                     id="search-toggle-indicator"></span></legend>
@@ -349,6 +350,13 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/msgpack-lite/0.1.26/msgpack.min.js"></script>
     <script src="shared.js"></script>
     <script>
+        function findQueryParam(name) {
+            let urlParams = window.location.search.substring(1).split("&").map(x => x.split("="));
+            let pair = urlParams.find(x => x[0] === name)
+            if (pair) {
+                return unescape(pair[1]);
+            }
+        }
         let app = new Vue({
             el: '#app',
             data: {
@@ -461,6 +469,21 @@
                         };
                     }).sort((a, b) => Math.abs(b.percent) - Math.abs(a.percent));
                 },
+                before() {
+                    if (!this.data) {
+                        return findQueryParam("start").substring(0, 7);
+                    }
+                    return `#${this.data.a.pr}` || this.formatDate(this.data.a.date) || this.data.a.commit.substring(0, 7);
+                },
+                after() {
+                    if (!this.data) {
+                        return findQueryParam("end").substring(0, 7);
+                    }
+                    return `#${this.data.b.pr}` || this.formatDate(this.data.b.date) || this.data.b.commit.substring(0, 7);
+                },
+                stat() {
+                    return findQueryParam("stat");
+                }
             },
             methods: {
                 short(comparison) {
@@ -575,31 +598,10 @@
                 stat: "instructions:u",
             }, state);
             makeRequest("/get", values).then(function (data) {
-                updateHeader(data.a.commit, data.b.commit);
                 app.data = data;
             });
         }
 
-        function updateHeader(a, b, stat) {
-            let shorten = (text) => {
-                return text.substring(0, 7);
-            }
-            a && (document.getElementById("before").innerHTML = shorten(a));
-            b && (document.getElementById("after").innerHTML = shorten(b));
-            stat && (document.getElementById("stat-header").innerHTML = stat);
-        }
-
-        function findQueryParam(name) {
-            let urlParams = window.location.search.substring(1).split("&").map(x => x.split("="));
-            let pair = urlParams.find(x => x[0] === name)
-            if (pair) {
-                return unescape(pair[1]);
-            }
-        }
-        let start = findQueryParam("start");
-        let end = findQueryParam("end");
-        let stat = findQueryParam("stat")
-        updateHeader(start, end, stat);
 
         function submitSettings() {
             let start = document.getElementById("start-bound").value;
