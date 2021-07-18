@@ -315,6 +315,27 @@
                     </template>
                 </tbody>
             </table>
+            <br />
+            <table class="compare" v-if="data && data.a.bootstrap">
+                <tr>
+                    <td colspan="4">bootstrap timings; variance is 1-3% on smaller benchmarks! Values in seconds.</td>
+                </tr>
+                <tr>
+                    <th>total</th>
+                    <th>{{bootstrapTotals.a.toFixed(3)}}</th>
+                    <th>{{bootstrapTotals.b.toFixed(3)}}</th>
+                </tr>
+                <template v-for="bootstrap in bootstraps">
+                    <tr data-field-start="true">
+                        <th style="width: 19em;">{{bootstrap.name}}</th>
+                        <td>{{bootstrap.a}}</td>
+                        <td>{{bootstrap.b}}</td>
+                        <td><span
+                                v-bind:class="percentClass(bootstrap.percent)">{{bootstrap.percent.toFixed(1)}}%</span>
+                        </td>
+                    </tr>
+                </template>
+            </table>
         </div>
     </div>
     <br>
@@ -479,7 +500,29 @@
                         }
                     });
                     return fields;
-                }
+                },
+                bootstrapTotals() {
+                    const sum = bootstrap => Object.entries(bootstrap).map(e => e[1] / 1e9).reduce((sum, next) => sum + next, 0);
+                    const a = sum(this.data.a.bootstrap);
+                    const b = sum(this.data.b.bootstrap);
+                    return { a, b };
+                },
+                bootstraps() {
+                    console.log(this.data.a.bootstrap);
+                    return Object.entries(this.data.a.bootstrap).map(e => {
+                        const name = e[0];
+
+                        const format = datum => datum.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+                        const a = format(e[1] / 1e9);
+                        const b = format(this.data.b.bootstrap[name] / 1e9);
+                        return {
+                            name,
+                            a,
+                            b,
+                            percent: 100 * (b - a) / a
+                        };
+                    }).sort((a, b) => Math.abs(b.percent) - Math.abs(a.percent));
+                },
             },
             methods: {
                 short: function (comparison) {
