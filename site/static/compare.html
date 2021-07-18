@@ -21,7 +21,7 @@
 
         .section {
             display: flex;
-            margin: 4px 0;
+            margin: 10px 0;
         }
 
         #commits {
@@ -62,12 +62,6 @@
             font-size: 16px;
         }
 
-        .section .section-heading {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-        }
-
         #filters-content .section-heading {
             font-size: 16px;
         }
@@ -85,7 +79,6 @@
 
         input {
             border-radius: 5px;
-            padding: 4px;
             font-size: 12px;
             height: 100%;
         }
@@ -98,7 +91,6 @@
             width: 100%;
             font-weight: bold;
             background: #ADD8E6;
-            margin: 10px 0;
         }
 
         .cache-label {
@@ -195,15 +187,15 @@
                 <div class="section">
                     <div class="section-heading">Filter by benchmark
                     </div>
-                    <input id="filter" type="text" v-model="filter.name" /> </p>
+                    <input id="filter" type="text" v-model="filter.name" />
                 </div>
                 <div class=" section">
                     <div class="section-heading">
-                        <div>
+                        <div style="width: 160px;">
                             <span>Cache states</span>
-                            <div class="tooltip">?<span class="tooltiptext">
-                                    Most benchmarks have at least 4 cache states for which we collect data
-                            </div>
+                            <span class="tooltip">?<span class="tooltiptext">
+                                    Most benchmarks have at least 4 cache states for which we collect data</span>
+                            </span>
                         </div>
                     </div>
                     <ul id="states-list">
@@ -317,7 +309,7 @@
                 </tbody>
             </table>
             <br />
-            <table class="compare" v-if="data && data.a.bootstrap">
+            <table class="compare" v-if="data && data.a.bootstrap.length > 0">
                 <tr>
                     <td colspan="4">bootstrap timings; variance is 1-3% on smaller benchmarks! Values in seconds.</td>
                 </tr>
