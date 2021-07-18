@@ -235,7 +235,8 @@
                     <div class="section-heading"><span>Show only significant changes</span>
                         <span class="tooltip">?
                             <span class="tooltiptext">
-                                Whether to filter out all benchmarks that do not show significant changes.
+                                Whether to filter out all benchmarks that do not show significant changes. A significant
+                                change is any change above 0.2% for non-noisy benchmarks and 1.0% for noisy ones.
                             </span>
                         </span>
                     </div>
@@ -281,15 +282,13 @@
                     <template v-for="bench in benches">
                         <tr data-field-start="true">
                             <th>
-                                <details class="toggle-table" v-on:toggle="benchGroupToggle">
+                                <details>
                                     <summary>{{ trimBenchName(bench.name) }}</summary>
                                 </details>
                             </th>
-                            <td>avg: <span v-bind:class="percentClass(bench.avgPct)">{{bench.avgPct}}</span></td>
-                            <td>min: <span v-bind:class="percentClass(bench.minPct)">{{bench.minPct}}</span></td>
-                            <td>max: <span
-                                    v-bind:class="percentClass(bench.maxPct)">{{bench.maxPct}}%{{isDodgyBench(bench)
-                                    ? "?" : ""}}</span></td>
+                            <td>min: <span v-bind:class="percentClass(bench.minPct)">{{bench.minPct}}%</span></td>
+                            <td>max: <span v-bind:class="percentClass(bench.maxPct)">{{bench.maxPct}}%</span></td>
+                            <td></td>
                         </tr>
                         <template v-for="run in bench.variants">
                             <tr>
@@ -403,6 +402,10 @@
                             const key = d[0];
                             const datumA = d[1];
                             const datumB = data.b.data[name].find(x => x[0] == key)[1];
+                            let percent = (100 * (datumB - datumA) / datumA).toFixed(1);
+                            if (percent === "-0.0") {
+                                percent = "0.0";
+                            }
 
                             let isDodgy = false;
                             if (data.variance) {
@@ -414,7 +417,7 @@
                                     casename: key,
                                     datumA,
                                     datumB,
-                                    percent: (100 * (datumB - datumA) / datumA).toFixed(1),
+                                    percent,
                                     isDodgy,
                                 });
                             }
@@ -431,15 +434,12 @@
                                 const pcts = variants.map(field => parseFloat(field.percent));
                                 const maxPct = Math.max(...pcts).toFixed(1);
                                 const minPct = Math.min(...pcts).toFixed(1);
-                                const sum = pcts.reduce((a, b) => a + b, 0);
-                                const avgPct = (sum / pcts.length).toFixed(1);
                                 const maxCasenameLen = Math.max(...variants.map(f => f.casename.length));
                                 return {
                                     name,
                                     variants,
                                     maxPct,
                                     minPct,
-                                    avgPct,
                                     maxCasenameLen,
                                 };
                             }).
@@ -499,10 +499,6 @@
                 percentLink(commit, baseCommit, bench, run) {
                     return `/detailed-query.html?commit=${commit}&base_commit=${baseCommit}&benchmark=${bench}&run_name=${run}`;
                 },
-                benchGroupToggle(e) {
-                    const element = e.target;
-                    toggleBenchGroup(element);
-                },
                 formatDate(date) {
                     date = new Date(date);
                     function padStr(i) {
@@ -519,21 +515,7 @@
                     }
                     return result;
                 },
-                isDodgyBench(bench) {
-                    return bench.variants.some(f => f.isDodgy);
-                },
             },
-            watch: {
-                data(newVal, oldVal) {
-                    if (newVal && !oldVal) {
-                        this.$nextTick(() => {
-                            for (let element of document.querySelectorAll(".toggle-table")) {
-                                toggleBenchGroup(element);
-                            }
-                        });
-                    }
-                }
-            }
         });
 
         function isSignificant(variant) {
@@ -544,19 +526,6 @@
                 return percent > 0.2;
             }
 
-        }
-
-        function toggleBenchGroup(element) {
-            let next = element.parentElement.parentElement.nextElementSibling;
-            let inBody = []
-            while (next && next.getAttribute("data-field-start") !== "true") {
-                if (element.open) {
-                    next.style.display = "";
-                } else {
-                    next.style.display = "none";
-                }
-                next = next.nextElementSibling;
-            }
         }
 
         function toggleFilters(id, toggle) {
