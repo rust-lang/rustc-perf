@@ -185,7 +185,7 @@
                         <select id='stats' name="stat"></select>
                     </div>
                 </div>
-                <input id="submit" type="submit" value="Submit" onclick="submit_settings(); return false;">
+                <input id="submit" type="submit" value="Submit" onclick="submitSettings(); return false;">
         </fieldset>
         <fieldset id="filters">
             <legend id="filters-toggle" class="section-heading">Filters<span id="filters-toggle-indicator"></span>
@@ -283,10 +283,10 @@
                                     <summary>{{ trimBenchName(bench.name) }}</summary>
                                 </details>
                             </th>
-                            <td>avg: <span v-bind:class="percentClass(bench.avg_pct)">{{bench.avg_pct}}</span></td>
-                            <td>min: <span v-bind:class="percentClass(bench.min_pct)">{{bench.min_pct}}</span></td>
+                            <td>avg: <span v-bind:class="percentClass(bench.avgPct)">{{bench.avgPct}}</span></td>
+                            <td>min: <span v-bind:class="percentClass(bench.minPct)">{{bench.minPct}}</span></td>
                             <td>max: <span
-                                    v-bind:class="percentClass(bench.max_pct)">{{bench.max_pct}}%{{isDodgyBench(bench)
+                                    v-bind:class="percentClass(bench.maxPct)">{{bench.maxPct}}%{{isDodgyBench(bench)
                                     ? "?" : ""}}</span></td>
                         </tr>
                         <template v-for="run in bench.fields">
@@ -294,12 +294,12 @@
                                 <td>{{ run.casename }}</td>
                                 <td>
                                     <a v-bind:href="detailedQueryLink(data.a.commit, bench.name, run.casename)">
-                                        {{ run.datum_a }}
+                                        {{ run.datumA }}
                                     </a>
                                 </td>
                                 <td>
                                     <a v-bind:href="detailedQueryLink(data.b.commit, bench.name, run.casename)">
-                                        {{ run.datum_b }}
+                                        {{ run.datumB }}
                                     </a>
                                 </td>
                                 <td>
@@ -394,14 +394,14 @@
                             return true;
                         }
                     }
-                    function to_fields(name) {
+                    function toFields(name) {
                         let source = data.a.data[name] || data.b.data[name];
-                        let max_length = 0;
+                        let maxLength = 0;
                         if (data.a.data[name]) {
-                            max_length = data.a.data[name].length;
+                            maxLength = data.a.data[name].length;
                         }
-                        if (data.b.data[name] && data.b.data[name].length > max_length) {
-                            max_length = data.b.data[name].length;
+                        if (data.b.data[name] && data.b.data[name].length > maxLength) {
+                            maxLength = data.b.data[name].length;
                         }
 
                         let keys = {};
@@ -410,7 +410,7 @@
                                 if (!keys[data.a.data[name][i][0]]) {
                                     keys[data.a.data[name][i][0]] = {};
                                 }
-                                keys[data.a.data[name][i][0]].a_idx = i;
+                                keys[data.a.data[name][i][0]].aIdx = i;
                             }
                         }
                         if (data.b.data[name]) {
@@ -418,25 +418,34 @@
                                 if (!keys[data.b.data[name][i][0]]) {
                                     keys[data.b.data[name][i][0]] = {};
                                 }
-                                keys[data.b.data[name][i][0]].b_idx = i;
+                                keys[data.b.data[name][i][0]].bIdx = i;
                             }
                         }
 
                         let fields = [];
                         for (let key in keys) {
-                            let a_idx = keys[key].a_idx;
-                            let b_idx = keys[key].b_idx;
-                            let datum_a = null;
-                            let datum_b = null;
-                            if (a_idx != undefined && b_idx != undefined) {
-                                datum_a = data.a.data[name][a_idx][1];
-                                datum_b = data.b.data[name][b_idx][1];
-                            } else if (a_idx != undefined) {
-                                datum_a = data.a.data[name][a_idx][1];
-                            } else if (b_idx != undefined) {
-                                datum_b = data.b.data[name][b_idx][1];
+                            let aIdx = keys[key].aIdx;
+                            let bIdx = keys[key].bIdx;
+                            let datumA = null;
+                            let datumB = null;
+                            if (aIdx != undefined && bIdx != undefined) {
+                                datumA = data.a.data[name][aIdx][1];
+                                datumB = data.b.data[name][bIdx][1];
+                            } else if (aIdx != undefined) {
+                                datumA = data.a.data[name][aIdx][1];
+                            } else if (bIdx != undefined) {
+                                datumB = data.b.data[name][bIdx][1];
                             } else {
                                 // should be unreachable
+                            }
+
+
+                            function percentChg(a, b) {
+                                if (a && b) {
+                                    return 100 * (b - a) / a;
+                                } else {
+                                    return null;
+                                }
                             }
 
                             let isDodgy = false;
@@ -447,9 +456,9 @@
                             if (shouldShowBuild(key)) {
                                 fields.push({
                                     casename: key,
-                                    datum_a,
-                                    datum_b,
-                                    percent: percent_chg(datum_a, datum_b).toFixed(1),
+                                    datumA,
+                                    datumB,
+                                    percent: percentChg(datumA, datumB).toFixed(1),
                                     isDodgy,
                                 });
                             }
@@ -458,47 +467,27 @@
                         return fields;
                     }
 
-                    let test_names = unique([
+                    let textNames = unique([
                         ...Object.keys(data.a.data),
                         ...Object.keys(data.b.data),
                     ]);
-                    // let bootstrap_names = unique([
-                    //     ...Object.keys(data.a.bootstrap),
-                    //     ...Object.keys(data.b.bootstrap),
-                    // ]);
 
-                    let fields = [
-                        // ...bootstrap_names
-                        //     .map(name => name)
-                        //     .map(name => ({ name, is_bootstrap: true, fields: to_fields_bootstrap(name) })),
-                        ...test_names.filter(n => filter.name && filter.name.trim() ? n.includes(filter.name.trim()) : true).map(name => { return { name, fields: to_fields(name) } }).filter(b => b.fields.length > 0)
-                    ];
+                    let fields =
+                        textNames.
+                            filter(n => filter.name && filter.name.trim() ? n.includes(filter.name.trim()) : true).
+                            map(name => { return { name, fields: toFields(name) } }).filter(b => b.fields.length > 0);
 
                     for (let field of fields) {
                         let pcts = field.fields.map(field => parseFloat(field.percent))
                             .filter(p => p != undefined && p != null);
-                        field.max_pct = Math.max(...pcts).toFixed(1);
-                        field.min_pct = Math.min(...pcts).toFixed(1);
-                        field.farthest_pct = Math.max(...pcts.map(p => Math.abs(p)));
+                        field.maxPct = Math.max(...pcts).toFixed(1);
+                        field.minPct = Math.min(...pcts).toFixed(1);
                         let sum = pcts.reduce((a, b) => a + b, 0);
                         let avg = sum / pcts.length;
-                        field.avg_pct = avg.toFixed(1);
-                        field.max_casename_len = Math.max(...field.fields.map(f => f.casename.length));
+                        field.avgPct = avg.toFixed(1);
+                        field.maxCasenameLen = Math.max(...field.fields.map(f => f.casename.length));
                     }
 
-                    fields.sort((a, b) => {
-                        if (a.is_bootstrap == b.is_bootstrap) {
-                            return b.farthest_pct - a.farthest_pct;
-                        }
-                        else {
-                            if (a.is_bootstrap) {
-                                return 1;
-                            }
-                            else {
-                                return -1;
-                            }
-                        }
-                    });
                     return fields;
                 },
                 bootstrapTotals() {
@@ -508,7 +497,6 @@
                     return { a, b };
                 },
                 bootstraps() {
-                    console.log(this.data.a.bootstrap);
                     return Object.entries(this.data.a.bootstrap).map(e => {
                         const name = e[0];
 
@@ -556,7 +544,12 @@
                     toggleBenchGroup(element);
                 },
                 formatDate(date) {
-                    return print_date(new Date(date));
+                    date = new Date(date);
+                    function padStr(i) {
+                        return (i < 10) ? "0" + i : "" + i;
+                    }
+
+                    return `${date.getUTCFullYear()}-${padStr(date.getUTCMonth() + 1)}-${padStr(date.getUTCDate())} `;
                 },
                 trimBenchName(name) {
                     let result = name.substring(0, 25)
@@ -616,423 +609,28 @@
         };
 
 
-        function print_date(date) {
-            function pad_str(i) {
-                return (i < 10) ? "0" + i : "" + i;
-            }
-
-            return `${date.getUTCFullYear()}-${pad_str(date.getUTCMonth() + 1)}-${pad_str(date.getUTCDate())} `;
-        }
-
         function unique(arr) {
             return arr.filter((value, idx) => arr.indexOf(value) == idx);
         }
 
-        function add_datum_fields(datum, sha, bench, run, selfProfileAvailable) {
-            let html = "";
-            if (datum) {
-                html += "<td>";
-                let txt = "";
-                if (Number.isInteger(datum)) {
-                    txt = datum + "";
-                } else {
-                    txt = datum.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
-                }
-                if (selfProfileAvailable) {
-                    html += `< a href = "/detailed-query.html?commit=${sha}&benchmark=${bench}&run_name=${run}" > ${txt}</a > `;
-                } else {
-                    html += txt;
-                }
-                html += "</td>";
-            } else {
-                html += "<td>-</td>";
-            }
-            return html;
-        }
-
-        function percent_chg(a, b) {
-            if (a && b) {
-                return 100 * (b - a) / a;
-            } else {
-                return null;
-            }
-        }
-
-        function add_percent(pct, dodgy, dodgy_marker) {
-            if (pct != null && pct != Infinity && pct != -Infinity) {
-                let klass = "";
-                if (pct > 1) {
-                    klass = 'class="positive"';
-                } else if (pct > 0.1) {
-                    klass = 'class="slightly-positive"';
-                } else if (pct < -1) {
-                    klass = 'class="negative"';
-                } else if (pct < -0.1) {
-                    klass = 'class="slightly-negative"';
-                }
-                let title = "";
-                let marker = "";
-                if (dodgy) {
-                    title = `title = "${dodgy}"`;
-                    marker = dodgy_marker;
-                }
-                return `< span ${klass} ${title}> ${pct.toFixed(1)}% ${marker}</span > `;
-            } else {
-                return "<span>-</span>"
-            }
-        }
 
         function shortCommit(commit) {
             return commit.substring(0, 8);
         }
 
-        function populate_data(data) {
-            app.data = data;
-            {
-                let filter = document.querySelector("#filter").value;
-                let test_names = unique([
-                    ...Object.keys(data.a.data),
-                    ...Object.keys(data.b.data),
-                    ...Object.keys(data.a.bootstrap),
-                    ...Object.keys(data.b.bootstrap),
-                ]);
-                let is_copied = false;
-                for (let name of test_names) {
-                    if (!name.includes(filter)) {
-                        if (!is_copied) {
-                            // Copying data is very expensive
-                            // This branch ensures that we avoid copying
-                            // if there are no filters (which is the most common case)
-                            data = JSON.parse(JSON.stringify(DATA)); // deep copy
-                            is_copied = true;
-                        }
-                        if (data.a.data[name]) delete data.a.data[name];
-                        if (data.b.data[name]) delete data.b.data[name];
-                        if (data.a.bootstrap[name]) delete data.a.bootstrap[name];
-                        if (data.b.bootstrap[name]) delete data.b.bootstrap[name];
-                    }
-                }
-            }
-
-            function shouldShowBuild(name) {
-                if (name == "full") {
-                    return document.querySelector("#build-full").checked;
-                } else if (name == "incr-full") {
-                    return document.querySelector("#build-incremental-full").checked;
-                } else if (name == "incr-unchanged") {
-                    return document.querySelector("#build-incremental-unchanged").checked;
-                } else if (name.startsWith("incr-patched")) {
-                    return document.querySelector("#build-incremental-patched").checked;
-                } else {
-                    // Unknown, but by default we should show things
-                    return true;
-                }
-            }
-
-            let html = "";
-
-            html += `< table class="compare" style = "font-size: medium !important;" > `;
-            html += "<thead>";
-
-            if (!data.is_contiguous) {
-                html += `< tr > <td colspan=4 style = "text-align:center;" > `;
-                html += `< b > Warning</b >: The start and end are not adjacent!`;
-                html += `</td ></tr > `;
-            }
-
-            // Heading: the two dates, and the time and rss percent changes.
-            html += "<tr>";
-
-            html += "<th>" + "<a href=\"" +
-                "https://github.com/rust-lang/rust/compare/" + data.a.commit + "..." +
-                data.b.commit +
-                "\">compare</a>" + "</th>";
-
-            let prev_link = "";
-            if (data.prev) {
-                let params = new URLSearchParams(window.location.search);
-                params.set("end", params.get("start"));
-                params.set("start", data.prev);
-                prev_link = `< a href = "/compare.html?${params.toString()}" >& larr;</a > `;
-            }
-            let next_link = "";
-            if (data.next) {
-                let params = new URLSearchParams(window.location.search);
-                params.set("start", params.get("end"));
-                params.set("end", data.next);
-                next_link = ` < a href = "/compare.html?${params.toString()}" >& rarr;</a > `;
-            }
-            html += "<th>"
-                + prev_link + ""
-                + print_date(new Date(data.a.date))
-                + ` (<a href="https://github.com/rust-lang/rust/commit/${data.a.commit}"
-                    >${data.a.commit.substring(0, 8)}</a>)` + "</th>";
-            html += "<th>" + print_date(new Date(data.b.date))
-                + ` (<a href="https://github.com/rust-lang/rust/commit/${data.b.commit}"
-                    >${data.b.commit.substring(0, 8)}</a>)`
-                + next_link
-                + "</th>";
-
-            html += "<th>" + "% change" + "</th>";
-            html += "</tr>";
-
-            html += "<tr>";
-            html += "<th></th>";
-            html += `< th style = "text-align:left;" > ${data.a.pr ? `<a
-            href="https://github.com/rust-lang/rust/pull/${data.a.pr}">#${data.a.pr}</a>` : ""
-                }</th > `;
-            html += `< th style = "text-align:left;" > ${data.b.pr ? `<a
-            href="https://github.com/rust-lang/rust/pull/${data.b.pr}">#${data.b.pr}</a>` : ""
-                }</th > `;
-            html += "</tr>";
-
-            html += "</thead>";
-
-            let test_names = unique([
-                ...Object.keys(data.a.data),
-                ...Object.keys(data.b.data),
-            ]);
-            let bootstrap_names = unique([
-                ...Object.keys(data.a.bootstrap),
-                ...Object.keys(data.b.bootstrap),
-            ]);
-
-            let fields = [
-                ...bootstrap_names
-                    .map(name => name)
-                    .map(name => ({ name, is_bootstrap: true, fields: to_fields_bootstrap(name) })),
-                ...test_names.map(name => ({ name, is_bootstrap: false, fields: to_fields(name) })),
-            ];
-
-            function to_fields_bootstrap(name) {
-                let datum_a = data.a.bootstrap[name] || null;
-                let datum_b = data.b.bootstrap[name] || null;
-                datum_a = datum_a ? datum_a / 1e9 : null;
-                datum_b = datum_b ? datum_b / 1e9 : null;
-
-                return [
-                    {
-                        casename: name,
-                        datum_a,
-                        datum_b,
-                        percent: percent_chg(datum_a, datum_b),
-                    }
-                ];
-            }
-
-            function to_fields(name) {
-                let source = data.a.data[name] || data.b.data[name];
-                let max_length = 0;
-                if (data.a.data[name]) {
-                    max_length = data.a.data[name].length;
-                }
-                if (data.b.data[name] && data.b.data[name].length > max_length) {
-                    max_length = data.b.data[name].length;
-                }
-
-                let keys = {};
-                if (data.a.data[name]) {
-                    for (let i = 0; i < data.a.data[name].length; i++) {
-                        if (!keys[data.a.data[name][i][0]]) {
-                            keys[data.a.data[name][i][0]] = {};
-                        }
-                        keys[data.a.data[name][i][0]].a_idx = i;
-                    }
-                }
-                if (data.b.data[name]) {
-                    for (let i = 0; i < data.b.data[name].length; i++) {
-                        if (!keys[data.b.data[name][i][0]]) {
-                            keys[data.b.data[name][i][0]] = {};
-                        }
-                        keys[data.b.data[name][i][0]].b_idx = i;
-                    }
-                }
-
-                let fields = [];
-                for (let key in keys) {
-                    let a_idx = keys[key].a_idx;
-                    let b_idx = keys[key].b_idx;
-                    let datum_a = null;
-                    let datum_b = null;
-                    if (a_idx != undefined && b_idx != undefined) {
-                        datum_a = data.a.data[name][a_idx][1];
-                        datum_b = data.b.data[name][b_idx][1];
-                    } else if (a_idx != undefined) {
-                        datum_a = data.a.data[name][a_idx][1];
-                    } else if (b_idx != undefined) {
-                        datum_b = data.b.data[name][b_idx][1];
-                    } else {
-                        // should be unreachable
-                    }
-                    if (shouldShowBuild(key)) {
-                        fields.push({
-                            casename: key,
-                            datum_a,
-                            datum_b,
-                            percent: percent_chg(datum_a, datum_b),
-                        });
-                    }
-                }
-
-                return fields;
-            }
-
-            for (let field of fields) {
-                let pcts = field.fields.map(field => field.percent)
-                    .filter(p => p != undefined && p != null);
-                field.max_pct = Math.max(...pcts);
-                field.min_pct = Math.min(...pcts);
-                field.farthest_pct = Math.max(...pcts.map(p => Math.abs(p)));
-                let sum = pcts.reduce((a, b) => a + b, 0);
-                let avg = sum / pcts.length;
-                field.avg_pct = avg;
-                field.max_casename_len = Math.max(...field.fields.map(f => f.casename.length));
-            }
-
-            fields.sort((a, b) => {
-                if (a.is_bootstrap == b.is_bootstrap) {
-                    return b.farthest_pct - a.farthest_pct;
-                }
-                else {
-                    if (a.is_bootstrap) {
-                        return 1;
-                    }
-                    else {
-                        return -1;
-                    }
-                }
-            });
-
-            let max_name_width = Math.max(...fields.map(f => f.max_casename_len));
-
-            function dodgy_name_title() {
-                return "One or more of this benchmark's runs have high measurement variation. " +
-                    "Treat this value with caution. And see the warning at the bottom of " +
-                    "the table.";
-            }
-
-            function dodgy_casename_title(name, casename, variance) {
-                if (!variance) {
-                    return "";
-                }
-
-                if (variance.type == "HighlyVariable") {
-                    return `This measurement varies a lot.Do not trust it!`
-                }
-                if (variance.type == "Noisy") {
-                    return `This measurement is noisy.Do not trust it!`
-                }
-                return "";
-            }
-
-            let is_first_bootstrap = true;
-            for (let field of fields) {
-                let is_dodgy = Object.keys(data.variance || {}).some(k => {
-                    let variance = data.variance[k];
-                    return k.startsWith(field.name) && variance && variance.description.type != "Normal";
-                });
-                let dodgy = is_dodgy ? dodgy_name_title() : "";
-                if (field.is_bootstrap) {
-                    if (is_first_bootstrap) {
-                        html += "<tr data-field-start=true><td>&nbsp;</td></tr>";
-                        html += "<tr data-field-start=true><td colspan=4>bootstrap timings; variance is 1-3% on smaller benchmarks! Values in seconds.</td></tr>";
-                        is_first_bootstrap = false;
-
-                        html += "<tr data-field-start=true>";
-                        html += `< th style = "width: ${max_name_width / 2}em;" data - js - name=Total > ` + truncate_name("total") + "</th>";
-                        let sum = (acc, value) => acc + value;
-                        let a_total = fields.filter(f => f.is_bootstrap).map(f => f.fields[0].datum_a).reduce(sum);
-                        let b_total = fields.filter(f => f.is_bootstrap).map(f => f.fields[0].datum_b).reduce(sum);
-                        html += add_datum_fields(a_total, data.a.commit, "Total", "", false);
-                        html += add_datum_fields(b_total, data.b.commit, "Total", "", false);
-                        let pct = add_percent(percent_chg(a_total, b_total), dodgy, "??");
-                        html += `< td > ${pct}</td > `;
-                        html += "</tr>";
-                    }
-                    html += "<tr data-field-start=true>";
-                    html += `< th style = "width: ${max_name_width / 2}em;" data - js - name=${field.name}> ` + truncate_name(field.name) + "</th>";
-                    let entry = field.fields[0];
-                    html += add_datum_fields(entry.datum_a, data.a.commit,
-                        field.name, entry.casename, false);
-                    html += add_datum_fields(entry.datum_b, data.b.commit,
-                        field.name, entry.casename, false);
-                    let pct = add_percent(entry.percent, dodgy, "??");
-                    html += `< td > ${pct}</td > `;
-                    html += "</tr>";
-                } else {
-                    html += "<tr><td>&nbsp;</td></tr>";
-                    html += "<tr data-field-start=true>";
-                    html += `< th style = "width: ${max_name_width / 2}em;" data - js - name=${field.name}> ` +
-                        `< details class=toggle - table > <summary>` +
-                        truncate_name(field.name) + "</summary></details ></th > ";
-                    html += "<td> avg: " + add_percent(field.avg_pct, dodgy, "?") + "</td>";
-                    html += "<td text-align=center> min: " + add_percent(field.min_pct, dodgy, "?") +
-                        "</td>";
-                    html += "<td> max: " + add_percent(field.max_pct, dodgy, "?") + "</td>";
-                    html += "</tr>";
-                    for (let i = 0; i < field.fields.length; i++) {
-                        let entry = field.fields[i];
-                        const varianceKey = field.name + "-" + entry.casename;
-                        const variance = data.variance && data.variance[varianceKey] && data.variance[varianceKey].description;
-                        let dodgy = dodgy_casename_title(field.name, entry.casename, variance);
-                        html += "<tr>";
-                        html += "<td>" + entry.casename + "</td>";
-                        // No base comparison commit for the first datum
-                        html += add_datum_fields(entry.datum_a, data.a.commit,
-                            field.name, entry.casename, true);
-                        html += add_datum_fields(entry.datum_b, data.b.commit,
-                            field.name, entry.casename, true);
-                        let pct = add_percent(entry.percent, dodgy, "??");
-                        let diff_href =
-                            `/detailed-query.html?commit=${data.b.commit}&base_commit=${data.a.commit}&benchmark=${field.name}&run_name=${entry.casename}`;
-                        html += `<td><a href="${diff_href}">${pct}</a></td>`;
-                        html += "</tr>";
-                    }
-                }
-            }
-
-            html += "</table>";
-
-            // document.getElementById("content").innerHTML = html;
-            // document.getElementById("content").style.display = "block";
-            for (let element of document.querySelectorAll(".toggle-table")) {
-                let name = element.parentElement.getAttribute("data-js-name");
-                let in_body = [];
-                let next = element.parentElement.parentElement.nextElementSibling;
-                while (next && next.getAttribute("data-field-start") !== "true") {
-                    in_body.push(next);
-                    next = next.nextElementSibling;
-                }
-                for (let detail of in_body) {
-                    detail.style.display = "none";
-                }
-                element.addEventListener("toggle", evt => {
-                    for (let detail of in_body) {
-                        if (element.open) {
-                            detail.style.display = "";
-                        } else {
-                            detail.style.display = "none";
-                        }
-                    }
-                });
-            }
-        }
-
-        var DATA;
-        function make_data(state) {
+        function makeData(state) {
             let values = Object.assign({}, {
                 start: "",
                 end: "",
                 stat: "instructions:u",
             }, state);
-            make_request("/get", values).then(function (data) {
-                DATA = data;
-                update_header(data.a.commit, data.b.commit);
-                populate_data(data);
+            makeRequest("/get", values).then(function (data) {
+                updateHeader(data.a.commit, data.b.commit);
+                app.data = data;
             });
         }
 
-        function update_header(a, b, stat) {
+        function updateHeader(a, b, stat) {
             let shorten = (text) => {
                 return text.substring(0, 7);
             }
@@ -1050,9 +648,9 @@
         let start = findQueryParam("start");
         let end = findQueryParam("end");
         let stat = findQueryParam("stat")
-        update_header(start, end, stat);
+        updateHeader(start, end, stat);
 
-        function submit_settings() {
+        function submitSettings() {
             let start = document.getElementById("start-bound").value;
             let end = document.getElementById("end-bound").value;
             let stat = getSelected("stats");
@@ -1063,7 +661,7 @@
             window.location.search = params.toString();
         }
 
-        load_state(make_data);
+        loadState(makeData);
     </script>
 </body>
 
