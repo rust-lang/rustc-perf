@@ -289,7 +289,7 @@
                                     v-bind:class="percentClass(bench.maxPct)">{{bench.maxPct}}%{{isDodgyBench(bench)
                                     ? "?" : ""}}</span></td>
                         </tr>
-                        <template v-for="run in bench.fields">
+                        <template v-for="run in bench.variants">
                             <tr>
                                 <td>{{ run.casename }}</td>
                                 <td>
@@ -364,19 +364,19 @@
                 data: null
             },
             computed: {
-                notContinuous: function () {
+                notContinuous() {
                     return !this.data.is_contiguous;
                 },
-                prevLink: function () {
+                prevLink() {
                     return `/compare.html?start=${this.data.prev}&end=${this.data.a.commit}`;
                 },
-                nextLink: function () {
+                nextLink() {
                     return `/compare.html?start=${this.data.b.commit}&end=${this.data.next}`;
                 },
-                compareLink: function () {
+                compareLink() {
                     return `https://github.com/rust-lang/rust/compare/${this.data.a.commit}...${this.data.b.commit}`;
                 },
-                benches: function () {
+                benches() {
                     let data = this.data;
                     const filter = this.filter;
 
@@ -394,59 +394,12 @@
                             return true;
                         }
                     }
-                    function toFields(name) {
-                        let source = data.a.data[name] || data.b.data[name];
-                        let maxLength = 0;
-                        if (data.a.data[name]) {
-                            maxLength = data.a.data[name].length;
-                        }
-                        if (data.b.data[name] && data.b.data[name].length > maxLength) {
-                            maxLength = data.b.data[name].length;
-                        }
-
-                        let keys = {};
-                        if (data.a.data[name]) {
-                            for (let i = 0; i < data.a.data[name].length; i++) {
-                                if (!keys[data.a.data[name][i][0]]) {
-                                    keys[data.a.data[name][i][0]] = {};
-                                }
-                                keys[data.a.data[name][i][0]].aIdx = i;
-                            }
-                        }
-                        if (data.b.data[name]) {
-                            for (let i = 0; i < data.b.data[name].length; i++) {
-                                if (!keys[data.b.data[name][i][0]]) {
-                                    keys[data.b.data[name][i][0]] = {};
-                                }
-                                keys[data.b.data[name][i][0]].bIdx = i;
-                            }
-                        }
-
-                        let fields = [];
-                        for (let key in keys) {
-                            let aIdx = keys[key].aIdx;
-                            let bIdx = keys[key].bIdx;
-                            let datumA = null;
-                            let datumB = null;
-                            if (aIdx != undefined && bIdx != undefined) {
-                                datumA = data.a.data[name][aIdx][1];
-                                datumB = data.b.data[name][bIdx][1];
-                            } else if (aIdx != undefined) {
-                                datumA = data.a.data[name][aIdx][1];
-                            } else if (bIdx != undefined) {
-                                datumB = data.b.data[name][bIdx][1];
-                            } else {
-                                // should be unreachable
-                            }
-
-
-                            function percentChg(a, b) {
-                                if (a && b) {
-                                    return 100 * (b - a) / a;
-                                } else {
-                                    return null;
-                                }
-                            }
+                    function toVariants(name) {
+                        let variants = [];
+                        for (let d of data.a.data[name]) {
+                            const key = d[0];
+                            const datumA = d[1];
+                            const datumB = data.b.data[name].find(x => x[0] == key)[1];
 
                             let isDodgy = false;
                             if (data.variance) {
@@ -454,41 +407,38 @@
                                 isDodgy = !!(variance && variance.description && variance.description.type != "Normal");
                             }
                             if (shouldShowBuild(key)) {
-                                fields.push({
+                                variants.push({
                                     casename: key,
                                     datumA,
                                     datumB,
-                                    percent: percentChg(datumA, datumB).toFixed(1),
+                                    percent: (100 * (datumB - datumA) / datumA).toFixed(1),
                                     isDodgy,
                                 });
                             }
                         }
 
-                        return fields;
+                        return variants;
                     }
 
-                    let textNames = unique([
-                        ...Object.keys(data.a.data),
-                        ...Object.keys(data.b.data),
-                    ]);
-
-                    let fields =
-                        textNames.
+                    let benches =
+                        Object.keys(data.a.data).
                             filter(n => filter.name && filter.name.trim() ? n.includes(filter.name.trim()) : true).
-                            map(name => { return { name, fields: toFields(name) } }).filter(b => b.fields.length > 0);
+                            map(name => { return { name, variants: toVariants(name) } }).filter(b => b.variants.length > 0);
 
-                    for (let field of fields) {
-                        let pcts = field.fields.map(field => parseFloat(field.percent))
+                    for (let bench of benches) {
+                        let pcts = bench.variants.map(field => parseFloat(field.percent))
                             .filter(p => p != undefined && p != null);
-                        field.maxPct = Math.max(...pcts).toFixed(1);
-                        field.minPct = Math.min(...pcts).toFixed(1);
+                        bench.maxPct = Math.max(...pcts).toFixed(1);
+                        bench.minPct = Math.min(...pcts).toFixed(1);
                         let sum = pcts.reduce((a, b) => a + b, 0);
-                        let avg = sum / pcts.length;
-                        field.avgPct = avg.toFixed(1);
-                        field.maxCasenameLen = Math.max(...field.fields.map(f => f.casename.length));
+                        bench.avgPct = (sum / pcts.length).toFixed(1);
+                        bench.maxCasenameLen = Math.max(...bench.variants.map(f => f.casename.length));
                     }
+                    const largestChange = a => Math.max(Math.abs(a.minPct), Math.abs(a.maxPct));
 
-                    return fields;
+                    benches.sort((a, b) => largestChange(b) - largestChange(a));
+
+                    return benches;
                 },
                 bootstrapTotals() {
                     const sum = bootstrap => Object.entries(bootstrap).map(e => e[1] / 1e9).reduce((sum, next) => sum + next, 0);
@@ -513,13 +463,13 @@
                 },
             },
             methods: {
-                short: function (comparison) {
+                short(comparison) {
                     return shortCommit(comparison.commit);
                 },
-                prLink: function (pr) {
+                prLink(pr) {
                     return `https://github.com/rust-lang/rust/pull/${pr}`;
                 },
-                percentClass: function (pct) {
+                percentClass(pct) {
                     let klass = "";
                     if (pct > 1) {
                         klass = 'positive';
@@ -560,11 +510,11 @@
                     return result;
                 },
                 isDodgyBench(bench) {
-                    return bench.fields.some(f => f.isDodgy);
+                    return bench.variants.some(f => f.isDodgy);
                 },
             },
             watch: {
-                data: function (newVal, oldVal) {
+                data(newVal, oldVal) {
                     if (newVal && !oldVal) {
                         this.$nextTick(() => {
                             for (let element of document.querySelectorAll(".toggle-table")) {
@@ -574,7 +524,8 @@
                     }
                 }
             }
-        })
+        });
+
         function toggleBenchGroup(element) {
             let next = element.parentElement.parentElement.nextElementSibling;
             let inBody = []
@@ -587,6 +538,7 @@
                 next = next.nextElementSibling;
             }
         }
+
         function toggleFilters(id, toggle) {
             let styles = document.getElementById(id).style;
             let indicator = document.getElementById(toggle);
@@ -608,11 +560,9 @@
             toggleFilters("search-content", "search-toggle-indicator");
         };
 
-
         function unique(arr) {
             return arr.filter((value, idx) => arr.indexOf(value) == idx);
         }
-
 
         function shortCommit(commit) {
             return commit.substring(0, 8);
@@ -638,6 +588,7 @@
             b && (document.getElementById("after").innerHTML = shorten(b));
             stat && (document.getElementById("stat-header").innerHTML = stat);
         }
+
         function findQueryParam(name) {
             let urlParams = window.location.search.substring(1).split("&").map(x => x.split("="));
             let pair = urlParams.find(x => x[0] === name)
