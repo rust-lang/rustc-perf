@@ -200,9 +200,9 @@
                 </div>
                 <input id="submit" type="submit" value="Submit" onclick="submitSettings(); return false;">
         </fieldset>
-        <h1>Comparing <span id="stat-header">{{stat}}</span> between <span id="before">{{before}}</span> and
+        <h2>Comparing <span id="stat-header">{{stat}}</span> between <span id="before">{{before}}</span> and
             <span id="after">{{after}}</span>
-        </h1>
+        </h2>
         <div v-if="data" style="margin: 12px 0;">
             <div style="display: flex;justify-content: center;">
                 <div class="description-box">
@@ -292,8 +292,8 @@
                                     <summary>{{ trimBenchName(bench.name) }}</summary>
                                 </details>
                             </th>
-                            <td>avg: <span v-bind:class="percentClass(bench.avgPct)">{{bench.avgPct}}</span></td>
-                            <td>min: <span v-bind:class="percentClass(bench.minPct)">{{bench.minPct}}</span></td>
+                            <td>avg: <span v-bind:class="percentClass(bench.avgPct)">{{bench.avgPct}}%</span></td>
+                            <td>min: <span v-bind:class="percentClass(bench.minPct)">{{bench.minPct}}%</span></td>
                             <td>max: <span
                                     v-bind:class="percentClass(bench.maxPct)">{{bench.maxPct}}%{{isDodgyBench(bench)
                                     ? "?" : ""}}</span></td>
@@ -359,6 +359,9 @@
     <script src="shared.js"></script>
     <script>
         function findQueryParam(name) {
+            if (!window.location.search) {
+                return null;
+            }
             let urlParams = window.location.search.substring(1).split("&").map(x => x.split("="));
             let pair = urlParams.find(x => x[0] === name)
             if (pair) {
@@ -479,18 +482,35 @@
                 },
                 before() {
                     if (!this.data) {
-                        return findQueryParam("start").substring(0, 7);
+                        const start = findQueryParam("start");
+                        return start ? start.substring(0, 7) : "???";
                     }
-                    return `#${this.data.a.pr}` || this.formatDate(this.data.a.date) || this.data.a.commit.substring(0, 7);
+                    if (this.data.a.pr) {
+                        return `#${this.data.a.pr}`;
+                    }
+                    if (this.data.a.date) {
+                        return this.formatDate(this.data.a.date);
+                    }
+
+                    return this.data.a.commit.substring(0, 7);
                 },
                 after() {
                     if (!this.data) {
-                        return findQueryParam("end").substring(0, 7);
+                        const end = findQueryParam("end");
+                        return end ? end.substring(0, 7) : "???";
                     }
-                    return `#${this.data.b.pr}` || this.formatDate(this.data.b.date) || this.data.b.commit.substring(0, 7);
+
+                    if (this.data.b.pr) {
+                        return `#${this.data.b.pr}`;
+                    }
+                    if (this.data.b.date) {
+                        return this.formatDate(this.data.b.date);
+                    }
+
+                    return this.data.b.commit.substring(0, 7);
                 },
                 stat() {
-                    return findQueryParam("stat");
+                    return findQueryParam("stat") || "instructions:u";
                 }
             },
             methods: {
@@ -577,10 +597,10 @@
             let styles = document.getElementById(id).style;
             let indicator = document.getElementById(toggle);
             if (styles.display != "none") {
-                indicator.innerHTML = "⯈"
+                indicator.innerHTML = " ▶"
                 styles.display = "none";
             } else {
-                indicator.innerHTML = "▼"
+                indicator.innerHTML = " ▼"
                 styles.display = "block";
             }
         }
