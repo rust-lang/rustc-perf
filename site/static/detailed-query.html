@@ -309,14 +309,14 @@
             let values = Object.assign({
                 sort_idx: "-2",
             }, state);
-            make_request("/self-profile", values).then(function (data) {
+            makeRequest("/self-profile", values).then(function (data) {
                 DATA = data;
                 data = JSON.parse(JSON.stringify(DATA)); // deep copy
                 populate_data(data, values);
             });
         }
 
-        load_state(make_data, true);
+        loadState(make_data, true);
     </script>
 </body>
 

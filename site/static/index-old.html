@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <meta charset="utf-8">
     <title>rustc performance data</title>
@@ -13,9 +14,11 @@
         }
     </style>
 </head>
+
 <body class="container">
     <div>&gt; <a href="index.html">graphs</a>, <a href="compare.html">compare</a>,
-        <a href="dashboard.html">dashboard</a>, <a href="status.html">status</a>.</div>
+        <a href="dashboard.html">dashboard</a>, <a href="status.html">status</a>.
+    </div>
     <div id="settings">
         start: <input placeholder="yyyy-mm-dd or commit" id="start-bound" />
         end: <input placeholder="yyyy-mm-dd or commit" id="end-bound" />
@@ -27,207 +30,216 @@
         See <a href="/compare.html">compare page</a> for descriptions of what
         the names mean.
     </div>
-    <div id="loading"><h2>Loading &amp; rendering data..</h2><h3>This may take a while!</h3></div>
+    <div id="loading">
+        <h2>Loading &amp; rendering data..</h2>
+        <h3>This may take a while!</h3>
+    </div>
     <div id="charts"></div>
     <div id="as-of"></div>
     <a href="https://github.com/rust-lang-nursery/rustc-perf">
-        <img style="position: absolute; top: 0; right: 0; border: 0;" src="https://camo.githubusercontent.com/38ef81f8aca64bb9a64448d0d70f1308ef5341ab/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f72696768745f6461726b626c75655f3132313632312e706e67" alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_darkblue_121621.png">
+        <img style="position: absolute; top: 0; right: 0; border: 0;"
+            src="https://camo.githubusercontent.com/38ef81f8aca64bb9a64448d0d70f1308ef5341ab/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f72696768745f6461726b626c75655f3132313632312e706e67"
+            alt="Fork me on GitHub"
+            data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_darkblue_121621.png">
     </a>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/msgpack-lite/0.1.26/msgpack.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highcharts/6.0.7/highcharts.js"></script>
     <script src="shared.js"></script>
 
     <script>
-    let summaryYAxis = "Multiplier of `full` builds";
-    function init_graph(response, stat, absolute) {
-        let sorted_names = Object.keys(response.benchmarks);
-        sorted_names.sort();
-        document.getElementById("charts").style.display = "none";
-        let title = "";
-        let yAxis = "Value";
-        if (stat == "instructions:u") {
-            title = "Number of CPU instructions";
-            yAxis = "Instructions";
-        } else if (stat == "cycles:u") {
-            title = "Number of CPU cycles";
-            yAxis = "Cycles";
-        } else if (stat == "cpu-clock") {
-            title = "Wall time execution";
-            yAxis = "Seconds";
-        } else if (stat == "wall-time") {
-            title = "Wall time execution";
-            yAxis = "Seconds";
-        } else if (stat == "max-rss") {
-            title = "Maximum resident set size";
-            yAxis = "Kilobytes";
-        } else if (stat == "faults") {
-            title = "Faults";
-        }
-
-        function clickHandler(event) {
-            if (this.options.prev_commit !== false) {
-                const prev_commit = this.options.commit
-                window.open("/compare.html?start=" + this.options.prev_commit +
-                    "&end=" + this.options.commit +
-                    "&stat=" + stat, "_blank");
+        let summaryYAxis = "Multiplier of `full` builds";
+        function init_graph(response, stat, absolute) {
+            let sorted_names = Object.keys(response.benchmarks);
+            sorted_names.sort();
+            document.getElementById("charts").style.display = "none";
+            let title = "";
+            let yAxis = "Value";
+            if (stat == "instructions:u") {
+                title = "Number of CPU instructions";
+                yAxis = "Instructions";
+            } else if (stat == "cycles:u") {
+                title = "Number of CPU cycles";
+                yAxis = "Cycles";
+            } else if (stat == "cpu-clock") {
+                title = "Wall time execution";
+                yAxis = "Seconds";
+            } else if (stat == "wall-time") {
+                title = "Wall time execution";
+                yAxis = "Seconds";
+            } else if (stat == "max-rss") {
+                title = "Maximum resident set size";
+                yAxis = "Kilobytes";
+            } else if (stat == "faults") {
+                title = "Faults";
             }
-            return false;
-        }
 
-        for (let crate_name of sorted_names) {
-            let wrapper = document.createElement("table");
-            let row = document.createElement("tr");
-            wrapper.appendChild(row);
-            for (let profile of ["check", "debug", "opt"]) {
-                let crate_name_with_profile = `${crate_name}-${profile}`;
-                let element = document.createElement("td");
-                let element_1 = document.createElement("div");
-                let element_2 = document.createElement("div");
-                element_1.style.position = "absolute";
-                element_1.style.width = "100%";
-                element_1.id = "chart-container-" + crate_name_with_profile;
-                element_2.style.position = "relative";
-                element_2.style.width = "100%";
-                element_2.style.height = "450px";
-                element_2.appendChild(element_1);
-                element.id = "chart-top-outer-container-" + crate_name_with_profile;
-                element.style.width = "33%";
-                element.appendChild(element_2);
-                row.appendChild(element);
+            function clickHandler(event) {
+                if (this.options.prev_commit !== false) {
+                    const prev_commit = this.options.commit
+                    window.open("/compare.html?start=" + this.options.prev_commit +
+                        "&end=" + this.options.commit +
+                        "&stat=" + stat, "_blank");
+                }
+                return false;
             }
-            row.style.width = "100%";
-            wrapper.style.width = "100%";
-            document.getElementById("charts").appendChild(wrapper);
-        }
-        let graphs = [];
-        for (let crate_name of sorted_names) {
-            for (let profile of ["check", "debug", "opt"]) {
-                graphs.push(() => {
-                    let cache_states =
-                        response.benchmarks[crate_name][profile];
-                    let datasets = [];
-                    let max = response.max[crate_name.replace("-check", "").replace("-debug", "").replace("-opt", "")];
-                    for (let state of cache_states) {
-                        let cache_name = state[0];
-                        let data = state[1];
-                        datasets.push({
-                            name: cache_name,
-                            animation: false,
-                            allowPointSelect: true,
-                            data: data.map(({commit, absolute, percent, y, x, is_interpolated}) => ({
-                                commit: response.commits[commit],
-                                prev_commit: commit == 0 ? null : response.commits[commit - 1],
-                                absolute, percent, y, x, color: response.colors[is_interpolated ? 1 : 0],
-                            })),
-                            marker: {
-                                enabled: true
-                            },
-                        });
-                    }
 
-                    let id = "chart-container-" + crate_name + "-" + profile;
-                    let element = document.getElementById(id);
-                    let chart = new Highcharts.chart(element, {
-                        chart: {
-                            zoomType: "xy",
-                            renderTo: element,
-                            type: "line",
-                        },
-                        title: {
-                            text: crate_name + "-" + profile + "<br>" + title,
-                        },
-                        rangeSelector: {
-                            selected: 1,
-                        },
-                        series: datasets,
-                        tooltip: {
-                            crosshairs: [true],
-                            formatter: function formatter() {
-                                let date = new Date(this.x);
-                                let commit = this.point.commit.substr(0, 10);
-                                let y_axis = crate_name.startsWith("Summary") ? summaryYAxis : yAxis;
-                                return "<b>" + date.toLocaleString() + " - " + commit + "</b>" +
-                                    "<br>" + this.series.name + ": " +
-                                    this.point.absolute.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) +
-                                    " " + y_axis.toLowerCase() + " (" +
-                                    this.point.percent.toFixed(2) + "% from start)";
+            for (let crate_name of sorted_names) {
+                let wrapper = document.createElement("table");
+                let row = document.createElement("tr");
+                wrapper.appendChild(row);
+                for (let profile of ["check", "debug", "opt"]) {
+                    let crate_name_with_profile = `${crate_name}-${profile}`;
+                    let element = document.createElement("td");
+                    let element_1 = document.createElement("div");
+                    let element_2 = document.createElement("div");
+                    element_1.style.position = "absolute";
+                    element_1.style.width = "100%";
+                    element_1.id = "chart-container-" + crate_name_with_profile;
+                    element_2.style.position = "relative";
+                    element_2.style.width = "100%";
+                    element_2.style.height = "450px";
+                    element_2.appendChild(element_1);
+                    element.id = "chart-top-outer-container-" + crate_name_with_profile;
+                    element.style.width = "33%";
+                    element.appendChild(element_2);
+                    row.appendChild(element);
+                }
+                row.style.width = "100%";
+                wrapper.style.width = "100%";
+                document.getElementById("charts").appendChild(wrapper);
+            }
+            let graphs = [];
+            for (let crate_name of sorted_names) {
+                for (let profile of ["check", "debug", "opt"]) {
+                    graphs.push(() => {
+                        let cache_states =
+                            response.benchmarks[crate_name][profile];
+                        let datasets = [];
+                        let max = response.max[crate_name.replace("-check", "").replace("-debug", "").replace("-opt", "")];
+                        for (let state of cache_states) {
+                            let cache_name = state[0];
+                            let data = state[1];
+                            datasets.push({
+                                name: cache_name,
+                                animation: false,
+                                allowPointSelect: true,
+                                data: data.map(({ commit, absolute, percent, y, x, is_interpolated }) => ({
+                                    commit: response.commits[commit],
+                                    prev_commit: commit == 0 ? null : response.commits[commit - 1],
+                                    absolute, percent, y, x, color: response.colors[is_interpolated ? 1 : 0],
+                                })),
+                                marker: {
+                                    enabled: true
+                                },
+                            });
+                        }
+
+                        let id = "chart-container-" + crate_name + "-" + profile;
+                        let element = document.getElementById(id);
+                        let chart = new Highcharts.chart(element, {
+                            chart: {
+                                zoomType: "xy",
+                                renderTo: element,
+                                type: "line",
                             },
-                        },
-                        xAxis: {
-                            type: "datetime",
-                        },
-                        yAxis: absolute ? {
-                            // Only the leftmost one ("-check") has its y-axis titled.
-                            title: profile == "check" ?
-                                { text: crate_name.startsWith("Summary") ?
-                                    summaryYAxis : yAxis } :
-                                { text: "" },
-                            min: 0,
-                            ceiling: max * 1.05,
-                            floor: 0,
-                        } : {
-                            max: max * 1.05,
-                            softMin: -5,
-                            minRange: 0.1,
                             title: {
-                                text: "% change",
-                            }
-                        },
-                        plotOptions: {
-                            line: {
-                                point: {
-                                    events: {
-                                        click: clickHandler,
+                                text: crate_name + "-" + profile + "<br>" + title,
+                            },
+                            rangeSelector: {
+                                selected: 1,
+                            },
+                            series: datasets,
+                            tooltip: {
+                                crosshairs: [true],
+                                formatter: function formatter() {
+                                    let date = new Date(this.x);
+                                    let commit = this.point.commit.substr(0, 10);
+                                    let y_axis = crate_name.startsWith("Summary") ? summaryYAxis : yAxis;
+                                    return "<b>" + date.toLocaleString() + " - " + commit + "</b>" +
+                                        "<br>" + this.series.name + ": " +
+                                        this.point.absolute.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) +
+                                        " " + y_axis.toLowerCase() + " (" +
+                                        this.point.percent.toFixed(2) + "% from start)";
+                                },
+                            },
+                            xAxis: {
+                                type: "datetime",
+                            },
+                            yAxis: absolute ? {
+                                // Only the leftmost one ("-check") has its y-axis titled.
+                                title: profile == "check" ?
+                                    {
+                                        text: crate_name.startsWith("Summary") ?
+                                            summaryYAxis : yAxis
+                                    } :
+                                    { text: "" },
+                                min: 0,
+                                ceiling: max * 1.05,
+                                floor: 0,
+                            } : {
+                                max: max * 1.05,
+                                softMin: -5,
+                                minRange: 0.1,
+                                title: {
+                                    text: "% change",
+                                }
+                            },
+                            plotOptions: {
+                                line: {
+                                    point: {
+                                        events: {
+                                            click: clickHandler,
+                                        }
                                     }
                                 }
                             }
-                        }
+                        });
                     });
-                });
+                }
             }
+            processGraphs(graphs);
+            document.getElementById("charts").style.display = "block";
         }
-        processGraphs(graphs);
-        document.getElementById("charts").style.display = "block";
-    }
 
-    function processGraphs(graphs) {
-        requestAnimationFrame(() => {
-            graphs.shift()();
-            if (graphs.length > 0) {
-                processGraphs(graphs);
-            }
-        });
-    }
+        function processGraphs(graphs) {
+            requestAnimationFrame(() => {
+                graphs.shift()();
+                if (graphs.length > 0) {
+                    processGraphs(graphs);
+                }
+            });
+        }
 
-    function make_graph(state) {
-        // it's already visible, but if we would allow calling this more than once this makes it repeatable
-        document.getElementById("loading").style.display = "block";
-        let values = Object.assign({}, {
-            start: "",
-            end: "",
-            stat: "instructions:u",
-            absolute: true,
-        }, state);
-        make_request("/graph", values).then(function(response) {
-            init_graph(response, values.stat, values.absolute);
-            document.getElementById("loading").style.display = "none";
-        });
-    }
+        function make_graph(state) {
+            // it's already visible, but if we would allow calling this more than once this makes it repeatable
+            document.getElementById("loading").style.display = "block";
+            let values = Object.assign({}, {
+                start: "",
+                end: "",
+                stat: "instructions:u",
+                absolute: true,
+            }, state);
+            makeRequest("/graph", values).then(function (response) {
+                init_graph(response, values.stat, values.absolute);
+                document.getElementById("loading").style.display = "none";
+            });
+        }
 
-    function submit_settings() {
-        let start = document.getElementById("start-bound").value;
-        let end = document.getElementById("end-bound").value;
-        let absolute = document.getElementById("absolute").checked;
-        let stat = getSelected("stats");
-        let params = new URLSearchParams();
-        params.append("start", start);
-        params.append("end", end);
-        params.append("absolute", absolute);
-        params.append("stat", stat);
-        window.location.search = params.toString();
-    }
+        function submit_settings() {
+            let start = document.getElementById("start-bound").value;
+            let end = document.getElementById("end-bound").value;
+            let absolute = document.getElementById("absolute").checked;
+            let stat = getSelected("stats");
+            let params = new URLSearchParams();
+            params.append("start", start);
+            params.append("end", end);
+            params.append("absolute", absolute);
+            params.append("stat", stat);
+            window.location.search = params.toString();
+        }
 
-    load_state(make_graph);
+        loadState(make_graph);
     </script>
 </body>
+
 </html>

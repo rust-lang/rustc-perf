@@ -186,7 +186,7 @@ function query_string_for_state(state) {
     return result;
 }
 
-function load_state(callback, skip_settings) {
+function loadState(callback, skip_settings) {
     let params = new URLSearchParams(window.location.search.slice(1));
     let state = {};
     for (let param of params) {
@@ -225,7 +225,7 @@ function load_state(callback, skip_settings) {
 }
 
 // This one is for making the request we send to the backend.
-function make_request(path, body) {
+function makeRequest(path, body) {
     if (window.msgpack === undefined) {
         alert("msgpack is not loaded, maybe allow scripts from cdnjs.cloudflare.com?");
         return Promise.reject("msgpack is not loaded");

@@ -10,16 +10,162 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <style>
         ul li {
+            margin: 0;
+        }
+
+        ul li input {
+            vertical-align: middle;
+            margin: 0 2px;
+
+        }
+
+        .section {
+            display: flex;
+            margin: 10px 0;
+        }
+
+        #commits {
+            border: none;
+            display: flex;
+            padding: 0px;
+        }
+
+        .commit-input {
+            width: 270px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .commit-input label {
+            font-size: 12px;
+            font-weight: bold;
+            margin-bottom: 6px;
+        }
+
+        #metric {
             position: relative;
-            padding-top: 0.5em;
+            height: 40px;
+        }
+
+        #stats {
+            border-radius: 5px;
+            width: 200px;
+            font-size: 14px;
+            margin-left: 52px;
+        }
+
+        #filters-toggle {
+            cursor: pointer;
+        }
+
+        .section-heading {
+            font-size: 16px;
+        }
+
+        #filters-content .section-heading {
+            font-size: 16px;
+        }
+
+        #filters {
+            border: 1px black;
+            border-style: dotted;
+            margin: 12px 0px;
+            border-radius: 10px;
+        }
+
+        #filter {
+            margin-left: 52px;
+        }
+
+        input {
+            border-radius: 5px;
+            font-size: 12px;
+            height: 100%;
         }
 
         input[type="checkbox"] {
+            height: auto;
+        }
+
+        #settings input[type=submit] {
+            width: 100%;
+            font-weight: bold;
+            background: #ADD8E6;
+        }
+
+        .cache-label {
+            font-weight: bold;
+        }
+
+        #states-list {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            width: 80%;
+            list-style: none;
+            margin: 0;
+        }
+
+        .tooltip {
+            position: relative;
+            border-radius: 50%;
+            font-size: 12px;
+            margin: 0 -4px;
+            border: 1px solid #7d6969;
+            width: 16px;
+            text-align: center;
+            font-weight: bold;
+            background: #d6d3d3;
+            cursor: pointer;
+            display: inline-block;
+        }
+
+        .tooltip .tooltiptext {
+            width: 180px;
+            visibility: hidden;
+            color: white;
+            background-color: #524d4d;
+            text-align: center;
+            padding: 5px;
+            border-radius: 6px;
+
             position: absolute;
-            top: 0.25em;
-            left: -2em;
+            bottom: 125%;
+            margin-left: -60px;
+
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        .description-box {
+            border: 1px solid;
+            display: flex;
+        }
+
+        .description-arrow {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            background: #8dcc8d;
+            padding: 5px;
+        }
+
+        #not-continuous {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            text-align: center;
+            background: #cc3300;
+            border: 1px solid;
+            cursor: help;
         }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
 </head>
 
 <body class="container" style="max-width:800px">
@@ -27,47 +173,197 @@
         <a href="dashboard.html">dashboard</a>, <a href="bootstrap.html">bootstrap</a>,
         <a href="status.html">status</a>, <a href="help.html">help</a>.
     </div>
-    <div>
-        <p>Warning: although measurements known to have high variation are marked with
-            '?'/'??', this does not mean that unmarked measurements are guaranteed to have
-            low variation. Verify the measurement against the
-            <a
-                href="compare.html?start=3158857297417566824631a85c4cb3c0615ec6c2&end=7e0241c63755ea28045d512b742f50b307874419&stat=instructions:u">
-                last "noise run"</a> which shows the perf difference of a non-functional change.
-        </p>
-    </div>
-    Filter benchmark builds: <input id="filter" type="text" /><br>
-    <div>
-        <h3>Cache states</h3>
-        <p>Most benchmarks have at least 4 cache states for which we collect data:</p>
-        <ul style="list-style:none;">
-            <li><input type="checkbox" id="build-full" checked /> full: a
-                non-incremental full build starting with empty cache</li>
-            <li><input type="checkbox" id="build-incremental-full" checked /> incr-full: an incremental build starting
-                with empty cache</li>
-            <li><input type="checkbox" id="build-incremental-unchanged" checked /> incr-unchanged: an incremental build
-                starting with complete
-                cache, and unchanged source directory -- the "perfect" scenario for incremental.</li>
-            <li><input type="checkbox" id="build-incremental-patched" checked /> incr-patched: an incremental build
-                starting with complete cache, and an
-                altered source directory. The typical variant of this is "println" which represents
-                the addition of a `println!` macro somewhere in the source code.</li>
-        </ul>
-    </div>
-    <form id="settings" action="">
-        <fieldset id="commits">
-            <legend>Commits</legend>
-            <label for="start-bound">Commit/Date A:</label>
-            <input width="100em" placeholder="YYYY-MM-DD or SHA" id="start-bound" /><br>
-            <label for="end-bound">Commit/Date B:</label>
-            <input width="100em" placeholder="YYYY-MM-DD or SHA" id="end-bound" /><br>
+    <br />
+    <div id="app">
+        <fieldset id="settings">
+            <legend id="search-toggle" class="section-heading">Do another comparison<span
+                    id="search-toggle-indicator"></span></legend>
+            <div id="search-content">
+                <div id="commits" class="section">
+                    <div class="section-heading">Commits</div>
+                    <div style="display: flex; width: 100%; justify-content: space-around;">
+                        <div class="commit-input">
+                            <label for="start-bound">Before</label>
+                            <input width="100em" placeholder="YYYY-MM-DD or Commit SHA" id="start-bound" />
+                        </div>
+                        <div class="commit-input">
+                            <label for="end-bound">After</label>
+                            <input width="100em" placeholder="YYYY-MM-DD or Commit SHA" id="end-bound" />
+                        </div>
+                    </div>
+                </div>
+                <div id="metric" class="section">
+                    <div class="section-heading" for="stats">Metric</div>
+                    <div style="display: flex; flex-direction: column; justify-content: center;">
+                        <select id='stats' name="stat"></select>
+                    </div>
+                </div>
+                <input id="submit" type="submit" value="Submit" onclick="submitSettings(); return false;">
         </fieldset>
-        <label for="stats">Choose a comparison method:</label>
-        <select id='stats' name="stat">
-        </select><br>
-        <input type="submit" value="Submit" onclick="submit_settings(); return false;">
-    </form>
-    <div id="content" style="display: none; margin-top: 15px"></div>
+        <h2>Comparing <span id="stat-header">{{stat}}</span> between <span id="before">{{before}}</span> and
+            <span id="after">{{after}}</span>
+        </h2>
+        <div v-if="data" style="margin: 12px 0;">
+            <div style="display: flex;justify-content: center;">
+                <div class="description-box">
+                    <div v-if="data.prev" class="description-arrow"><a v-bind:href="prevLink">&larr;</a></div>
+                    <div style="padding: 10px;">
+                        <a v-if="data.a.pr" v-bind:href="prLink(data.a.pr)">#{{data.a.pr}}</a>
+                        <span v-if="data.a.date">{{formatDate(data.a.date)}}</span>
+                        (<a v-bind:href="commitLink(data.a.commit)">{{short(data.a)}}</a>)
+                    </div>
+                </div>
+                <div v-if="notContinuous" id="not-continuous" title="WARNING! The commits are not continuous.">...
+                </div>
+                <div class="description-box">
+                    <div style="padding: 10px;">
+                        <a v-if="data.b.pr" v-bind:href="prLink(data.b.pr)">#{{data.b.pr}}</a>
+                        <span v-if="data.b.date">{{formatDate(data.b.date)}}</span>
+                        (<a v-bind:href="commitLink(data.b.commit)">{{short(data.b)}}</a>)
+                    </div>
+                    <div v-if="data.next" class="description-arrow"><a v-bind:href="nextLink">&rarr;</a></div>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: center;">
+                <a v-bind:href="compareLink">🔎 compare commits</a>
+            </div>
+        </div>
+        <fieldset id="filters">
+            <legend id="filters-toggle" class="section-heading">Filters<span id="filters-toggle-indicator"></span>
+            </legend>
+            <div id="filters-content" style="display: none;">
+                <div class="section">
+                    <div class="section-heading">Filter by benchmark
+                    </div>
+                    <input id="filter" type="text" v-model="filter.name" />
+                </div>
+                <div class=" section">
+                    <div class="section-heading">
+                        <div style="width: 160px;">
+                            <span>Build types</span>
+                            <span class="tooltip">?
+                                <span class="tooltiptext">
+                                    The different types of builds based on their incremental compilation cache state and
+                                    what has changed since the last build.
+                                </span>
+                            </span>
+                        </div>
+                    </div>
+                    <ul id="states-list">
+                        <li><input type="checkbox" id="build-full" v-model="filter.cache.full" /><span
+                                class="cache-label">full</span>
+                            <div class="tooltip">?
+                                <span class="tooltiptext">
+                                    A non-incremental full build starting with empty cache.
+                                </span>
+                            </div>
+                        </li>
+                        <li><input type="checkbox" id="build-incremental-full" v-model="filter.cache.incrFull" /> <span
+                                class="cache-label">incr-full</span>
+                            <div class="tooltip">?
+                                <span class="tooltiptext">
+                                    An incremental build starting with empty cache.
+                                </span>
+                            </div>
+                        </li>
+                        <li><input type="checkbox" id="build-incremental-unchanged"
+                                v-model="filter.cache.incrUnchanged" />
+                            <span class="cache-label">incr-unchanged</span>
+                            <div class="tooltip">?
+                                <span class="tooltiptext">
+                                    An incremental build starting with complete cache, and unchanged source directory --
+                                    the "perfect" scenario for incremental.
+                                </span>
+                            </div>
+                        </li>
+                        <li><input type="checkbox" id="build-incremental-patched"
+                                v-model="filter.cache.incrPatched" /><span class="cache-label">incr-patched</span>
+                            <div class="tooltip">?
+                                <span class="tooltiptext">
+                                    An incremental build starting with complete cache, and an altered source directory.
+                                    The typical variant of this is "println" which represents the addition of a
+                                    `println!` macro somewhere in the source code.
+                                </span>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+                <div class="section">
+                    <div class="section-heading"><span>Show only significant changes</span>
+                        <span class="tooltip">?
+                            <span class="tooltiptext">
+                                Whether to filter out all benchmarks that do not show significant changes. A significant
+                                change is any change above 0.2% for non-noisy benchmarks and 1.0% for noisy ones.
+                            </span>
+                        </span>
+                    </div>
+                    <input type="checkbox" v-model="filter.showOnlySignificant" style="margin-left: 20px;" />
+                </div>
+            </div>
+        </fieldset>
+        <div v-if="data" id="content" style="margin-top: 15px">
+            <table class="compare" style="width: 80%; margin: 0 auto; font-size: medium !important;">
+                <tbody>
+                    <template v-for="bench in benches">
+                        <tr data-field-start="true">
+                            <th>
+                                <details>
+                                    <summary>{{ trimBenchName(bench.name) }}</summary>
+                                </details>
+                            </th>
+                            <td>min: <span v-bind:class="percentClass(bench.minPct)">{{bench.minPct}}%</span></td>
+                            <td>max: <span v-bind:class="percentClass(bench.maxPct)">{{bench.maxPct}}%</span></td>
+                            <td></td>
+                        </tr>
+                        <template v-for="run in bench.variants">
+                            <tr>
+                                <td>{{ run.casename }}</td>
+                                <td>
+                                    <a v-bind:href="detailedQueryLink(data.a.commit, bench.name, run.casename)">
+                                        {{ run.datumA }}
+                                    </a>
+                                </td>
+                                <td>
+                                    <a v-bind:href="detailedQueryLink(data.b.commit, bench.name, run.casename)">
+                                        {{ run.datumB }}
+                                    </a>
+                                </td>
+                                <td>
+                                    <a
+                                        v-bind:href="percentLink(data.b.commit, data.a.commit, bench.name, run.casename)">
+                                        <span v-bind:class="percentClass(run.percent)">
+                                            {{ run.percent }}%{{run.isDodgy ? "?" : ""}}
+                                        </span>
+                                    </a>
+                                </td>
+                            </tr>
+                        </template>
+                    </template>
+                </tbody>
+            </table>
+            <br />
+            <table class="compare" v-if="data && data.a.bootstrap.length > 0">
+                <tr>
+                    <td colspan="4">bootstrap timings; variance is 1-3% on smaller benchmarks! Values in seconds.</td>
+                </tr>
+                <tr>
+                    <th>total</th>
+                    <th>{{bootstrapTotals.a.toFixed(3)}}</th>
+                    <th>{{bootstrapTotals.b.toFixed(3)}}</th>
+                </tr>
+                <template v-for="bootstrap in bootstraps">
+                    <tr data-field-start="true">
+                        <th style="width: 19em;">{{bootstrap.name}}</th>
+                        <td>{{bootstrap.a}}</td>
+                        <td>{{bootstrap.b}}</td>
+                        <td><span
+                                v-bind:class="percentClass(bootstrap.percent)">{{bootstrap.percent.toFixed(1)}}%</span>
+                        </td>
+                    </tr>
+                </template>
+            </table>
+        </div>
+    </div>
     <br>
     <div id="as-of"></div>
     <a href="https://github.com/rust-lang-nursery/rustc-perf">
@@ -79,415 +375,271 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/msgpack-lite/0.1.26/msgpack.min.js"></script>
     <script src="shared.js"></script>
     <script>
-        function print_date(date) {
-            function pad_str(i) {
-                return (i < 10) ? "0" + i : "" + i;
+        function findQueryParam(name) {
+            if (!window.location.search) {
+                return null;
+            }
+            let urlParams = window.location.search.substring(1).split("&").map(x => x.split("="));
+            let pair = urlParams.find(x => x[0] === name)
+            if (pair) {
+                return unescape(pair[1]);
+            }
+        }
+        let app = new Vue({
+            el: '#app',
+            data: {
+                filter: {
+                    name: null,
+                    showOnlySignificant: true,
+                    cache: {
+                        full: true,
+                        incrFull: true,
+                        incrUnchanged: true,
+                        incrPatched: true
+                    }
+                },
+                data: null
+            },
+            computed: {
+                notContinuous() {
+                    return !this.data.is_contiguous;
+                },
+                prevLink() {
+                    return `/compare.html?start=${this.data.prev}&end=${this.data.a.commit}`;
+                },
+                nextLink() {
+                    return `/compare.html?start=${this.data.b.commit}&end=${this.data.next}`;
+                },
+                compareLink() {
+                    return `https://github.com/rust-lang/rust/compare/${this.data.a.commit}...${this.data.b.commit}`;
+                },
+                benches() {
+                    let data = this.data;
+                    const filter = this.filter;
+
+                    function shouldShowBuild(name) {
+                        if (name === "full") {
+                            return filter.cache.full;
+                        } else if (name === "incr-full") {
+                            return filter.cache.incrFull;
+                        } else if (name === "incr-unchanged") {
+                            return filter.cache.incrUnchanged;
+                        } else if (name.startsWith("incr-patched")) {
+                            return filter.cache.incrPatched;
+                        } else {
+                            // Unknown, but by default we should show things
+                            return true;
+                        }
+                    }
+                    function toVariants(name) {
+                        let variants = [];
+                        for (let d of data.a.data[name]) {
+                            const key = d[0];
+                            const datumA = d[1];
+                            const datumB = data.b.data[name].find(x => x[0] == key)[1];
+                            let percent = (100 * (datumB - datumA) / datumA).toFixed(1);
+                            if (percent === "-0.0") {
+                                percent = "0.0";
+                            }
+
+                            let isDodgy = false;
+                            if (data.variance) {
+                                let variance = data.variance[name + "-" + key];
+                                isDodgy = !!(variance && variance.description && variance.description.type != "Normal");
+                            }
+                            if (shouldShowBuild(key)) {
+                                variants.push({
+                                    casename: key,
+                                    datumA,
+                                    datumB,
+                                    percent,
+                                    isDodgy,
+                                });
+                            }
+                        }
+
+                        return variants;
+                    }
+
+                    let benches =
+                        Object.keys(data.a.data).
+                            filter(n => filter.name && filter.name.trim() ? n.includes(filter.name.trim()) : true).
+                            map(name => {
+                                const variants = toVariants(name).filter(v => filter.showOnlySignificant ? isSignificant(v) : true);
+                                const pcts = variants.map(field => parseFloat(field.percent));
+                                const maxPct = Math.max(...pcts).toFixed(1);
+                                const minPct = Math.min(...pcts).toFixed(1);
+                                const maxCasenameLen = Math.max(...variants.map(f => f.casename.length));
+                                return {
+                                    name,
+                                    variants,
+                                    maxPct,
+                                    minPct,
+                                    maxCasenameLen,
+                                };
+                            }).
+                            filter(b => b.variants.length > 0);
+
+                    const largestChange = a => Math.max(Math.abs(a.minPct), Math.abs(a.maxPct));
+                    benches.sort((a, b) => largestChange(b) - largestChange(a));
+
+                    return benches;
+                },
+                bootstrapTotals() {
+                    const sum = bootstrap => Object.entries(bootstrap).map(e => e[1] / 1e9).reduce((sum, next) => sum + next, 0);
+                    const a = sum(this.data.a.bootstrap);
+                    const b = sum(this.data.b.bootstrap);
+                    return { a, b };
+                },
+                bootstraps() {
+                    return Object.entries(this.data.a.bootstrap).map(e => {
+                        const name = e[0];
+
+                        const format = datum => datum.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+                        const a = format(e[1] / 1e9);
+                        const b = format(this.data.b.bootstrap[name] / 1e9);
+                        return {
+                            name,
+                            a,
+                            b,
+                            percent: 100 * (b - a) / a
+                        };
+                    }).sort((a, b) => Math.abs(b.percent) - Math.abs(a.percent));
+                },
+                before() {
+                    if (!this.data) {
+                        const start = findQueryParam("start");
+                        return start ? start.substring(0, 7) : "???";
+                    }
+                    if (this.data.a.pr) {
+                        return `#${this.data.a.pr}`;
+                    }
+                    if (this.data.a.date) {
+                        return this.formatDate(this.data.a.date);
+                    }
+
+                    return this.data.a.commit.substring(0, 7);
+                },
+                after() {
+                    if (!this.data) {
+                        const end = findQueryParam("end");
+                        return end ? end.substring(0, 7) : "???";
+                    }
+
+                    if (this.data.b.pr) {
+                        return `#${this.data.b.pr}`;
+                    }
+                    if (this.data.b.date) {
+                        return this.formatDate(this.data.b.date);
+                    }
+
+                    return this.data.b.commit.substring(0, 7);
+                },
+                stat() {
+                    return findQueryParam("stat") || "instructions:u";
+                }
+            },
+            methods: {
+                short(comparison) {
+                    return shortCommit(comparison.commit);
+                },
+                prLink(pr) {
+                    return `https://github.com/rust-lang/rust/pull/${pr}`;
+                },
+                percentClass(pct) {
+                    let klass = "";
+                    if (pct > 1) {
+                        klass = 'positive';
+                    } else if (pct > 0.1) {
+                        klass = 'slightly-positive';
+                    } else if (pct < -1) {
+                        klass = 'negative';
+                    } else if (pct < -0.1) {
+                        klass = 'slightly-negative';
+                    }
+                    return klass;
+
+                },
+                detailedQueryLink(commit, bench, run) {
+                    return `/detailed-query.html?commit=${commit}&benchmark=${bench}&run_name=${run}`;
+                },
+                percentLink(commit, baseCommit, bench, run) {
+                    return `/detailed-query.html?commit=${commit}&base_commit=${baseCommit}&benchmark=${bench}&run_name=${run}`;
+                },
+                commitLink(commit) {
+                    return `https://github.com/rust-lang/rust/commit/${commit}`;
+                },
+                formatDate(date) {
+                    date = new Date(date);
+                    function padStr(i) {
+                        return (i < 10) ? "0" + i : "" + i;
+                    }
+
+                    return `${date.getUTCFullYear()}-${padStr(date.getUTCMonth() + 1)}-${padStr(date.getUTCDate())} `;
+                },
+                trimBenchName(name) {
+                    let result = name.substring(0, 25)
+                    if (result != name) {
+                        result = result + "...";
+
+                    }
+                    return result;
+                },
+            },
+        });
+
+        function isSignificant(variant) {
+            const percent = Math.abs(variant.percent);
+            if (variant.isDodgy) {
+                return percent > 1.0;
+            } else {
+                return percent > 0.2;
             }
 
-            return `${date.getUTCFullYear()}-${pad_str(date.getUTCMonth() + 1)}-${pad_str(date.getUTCDate())}`;
         }
+
+        function toggleFilters(id, toggle) {
+            let styles = document.getElementById(id).style;
+            let indicator = document.getElementById(toggle);
+            if (styles.display != "none") {
+                indicator.innerHTML = " ▶"
+                styles.display = "none";
+            } else {
+                indicator.innerHTML = " ▼"
+                styles.display = "block";
+            }
+        }
+        toggleFilters("filters-content", "filters-toggle-indicator");
+        toggleFilters("search-content", "search-toggle-indicator");
+
+        document.getElementById("filters-toggle").onclick = (e) => {
+            toggleFilters("filters-content", "filters-toggle-indicator");
+        };
+        document.getElementById("search-toggle").onclick = (e) => {
+            toggleFilters("search-content", "search-toggle-indicator");
+        };
 
         function unique(arr) {
             return arr.filter((value, idx) => arr.indexOf(value) == idx);
         }
 
-        function add_datum_fields(datum, sha, bench, run, selfProfileAvailable) {
-            let html = "";
-            if (datum) {
-                html += "<td>";
-                let txt = "";
-                if (Number.isInteger(datum)) {
-                    txt = datum + "";
-                } else {
-                    txt = datum.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
-                }
-                if (selfProfileAvailable) {
-                    html += `<a href="/detailed-query.html?commit=${sha}&benchmark=${bench}&run_name=${run}">${txt}</a>`;
-                } else {
-                    html += txt;
-                }
-                html += "</td>";
-            } else {
-                html += "<td>-</td>";
-            }
-            return html;
+        function shortCommit(commit) {
+            return commit.substring(0, 8);
         }
 
-        function percent_chg(a, b) {
-            if (a && b) {
-                return 100 * (b - a) / a;
-            } else {
-                return null;
-            }
-        }
-
-        function add_percent(pct, dodgy, dodgy_marker) {
-            if (pct != null && pct != Infinity && pct != -Infinity) {
-                let klass = "";
-                if (pct > 1) {
-                    klass = 'class="positive"';
-                } else if (pct > 0.1) {
-                    klass = 'class="slightly-positive"';
-                } else if (pct < -1) {
-                    klass = 'class="negative"';
-                } else if (pct < -0.1) {
-                    klass = 'class="slightly-negative"';
-                }
-                let title = "";
-                let marker = "";
-                if (dodgy) {
-                    title = `title="${dodgy}"`;
-                    marker = dodgy_marker;
-                }
-                return `<span ${klass} ${title}>${pct.toFixed(1)}%${marker}</span>`;
-            } else {
-                return "<span>-</span>"
-            }
-        }
-
-        function populate_data(data) {
-            {
-                let filter = document.querySelector("#filter").value;
-                let test_names = unique([
-                    ...Object.keys(data.a.data),
-                    ...Object.keys(data.b.data),
-                    ...Object.keys(data.a.bootstrap),
-                    ...Object.keys(data.b.bootstrap),
-                ]);
-                let is_copied = false;
-                for (let name of test_names) {
-                    if (!name.includes(filter)) {
-                        if (!is_copied) {
-                            // Copying data is very expensive
-                            // This branch ensures that we avoid copying
-                            // if there are no filters (which is the most common case)
-                            data = JSON.parse(JSON.stringify(DATA)); // deep copy
-                            is_copied = true;
-                        }
-                        if (data.a.data[name]) delete data.a.data[name];
-                        if (data.b.data[name]) delete data.b.data[name];
-                        if (data.a.bootstrap[name]) delete data.a.bootstrap[name];
-                        if (data.b.bootstrap[name]) delete data.b.bootstrap[name];
-                    }
-                }
-            }
-
-            function shouldShowBuild(name) {
-                if (name == "full") {
-                    return document.querySelector("#build-full").checked;
-                } else if (name == "incr-full") {
-                    return document.querySelector("#build-incremental-full").checked;
-                } else if (name == "incr-unchanged") {
-                    return document.querySelector("#build-incremental-unchanged").checked;
-                } else if (name.startsWith("incr-patched")) {
-                    return document.querySelector("#build-incremental-patched").checked;
-                } else {
-                    // Unknown, but by default we should show things
-                    return true;
-                }
-            }
-
-            let html = "";
-
-            html += `<table class="compare" style="font-size: medium !important;">`;
-            html += "<thead>";
-
-            if (!data.is_contiguous) {
-                html += `<tr><td colspan=4 style="text-align:center;">`;
-                html += `<b>Warning</b>: The start and end are not adjacent!`;
-                html += `</td></tr>`;
-            }
-
-            // Heading: the two dates, and the time and rss percent changes.
-            html += "<tr>";
-
-            html += "<th>" + "<a href=\"" +
-                "https://github.com/rust-lang/rust/compare/" + data.a.commit + "..." +
-                data.b.commit +
-                "\">compare</a>" + "</th>";
-
-            let prev_link = "";
-            if (data.prev) {
-                let params = new URLSearchParams(window.location.search);
-                params.set("end", params.get("start"));
-                params.set("start", data.prev);
-                prev_link = `<a href="/compare.html?${params.toString()}">&larr;</a> `;
-            }
-            let next_link = "";
-            if (data.next) {
-                let params = new URLSearchParams(window.location.search);
-                params.set("start", params.get("end"));
-                params.set("end", data.next);
-                next_link = ` <a href="/compare.html?${params.toString()}">&rarr;</a>`;
-            }
-            html += "<th>"
-                + prev_link + ""
-                + print_date(new Date(data.a.date))
-                + ` (<a href="https://github.com/rust-lang/rust/commit/${data.a.commit}"
-                >${data.a.commit.substring(0, 8)}</a>)` + "</th>";
-            html += "<th>" + print_date(new Date(data.b.date))
-                + ` (<a href="https://github.com/rust-lang/rust/commit/${data.b.commit}"
-                >${data.b.commit.substring(0, 8)}</a>)`
-                + next_link
-                + "</th>";
-
-            html += "<th>" + "% change" + "</th>";
-            html += "</tr>";
-
-            html += "<tr>";
-            html += "<th></th>";
-            html += `<th style="text-align:left;">${data.a.pr ? `<a
-            href="https://github.com/rust-lang/rust/pull/${data.a.pr}">#${data.a.pr}</a>` : ""}</th>`;
-            html += `<th style="text-align:left;">${data.b.pr ? `<a
-            href="https://github.com/rust-lang/rust/pull/${data.b.pr}">#${data.b.pr}</a>` : ""}</th>`;
-            html += "</tr>";
-
-            html += "</thead>";
-
-            let test_names = unique([
-                ...Object.keys(data.a.data),
-                ...Object.keys(data.b.data),
-            ]);
-            let bootstrap_names = unique([
-                ...Object.keys(data.a.bootstrap),
-                ...Object.keys(data.b.bootstrap),
-            ]);
-
-            let fields = [
-                ...bootstrap_names
-                    .map(name => name)
-                    .map(name => ({ name, is_bootstrap: true, fields: to_fields_bootstrap(name) })),
-                ...test_names.map(name => ({ name, is_bootstrap: false, fields: to_fields(name) })),
-            ];
-
-            function to_fields_bootstrap(name) {
-                let datum_a = data.a.bootstrap[name] || null;
-                let datum_b = data.b.bootstrap[name] || null;
-                datum_a = datum_a ? datum_a / 1e9 : null;
-                datum_b = datum_b ? datum_b / 1e9 : null;
-
-                return [
-                    {
-                        casename: name,
-                        datum_a,
-                        datum_b,
-                        percent: percent_chg(datum_a, datum_b),
-                    }
-                ];
-            }
-
-            function to_fields(name) {
-                let source = data.a.data[name] || data.b.data[name];
-                let max_length = 0;
-                if (data.a.data[name]) {
-                    max_length = data.a.data[name].length;
-                }
-                if (data.b.data[name] && data.b.data[name].length > max_length) {
-                    max_length = data.b.data[name].length;
-                }
-
-                let keys = {};
-                if (data.a.data[name]) {
-                    for (let i = 0; i < data.a.data[name].length; i++) {
-                        if (!keys[data.a.data[name][i][0]]) {
-                            keys[data.a.data[name][i][0]] = {};
-                        }
-                        keys[data.a.data[name][i][0]].a_idx = i;
-                    }
-                }
-                if (data.b.data[name]) {
-                    for (let i = 0; i < data.b.data[name].length; i++) {
-                        if (!keys[data.b.data[name][i][0]]) {
-                            keys[data.b.data[name][i][0]] = {};
-                        }
-                        keys[data.b.data[name][i][0]].b_idx = i;
-                    }
-                }
-
-                let fields = [];
-                for (let key in keys) {
-                    let a_idx = keys[key].a_idx;
-                    let b_idx = keys[key].b_idx;
-                    let datum_a = null;
-                    let datum_b = null;
-                    if (a_idx != undefined && b_idx != undefined) {
-                        datum_a = data.a.data[name][a_idx][1];
-                        datum_b = data.b.data[name][b_idx][1];
-                    } else if (a_idx != undefined) {
-                        datum_a = data.a.data[name][a_idx][1];
-                    } else if (b_idx != undefined) {
-                        datum_b = data.b.data[name][b_idx][1];
-                    } else {
-                        // should be unreachable
-                    }
-                    if (shouldShowBuild(key)) {
-                        fields.push({
-                            casename: key,
-                            datum_a,
-                            datum_b,
-                            percent: percent_chg(datum_a, datum_b),
-                        });
-                    }
-                }
-
-                return fields;
-            }
-
-            for (let field of fields) {
-                let pcts = field.fields.map(field => field.percent)
-                    .filter(p => p != undefined && p != null);
-                field.max_pct = Math.max(...pcts);
-                field.min_pct = Math.min(...pcts);
-                field.farthest_pct = Math.max(...pcts.map(p => Math.abs(p)));
-                let sum = pcts.reduce((a, b) => a + b, 0);
-                let avg = sum / pcts.length;
-                field.avg_pct = avg;
-                field.max_casename_len = Math.max(...field.fields.map(f => f.casename.length));
-            }
-
-            fields.sort((a, b) => {
-                if (a.is_bootstrap == b.is_bootstrap) {
-                    return b.farthest_pct - a.farthest_pct;
-                }
-                else {
-                    if (a.is_bootstrap) {
-                        return 1;
-                    }
-                    else {
-                        return -1;
-                    }
-                }
-            });
-
-            let max_name_width = Math.max(...fields.map(f => f.max_casename_len));
-
-            function dodgy_name_title() {
-                return "One or more of this benchmark's runs have high measurement variation. " +
-                    "Treat this value with caution. And see the warning at the bottom of " +
-                    "the table.";
-            }
-
-            function dodgy_casename_title(name, casename, variance) {
-                if (!variance) {
-                    return "";
-                }
-
-                if (variance.type == "HighlyVariable") {
-                    return `This measurement varies a lot. Do not trust it!`
-                }
-                if (variance.type == "Noisy") {
-                    return `This measurement is noisy. Do not trust it!`
-                }
-                return "";
-            }
-
-            let is_first_bootstrap = true;
-            for (let field of fields) {
-                let is_dodgy = Object.keys(data.variance || {}).some(k => {
-                    let variance = data.variance[k];
-                    return k.startsWith(field.name) && variance && variance.description.type != "Normal";
-                });
-                let dodgy = is_dodgy ? dodgy_name_title() : "";
-                if (field.is_bootstrap) {
-                    if (is_first_bootstrap) {
-                        html += "<tr data-field-start=true><td>&nbsp;</td></tr>";
-                        html += "<tr data-field-start=true><td colspan=4>bootstrap timings; variance is 1-3% on smaller benchmarks! Values in seconds.</td></tr>";
-                        is_first_bootstrap = false;
-
-                        html += "<tr data-field-start=true>";
-                        html += `<th style="width: ${max_name_width / 2}em;" data-js-name=Total>` + truncate_name("total") + "</th>";
-                        let sum = (acc, value) => acc + value;
-                        let a_total = fields.filter(f => f.is_bootstrap).map(f => f.fields[0].datum_a).reduce(sum);
-                        let b_total = fields.filter(f => f.is_bootstrap).map(f => f.fields[0].datum_b).reduce(sum);
-                        html += add_datum_fields(a_total, data.a.commit, "Total", "", false);
-                        html += add_datum_fields(b_total, data.b.commit, "Total", "", false);
-                        let pct = add_percent(percent_chg(a_total, b_total), dodgy, "??");
-                        html += `<td>${pct}</td>`;
-                        html += "</tr>";
-                    }
-                    html += "<tr data-field-start=true>";
-                    html += `<th style="width: ${max_name_width / 2}em;" data-js-name=${field.name}>` + truncate_name(field.name) + "</th>";
-                    let entry = field.fields[0];
-                    html += add_datum_fields(entry.datum_a, data.a.commit,
-                        field.name, entry.casename, false);
-                    html += add_datum_fields(entry.datum_b, data.b.commit,
-                        field.name, entry.casename, false);
-                    let pct = add_percent(entry.percent, dodgy, "??");
-                    html += `<td>${pct}</td>`;
-                    html += "</tr>";
-                } else {
-                    html += "<tr><td>&nbsp;</td></tr>";
-                    html += "<tr data-field-start=true>";
-                    html += `<th style="width: ${max_name_width / 2}em;" data-js-name=${field.name}>` +
-                        `<details class=toggle-table><summary>` +
-                        truncate_name(field.name) + "</summary></details></th>";
-                    html += "<td> avg: " + add_percent(field.avg_pct, dodgy, "?") + "</td>";
-                    html += "<td text-align=center> min: " + add_percent(field.min_pct, dodgy, "?") +
-                        "</td>";
-                    html += "<td> max: " + add_percent(field.max_pct, dodgy, "?") + "</td>";
-                    html += "</tr>";
-                    for (let i = 0; i < field.fields.length; i++) {
-                        let entry = field.fields[i];
-                        const varianceKey = field.name + "-" + entry.casename;
-                        const variance = data.variance && data.variance[varianceKey] && data.variance[varianceKey].description;
-                        let dodgy = dodgy_casename_title(field.name, entry.casename, variance);
-                        html += "<tr>";
-                        html += "<td>" + entry.casename + "</td>";
-                        // No base comparison commit for the first datum
-                        html += add_datum_fields(entry.datum_a, data.a.commit,
-                            field.name, entry.casename, true);
-                        html += add_datum_fields(entry.datum_b, data.b.commit,
-                            field.name, entry.casename, true);
-                        let pct = add_percent(entry.percent, dodgy, "??");
-                        let diff_href =
-                            `/detailed-query.html?commit=${data.b.commit}&base_commit=${data.a.commit}&benchmark=${field.name}&run_name=${entry.casename}`;
-                        html += `<td><a href="${diff_href}">${pct}</a></td>`;
-                        html += "</tr>";
-                    }
-                }
-            }
-
-            html += "</table>";
-
-            document.getElementById("content").innerHTML = html;
-            document.getElementById("content").style.display = "block";
-            for (let element of document.querySelectorAll(".toggle-table")) {
-                let name = element.parentElement.getAttribute("data-js-name");
-                let in_body = [];
-                let next = element.parentElement.parentElement.nextElementSibling;
-                while (next && next.getAttribute("data-field-start") !== "true") {
-                    in_body.push(next);
-                    next = next.nextElementSibling;
-                }
-                for (let detail of in_body) {
-                    detail.style.display = "none";
-                }
-                element.addEventListener("toggle", evt => {
-                    for (let detail of in_body) {
-                        if (element.open) {
-                            detail.style.display = "";
-                        } else {
-                            detail.style.display = "none";
-                        }
-                    }
-                });
-            }
-        }
-
-        var DATA;
-        function make_data(state) {
+        function makeData(state) {
             let values = Object.assign({}, {
                 start: "",
                 end: "",
                 stat: "instructions:u",
             }, state);
-            make_request("/get", values).then(function (data) {
-                DATA = data;
-                populate_data(data);
+            makeRequest("/get", values).then(function (data) {
+                app.data = data;
             });
         }
 
-        function submit_settings() {
+
+        function submitSettings() {
             let start = document.getElementById("start-bound").value;
             let end = document.getElementById("end-bound").value;
             let stat = getSelected("stats");
@@ -498,18 +650,7 @@
             window.location.search = params.toString();
         }
 
-        load_state(make_data);
-
-        function rerender() {
-            populate_data(DATA);
-        }
-
-        document.querySelector("#filter").addEventListener("change", rerender);
-        document.querySelector("#build-full").addEventListener("change", rerender);
-        document.querySelector("#build-incremental-full").addEventListener("change", rerender);
-        document.querySelector("#build-incremental-unchanged").addEventListener("change", rerender);
-        document.querySelector("#build-incremental-patched").addEventListener("change", rerender);
-
+        loadState(makeData);
     </script>
 </body>
 
