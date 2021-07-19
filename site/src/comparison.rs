@@ -25,18 +25,14 @@ pub async fn handle_triage(
 ) -> Result<api::triage::Response, BoxedError> {
     let start = body.start;
     let end = body.end;
-    // Compare against self to get next
     let master_commits = collector::master_commits().await?;
-    let comparison = compare_given_commits(
-        start.clone(),
-        start.clone(),
-        "instructions:u".to_owned(),
-        ctxt,
-        &master_commits,
-    )
-    .await?
-    .unwrap();
-    let mut after = Bound::Commit(comparison.next(&master_commits).unwrap()); // TODO: handle no next commit
+
+    let start_artifact = ctxt
+        .artifact_id_for_bound(start.clone(), true)
+        .ok_or(format!("could not find start commit for bound {:?}", start))?;
+    let mut next = next_commit(&start_artifact, &master_commits)
+        .map(|c| Bound::Commit(c.sha.clone()))
+        .unwrap(); // TODO: handle no next commit
 
     let mut report = HashMap::new();
     let mut before = start.clone();
@@ -44,7 +40,7 @@ pub async fn handle_triage(
     loop {
         let comparison = match compare_given_commits(
             before,
-            after.clone(),
+            next.clone(),
             "instructions:u".to_owned(),
             ctxt,
             &master_commits,
@@ -55,7 +51,7 @@ pub async fn handle_triage(
             None => {
                 log::info!(
                     "No data found for end bound {:?}. Ending comparison...",
-                    after
+                    next
                 );
                 break;
             }
@@ -72,14 +68,14 @@ pub async fn handle_triage(
         // Check that there is a next commit and that the
         // after commit is not equal to `end`
         match comparison.next(&master_commits).map(Bound::Commit) {
-            Some(next) if Some(&after) != end.as_ref() => {
-                before = after;
-                after = next;
+            Some(n) if Some(&next) != end.as_ref() => {
+                before = next;
+                next = n;
             }
             _ => break,
         }
     }
-    let end = end.unwrap_or(after);
+    let end = end.unwrap_or(next);
 
     let report = generate_report(&start, &end, report).await;
     Ok(api::triage::Response(report))
