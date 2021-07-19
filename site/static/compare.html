@@ -240,43 +240,51 @@
                 <div class=" section">
                     <div class="section-heading">
                         <div style="width: 160px;">
-                            <span>Cache states</span>
-                            <span class="tooltip">?<span class="tooltiptext">
-                                    Most benchmarks have at least 4 cache states for which we collect data</span>
+                            <span>Build types</span>
+                            <span class="tooltip">?
+                                <span class="tooltiptext">
+                                    The different types of builds based on their incremental compilation cache state and
+                                    what has changed since the last build.
+                                </span>
                             </span>
                         </div>
                     </div>
                     <ul id="states-list">
                         <li><input type="checkbox" id="build-full" v-model="filter.cache.full" /><span
                                 class="cache-label">full</span>
-                            <div class="tooltip">?<span class="tooltiptext">A
-                                    non-incremental full build starting with empty cache</span></div>
+                            <div class="tooltip">?
+                                <span class="tooltiptext">
+                                    A non-incremental full build starting with empty cache.
+                                </span>
+                            </div>
                         </li>
                         <li><input type="checkbox" id="build-incremental-full" v-model="filter.cache.incrFull" /> <span
                                 class="cache-label">incr-full</span>
-                            <div class="tooltip">?<span class="tooltiptext">An incremental build
-                                    starting
-                                    with empty cache
-                                </span></div>
+                            <div class="tooltip">?
+                                <span class="tooltiptext">
+                                    An incremental build starting with empty cache.
+                                </span>
+                            </div>
                         </li>
                         <li><input type="checkbox" id="build-incremental-unchanged"
                                 v-model="filter.cache.incrUnchanged" />
                             <span class="cache-label">incr-unchanged</span>
-                            <div class="tooltip">?<span class="tooltiptext">An
-                                    incremental
-                                    build
-                                    starting with complete
-                                    cache, and unchanged source directory -- the "perfect" scenario for
-                                    incremental.</span>
+                            <div class="tooltip">?
+                                <span class="tooltiptext">
+                                    An incremental build starting with complete cache, and unchanged source directory --
+                                    the "perfect" scenario for incremental.
+                                </span>
                             </div>
                         </li>
                         <li><input type="checkbox" id="build-incremental-patched"
                                 v-model="filter.cache.incrPatched" /><span class="cache-label">incr-patched</span>
-                            <div class="tooltip">?<span class="tooltiptext">An incremental
-                                    build
-                                    starting with complete cache, and an
-                                    altered source directory. The typical variant of this is "println" which represents
-                                    the addition of a `println!` macro somewhere in the source code.</span></div>
+                            <div class="tooltip">?
+                                <span class="tooltiptext">
+                                    An incremental build starting with complete cache, and an altered source directory.
+                                    The typical variant of this is "println" which represents the addition of a
+                                    `println!` macro somewhere in the source code.
+                                </span>
+                            </div>
                         </li>
                     </ul>
                 </div>
