@@ -376,11 +376,8 @@
     <script src="shared.js"></script>
     <script>
         function findQueryParam(name) {
-            if (!window.location.search) {
-                return null;
-            }
-            let urlParams = window.location.search.substring(1).split("&").map(x => x.split("="));
-            let pair = urlParams.find(x => x[0] === name)
+            let urlParams = window.location.search?.substring(1).split("&").map(x => x.split("="));
+            let pair = urlParams?.find(x => x[0] === name)
             if (pair) {
                 return unescape(pair[1]);
             }
@@ -436,7 +433,10 @@
                         for (let d of data.a.data[name]) {
                             const key = d[0];
                             const datumA = d[1];
-                            const datumB = data.b.data[name].find(x => x[0] == key)[1];
+                            const datumB = data.b.data[name]?.find(x => x[0] == key)?.[1];
+                            if (!datumB) {
+                                continue;
+                            }
                             let percent = (100 * (datumB - datumA) / datumA).toFixed(1);
                             if (percent === "-0.0") {
                                 percent = "0.0";
@@ -445,7 +445,7 @@
                             let isDodgy = false;
                             if (data.variance) {
                                 let variance = data.variance[name + "-" + key];
-                                isDodgy = !!(variance && variance.description && variance.description.type != "Normal");
+                                isDodgy = (variance?.description?.type ?? "Normal") != "Normal";
                             }
                             if (shouldShowBuild(key)) {
                                 variants.push({
