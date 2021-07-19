@@ -69,7 +69,7 @@
         #filters {
             border: 1px black;
             border-style: dotted;
-            margin: 16px 0px;
+            margin: 12px 0px;
             border-radius: 10px;
         }
 
@@ -141,6 +141,29 @@
             visibility: visible;
             opacity: 1;
         }
+
+        .description-box {
+            border: 1px solid;
+            display: flex;
+        }
+
+        .description-arrow {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            background: #8dcc8d;
+            padding: 5px;
+        }
+
+        #not-continuous {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            text-align: center;
+            background: #cc3300;
+            border: 1px solid;
+            cursor: help;
+        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
 </head>
@@ -152,8 +175,6 @@
     </div>
     <br />
     <div id="app">
-        <h1>Comparing <span id="stat-header">instructions:u</span> between <span id="before">???</span> and <span
-                id="after">???</span></h1>
         <fieldset id="settings">
             <legend id="search-toggle" class="section-heading">Do another comparison<span
                     id="search-toggle-indicator"></span></legend>
@@ -179,6 +200,34 @@
                 </div>
                 <input id="submit" type="submit" value="Submit" onclick="submitSettings(); return false;">
         </fieldset>
+        <h2>Comparing <span id="stat-header">{{stat}}</span> between <span id="before">{{before}}</span> and
+            <span id="after">{{after}}</span>
+        </h2>
+        <div v-if="data" style="margin: 12px 0;">
+            <div style="display: flex;justify-content: center;">
+                <div class="description-box">
+                    <div class="description-arrow"><a v-if="data.prev" v-bind:href="prevLink">&larr;</a></div>
+                    <div style="padding: 10px;">
+                        <a v-if="data.a.pr" v-bind:href="prLink(data.a.pr)">#{{data.a.pr}}</a>
+                        <span v-if="data.a.date">{{formatDate(data.a.date)}}</span>
+                        (<a v-bind:href="commitLink(data.a.commit)">{{short(data.a)}}</a>)
+                    </div>
+                </div>
+                <div v-if="notContinuous" id="not-continuous" title="WARNING! The commits are not continuous.">...
+                </div>
+                <div class="description-box">
+                    <div style="padding: 10px;">
+                        <a v-if="data.b.pr" v-bind:href="prLink(data.b.pr)">#{{data.b.pr}}</a>
+                        <span v-if="data.b.date">{{formatDate(data.b.date)}}</span>
+                        (<a v-bind:href="commitLink(data.b.commit)">{{short(data.b)}}</a>)
+                    </div>
+                    <div class="description-arrow"><a v-if="data.next" v-bind:href="nextLink">&rarr;</a></div>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: center;">
+                <a v-bind:href="compareLink">🔎 compare commits</a>
+            </div>
+        </div>
         <fieldset id="filters">
             <legend id="filters-toggle" class="section-heading">Filters<span id="filters-toggle-indicator"></span>
             </legend>
@@ -244,40 +293,8 @@
                 </div>
             </div>
         </fieldset>
-        <div id="content" style="margin-top: 15px">
-            <table v-if="data" class="compare" style="font-size: medium !important;">
-                <thead>
-                    <tr>
-                        <td v-if="notContinuous" colspan="4" style="text-align:center;"><b>Warning</b>: The start and
-                            end
-                            are not adjacent!</td>
-                    </tr>
-                    <tr>
-                        <th>
-                            <a v-bind:href="compareLink">compare</a>
-                        </th>
-                        <th>
-                            <a v-if="data.prev" v-bind:href="prevLink">&larr;</a>
-                            {{formatDate(data.a.date)}}
-                            (<a>{{short(data.a)}}</a>)
-                        </th>
-                        <th>
-                            {{formatDate(data.b.date)}}
-                            (<a>{{short(data.b)}}</a>)
-                            <a v-if="data.next" v-bind:href="nextLink">&rarr;</a>
-                        </th>
-                        <th>% change</th>
-                    </tr>
-                    <tr>
-                        <th></th>
-                        <th style="text-align: left;"><a v-if="data.a.pr"
-                                v-bind:href="prLink(data.a.pr)">#{{data.a.pr}}</a>
-                        </th>
-                        <th style="text-align: left;"><a v-if="data.b.pr"
-                                v-bind:href="prLink(data.b.pr)">#{{data.b.pr}}</a>
-                        </th>
-                    </tr>
-                </thead>
+        <div v-if="data" id="content" style="margin-top: 15px">
+            <table class="compare" style="width: 80%; margin: 0 auto; font-size: medium !important;">
                 <tbody>
                     <template v-for="bench in benches">
                         <tr data-field-start="true">
@@ -287,7 +304,9 @@
                                 </details>
                             </th>
                             <td>min: <span v-bind:class="percentClass(bench.minPct)">{{bench.minPct}}%</span></td>
-                            <td>max: <span v-bind:class="percentClass(bench.maxPct)">{{bench.maxPct}}%</span></td>
+                            <td>max: <span
+                                    v-bind:class="percentClass(bench.maxPct)">{{bench.maxPct}}%{{isDodgyBench(bench)
+                                    ? "?" : ""}}</span></td>
                             <td></td>
                         </tr>
                         <template v-for="run in bench.variants">
@@ -350,6 +369,16 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/msgpack-lite/0.1.26/msgpack.min.js"></script>
     <script src="shared.js"></script>
     <script>
+        function findQueryParam(name) {
+            if (!window.location.search) {
+                return null;
+            }
+            let urlParams = window.location.search.substring(1).split("&").map(x => x.split("="));
+            let pair = urlParams.find(x => x[0] === name)
+            if (pair) {
+                return unescape(pair[1]);
+            }
+        }
         let app = new Vue({
             el: '#app',
             data: {
@@ -471,6 +500,38 @@
                         };
                     }).sort((a, b) => Math.abs(b.percent) - Math.abs(a.percent));
                 },
+                before() {
+                    if (!this.data) {
+                        const start = findQueryParam("start");
+                        return start ? start.substring(0, 7) : "???";
+                    }
+                    if (this.data.a.pr) {
+                        return `#${this.data.a.pr}`;
+                    }
+                    if (this.data.a.date) {
+                        return this.formatDate(this.data.a.date);
+                    }
+
+                    return this.data.a.commit.substring(0, 7);
+                },
+                after() {
+                    if (!this.data) {
+                        const end = findQueryParam("end");
+                        return end ? end.substring(0, 7) : "???";
+                    }
+
+                    if (this.data.b.pr) {
+                        return `#${this.data.b.pr}`;
+                    }
+                    if (this.data.b.date) {
+                        return this.formatDate(this.data.b.date);
+                    }
+
+                    return this.data.b.commit.substring(0, 7);
+                },
+                stat() {
+                    return findQueryParam("stat") || "instructions:u";
+                }
             },
             methods: {
                 short(comparison) {
@@ -498,6 +559,9 @@
                 },
                 percentLink(commit, baseCommit, bench, run) {
                     return `/detailed-query.html?commit=${commit}&base_commit=${baseCommit}&benchmark=${bench}&run_name=${run}`;
+                },
+                commitLink(commit) {
+                    return `https://github.com/rust-lang/rust/commit/${commit}`;
                 },
                 formatDate(date) {
                     date = new Date(date);
@@ -532,10 +596,10 @@
             let styles = document.getElementById(id).style;
             let indicator = document.getElementById(toggle);
             if (styles.display != "none") {
-                indicator.innerHTML = "⯈"
+                indicator.innerHTML = " ▶"
                 styles.display = "none";
             } else {
-                indicator.innerHTML = "▼"
+                indicator.innerHTML = " ▼"
                 styles.display = "block";
             }
         }
@@ -564,31 +628,10 @@
                 stat: "instructions:u",
             }, state);
             makeRequest("/get", values).then(function (data) {
-                updateHeader(data.a.commit, data.b.commit);
                 app.data = data;
             });
         }
 
-        function updateHeader(a, b, stat) {
-            let shorten = (text) => {
-                return text.substring(0, 7);
-            }
-            a && (document.getElementById("before").innerHTML = shorten(a));
-            b && (document.getElementById("after").innerHTML = shorten(b));
-            stat && (document.getElementById("stat-header").innerHTML = stat);
-        }
-
-        function findQueryParam(name) {
-            let urlParams = window.location.search.substring(1).split("&").map(x => x.split("="));
-            let pair = urlParams.find(x => x[0] === name)
-            if (pair) {
-                return unescape(pair[1]);
-            }
-        }
-        let start = findQueryParam("start");
-        let end = findQueryParam("end");
-        let stat = findQueryParam("stat")
-        updateHeader(start, end, stat);
 
         function submitSettings() {
             let start = document.getElementById("start-bound").value;
