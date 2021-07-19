@@ -177,6 +177,8 @@
 
         #benches th {
             border-right: dotted 1px;
+            text-align: left;
+            word-break: break-word;
         }
 
         .benchmark-name {
@@ -325,7 +327,7 @@
                     <tbody>
                         <template v-for="run in bench.variants">
                             <tr>
-                                <th v-if="run.index === 0" v-bind:rowspan="bench.variants.length"> {{bench.name}}</th>
+                                <th v-if="run.first" v-bind:rowspan="bench.variants.length">{{bench.name}}</th>
                                 <td>{{ run.casename }}</td>
                                 <td>
                                     <a v-bind:href="detailedQueryLink(data.a.commit, bench.name, run.casename)">
@@ -440,7 +442,6 @@
                     }
                     function toVariants(name) {
                         let variants = [];
-                        let index = 0;
                         for (let d of data.a.data[name]) {
                             const key = d[0];
                             const datumA = d[1];
@@ -461,13 +462,11 @@
                             if (shouldShowBuild(key)) {
                                 variants.push({
                                     casename: key,
-                                    index,
                                     datumA,
                                     datumB,
                                     percent,
                                     isDodgy,
                                 });
-                                index += 1;
                             }
                         }
 
@@ -483,6 +482,10 @@
                                 const maxPct = Math.max(...pcts).toFixed(1);
                                 const minPct = Math.min(...pcts).toFixed(1);
                                 const maxCasenameLen = Math.max(...variants.map(f => f.casename.length));
+                                if (variants.length > 0) {
+                                    variants[0].first = true;
+                                }
+
                                 return {
                                     name,
                                     variants,
