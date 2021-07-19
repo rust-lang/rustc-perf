@@ -304,9 +304,7 @@
                                 </details>
                             </th>
                             <td>min: <span v-bind:class="percentClass(bench.minPct)">{{bench.minPct}}%</span></td>
-                            <td>max: <span
-                                    v-bind:class="percentClass(bench.maxPct)">{{bench.maxPct}}%{{isDodgyBench(bench)
-                                    ? "?" : ""}}</span></td>
+                            <td>max: <span v-bind:class="percentClass(bench.maxPct)">{{bench.maxPct}}%</span></td>
                             <td></td>
                         </tr>
                         <template v-for="run in bench.variants">
