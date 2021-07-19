@@ -348,15 +348,16 @@
                 </tr>
                 <tr>
                     <th>total</th>
-                    <th>{{bootstrapTotals.a.toFixed(3)}}</th>
-                    <th>{{bootstrapTotals.b.toFixed(3)}}</th>
+                    <th v-if="bootstrapTotals.a">A: {{bootstrapTotals.a.toFixed(3)}}</th>
+                    <th v-if="bootstrapTotals.b">B: {{bootstrapTotals.b.toFixed(3)}}</th>
                 </tr>
                 <template v-for="bootstrap in bootstraps">
                     <tr data-field-start="true">
                         <th style="width: 19em;">{{bootstrap.name}}</th>
-                        <td>{{bootstrap.a}}</td>
-                        <td>{{bootstrap.b}}</td>
-                        <td><span
+                        <td v-if="bootstrap.a">{{bootstrap.a}}</td>
+                        <td v-if="bootstrap.b">{{bootstrap.b}}</td>
+                        <td>
+                            <span v-if="bootstrap.percent"
                                 v-bind:class="percentClass(bootstrap.percent)">{{bootstrap.percent.toFixed(1)}}%</span>
                         </td>
                     </tr>
@@ -495,13 +496,13 @@
                     return Object.entries(this.data.a.bootstrap).map(e => {
                         const name = e[0];
 
-                        const format = datum => datum.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
-                        const a = format(e[1] / 1e9);
-                        const b = format(this.data.b.bootstrap[name] / 1e9);
+                        const format = datum => datum ? datum.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 }) : "";
+                        const a = e[1] / 1e9;
+                        const b = this.data.b.bootstrap[name] / 1e9;
                         return {
                             name,
-                            a,
-                            b,
+                            a: format(a),
+                            b: format(b),
                             percent: 100 * (b - a) / a
                         };
                     }).sort((a, b) => Math.abs(b.percent) - Math.abs(a.percent));
