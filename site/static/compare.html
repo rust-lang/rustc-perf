@@ -341,6 +341,31 @@
             </div>
         </fieldset>
         <div v-if="data" id="content" style="margin-top: 15px">
+            <div>
+                <span style="font-weight: bold;">Summary:</span>
+                <span class="positive">
+                    {{summary.numRegressed}}
+                    <svg style="width:18px;height:18px" viewBox="0 0 24 24">
+                        <path
+                            d="M16,18L18.29,15.71L13.41,10.83L9.41,14.83L2,7.41L3.41,6L9.41,12L13.41,8L19.71,14.29L22,12V18H16Z">
+                        </path>
+                    </svg>
+                </span>
+                <span>
+                    {{summary.numUnchanged}}
+                    <svg style="width:18px;height:18px" viewBox="0 0 24 24">
+                        <path d="M22,12L18,8V11H3V13H18V16L22,12Z"></path>
+                    </svg>
+                </span>
+                <span class="negative">
+                    {{summary.numImproved}}
+                    <svg style="width:18px;height:18px" viewBox="0 0 24 24">
+                        <path
+                            d="M16,6L18.29,8.29L13.41,13.17L9.41,9.17L2,16.59L3.41,18L9.41,12L13.41,16L19.71,9.71L22,12V6H16Z">
+                        </path>
+                    </svg>
+                </span>
+            </div>
             <table id="benches" class="compare">
                 <template v-for="bench in benches">
                     <tbody>
@@ -572,6 +597,37 @@
                 },
                 stat() {
                     return findQueryParam("stat") || "instructions:u";
+                },
+                summary() {
+                    let numRegressed = 0;
+                    let numImproved = 0;
+                    let numUnchanged = 0;
+                    for (let name of Object.keys(this.data.a.data)) {
+                        for (let d of this.data.a.data[name]) {
+                            const run = d[0];
+                            const datumA = d[1];
+                            const datumB = this.data.b.data[name]?.find(x => x[0] == run)?.[1];
+                            if (!datumB) {
+                                continue;
+                            }
+                            let percent = 100 * ((datumB - datumA) / datumA);
+                            const isDodgy = this.isDodgy(name, run);
+                            const threshold = isDodgy ? 1.0 : 0.2;
+                            if (percent > threshold) {
+                                numRegressed += 1;
+                            } else if (percent < -threshold) {
+                                numImproved += 1;
+                            } else {
+                                numUnchanged += 1
+                            }
+                        }
+                    }
+                    return {
+                        numRegressed,
+                        numImproved,
+                        numUnchanged,
+                    }
+
                 }
             },
             methods: {
@@ -620,6 +676,14 @@
                     }
                     return result;
                 },
+                isDodgy(name, run) {
+                    let variance = this.data.variance;
+                    if (!variance) {
+                        return false;
+                    }
+                    variance = this.data.variance[name + "-" + run];
+                    return (variance?.description?.type ?? "Normal") != "Normal";
+                }
             },
         });
 
