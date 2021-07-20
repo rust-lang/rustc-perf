@@ -28,7 +28,7 @@ be the parent commit that we use for the current round of triage.
 Use the API endpoint to automate building the file:
 
 ```
-% curl https://perf.rust-lang.org/perf/triage '{"start":"$PARENT","stat":"instructions:u"}' > YYYY-MM-DD.md
+% curl https://perf.rust-lang.org/perf/triage -d "{\"start\": \"$PARENT\"}" > YYYY-MM-DD.md
 ```
 
 ## Analysis
