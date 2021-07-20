@@ -9,6 +9,15 @@
     <link rel="alternate icon" type="image/png" href="/favicon-32x32.png">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <style>
+        body {
+            max-width: 800px;
+            margin: 2% auto;
+        }
+
+        #app {
+            margin: 0 2%;
+        }
+
         ul li {
             margin: 0;
         }
@@ -165,6 +174,10 @@
             cursor: help;
         }
 
+        #benches {
+            font-size: medium;
+        }
+
         #benches tbody::before {
             content: '';
             display: block;
@@ -179,6 +192,12 @@
             border-right: dotted 1px;
             text-align: left;
             word-break: break-word;
+            width: 25%;
+            min-width: 50px;
+        }
+
+        #benches th+td {
+            width: 25%;
         }
 
         .benchmark-name {
@@ -188,7 +207,7 @@
     <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
 </head>
 
-<body class="container" style="max-width:800px">
+<body>
     <div>&gt; <a href="index.html">graphs</a>, <a href="compare.html">compare</a>,
         <a href="dashboard.html">dashboard</a>, <a href="bootstrap.html">bootstrap</a>,
         <a href="status.html">status</a>, <a href="help.html">help</a>.
@@ -322,7 +341,7 @@
             </div>
         </fieldset>
         <div v-if="data" id="content" style="margin-top: 15px">
-            <table id="benches" class="compare" style="width: 80%; margin: 0 auto; font-size: medium !important;">
+            <table id="benches" class="compare">
                 <template v-for="bench in benches">
                     <tbody>
                         <template v-for="run in bench.variants">
