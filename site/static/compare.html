@@ -184,7 +184,11 @@
             height: 10px;
         }
 
-        #benches td {
+        #content td {
+            text-align: center;
+        }
+
+        #bootstrap th {
             text-align: center;
         }
 
@@ -372,7 +376,8 @@
                 </template>
             </table>
             <br />
-            <table class="compare" style="margin: auto;" v-if="data && Object.keys(data.a.bootstrap).length > 0">
+            <table id="bootstrap" class="compare" style="margin: auto;"
+                v-if="data && Object.keys(data.a.bootstrap).length > 0">
                 <tr>
                     <td colspan="4">bootstrap timings; variance is 1-3% on smaller benchmarks! Values in seconds.</td>
                 </tr>
@@ -380,14 +385,16 @@
                     <th>total</th>
                     <th v-if="bootstrapTotals.a">A: {{bootstrapTotals.a.toFixed(3)}}</th>
                     <th v-if="bootstrapTotals.b">B: {{bootstrapTotals.b.toFixed(3)}}</th>
-                    <th v-if="bootstrapTotals.a && bootstrapTotals.b"
-                        v-bind:class="diffClass(bootstrapTotals.b - bootstrapTotals.a)">
-                        {{(bootstrapTotals.b - bootstrapTotals.a).toFixed(3)}}
+                    <th v-if="bootstrapTotals.a && bootstrapTotals.b">
+                        Total: {{(bootstrapTotals.b - bootstrapTotals.a).toFixed(1)}}
+                        <div v-bind:class="diffClass(bootstrapTotals.b - bootstrapTotals.a)">
+                            ({{((bootstrapTotals.b - bootstrapTotals.a ) / bootstrapTotals.a).toFixed(3)}}%)
+                        </div>
                     </th>
                 </tr>
                 <template v-for="bootstrap in bootstraps">
                     <tr>
-                        <th style="width: 19em;">{{bootstrap.name}}</th>
+                        <th style="text-align: right; width: 19em;">{{bootstrap.name}}</th>
                         <td v-if="bootstrap.a">{{bootstrap.a}}</td>
                         <td v-if="bootstrap.b">{{bootstrap.b}}</td>
                         <td>
