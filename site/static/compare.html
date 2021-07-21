@@ -380,6 +380,10 @@
                     <th>total</th>
                     <th v-if="bootstrapTotals.a">A: {{bootstrapTotals.a.toFixed(3)}}</th>
                     <th v-if="bootstrapTotals.b">B: {{bootstrapTotals.b.toFixed(3)}}</th>
+                    <th v-if="bootstrapTotals.a && bootstrapTotals.b"
+                        v-bind:class="diffClass(bootstrapTotals.b - bootstrapTotals.a)">
+                        {{(bootstrapTotals.b - bootstrapTotals.a).toFixed(3)}}
+                    </th>
                 </tr>
                 <template v-for="bootstrap in bootstraps">
                     <tr>
@@ -591,6 +595,16 @@
                         klass = 'negative';
                     } else if (pct < -0.1) {
                         klass = 'slightly-negative';
+                    }
+                    return klass;
+
+                },
+                diffClass(diff) {
+                    let klass = "";
+                    if (diff > 1) {
+                        klass = 'positive';
+                    } else if (diff < -1) {
+                        klass = 'negative';
                     }
                     return klass;
 
