@@ -203,6 +203,11 @@
         .benchmark-name {
             text-align: center;
         }
+
+        .summary {
+            display: flex;
+            align-items: center;
+        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
 </head>
@@ -341,9 +346,9 @@
             </div>
         </fieldset>
         <div v-if="data" id="content" style="margin-top: 15px">
-            <div>
+            <div style="display: flex; justify-content: space-evenly;">
                 <span style="font-weight: bold;">Summary:</span>
-                <span class="positive">
+                <span class="summary positive">
                     {{summary.numRegressed}}
                     <svg style="width:18px;height:18px" viewBox="0 0 24 24">
                         <path
@@ -351,13 +356,13 @@
                         </path>
                     </svg>
                 </span>
-                <span>
+                <span class="summary">
                     {{summary.numUnchanged}}
                     <svg style="width:18px;height:18px" viewBox="0 0 24 24">
                         <path d="M22,12L18,8V11H3V13H18V16L22,12Z"></path>
                     </svg>
                 </span>
-                <span class="negative">
+                <span class="summary negative">
                     {{summary.numImproved}}
                     <svg style="width:18px;height:18px" viewBox="0 0 24 24">
                         <path
