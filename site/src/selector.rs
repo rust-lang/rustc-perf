@@ -22,13 +22,13 @@
 //! requests that all are provided. Note that this is a cartesian product if
 //! there are multiple `None`s.
 
-use crate::db::{ArtifactId, Cache, Profile};
+use crate::db::{ArtifactId, Profile, Scenario};
 use crate::interpolate::Interpolate;
 use crate::load::SiteCtxt;
 
 use async_trait::async_trait;
 use collector::Bound;
-use database::{Commit, Crate, Index, Lookup, ProcessStatistic, QueryLabel};
+use database::{Benchmark, Commit, Index, Lookup, Metric, QueryLabel};
 
 use std::convert::TryInto;
 use std::fmt;
@@ -60,7 +60,7 @@ pub fn artifact_id_for_bound(data: &Index, bound: Bound, is_left: bool) -> Optio
                 Bound::Date(_) => false,
                 Bound::None => false,
             })
-            .map(|aid| ArtifactId::Artifact(aid.to_string()))
+            .map(|aid| ArtifactId::Tag(aid.to_string()))
     })
 }
 
@@ -115,10 +115,10 @@ impl Iterator for ArtifactIdIter {
 
 #[derive(Copy, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Tag {
-    Crate,
+    Benchmark,
     Profile,
-    Cache,
-    ProcessStatistic,
+    Scenario,
+    Metric,
     QueryLabel,
 }
 
@@ -126,7 +126,7 @@ pub trait GetValue {
     fn value(component: &PathComponent) -> Option<&Self>;
 }
 
-impl GetValue for Crate {
+impl GetValue for Benchmark {
     fn value(component: &PathComponent) -> Option<&Self> {
         match component {
             PathComponent::Crate(v) => Some(v),
@@ -144,7 +144,7 @@ impl GetValue for Profile {
     }
 }
 
-impl GetValue for Cache {
+impl GetValue for Scenario {
     fn value(component: &PathComponent) -> Option<&Self> {
         match component {
             PathComponent::Cache(v) => Some(v),
@@ -153,7 +153,7 @@ impl GetValue for Cache {
     }
 }
 
-impl GetValue for ProcessStatistic {
+impl GetValue for Metric {
     fn value(component: &PathComponent) -> Option<&Self> {
         match component {
             PathComponent::ProcessStatistic(v) => Some(v),
@@ -173,20 +173,20 @@ impl GetValue for QueryLabel {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum PathComponent {
-    Crate(Crate),
+    Crate(Benchmark),
     Profile(Profile),
-    Cache(Cache),
+    Cache(Scenario),
     QueryLabel(QueryLabel),
-    ProcessStatistic(ProcessStatistic),
+    ProcessStatistic(Metric),
 }
 
 impl PathComponent {
     pub fn as_tag(&self) -> Tag {
         match self {
-            PathComponent::Crate(_) => Tag::Crate,
+            PathComponent::Crate(_) => Tag::Benchmark,
             PathComponent::Profile(_) => Tag::Profile,
-            PathComponent::Cache(_) => Tag::Cache,
-            PathComponent::ProcessStatistic(_) => Tag::ProcessStatistic,
+            PathComponent::Cache(_) => Tag::Scenario,
+            PathComponent::ProcessStatistic(_) => Tag::Metric,
             PathComponent::QueryLabel(_) => Tag::QueryLabel,
         }
     }
@@ -556,10 +556,10 @@ impl ProcessStatisticSeries {
         mut query: Query,
     ) -> Result<Vec<SeriesResponse<Self>>, String> {
         let dumped = format!("{:?}", query);
-        let krate = query.extract_as::<String>(Tag::Crate)?;
+        let krate = query.extract_as::<String>(Tag::Benchmark)?;
         let profile = query.extract_as::<Profile>(Tag::Profile)?;
-        let cache = query.extract_as::<Cache>(Tag::Cache)?;
-        let statid = query.extract_as::<ProcessStatistic>(Tag::ProcessStatistic)?;
+        let cache = query.extract_as::<Scenario>(Tag::Scenario)?;
+        let statid = query.extract_as::<Metric>(Tag::Metric)?;
         query.assert_empty()?;
 
         let index = ctxt.index.load();
@@ -579,10 +579,10 @@ impl ProcessStatisticSeries {
             .iter()
             .map(|path| {
                 let query = crate::db::DbLabel::ProcessStat {
-                    krate: path.0,
+                    benchmark: path.0,
                     profile: path.1,
-                    cache: path.2,
-                    stat: path.3,
+                    scenario: path.2,
+                    metric: path.3,
                 };
                 query.lookup(&index).unwrap()
             })
@@ -657,9 +657,9 @@ impl SelfProfile {
     async fn new(
         artifact_ids: Arc<Vec<ArtifactId>>,
         ctxt: &SiteCtxt,
-        krate: Crate,
+        krate: Benchmark,
         profile: Profile,
-        cache: Cache,
+        cache: Scenario,
     ) -> Self {
         let mut res = Vec::with_capacity(artifact_ids.len());
         let idx = ctxt.index.load();
@@ -734,9 +734,9 @@ impl SelfProfile {
         ctxt: &SiteCtxt,
         mut query: Query,
     ) -> Result<Vec<SeriesResponse<Self>>, String> {
-        let krate = query.extract_as::<String>(Tag::Crate)?;
+        let krate = query.extract_as::<String>(Tag::Benchmark)?;
         let profile = query.extract_as::<Profile>(Tag::Profile)?;
-        let cache = query.extract_as::<Cache>(Tag::Cache)?;
+        let cache = query.extract_as::<Scenario>(Tag::Scenario)?;
         query.assert_empty()?;
 
         let mut series = ctxt
@@ -773,9 +773,9 @@ impl SelfProfileQueryTime {
     async fn new(
         artifact_ids: Arc<Vec<ArtifactId>>,
         ctxt: &SiteCtxt,
-        krate: Crate,
+        krate: Benchmark,
         profile: Profile,
-        cache: Cache,
+        cache: Scenario,
         query: QueryLabel,
     ) -> Self {
         let mut res = Vec::with_capacity(artifact_ids.len());
@@ -783,9 +783,9 @@ impl SelfProfileQueryTime {
         let mut conn = ctxt.conn().await;
         let mut tx = conn.transaction().await;
         let query = crate::db::DbLabel::SelfProfileQuery {
-            krate,
+            benchmark: krate,
             profile,
-            cache,
+            scenario: cache,
             query,
         };
         for aid in artifact_ids.iter() {
@@ -824,9 +824,9 @@ impl SelfProfileQueryTime {
         ctxt: &SiteCtxt,
         mut query: Query,
     ) -> Result<Vec<SeriesResponse<Self>>, String> {
-        let krate = query.extract_as::<String>(Tag::Crate)?;
+        let krate = query.extract_as::<String>(Tag::Benchmark)?;
         let profile = query.extract_as::<Profile>(Tag::Profile)?;
-        let cache = query.extract_as::<Cache>(Tag::Cache)?;
+        let cache = query.extract_as::<Scenario>(Tag::Scenario)?;
         let ql = query.extract_as::<QueryLabel>(Tag::QueryLabel)?;
         query.assert_empty()?;
 

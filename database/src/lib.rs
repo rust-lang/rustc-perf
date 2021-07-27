@@ -12,8 +12,8 @@ pub mod pool;
 
 pub use pool::{Connection, Pool};
 
-intern!(pub struct ProcessStatistic);
-intern!(pub struct Crate);
+intern!(pub struct Metric);
+intern!(pub struct Benchmark);
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct QueuedCommit {
@@ -232,40 +232,41 @@ impl fmt::Display for Profile {
     }
 }
 
-/// The incremental cache state
+/// The scenario under test - composed of incremental cache state
+/// and sometimes a code change.
 ///
 /// These are usually reported to users in a "flipped" way. For example,
 /// `Cache::Empty` means we're doing a "full" build. We present this to users as "full".
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "variant", content = "name")]
-pub enum Cache {
+pub enum Scenario {
     /// Empty cache (i.e., full build)
     #[serde(rename = "full")]
     Empty,
     /// Empty cache but still incremental (i.e., a full incremental build)
     #[serde(rename = "incr-full")]
     IncrementalEmpty,
-    /// Cache is fully up-to-date (i.e., nothing has changed)
+    /// Cache is fully up-to-date (i.e., no code has changed)
     #[serde(rename = "incr-unchanged")]
     IncrementalFresh,
-    /// Cache is mostly up-to-date but something has been changed
+    /// Cache is mostly up-to-date but some code has been changed
     #[serde(rename = "incr-patched")]
     IncrementalPatch(PatchName),
 }
 
 intern!(pub struct PatchName);
 
-impl std::str::FromStr for Cache {
+impl std::str::FromStr for Scenario {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s.to_ascii_lowercase().as_str() {
-            "full" => Cache::Empty,
-            "incr-full" => Cache::IncrementalEmpty,
-            "incr-unchanged" => Cache::IncrementalFresh,
+            "full" => Scenario::Empty,
+            "incr-full" => Scenario::IncrementalEmpty,
+            "incr-unchanged" => Scenario::IncrementalFresh,
             _ => {
                 // FIXME: use str::strip_prefix when stabilized
                 if s.starts_with("incr-patched: ") {
-                    Cache::IncrementalPatch(PatchName::from(&s["incr-patched: ".len()..]))
+                    Scenario::IncrementalPatch(PatchName::from(&s["incr-patched: ".len()..]))
                 } else {
                     return Err(format!("{} is not a profile", s));
                 }
@@ -274,24 +275,24 @@ impl std::str::FromStr for Cache {
     }
 }
 
-impl fmt::Display for Cache {
+impl fmt::Display for Scenario {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Cache::Empty => write!(f, "full"),
-            Cache::IncrementalEmpty => write!(f, "incr-full"),
-            Cache::IncrementalFresh => write!(f, "incr-unchanged"),
-            Cache::IncrementalPatch(name) => write!(f, "incr-patched: {}", name),
+            Scenario::Empty => write!(f, "full"),
+            Scenario::IncrementalEmpty => write!(f, "incr-full"),
+            Scenario::IncrementalFresh => write!(f, "incr-unchanged"),
+            Scenario::IncrementalPatch(name) => write!(f, "incr-patched: {}", name),
         }
     }
 }
 
-impl Cache {
+impl Scenario {
     pub fn to_id(&self) -> String {
         match self {
-            Cache::Empty => format!("full"),
-            Cache::IncrementalEmpty => format!("incr-full"),
-            Cache::IncrementalFresh => format!("incr-unchanged"),
-            Cache::IncrementalPatch(name) => format!("incr-patched-{}", name),
+            Scenario::Empty => format!("full"),
+            Scenario::IncrementalEmpty => format!("incr-full"),
+            Scenario::IncrementalFresh => format!("incr-unchanged"),
+            Scenario::IncrementalPatch(name) => format!("incr-patched-{}", name),
         }
     }
 }
@@ -299,20 +300,20 @@ impl Cache {
 use std::cmp::Ordering;
 
 // We sort println before all other patches.
-impl Ord for Cache {
-    fn cmp(&self, other: &Cache) -> Ordering {
+impl Ord for Scenario {
+    fn cmp(&self, other: &Scenario) -> Ordering {
         match (self, other) {
             (a, b) if a == b => Ordering::Equal,
-            (Cache::Empty, _) => Ordering::Less,
-            (Cache::IncrementalEmpty, Cache::Empty) => Ordering::Greater,
-            (Cache::IncrementalEmpty, _) => Ordering::Less,
-            (Cache::IncrementalFresh, Cache::Empty) => Ordering::Greater,
-            (Cache::IncrementalFresh, Cache::IncrementalEmpty) => Ordering::Greater,
-            (Cache::IncrementalFresh, _) => Ordering::Less,
-            (Cache::IncrementalPatch(_), Cache::Empty) => Ordering::Greater,
-            (Cache::IncrementalPatch(_), Cache::IncrementalEmpty) => Ordering::Greater,
-            (Cache::IncrementalPatch(_), Cache::IncrementalFresh) => Ordering::Greater,
-            (Cache::IncrementalPatch(a), Cache::IncrementalPatch(b)) => {
+            (Scenario::Empty, _) => Ordering::Less,
+            (Scenario::IncrementalEmpty, Scenario::Empty) => Ordering::Greater,
+            (Scenario::IncrementalEmpty, _) => Ordering::Less,
+            (Scenario::IncrementalFresh, Scenario::Empty) => Ordering::Greater,
+            (Scenario::IncrementalFresh, Scenario::IncrementalEmpty) => Ordering::Greater,
+            (Scenario::IncrementalFresh, _) => Ordering::Less,
+            (Scenario::IncrementalPatch(_), Scenario::Empty) => Ordering::Greater,
+            (Scenario::IncrementalPatch(_), Scenario::IncrementalEmpty) => Ordering::Greater,
+            (Scenario::IncrementalPatch(_), Scenario::IncrementalFresh) => Ordering::Greater,
+            (Scenario::IncrementalPatch(a), Scenario::IncrementalPatch(b)) => {
                 if a == "println" {
                     Ordering::Less
                 } else if b == "println" {
@@ -325,18 +326,18 @@ impl Ord for Cache {
     }
 }
 
-impl PartialOrd for Cache {
-    fn partial_cmp(&self, other: &Cache) -> Option<Ordering> {
+impl PartialOrd for Scenario {
+    fn partial_cmp(&self, other: &Scenario) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
 #[derive(Deserialize, Serialize, Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct LabelPath {
-    pub krate: Option<Crate>,
+    pub benchmark: Option<Benchmark>,
     pub profile: Option<Profile>,
-    pub cache: Option<Cache>,
-    pub process_stat: Option<ProcessStatistic>,
+    pub scenario: Option<Scenario>,
+    pub metric: Option<Metric>,
     pub query: Option<QueryLabel>,
 }
 
@@ -344,30 +345,30 @@ impl LabelPath {
     pub fn new() -> Self {
         assert_eq!(std::mem::size_of::<LabelPath>(), 48);
         Self {
-            krate: None,
+            benchmark: None,
             profile: None,
-            cache: None,
-            process_stat: None,
+            scenario: None,
+            metric: None,
             query: None,
         }
     }
 
     pub fn set(&mut self, component: Label) {
         match component {
-            Label::Crate(c) => self.krate = Some(c),
+            Label::Benchmark(b) => self.benchmark = Some(b),
             Label::Profile(p) => self.profile = Some(p),
-            Label::Cache(c) => self.cache = Some(c),
-            Label::ProcessStat(p) => self.process_stat = Some(p),
+            Label::Scenario(s) => self.scenario = Some(s),
+            Label::Metric(m) => self.metric = Some(m),
             Label::Query(q) => self.query = Some(q),
         }
     }
 
     pub fn remove(&mut self, component: LabelTag) {
         match component {
-            LabelTag::Crate => self.krate = None,
+            LabelTag::Benchmark => self.benchmark = None,
             LabelTag::Profile => self.profile = None,
-            LabelTag::Cache => self.cache = None,
-            LabelTag::ProcessStat => self.process_stat = None,
+            LabelTag::Scenario => self.scenario = None,
+            LabelTag::Metric => self.metric = None,
             LabelTag::Query => self.query = None,
         }
     }
@@ -375,19 +376,19 @@ impl LabelPath {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum LabelTag {
-    Crate,
+    Benchmark,
     Profile,
-    Cache,
-    ProcessStat,
+    Scenario,
+    Metric,
     Query,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Label {
-    Crate(Crate),
+    Benchmark(Benchmark),
     Profile(Profile),
-    Cache(Cache),
-    ProcessStat(ProcessStatistic),
+    Scenario(Scenario),
+    Metric(Metric),
     Query(QueryLabel),
 }
 
@@ -397,14 +398,14 @@ pub enum ArtifactId {
     /// A built version of the compiler at an exact commit
     Commit(Commit),
     /// A symbolic tag for a built compiler like "1.51.0"
-    Artifact(String),
+    Tag(String),
 }
 
 impl fmt::Display for ArtifactId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ArtifactId::Commit(c) => write!(f, "{} ({})", c.sha, c.date),
-            ArtifactId::Artifact(id) => write!(f, "{}", id),
+            ArtifactId::Tag(id) => write!(f, "{}", id),
         }
     }
 }
@@ -475,11 +476,11 @@ pub struct Index {
     /// Id lookup of the errors for a crate
     artifacts: Indexed<Box<str>>,
     /// Id lookup of the errors for a crate
-    errors: Indexed<Crate>,
+    errors: Indexed<Benchmark>,
     /// Id lookup of a given process stastic profile
-    pstats: Indexed<(Crate, Profile, Cache, ProcessStatistic)>,
+    pstats: Indexed<(Benchmark, Profile, Scenario, Metric)>,
     /// Id lookup of a given process query label
-    queries: Indexed<(Crate, Profile, Cache, QueryLabel)>,
+    queries: Indexed<(Benchmark, Profile, Scenario, QueryLabel)>,
 }
 
 /// An index lookup
@@ -594,18 +595,18 @@ mod index_serde {
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum DbLabel {
     Errors {
-        krate: Crate,
+        benchmark: Benchmark,
     },
     ProcessStat {
-        krate: Crate,
+        benchmark: Benchmark,
         profile: Profile,
-        cache: Cache,
-        stat: ProcessStatistic,
+        scenario: Scenario,
+        metric: Metric,
     },
     SelfProfileQuery {
-        krate: Crate,
+        benchmark: Benchmark,
         profile: Profile,
-        cache: Cache,
+        scenario: Scenario,
         query: QueryLabel,
     },
 }
@@ -619,19 +620,23 @@ impl Lookup for DbLabel {
     type Id = u32;
     fn lookup(&self, index: &Index) -> Option<Self::Id> {
         match self {
-            DbLabel::Errors { krate } => index.errors.get(krate),
+            DbLabel::Errors { benchmark } => index.errors.get(benchmark),
             DbLabel::ProcessStat {
-                krate,
+                benchmark,
                 profile,
-                cache,
-                stat,
-            } => index.pstats.get(&(*krate, *profile, *cache, *stat)),
+                scenario,
+                metric,
+            } => index
+                .pstats
+                .get(&(*benchmark, *profile, *scenario, *metric)),
             DbLabel::SelfProfileQuery {
-                krate,
+                benchmark,
                 profile,
-                cache,
+                scenario,
                 query,
-            } => index.queries.get(&(*krate, *profile, *cache, *query)),
+            } => index
+                .queries
+                .get(&(*benchmark, *profile, *scenario, *query)),
         }
     }
 }
@@ -641,7 +646,7 @@ impl Lookup for ArtifactId {
     fn lookup(&self, index: &Index) -> Option<Self::Id> {
         Some(match self {
             ArtifactId::Commit(c) => ArtifactIdNumber(index.commits.get(c)?),
-            ArtifactId::Artifact(a) => ArtifactIdNumber(index.artifacts.get(a.as_str())?),
+            ArtifactId::Tag(a) => ArtifactIdNumber(index.artifacts.get(a.as_str())?),
         })
     }
 }
@@ -696,7 +701,7 @@ impl Index {
             .collect()
     }
 
-    pub fn all_errors(&self) -> impl Iterator<Item = Crate> + '_ {
+    pub fn all_errors(&self) -> impl Iterator<Item = Benchmark> + '_ {
         self.errors.map.keys().copied()
     }
 
@@ -706,7 +711,7 @@ impl Index {
     // for it as keeping indices around would be annoying.
     pub fn all_pstat_series(
         &self,
-    ) -> impl Iterator<Item = &'_ (Crate, Profile, Cache, ProcessStatistic)> + '_ {
+    ) -> impl Iterator<Item = &'_ (Benchmark, Profile, Scenario, Metric)> + '_ {
         self.pstats.map.keys()
     }
 
@@ -716,7 +721,7 @@ impl Index {
     // for it as keeping indices around would be annoying.
     pub fn all_query_series(
         &self,
-    ) -> impl Iterator<Item = &'_ (Crate, Profile, Cache, QueryLabel)> + '_ {
+    ) -> impl Iterator<Item = &'_ (Benchmark, Profile, Scenario, QueryLabel)> + '_ {
         self.queries.map.keys()
     }
 
@@ -726,14 +731,14 @@ impl Index {
     // for it as keeping indices around would be annoying.
     pub fn filtered_queries(
         &self,
-        krate: Crate,
+        benchmark: Benchmark,
         profile: Profile,
-        cache: Cache,
+        scenario: Scenario,
     ) -> impl Iterator<Item = QueryLabel> + '_ {
         self.queries
             .map
             .keys()
-            .filter(move |path| path.0 == krate && path.1 == profile && path.2 == cache)
+            .filter(move |path| path.0 == benchmark && path.1 == profile && path.2 == scenario)
             .map(|path| path.3)
             .filter(|q| !q.as_str().starts_with("codegen passes ["))
     }

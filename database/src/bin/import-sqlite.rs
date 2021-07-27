@@ -44,10 +44,10 @@ async fn main() {
             }
 
             let id = database::DbLabel::ProcessStat {
-                krate,
+                benchmark: krate,
                 profile,
-                cache,
-                stat,
+                scenario: cache,
+                metric: stat,
             }
             .lookup(&sqlite_idx)
             .unwrap();

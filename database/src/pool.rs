@@ -1,5 +1,5 @@
 use crate::{ArtifactId, ArtifactIdNumber};
-use crate::{Cache, CollectionId, Index, Profile, QueryDatum, QueuedCommit, Step};
+use crate::{CollectionId, Index, Profile, QueryDatum, QueuedCommit, Scenario, Step};
 use chrono::{DateTime, Utc};
 use hashbrown::HashMap;
 use std::sync::{Arc, Mutex};
@@ -33,7 +33,7 @@ pub trait Connection: Send + Sync {
         artifact: ArtifactIdNumber,
         krate: &str,
         profile: Profile,
-        cache: Cache,
+        cache: Scenario,
         statistic: &str,
         value: f64,
     );
@@ -47,7 +47,7 @@ pub trait Connection: Send + Sync {
         artifact: ArtifactIdNumber,
         krate: &str,
         profile: Profile,
-        cache: Cache,
+        cache: Scenario,
     );
     async fn record_self_profile_query(
         &self,
@@ -55,7 +55,7 @@ pub trait Connection: Send + Sync {
         artifact: ArtifactIdNumber,
         krate: &str,
         profile: Profile,
-        cache: Cache,
+        cache: Scenario,
         query: &str,
         qd: QueryDatum,
     );

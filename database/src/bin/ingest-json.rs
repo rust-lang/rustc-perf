@@ -3,7 +3,7 @@
 use anyhow::Context as _;
 use chrono::{DateTime, Utc};
 use database::pool::ConnectionManager;
-use database::{Cache, Crate, Profile};
+use database::{Benchmark, Profile, Scenario};
 use database::{Commit, PatchName, Pool, QueryLabel};
 use futures::stream::{FuturesUnordered, StreamExt};
 use hashbrown::{HashMap, HashSet};
@@ -20,20 +20,20 @@ use tokio_postgres::Statement;
 pub struct ArtifactData {
     pub id: String,
     // String in Result is the output of the command that failed
-    pub benchmarks: HashMap<Crate, Result<Benchmark, String>>,
+    pub benchmarks: HashMap<Benchmark, Result<BenchmarkRuns, String>>,
 }
 
 #[derive(Deserialize)]
 pub struct CommitData {
     pub commit: Commit,
     // String in Result is the output of the command that failed
-    pub benchmarks: HashMap<Crate, Result<Benchmark, String>>,
+    pub benchmarks: HashMap<Benchmark, Result<BenchmarkRuns, String>>,
 }
 
 #[derive(Deserialize)]
-pub struct Benchmark {
+pub struct BenchmarkRuns {
     pub runs: Vec<Run>,
-    pub name: Crate,
+    pub name: Benchmark,
 }
 
 #[derive(Deserialize)]
@@ -931,10 +931,10 @@ async fn ingest<T: Ingesting>(conn: &T, caches: &mut IdCache, path: &Path) {
                 Profile::Opt => "opt",
             };
             let state = match &run.state {
-                BenchmarkState::Clean => Cache::Empty,
-                BenchmarkState::IncrementalStart => Cache::IncrementalEmpty,
-                BenchmarkState::IncrementalClean => Cache::IncrementalFresh,
-                BenchmarkState::IncrementalPatched(p) => Cache::IncrementalPatch(p.name),
+                BenchmarkState::Clean => Scenario::Empty,
+                BenchmarkState::IncrementalStart => Scenario::IncrementalEmpty,
+                BenchmarkState::IncrementalClean => Scenario::IncrementalFresh,
+                BenchmarkState::IncrementalPatched(p) => Scenario::IncrementalPatch(p.name),
             };
 
             for (sid, stat) in run.stats.iter() {

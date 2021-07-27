@@ -10,6 +10,15 @@ The following is a glossary of domain specific terminology. Although benchmarks 
 * **metric**: a name of quantifiable metric being measured (e.g., instruction count)
 * **artifact**: a specific version of rustc (usually a commit sha or some sort of human readable "tag" like 1.51.0)
 
+## Benchmarks
+
+* **stress test benchmark**: a benchmark that is specifically designed to stress a certain part of the compiler (e.g., [deeply-nested-async](https://github.com/rust-lang/rustc-perf/tree/master/collector/benchmarks/deeply-nested-async) is meant to stress parts of the compiler used in async code)
+* **real world benchmark**: a benchmark based on a real world crate. These are typically copied as-is from crates.io. (e.g., [serde](https://github.com/rust-lang/rustc-perf/tree/master/collector/benchmarks/serde) is a popular crate and the benchmark has not been altered from a release of serde on crates.io). 
+
+## Artifacts
+
+* **artifact tag**: an identifier for a particular artifact (e.g., the tag "1.51.0" would presumably point to the 1.51.0 release of rustc).
+
 ## Testing 
 
 * **test case**: a combination of a benchmark, a profile, and a scenario.
@@ -19,11 +28,6 @@ The following is a glossary of domain specific terminology. Although benchmarks 
 * **statistic**: a single value of a metric in a test result
 * **run**: a collection of test results for all currently available test cases run on a given artifact. 
 * **test result delta**: the delta between two test results for the same test case but (optionally) different artifacts. The [comparison page](https://perf.rust-lang.org/compare.html) lists all the test result deltas as percentages comparing two runs.  
-
-## Benchmarks
-
-* **stress test benchmark**: a benchmark that is specifically designed to stress a certain part of the compiler (e.g., [deeply-nested-async](https://github.com/rust-lang/rustc-perf/tree/master/collector/benchmarks/deeply-nested-async) is meant to stress parts of the compiler used in async code)
-* **real world benchmark**: a benchmark based on a real world crate. These are typically copied as-is from crates.io. (e.g., [serde](https://github.com/rust-lang/rustc-perf/tree/master/collector/benchmarks/serde) is a popular crate and the benchmark has not been altered from a release of serde on crates.io). 
 
 ## Analysis
 

@@ -26,7 +26,7 @@ pub use crate::api::{
     self, bootstrap, comparison, dashboard, github, graph, info, self_profile, self_profile_raw,
     status, triage, CommitResponse, ServerResult, StyledBenchmarkName,
 };
-use crate::db::{self, ArtifactId, Cache, Crate, Lookup, Profile};
+use crate::db::{self, ArtifactId, Benchmark, Lookup, Profile, Scenario};
 use crate::interpolate::Interpolated;
 use crate::load::{Config, SiteCtxt};
 use crate::selector::{self, PathComponent, Tag};
@@ -144,7 +144,7 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
     let artifact_ids = Arc::new(
         versions
             .into_iter()
-            .map(|v| ArtifactId::Artifact(v.to_string()))
+            .map(|v| ArtifactId::Tag(v.to_string()))
             .chain(std::iter::once(
                 ctxt.index.load().commits().last().unwrap().clone().into(),
             ))
@@ -156,7 +156,7 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
         // This list was found via:
         // `rg supports.stable collector/benchmarks/ -tjson -c --sort path`
         .set(
-            Tag::Crate,
+            Tag::Benchmark,
             selector::Selector::Subset(vec![
                 "encoding",
                 "futures",
@@ -169,7 +169,7 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
                 "tokio-webpush-simple",
             ]),
         )
-        .set(Tag::ProcessStatistic, selector::Selector::One("wall-time"));
+        .set(Tag::Metric, selector::Selector::One("wall-time"));
 
     let summary_patches = ctxt.summary_patches();
     let by_profile = ByProfile::new::<String, _, _>(|profile| {
@@ -185,7 +185,7 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
                         query
                             .clone()
                             .set(Tag::Profile, selector::Selector::One(profile))
-                            .set(Tag::Cache, selector::Selector::One(patch)),
+                            .set(Tag::Scenario, selector::Selector::One(patch)),
                         aids.clone(),
                     )
                     .await?;
@@ -202,11 +202,11 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
                 .collect::<Vec<_>>();
 
                 match patch {
-                    Cache::Empty => cases.clean_averages = points,
-                    Cache::IncrementalEmpty => cases.base_incr_averages = points,
-                    Cache::IncrementalFresh => cases.clean_incr_averages = points,
+                    Scenario::Empty => cases.clean_averages = points,
+                    Scenario::IncrementalEmpty => cases.base_incr_averages = points,
+                    Scenario::IncrementalFresh => cases.clean_incr_averages = points,
                     // we only have println patches here
-                    Cache::IncrementalPatch(_) => cases.println_incr_averages = points,
+                    Scenario::IncrementalPatch(_) => cases.println_incr_averages = points,
                 }
             }
             Ok(cases)
@@ -220,7 +220,7 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
             .iter()
             .map(|aid| match aid {
                 ArtifactId::Commit(c) => format!("master: {}", &c.sha.to_string()[0..8]),
-                ArtifactId::Artifact(aid) => aid.clone(),
+                ArtifactId::Tag(aid) => aid.clone(),
             })
             .collect::<Vec<_>>(),
         check: by_profile.check,
@@ -444,7 +444,7 @@ pub async fn handle_graph_new(
             .iter()
             .map(|c| match c {
                 ArtifactId::Commit(c) => (c.date.0.timestamp(), c.sha.clone()),
-                ArtifactId::Artifact(_) => unreachable!(),
+                ArtifactId::Tag(_) => unreachable!(),
             })
             .collect(),
         benchmarks,
@@ -480,10 +480,10 @@ pub async fn handle_graph(
     let series = ctxt
         .query::<Option<f64>>(
             selector::Query::new()
-                .set::<String>(selector::Tag::Crate, selector::Selector::All)
+                .set::<String>(selector::Tag::Benchmark, selector::Selector::All)
                 .set::<String>(selector::Tag::Profile, selector::Selector::All)
-                .set::<String>(selector::Tag::Cache, selector::Selector::All)
-                .set::<String>(selector::Tag::ProcessStatistic, stat_selector.clone()),
+                .set::<String>(selector::Tag::Scenario, selector::Selector::All)
+                .set::<String>(selector::Tag::Metric, stat_selector.clone()),
             commits.clone(),
         )
         .await?;
@@ -507,13 +507,10 @@ pub async fn handle_graph(
     )
     .map(|(cache, profile, pstat)| {
         selector::Query::new()
-            .set::<String>(selector::Tag::Crate, selector::Selector::All)
+            .set::<String>(selector::Tag::Benchmark, selector::Selector::All)
             .set(selector::Tag::Profile, selector::Selector::One(profile))
-            .set(selector::Tag::Cache, selector::Selector::One(cache))
-            .set::<String>(
-                selector::Tag::ProcessStatistic,
-                selector::Selector::One(pstat),
-            )
+            .set(selector::Tag::Scenario, selector::Selector::One(cache))
+            .set::<String>(selector::Tag::Metric, selector::Selector::One(pstat))
     });
 
     for query in summary_queries {
@@ -525,19 +522,22 @@ pub async fn handle_graph(
             .parse::<Profile>()
             .unwrap();
         let cache = query
-            .get(Tag::Cache)
+            .get(Tag::Scenario)
             .unwrap()
             .raw
             .assert_one()
-            .parse::<Cache>()
+            .parse::<Scenario>()
             .unwrap();
         let q = selector::Query::new()
-            .set::<String>(selector::Tag::Crate, selector::Selector::All)
+            .set::<String>(selector::Tag::Benchmark, selector::Selector::All)
             .set(selector::Tag::Profile, selector::Selector::One(profile))
-            .set(selector::Tag::Cache, selector::Selector::One(Cache::Empty))
             .set(
-                selector::Tag::ProcessStatistic,
-                query.get(Tag::ProcessStatistic).unwrap().raw.clone(),
+                selector::Tag::Scenario,
+                selector::Selector::One(Scenario::Empty),
+            )
+            .set(
+                selector::Tag::Metric,
+                query.get(Tag::Metric).unwrap().raw.clone(),
             );
         let against = match baselines.entry(q.clone()) {
             std::collections::hash_map::Entry::Occupied(o) => *o.get(),
@@ -570,7 +570,7 @@ pub async fn handle_graph(
                 .set(PathComponent::Cache(cache))
                 .set(PathComponent::ProcessStatistic(
                     query
-                        .get(Tag::ProcessStatistic)
+                        .get(Tag::Metric)
                         .unwrap()
                         .raw
                         .assert_one()
@@ -584,7 +584,7 @@ pub async fn handle_graph(
     let mut by_krate = HashMap::new();
     let mut by_krate_max = HashMap::new();
     for sr in series {
-        let krate = sr.path.get::<Crate>()?.to_string();
+        let krate = sr.path.get::<Benchmark>()?.to_string();
         let max = by_krate_max.entry(krate.clone()).or_insert(f32::MIN);
         *max = sr
             .series
@@ -596,7 +596,7 @@ pub async fn handle_graph(
             .or_insert_with(HashMap::new)
             .entry(sr.path.get::<Profile>()?.to_string())
             .or_insert_with(Vec::new)
-            .push((sr.path.get::<Cache>()?.to_string(), sr.series));
+            .push((sr.path.get::<Scenario>()?.to_string(), sr.series));
     }
 
     let resp = Arc::new(graph::Response {
@@ -932,7 +932,7 @@ pub async fn handle_self_profile_raw(
 
     let cache = body
         .run_name
-        .parse::<database::Cache>()
+        .parse::<database::Scenario>()
         .map_err(|e| format!("invalid run name: {:?}", e))?;
 
     let conn = ctxt.conn().await;
@@ -1038,9 +1038,12 @@ pub async fn handle_self_profile(
         .ok_or(format!("sort_idx needs to be i32"))?;
 
     let query = selector::Query::new()
-        .set(Tag::Crate, selector::Selector::One(bench_name))
+        .set(Tag::Benchmark, selector::Selector::One(bench_name))
         .set(Tag::Profile, selector::Selector::One(bench_ty))
-        .set(Tag::Cache, selector::Selector::One(body.run_name.clone()));
+        .set(
+            Tag::Scenario,
+            selector::Selector::One(body.run_name.clone()),
+        );
 
     let mut commits = vec![index
         .commits()
@@ -1051,7 +1054,7 @@ pub async fn handle_self_profile(
             index
                 .artifacts()
                 .find(|a| **a == body.commit)
-                .map(|a| ArtifactId::Artifact(a.to_owned()))
+                .map(|a| ArtifactId::Tag(a.to_owned()))
         })
         .ok_or(format!("could not find artifact {}", body.commit))?];
 
@@ -1066,7 +1069,7 @@ pub async fn handle_self_profile(
                     index
                         .artifacts()
                         .find(|a| **a == *bc.as_str())
-                        .map(|a| ArtifactId::Artifact(a.to_owned()))
+                        .map(|a| ArtifactId::Tag(a.to_owned()))
                 })
                 .ok_or(format!("could not find artifact {}", body.commit))?,
         );
@@ -1095,7 +1098,7 @@ pub async fn handle_self_profile(
     let mut cpu_responses = ctxt
         .query::<Option<f64>>(
             query.clone().set(
-                Tag::ProcessStatistic,
+                Tag::Metric,
                 selector::Selector::One("cpu-clock".to_string()),
             ),
             commits.clone(),
@@ -1180,7 +1183,7 @@ pub async fn handle_bootstrap(
             .into_iter()
             .map(|v| match v {
                 ArtifactId::Commit(c) => (c.date.0.timestamp(), c.sha),
-                ArtifactId::Artifact(_) => todo!(),
+                ArtifactId::Tag(_) => todo!(),
             })
             .collect(),
         by_crate,

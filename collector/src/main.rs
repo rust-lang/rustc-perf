@@ -606,7 +606,7 @@ fn main_result() -> anyhow::Result<i32> {
             let res = bench(
                 &mut rt,
                 pool,
-                &ArtifactId::Artifact(id.to_string()),
+                &ArtifactId::Tag(id.to_string()),
                 &build_kinds,
                 &run_kinds,
                 Compiler {
@@ -731,7 +731,7 @@ fn main_result() -> anyhow::Result<i32> {
             let res = bench(
                 &mut rt,
                 pool,
-                &ArtifactId::Artifact(toolchain.to_string()),
+                &ArtifactId::Tag(toolchain.to_string()),
                 &build_kinds,
                 &run_kinds,
                 Compiler {

@@ -1,7 +1,7 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{
-    ArtifactId, ArtifactIdNumber, Cache, CollectionId, Commit, Crate, Date, Index, Profile,
-    QueuedCommit,
+    ArtifactId, ArtifactIdNumber, Benchmark, CollectionId, Commit, Date, Index, Profile,
+    QueuedCommit, Scenario,
 };
 use anyhow::Context as _;
 use chrono::{DateTime, TimeZone, Utc};
@@ -538,7 +538,7 @@ where
                     (
                         row.get::<_, i32>(0) as u32,
                         (
-                            Crate::from(row.get::<_, String>(1).as_str()),
+                            Benchmark::from(row.get::<_, String>(1).as_str()),
                             match row.get::<_, String>(2).as_str() {
                                 "check" => Profile::Check,
                                 "opt" => Profile::Opt,
@@ -565,7 +565,7 @@ where
                     (
                         row.get::<_, i32>(0) as u32,
                         (
-                            Crate::from(row.get::<_, String>(1).as_str()),
+                            Benchmark::from(row.get::<_, String>(1).as_str()),
                             match row.get::<_, String>(2).as_str() {
                                 "check" => Profile::Check,
                                 "opt" => Profile::Opt,
@@ -755,7 +755,7 @@ where
         artifact: ArtifactIdNumber,
         krate: &str,
         profile: Profile,
-        cache: Cache,
+        cache: Scenario,
         statistic: &str,
         value: f64,
     ) {
@@ -830,7 +830,7 @@ where
                 },
                 if commit.is_try() { "try" } else { "master" },
             ),
-            ArtifactId::Artifact(a) => (a.clone(), None, "release"),
+            ArtifactId::Tag(a) => (a.clone(), None, "release"),
         };
         let aid = self
             .conn()
@@ -866,7 +866,7 @@ where
         artifact: ArtifactIdNumber,
         krate: &str,
         profile: Profile,
-        cache: Cache,
+        cache: Scenario,
         query: &str,
         qd: crate::QueryDatum,
     ) {
@@ -1069,7 +1069,7 @@ where
                         .map(Date)
                         .unwrap_or_else(|| Date::ymd_hms(2001, 01, 01, 0, 0, 0)),
                 }),
-                "release" => ArtifactId::Artifact(row.get(0)),
+                "release" => ArtifactId::Tag(row.get(0)),
                 _ => {
                     log::error!("unknown ty {:?}", ty);
                     continue;
@@ -1136,7 +1136,7 @@ where
         artifact: ArtifactIdNumber,
         krate: &str,
         profile: Profile,
-        cache: Cache,
+        cache: Scenario,
     ) {
         let profile = profile.to_string();
         let cache = cache.to_string();
@@ -1167,7 +1167,7 @@ where
                     &cache,
                     &match aid {
                         ArtifactId::Commit(c) => c.sha,
-                        ArtifactId::Artifact(a) => a,
+                        ArtifactId::Tag(a) => a,
                     },
                 ],
             )
@@ -1233,7 +1233,7 @@ where
                 sha: artifact.to_owned(),
                 date: Date::ymd_hms(2000, 1, 1, 0, 0, 0),
             })),
-            "release" => Some(ArtifactId::Artifact(artifact.to_owned())),
+            "release" => Some(ArtifactId::Tag(artifact.to_owned())),
             _ => panic!("unknown artifact type: {:?}", ty),
         }
     }

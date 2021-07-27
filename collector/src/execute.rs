@@ -605,7 +605,7 @@ impl<'a> MeasureProcessor<'a> {
 
     fn insert_stats(
         &mut self,
-        cache: database::Cache,
+        cache: database::Scenario,
         build_kind: BuildKind,
         stats: (Stats, Option<SelfProfile>, Option<SelfProfileFiles>),
     ) {
@@ -822,18 +822,26 @@ impl<'a> Processor for MeasureProcessor<'a> {
             Ok(res) => {
                 match data.run_kind {
                     RunKind::Full => {
-                        self.insert_stats(database::Cache::Empty, data.build_kind, res);
+                        self.insert_stats(database::Scenario::Empty, data.build_kind, res);
                     }
                     RunKind::IncrFull => {
-                        self.insert_stats(database::Cache::IncrementalEmpty, data.build_kind, res);
+                        self.insert_stats(
+                            database::Scenario::IncrementalEmpty,
+                            data.build_kind,
+                            res,
+                        );
                     }
                     RunKind::IncrUnchanged => {
-                        self.insert_stats(database::Cache::IncrementalFresh, data.build_kind, res);
+                        self.insert_stats(
+                            database::Scenario::IncrementalFresh,
+                            data.build_kind,
+                            res,
+                        );
                     }
                     RunKind::IncrPatched => {
                         let patch = data.patch.unwrap();
                         self.insert_stats(
-                            database::Cache::IncrementalPatch(patch.name),
+                            database::Scenario::IncrementalPatch(patch.name),
                             data.build_kind,
                             res,
                         );

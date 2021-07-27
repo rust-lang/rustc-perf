@@ -1,5 +1,5 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
-use crate::{ArtifactId, CollectionId, Commit, Crate, Date, Profile};
+use crate::{ArtifactId, Benchmark, CollectionId, Commit, Date, Profile};
 use crate::{ArtifactIdNumber, Index, QueryDatum, QueuedCommit};
 use chrono::{DateTime, TimeZone, Utc};
 use hashbrown::HashMap;
@@ -292,7 +292,7 @@ impl Connection for SqliteConnection {
                 Ok((
                     row.get::<_, i32>(0)? as u32,
                     (
-                        Crate::from(row.get::<_, String>(1)?.as_str()),
+                        Benchmark::from(row.get::<_, String>(1)?.as_str()),
                         match row.get::<_, String>(2)?.as_str() {
                             "check" => Profile::Check,
                             "opt" => Profile::Opt,
@@ -333,7 +333,7 @@ impl Connection for SqliteConnection {
                     Ok((
                         row.get::<_, i32>(0)? as u32,
                         (
-                            Crate::from(row.get::<_, String>(1)?.as_str()),
+                            Benchmark::from(row.get::<_, String>(1)?.as_str()),
                             match row.get::<_, String>(2)?.as_str() {
                                 "check" => Profile::Check,
                                 "opt" => Profile::Opt,
@@ -564,7 +564,7 @@ impl Connection for SqliteConnection {
         artifact: ArtifactIdNumber,
         krate: &str,
         profile: Profile,
-        cache: crate::Cache,
+        cache: crate::Scenario,
         statistic: &str,
         value: f64,
     ) {
@@ -621,7 +621,7 @@ impl Connection for SqliteConnection {
                 },
                 if commit.is_try() { "try" } else { "master" },
             ),
-            crate::ArtifactId::Artifact(a) => (a.clone(), None, "release"),
+            crate::ArtifactId::Tag(a) => (a.clone(), None, "release"),
         };
 
         self.raw_ref()
@@ -647,7 +647,7 @@ impl Connection for SqliteConnection {
         artifact: ArtifactIdNumber,
         krate: &str,
         profile: Profile,
-        cache: crate::Cache,
+        cache: crate::Scenario,
         query: &str,
         qd: QueryDatum,
     ) {
@@ -808,7 +808,7 @@ impl Connection for SqliteConnection {
                         .map(Date)
                         .unwrap_or_else(|| Date::ymd_hms(2001, 01, 01, 0, 0, 0)),
                 }),
-                "release" => ArtifactId::Artifact(name),
+                "release" => ArtifactId::Tag(name),
                 _ => {
                     log::error!("unknown ty {:?}", ty);
                     continue;
@@ -893,7 +893,7 @@ impl Connection for SqliteConnection {
         _artifact: ArtifactIdNumber,
         _krate: &str,
         _profile: Profile,
-        _cache: crate::Cache,
+        _cache: crate::Scenario,
     ) {
         // FIXME: this is left for the future, if we ever need to support it. It
         // shouldn't be too hard, but we may also want to just intern the raw
@@ -965,7 +965,7 @@ impl Connection for SqliteConnection {
                 sha: artifact.to_owned(),
                 date: Date::ymd_hms(2000, 1, 1, 0, 0, 0),
             })),
-            "release" => Some(ArtifactId::Artifact(artifact.to_owned())),
+            "release" => Some(ArtifactId::Tag(artifact.to_owned())),
             _ => panic!("unknown artifact type: {:?}", ty),
         }
     }
