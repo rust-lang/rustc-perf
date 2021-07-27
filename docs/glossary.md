@@ -25,6 +25,7 @@ The following is a glossary of domain specific terminology. Although benchmarks 
 * **test**: the act of running an artifact under a test case. Each test result is composed of many iterations.
 * **test iteration**: a single iteration that makes up a test. Note: we currently normally run 2 test iterations for each test. 
 * **test result**: the collection of all metrics as a result of running a test. 
+* **test case metric**: the combination of a test case and a particular metric.
 * **statistic**: a single value of a metric in a test result
 * **run**: a collection of test results for all currently available test cases run on a given artifact. 
 * **test result delta**: the delta between two test results for the same test case but (optionally) different artifacts. The [comparison page](https://perf.rust-lang.org/compare.html) lists all the test result deltas as percentages comparing two runs.  

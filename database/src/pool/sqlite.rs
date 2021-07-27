@@ -325,7 +325,7 @@ impl Connection for SqliteConnection {
             commits,
             artifacts,
             errors,
-            pstats: self
+            pstat_series: self
                 .raw()
                 .prepare("select id, crate, profile, cache, statistic from pstat_series;")
                 .unwrap()

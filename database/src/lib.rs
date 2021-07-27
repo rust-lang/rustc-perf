@@ -420,7 +420,7 @@ impl From<Commit> for ArtifactId {
 pub trait SeriesType: Sized {
     async fn get(
         conn: &dyn pool::Connection,
-        series: u32,
+        test_case_metric_row_id: u32,
         artifact_row_id: ArtifactIdNumber,
     ) -> Option<Self>;
 }
@@ -429,10 +429,11 @@ pub trait SeriesType: Sized {
 impl SeriesType for f64 {
     async fn get(
         conn: &dyn pool::Connection,
-        series: u32,
+        test_case_metric_row_id: u32,
         artifact_row_id: ArtifactIdNumber,
     ) -> Option<Self> {
-        conn.get_pstats(&[series], &[Some(artifact_row_id)]).await[0][0]
+        conn.get_pstats(&[test_case_metric_row_id], &[Some(artifact_row_id)])
+            .await[0][0]
     }
 }
 
@@ -477,8 +478,9 @@ pub struct Index {
     artifacts: Indexed<Box<str>>,
     /// Id lookup of the errors for a crate
     errors: Indexed<Benchmark>,
-    /// Id lookup of a given process stastic profile
-    pstats: Indexed<(Benchmark, Profile, Scenario, Metric)>,
+    /// Id lookup of test case metrics.
+    /// For legacy reasons called `pstat_series` in the database, and so the name is kept here.
+    pstat_series: Indexed<(Benchmark, Profile, Scenario, Metric)>,
     /// Id lookup of a given process query label
     queries: Indexed<(Benchmark, Profile, Scenario, QueryLabel)>,
 }
@@ -597,7 +599,7 @@ pub enum DbLabel {
     Errors {
         benchmark: Benchmark,
     },
-    ProcessStat {
+    TestCaseMetric {
         benchmark: Benchmark,
         profile: Profile,
         scenario: Scenario,
@@ -621,13 +623,13 @@ impl Lookup for DbLabel {
     fn lookup(&self, index: &Index) -> Option<Self::Id> {
         match self {
             DbLabel::Errors { benchmark } => index.errors.get(benchmark),
-            DbLabel::ProcessStat {
+            DbLabel::TestCaseMetric {
                 benchmark,
                 profile,
                 scenario,
                 metric,
             } => index
-                .pstats
+                .pstat_series
                 .get(&(*benchmark, *profile, *scenario, *metric)),
             DbLabel::SelfProfileQuery {
                 benchmark,
@@ -658,22 +660,22 @@ impl Index {
 
     pub fn lookup(
         &self,
-        path: &DbLabel,
+        label: &DbLabel,
         artifact_id: &ArtifactId,
     ) -> Option<(u32, ArtifactIdNumber)> {
         let artifact_row_id = artifact_id.lookup(self)?;
-        let series = path.lookup(self)?;
-        Some((series, artifact_row_id))
+        let test_case_metric_row_id = label.lookup(self)?;
+        Some((test_case_metric_row_id, artifact_row_id))
     }
 
     pub async fn get<T: SeriesType>(
         &self,
         db: &mut dyn pool::Connection,
-        path: &DbLabel,
+        label: &DbLabel,
         artifact_id: &ArtifactId,
     ) -> Option<T> {
-        let (series, artifact_row_id) = self.lookup(path, artifact_id)?;
-        T::get(db, series, artifact_row_id).await
+        let (test_case_metric_row_id, artifact_row_id) = self.lookup(label, artifact_id)?;
+        T::get(db, test_case_metric_row_id, artifact_row_id).await
     }
 
     pub fn artifacts(&self) -> impl Iterator<Item = &'_ str> + '_ {
@@ -690,11 +692,11 @@ impl Index {
     // millions of queries and labels and iterating all of them is eventually
     // going to be impractical. But for now it performs quite well, so we'll go
     // for it as keeping indices around would be annoying.
-    pub fn stats(&self) -> Vec<String> {
-        self.pstats
+    pub fn metrics(&self) -> Vec<String> {
+        self.pstat_series
             .map
             .keys()
-            .map(|path| path.3)
+            .map(|(_, _, _, metric)| metric)
             .collect::<std::collections::HashSet<_>>()
             .into_iter()
             .map(|s| s.to_string())
@@ -709,10 +711,10 @@ impl Index {
     // millions of queries and labels and iterating all of them is eventually
     // going to be impractical. But for now it performs quite well, so we'll go
     // for it as keeping indices around would be annoying.
-    pub fn all_pstat_series(
+    pub fn all_test_case_metrics(
         &self,
     ) -> impl Iterator<Item = &'_ (Benchmark, Profile, Scenario, Metric)> + '_ {
-        self.pstats.map.keys()
+        self.pstat_series.map.keys()
     }
 
     // FIXME: in theory this won't scale indefinitely as there's potentially

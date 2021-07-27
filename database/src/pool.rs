@@ -74,7 +74,7 @@ pub trait Connection: Send + Sync {
     ) -> HashMap<String, Vec<Option<Duration>>>;
     async fn get_pstats(
         &self,
-        series: &[u32],
+        pstat_series_row_ids: &[u32],
         artifact_row_id: &[Option<ArtifactIdNumber>],
     ) -> Vec<Vec<Option<f64>>>;
     async fn get_self_profile(

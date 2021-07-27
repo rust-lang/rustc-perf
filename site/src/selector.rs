@@ -129,7 +129,7 @@ pub trait GetValue {
 impl GetValue for Benchmark {
     fn value(component: &PathComponent) -> Option<&Self> {
         match component {
-            PathComponent::Crate(v) => Some(v),
+            PathComponent::Benchmark(v) => Some(v),
             _ => None,
         }
     }
@@ -147,7 +147,7 @@ impl GetValue for Profile {
 impl GetValue for Scenario {
     fn value(component: &PathComponent) -> Option<&Self> {
         match component {
-            PathComponent::Cache(v) => Some(v),
+            PathComponent::Scenario(v) => Some(v),
             _ => None,
         }
     }
@@ -156,7 +156,7 @@ impl GetValue for Scenario {
 impl GetValue for Metric {
     fn value(component: &PathComponent) -> Option<&Self> {
         match component {
-            PathComponent::ProcessStatistic(v) => Some(v),
+            PathComponent::Metric(v) => Some(v),
             _ => None,
         }
     }
@@ -173,20 +173,20 @@ impl GetValue for QueryLabel {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum PathComponent {
-    Crate(Benchmark),
+    Benchmark(Benchmark),
     Profile(Profile),
-    Cache(Scenario),
+    Scenario(Scenario),
     QueryLabel(QueryLabel),
-    ProcessStatistic(Metric),
+    Metric(Metric),
 }
 
 impl PathComponent {
     pub fn as_tag(&self) -> Tag {
         match self {
-            PathComponent::Crate(_) => Tag::Benchmark,
+            PathComponent::Benchmark(_) => Tag::Benchmark,
             PathComponent::Profile(_) => Tag::Profile,
-            PathComponent::Cache(_) => Tag::Scenario,
-            PathComponent::ProcessStatistic(_) => Tag::Metric,
+            PathComponent::Scenario(_) => Tag::Scenario,
+            PathComponent::Metric(_) => Tag::Metric,
             PathComponent::QueryLabel(_) => Tag::QueryLabel,
         }
     }
@@ -556,20 +556,20 @@ impl ProcessStatisticSeries {
         mut query: Query,
     ) -> Result<Vec<SeriesResponse<Self>>, String> {
         let dumped = format!("{:?}", query);
-        let krate = query.extract_as::<String>(Tag::Benchmark)?;
+        let benchmark = query.extract_as::<String>(Tag::Benchmark)?;
         let profile = query.extract_as::<Profile>(Tag::Profile)?;
-        let cache = query.extract_as::<Scenario>(Tag::Scenario)?;
-        let statid = query.extract_as::<Metric>(Tag::Metric)?;
+        let scenario = query.extract_as::<Scenario>(Tag::Scenario)?;
+        let metric = query.extract_as::<Metric>(Tag::Metric)?;
         query.assert_empty()?;
 
         let index = ctxt.index.load();
         let mut series = index
-            .all_pstat_series()
+            .all_test_case_metrics()
             .filter(|tup| {
-                krate.matches(tup.0)
+                benchmark.matches(tup.0)
                     && profile.matches(tup.1)
-                    && cache.matches(tup.2)
-                    && statid.matches(tup.3)
+                    && scenario.matches(tup.2)
+                    && metric.matches(tup.3)
             })
             .collect::<Vec<_>>();
 
@@ -578,7 +578,7 @@ impl ProcessStatisticSeries {
         let sids = series
             .iter()
             .map(|path| {
-                let query = crate::db::DbLabel::ProcessStat {
+                let query = crate::db::DbLabel::TestCaseMetric {
                     benchmark: path.0,
                     profile: path.1,
                     scenario: path.2,
@@ -620,10 +620,10 @@ impl ProcessStatisticSeries {
                         },
                     },
                     path: Path::new()
-                        .set(PathComponent::Crate(path.0))
+                        .set(PathComponent::Benchmark(path.0))
                         .set(PathComponent::Profile(path.1))
-                        .set(PathComponent::Cache(path.2))
-                        .set(PathComponent::ProcessStatistic(path.3)),
+                        .set(PathComponent::Scenario(path.2))
+                        .set(PathComponent::Metric(path.3)),
                 }
             })
             .collect::<Vec<_>>();
@@ -734,16 +734,18 @@ impl SelfProfile {
         ctxt: &SiteCtxt,
         mut query: Query,
     ) -> Result<Vec<SeriesResponse<Self>>, String> {
-        let krate = query.extract_as::<String>(Tag::Benchmark)?;
+        let benchmark = query.extract_as::<String>(Tag::Benchmark)?;
         let profile = query.extract_as::<Profile>(Tag::Profile)?;
-        let cache = query.extract_as::<Scenario>(Tag::Scenario)?;
+        let scenario = query.extract_as::<Scenario>(Tag::Scenario)?;
         query.assert_empty()?;
 
         let mut series = ctxt
             .index
             .load()
             .all_query_series()
-            .filter(|tup| krate.matches(tup.0) && profile.matches(tup.1) && cache.matches(tup.2))
+            .filter(|tup| {
+                benchmark.matches(tup.0) && profile.matches(tup.1) && scenario.matches(tup.2)
+            })
             .map(|tup| (tup.0, tup.1, tup.2))
             .collect::<Vec<_>>();
 
@@ -755,9 +757,9 @@ impl SelfProfile {
             res.push(SeriesResponse {
                 series: SelfProfile::new(artifact_ids.clone(), ctxt, path.0, path.1, path.2).await,
                 path: Path::new()
-                    .set(PathComponent::Crate(path.0))
+                    .set(PathComponent::Benchmark(path.0))
                     .set(PathComponent::Profile(path.1))
-                    .set(PathComponent::Cache(path.2)),
+                    .set(PathComponent::Scenario(path.2)),
             });
         }
         Ok(res)
@@ -773,9 +775,9 @@ impl SelfProfileQueryTime {
     async fn new(
         artifact_ids: Arc<Vec<ArtifactId>>,
         ctxt: &SiteCtxt,
-        krate: Benchmark,
+        benchmark: Benchmark,
         profile: Profile,
-        cache: Scenario,
+        scenario: Scenario,
         query: QueryLabel,
     ) -> Self {
         let mut res = Vec::with_capacity(artifact_ids.len());
@@ -783,9 +785,9 @@ impl SelfProfileQueryTime {
         let mut conn = ctxt.conn().await;
         let mut tx = conn.transaction().await;
         let query = crate::db::DbLabel::SelfProfileQuery {
-            benchmark: krate,
+            benchmark,
             profile,
-            scenario: cache,
+            scenario,
             query,
         };
         for aid in artifact_ids.iter() {
@@ -824,9 +826,9 @@ impl SelfProfileQueryTime {
         ctxt: &SiteCtxt,
         mut query: Query,
     ) -> Result<Vec<SeriesResponse<Self>>, String> {
-        let krate = query.extract_as::<String>(Tag::Benchmark)?;
+        let benchmark = query.extract_as::<String>(Tag::Benchmark)?;
         let profile = query.extract_as::<Profile>(Tag::Profile)?;
-        let cache = query.extract_as::<Scenario>(Tag::Scenario)?;
+        let scenario = query.extract_as::<Scenario>(Tag::Scenario)?;
         let ql = query.extract_as::<QueryLabel>(Tag::QueryLabel)?;
         query.assert_empty()?;
 
@@ -834,9 +836,9 @@ impl SelfProfileQueryTime {
         let mut series = index
             .all_query_series()
             .filter(|tup| {
-                krate.matches(tup.0)
+                benchmark.matches(tup.0)
                     && profile.matches(tup.1)
-                    && cache.matches(tup.2)
+                    && scenario.matches(tup.2)
                     && ql.matches(tup.3)
             })
             .collect::<Vec<_>>();
@@ -856,9 +858,9 @@ impl SelfProfileQueryTime {
                 )
                 .await,
                 path: Path::new()
-                    .set(PathComponent::Crate(path.0))
+                    .set(PathComponent::Benchmark(path.0))
                     .set(PathComponent::Profile(path.1))
-                    .set(PathComponent::Cache(path.2))
+                    .set(PathComponent::Scenario(path.2))
                     .set(PathComponent::QueryLabel(path.3)),
             });
         }

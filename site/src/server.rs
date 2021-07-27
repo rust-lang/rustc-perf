@@ -37,10 +37,10 @@ type Response = http::Response<hyper::Body>;
 static INTERPOLATED_COLOR: &str = "#fcb0f1";
 
 pub fn handle_info(ctxt: &SiteCtxt) -> info::Response {
-    let mut stats = ctxt.index.load().stats();
-    stats.sort();
+    let mut metrics = ctxt.index.load().metrics();
+    metrics.sort();
     info::Response {
-        stats,
+        stats: metrics,
         as_of: ctxt.index.load().commits().last().map(|d| d.date),
     }
 }
@@ -411,10 +411,10 @@ pub async fn handle_graph_new(
 
     let raw = handle_graph(body, ctxt).await?;
 
-    for (crate_, crate_data) in raw.benchmarks.iter() {
+    for (benchmark_, benchmark_data) in raw.benchmarks.iter() {
         let mut by_profile = HashMap::with_capacity(3);
 
-        for (profile, series) in crate_data.iter() {
+        for (profile, series) in benchmark_data.iter() {
             let mut by_run = HashMap::with_capacity(3);
 
             for (name, points) in series.iter() {
@@ -436,7 +436,7 @@ pub async fn handle_graph_new(
             by_profile.insert(profile.parse::<Profile>().unwrap(), by_run);
         }
 
-        benchmarks.insert(crate_.clone(), by_profile);
+        benchmarks.insert(benchmark_.clone(), by_profile);
     }
 
     Ok(Arc::new(graph::NewResponse {
@@ -475,7 +475,7 @@ pub async fn handle_graph(
     let range = ctxt.data_range(body.start.clone()..=body.end.clone());
     let commits: Arc<Vec<_>> = Arc::new(range.iter().map(|c| c.clone().into()).collect());
 
-    let stat_selector = selector::Selector::One(body.stat.clone());
+    let metric_selector = selector::Selector::One(body.stat.clone());
 
     let series = ctxt
         .query::<Option<f64>>(
@@ -483,7 +483,7 @@ pub async fn handle_graph(
                 .set::<String>(selector::Tag::Benchmark, selector::Selector::All)
                 .set::<String>(selector::Tag::Profile, selector::Selector::All)
                 .set::<String>(selector::Tag::Scenario, selector::Selector::All)
-                .set::<String>(selector::Tag::Metric, stat_selector.clone()),
+                .set::<String>(selector::Tag::Metric, metric_selector.clone()),
             commits.clone(),
         )
         .await?;
@@ -505,12 +505,12 @@ pub async fn handle_graph(
         vec![Profile::Check, Profile::Debug, Profile::Opt],
         vec![body.stat.clone()]
     )
-    .map(|(cache, profile, pstat)| {
+    .map(|(scenario, profile, metric)| {
         selector::Query::new()
             .set::<String>(selector::Tag::Benchmark, selector::Selector::All)
             .set(selector::Tag::Profile, selector::Selector::One(profile))
-            .set(selector::Tag::Scenario, selector::Selector::One(cache))
-            .set::<String>(selector::Tag::Metric, selector::Selector::One(pstat))
+            .set(selector::Tag::Scenario, selector::Selector::One(scenario))
+            .set::<String>(selector::Tag::Metric, selector::Selector::One(metric))
     });
 
     for query in summary_queries {
@@ -521,7 +521,7 @@ pub async fn handle_graph(
             .assert_one()
             .parse::<Profile>()
             .unwrap();
-        let cache = query
+        let scenario = query
             .get(Tag::Scenario)
             .unwrap()
             .raw
@@ -565,10 +565,10 @@ pub async fn handle_graph(
         let graph_data = to_graph_data(&cc, body.absolute, averaged).collect::<Vec<_>>();
         series.push(selector::SeriesResponse {
             path: selector::Path::new()
-                .set(PathComponent::Crate("Summary".into()))
+                .set(PathComponent::Benchmark("Summary".into()))
                 .set(PathComponent::Profile(profile))
-                .set(PathComponent::Cache(cache))
-                .set(PathComponent::ProcessStatistic(
+                .set(PathComponent::Scenario(scenario))
+                .set(PathComponent::Metric(
                     query
                         .get(Tag::Metric)
                         .unwrap()

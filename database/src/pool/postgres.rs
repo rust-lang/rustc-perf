@@ -525,7 +525,7 @@ where
                     )
                 })
                 .collect(),
-            pstats: self
+            pstat_series: self
                 .conn()
                 .query(
                     "select id, crate, profile, cache, statistic from pstat_series;",
@@ -583,17 +583,23 @@ where
     }
     async fn get_pstats(
         &self,
-        series: &[u32],
+        pstat_series_row_ids: &[u32],
         artifact_row_ids: &[Option<crate::ArtifactIdNumber>],
     ) -> Vec<Vec<Option<f64>>> {
-        let series = series.iter().map(|sid| *sid as i32).collect::<Vec<_>>();
+        let pstat_series_row_ids = pstat_series_row_ids
+            .iter()
+            .map(|sid| *sid as i32)
+            .collect::<Vec<_>>();
         let artifact_row_ids = artifact_row_ids
             .iter()
             .map(|id| id.map(|id| id.0 as i32))
             .collect::<Vec<_>>();
         let rows = self
             .conn()
-            .query(&self.statements().get_pstat, &[&series, &artifact_row_ids])
+            .query(
+                &self.statements().get_pstat,
+                &[&pstat_series_row_ids, &artifact_row_ids],
+            )
             .await
             .unwrap();
         rows.into_iter()
@@ -602,14 +608,14 @@ where
     }
     async fn get_self_profile_query(
         &self,
-        series: u32,
+        pstat_series_row_id: u32,
         artifact_row_id: crate::ArtifactIdNumber,
     ) -> Option<crate::QueryDatum> {
         let row = self
             .conn()
             .query_opt(
                 &self.statements().get_self_profile_query,
-                &[&(series as i32), &(artifact_row_id.0 as i32)],
+                &[&(pstat_series_row_id as i32), &(artifact_row_id.0 as i32)],
             )
             .await
             .unwrap()?;

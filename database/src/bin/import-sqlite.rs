@@ -38,12 +38,12 @@ async fn main() {
         let sqlite_aid = sqlite_conn.artifact_id(&aid).await;
         let postgres_aid = postgres_conn.artifact_id(&aid).await;
 
-        for &(krate, profile, cache, stat) in sqlite_idx.all_pstat_series() {
+        for &(krate, profile, cache, stat) in sqlite_idx.all_test_case_metrics() {
             if benchmarks.insert(krate) {
                 postgres_conn.record_benchmark(krate.as_str(), None).await;
             }
 
-            let id = database::DbLabel::ProcessStat {
+            let id = database::DbLabel::TestCaseMetric {
                 benchmark: krate,
                 profile,
                 scenario: cache,
