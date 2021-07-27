@@ -15,25 +15,25 @@ Below are some diagrams showing the basic layout of the database schema for thes
 ### Performance run statistics
 
 ```
-  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐   
-  │ benchmarks    │  │ collections   │  │ artifacts     │
-  ├───────────────┤  ├───────────────┤  ├───────────────┤
-┌►│ id *          │  │ id *          │◄┐│ id *          │◄┐
-│ │ name          │  │ commit        │ ││ name          │ │
-│ │ runs_on_stable│  │               │ ││ date          │ │
-│ │               │  │               │ ││ type          │ │
-│ └───────────────┘  └───────────────┘ │└───────────────┘ │
-│                                      │                  │
-│                                      │                  │
-│ ┌───────────────┐  ┌───────────────┐ |                  │
-│ │ pstat_series  │  │ pstats        │ │                  │
-│ ├───────────────┤  ├───────────────┤ │                  │ 
-│ │ id *          │◄┐│ id *          │ │                  │
-└─┤ benchmark_id  │ └┤ series_id     │ │                  │ 
-  │ profile       │  │ artifact_id   ├─┼──────────────────┘
-  │ cache         │  │ collection_id ├─┘
-  │ statistic     │  │ value         │
-  └───────────────┘  └───────────────┘
+  ┌────────────┐  ┌───────────────┐  ┌────────────┐   
+  │ benchmark  │  │ collection    │  │ artifact   │
+  ├────────────┤  ├───────────────┤  ├────────────┤
+┌►│ name *     │  │ id *          │◄┐│ id *       │◄┐
+│ │ stabilized │  │ perf_commit   │ ││ name       │ │
+│ │            │  │               │ ││ date       │ │
+│ │            │  │               │ ││ type       │ │
+│ └────────────┘  └───────────────┘ │└────────────┘ │
+│                                   │               │
+│                                   │               │
+│ ┌───────────────┐  ┌──────────┐   |               │
+│ │ pstat_series  │  │ pstat    │   │               │
+│ ├───────────────┤  ├──────────┤   │               │ 
+│ │ id *          │◄┐│ id *     │   │               │
+└─┤ crate         │ └┤ series   │   │               │ 
+  │ profile       │  │ aid      ├───┼───────────────┘
+  │ cache         │  │ cid      ├───┘
+  │ statistic     │  │ value    │
+  └───────────────┘  └──────────┘
 ```
 
 ### Self profile data
