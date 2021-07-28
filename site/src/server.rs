@@ -581,18 +581,20 @@ pub async fn handle_graph(
         })
     }
 
-    let mut by_krate = HashMap::new();
-    let mut by_krate_max = HashMap::new();
+    let mut by_test_case = HashMap::new();
+    let mut by_benchmark_max = HashMap::new();
     for sr in series {
-        let krate = sr.path.get::<Benchmark>()?.to_string();
-        let max = by_krate_max.entry(krate.clone()).or_insert(f32::MIN);
+        let benchmark = sr.path.get::<Benchmark>()?.to_string();
+        let max = by_benchmark_max
+            .entry(benchmark.clone())
+            .or_insert(f32::MIN);
         *max = sr
             .series
             .iter()
             .map(|p| p.y)
             .fold(*max, |max, p| max.max(p));
-        by_krate
-            .entry(krate)
+        by_test_case
+            .entry(benchmark)
             .or_insert_with(HashMap::new)
             .entry(sr.path.get::<Profile>()?.to_string())
             .or_insert_with(Vec::new)
@@ -600,8 +602,8 @@ pub async fn handle_graph(
     }
 
     let resp = Arc::new(graph::Response {
-        max: by_krate_max,
-        benchmarks: by_krate,
+        max: by_benchmark_max,
+        benchmarks: by_test_case,
         colors: vec![String::new(), String::from(INTERPOLATED_COLOR)],
         commits: cc.into_commits(),
     });
@@ -1027,7 +1029,7 @@ pub async fn handle_self_profile(
 ) -> ServerResult<self_profile::Response> {
     log::info!("handle_self_profile({:?})", body);
     let mut it = body.benchmark.rsplitn(2, '-');
-    let bench_ty = it.next().ok_or(format!("no benchmark type"))?;
+    let profile = it.next().ok_or(format!("no benchmark type"))?;
     let bench_name = it.next().ok_or(format!("no benchmark name"))?;
     let index = ctxt.index.load();
 
@@ -1039,7 +1041,7 @@ pub async fn handle_self_profile(
 
     let query = selector::Query::new()
         .set(Tag::Benchmark, selector::Selector::One(bench_name))
-        .set(Tag::Profile, selector::Selector::One(bench_ty))
+        .set(Tag::Profile, selector::Selector::One(profile))
         .set(
             Tag::Scenario,
             selector::Selector::One(body.run_name.clone()),

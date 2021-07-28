@@ -172,17 +172,17 @@ impl From<InternalSelfProfile> for SelfProfile {
 
 #[derive(Debug, Hash, PartialEq, Eq)]
 struct PstatSeries {
-    krate: Arc<String>,
+    benchmark: Arc<String>,
     profile: &'static str,
-    cache: String,
-    statistic: &'static str,
+    scenario: String,
+    metric: &'static str,
 }
 
 #[derive(Debug, Hash, PartialEq, Eq)]
 struct SpqSeries {
-    krate: Arc<String>,
+    benchmark: Arc<String>,
     profile: &'static str,
-    cache: String,
+    scenario: String,
     query: &'static str,
 }
 
@@ -291,10 +291,10 @@ impl Ingesting for Sqlite<'_> {
             cached
                 .execute(rusqlite::params_from_iter(series.iter().flat_map(|v| {
                     vec![
-                        ToSqlOutput::Borrowed(ValueRef::Text(v.krate.as_bytes())),
+                        ToSqlOutput::Borrowed(ValueRef::Text(v.benchmark.as_bytes())),
                         ToSqlOutput::Borrowed(ValueRef::Text(v.profile.as_bytes())),
-                        ToSqlOutput::Borrowed(ValueRef::Text(v.cache.as_bytes())),
-                        ToSqlOutput::Borrowed(ValueRef::Text(v.statistic.as_bytes())),
+                        ToSqlOutput::Borrowed(ValueRef::Text(v.scenario.as_bytes())),
+                        ToSqlOutput::Borrowed(ValueRef::Text(v.metric.as_bytes())),
                     ]
                 })))
                 .unwrap();
@@ -306,7 +306,7 @@ impl Ingesting for Sqlite<'_> {
             ",
             )
             .unwrap()
-            .execute(params![&v.krate, &v.profile, &v.cache, &v.statistic,])
+            .execute(params![&v.benchmark, &v.profile, &v.scenario, &v.metric,])
             .unwrap();
         }
 
@@ -314,7 +314,7 @@ impl Ingesting for Sqlite<'_> {
             c
                 .prepare_cached("select id from pstat_series where pstat_series.crate = ? and pstat_series.profile = ? and pstat_series.cache = ? and pstat_series.statistic = ?")
                 .unwrap()
-                .query_row(params![&s.krate, &s.profile, &s.cache, &s.statistic], |r| r.get(0))
+                .query_row(params![&s.benchmark, &s.profile, &s.scenario, &s.metric], |r| r.get(0))
                 .unwrap()
         }).collect()
     }
@@ -359,9 +359,9 @@ impl Ingesting for Sqlite<'_> {
             cached
                 .execute(rusqlite::params_from_iter(series.iter().flat_map(|v| {
                     vec![
-                        ToSqlOutput::Borrowed(ValueRef::Text(v.krate.as_bytes())),
+                        ToSqlOutput::Borrowed(ValueRef::Text(v.benchmark.as_bytes())),
                         ToSqlOutput::Borrowed(ValueRef::Text(v.profile.as_bytes())),
-                        ToSqlOutput::Borrowed(ValueRef::Text(v.cache.as_bytes())),
+                        ToSqlOutput::Borrowed(ValueRef::Text(v.scenario.as_bytes())),
                         ToSqlOutput::Borrowed(ValueRef::Text(v.query.as_bytes())),
                     ]
                 })))
@@ -374,7 +374,7 @@ impl Ingesting for Sqlite<'_> {
             ",
             )
             .unwrap()
-            .execute(params![&v.krate, &v.profile, &v.cache, &v.query])
+            .execute(params![&v.benchmark, &v.profile, &v.scenario, &v.query])
             .unwrap();
         }
 
@@ -385,9 +385,10 @@ impl Ingesting for Sqlite<'_> {
             .iter()
             .map(|s| {
                 cached
-                    .query_row(params![&s.krate, &s.profile, &s.cache, &s.query], |r| {
-                        r.get(0)
-                    })
+                    .query_row(
+                        params![&s.benchmark, &s.profile, &s.scenario, &s.query],
+                        |r| r.get(0),
+                    )
                     .unwrap()
             })
             .collect()
@@ -492,10 +493,10 @@ impl Ingesting for Postgres<'_> {
                 .iter()
                 .flat_map(|s| {
                     vec![
-                        &*s.krate as &(dyn tokio_postgres::types::ToSql + Sync),
+                        &*s.benchmark as &(dyn tokio_postgres::types::ToSql + Sync),
                         &s.profile as &(dyn tokio_postgres::types::ToSql + Sync),
-                        &s.cache as &(dyn tokio_postgres::types::ToSql + Sync),
-                        &s.statistic as &(dyn tokio_postgres::types::ToSql + Sync),
+                        &s.scenario as &(dyn tokio_postgres::types::ToSql + Sync),
+                        &s.metric as &(dyn tokio_postgres::types::ToSql + Sync),
                     ]
                 })
                 .collect::<Vec<_>>();
@@ -513,7 +514,7 @@ impl Ingesting for Postgres<'_> {
                 .conn
                 .query_one(
                     &self.cached.pstat_series_insert,
-                    &[&s.krate.as_str(), &s.profile, &s.cache, &s.statistic],
+                    &[&s.benchmark.as_str(), &s.profile, &s.scenario, &s.metric],
                 )
                 .await
                 .unwrap();
@@ -535,9 +536,9 @@ impl Ingesting for Postgres<'_> {
                 .iter()
                 .flat_map(|s| {
                     vec![
-                        &*s.krate as &(dyn tokio_postgres::types::ToSql + Sync),
+                        &*s.benchmark as &(dyn tokio_postgres::types::ToSql + Sync),
                         &s.profile as &(dyn tokio_postgres::types::ToSql + Sync),
-                        &s.cache as &(dyn tokio_postgres::types::ToSql + Sync),
+                        &s.scenario as &(dyn tokio_postgres::types::ToSql + Sync),
                         &s.query as &(dyn tokio_postgres::types::ToSql + Sync),
                     ]
                 })
@@ -556,7 +557,7 @@ impl Ingesting for Postgres<'_> {
                 .conn
                 .query_one(
                     &self.cached.spq_series_insert,
-                    &[&s.krate.as_str(), &s.profile, &s.cache, &s.query],
+                    &[&s.benchmark.as_str(), &s.profile, &s.scenario, &s.query],
                 )
                 .await
                 .unwrap();
@@ -688,18 +689,18 @@ async fn main() {
         let mut rows = rows.query(params![]).unwrap();
         while let Some(row) = rows.next().unwrap() {
             let profile: String = row.get(2).unwrap();
-            let statistic: String = row.get(4).unwrap();
+            let metric: String = row.get(4).unwrap();
             s_cache.pstat_series.insert(
                 PstatSeries {
-                    krate: Arc::new(row.get(1).unwrap()),
+                    benchmark: Arc::new(row.get(1).unwrap()),
                     profile: match profile.as_str() {
                         "check" => "check",
                         "opt" => "opt",
                         "debug" => "debug",
                         o => unimplemented!("{}", o),
                     },
-                    cache: row.get(3).unwrap(),
-                    statistic: match statistic.as_str() {
+                    scenario: row.get(3).unwrap(),
+                    metric: match metric.as_str() {
                         "instructions:u" => "instructions:u",
                         "cycles:u" => "cycles:u",
                         "faults" => "faults",
@@ -722,14 +723,14 @@ async fn main() {
             let query: String = row.get(4).unwrap();
             s_cache.spq_series.insert(
                 SpqSeries {
-                    krate: Arc::new(row.get(1).unwrap()),
+                    benchmark: Arc::new(row.get(1).unwrap()),
                     profile: match profile.as_str() {
                         "check" => "check",
                         "opt" => "opt",
                         "debug" => "debug",
                         o => unimplemented!("{}", o),
                     },
-                    cache: row.get(3).unwrap(),
+                    scenario: row.get(3).unwrap(),
                     query: QueryLabel::from(query.as_str()).as_str(),
                 },
                 row.get(0).unwrap(),
@@ -759,18 +760,18 @@ async fn main() {
         while let Some(row) = rows.next().await {
             let row = row.unwrap();
             let profile: String = row.get(2);
-            let statistic: String = row.get(4);
+            let metric: String = row.get(4);
             p_cache.pstat_series.insert(
                 PstatSeries {
-                    krate: Arc::new(row.get(1)),
+                    benchmark: Arc::new(row.get(1)),
                     profile: match profile.as_str() {
                         "check" => "check",
                         "opt" => "opt",
                         "debug" => "debug",
                         o => unimplemented!("{}", o),
                     },
-                    cache: row.get(3),
-                    statistic: match statistic.as_str() {
+                    scenario: row.get(3),
+                    metric: match metric.as_str() {
                         "instructions:u" => "instructions:u",
                         "cycles:u" => "cycles:u",
                         "faults" => "faults",
@@ -807,14 +808,14 @@ async fn main() {
             let query: String = row.get(4);
             p_cache.spq_series.insert(
                 SpqSeries {
-                    krate: Arc::new(row.get(1)),
+                    benchmark: Arc::new(row.get(1)),
                     profile: match profile.as_str() {
                         "check" => "check",
                         "opt" => "opt",
                         "debug" => "debug",
                         o => unimplemented!("{}", o),
                     },
-                    cache: row.get(3),
+                    scenario: row.get(3),
                     query: QueryLabel::from(query.as_str()).as_str(),
                 },
                 row.get(0),
@@ -940,10 +941,10 @@ async fn ingest<T: Ingesting>(conn: &T, caches: &mut IdCache, path: &Path) {
             for (sid, stat) in run.stats.iter() {
                 let name = name.clone();
                 let key = PstatSeries {
-                    krate: name.clone(),
+                    benchmark: name.clone(),
                     profile: profile_str,
-                    cache: state.to_string(),
-                    statistic: sid,
+                    scenario: state.to_string(),
+                    metric: sid,
                 };
                 if let Some(&sid) = caches.pstat_series.get(&key) {
                     buf.push(conn.pstat(sid, aid, cid, stat));
@@ -957,9 +958,9 @@ async fn ingest<T: Ingesting>(conn: &T, caches: &mut IdCache, path: &Path) {
                 for qd in self_profile.query_data.iter() {
                     let name = name.clone();
                     let key = SpqSeries {
-                        krate: name.clone(),
+                        benchmark: name.clone(),
                         profile: profile_str,
-                        cache: state.to_string(),
+                        scenario: state.to_string(),
                         query: qd.label.as_str(),
                     };
                     if let Some(&sid) = caches.spq_series.get(&key) {

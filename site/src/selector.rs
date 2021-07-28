@@ -3,9 +3,8 @@
 //!
 //! We have the following expected paths:
 //!
-//! * :crate/:profile/:cache_state/:stat_id (Instructions, CpuClock, CpuClockUser, ...)
-//!     => [cid => u64]
-//! * :crate/:profile/:cache_state/:self_profile_query/:stat (SelfProfileTime, SelfProfileCacheHits, ...)
+//! * :benchmark/:profile/:scenario/:metric => [cid => u64]
+//! * :crate/:profile/:scenario/:self_profile_query/:stat (SelfProfileTime, SelfProfileCacheHits, ...)
 //!     :stat = time => Duration,
 //!     :stat = cache hits => u32,
 //!     :stat = invocation count => u32,
@@ -499,7 +498,7 @@ impl SeriesElement for Option<f64> {
         String,
     > {
         let results = vec![
-            ProcessStatisticSeries::expand_query(artifact_ids.clone(), ctxt, query.clone())
+            StatisticSeries::expand_query(artifact_ids.clone(), ctxt, query.clone())
                 .await
                 .map(|sr| {
                     sr.into_iter()
@@ -540,16 +539,16 @@ impl SiteCtxt {
     }
 }
 
-pub struct ProcessStatisticSeries {
+pub struct StatisticSeries {
     artifact_ids: ArtifactIdIter,
     points: std::vec::IntoIter<Option<f64>>,
 }
 
-impl Series for ProcessStatisticSeries {
+impl Series for StatisticSeries {
     type Element = Option<f64>;
 }
 
-impl ProcessStatisticSeries {
+impl StatisticSeries {
     async fn expand_query(
         artifact_ids: Arc<Vec<ArtifactId>>,
         ctxt: &SiteCtxt,
@@ -563,26 +562,26 @@ impl ProcessStatisticSeries {
         query.assert_empty()?;
 
         let index = ctxt.index.load();
-        let mut series = index
-            .all_test_case_metrics()
-            .filter(|tup| {
-                benchmark.matches(tup.0)
-                    && profile.matches(tup.1)
-                    && scenario.matches(tup.2)
-                    && metric.matches(tup.3)
+        let mut statistic_descriptions = index
+            .all_statistic_descriptions()
+            .filter(|(b, p, s, m)| {
+                benchmark.matches(*b)
+                    && profile.matches(*p)
+                    && scenario.matches(*s)
+                    && metric.matches(*m)
             })
             .collect::<Vec<_>>();
 
-        series.sort_unstable();
+        statistic_descriptions.sort_unstable();
 
-        let sids = series
+        let sids = statistic_descriptions
             .iter()
-            .map(|path| {
-                let query = crate::db::DbLabel::TestCaseMetric {
-                    benchmark: path.0,
-                    profile: path.1,
-                    scenario: path.2,
-                    metric: path.3,
+            .map(|(b, p, s, m)| {
+                let query = crate::db::DbLabel::StatisticDescription {
+                    benchmark: *b,
+                    profile: *p,
+                    scenario: *s,
+                    metric: *m,
                 };
                 query.lookup(&index).unwrap()
             })
@@ -603,11 +602,11 @@ impl ProcessStatisticSeries {
             .into_iter()
             .enumerate()
             .map(|(idx, points)| {
-                let path = &series[idx];
+                let &&(benchmark, profile, scenario, metric) = &statistic_descriptions[idx];
                 SeriesResponse {
-                    series: ProcessStatisticSeries {
+                    series: StatisticSeries {
                         artifact_ids: ArtifactIdIter::new(artifact_ids.clone()),
-                        points: if path.3 == *"cpu-clock" {
+                        points: if metric == *"cpu-clock" {
                             // Convert to seconds -- perf reports this measurement in
                             // milliseconds
                             points
@@ -620,24 +619,24 @@ impl ProcessStatisticSeries {
                         },
                     },
                     path: Path::new()
-                        .set(PathComponent::Benchmark(path.0))
-                        .set(PathComponent::Profile(path.1))
-                        .set(PathComponent::Scenario(path.2))
-                        .set(PathComponent::Metric(path.3)),
+                        .set(PathComponent::Benchmark(benchmark))
+                        .set(PathComponent::Profile(profile))
+                        .set(PathComponent::Scenario(scenario))
+                        .set(PathComponent::Metric(metric)),
                 }
             })
             .collect::<Vec<_>>();
         log::trace!(
             "{:?}: run {} from {}",
             start.elapsed(),
-            series.len(),
+            statistic_descriptions.len(),
             dumped
         );
         Ok(res)
     }
 }
 
-impl Iterator for ProcessStatisticSeries {
+impl Iterator for StatisticSeries {
     type Item = (ArtifactId, Option<f64>);
     fn next(&mut self) -> Option<Self::Item> {
         Some((self.artifact_ids.next()?, self.points.next().unwrap()))
@@ -657,16 +656,16 @@ impl SelfProfile {
     async fn new(
         artifact_ids: Arc<Vec<ArtifactId>>,
         ctxt: &SiteCtxt,
-        krate: Benchmark,
+        benchmark: Benchmark,
         profile: Profile,
-        cache: Scenario,
+        scenario: Scenario,
     ) -> Self {
         let mut res = Vec::with_capacity(artifact_ids.len());
         let idx = ctxt.index.load();
         let mut conn = ctxt.conn().await;
         let mut tx = conn.transaction().await;
         let labels = idx
-            .filtered_queries(krate, profile, cache)
+            .filtered_queries(benchmark, profile, scenario)
             .collect::<Vec<_>>();
         for aid in artifact_ids.iter() {
             let mut queries = Vec::new();
@@ -681,9 +680,9 @@ impl SelfProfile {
             let self_profile_data = conn
                 .get_self_profile(
                     artifact_row_id,
-                    krate.as_str(),
+                    benchmark.as_str(),
                     &profile.to_string(),
-                    &cache.to_string(),
+                    &scenario.to_string(),
                 )
                 .await;
             for (label, qd) in self_profile_data {

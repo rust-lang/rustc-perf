@@ -27,6 +27,8 @@ The following is a glossary of domain specific terminology. Although benchmarks 
 * **test result**: the collection of all metrics as a result of running a test. 
 * **test case metric**: the combination of a test case and a particular metric.
 * **statistic**: a single value of a metric in a test result
+* **statistic description**: the combination of a metric and a test result which describes a statistic.
+* **statistic series**: statistics for the same statistic description over time.
 * **run**: a collection of test results for all currently available test cases run on a given artifact. 
 * **test result delta**: the delta between two test results for the same test case but (optionally) different artifacts. The [comparison page](https://perf.rust-lang.org/compare.html) lists all the test result deltas as percentages comparing two runs.  
 
@@ -39,4 +41,4 @@ The following is a glossary of domain specific terminology. Although benchmarks 
 ## Other 
 
 * **bootstrap**: the process of building the compiler from a previous version of the compiler
-* **query**: a query used inside the [compiler query system](https://rustc-dev-guide.rust-lang.org/overview.html#queries).
+* **compiler query**: a query used inside the [compiler query system](https://rustc-dev-guide.rust-lang.org/overview.html#queries).

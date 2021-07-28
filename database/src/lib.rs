@@ -599,7 +599,7 @@ pub enum DbLabel {
     Errors {
         benchmark: Benchmark,
     },
-    TestCaseMetric {
+    StatisticDescription {
         benchmark: Benchmark,
         profile: Profile,
         scenario: Scenario,
@@ -623,7 +623,7 @@ impl Lookup for DbLabel {
     fn lookup(&self, index: &Index) -> Option<Self::Id> {
         match self {
             DbLabel::Errors { benchmark } => index.errors.get(benchmark),
-            DbLabel::TestCaseMetric {
+            DbLabel::StatisticDescription {
                 benchmark,
                 profile,
                 scenario,
@@ -711,7 +711,7 @@ impl Index {
     // millions of queries and labels and iterating all of them is eventually
     // going to be impractical. But for now it performs quite well, so we'll go
     // for it as keeping indices around would be annoying.
-    pub fn all_test_case_metrics(
+    pub fn all_statistic_descriptions(
         &self,
     ) -> impl Iterator<Item = &'_ (Benchmark, Profile, Scenario, Metric)> + '_ {
         self.pstat_series.map.keys()

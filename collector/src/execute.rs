@@ -554,7 +554,7 @@ pub trait Processor {
 
 pub struct MeasureProcessor<'a> {
     rt: &'a mut Runtime,
-    krate: &'a BenchmarkName,
+    benchmark: &'a BenchmarkName,
     conn: &'a mut dyn database::Connection,
     artifact: &'a database::ArtifactId,
     artifact_row_id: database::ArtifactIdNumber,
@@ -568,7 +568,7 @@ impl<'a> MeasureProcessor<'a> {
     pub fn new(
         rt: &'a mut Runtime,
         conn: &'a mut dyn database::Connection,
-        krate: &'a BenchmarkName,
+        benchmark: &'a BenchmarkName,
         artifact: &'a database::ArtifactId,
         artifact_row_id: database::ArtifactIdNumber,
         is_self_profile: bool,
@@ -594,7 +594,7 @@ impl<'a> MeasureProcessor<'a> {
             rt,
             upload: None,
             conn,
-            krate,
+            benchmark,
             artifact,
             artifact_row_id,
             is_first_collection: true,
@@ -644,14 +644,14 @@ impl<'a> MeasureProcessor<'a> {
                 }
                 let prefix = PathBuf::from("self-profile")
                     .join(self.artifact_row_id.0.to_string())
-                    .join(self.krate.0.as_str())
+                    .join(self.benchmark.0.as_str())
                     .join(profile.to_string())
                     .join(cache.to_id());
                 self.upload = Some(Upload::new(prefix, collection, files));
                 self.rt.block_on(self.conn.record_raw_self_profile(
                     collection,
                     self.artifact_row_id,
-                    self.krate.0.as_str(),
+                    self.benchmark.0.as_str(),
                     profile,
                     cache,
                 ));
@@ -663,7 +663,7 @@ impl<'a> MeasureProcessor<'a> {
             buf.push(self.conn.record_statistic(
                 collection,
                 self.artifact_row_id,
-                self.krate.0.as_str(),
+                self.benchmark.0.as_str(),
                 profile,
                 cache,
                 stat,
@@ -674,12 +674,12 @@ impl<'a> MeasureProcessor<'a> {
         if let Some(sp) = &stats.1 {
             let conn = &*self.conn;
             let artifact_row_id = self.artifact_row_id;
-            let krate = self.krate.0.as_str();
+            let benchmark = self.benchmark.0.as_str();
             for qd in &sp.query_data {
                 buf.push(conn.record_self_profile_query(
                     collection,
                     artifact_row_id,
-                    krate,
+                    benchmark,
                     profile,
                     cache,
                     qd.label.as_str(),
@@ -704,7 +704,7 @@ struct Upload(std::process::Child, tempfile::NamedTempFile);
 impl Upload {
     fn new(prefix: PathBuf, collection: database::CollectionId, files: SelfProfileFiles) -> Upload {
         // Files are placed at
-        //  * self-profile/<artifact id>/<krate>/<profile>/<cache>
+        //  * self-profile/<artifact id>/<benchmark>/<profile>/<scenario>
         //    /self-profile-<collection-id>.{extension}
         let upload = tempfile::NamedTempFile::new()
             .context("create temporary file")

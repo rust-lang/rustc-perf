@@ -31,10 +31,10 @@ pub trait Connection: Send + Sync {
         &self,
         collection: CollectionId,
         artifact: ArtifactIdNumber,
-        krate: &str,
+        benchmark: &str,
         profile: Profile,
-        cache: Scenario,
-        statistic: &str,
+        scenario: Scenario,
+        metric: &str,
         value: f64,
     );
     /// Records a self-profile artifact in S3.
@@ -45,17 +45,17 @@ pub trait Connection: Send + Sync {
         &self,
         collection: CollectionId,
         artifact: ArtifactIdNumber,
-        krate: &str,
+        benchmark: &str,
         profile: Profile,
-        cache: Scenario,
+        scenario: Scenario,
     );
     async fn record_self_profile_query(
         &self,
         collection: CollectionId,
         artifact: ArtifactIdNumber,
-        krate: &str,
+        benchmark: &str,
         profile: Profile,
-        cache: Scenario,
+        scenario: Scenario,
         query: &str,
         qd: QueryDatum,
     );

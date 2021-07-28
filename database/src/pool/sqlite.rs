@@ -415,7 +415,7 @@ impl Connection for SqliteConnection {
         aid: ArtifactIdNumber,
         crate_: &str,
         profile: &str,
-        cache: &str,
+        scenario: &str,
     ) -> HashMap<crate::QueryLabel, crate::QueryDatum> {
         self.raw_ref()
             .prepare_cached("
@@ -430,7 +430,7 @@ impl Connection for SqliteConnection {
                     and aid = ?
                 ")
             .unwrap()
-            .query_map(params![&crate_, &profile, &cache, &aid.0], |r| {
+            .query_map(params![&crate_, &profile, &scenario, &aid.0], |r| {
                 let self_time: i64 = r.get(1)?;
                 let blocked_time: i64 = r.get(2)?;
                 let incremental_load_time: i64 = r.get(3)?;
@@ -562,25 +562,25 @@ impl Connection for SqliteConnection {
         &self,
         collection: CollectionId,
         artifact: ArtifactIdNumber,
-        krate: &str,
+        benchmark: &str,
         profile: Profile,
-        cache: crate::Scenario,
-        statistic: &str,
+        scenario: crate::Scenario,
+        metric: &str,
         value: f64,
     ) {
         let profile = profile.to_string();
-        let cache = cache.to_string();
+        let scenario = scenario.to_string();
         self.raw_ref().execute("insert or ignore into pstat_series (crate, profile, cache, statistic) VALUES (?, ?, ?, ?)", params![
-            &krate,
+            &benchmark,
             &profile,
-            &cache,
-            &statistic,
+            &scenario,
+            &metric,
         ]).unwrap();
         let sid: i32 = self.raw_ref().query_row("select id from pstat_series where crate = ? and profile = ? and cache = ? and statistic = ?", params![
-            &krate,
+            &benchmark,
             &profile,
-            &cache,
-            &statistic,
+            &scenario,
+            &metric,
         ], |r| r.get(0)).unwrap();
         self.raw_ref()
             .execute(
@@ -645,24 +645,24 @@ impl Connection for SqliteConnection {
         &self,
         collection: CollectionId,
         artifact: ArtifactIdNumber,
-        krate: &str,
+        benchmark: &str,
         profile: Profile,
-        cache: crate::Scenario,
+        scenario: crate::Scenario,
         query: &str,
         qd: QueryDatum,
     ) {
         let profile = profile.to_string();
-        let cache = cache.to_string();
+        let scenario = scenario.to_string();
         self.raw_ref().execute("insert or ignore into self_profile_query_series (crate, profile, cache, query) VALUES (?, ?, ?, ?)", params![
-            &krate,
+            &benchmark,
             &profile,
-            &cache,
+            &scenario,
             &query,
         ]).unwrap();
         let sid: i32 = self.raw_ref().query_row("select id from self_profile_query_series where crate = ? and profile = ? and cache = ? and query = ?", params![
-            &krate,
+            &benchmark,
             &profile,
-            &cache,
+            &scenario,
             &query,
         ], |r| r.get(0)).unwrap();
         self.raw_ref()
@@ -713,13 +713,13 @@ impl Connection for SqliteConnection {
             )
             .unwrap();
     }
-    async fn record_benchmark(&self, krate: &str, supports_stable: Option<bool>) {
+    async fn record_benchmark(&self, benchmark: &str, supports_stable: Option<bool>) {
         if let Some(stable) = supports_stable {
             self.raw_ref()
                 .execute(
                     "insert into benchmark (name, stabilized) VALUES (?, ?)
                 ON CONFLICT (name) do update set stabilized = excluded.stabilized",
-                    params![krate, stable],
+                    params![benchmark, stable],
                 )
                 .unwrap();
         } else {
@@ -727,7 +727,7 @@ impl Connection for SqliteConnection {
                 .execute(
                     "insert into benchmark (name, stabilized) VALUES (?, ?)
                 ON CONFLICT DO NOTHING",
-                    params![krate, false],
+                    params![benchmark, false],
                 )
                 .unwrap();
         }
@@ -891,9 +891,9 @@ impl Connection for SqliteConnection {
         &self,
         _collection: CollectionId,
         _artifact: ArtifactIdNumber,
-        _krate: &str,
+        _benchmark: &str,
         _profile: Profile,
-        _cache: crate::Scenario,
+        _scenario: crate::Scenario,
     ) {
         // FIXME: this is left for the future, if we ever need to support it. It
         // shouldn't be too hard, but we may also want to just intern the raw
@@ -906,7 +906,7 @@ impl Connection for SqliteConnection {
         _aid: ArtifactId,
         _crate_: &str,
         _profile: &str,
-        _cache: &str,
+        _scenario: &str,
     ) -> Vec<(ArtifactIdNumber, i32)> {
         Vec::new()
     }
