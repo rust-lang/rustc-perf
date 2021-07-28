@@ -268,13 +268,6 @@ impl<T> SeriesResponse<T> {
     }
 }
 
-pub trait Series: Sized
-where
-    Self: Iterator<Item = (ArtifactId, <Self as Series>::Element)>,
-{
-    type Element: Sized;
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Path {
     path: Vec<PathComponent>,
@@ -544,10 +537,6 @@ pub struct StatisticSeries {
     points: std::vec::IntoIter<Option<f64>>,
 }
 
-impl Series for StatisticSeries {
-    type Element = Option<f64>;
-}
-
 impl StatisticSeries {
     async fn expand_query(
         artifact_ids: Arc<Vec<ArtifactId>>,
@@ -723,10 +712,6 @@ impl Iterator for SelfProfile {
     }
 }
 
-impl Series for SelfProfile {
-    type Element = Option<SelfProfileData>;
-}
-
 impl SelfProfile {
     async fn expand_query(
         artifact_ids: Arc<Vec<ArtifactId>>,
@@ -813,10 +798,6 @@ impl Iterator for SelfProfileQueryTime {
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.artifact_ids.size_hint()
     }
-}
-
-impl Series for SelfProfileQueryTime {
-    type Element = Option<f64>;
 }
 
 impl SelfProfileQueryTime {
