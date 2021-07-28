@@ -33,6 +33,7 @@ use database::{Commit, Crate, Index, Lookup, ProcessStatistic, QueryLabel};
 use std::convert::TryInto;
 use std::fmt;
 use std::ops::RangeInclusive;
+use std::str::FromStr;
 use std::sync::Arc;
 
 /// Finds the most appropriate `ArtifactId` for a given bound.
@@ -361,6 +362,17 @@ impl Query {
         }
     }
 
+    fn extract_as<T>(&mut self, tag: Tag) -> Result<Selector<T>, String>
+    where
+        T: FromStr,
+        <T as FromStr>::Err: fmt::Display,
+    {
+        Ok(self.extract(tag)?.raw.try_map(|p| {
+            p.parse::<T>()
+                .map_err(|e| format!("failed to parse query tag {:?}: {}", tag, e))
+        })?)
+    }
+
     fn assert_empty(&self) -> Result<(), String> {
         if self.path.is_empty() {
             Ok(())
@@ -528,11 +540,6 @@ impl SiteCtxt {
     }
 }
 
-#[derive(Clone)]
-pub struct Source<'a> {
-    ctxt: &'a SiteCtxt,
-}
-
 pub struct ProcessStatisticSeries {
     artifact_ids: ArtifactIdIter,
     points: std::vec::IntoIter<Option<f64>>,
@@ -549,19 +556,10 @@ impl ProcessStatisticSeries {
         mut query: Query,
     ) -> Result<Vec<SeriesResponse<Self>>, String> {
         let dumped = format!("{:?}", query);
-        let krate = query.extract(Tag::Crate)?.raw;
-        let profile = query
-            .extract(Tag::Profile)?
-            .raw
-            .try_map(|p| p.parse::<Profile>())?;
-        let cache = query
-            .extract(Tag::Cache)?
-            .raw
-            .try_map(|p| p.parse::<Cache>())?;
-        let statid = query
-            .extract(Tag::ProcessStatistic)?
-            .raw
-            .try_map(|p| p.parse::<ProcessStatistic>())?;
+        let krate = query.extract_as::<String>(Tag::Crate)?;
+        let profile = query.extract_as::<Profile>(Tag::Profile)?;
+        let cache = query.extract_as::<Cache>(Tag::Cache)?;
+        let statid = query.extract_as::<ProcessStatistic>(Tag::ProcessStatistic)?;
         query.assert_empty()?;
 
         let index = ctxt.index.load();
@@ -736,15 +734,9 @@ impl SelfProfile {
         ctxt: &SiteCtxt,
         mut query: Query,
     ) -> Result<Vec<SeriesResponse<Self>>, String> {
-        let krate = query.extract(Tag::Crate)?.raw;
-        let profile = query
-            .extract(Tag::Profile)?
-            .raw
-            .try_map(|p| p.parse::<Profile>())?;
-        let cache = query
-            .extract(Tag::Cache)?
-            .raw
-            .try_map(|p| p.parse::<Cache>())?;
+        let krate = query.extract_as::<String>(Tag::Crate)?;
+        let profile = query.extract_as::<Profile>(Tag::Profile)?;
+        let cache = query.extract_as::<Cache>(Tag::Cache)?;
         query.assert_empty()?;
 
         let mut series = ctxt
@@ -832,19 +824,10 @@ impl SelfProfileQueryTime {
         ctxt: &SiteCtxt,
         mut query: Query,
     ) -> Result<Vec<SeriesResponse<Self>>, String> {
-        let krate = query.extract(Tag::Crate)?.raw;
-        let profile = query
-            .extract(Tag::Profile)?
-            .raw
-            .try_map(|p| p.parse::<Profile>())?;
-        let cache = query
-            .extract(Tag::Cache)?
-            .raw
-            .try_map(|p| p.parse::<Cache>())?;
-        let ql = query
-            .extract(Tag::QueryLabel)?
-            .raw
-            .map(|p| QueryLabel::from(p.as_str()));
+        let krate = query.extract_as::<String>(Tag::Crate)?;
+        let profile = query.extract_as::<Profile>(Tag::Profile)?;
+        let cache = query.extract_as::<Cache>(Tag::Cache)?;
+        let ql = query.extract_as::<QueryLabel>(Tag::QueryLabel)?;
         query.assert_empty()?;
 
         let index = ctxt.index.load();
