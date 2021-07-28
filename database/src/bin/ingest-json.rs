@@ -171,7 +171,7 @@ impl From<InternalSelfProfile> for SelfProfile {
 }
 
 #[derive(Debug, Hash, PartialEq, Eq)]
-struct PstatSeries {
+struct StatDescription {
     benchmark: Arc<String>,
     profile: &'static str,
     scenario: String,
@@ -193,7 +193,7 @@ trait Ingesting {
     async fn collection(&self) -> i32;
     async fn error_series(&self, krate: &str) -> i32;
     async fn error(&self, series: i32, aid: i16, error: &str);
-    async fn pstat_series(&self, series: &[PstatSeries]) -> Vec<i32>;
+    async fn pstat_series(&self, series: &[StatDescription]) -> Vec<i32>;
     async fn pstat(&self, series: i32, aid: i16, cid: i32, value: f64);
     async fn self_profile_query_series(&self, series: &[SpqSeries]) -> Vec<i32>;
     async fn self_profile_query(&self, series: i32, aid: i16, cid: i32, qd: &QueryData);
@@ -269,7 +269,7 @@ impl Ingesting for Sqlite<'_> {
             )
             .unwrap();
     }
-    async fn pstat_series(&self, series: &[PstatSeries]) -> Vec<i32> {
+    async fn pstat_series(&self, series: &[StatDescription]) -> Vec<i32> {
         let c = self.conn();
         let mut cached = c
             .prepare_cached(
@@ -485,7 +485,7 @@ impl Ingesting for Postgres<'_> {
             .await
             .unwrap();
     }
-    async fn pstat_series(&self, series: &[PstatSeries]) -> Vec<i32> {
+    async fn pstat_series(&self, series: &[StatDescription]) -> Vec<i32> {
         let mut res = Vec::with_capacity(series.len());
         let mut exact = series.chunks_exact(11);
         for series in exact.by_ref() {
@@ -691,7 +691,7 @@ async fn main() {
             let profile: String = row.get(2).unwrap();
             let metric: String = row.get(4).unwrap();
             s_cache.pstat_series.insert(
-                PstatSeries {
+                StatDescription {
                     benchmark: Arc::new(row.get(1).unwrap()),
                     profile: match profile.as_str() {
                         "check" => "check",
@@ -762,7 +762,7 @@ async fn main() {
             let profile: String = row.get(2);
             let metric: String = row.get(4);
             p_cache.pstat_series.insert(
-                PstatSeries {
+                StatDescription {
                     benchmark: Arc::new(row.get(1)),
                     profile: match profile.as_str() {
                         "check" => "check",
@@ -871,7 +871,7 @@ async fn main() {
 #[derive(Default)]
 struct IdCache {
     benchmarks: HashSet<Arc<String>>,
-    pstat_series: HashMap<PstatSeries, i32>,
+    pstat_series: HashMap<StatDescription, i32>,
     spq_series: HashMap<SpqSeries, i32>,
 }
 
@@ -940,7 +940,7 @@ async fn ingest<T: Ingesting>(conn: &T, caches: &mut IdCache, path: &Path) {
 
             for (sid, stat) in run.stats.iter() {
                 let name = name.clone();
-                let key = PstatSeries {
+                let key = StatDescription {
                     benchmark: name.clone(),
                     profile: profile_str,
                     scenario: state.to_string(),

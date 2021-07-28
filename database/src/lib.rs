@@ -420,7 +420,7 @@ impl From<Commit> for ArtifactId {
 pub trait SeriesType: Sized {
     async fn get(
         conn: &dyn pool::Connection,
-        test_case_metric_row_id: u32,
+        stat_description_row_id: u32,
         artifact_row_id: ArtifactIdNumber,
     ) -> Option<Self>;
 }
@@ -429,10 +429,10 @@ pub trait SeriesType: Sized {
 impl SeriesType for f64 {
     async fn get(
         conn: &dyn pool::Connection,
-        test_case_metric_row_id: u32,
+        stat_description_row_id: u32,
         artifact_row_id: ArtifactIdNumber,
     ) -> Option<Self> {
-        conn.get_pstats(&[test_case_metric_row_id], &[Some(artifact_row_id)])
+        conn.get_pstats(&[stat_description_row_id], &[Some(artifact_row_id)])
             .await[0][0]
     }
 }
@@ -478,7 +478,7 @@ pub struct Index {
     artifacts: Indexed<Box<str>>,
     /// Id lookup of the errors for a crate
     errors: Indexed<Benchmark>,
-    /// Id lookup of test case metrics.
+    /// Id lookup of stat description ids
     /// For legacy reasons called `pstat_series` in the database, and so the name is kept here.
     pstat_series: Indexed<(Benchmark, Profile, Scenario, Metric)>,
     /// Id lookup of a given process query label
@@ -664,8 +664,8 @@ impl Index {
         artifact_id: &ArtifactId,
     ) -> Option<(u32, ArtifactIdNumber)> {
         let artifact_row_id = artifact_id.lookup(self)?;
-        let test_case_metric_row_id = label.lookup(self)?;
-        Some((test_case_metric_row_id, artifact_row_id))
+        let stat_description_row_id = label.lookup(self)?;
+        Some((stat_description_row_id, artifact_row_id))
     }
 
     pub async fn get<T: SeriesType>(
@@ -674,8 +674,8 @@ impl Index {
         label: &DbLabel,
         artifact_id: &ArtifactId,
     ) -> Option<T> {
-        let (test_case_metric_row_id, artifact_row_id) = self.lookup(label, artifact_id)?;
-        T::get(db, test_case_metric_row_id, artifact_row_id).await
+        let (stat_description_row_id, artifact_row_id) = self.lookup(label, artifact_id)?;
+        T::get(db, stat_description_row_id, artifact_row_id).await
     }
 
     pub fn artifacts(&self) -> impl Iterator<Item = &'_ str> + '_ {
@@ -740,8 +740,8 @@ impl Index {
         self.queries
             .map
             .keys()
-            .filter(move |path| path.0 == benchmark && path.1 == profile && path.2 == scenario)
-            .map(|path| path.3)
+            .filter(move |&&(b, p, s, _)| b == benchmark && p == profile && s == scenario)
+            .map(|&(_, _, _, q)| q)
             .filter(|q| !q.as_str().starts_with("codegen passes ["))
     }
 }

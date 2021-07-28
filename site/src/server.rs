@@ -171,21 +171,21 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
         )
         .set(Tag::Metric, selector::Selector::One("wall-time"));
 
-    let summary_patches = ctxt.summary_patches();
+    let summary_scenarios = ctxt.summary_scenarios();
     let by_profile = ByProfile::new::<String, _, _>(|profile| {
-        let summary_patches = &summary_patches;
+        let summary_scenarios = &summary_scenarios;
         let ctxt = &ctxt;
         let query = &query;
         let aids = &artifact_ids;
         async move {
             let mut cases = dashboard::Cases::default();
-            for patch in summary_patches.iter() {
+            for scenario in summary_scenarios.iter() {
                 let responses = ctxt
                     .query::<Option<f64>>(
                         query
                             .clone()
                             .set(Tag::Profile, selector::Selector::One(profile))
-                            .set(Tag::Scenario, selector::Selector::One(patch)),
+                            .set(Tag::Scenario, selector::Selector::One(scenario)),
                         aids.clone(),
                     )
                     .await?;
@@ -201,7 +201,7 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
                 })
                 .collect::<Vec<_>>();
 
-                match patch {
+                match scenario {
                     Scenario::Empty => cases.clean_averages = points,
                     Scenario::IncrementalEmpty => cases.base_incr_averages = points,
                     Scenario::IncrementalFresh => cases.clean_incr_averages = points,
@@ -501,7 +501,7 @@ pub async fn handle_graph(
     let baselines = &mut baselines;
 
     let summary_queries = iproduct!(
-        ctxt.summary_patches(),
+        ctxt.summary_scenarios(),
         vec![Profile::Check, Profile::Debug, Profile::Opt],
         vec![body.stat.clone()]
     )

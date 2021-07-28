@@ -86,7 +86,7 @@ pub struct SiteCtxt {
 }
 
 impl SiteCtxt {
-    pub fn summary_patches(&self) -> Vec<crate::db::Scenario> {
+    pub fn summary_scenarios(&self) -> Vec<crate::db::Scenario> {
         vec![
             crate::db::Scenario::Empty,
             crate::db::Scenario::IncrementalEmpty,

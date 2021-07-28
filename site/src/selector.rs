@@ -564,11 +564,11 @@ impl StatisticSeries {
         let index = ctxt.index.load();
         let mut statistic_descriptions = index
             .all_statistic_descriptions()
-            .filter(|(b, p, s, m)| {
-                benchmark.matches(*b)
-                    && profile.matches(*p)
-                    && scenario.matches(*s)
-                    && metric.matches(*m)
+            .filter(|&&(b, p, s, m)| {
+                benchmark.matches(b)
+                    && profile.matches(p)
+                    && scenario.matches(s)
+                    && metric.matches(m)
             })
             .collect::<Vec<_>>();
 
@@ -576,12 +576,12 @@ impl StatisticSeries {
 
         let sids = statistic_descriptions
             .iter()
-            .map(|(b, p, s, m)| {
+            .map(|&&(b, p, s, m)| {
                 let query = crate::db::DbLabel::StatisticDescription {
-                    benchmark: *b,
-                    profile: *p,
-                    scenario: *s,
-                    metric: *m,
+                    benchmark: b,
+                    profile: p,
+                    scenario: s,
+                    metric: m,
                 };
                 query.lookup(&index).unwrap()
             })
@@ -742,23 +742,23 @@ impl SelfProfile {
             .index
             .load()
             .all_query_series()
-            .filter(|tup| {
-                benchmark.matches(tup.0) && profile.matches(tup.1) && scenario.matches(tup.2)
+            .filter(|&&(b, p, s, _)| {
+                benchmark.matches(b) && profile.matches(p) && scenario.matches(s)
             })
-            .map(|tup| (tup.0, tup.1, tup.2))
+            .map(|&(b, p, s, _)| (b, p, s))
             .collect::<Vec<_>>();
 
         series.sort_unstable();
         series.dedup();
 
         let mut res = Vec::with_capacity(series.len());
-        for path in series {
+        for (b, p, s) in series {
             res.push(SeriesResponse {
-                series: SelfProfile::new(artifact_ids.clone(), ctxt, path.0, path.1, path.2).await,
+                series: SelfProfile::new(artifact_ids.clone(), ctxt, b, p, s).await,
                 path: Path::new()
-                    .set(PathComponent::Benchmark(path.0))
-                    .set(PathComponent::Profile(path.1))
-                    .set(PathComponent::Scenario(path.2)),
+                    .set(PathComponent::Benchmark(b))
+                    .set(PathComponent::Profile(p))
+                    .set(PathComponent::Scenario(s)),
             });
         }
         Ok(res)
