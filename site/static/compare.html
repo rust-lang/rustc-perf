@@ -298,25 +298,33 @@
                         </div>
                     </div>
                     <ul id="states-list">
-                        <li><input type="checkbox" id="build-full" v-model="filter.cache.full" /><span
-                                class="cache-label">full</span>
+                        <li>
+                            <label>
+                                <input type="checkbox" id="build-full" v-model="filter.cache.full" />
+                                <span class="cache-label">full</span>
+                            </label>
                             <div class="tooltip">?
                                 <span class="tooltiptext">
                                     A non-incremental full build starting with empty cache.
                                 </span>
                             </div>
                         </li>
-                        <li><input type="checkbox" id="build-incremental-full" v-model="filter.cache.incrFull" /> <span
-                                class="cache-label">incr-full</span>
+                        <li>
+                            <label>
+                                <input type="checkbox" id="build-incremental-full" v-model="filter.cache.incrFull" />
+                                <span class="cache-label">incr-full</span>
+                            </label>
                             <div class="tooltip">?
                                 <span class="tooltiptext">
                                     An incremental build starting with empty cache.
                                 </span>
                             </div>
                         </li>
-                        <li><input type="checkbox" id="build-incremental-unchanged"
-                                v-model="filter.cache.incrUnchanged" />
-                            <span class="cache-label">incr-unchanged</span>
+                        <li>
+                            <label>
+                                <input type="checkbox" id="build-incremental-unchanged" v-model="filter.cache.incrUnchanged" />
+                                <span class="cache-label">incr-unchanged</span>
+                            </label>
                             <div class="tooltip">?
                                 <span class="tooltiptext">
                                     An incremental build starting with complete cache, and unchanged source directory --
@@ -324,8 +332,11 @@
                                 </span>
                             </div>
                         </li>
-                        <li><input type="checkbox" id="build-incremental-patched"
-                                v-model="filter.cache.incrPatched" /><span class="cache-label">incr-patched</span>
+                        <li>
+                            <label>
+                                <input type="checkbox" id="build-incremental-patched" v-model="filter.cache.incrPatched" />
+                                <span class="cache-label">incr-patched</span>
+                            </label>
                             <div class="tooltip">?
                                 <span class="tooltiptext">
                                     An incremental build starting with complete cache, and an altered source directory.
