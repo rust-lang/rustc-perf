@@ -181,7 +181,7 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
             let mut cases = dashboard::Cases::default();
             for scenario in summary_scenarios.iter() {
                 let responses = ctxt
-                    .query::<Option<f64>>(
+                    .statistic_series(
                         query
                             .clone()
                             .set(Tag::Profile, selector::Selector::One(profile))
@@ -478,7 +478,7 @@ pub async fn handle_graph(
     let metric_selector = selector::Selector::One(body.stat.clone());
 
     let series = ctxt
-        .query::<Option<f64>>(
+        .statistic_series(
             selector::Query::new()
                 .set::<String>(selector::Tag::Benchmark, selector::Selector::All)
                 .set::<String>(selector::Tag::Profile, selector::Selector::All)
@@ -543,7 +543,7 @@ pub async fn handle_graph(
             std::collections::hash_map::Entry::Occupied(o) => *o.get(),
             std::collections::hash_map::Entry::Vacant(v) => {
                 let value = db::average(
-                    ctxt.query::<Option<f64>>(q, c.clone())
+                    ctxt.statistic_series(q, c.clone())
                         .await?
                         .into_iter()
                         .map(|sr| sr.interpolate().series)
@@ -555,7 +555,7 @@ pub async fn handle_graph(
             }
         };
         let averaged = db::average(
-            ctxt.query::<Option<f64>>(query.clone(), commits.clone())
+            ctxt.statistic_series(query.clone(), commits.clone())
                 .await?
                 .into_iter()
                 .map(|sr| sr.interpolate().series)
@@ -1078,9 +1078,7 @@ pub async fn handle_self_profile(
     }
 
     let commits = Arc::new(commits);
-    let mut sp_responses = ctxt
-        .query::<Option<selector::SelfProfileData>>(query.clone(), commits.clone())
-        .await?;
+    let mut sp_responses = ctxt.self_profile(query.clone(), commits.clone()).await?;
 
     if sp_responses.is_empty() {
         return Err(format!("no results found for {:?} in {:?}", query, commits));
@@ -1098,7 +1096,7 @@ pub async fn handle_self_profile(
     let mut sp_response = sp_responses.remove(0).series;
 
     let mut cpu_responses = ctxt
-        .query::<Option<f64>>(
+        .self_profile_query_time(
             query.clone().set(
                 Tag::Metric,
                 selector::Selector::One("cpu-clock".to_string()),
