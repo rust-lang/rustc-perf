@@ -1,15 +1,10 @@
 //! This module handles self-profile "rich" APIs (e.g., chrome profiler JSON)
 //! generation from the raw artifacts on demand.
 
-use crate::load::SiteCtxt;
 use anyhow::Context;
-use bytes::Buf;
-use hyper::StatusCode;
 use std::collections::HashMap;
 use std::fmt;
 use std::io::Read;
-
-type Response = http::Response<hyper::Body>;
 
 pub mod crox;
 pub mod flamegraph;
@@ -65,62 +60,8 @@ impl fmt::Debug for Pieces {
     }
 }
 
-pub async fn get_pieces(
-    body: crate::api::self_profile_raw::Request,
-    ctxt: &SiteCtxt,
-) -> Result<Pieces, Response> {
-    let res = crate::server::handle_self_profile_raw(body, ctxt).await;
-    let url = match res {
-        Ok(v) => v.url,
-        Err(e) => {
-            let mut resp = Response::new(e.into());
-            *resp.status_mut() = StatusCode::BAD_REQUEST;
-            return Err(resp);
-        }
-    };
-    log::trace!("downloading {}", url);
-
-    let resp = match reqwest::get(&url).await {
-        Ok(r) => r,
-        Err(e) => {
-            let mut resp = Response::new(format!("{:?}", e).into());
-            *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-            return Err(resp);
-        }
-    };
-
-    if !resp.status().is_success() {
-        let mut resp =
-            Response::new(format!("upstream status {:?} is not successful", resp.status()).into());
-        *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-        return Err(resp);
-    }
-
-    let tarball = match resp.bytes().await {
-        Ok(b) => b,
-        Err(e) => {
-            let mut resp =
-                Response::new(format!("could not download from upstream: {:?}", e).into());
-            *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-            return Err(resp);
-        }
-    };
-    let tarball = tar::Archive::new(std::io::BufReader::new(snap::read::FrameDecoder::new(
-        tarball.reader(),
-    )));
-    let pieces = match Pieces::from_tarball(tarball) {
-        Ok(v) => v,
-        Err(e) => {
-            let mut resp = Response::new(format!("could not extract from tarball: {:?}", e).into());
-            *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-            return Err(resp);
-        }
-    };
-    Ok(pieces)
-}
-
 impl Pieces {
-    fn from_tarball<R: std::io::Read>(mut tarball: tar::Archive<R>) -> anyhow::Result<Pieces> {
+    pub fn from_tarball<R: std::io::Read>(mut tarball: tar::Archive<R>) -> anyhow::Result<Pieces> {
         let mut pieces = Pieces {
             string_data: Vec::new(),
             string_index: Vec::new(),

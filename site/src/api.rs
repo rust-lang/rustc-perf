@@ -323,35 +323,6 @@ pub mod github {
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct Response;
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct CommitParent {
-        pub sha: String,
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct CommitTree {
-        pub sha: String,
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct InnerCommit {
-        #[serde(default)]
-        pub message: String,
-        pub tree: CommitTree,
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct Commit {
-        pub sha: String,
-        pub commit: InnerCommit,
-        pub parents: Vec<CommitParent>,
-    }
-
-    #[derive(Debug, Clone, Serialize)]
-    pub struct PostComment {
-        pub body: String,
-    }
 }
 
 pub mod triage {

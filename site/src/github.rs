@@ -1,30 +1,18 @@
-use crate::api::{github, ServerResult};
+use crate::api::github::Issue;
 use crate::comparison::{ComparisonSummary, Direction};
 use crate::load::{Config, SiteCtxt, TryCommit};
 
 use anyhow::Context as _;
 use database::ArtifactId;
 use hashbrown::HashSet;
-use regex::Regex;
 use reqwest::header::USER_AGENT;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use std::{fmt::Write, sync::Arc, time::Duration};
 
 type BoxedError = Box<dyn std::error::Error + Send + Sync>;
 
-lazy_static::lazy_static! {
-    static ref BODY_TRY_COMMIT: Regex =
-        Regex::new(r#"(?:\W|^)@rust-timer\s+build\s+(\w+)(?:\W|$)(?:include=(\S+))?\s*(?:exclude=(\S+))?\s*(?:runs=(\d+))?"#).unwrap();
-    static ref BODY_QUEUE: Regex =
-        Regex::new(r#"(?:\W|^)@rust-timer\s+queue(?:\W|$)(?:include=(\S+))?\s*(?:exclude=(\S+))?\s*(?:runs=(\d+))?"#).unwrap();
-    static ref BODY_MAKE_PR_FOR: Regex =
-        Regex::new(r#"(?:\W|^)@rust-timer\s+make-pr-for\s+(\w+)(?:\W|$)"#).unwrap();
-    static ref BODY_UDPATE_PR_FOR: Regex =
-        Regex::new(r#"(?:\W|^)@rust-timer\s+update-branch-for\s+(\w+)(?:\W|$)"#).unwrap();
-}
-
-async fn get_authorized_users() -> ServerResult<Vec<usize>> {
+pub async fn get_authorized_users() -> Result<Vec<usize>, String> {
     let url = format!("{}/permissions/perf.json", ::rust_team_data::v1::BASE_URL);
     let client = reqwest::Client::new();
     client
@@ -40,120 +28,8 @@ async fn get_authorized_users() -> ServerResult<Vec<usize>> {
         .map(|perms| perms.github_ids)
 }
 
-pub async fn handle_github(
-    request: github::Request,
-    ctxt: Arc<SiteCtxt>,
-) -> ServerResult<github::Response> {
-    if request.comment.body.contains(" homu: ") {
-        if let Some(sha) = handle_homu_res(&request).await {
-            return enqueue_sha(request, &ctxt, sha).await;
-        }
-    }
-
-    if !request.comment.body.contains("@rust-timer ") {
-        return Ok(github::Response);
-    }
-
-    if request.comment.author_association != github::Association::Owner
-        && !get_authorized_users()
-            .await?
-            .contains(&request.comment.user.id)
-    {
-        post_comment(
-            &ctxt.config,
-            request.issue.number,
-            "Insufficient permissions to issue commands to rust-timer.",
-        )
-        .await;
-        return Ok(github::Response);
-    }
-
-    if let Some(captures) = BODY_QUEUE.captures(&request.comment.body) {
-        let include = captures.get(1).map(|v| v.as_str());
-        let exclude = captures.get(2).map(|v| v.as_str());
-        let runs = captures.get(3).and_then(|v| v.as_str().parse::<i32>().ok());
-        {
-            let conn = ctxt.conn().await;
-            conn.queue_pr(request.issue.number, include, exclude, runs)
-                .await;
-        }
-        post_comment(
-            &ctxt.config,
-            request.issue.number,
-            "Awaiting bors try build completion.
-
-@rustbot label: +S-waiting-on-perf",
-        )
-        .await;
-        return Ok(github::Response);
-    }
-
-    if let Some(captures) = BODY_TRY_COMMIT.captures(&request.comment.body) {
-        if let Some(commit) = captures.get(1).map(|c| c.as_str().to_owned()) {
-            let include = captures.get(2).map(|v| v.as_str());
-            let exclude = captures.get(3).map(|v| v.as_str());
-            let runs = captures.get(4).and_then(|v| v.as_str().parse::<i32>().ok());
-            let commit = commit.trim_start_matches("https://github.com/rust-lang/rust/commit/");
-            {
-                let conn = ctxt.conn().await;
-                conn.queue_pr(request.issue.number, include, exclude, runs)
-                    .await;
-            }
-            let f = enqueue_sha(request, &ctxt, commit.to_owned());
-            return f.await;
-        }
-    }
-
-    let captures = BODY_MAKE_PR_FOR
-        .captures_iter(&request.comment.body)
-        .collect::<Vec<_>>();
-    for capture in captures {
-        if let Some(rollup_merge) = capture.get(1).map(|c| c.as_str().to_owned()) {
-            let rollup_merge =
-                rollup_merge.trim_start_matches("https://github.com/rust-lang/rust/commit/");
-            let client = reqwest::Client::new();
-            pr_and_try_for_rollup(
-                &client,
-                ctxt.clone(),
-                &request.issue.repository_url,
-                &rollup_merge,
-                &request.comment.html_url,
-            )
-            .await
-            .map_err(|e| format!("{:?}", e))?;
-        }
-    }
-
-    let captures = BODY_UDPATE_PR_FOR
-        .captures_iter(&request.comment.body)
-        .collect::<Vec<_>>();
-    for capture in captures {
-        if let Some(rollup_merge) = capture.get(1).map(|c| c.as_str().to_owned()) {
-            let rollup_merge =
-                rollup_merge.trim_start_matches("https://github.com/rust-lang/rust/commit/");
-
-            // This just creates or updates the branch for this merge commit.
-            // Intended for resolving the race condition of master merging in
-            // between us updating the commit and merging things.
-            let client = reqwest::Client::new();
-            let branch =
-                branch_for_rollup(&client, &ctxt, &request.issue.repository_url, rollup_merge)
-                    .await
-                    .map_err(|e| e.to_string())?;
-            post_comment(
-                &ctxt.config,
-                request.issue.number,
-                &format!("Master base SHA: {}", branch.master_base_sha),
-            )
-            .await;
-        }
-    }
-
-    Ok(github::Response)
-}
-
 // Returns the PR number
-async fn pr_and_try_for_rollup(
+pub async fn pr_and_try_for_rollup(
     client: &reqwest::Client,
     ctxt: Arc<SiteCtxt>,
     repository_url: &str,
@@ -226,13 +102,13 @@ build hasn't yet started.",
     Ok(pr_number)
 }
 
-struct RollupBranch {
-    master_base_sha: String,
-    rolled_up_pr_number: u32,
-    name: String,
+pub struct RollupBranch {
+    pub master_base_sha: String,
+    pub rolled_up_pr_number: u32,
+    pub name: String,
 }
 
-async fn branch_for_rollup(
+pub async fn branch_for_rollup(
     client: &reqwest::Client,
     ctxt: &SiteCtxt,
     repository_url: &str,
@@ -467,7 +343,7 @@ pub async fn get_commit(
     ctxt: &SiteCtxt,
     repository_url: &str,
     sha: &str,
-) -> anyhow::Result<github::Commit> {
+) -> anyhow::Result<Commit> {
     let timer_token = ctxt
         .config
         .keys
@@ -498,13 +374,33 @@ pub async fn get_commit(
     }
 }
 
-async fn enqueue_sha(
-    request: github::Request,
-    ctxt: &SiteCtxt,
-    commit: String,
-) -> ServerResult<github::Response> {
+#[derive(Debug, Clone, Deserialize)]
+pub struct Commit {
+    pub sha: String,
+    pub commit: InnerCommit,
+    pub parents: Vec<CommitParent>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct InnerCommit {
+    #[serde(default)]
+    pub message: String,
+    pub tree: CommitTree,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CommitTree {
+    pub sha: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CommitParent {
+    pub sha: String,
+}
+
+pub async fn enqueue_sha(issue: Issue, ctxt: &SiteCtxt, commit: String) -> Result<(), String> {
     let client = reqwest::Client::new();
-    let commit_response = get_commit(&client, ctxt, &request.issue.repository_url, &commit)
+    let commit_response = get_commit(&client, ctxt, &issue.repository_url, &commit)
         .await
         .map_err(|e| e.to_string())?;
     if commit_response.parents.len() != 2 {
@@ -513,17 +409,17 @@ async fn enqueue_sha(
             commit_response.sha,
             commit_response.parents.len()
         );
-        return Ok(github::Response);
+        return Ok(());
     }
     let try_commit = TryCommit {
         sha: commit_response.sha.clone(),
         parent_sha: commit_response.parents[0].sha.clone(),
-        issue: request.issue.clone(),
+        issue: issue.clone(),
     };
     let queued = {
         let conn = ctxt.conn().await;
         conn.pr_attach_commit(
-            request.issue.number,
+            issue.number,
             &commit_response.sha,
             &commit_response.parents[0].sha,
         )
@@ -536,9 +432,9 @@ async fn enqueue_sha(
             commit_response.parents[0].sha,
             try_commit.comparison_url(),
         );
-        post_comment(&ctxt.config, request.issue.number, msg).await;
+        post_comment(&ctxt.config, issue.number, msg).await;
     }
-    Ok(github::Response)
+    Ok(())
 }
 
 #[derive(Debug, Deserialize)]
@@ -547,22 +443,23 @@ enum HomuComment {
     TryBuildCompleted { merge_sha: String },
 }
 
-async fn handle_homu_res(request: &github::Request) -> Option<String> {
-    if !request.comment.body.contains("Try build successful") {
+/// Parse comment from homu containing try build sha
+pub async fn parse_homu_comment(comment_body: &str) -> Option<String> {
+    if !comment_body.contains("Try build successful") {
         return None;
     }
 
     let start = "<!-- homu: ";
-    let start_idx = request.comment.body.find(start).expect("found homu") + start.len();
-    let end_idx = start_idx + request.comment.body[start_idx..].find(" -->").unwrap();
+    let start_idx = comment_body.find(start).expect("found homu") + start.len();
+    let end_idx = start_idx + comment_body[start_idx..].find(" -->").unwrap();
 
-    let sha = match serde_json::from_str(&request.comment.body[start_idx..end_idx]) {
+    let sha = match serde_json::from_str(&comment_body[start_idx..end_idx]) {
         Ok(HomuComment::TryBuildCompleted { merge_sha }) => merge_sha,
         Err(err) => {
             log::warn!(
                 "failed to parse try build result; comment: {:?}, part: {:?}, err: {:?}",
-                request.comment.body,
-                &request.comment.body[start_idx..end_idx],
+                comment_body,
+                &comment_body[start_idx..end_idx],
                 err
             );
             return None;
@@ -588,7 +485,7 @@ where
             "https://api.github.com/repos/rust-lang/rust/issues/{}/comments",
             pr
         ))
-        .json(&github::PostComment {
+        .json(&PostComment {
             body: body.to_owned(),
         })
         .header(USER_AGENT, "perf-rust-lang-org-server")
@@ -597,6 +494,11 @@ where
     if let Err(e) = req.send().await {
         eprintln!("failed to post comment: {:?}", e);
     }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PostComment {
+    pub body: String,
 }
 
 pub async fn post_finished(ctxt: &SiteCtxt) {
