@@ -3,9 +3,8 @@
 //!
 //! We have the following expected paths:
 //!
-//! * :crate/:profile/:cache_state/:stat_id (Instructions, CpuClock, CpuClockUser, ...)
-//!     => [cid => u64]
-//! * :crate/:profile/:cache_state/:self_profile_query/:stat (SelfProfileTime, SelfProfileCacheHits, ...)
+//! * :benchmark/:profile/:scenario/:metric => [cid => u64]
+//! * :crate/:profile/:scenario/:self_profile_query/:stat (SelfProfileTime, SelfProfileCacheHits, ...)
 //!     :stat = time => Duration,
 //!     :stat = cache hits => u32,
 //!     :stat = invocation count => u32,
@@ -22,13 +21,13 @@
 //! requests that all are provided. Note that this is a cartesian product if
 //! there are multiple `None`s.
 
-use crate::db::{ArtifactId, Cache, Profile};
+use crate::db::{ArtifactId, Profile, Scenario};
 use crate::interpolate::Interpolate;
 use crate::load::SiteCtxt;
 
 use async_trait::async_trait;
 use collector::Bound;
-use database::{Commit, Crate, Index, Lookup, ProcessStatistic, QueryLabel};
+use database::{Benchmark, Commit, Index, Lookup, Metric, QueryLabel};
 
 use std::convert::TryInto;
 use std::fmt;
@@ -60,7 +59,7 @@ pub fn artifact_id_for_bound(data: &Index, bound: Bound, is_left: bool) -> Optio
                 Bound::Date(_) => false,
                 Bound::None => false,
             })
-            .map(|aid| ArtifactId::Artifact(aid.to_string()))
+            .map(|aid| ArtifactId::Tag(aid.to_string()))
     })
 }
 
@@ -115,10 +114,10 @@ impl Iterator for ArtifactIdIter {
 
 #[derive(Copy, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Tag {
-    Crate,
+    Benchmark,
     Profile,
-    Cache,
-    ProcessStatistic,
+    Scenario,
+    Metric,
     QueryLabel,
 }
 
@@ -126,10 +125,10 @@ pub trait GetValue {
     fn value(component: &PathComponent) -> Option<&Self>;
 }
 
-impl GetValue for Crate {
+impl GetValue for Benchmark {
     fn value(component: &PathComponent) -> Option<&Self> {
         match component {
-            PathComponent::Crate(v) => Some(v),
+            PathComponent::Benchmark(v) => Some(v),
             _ => None,
         }
     }
@@ -144,19 +143,19 @@ impl GetValue for Profile {
     }
 }
 
-impl GetValue for Cache {
+impl GetValue for Scenario {
     fn value(component: &PathComponent) -> Option<&Self> {
         match component {
-            PathComponent::Cache(v) => Some(v),
+            PathComponent::Scenario(v) => Some(v),
             _ => None,
         }
     }
 }
 
-impl GetValue for ProcessStatistic {
+impl GetValue for Metric {
     fn value(component: &PathComponent) -> Option<&Self> {
         match component {
-            PathComponent::ProcessStatistic(v) => Some(v),
+            PathComponent::Metric(v) => Some(v),
             _ => None,
         }
     }
@@ -173,20 +172,20 @@ impl GetValue for QueryLabel {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum PathComponent {
-    Crate(Crate),
+    Benchmark(Benchmark),
     Profile(Profile),
-    Cache(Cache),
+    Scenario(Scenario),
     QueryLabel(QueryLabel),
-    ProcessStatistic(ProcessStatistic),
+    Metric(Metric),
 }
 
 impl PathComponent {
     pub fn as_tag(&self) -> Tag {
         match self {
-            PathComponent::Crate(_) => Tag::Crate,
+            PathComponent::Benchmark(_) => Tag::Benchmark,
             PathComponent::Profile(_) => Tag::Profile,
-            PathComponent::Cache(_) => Tag::Cache,
-            PathComponent::ProcessStatistic(_) => Tag::ProcessStatistic,
+            PathComponent::Scenario(_) => Tag::Scenario,
+            PathComponent::Metric(_) => Tag::Metric,
             PathComponent::QueryLabel(_) => Tag::QueryLabel,
         }
     }
@@ -499,7 +498,7 @@ impl SeriesElement for Option<f64> {
         String,
     > {
         let results = vec![
-            ProcessStatisticSeries::expand_query(artifact_ids.clone(), ctxt, query.clone())
+            StatisticSeries::expand_query(artifact_ids.clone(), ctxt, query.clone())
                 .await
                 .map(|sr| {
                     sr.into_iter()
@@ -540,49 +539,49 @@ impl SiteCtxt {
     }
 }
 
-pub struct ProcessStatisticSeries {
+pub struct StatisticSeries {
     artifact_ids: ArtifactIdIter,
     points: std::vec::IntoIter<Option<f64>>,
 }
 
-impl Series for ProcessStatisticSeries {
+impl Series for StatisticSeries {
     type Element = Option<f64>;
 }
 
-impl ProcessStatisticSeries {
+impl StatisticSeries {
     async fn expand_query(
         artifact_ids: Arc<Vec<ArtifactId>>,
         ctxt: &SiteCtxt,
         mut query: Query,
     ) -> Result<Vec<SeriesResponse<Self>>, String> {
         let dumped = format!("{:?}", query);
-        let krate = query.extract_as::<String>(Tag::Crate)?;
+        let benchmark = query.extract_as::<String>(Tag::Benchmark)?;
         let profile = query.extract_as::<Profile>(Tag::Profile)?;
-        let cache = query.extract_as::<Cache>(Tag::Cache)?;
-        let statid = query.extract_as::<ProcessStatistic>(Tag::ProcessStatistic)?;
+        let scenario = query.extract_as::<Scenario>(Tag::Scenario)?;
+        let metric = query.extract_as::<Metric>(Tag::Metric)?;
         query.assert_empty()?;
 
         let index = ctxt.index.load();
-        let mut series = index
-            .all_pstat_series()
-            .filter(|tup| {
-                krate.matches(tup.0)
-                    && profile.matches(tup.1)
-                    && cache.matches(tup.2)
-                    && statid.matches(tup.3)
+        let mut statistic_descriptions = index
+            .all_statistic_descriptions()
+            .filter(|&&(b, p, s, m)| {
+                benchmark.matches(b)
+                    && profile.matches(p)
+                    && scenario.matches(s)
+                    && metric.matches(m)
             })
             .collect::<Vec<_>>();
 
-        series.sort_unstable();
+        statistic_descriptions.sort_unstable();
 
-        let sids = series
+        let sids = statistic_descriptions
             .iter()
-            .map(|path| {
-                let query = crate::db::DbLabel::ProcessStat {
-                    krate: path.0,
-                    profile: path.1,
-                    cache: path.2,
-                    stat: path.3,
+            .map(|&&(b, p, s, m)| {
+                let query = crate::db::DbLabel::StatisticDescription {
+                    benchmark: b,
+                    profile: p,
+                    scenario: s,
+                    metric: m,
                 };
                 query.lookup(&index).unwrap()
             })
@@ -603,11 +602,11 @@ impl ProcessStatisticSeries {
             .into_iter()
             .enumerate()
             .map(|(idx, points)| {
-                let path = &series[idx];
+                let &&(benchmark, profile, scenario, metric) = &statistic_descriptions[idx];
                 SeriesResponse {
-                    series: ProcessStatisticSeries {
+                    series: StatisticSeries {
                         artifact_ids: ArtifactIdIter::new(artifact_ids.clone()),
-                        points: if path.3 == *"cpu-clock" {
+                        points: if metric == *"cpu-clock" {
                             // Convert to seconds -- perf reports this measurement in
                             // milliseconds
                             points
@@ -620,24 +619,24 @@ impl ProcessStatisticSeries {
                         },
                     },
                     path: Path::new()
-                        .set(PathComponent::Crate(path.0))
-                        .set(PathComponent::Profile(path.1))
-                        .set(PathComponent::Cache(path.2))
-                        .set(PathComponent::ProcessStatistic(path.3)),
+                        .set(PathComponent::Benchmark(benchmark))
+                        .set(PathComponent::Profile(profile))
+                        .set(PathComponent::Scenario(scenario))
+                        .set(PathComponent::Metric(metric)),
                 }
             })
             .collect::<Vec<_>>();
         log::trace!(
             "{:?}: run {} from {}",
             start.elapsed(),
-            series.len(),
+            statistic_descriptions.len(),
             dumped
         );
         Ok(res)
     }
 }
 
-impl Iterator for ProcessStatisticSeries {
+impl Iterator for StatisticSeries {
     type Item = (ArtifactId, Option<f64>);
     fn next(&mut self) -> Option<Self::Item> {
         Some((self.artifact_ids.next()?, self.points.next().unwrap()))
@@ -657,16 +656,16 @@ impl SelfProfile {
     async fn new(
         artifact_ids: Arc<Vec<ArtifactId>>,
         ctxt: &SiteCtxt,
-        krate: Crate,
+        benchmark: Benchmark,
         profile: Profile,
-        cache: Cache,
+        scenario: Scenario,
     ) -> Self {
         let mut res = Vec::with_capacity(artifact_ids.len());
         let idx = ctxt.index.load();
         let mut conn = ctxt.conn().await;
         let mut tx = conn.transaction().await;
         let labels = idx
-            .filtered_queries(krate, profile, cache)
+            .filtered_queries(benchmark, profile, scenario)
             .collect::<Vec<_>>();
         for aid in artifact_ids.iter() {
             let mut queries = Vec::new();
@@ -681,9 +680,9 @@ impl SelfProfile {
             let self_profile_data = conn
                 .get_self_profile(
                     artifact_row_id,
-                    krate.as_str(),
+                    benchmark.as_str(),
                     &profile.to_string(),
-                    &cache.to_string(),
+                    &scenario.to_string(),
                 )
                 .await;
             for (label, qd) in self_profile_data {
@@ -734,30 +733,32 @@ impl SelfProfile {
         ctxt: &SiteCtxt,
         mut query: Query,
     ) -> Result<Vec<SeriesResponse<Self>>, String> {
-        let krate = query.extract_as::<String>(Tag::Crate)?;
+        let benchmark = query.extract_as::<String>(Tag::Benchmark)?;
         let profile = query.extract_as::<Profile>(Tag::Profile)?;
-        let cache = query.extract_as::<Cache>(Tag::Cache)?;
+        let scenario = query.extract_as::<Scenario>(Tag::Scenario)?;
         query.assert_empty()?;
 
         let mut series = ctxt
             .index
             .load()
             .all_query_series()
-            .filter(|tup| krate.matches(tup.0) && profile.matches(tup.1) && cache.matches(tup.2))
-            .map(|tup| (tup.0, tup.1, tup.2))
+            .filter(|&&(b, p, s, _)| {
+                benchmark.matches(b) && profile.matches(p) && scenario.matches(s)
+            })
+            .map(|&(b, p, s, _)| (b, p, s))
             .collect::<Vec<_>>();
 
         series.sort_unstable();
         series.dedup();
 
         let mut res = Vec::with_capacity(series.len());
-        for path in series {
+        for (b, p, s) in series {
             res.push(SeriesResponse {
-                series: SelfProfile::new(artifact_ids.clone(), ctxt, path.0, path.1, path.2).await,
+                series: SelfProfile::new(artifact_ids.clone(), ctxt, b, p, s).await,
                 path: Path::new()
-                    .set(PathComponent::Crate(path.0))
-                    .set(PathComponent::Profile(path.1))
-                    .set(PathComponent::Cache(path.2)),
+                    .set(PathComponent::Benchmark(b))
+                    .set(PathComponent::Profile(p))
+                    .set(PathComponent::Scenario(s)),
             });
         }
         Ok(res)
@@ -773,9 +774,9 @@ impl SelfProfileQueryTime {
     async fn new(
         artifact_ids: Arc<Vec<ArtifactId>>,
         ctxt: &SiteCtxt,
-        krate: Crate,
+        benchmark: Benchmark,
         profile: Profile,
-        cache: Cache,
+        scenario: Scenario,
         query: QueryLabel,
     ) -> Self {
         let mut res = Vec::with_capacity(artifact_ids.len());
@@ -783,9 +784,9 @@ impl SelfProfileQueryTime {
         let mut conn = ctxt.conn().await;
         let mut tx = conn.transaction().await;
         let query = crate::db::DbLabel::SelfProfileQuery {
-            krate,
+            benchmark,
             profile,
-            cache,
+            scenario,
             query,
         };
         for aid in artifact_ids.iter() {
@@ -824,9 +825,9 @@ impl SelfProfileQueryTime {
         ctxt: &SiteCtxt,
         mut query: Query,
     ) -> Result<Vec<SeriesResponse<Self>>, String> {
-        let krate = query.extract_as::<String>(Tag::Crate)?;
+        let benchmark = query.extract_as::<String>(Tag::Benchmark)?;
         let profile = query.extract_as::<Profile>(Tag::Profile)?;
-        let cache = query.extract_as::<Cache>(Tag::Cache)?;
+        let scenario = query.extract_as::<Scenario>(Tag::Scenario)?;
         let ql = query.extract_as::<QueryLabel>(Tag::QueryLabel)?;
         query.assert_empty()?;
 
@@ -834,9 +835,9 @@ impl SelfProfileQueryTime {
         let mut series = index
             .all_query_series()
             .filter(|tup| {
-                krate.matches(tup.0)
+                benchmark.matches(tup.0)
                     && profile.matches(tup.1)
-                    && cache.matches(tup.2)
+                    && scenario.matches(tup.2)
                     && ql.matches(tup.3)
             })
             .collect::<Vec<_>>();
@@ -856,9 +857,9 @@ impl SelfProfileQueryTime {
                 )
                 .await,
                 path: Path::new()
-                    .set(PathComponent::Crate(path.0))
+                    .set(PathComponent::Benchmark(path.0))
                     .set(PathComponent::Profile(path.1))
-                    .set(PathComponent::Cache(path.2))
+                    .set(PathComponent::Scenario(path.2))
                     .set(PathComponent::QueryLabel(path.3)),
             });
         }

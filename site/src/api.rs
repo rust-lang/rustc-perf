@@ -4,14 +4,14 @@
 //!
 //! The responses are calculated in the server.rs file.
 
-use database::Crate;
+use database::Benchmark;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::result::Result as StdResult;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct StyledBenchmarkName {
-    pub name: Crate,
+    pub name: Benchmark,
     pub profile: crate::db::Profile,
 }
 

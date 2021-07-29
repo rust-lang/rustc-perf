@@ -619,7 +619,7 @@ pub async fn post_finished(ctxt: &SiteCtxt) {
             ArtifactId::Commit(c) => {
                 commits.remove(&c.sha);
             }
-            ArtifactId::Artifact(_) => {
+            ArtifactId::Tag(_) => {
                 // do nothing, for now, though eventually we'll want an artifact
                 // queue
             }

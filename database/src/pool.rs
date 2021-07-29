@@ -1,5 +1,5 @@
 use crate::{ArtifactId, ArtifactIdNumber};
-use crate::{Cache, CollectionId, Index, Profile, QueryDatum, QueuedCommit, Step};
+use crate::{CollectionId, Index, Profile, QueryDatum, QueuedCommit, Scenario, Step};
 use chrono::{DateTime, Utc};
 use hashbrown::HashMap;
 use std::sync::{Arc, Mutex};
@@ -31,10 +31,10 @@ pub trait Connection: Send + Sync {
         &self,
         collection: CollectionId,
         artifact: ArtifactIdNumber,
-        krate: &str,
+        benchmark: &str,
         profile: Profile,
-        cache: Cache,
-        statistic: &str,
+        scenario: Scenario,
+        metric: &str,
         value: f64,
     );
     /// Records a self-profile artifact in S3.
@@ -45,17 +45,17 @@ pub trait Connection: Send + Sync {
         &self,
         collection: CollectionId,
         artifact: ArtifactIdNumber,
-        krate: &str,
+        benchmark: &str,
         profile: Profile,
-        cache: Cache,
+        scenario: Scenario,
     );
     async fn record_self_profile_query(
         &self,
         collection: CollectionId,
         artifact: ArtifactIdNumber,
-        krate: &str,
+        benchmark: &str,
         profile: Profile,
-        cache: Cache,
+        scenario: Scenario,
         query: &str,
         qd: QueryDatum,
     );
@@ -74,7 +74,7 @@ pub trait Connection: Send + Sync {
     ) -> HashMap<String, Vec<Option<Duration>>>;
     async fn get_pstats(
         &self,
-        series: &[u32],
+        pstat_series_row_ids: &[u32],
         artifact_row_id: &[Option<ArtifactIdNumber>],
     ) -> Vec<Vec<Option<f64>>>;
     async fn get_self_profile(

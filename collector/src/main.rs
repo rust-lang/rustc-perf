@@ -67,28 +67,28 @@ impl BuildKind {
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum RunKind {
+pub enum ScenarioKind {
     Full,
     IncrFull,
     IncrUnchanged,
     IncrPatched,
 }
 
-impl RunKind {
-    fn all() -> Vec<RunKind> {
+impl ScenarioKind {
+    fn all() -> Vec<ScenarioKind> {
         vec![
-            RunKind::Full,
-            RunKind::IncrFull,
-            RunKind::IncrUnchanged,
-            RunKind::IncrPatched,
+            ScenarioKind::Full,
+            ScenarioKind::IncrFull,
+            ScenarioKind::IncrUnchanged,
+            ScenarioKind::IncrPatched,
         ]
     }
 
-    fn all_non_incr() -> Vec<RunKind> {
-        vec![RunKind::Full]
+    fn all_non_incr() -> Vec<ScenarioKind> {
+        vec![ScenarioKind::Full]
     }
 
-    fn default() -> Vec<RunKind> {
+    fn default() -> Vec<ScenarioKind> {
         Self::all()
     }
 }
@@ -101,12 +101,12 @@ const STRINGS_AND_BUILD_KINDS: &[(&str, BuildKind)] = &[
     ("Opt", BuildKind::Opt),
 ];
 
-// How the --runs arg maps to RunKinds.
-const STRINGS_AND_RUN_KINDS: &[(&str, RunKind)] = &[
-    ("Full", RunKind::Full),
-    ("IncrFull", RunKind::IncrFull),
-    ("IncrUnchanged", RunKind::IncrUnchanged),
-    ("IncrPatched", RunKind::IncrPatched),
+// How the --runs arg maps to ScenarioKinds.
+const STRINGS_AND_SCENARIO_KINDS: &[(&str, ScenarioKind)] = &[
+    ("Full", ScenarioKind::Full),
+    ("IncrFull", ScenarioKind::IncrFull),
+    ("IncrUnchanged", ScenarioKind::IncrUnchanged),
+    ("IncrPatched", ScenarioKind::IncrPatched),
 ];
 
 fn build_kinds_from_arg(arg: &Option<&str>) -> anyhow::Result<Vec<BuildKind>> {
@@ -117,11 +117,11 @@ fn build_kinds_from_arg(arg: &Option<&str>) -> anyhow::Result<Vec<BuildKind>> {
     }
 }
 
-fn run_kinds_from_arg(arg: Option<&str>) -> anyhow::Result<Vec<RunKind>> {
+fn scenario_kinds_from_arg(arg: Option<&str>) -> anyhow::Result<Vec<ScenarioKind>> {
     if let Some(arg) = arg {
-        kinds_from_arg("run", STRINGS_AND_RUN_KINDS, arg)
+        kinds_from_arg("run", STRINGS_AND_SCENARIO_KINDS, arg)
     } else {
-        Ok(RunKind::default())
+        Ok(ScenarioKind::default())
     }
 }
 
@@ -203,7 +203,7 @@ fn bench(
     pool: database::Pool,
     artifact_id: &ArtifactId,
     build_kinds: &[BuildKind],
-    run_kinds: &[RunKind],
+    scenario_kinds: &[ScenarioKind],
     compiler: Compiler<'_>,
     benchmarks: &[Benchmark],
     iterations: Option<usize>,
@@ -269,8 +269,13 @@ fn bench(
             artifact_row_id,
             is_self_profile,
         );
-        let result =
-            benchmark.measure(&mut processor, build_kinds, run_kinds, compiler, iterations);
+        let result = benchmark.measure(
+            &mut processor,
+            build_kinds,
+            scenario_kinds,
+            compiler,
+            iterations,
+        );
         if let Err(s) = result {
             eprintln!(
                 "collector error: Failed to benchmark '{}', recorded: {:#}",
@@ -592,7 +597,7 @@ fn main_result() -> anyhow::Result<i32> {
             let db = sub_m.value_of("DB").unwrap_or(default_db);
             let exclude = sub_m.value_of("EXCLUDE");
             let include = sub_m.value_of("INCLUDE");
-            let run_kinds = run_kinds_from_arg(sub_m.value_of("RUNS"))?;
+            let scenario_kinds = scenario_kinds_from_arg(sub_m.value_of("RUNS"))?;
             let iterations = iterations_from_arg(sub_m.value_of("ITERATIONS"))?;
             let rustdoc = sub_m.value_of("RUSTDOC");
             let is_self_profile = sub_m.is_present("SELF_PROFILE");
@@ -606,9 +611,9 @@ fn main_result() -> anyhow::Result<i32> {
             let res = bench(
                 &mut rt,
                 pool,
-                &ArtifactId::Artifact(id.to_string()),
+                &ArtifactId::Tag(id.to_string()),
                 &build_kinds,
-                &run_kinds,
+                &scenario_kinds,
                 Compiler {
                     rustc: &rustc,
                     rustdoc: rustdoc.as_deref(),
@@ -663,7 +668,7 @@ fn main_result() -> anyhow::Result<i32> {
                 pool,
                 &ArtifactId::Commit(commit),
                 &BuildKind::all(),
-                &RunKind::all(),
+                &ScenarioKind::all(),
                 Compiler::from_sysroot(&sysroot),
                 &benchmarks,
                 next.runs.map(|v| v as usize),
@@ -693,10 +698,10 @@ fn main_result() -> anyhow::Result<i32> {
 
             let pool = database::Pool::open(db);
 
-            let run_kinds = if collector::version_supports_incremental(toolchain) {
-                RunKind::all()
+            let scenario_kinds = if collector::version_supports_incremental(toolchain) {
+                ScenarioKind::all()
             } else {
-                RunKind::all_non_incr()
+                ScenarioKind::all_non_incr()
             };
             let build_kinds = if collector::version_supports_doc(toolchain) {
                 BuildKind::all()
@@ -731,9 +736,9 @@ fn main_result() -> anyhow::Result<i32> {
             let res = bench(
                 &mut rt,
                 pool,
-                &ArtifactId::Artifact(toolchain.to_string()),
+                &ArtifactId::Tag(toolchain.to_string()),
                 &build_kinds,
-                &run_kinds,
+                &scenario_kinds,
                 Compiler {
                     rustc: Path::new(rustc.trim()),
                     rustdoc: Some(Path::new(rustdoc.trim())),
@@ -761,7 +766,7 @@ fn main_result() -> anyhow::Result<i32> {
             let exclude = sub_m.value_of("EXCLUDE");
             let include = sub_m.value_of("INCLUDE");
             let out_dir = PathBuf::from(sub_m.value_of_os("OUT_DIR").unwrap_or(default_out_dir));
-            let run_kinds = run_kinds_from_arg(sub_m.value_of("RUNS"))?;
+            let scenario_kinds = scenario_kinds_from_arg(sub_m.value_of("RUNS"))?;
             let rustdoc = sub_m.value_of("RUSTDOC");
 
             let (rustc, rustdoc, cargo) = get_local_toolchain(&build_kinds, rustc, rustdoc, cargo)?;
@@ -782,8 +787,13 @@ fn main_result() -> anyhow::Result<i32> {
             for (i, benchmark) in benchmarks.iter().enumerate() {
                 eprintln!("{}", n_benchmarks_remaining(benchmarks.len() - i));
                 let mut processor = execute::ProfileProcessor::new(profiler, &out_dir, &id);
-                let result =
-                    benchmark.measure(&mut processor, &build_kinds, &run_kinds, compiler, Some(1));
+                let result = benchmark.measure(
+                    &mut processor,
+                    &build_kinds,
+                    &scenario_kinds,
+                    compiler,
+                    Some(1),
+                );
                 if let Err(ref s) = result {
                     errors.incr();
                     eprintln!(

@@ -1,6 +1,6 @@
 //! Execute benchmarks.
 
-use crate::{BuildKind, Compiler, RunKind};
+use crate::{BuildKind, Compiler, ScenarioKind};
 use anyhow::{anyhow, bail, Context};
 use collector::command_output;
 use collector::etw_parser;
@@ -251,7 +251,7 @@ impl Profiler {
         }
     }
 
-    fn is_run_kind_allowed(&self, run_kind: RunKind) -> bool {
+    fn is_scenario_kind_allowed(&self, scenario_kind: ScenarioKind) -> bool {
         match self {
             Profiler::PerfStat
             | Profiler::PerfStatSelfProfile
@@ -266,7 +266,7 @@ impl Profiler {
             | Profiler::DHAT
             | Profiler::Massif
             | Profiler::Eprintln => true,
-            Profiler::LlvmLines => run_kind == RunKind::Full,
+            Profiler::LlvmLines => scenario_kind == ScenarioKind::Full,
         }
     }
 }
@@ -276,7 +276,12 @@ struct CargoProcess<'a> {
     cwd: &'a Path,
     build_kind: BuildKind,
     incremental: bool,
-    processor_etc: Option<(&'a mut dyn Processor, RunKind, &'a str, Option<&'a Patch>)>,
+    processor_etc: Option<(
+        &'a mut dyn Processor,
+        ScenarioKind,
+        &'a str,
+        Option<&'a Patch>,
+    )>,
     processor_name: BenchmarkName,
     manifest_path: String,
     cargo_args: Vec<String>,
@@ -294,11 +299,11 @@ impl<'a> CargoProcess<'a> {
     fn processor(
         mut self,
         processor: &'a mut dyn Processor,
-        run_kind: RunKind,
-        run_kind_str: &'a str,
+        scenario_kind: ScenarioKind,
+        scenario_kind_str: &'a str,
         patch: Option<&'a Patch>,
     ) -> Self {
-        self.processor_etc = Some((processor, run_kind, run_kind_str, patch));
+        self.processor_etc = Some((processor, scenario_kind, scenario_kind_str, patch));
         self
     }
 
@@ -344,7 +349,7 @@ impl<'a> CargoProcess<'a> {
     // really.
     fn run_rustc(&mut self, needs_final: bool) -> anyhow::Result<()> {
         log::info!(
-            "run_rustc with incremental={}, build_kind={:?}, run_kind={:?}, patch={:?}",
+            "run_rustc with incremental={}, build_kind={:?}, scenario_kind={:?}, patch={:?}",
             self.incremental,
             self.build_kind,
             self.processor_etc.as_ref().map(|v| v.1),
@@ -355,30 +360,31 @@ impl<'a> CargoProcess<'a> {
             // Get the subcommand. If it's not `rustc` it must should be a
             // subcommand that itself invokes `rustc` (so that the `FAKE_RUSTC`
             // machinery works).
-            let subcommand = if let Some((ref mut processor, run_kind, ..)) = self.processor_etc {
-                let profiler = processor.profiler(self.build_kind);
-                if !profiler.is_run_kind_allowed(run_kind) {
-                    return Err(anyhow::anyhow!(
-                        "this profiler doesn't support {:?} runs",
-                        run_kind
-                    ));
-                }
-
-                match profiler.subcommand(self.build_kind) {
-                    None => {
+            let subcommand =
+                if let Some((ref mut processor, scenario_kind, ..)) = self.processor_etc {
+                    let profiler = processor.profiler(self.build_kind);
+                    if !profiler.is_scenario_kind_allowed(scenario_kind) {
                         return Err(anyhow::anyhow!(
-                            "this profiler doesn't support {:?} builds",
-                            self.build_kind
-                        ))
+                            "this profiler doesn't support {:?} scenarios",
+                            scenario_kind
+                        ));
                     }
-                    Some(sub) => sub,
-                }
-            } else {
-                match self.build_kind {
-                    BuildKind::Doc => "rustdoc",
-                    _ => "rustc",
-                }
-            };
+
+                    match profiler.subcommand(self.build_kind) {
+                        None => {
+                            return Err(anyhow::anyhow!(
+                                "this profiler doesn't support {:?} builds",
+                                self.build_kind
+                            ))
+                        }
+                        Some(sub) => sub,
+                    }
+                } else {
+                    match self.build_kind {
+                        BuildKind::Doc => "rustdoc",
+                        _ => "rustc",
+                    }
+                };
 
             let mut cmd = self.base_command(self.cwd, subcommand);
             cmd.arg("-p").arg(self.get_pkgid(self.cwd)?);
@@ -460,13 +466,15 @@ impl<'a> CargoProcess<'a> {
             log::debug!("{:?}", cmd);
 
             let output = command_output(&mut cmd)?;
-            if let Some((ref mut processor, run_kind, run_kind_str, patch)) = self.processor_etc {
+            if let Some((ref mut processor, scenario_kind, scenario_kind_str, patch)) =
+                self.processor_etc
+            {
                 let data = ProcessOutputData {
                     name: self.processor_name.clone(),
                     cwd: self.cwd,
                     build_kind: self.build_kind,
-                    run_kind,
-                    run_kind_str,
+                    scenario_kind,
+                    scenario_kind_str,
                     patch,
                 };
                 match processor.process_output(&data, output) {
@@ -515,8 +523,8 @@ pub struct ProcessOutputData<'a> {
     name: BenchmarkName,
     cwd: &'a Path,
     build_kind: BuildKind,
-    run_kind: RunKind,
-    run_kind_str: &'a str,
+    scenario_kind: ScenarioKind,
+    scenario_kind_str: &'a str,
     patch: Option<&'a Patch>,
 }
 
@@ -554,7 +562,7 @@ pub trait Processor {
 
 pub struct MeasureProcessor<'a> {
     rt: &'a mut Runtime,
-    krate: &'a BenchmarkName,
+    benchmark: &'a BenchmarkName,
     conn: &'a mut dyn database::Connection,
     artifact: &'a database::ArtifactId,
     artifact_row_id: database::ArtifactIdNumber,
@@ -568,7 +576,7 @@ impl<'a> MeasureProcessor<'a> {
     pub fn new(
         rt: &'a mut Runtime,
         conn: &'a mut dyn database::Connection,
-        krate: &'a BenchmarkName,
+        benchmark: &'a BenchmarkName,
         artifact: &'a database::ArtifactId,
         artifact_row_id: database::ArtifactIdNumber,
         is_self_profile: bool,
@@ -594,7 +602,7 @@ impl<'a> MeasureProcessor<'a> {
             rt,
             upload: None,
             conn,
-            krate,
+            benchmark,
             artifact,
             artifact_row_id,
             is_first_collection: true,
@@ -605,7 +613,7 @@ impl<'a> MeasureProcessor<'a> {
 
     fn insert_stats(
         &mut self,
-        cache: database::Cache,
+        scenario: database::Scenario,
         build_kind: BuildKind,
         stats: (Stats, Option<SelfProfile>, Option<SelfProfileFiles>),
     ) {
@@ -644,16 +652,16 @@ impl<'a> MeasureProcessor<'a> {
                 }
                 let prefix = PathBuf::from("self-profile")
                     .join(self.artifact_row_id.0.to_string())
-                    .join(self.krate.0.as_str())
+                    .join(self.benchmark.0.as_str())
                     .join(profile.to_string())
-                    .join(cache.to_id());
+                    .join(scenario.to_id());
                 self.upload = Some(Upload::new(prefix, collection, files));
                 self.rt.block_on(self.conn.record_raw_self_profile(
                     collection,
                     self.artifact_row_id,
-                    self.krate.0.as_str(),
+                    self.benchmark.0.as_str(),
                     profile,
-                    cache,
+                    scenario,
                 ));
             }
         }
@@ -663,9 +671,9 @@ impl<'a> MeasureProcessor<'a> {
             buf.push(self.conn.record_statistic(
                 collection,
                 self.artifact_row_id,
-                self.krate.0.as_str(),
+                self.benchmark.0.as_str(),
                 profile,
-                cache,
+                scenario,
                 stat,
                 value,
             ));
@@ -674,14 +682,14 @@ impl<'a> MeasureProcessor<'a> {
         if let Some(sp) = &stats.1 {
             let conn = &*self.conn;
             let artifact_row_id = self.artifact_row_id;
-            let krate = self.krate.0.as_str();
+            let benchmark = self.benchmark.0.as_str();
             for qd in &sp.query_data {
                 buf.push(conn.record_self_profile_query(
                     collection,
                     artifact_row_id,
-                    krate,
+                    benchmark,
                     profile,
-                    cache,
+                    scenario,
                     qd.label.as_str(),
                     database::QueryDatum {
                         self_time: qd.self_time,
@@ -704,7 +712,7 @@ struct Upload(std::process::Child, tempfile::NamedTempFile);
 impl Upload {
     fn new(prefix: PathBuf, collection: database::CollectionId, files: SelfProfileFiles) -> Upload {
         // Files are placed at
-        //  * self-profile/<artifact id>/<krate>/<profile>/<cache>
+        //  * self-profile/<artifact id>/<benchmark>/<profile>/<scenario>
         //    /self-profile-<collection-id>.{extension}
         let upload = tempfile::NamedTempFile::new()
             .context("create temporary file")
@@ -820,20 +828,28 @@ impl<'a> Processor for MeasureProcessor<'a> {
     ) -> anyhow::Result<Retry> {
         match process_stat_output(output) {
             Ok(res) => {
-                match data.run_kind {
-                    RunKind::Full => {
-                        self.insert_stats(database::Cache::Empty, data.build_kind, res);
+                match data.scenario_kind {
+                    ScenarioKind::Full => {
+                        self.insert_stats(database::Scenario::Empty, data.build_kind, res);
                     }
-                    RunKind::IncrFull => {
-                        self.insert_stats(database::Cache::IncrementalEmpty, data.build_kind, res);
+                    ScenarioKind::IncrFull => {
+                        self.insert_stats(
+                            database::Scenario::IncrementalEmpty,
+                            data.build_kind,
+                            res,
+                        );
                     }
-                    RunKind::IncrUnchanged => {
-                        self.insert_stats(database::Cache::IncrementalFresh, data.build_kind, res);
+                    ScenarioKind::IncrUnchanged => {
+                        self.insert_stats(
+                            database::Scenario::IncrementalFresh,
+                            data.build_kind,
+                            res,
+                        );
                     }
-                    RunKind::IncrPatched => {
+                    ScenarioKind::IncrPatched => {
                         let patch = data.patch.unwrap();
                         self.insert_stats(
-                            database::Cache::IncrementalPatch(patch.name),
+                            database::Scenario::IncrementalPatch(patch.name),
                             data.build_kind,
                             res,
                         );
@@ -906,7 +922,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
         let out_file = |prefix: &str| -> String {
             format!(
                 "{}-{}-{}-{:?}-{}",
-                prefix, self.id, data.name, data.build_kind, data.run_kind_str
+                prefix, self.id, data.name, data.build_kind, data.scenario_kind_str
             )
         };
 
@@ -1253,7 +1269,7 @@ impl Benchmark {
         &self,
         processor: &mut dyn Processor,
         build_kinds: &[BuildKind],
-        run_kinds: &[RunKind],
+        scenario_kinds: &[ScenarioKind],
         compiler: Compiler<'_>,
         iterations: Option<usize>,
     ) -> anyhow::Result<()> {
@@ -1312,7 +1328,10 @@ impl Benchmark {
         .unwrap()?;
 
         for (build_kind, prep_dir) in build_kind_dirs {
-            eprintln!("Running {}: {:?} + {:?}", self.name, build_kind, run_kinds);
+            eprintln!(
+                "Running {}: {:?} + {:?}",
+                self.name, build_kind, scenario_kinds
+            );
 
             // We want at least two runs for all benchmarks (since we run
             // self-profile separately).
@@ -1332,9 +1351,9 @@ impl Benchmark {
                 let cwd = timing_dir.path();
 
                 // A full non-incremental build.
-                if run_kinds.contains(&RunKind::Full) {
+                if scenario_kinds.contains(&ScenarioKind::Full) {
                     self.mk_cargo_process(compiler, cwd, build_kind)
-                        .processor(processor, RunKind::Full, "Full", None)
+                        .processor(processor, ScenarioKind::Full, "Full", None)
                         .run_rustc(true)?;
                 }
 
@@ -1342,38 +1361,43 @@ impl Benchmark {
                 if build_kind != BuildKind::Doc {
                     // An incremental build from scratch (slowest incremental case).
                     // This is required for any subsequent incremental builds.
-                    if run_kinds.contains(&RunKind::IncrFull)
-                        || run_kinds.contains(&RunKind::IncrUnchanged)
-                        || run_kinds.contains(&RunKind::IncrPatched)
+                    if scenario_kinds.contains(&ScenarioKind::IncrFull)
+                        || scenario_kinds.contains(&ScenarioKind::IncrUnchanged)
+                        || scenario_kinds.contains(&ScenarioKind::IncrPatched)
                     {
                         self.mk_cargo_process(compiler, cwd, build_kind)
                             .incremental(true)
-                            .processor(processor, RunKind::IncrFull, "IncrFull", None)
+                            .processor(processor, ScenarioKind::IncrFull, "IncrFull", None)
                             .run_rustc(true)?;
                     }
 
                     // An incremental build with no changes (fastest incremental case).
-                    if run_kinds.contains(&RunKind::IncrUnchanged) {
+                    if scenario_kinds.contains(&ScenarioKind::IncrUnchanged) {
                         self.mk_cargo_process(compiler, cwd, build_kind)
                             .incremental(true)
-                            .processor(processor, RunKind::IncrUnchanged, "IncrUnchanged", None)
+                            .processor(
+                                processor,
+                                ScenarioKind::IncrUnchanged,
+                                "IncrUnchanged",
+                                None,
+                            )
                             .run_rustc(true)?;
                     }
 
-                    if run_kinds.contains(&RunKind::IncrPatched) {
+                    if scenario_kinds.contains(&ScenarioKind::IncrPatched) {
                         for (i, patch) in self.patches.iter().enumerate() {
                             log::debug!("applying patch {}", patch.name);
                             patch.apply(cwd).map_err(|s| anyhow::anyhow!("{}", s))?;
 
                             // An incremental build with some changes (realistic
                             // incremental case).
-                            let run_kind_str = format!("IncrPatched{}", i);
+                            let scenario_kind_str = format!("IncrPatched{}", i);
                             self.mk_cargo_process(compiler, cwd, build_kind)
                                 .incremental(true)
                                 .processor(
                                     processor,
-                                    RunKind::IncrPatched,
-                                    &run_kind_str,
+                                    ScenarioKind::IncrPatched,
+                                    &scenario_kind_str,
                                     Some(&patch),
                                 )
                                 .run_rustc(true)?;

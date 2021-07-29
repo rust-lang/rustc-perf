@@ -1,7 +1,7 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{
-    ArtifactId, ArtifactIdNumber, Cache, CollectionId, Commit, Crate, Date, Index, Profile,
-    QueuedCommit,
+    ArtifactId, ArtifactIdNumber, Benchmark, CollectionId, Commit, Date, Index, Profile,
+    QueuedCommit, Scenario,
 };
 use anyhow::Context as _;
 use chrono::{DateTime, TimeZone, Utc};
@@ -525,7 +525,7 @@ where
                     )
                 })
                 .collect(),
-            pstats: self
+            pstat_series: self
                 .conn()
                 .query(
                     "select id, crate, profile, cache, statistic from pstat_series;",
@@ -538,7 +538,7 @@ where
                     (
                         row.get::<_, i32>(0) as u32,
                         (
-                            Crate::from(row.get::<_, String>(1).as_str()),
+                            Benchmark::from(row.get::<_, String>(1).as_str()),
                             match row.get::<_, String>(2).as_str() {
                                 "check" => Profile::Check,
                                 "opt" => Profile::Opt,
@@ -565,7 +565,7 @@ where
                     (
                         row.get::<_, i32>(0) as u32,
                         (
-                            Crate::from(row.get::<_, String>(1).as_str()),
+                            Benchmark::from(row.get::<_, String>(1).as_str()),
                             match row.get::<_, String>(2).as_str() {
                                 "check" => Profile::Check,
                                 "opt" => Profile::Opt,
@@ -583,17 +583,23 @@ where
     }
     async fn get_pstats(
         &self,
-        series: &[u32],
+        pstat_series_row_ids: &[u32],
         artifact_row_ids: &[Option<crate::ArtifactIdNumber>],
     ) -> Vec<Vec<Option<f64>>> {
-        let series = series.iter().map(|sid| *sid as i32).collect::<Vec<_>>();
+        let pstat_series_row_ids = pstat_series_row_ids
+            .iter()
+            .map(|sid| *sid as i32)
+            .collect::<Vec<_>>();
         let artifact_row_ids = artifact_row_ids
             .iter()
             .map(|id| id.map(|id| id.0 as i32))
             .collect::<Vec<_>>();
         let rows = self
             .conn()
-            .query(&self.statements().get_pstat, &[&series, &artifact_row_ids])
+            .query(
+                &self.statements().get_pstat,
+                &[&pstat_series_row_ids, &artifact_row_ids],
+            )
             .await
             .unwrap();
         rows.into_iter()
@@ -602,14 +608,14 @@ where
     }
     async fn get_self_profile_query(
         &self,
-        series: u32,
+        pstat_series_row_id: u32,
         artifact_row_id: crate::ArtifactIdNumber,
     ) -> Option<crate::QueryDatum> {
         let row = self
             .conn()
             .query_opt(
                 &self.statements().get_self_profile_query,
-                &[&(series as i32), &(artifact_row_id.0 as i32)],
+                &[&(pstat_series_row_id as i32), &(artifact_row_id.0 as i32)],
             )
             .await
             .unwrap()?;
@@ -629,13 +635,13 @@ where
         artifact_row_id: ArtifactIdNumber,
         crate_: &str,
         profile: &str,
-        cache: &str,
+        scenario: &str,
     ) -> HashMap<crate::QueryLabel, crate::QueryDatum> {
         let rows = self
             .conn()
             .query(
                 &self.statements().get_self_profile,
-                &[&crate_, &profile, &cache, &(artifact_row_id.0 as i32)],
+                &[&crate_, &profile, &scenario, &(artifact_row_id.0 as i32)],
             )
             .await
             .unwrap();
@@ -753,19 +759,19 @@ where
         &self,
         collection: CollectionId,
         artifact: ArtifactIdNumber,
-        krate: &str,
+        benchmark: &str,
         profile: Profile,
-        cache: Cache,
-        statistic: &str,
-        value: f64,
+        scenario: Scenario,
+        metric: &str,
+        stat: f64,
     ) {
         let profile = profile.to_string();
-        let cache = cache.to_string();
+        let scenario = scenario.to_string();
         let sid = self
             .conn()
             .query_opt(
                 &self.statements().select_pstat_series,
-                &[&krate, &profile, &cache, &statistic],
+                &[&benchmark, &profile, &scenario, &metric],
             )
             .await
             .unwrap();
@@ -775,14 +781,14 @@ where
                 self.conn()
                     .query_opt(
                         &self.statements().insert_pstat_series,
-                        &[&krate, &profile, &cache, &statistic],
+                        &[&benchmark, &profile, &scenario, &metric],
                     )
                     .await
                     .unwrap();
                 self.conn()
                     .query_one(
                         &self.statements().select_pstat_series,
-                        &[&krate, &profile, &cache, &statistic],
+                        &[&benchmark, &profile, &scenario, &metric],
                     )
                     .await
                     .unwrap()
@@ -792,7 +798,7 @@ where
         self.conn()
             .execute(
                 &self.statements().insert_pstat,
-                &[&sid, &(artifact.0 as i32), &(collection.0 as i32), &value],
+                &[&sid, &(artifact.0 as i32), &(collection.0 as i32), &stat],
             )
             .await
             .unwrap();
@@ -830,7 +836,7 @@ where
                 },
                 if commit.is_try() { "try" } else { "master" },
             ),
-            ArtifactId::Artifact(a) => (a.clone(), None, "release"),
+            ArtifactId::Tag(a) => (a.clone(), None, "release"),
         };
         let aid = self
             .conn()
@@ -864,19 +870,19 @@ where
         &self,
         collection: CollectionId,
         artifact: ArtifactIdNumber,
-        krate: &str,
+        benchmark: &str,
         profile: Profile,
-        cache: Cache,
+        scenario: Scenario,
         query: &str,
         qd: crate::QueryDatum,
     ) {
         let profile = profile.to_string();
-        let cache = cache.to_string();
+        let scenario = scenario.to_string();
         let sid = self
             .conn()
             .query_opt(
                 &self.statements().select_self_query_series,
-                &[&krate, &profile, &cache, &query],
+                &[&benchmark, &profile, &scenario, &query],
             )
             .await
             .unwrap();
@@ -886,14 +892,14 @@ where
                 self.conn()
                     .query_one(
                         &self.statements().insert_self_query_series,
-                        &[&krate, &profile, &cache, &query],
+                        &[&benchmark, &profile, &scenario, &query],
                     )
                     .await
                     .unwrap();
                 self.conn()
                     .query_one(
                         &self.statements().select_self_query_series,
-                        &[&krate, &profile, &cache, &query],
+                        &[&benchmark, &profile, &scenario, &query],
                     )
                     .await
                     .unwrap()
@@ -944,12 +950,12 @@ where
             .await
             .unwrap();
     }
-    async fn record_benchmark(&self, krate: &str, supports_stable: Option<bool>) {
+    async fn record_benchmark(&self, benchmark: &str, supports_stable: Option<bool>) {
         if let Some(r) = self
             .conn()
             .query_opt(
                 "select stabilized from benchmark where name = $1",
-                &[&krate],
+                &[&benchmark],
             )
             .await
             .unwrap()
@@ -963,7 +969,7 @@ where
                 .execute(
                     "insert into benchmark (name, stabilized) VALUES ($1, $2)
                 ON CONFLICT (name) DO UPDATE SET stabilized = EXCLUDED.stabilized",
-                    &[&krate, &stable],
+                    &[&benchmark, &stable],
                 )
                 .await
                 .unwrap();
@@ -972,7 +978,7 @@ where
                 .execute(
                     "insert into benchmark (name, stabilized) VALUES ($1, $2)
                 ON CONFLICT DO NOTHING",
-                    &[&krate, &false],
+                    &[&benchmark, &false],
                 )
                 .await
                 .unwrap();
@@ -1069,7 +1075,7 @@ where
                         .map(Date)
                         .unwrap_or_else(|| Date::ymd_hms(2001, 01, 01, 0, 0, 0)),
                 }),
-                "release" => ArtifactId::Artifact(row.get(0)),
+                "release" => ArtifactId::Tag(row.get(0)),
                 _ => {
                     log::error!("unknown ty {:?}", ty);
                     continue;
@@ -1134,15 +1140,15 @@ where
         &self,
         collection: CollectionId,
         artifact: ArtifactIdNumber,
-        krate: &str,
+        benchmark: &str,
         profile: Profile,
-        cache: Cache,
+        scenario: Scenario,
     ) {
         let profile = profile.to_string();
-        let cache = cache.to_string();
+        let scenario = scenario.to_string();
         self.conn().execute(
             "insert into raw_self_profile (aid, cid, crate, profile, cache) VALUES ($1, $2, $3, $4, $5)",
-            &[&(artifact.0 as i32), &collection.0, &krate, &profile, &cache],
+            &[&(artifact.0 as i32), &collection.0, &benchmark, &profile, &scenario],
         ).await.unwrap();
     }
     async fn list_self_profile(
@@ -1150,7 +1156,7 @@ where
         aid: ArtifactId,
         crate_: &str,
         profile: &str,
-        cache: &str,
+        scenario: &str,
     ) -> Vec<(ArtifactIdNumber, i32)> {
         self.conn()
             .query(
@@ -1164,10 +1170,10 @@ where
                 &[
                     &crate_,
                     &profile,
-                    &cache,
+                    &scenario,
                     &match aid {
                         ArtifactId::Commit(c) => c.sha,
-                        ArtifactId::Artifact(a) => a,
+                        ArtifactId::Tag(a) => a,
                     },
                 ],
             )
@@ -1233,7 +1239,7 @@ where
                 sha: artifact.to_owned(),
                 date: Date::ymd_hms(2000, 1, 1, 0, 0, 0),
             })),
-            "release" => Some(ArtifactId::Artifact(artifact.to_owned())),
+            "release" => Some(ArtifactId::Tag(artifact.to_owned())),
             _ => panic!("unknown artifact type: {:?}", ty),
         }
     }

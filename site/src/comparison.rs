@@ -3,7 +3,7 @@
 //! comparison endpoints
 
 use crate::api;
-use crate::db::{ArtifactId, Cache, Crate, Profile};
+use crate::db::{ArtifactId, Benchmark, Profile, Scenario};
 use crate::github;
 use crate::load::SiteCtxt;
 use crate::selector::{self, Tag};
@@ -240,10 +240,10 @@ async fn compare_given_commits(
 
     // get all crates, cache, and profile combinations for the given stat
     let query = selector::Query::new()
-        .set::<String>(Tag::Crate, selector::Selector::All)
-        .set::<String>(Tag::Cache, selector::Selector::All)
+        .set::<String>(Tag::Benchmark, selector::Selector::All)
+        .set::<String>(Tag::Scenario, selector::Selector::All)
         .set::<String>(Tag::Profile, selector::Selector::All)
-        .set(Tag::ProcessStatistic, selector::Selector::One(stat.clone()));
+        .set(Tag::Metric, selector::Selector::One(stat.clone()));
 
     // `responses` contains series iterators. The first element in the iterator is the data
     // for `a` and the second is the data for `b`
@@ -370,11 +370,11 @@ where
         };
         data.entry(format!(
             "{}-{}",
-            response.path.get::<Crate>().unwrap(),
+            response.path.get::<Benchmark>().unwrap(),
             response.path.get::<Profile>().unwrap(),
         ))
         .or_insert_with(Vec::new)
-        .push((response.path.get::<Cache>().unwrap().to_string(), point));
+        .push((response.path.get::<Scenario>().unwrap().to_string(), point));
     }
     data
 }
@@ -384,7 +384,7 @@ impl From<ArtifactData> for api::comparison::ArtifactData {
         api::comparison::ArtifactData {
             commit: match data.artifact.clone() {
                 ArtifactId::Commit(c) => c.sha,
-                ArtifactId::Artifact(t) => t,
+                ArtifactId::Tag(t) => t,
             },
             date: if let ArtifactId::Commit(c) = &data.artifact {
                 Some(c.date)
@@ -481,10 +481,10 @@ impl BenchmarkVariances {
     ) -> Result<Option<Self>, BoxedError> {
         // get all crates, cache, and profile combinations for the given stat
         let query = selector::Query::new()
-            .set::<String>(Tag::Crate, selector::Selector::All)
-            .set::<String>(Tag::Cache, selector::Selector::All)
+            .set::<String>(Tag::Benchmark, selector::Selector::All)
+            .set::<String>(Tag::Scenario, selector::Selector::All)
             .set::<String>(Tag::Profile, selector::Selector::All)
-            .set(Tag::ProcessStatistic, selector::Selector::One(stat));
+            .set(Tag::Metric, selector::Selector::One(stat));
 
         let previous_commits = Arc::new(previous_commits(
             from,
@@ -614,7 +614,7 @@ pub fn prev_commit<'a>(
             let current = master_commits.iter().find(|c| c.sha == a.sha)?;
             master_commits.iter().find(|c| c.sha == current.parent_sha)
         }
-        ArtifactId::Artifact(_) => None,
+        ArtifactId::Tag(_) => None,
     }
 }
 
@@ -625,7 +625,7 @@ pub fn next_commit<'a>(
 ) -> Option<&'a collector::MasterCommit> {
     match artifact {
         ArtifactId::Commit(b) => master_commits.iter().find(|c| c.parent_sha == b.sha),
-        ArtifactId::Artifact(_) => None,
+        ArtifactId::Tag(_) => None,
     }
 }
 
@@ -807,11 +807,11 @@ TODO: Nags
 
 fn compare_link(start: &ArtifactId, end: &ArtifactId) -> String {
     let start = match &start {
-        ArtifactId::Artifact(a) => a,
+        ArtifactId::Tag(a) => a,
         ArtifactId::Commit(c) => &c.sha,
     };
     let end = match &end {
-        ArtifactId::Artifact(a) => a,
+        ArtifactId::Tag(a) => a,
         ArtifactId::Commit(c) => &c.sha,
     };
     format!(

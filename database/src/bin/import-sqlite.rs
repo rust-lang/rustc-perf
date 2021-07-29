@@ -38,37 +38,39 @@ async fn main() {
         let sqlite_aid = sqlite_conn.artifact_id(&aid).await;
         let postgres_aid = postgres_conn.artifact_id(&aid).await;
 
-        for &(krate, profile, cache, stat) in sqlite_idx.all_pstat_series() {
-            if benchmarks.insert(krate) {
-                postgres_conn.record_benchmark(krate.as_str(), None).await;
+        for &(benchmark, profile, scenario, metric) in sqlite_idx.all_statistic_descriptions() {
+            if benchmarks.insert(benchmark) {
+                postgres_conn
+                    .record_benchmark(benchmark.as_str(), None)
+                    .await;
             }
 
-            let id = database::DbLabel::ProcessStat {
-                krate,
+            let id = database::DbLabel::StatisticDescription {
+                benchmark,
                 profile,
-                cache,
-                stat,
+                scenario,
+                metric,
             }
             .lookup(&sqlite_idx)
             .unwrap();
 
-            let value = sqlite_conn
+            let stat = sqlite_conn
                 .get_pstats(&[id], &[Some(sqlite_aid)])
                 .await
                 .pop()
                 .unwrap()
                 .pop()
                 .unwrap();
-            if let Some(value) = value {
+            if let Some(stat) = stat {
                 postgres_conn
                     .record_statistic(
                         cid,
                         postgres_aid,
-                        &krate.to_string(),
+                        &benchmark.to_string(),
                         profile,
-                        cache,
-                        stat.as_str(),
-                        value,
+                        scenario,
+                        metric.as_str(),
+                        stat,
                     )
                     .await;
             }

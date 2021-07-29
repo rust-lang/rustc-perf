@@ -43,12 +43,12 @@ fn record(
         .arg("--hard")
         .arg(match artifact {
             ArtifactId::Commit(c) => c.sha.as_str(),
-            ArtifactId::Artifact(id) => id.as_str(),
+            ArtifactId::Tag(id) => id.as_str(),
         })
         .status()
         .context("git reset --hard")?;
 
-    if !status.success() && matches!(artifact, ArtifactId::Artifact(_)) {
+    if !status.success() && matches!(artifact, ArtifactId::Tag(_)) {
         log::warn!(
             "git reset --hard {} failed - trying default branch",
             artifact
@@ -165,12 +165,12 @@ fn checkout(artifact: &ArtifactId) -> anyhow::Result<()> {
             .arg("origin")
             .arg(match artifact {
                 ArtifactId::Commit(c) => c.sha.as_str(),
-                ArtifactId::Artifact(id) => id.as_str(),
+                ArtifactId::Tag(id) => id.as_str(),
             })
             .status()
             .context("git fetch origin")?;
 
-        if !status.success() && matches!(artifact, ArtifactId::Artifact(_)) {
+        if !status.success() && matches!(artifact, ArtifactId::Tag(_)) {
             log::warn!(
                 "git fetch origin {} failed - trying default branch",
                 artifact

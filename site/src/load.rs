@@ -16,7 +16,7 @@ use database::Date;
 use crate::api::github;
 use collector;
 use database::Pool;
-pub use database::{ArtifactId, Commit, Crate};
+pub use database::{ArtifactId, Benchmark, Commit};
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum MissingReason {
@@ -86,12 +86,12 @@ pub struct SiteCtxt {
 }
 
 impl SiteCtxt {
-    pub fn summary_patches(&self) -> Vec<crate::db::Cache> {
+    pub fn summary_scenarios(&self) -> Vec<crate::db::Scenario> {
         vec![
-            crate::db::Cache::Empty,
-            crate::db::Cache::IncrementalEmpty,
-            crate::db::Cache::IncrementalFresh,
-            crate::db::Cache::IncrementalPatch("println".into()),
+            crate::db::Scenario::Empty,
+            crate::db::Scenario::IncrementalEmpty,
+            crate::db::Scenario::IncrementalFresh,
+            crate::db::Scenario::IncrementalPatch("println".into()),
         ]
     }
 
@@ -225,7 +225,7 @@ impl SiteCtxt {
                     have.remove(&c.sha);
                     commits.insert(0, (c, MissingReason::InProgress(previous)));
                 }
-                ArtifactId::Artifact(_) => {
+                ArtifactId::Tag(_) => {
                     // do nothing, for now, though eventually we'll want an artifact
                     // queue
                 }
