@@ -412,7 +412,7 @@ impl SiteCtxt {
         query: Query,
         artifact_ids: Arc<Vec<ArtifactId>>,
     ) -> Result<Vec<SeriesResponse<StatisticSeries>>, String> {
-        StatisticSeries::expand_query(artifact_ids.clone(), self, query.clone()).await
+        StatisticSeries::execute_query(artifact_ids.clone(), self, query.clone()).await
     }
 
     pub async fn self_profile(
@@ -420,7 +420,7 @@ impl SiteCtxt {
         query: Query,
         artifact_ids: Arc<Vec<ArtifactId>>,
     ) -> Result<Vec<SeriesResponse<SelfProfile>>, String> {
-        SelfProfile::expand_query(artifact_ids, self, query.clone()).await
+        SelfProfile::execute_query(artifact_ids, self, query.clone()).await
     }
 
     pub async fn self_profile_query_time(
@@ -428,7 +428,7 @@ impl SiteCtxt {
         query: Query,
         artifact_ids: Arc<Vec<ArtifactId>>,
     ) -> Result<Vec<SeriesResponse<SelfProfileQueryTime>>, String> {
-        SelfProfileQueryTime::expand_query(artifact_ids, self, query.clone()).await
+        SelfProfileQueryTime::execute_query(artifact_ids, self, query.clone()).await
     }
 }
 
@@ -438,7 +438,7 @@ pub struct StatisticSeries {
 }
 
 impl StatisticSeries {
-    async fn expand_query(
+    async fn execute_query(
         artifact_ids: Arc<Vec<ArtifactId>>,
         ctxt: &SiteCtxt,
         mut query: Query,
@@ -600,7 +600,7 @@ impl SelfProfile {
         }
     }
 
-    async fn expand_query(
+    async fn execute_query(
         artifact_ids: Arc<Vec<ArtifactId>>,
         ctxt: &SiteCtxt,
         mut query: Query,
@@ -686,7 +686,7 @@ impl SelfProfileQueryTime {
         }
     }
 
-    async fn expand_query(
+    async fn execute_query(
         artifact_ids: Arc<Vec<ArtifactId>>,
         ctxt: &SiteCtxt,
         mut query: Query,
