@@ -700,33 +700,22 @@ impl SelfProfileQueryTime {
         let index = ctxt.index.load();
         let mut series = index
             .all_query_series()
-            .filter(|tup| {
-                benchmark.matches(tup.0)
-                    && profile.matches(tup.1)
-                    && scenario.matches(tup.2)
-                    && ql.matches(tup.3)
+            .filter(|&&(b, p, s, q)| {
+                benchmark.matches(b) && profile.matches(p) && scenario.matches(s) && ql.matches(q)
             })
             .collect::<Vec<_>>();
 
         series.sort_unstable();
 
         let mut res = Vec::with_capacity(series.len());
-        for path in series {
+        for &(b, p, s, q) in series {
             res.push(SeriesResponse {
-                series: SelfProfileQueryTime::new(
-                    artifact_ids.clone(),
-                    ctxt,
-                    path.0,
-                    path.1,
-                    path.2,
-                    path.3,
-                )
-                .await,
+                series: SelfProfileQueryTime::new(artifact_ids.clone(), ctxt, b, p, s, q).await,
                 path: Path::new()
-                    .set(PathComponent::Benchmark(path.0))
-                    .set(PathComponent::Profile(path.1))
-                    .set(PathComponent::Scenario(path.2))
-                    .set(PathComponent::QueryLabel(path.3)),
+                    .set(PathComponent::Benchmark(b))
+                    .set(PathComponent::Profile(p))
+                    .set(PathComponent::Scenario(s))
+                    .set(PathComponent::QueryLabel(q)),
             });
         }
         Ok(res)
