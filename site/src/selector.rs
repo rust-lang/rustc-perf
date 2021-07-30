@@ -422,14 +422,6 @@ impl SiteCtxt {
     ) -> Result<Vec<SeriesResponse<SelfProfile>>, String> {
         SelfProfile::execute_query(artifact_ids, self, query.clone()).await
     }
-
-    pub async fn self_profile_query_time(
-        &self,
-        query: Query,
-        artifact_ids: Arc<Vec<ArtifactId>>,
-    ) -> Result<Vec<SeriesResponse<SelfProfileQueryTime>>, String> {
-        SelfProfileQueryTime::execute_query(artifact_ids, self, query.clone()).await
-    }
 }
 
 pub struct StatisticSeries {
@@ -639,91 +631,6 @@ impl SelfProfile {
 
 impl Iterator for SelfProfile {
     type Item = (ArtifactId, Option<SelfProfileData>);
-    fn next(&mut self) -> Option<Self::Item> {
-        Some((self.artifact_ids.next()?, self.points.next().unwrap()))
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.artifact_ids.size_hint()
-    }
-}
-
-pub struct SelfProfileQueryTime {
-    artifact_ids: ArtifactIdIter,
-    points: std::vec::IntoIter<Option<f64>>,
-}
-
-impl SelfProfileQueryTime {
-    async fn new(
-        artifact_ids: Arc<Vec<ArtifactId>>,
-        ctxt: &SiteCtxt,
-        benchmark: Benchmark,
-        profile: Profile,
-        scenario: Scenario,
-        query: QueryLabel,
-    ) -> Self {
-        let mut res = Vec::with_capacity(artifact_ids.len());
-        let idx = ctxt.index.load();
-        let mut conn = ctxt.conn().await;
-        let mut tx = conn.transaction().await;
-        let query = crate::db::DbLabel::SelfProfileQuery {
-            benchmark,
-            profile,
-            scenario,
-            query,
-        };
-        for aid in artifact_ids.iter() {
-            let point = idx
-                .get::<crate::db::QueryDatum>(tx.conn(), &query, aid)
-                .await
-                .map(|qd| qd.self_time.as_secs_f64());
-            res.push(point);
-        }
-        tx.finish().await.unwrap();
-        SelfProfileQueryTime {
-            artifact_ids: ArtifactIdIter::new(artifact_ids),
-            points: res.into_iter(),
-        }
-    }
-
-    async fn execute_query(
-        artifact_ids: Arc<Vec<ArtifactId>>,
-        ctxt: &SiteCtxt,
-        mut query: Query,
-    ) -> Result<Vec<SeriesResponse<Self>>, String> {
-        let benchmark = query.extract_as::<String>(Tag::Benchmark)?;
-        let profile = query.extract_as::<Profile>(Tag::Profile)?;
-        let scenario = query.extract_as::<Scenario>(Tag::Scenario)?;
-        let ql = query.extract_as::<QueryLabel>(Tag::QueryLabel)?;
-        query.assert_empty()?;
-
-        let index = ctxt.index.load();
-        let mut series = index
-            .all_query_series()
-            .filter(|&&(b, p, s, q)| {
-                benchmark.matches(b) && profile.matches(p) && scenario.matches(s) && ql.matches(q)
-            })
-            .collect::<Vec<_>>();
-
-        series.sort_unstable();
-
-        let mut res = Vec::with_capacity(series.len());
-        for &(b, p, s, q) in series {
-            res.push(SeriesResponse {
-                series: SelfProfileQueryTime::new(artifact_ids.clone(), ctxt, b, p, s, q).await,
-                path: Path::new()
-                    .set(PathComponent::Benchmark(b))
-                    .set(PathComponent::Profile(p))
-                    .set(PathComponent::Scenario(s))
-                    .set(PathComponent::QueryLabel(q)),
-            });
-        }
-        Ok(res)
-    }
-}
-
-impl Iterator for SelfProfileQueryTime {
-    type Item = (ArtifactId, Option<f64>);
     fn next(&mut self) -> Option<Self::Item> {
         Some((self.artifact_ids.next()?, self.points.next().unwrap()))
     }
