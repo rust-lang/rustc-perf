@@ -247,7 +247,7 @@ async fn compare_given_commits(
 
     // `responses` contains series iterators. The first element in the iterator is the data
     // for `a` and the second is the data for `b`
-    let mut responses = ctxt.query::<Option<f64>>(query.clone(), aids).await?;
+    let mut responses = ctxt.statistic_series(query.clone(), aids).await?;
 
     let conn = ctxt.conn().await;
     Ok(Some(Comparison {
@@ -492,7 +492,7 @@ impl BenchmarkVariances {
             master_commits,
         ));
         let mut previous_commit_series = ctxt
-            .query::<Option<f64>>(query, previous_commits.clone())
+            .statistic_series(query, previous_commits.clone())
             .await?;
 
         let mut variance_data: HashMap<String, BenchmarkVariance> = HashMap::new();
