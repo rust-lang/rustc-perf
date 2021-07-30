@@ -1096,7 +1096,7 @@ pub async fn handle_self_profile(
     let mut sp_response = sp_responses.remove(0).series;
 
     let mut cpu_responses = ctxt
-        .self_profile_query_time(
+        .statistic_series(
             query.clone().set(
                 Tag::Metric,
                 selector::Selector::One("cpu-clock".to_string()),
