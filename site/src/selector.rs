@@ -66,7 +66,7 @@ pub fn range_subset(data: Vec<Commit>, range: RangeInclusive<Bound>) -> Vec<Comm
     let (a, b) = range.into_inner();
 
     let left_idx = data.iter().position(|commit| a.left_match(commit));
-    let right_idx = data.iter().rposition(|commit| b.left_match(commit));
+    let right_idx = data.iter().rposition(|commit| b.right_match(commit));
 
     if let (Some(left), Some(right)) = (left_idx, right_idx) {
         data.get(left..=right)
