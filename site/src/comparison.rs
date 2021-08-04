@@ -117,13 +117,13 @@ async fn populate_report(comparison: &Comparison, report: &mut HashMap<Direction
     }
 }
 
-pub struct ComparisonSummary<'a> {
-    hi: Option<BenchmarkComparison<'a>>,
-    lo: Option<BenchmarkComparison<'a>>,
+pub struct ComparisonSummary {
+    hi: Option<BenchmarkComparison>,
+    lo: Option<BenchmarkComparison>,
 }
 
-impl ComparisonSummary<'_> {
-    pub fn summarize_comparison<'a>(comparison: &'a Comparison) -> Option<ComparisonSummary<'a>> {
+impl ComparisonSummary {
+    pub fn summarize_comparison(comparison: &Comparison) -> Option<ComparisonSummary> {
         let mut benchmarks = comparison.get_benchmarks();
         // Skip empty commits, sometimes happens if there's a compiler bug or so.
         if benchmarks.len() == 0 {
@@ -166,7 +166,7 @@ impl ComparisonSummary<'_> {
     }
 
     /// The changes ordered by their signficance (most significant first)
-    pub fn ordered_changes(&self) -> Vec<&BenchmarkComparison<'_>> {
+    pub fn ordered_changes(&self) -> Vec<&BenchmarkComparison> {
         match (&self.hi, &self.lo) {
             (None, None) => Vec::new(),
             (Some(b), None) => vec![b],
@@ -287,15 +287,13 @@ pub struct ArtifactData {
     pub artifact: ArtifactId,
     /// The pr of the artifact if known
     pub pr: Option<u32>,
-    /// Benchmark data in the form "$crate-$profile" -> Vec<("$cache", nanoseconds)>
-    ///
-    /// * $profile refers to the flavor of compilation like debug, doc, opt(timized), etc.
-    /// * $cache refers to how much of the compilation must be done and how much is cached
-    /// (e.g., "incr-unchanged" == compiling with full incremental cache and no code having changed)
-    pub data: HashMap<String, Vec<(String, f64)>>,
+    /// Statistics based on benchmark, profile and scenario
+    pub statistics: StatisticsMap,
     /// Bootstrap data in the form "$crate" -> nanoseconds
     pub bootstrap: HashMap<String, u64>,
 }
+
+type StatisticsMap = HashMap<Benchmark, HashMap<Profile, Vec<(Scenario, f64)>>>;
 
 impl ArtifactData {
     /// For the given `ArtifactId`, consume the first datapoint in each of the given `SeriesResponse`
@@ -311,7 +309,7 @@ impl ArtifactData {
     where
         T: Iterator<Item = (ArtifactId, Option<f64>)>,
     {
-        let data = data_from_series(series);
+        let statistics = statistics_from_series(series);
 
         let bootstrap = conn
             .get_bootstrap(&[conn.artifact_id(&artifact).await])
@@ -347,40 +345,55 @@ impl ArtifactData {
         Self {
             pr,
             artifact,
-            data,
+            statistics,
             bootstrap,
         }
     }
 }
 
-fn data_from_series<T>(
-    series: &mut [selector::SeriesResponse<T>],
-) -> HashMap<String, Vec<(String, f64)>>
+fn statistics_from_series<T>(series: &mut [selector::SeriesResponse<T>]) -> StatisticsMap
 where
     T: Iterator<Item = (ArtifactId, Option<f64>)>,
 {
-    let mut data = HashMap::new();
+    let mut stats: StatisticsMap = HashMap::new();
     for response in series {
         let (_, point) = response.series.next().expect("must have element");
 
-        let point = if let Some(pt) = point {
-            pt
+        let value = if let Some(v) = point {
+            v
         } else {
             continue;
         };
-        data.entry(format!(
-            "{}-{}",
-            response.path.get::<Benchmark>().unwrap(),
-            response.path.get::<Profile>().unwrap(),
-        ))
-        .or_insert_with(Vec::new)
-        .push((response.path.get::<Scenario>().unwrap().to_string(), point));
+        let benchmark = *response.path.get::<Benchmark>().unwrap();
+        let profile = *response.path.get::<Profile>().unwrap();
+        let scenario = *response.path.get::<Scenario>().unwrap();
+        stats
+            .entry(benchmark)
+            .or_default()
+            .entry(profile)
+            .or_default()
+            .push((scenario, value));
     }
-    data
+    stats
 }
 
 impl From<ArtifactData> for api::comparison::ArtifactData {
     fn from(data: ArtifactData) -> Self {
+        let stats = data
+            .statistics
+            .into_iter()
+            .flat_map(|(benchmark, profiles)| {
+                profiles.into_iter().map(move |(profile, scenarios)| {
+                    (
+                        format!("{}-{}", benchmark, profile),
+                        scenarios
+                            .into_iter()
+                            .map(|(s, v)| (s.to_string(), v))
+                            .collect::<Vec<_>>(),
+                    )
+                })
+            })
+            .collect();
         api::comparison::ArtifactData {
             commit: match data.artifact.clone() {
                 ArtifactId::Commit(c) => c.sha,
@@ -392,7 +405,7 @@ impl From<ArtifactData> for api::comparison::ArtifactData {
                 None
             },
             pr: data.pr,
-            data: data.data,
+            data: stats,
             bootstrap: data.bootstrap,
         }
     }
@@ -437,20 +450,27 @@ impl Comparison {
         next_commit(&self.b.artifact, master_commits).map(|c| c.sha.clone())
     }
 
-    fn get_benchmarks<'a>(&'a self) -> Vec<BenchmarkComparison<'a>> {
+    fn get_benchmarks(&self) -> Vec<BenchmarkComparison> {
         let mut result = Vec::new();
-        for (bench_name, a) in self.a.data.iter() {
-            if bench_name.ends_with("-doc") {
-                continue;
-            }
-            if let Some(b) = self.b.data.get(bench_name) {
-                for (cache_state, a) in a.iter() {
-                    if let Some(b) = b.iter().find(|(cs, _)| cs == cache_state).map(|(_, b)| b) {
-                        result.push(BenchmarkComparison {
-                            bench_name,
-                            cache_state,
-                            results: (a.clone(), b.clone()),
-                        })
+        for (&benchmark, profiles) in self.a.statistics.iter() {
+            for (&profile, scenarios) in profiles {
+                if profile == Profile::Doc {
+                    continue;
+                }
+
+                if let Some(b) = self.b.statistics.get(&benchmark) {
+                    if let Some(b) = b.get(&profile) {
+                        for &(scenario, a) in scenarios.iter() {
+                            if let Some(b) = b.iter().find(|(s, _)| *s == scenario).map(|(_, b)| b)
+                            {
+                                result.push(BenchmarkComparison {
+                                    benchmark,
+                                    profile,
+                                    scenario,
+                                    results: (a, *b),
+                                })
+                            }
+                        }
                     }
                 }
             }
@@ -497,13 +517,15 @@ impl BenchmarkVariances {
 
         let mut variance_data: HashMap<String, BenchmarkVariance> = HashMap::new();
         for _ in previous_commits.iter() {
-            let series_data = data_from_series(&mut previous_commit_series);
-            for (bench_and_profile, data) in series_data {
-                for (cache, val) in data {
-                    variance_data
-                        .entry(format!("{}-{}", bench_and_profile, cache))
-                        .or_default()
-                        .push(val);
+            let series_data = statistics_from_series(&mut previous_commit_series);
+            for (bench, profiles) in series_data {
+                for (profile, scenarios) in profiles {
+                    for (scenario, val) in scenarios {
+                        variance_data
+                            .entry(format!("{}-{}-{}", bench, profile, scenario))
+                            .or_default()
+                            .push(val);
+                    }
                 }
             }
         }
@@ -631,14 +653,15 @@ pub fn next_commit<'a>(
 
 // A single comparison based on benchmark and cache state
 #[derive(Debug)]
-pub struct BenchmarkComparison<'a> {
-    bench_name: &'a str,
-    cache_state: &'a str,
+pub struct BenchmarkComparison {
+    benchmark: Benchmark,
+    profile: Profile,
+    scenario: Scenario,
     results: (f64, f64),
 }
 
 const SIGNIFICANCE_THRESHOLD: f64 = 0.01;
-impl BenchmarkComparison<'_> {
+impl BenchmarkComparison {
     fn log_change(&self) -> f64 {
         let (a, b) = self.results;
         (b / a).ln()
@@ -650,9 +673,10 @@ impl BenchmarkComparison<'_> {
     }
 
     fn is_significant(&self) -> bool {
-        // This particular (benchmark, cache) combination frequently varies
-        if self.bench_name.starts_with("coercions-debug")
-            && self.cache_state == "incr-patched: println"
+        // This particular test case frequently varies
+        if &self.benchmark == "coercions"
+            && self.profile == Profile::Debug
+            && matches!(self.scenario, Scenario::IncrementalPatch(p) if &p == "println")
         {
             self.relative_change().abs() > 2.0
         } else {
@@ -703,7 +727,7 @@ impl BenchmarkComparison<'_> {
         writeln!(
             summary,
             " (up to {:.1}% on `{}` builds of `{}`)",
-            percent, self.cache_state, self.bench_name
+            percent, self.scenario, self.benchmark
         )
         .unwrap();
     }
