@@ -293,7 +293,7 @@ pub struct ArtifactData {
     pub bootstrap: HashMap<String, u64>,
 }
 
-type StatisticsMap = HashMap<Benchmark, HashMap<Profile, Vec<(Scenario, f64)>>>;
+type StatisticsMap = HashMap<(Benchmark, Profile, Scenario), f64>;
 
 impl ArtifactData {
     /// For the given `ArtifactId`, consume the first datapoint in each of the given `SeriesResponse`
@@ -367,33 +367,20 @@ where
         let benchmark = *response.path.get::<Benchmark>().unwrap();
         let profile = *response.path.get::<Profile>().unwrap();
         let scenario = *response.path.get::<Scenario>().unwrap();
-        stats
-            .entry(benchmark)
-            .or_default()
-            .entry(profile)
-            .or_default()
-            .push((scenario, value));
+        stats.insert((benchmark, profile, scenario), value);
     }
     stats
 }
 
 impl From<ArtifactData> for api::comparison::ArtifactData {
     fn from(data: ArtifactData) -> Self {
-        let stats = data
-            .statistics
-            .into_iter()
-            .flat_map(|(benchmark, profiles)| {
-                profiles.into_iter().map(move |(profile, scenarios)| {
-                    (
-                        format!("{}-{}", benchmark, profile),
-                        scenarios
-                            .into_iter()
-                            .map(|(s, v)| (s.to_string(), v))
-                            .collect::<Vec<_>>(),
-                    )
-                })
-            })
-            .collect();
+        let mut stats: HashMap<String, Vec<(String, f64)>> = HashMap::new();
+        for ((benchmark, profile, scenario), value) in data.statistics {
+            stats
+                .entry(format!("{}-{}", benchmark, profile))
+                .or_default()
+                .push((scenario.to_string(), value))
+        }
         api::comparison::ArtifactData {
             commit: match data.artifact.clone() {
                 ArtifactId::Commit(c) => c.sha,
@@ -452,27 +439,18 @@ impl Comparison {
 
     fn get_benchmarks(&self) -> Vec<BenchmarkComparison> {
         let mut result = Vec::new();
-        for (&benchmark, profiles) in self.a.statistics.iter() {
-            for (&profile, scenarios) in profiles {
-                if profile == Profile::Doc {
-                    continue;
-                }
+        for (&(benchmark, profile, scenario), &a) in self.a.statistics.iter() {
+            if profile == Profile::Doc {
+                continue;
+            }
 
-                if let Some(b) = self.b.statistics.get(&benchmark) {
-                    if let Some(b) = b.get(&profile) {
-                        for &(scenario, a) in scenarios.iter() {
-                            if let Some(b) = b.iter().find(|(s, _)| *s == scenario).map(|(_, b)| b)
-                            {
-                                result.push(BenchmarkComparison {
-                                    benchmark,
-                                    profile,
-                                    scenario,
-                                    results: (a, *b),
-                                })
-                            }
-                        }
-                    }
-                }
+            if let Some(&b) = self.b.statistics.get(&(benchmark, profile, scenario)) {
+                result.push(BenchmarkComparison {
+                    benchmark,
+                    profile,
+                    scenario,
+                    results: (a, b),
+                })
             }
         }
 
@@ -518,15 +496,11 @@ impl BenchmarkVariances {
         let mut variance_data: HashMap<String, BenchmarkVariance> = HashMap::new();
         for _ in previous_commits.iter() {
             let series_data = statistics_from_series(&mut previous_commit_series);
-            for (bench, profiles) in series_data {
-                for (profile, scenarios) in profiles {
-                    for (scenario, val) in scenarios {
-                        variance_data
-                            .entry(format!("{}-{}-{}", bench, profile, scenario))
-                            .or_default()
-                            .push(val);
-                    }
-                }
+            for ((bench, profile, scenario), value) in series_data {
+                variance_data
+                    .entry(format!("{}-{}-{}", bench, profile, scenario))
+                    .or_default()
+                    .push(value);
             }
         }
         if variance_data.len() < Self::MIN_PREVIOUS_COMMITS {
