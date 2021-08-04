@@ -208,9 +208,17 @@
             text-align: center;
         }
 
+        #summary {
+            border: 1px dashed;
+            padding: 4px;
+            border-radius: 6px;
+        }
+
         .summary {
             display: flex;
+            justify-content: center;
             align-items: center;
+            width: 20%;
         }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
@@ -322,7 +330,8 @@
                         </li>
                         <li>
                             <label>
-                                <input type="checkbox" id="build-incremental-unchanged" v-model="filter.cache.incrUnchanged" />
+                                <input type="checkbox" id="build-incremental-unchanged"
+                                    v-model="filter.cache.incrUnchanged" />
                                 <span class="cache-label">incr-unchanged</span>
                             </label>
                             <div class="tooltip">?
@@ -334,7 +343,8 @@
                         </li>
                         <li>
                             <label>
-                                <input type="checkbox" id="build-incremental-patched" v-model="filter.cache.incrPatched" />
+                                <input type="checkbox" id="build-incremental-patched"
+                                    v-model="filter.cache.incrPatched" />
                                 <span class="cache-label">incr-patched</span>
                             </label>
                             <div class="tooltip">?
@@ -352,7 +362,8 @@
                         <span class="tooltip">?
                             <span class="tooltiptext">
                                 Whether to filter out all benchmarks that do not show significant changes. A significant
-                                change is any change above 0.2% for non-noisy benchmarks and 1.0% for noisy ones.
+                                change is any change greater than or equal to 0.2% for non-noisy benchmarks and above
+                                1.0% for noisy ones.
                             </span>
                         </span>
                     </div>
@@ -361,30 +372,35 @@
             </div>
         </fieldset>
         <div v-if="data" id="content" style="margin-top: 15px">
-            <div style="display: flex; justify-content: space-evenly;">
-                <span style="font-weight: bold;">Summary:</span>
-                <span class="summary positive">
-                    {{summary.numRegressed}}
-                    <svg style="width:18px;height:18px" viewBox="0 0 24 24">
-                        <path
-                            d="M16,18L18.29,15.71L13.41,10.83L9.41,14.83L2,7.41L3.41,6L9.41,12L13.41,8L19.71,14.29L22,12V18H16Z">
-                        </path>
-                    </svg>
-                </span>
-                <span class="summary">
-                    {{summary.numUnchanged}}
-                    <svg style="width:18px;height:18px" viewBox="0 0 24 24">
-                        <path d="M22,12L18,8V11H3V13H18V16L22,12Z"></path>
-                    </svg>
-                </span>
-                <span class="summary negative">
-                    {{summary.numImproved}}
-                    <svg style="width:18px;height:18px" viewBox="0 0 24 24">
-                        <path
-                            d="M16,6L18.29,8.29L13.41,13.17L9.41,9.17L2,16.59L3.41,18L9.41,12L13.41,16L19.71,9.71L22,12V6H16Z">
-                        </path>
-                    </svg>
-                </span>
+            <div id="summary">
+                <div v-for="summaryPair in Object.entries(summary)" style="display: flex;">
+                    <span style="font-weight: bold; width: 30%; margin-left: 15%; text-transform: capitalize;">{{
+                        summaryPair[0] }}:</span>
+                    <div style="display: flex; justify-content: flex-end; width: 80%; margin-right: 15%;">
+                        <span class="summary positive">
+                            {{summaryPair[1].regressions.toString().padStart(3, "&nbsp;")}}
+                            <svg style="width:18px;height:18px" viewBox="0 0 24 24">
+                                <path
+                                    d="M16,18L18.29,15.71L13.41,10.83L9.41,14.83L2,7.41L3.41,6L9.41,12L13.41,8L19.71,14.29L22,12V18H16Z">
+                                </path>
+                            </svg>
+                        </span>
+                        <span class="summary">
+                            {{summaryPair[1].unchanged.toString().padStart(3, "&nbsp;")}}
+                            <svg style="width:18px;height:18px" viewBox="0 0 24 24">
+                                <path d="M22,12L18,8V11H3V13H18V16L22,12Z"></path>
+                            </svg>
+                        </span>
+                        <span class="summary negative">
+                            {{summaryPair[1].improvements.toString().padStart(3, "&nbsp;")}}
+                            <svg style="width:18px;height:18px" viewBox="0 0 24 24">
+                                <path
+                                    d="M16,6L18.29,8.29L13.41,13.17L9.41,9.17L2,16.59L3.41,18L9.41,12L13.41,16L19.71,9.71L22,12V6H16Z">
+                                </path>
+                            </svg>
+                        </span>
+                    </div>
+                </div>
             </div>
             <table id="benches" class="compare">
                 <template v-for="bench in benches">
@@ -407,7 +423,7 @@
                                     <a
                                         v-bind:href="percentLink(data.b.commit, data.a.commit, bench.name, run.casename)">
                                         <span v-bind:class="percentClass(run.percent)">
-                                            {{ run.percent }}%{{run.isDodgy ? "?" : ""}}
+                                            {{ run.percent.toFixed(2) }}%{{run.isDodgy ? "?" : ""}}
                                         </span>
                                     </a>
                                 </td>
@@ -520,11 +536,7 @@
                             if (!datumB) {
                                 continue;
                             }
-                            let percent = (100 * (datumB - datumA) / datumA).toFixed(1);
-                            if (percent === "-0.0") {
-                                percent = "0.0";
-                            }
-
+                            let percent = (100 * (datumB - datumA) / datumA);
                             let isDodgy = false;
                             if (data.variance) {
                                 let variance = data.variance[name + "-" + key];
@@ -548,11 +560,10 @@
                         Object.keys(data.a.data).
                             filter(n => filter.name && filter.name.trim() ? n.includes(filter.name.trim()) : true).
                             map(name => {
-                                const variants = toVariants(name).filter(v => filter.showOnlySignificant ? isSignificant(v) : true);
+                                const variants = toVariants(name).filter(v => filter.showOnlySignificant ? isSignificant(v.percent, v.isDodgy) : true);
                                 const pcts = variants.map(field => parseFloat(field.percent));
                                 const maxPct = Math.max(...pcts).toFixed(1);
                                 const minPct = Math.min(...pcts).toFixed(1);
-                                const maxCasenameLen = Math.max(...variants.map(f => f.casename.length));
                                 if (variants.length > 0) {
                                     variants[0].first = true;
                                 }
@@ -562,7 +573,6 @@
                                     variants,
                                     maxPct,
                                     minPct,
-                                    maxCasenameLen,
                                 };
                             }).
                             filter(b => b.variants.length > 0);
@@ -626,34 +636,32 @@
                     return findQueryParam("stat") || "instructions:u";
                 },
                 summary() {
-                    let numRegressed = 0;
-                    let numImproved = 0;
-                    let numUnchanged = 0;
-                    for (let name of Object.keys(this.data.a.data)) {
-                        for (let d of this.data.a.data[name]) {
-                            const run = d[0];
+                    const filtered = Object.fromEntries(this.benches.map(b => [b.name, Object.fromEntries(b.variants.map(v => [v.casename, true]))]));
+                    const newCount = { regressions: 0, improvements: 0, unchanged: 0 }
+                    let result = { all: { ...newCount }, filtered: { ...newCount } }
+                    for (let benchmarkAndProfile of Object.keys(this.data.a.data)) {
+                        for (let d of this.data.a.data[benchmarkAndProfile]) {
+                            const scenario = d[0];
                             const datumA = d[1];
-                            const datumB = this.data.b.data[name]?.find(x => x[0] == run)?.[1];
+                            const datumB = this.data.b.data[benchmarkAndProfile]?.find(x => x[0] == scenario)?.[1];
                             if (!datumB) {
                                 continue;
                             }
                             let percent = 100 * ((datumB - datumA) / datumA);
-                            const isDodgy = this.isDodgy(name, run);
-                            const threshold = isDodgy ? 1.0 : 0.2;
-                            if (percent > threshold) {
-                                numRegressed += 1;
-                            } else if (percent < -threshold) {
-                                numImproved += 1;
+                            const isDodgy = this.isDodgy(benchmarkAndProfile, scenario);
+                            if (percent > 0 && isSignificant(percent, isDodgy)) {
+                                result.all.regressions += 1;
+                                result.filtered.regressions += filtered[benchmarkAndProfile]?.[scenario] || 0;
+                            } else if (percent < 0 && isSignificant(percent, isDodgy)) {
+                                result.all.improvements += 1;
+                                result.filtered.improvements += filtered[benchmarkAndProfile]?.[scenario] || 0;
                             } else {
-                                numUnchanged += 1
+                                result.all.unchanged += 1;
+                                result.filtered.unchanged += filtered[benchmarkAndProfile]?.[scenario] || 0;
                             }
                         }
                     }
-                    return {
-                        numRegressed,
-                        numImproved,
-                        numUnchanged,
-                    }
+                    return result;
 
                 }
             },
@@ -668,11 +676,11 @@
                     let klass = "";
                     if (pct > 1) {
                         klass = 'positive';
-                    } else if (pct > 0.1) {
+                    } else if (pct >= 0.2) {
                         klass = 'slightly-positive';
                     } else if (pct < -1) {
                         klass = 'negative';
-                    } else if (pct < -0.1) {
+                    } else if (pct <= -0.2) {
                         klass = 'slightly-negative';
                     }
                     return klass;
@@ -713,25 +721,24 @@
                     }
                     return result;
                 },
-                isDodgy(name, run) {
+                isDodgy(benchmarkAndProfile, scenario) {
                     let variance = this.data.variance;
                     if (!variance) {
                         return false;
                     }
-                    variance = this.data.variance[name + "-" + run];
+                    variance = this.data.variance[benchmarkAndProfile + "-" + scenario];
                     return (variance?.description?.type ?? "Normal") != "Normal";
-                }
+                },
             },
         });
 
-        function isSignificant(variant) {
-            const percent = Math.abs(variant.percent);
-            if (variant.isDodgy) {
-                return percent > 1.0;
+        function isSignificant(percent, isNoisy) {
+            const perAbs = Math.abs(percent);
+            if (isNoisy) {
+                return perAbs > 1.0;
             } else {
-                return percent > 0.2;
+                return perAbs >= 0.2;
             }
-
         }
 
         function toggleFilters(id, toggle) {
