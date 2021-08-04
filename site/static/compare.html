@@ -525,28 +525,23 @@
                             return true;
                         }
                     }
-                    function toVariants(name) {
+                    function toVariants(results) {
                         let variants = [];
-                        for (let d of data.a.data[name]) {
-                            const key = d[0];
-                            const datumA = d[1];
-                            const datumB = data.b.data[name]?.find(x => x[0] == key)?.[1];
-                            if (!datumB) {
-                                continue;
-                            }
+                        for (let r of results) {
+                            const scenarioName = r.scenario;
+                            const datumA = r.statistics[0];
+                            const datumB = r.statistics[1];
+                            const isSignificant = r.is_significant;
                             let percent = (100 * (datumB - datumA) / datumA);
-                            let isDodgy = false;
-                            if (data.variance) {
-                                let variance = data.variance[name + "-" + key];
-                                isDodgy = (variance?.description?.type ?? "Normal") != "Normal";
-                            }
-                            if (shouldShowBuild(key)) {
+                            let isDodgy = r.is_dodgy;
+                            if (shouldShowBuild(scenarioName)) {
                                 variants.push({
-                                    casename: key,
+                                    casename: scenarioName,
                                     datumA,
                                     datumB,
                                     percent,
                                     isDodgy,
+                                    isSignificant
                                 });
                             }
                         }
@@ -555,25 +550,33 @@
                     }
 
                     let benches =
-                        Object.keys(data.a.data).
-                            filter(n => filter.name && filter.name.trim() ? n.includes(filter.name.trim()) : true).
-                            map(name => {
-                                const variants = toVariants(name).filter(v => filter.showOnlySignificant ? isSignificant(v.percent, v.isDodgy) : true);
-                                const pcts = variants.map(field => parseFloat(field.percent));
-                                const maxPct = Math.max(...pcts).toFixed(1);
-                                const minPct = Math.min(...pcts).toFixed(1);
-                                if (variants.length > 0) {
-                                    variants[0].first = true;
-                                }
+                        data.comparisons.
+                            filter(n => filter.name && filter.name.trim() ? n.benchmark.includes(filter.name.trim()) : true).
+                            reduce((accum, next) => {
+                                accum[next.benchmark + "-" + next.profile] ||= [];
+                                accum[next.benchmark + "-" + next.profile].push(next);
+                                return accum;
+                            }, {});
+                    benches = Object.entries(benches).
+                        map(c => {
+                            const name = c[0];
+                            const comparison = c[1];
+                            const variants = toVariants(comparison).filter(v => filter.showOnlySignificant ? v.isSignificant : true);
+                            const pcts = variants.map(field => parseFloat(field.percent));
+                            const maxPct = Math.max(...pcts).toFixed(1);
+                            const minPct = Math.min(...pcts).toFixed(1);
+                            if (variants.length > 0) {
+                                variants[0].first = true;
+                            }
 
-                                return {
-                                    name,
-                                    variants,
-                                    maxPct,
-                                    minPct,
-                                };
-                            }).
-                            filter(b => b.variants.length > 0);
+                            return {
+                                name,
+                                variants,
+                                maxPct,
+                                minPct,
+                            };
+                        }).
+                        filter(b => b.variants.length > 0);
 
                     const largestChange = a => Math.max(Math.abs(a.minPct), Math.abs(a.maxPct));
                     benches.sort((a, b) => largestChange(b) - largestChange(a));
@@ -634,29 +637,25 @@
                     return findQueryParam("stat") || "instructions:u";
                 },
                 summary() {
-                    const filtered = Object.fromEntries(this.benches.map(b => [b.name, Object.fromEntries(b.variants.map(v => [v.casename, true]))]));
+                    // Create object with each test case that is not filtered out as a key
+                    const filtered = Object.fromEntries(this.benches.flatMap(b => b.variants.map(v => [b.name + "-" + v.casename, true])));
                     const newCount = { regressions: 0, improvements: 0, unchanged: 0 }
                     let result = { all: { ...newCount }, filtered: { ...newCount } }
-                    for (let benchmarkAndProfile of Object.keys(this.data.a.data)) {
-                        for (let d of this.data.a.data[benchmarkAndProfile]) {
-                            const scenario = d[0];
-                            const datumA = d[1];
-                            const datumB = this.data.b.data[benchmarkAndProfile]?.find(x => x[0] == scenario)?.[1];
-                            if (!datumB) {
-                                continue;
-                            }
-                            let percent = 100 * ((datumB - datumA) / datumA);
-                            const isDodgy = this.isDodgy(benchmarkAndProfile, scenario);
-                            if (percent > 0 && isSignificant(percent, isDodgy)) {
-                                result.all.regressions += 1;
-                                result.filtered.regressions += filtered[benchmarkAndProfile]?.[scenario] || 0;
-                            } else if (percent < 0 && isSignificant(percent, isDodgy)) {
-                                result.all.improvements += 1;
-                                result.filtered.improvements += filtered[benchmarkAndProfile]?.[scenario] || 0;
-                            } else {
-                                result.all.unchanged += 1;
-                                result.filtered.unchanged += filtered[benchmarkAndProfile]?.[scenario] || 0;
-                            }
+                    for (let d of this.data.comparisons) {
+                        const testCase = testCaseString(d)
+                        const scenario = d.scenario;
+                        const datumA = d.statistics[0];
+                        const datumB = d.statistics[1];
+                        let percent = 100 * ((datumB - datumA) / datumA);
+                        if (percent > 0 && d.is_significant) {
+                            result.all.regressions += 1;
+                            result.filtered.regressions += filtered[testCase] || 0;
+                        } else if (percent < 0 && d.is_significant) {
+                            result.all.improvements += 1;
+                            result.filtered.improvements += filtered[testCase] || 0;
+                        } else {
+                            result.all.unchanged += 1;
+                            result.filtered.unchanged += filtered[testCase] || 0;
                         }
                     }
                     return result;
@@ -719,25 +718,8 @@
                     }
                     return result;
                 },
-                isDodgy(benchmarkAndProfile, scenario) {
-                    let variance = this.data.variance;
-                    if (!variance) {
-                        return false;
-                    }
-                    variance = this.data.variance[benchmarkAndProfile + "-" + scenario];
-                    return (variance?.description?.type ?? "Normal") != "Normal";
-                },
             },
         });
-
-        function isSignificant(percent, isNoisy) {
-            const perAbs = Math.abs(percent);
-            if (isNoisy) {
-                return perAbs > 1.0;
-            } else {
-                return perAbs >= 0.2;
-            }
-        }
 
         function toggleFilters(id, toggle) {
             let styles = document.getElementById(id).style;
@@ -752,6 +734,10 @@
         }
         toggleFilters("filters-content", "filters-toggle-indicator");
         toggleFilters("search-content", "search-toggle-indicator");
+
+        function testCaseString(testCase) {
+            return testCase.benchmark + "-" + testCase.profile + "-" + testCase.scenario;
+        }
 
         document.getElementById("filters-toggle").onclick = (e) => {
             toggleFilters("filters-content", "filters-toggle-indicator");

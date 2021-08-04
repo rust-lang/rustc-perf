@@ -641,7 +641,7 @@ pub struct BenchmarkComparison {
     results: (f64, f64),
 }
 
-const SIGNIFICANCE_THRESHOLD: f64 = 0.01;
+const SIGNIFICANCE_THRESHOLD: f64 = 0.001;
 impl BenchmarkComparison {
     fn log_change(&self) -> f64 {
         let (a, b) = self.results;
