@@ -22,13 +22,15 @@ At the core of comparison analysis are the collection of test results for the tw
 
 Analysis of the changes is performed in order to determine whether artifact B represents a performance change over artifact A. At a high level the analysis performed takes the following form:
 
-Are there 1 or more _significant_ test results that indicate performance changes. If all significant test results indicate regressions (i.e., all percent relative changes are positive), then artifact B represents a performance regression over artifact A. If all significant test results indicate improvements (i.e., all percent relative changes are negative), then artifact B represents a performance improvement over artifact B. If some significant test results indicate improvement and others indicate regressions, then the performance change is mixed.
+How many _significant_ test results indicate performance changes? If all significant test results indicate regressions (i.e., all percent relative changes are positive), then artifact B represents a performance regression over artifact A. If all significant test results indicate improvements (i.e., all percent relative changes are negative), then artifact B represents a performance improvement over artifact B. If some significant test results indicate improvement and others indicate regressions, then the performance change is mixed.
 
-* What makes a test result significant?
+Whether we actually _report_ an analysis or not depends on the context and how _confident_ we are in the summary of the results (see below for an explanation of how confidence is derived). For example, in pull request performance "try" runs, we report a performance change if we are at least confident that the results are "probably relevant", while for the triage report, we only report if the we are confident the results are "definitely relevant".
+
+### What makes a test result significant?
 
 A test result is significant if the relative change percentage meets some threshold. What the threshold is depends of whether the test case is "dodgy" or not (see below for an examination of "dodginess"). For dodgy test cases, the threshold is set at 1%. For non-dodgy test cases, the threshold is set to 0.1%.
 
-* What makes a test case "dodgy"?
+### What makes a test case "dodgy"?
 
 A test case is "dodgy" if it shows signs of either being noisy or highly variable.
 
@@ -43,3 +45,13 @@ Any relative delta change that is above a threshold (currently 0.1) is considere
 A highly variable test case is one where a certain percentage (currently 5%) of relative delta changes are significant. The logic being that test cases should only display significant relative delta changes a small percentage of the time.
 
 A noisy test case is one where of all the non-significant relative delta changes, the average delta change is still above some threshold (0.001). The logic being that non-significant changes should, on average, being very close to 0. If they are not close to zero, then they are noisy.
+
+### How is confidence in whether a test analysis is "relevant" determined?
+
+The confidence in whether a test analysis is relevant depends on the number of significant test results. Depending on that number a confidence level is reached:
+
+* Maybe relevant: 0-3 changes 
+* Probably relevant: 4-6 changes 
+* Definitely relevant: >6 changes 
+
+Note: changes can be any combination of positive or negative changes.

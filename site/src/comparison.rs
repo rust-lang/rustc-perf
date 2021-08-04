@@ -122,24 +122,30 @@ pub async fn handle_compare(
 
 async fn populate_report(comparison: &Comparison, report: &mut HashMap<Direction, Vec<String>>) {
     if let Some(summary) = ComparisonSummary::summarize_comparison(comparison) {
-        if let Some(direction) = summary.direction() {
-            let entry = report.entry(direction).or_default();
+        if summary.confidence().is_definitely_relevant() {
+            if let Some(direction) = summary.direction() {
+                let entry = report.entry(direction).or_default();
 
-            entry.push(summary.write(comparison).await)
+                entry.push(summary.write(comparison).await)
+            }
         }
     }
 }
 
 pub struct ComparisonSummary {
-    hi: Option<TestResultComparison>,
-    lo: Option<TestResultComparison>,
+    /// Significant comparisons
+    comparisons: Vec<TestResultComparison>,
 }
 
 impl ComparisonSummary {
     pub fn summarize_comparison(comparison: &Comparison) -> Option<ComparisonSummary> {
-        let mut benchmarks = comparison.get_benchmarks().collect::<Vec<_>>();
+        let mut comparisons = comparison
+            .get_benchmarks()
+            .filter(|c| c.is_significant())
+            .cloned()
+            .collect::<Vec<_>>();
         // Skip empty commits, sometimes happens if there's a compiler bug or so.
-        if benchmarks.len() == 0 {
+        if comparisons.len() == 0 {
             return None;
         }
 
@@ -148,27 +154,17 @@ impl ComparisonSummary {
                 .partial_cmp(&b2.log_change())
                 .unwrap_or(std::cmp::Ordering::Equal)
         };
-        let lo = benchmarks
-            .iter()
-            .enumerate()
-            .min_by(|&(_, b1), &(_, b2)| cmp(b1, b2))
-            .filter(|(_, c)| c.is_significant() && !c.is_increase())
-            .map(|(i, _)| i);
-        let lo = lo.map(|lo| benchmarks.remove(lo)).cloned();
-        let hi = benchmarks
-            .iter()
-            .enumerate()
-            .max_by(|&(_, b1), &(_, b2)| cmp(b1, b2))
-            .filter(|(_, c)| c.is_significant() && c.is_increase())
-            .map(|(i, _)| i);
-        let hi = hi.map(|hi| benchmarks.remove(hi)).cloned();
+        comparisons.sort_by(cmp);
 
-        Some(ComparisonSummary { hi, lo })
+        Some(ComparisonSummary { comparisons })
     }
 
     /// The direction of the changes
     pub fn direction(&self) -> Option<Direction> {
-        let d = match (&self.hi, &self.lo) {
+        let d = match (
+            self.largest_positive_change(),
+            &self.largest_negative_change(),
+        ) {
             (None, None) => return None,
             (Some(b), None) => b.direction(),
             (None, Some(b)) => b.direction(),
@@ -178,22 +174,31 @@ impl ComparisonSummary {
         Some(d)
     }
 
-    /// The changes ordered by their signficance (most significant first)
-    pub fn ordered_changes(&self) -> Vec<&TestResultComparison> {
-        match (&self.hi, &self.lo) {
-            (None, None) => Vec::new(),
-            (Some(b), None) => vec![b],
-            (None, Some(b)) => vec![b],
-            (Some(a), Some(b))
-                if b.log_change()
-                    .abs()
-                    .partial_cmp(&a.log_change().abs())
-                    .unwrap_or(std::cmp::Ordering::Equal)
-                    == std::cmp::Ordering::Greater =>
-            {
-                vec![b, a]
-            }
-            (Some(a), Some(b)) => vec![a, b],
+    /// The n largest changes ordered by the magnitude of their change
+    pub fn largest_changes(&self, n: usize) -> Vec<&TestResultComparison> {
+        let mut changes: Vec<&TestResultComparison> = self.comparisons.iter().take(n).collect();
+        changes.sort_by(|a, b| {
+            b.log_change()
+                .abs()
+                .partial_cmp(&a.log_change().abs())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        changes
+    }
+
+    pub fn largest_positive_change(&self) -> Option<&TestResultComparison> {
+        self.comparisons.first().filter(|s| s.is_increase())
+    }
+
+    pub fn largest_negative_change(&self) -> Option<&TestResultComparison> {
+        self.comparisons.last().filter(|s| !s.is_increase())
+    }
+
+    pub fn confidence(&self) -> ComparisonConfidence {
+        match self.comparisons.len() {
+            0..=3 => ComparisonConfidence::MaybeRelevant,
+            4..=6 => ComparisonConfidence::ProbablyRelevant,
+            _ => ComparisonConfidence::DefinitelyRelevant,
         }
     }
 
@@ -213,11 +218,30 @@ impl ComparisonSummary {
         let end = &comparison.b.artifact;
         let link = &compare_link(start, end);
 
-        for change in self.ordered_changes() {
+        for change in self.largest_changes(2) {
             write!(result, "- ").unwrap();
             change.summary_line(&mut result, Some(link))
         }
         result
+    }
+}
+
+/// The amount of confidence we have that a comparison actually represents a real
+/// change in the performance characteristics.
+#[derive(Clone, Copy)]
+pub enum ComparisonConfidence {
+    MaybeRelevant,
+    ProbablyRelevant,
+    DefinitelyRelevant,
+}
+
+impl ComparisonConfidence {
+    pub fn is_definitely_relevant(self) -> bool {
+        matches!(self, Self::DefinitelyRelevant)
+    }
+
+    pub fn is_atleast_probably_relevant(self) -> bool {
+        matches!(self, Self::DefinitelyRelevant | Self::ProbablyRelevant)
     }
 }
 
