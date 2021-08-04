@@ -12,7 +12,7 @@ use collector::Bound;
 use log::debug;
 use serde::Serialize;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::hash::Hash;
 use std::sync::Arc;
@@ -96,12 +96,29 @@ pub async fn handle_compare(
     let prev = comparison.prev(&master_commits);
     let next = comparison.next(&master_commits);
     let is_contiguous = comparison.is_contiguous(&*conn, &master_commits).await;
+    let comparisons = comparison
+        .statistics
+        .into_iter()
+        .map(|comparison| api::comparison::Comparison {
+            benchmark: comparison.benchmark.to_string(),
+            profile: comparison.profile.to_string(),
+            scenario: comparison.scenario.to_string(),
+            is_dodgy: comparison
+                .variance
+                .as_ref()
+                .map(|v| v.is_dodgy())
+                .unwrap_or(false),
+            is_significant: comparison.is_significant(),
+            historical_statistics: comparison.variance.map(|v| v.data),
+            statistics: comparison.results,
+        })
+        .collect();
 
     Ok(api::comparison::Response {
-        variance: comparison.benchmark_variances.map(|b| b.data),
         prev,
         a: comparison.a.into(),
         b: comparison.b.into(),
+        comparisons,
         next,
         is_contiguous,
     })
@@ -124,7 +141,7 @@ pub struct ComparisonSummary {
 
 impl ComparisonSummary {
     pub fn summarize_comparison(comparison: &Comparison) -> Option<ComparisonSummary> {
-        let mut benchmarks = comparison.get_benchmarks();
+        let mut benchmarks = comparison.get_benchmarks().collect::<Vec<_>>();
         // Skip empty commits, sometimes happens if there's a compiler bug or so.
         if benchmarks.len() == 0 {
             return None;
@@ -141,14 +158,14 @@ impl ComparisonSummary {
             .min_by(|&(_, b1), &(_, b2)| cmp(b1, b2))
             .filter(|(_, c)| c.is_significant() && !c.is_increase())
             .map(|(i, _)| i);
-        let lo = lo.map(|lo| benchmarks.remove(lo));
+        let lo = lo.map(|lo| benchmarks.remove(lo)).cloned();
         let hi = benchmarks
             .iter()
             .enumerate()
             .max_by(|&(_, b1), &(_, b2)| cmp(b1, b2))
             .filter(|(_, c)| c.is_significant() && c.is_increase())
             .map(|(i, _)| i);
-        let hi = hi.map(|hi| benchmarks.remove(hi));
+        let hi = hi.map(|hi| benchmarks.remove(hi)).cloned();
 
         Some(ComparisonSummary { hi, lo })
     }
@@ -250,11 +267,30 @@ async fn compare_given_commits(
     let mut responses = ctxt.statistic_series(query.clone(), aids).await?;
 
     let conn = ctxt.conn().await;
+    let statistics_for_a = statistics_from_series(&mut responses);
+    let statistics_for_b = statistics_from_series(&mut responses);
+
+    let variances = BenchmarkVariances::calculate(ctxt, a.clone(), master_commits, stat).await?;
+    let statistics = statistics_for_a
+        .into_iter()
+        .filter_map(|(test_case, a)| {
+            statistics_for_b
+                .get(&test_case)
+                .map(|&b| BenchmarkComparison {
+                    benchmark: test_case.0,
+                    profile: test_case.1,
+                    scenario: test_case.2,
+                    variance: variances
+                        .as_ref()
+                        .and_then(|v| v.data.get(&test_case).cloned()),
+                    results: (a, b),
+                })
+        })
+        .collect();
     Ok(Some(Comparison {
-        benchmark_variances: BenchmarkVariances::calculate(ctxt, a.clone(), master_commits, stat)
-            .await?,
-        a: ArtifactData::consume_one(&*conn, a.clone(), &mut responses, master_commits).await,
-        b: ArtifactData::consume_one(&*conn, b.clone(), &mut responses, master_commits).await,
+        a: ArtifactDescription::for_artifact(&*conn, a.clone(), master_commits).await,
+        b: ArtifactDescription::for_artifact(&*conn, b.clone(), master_commits).await,
+        statistics,
     }))
 }
 
@@ -280,37 +316,30 @@ fn previous_commits(
     prevs
 }
 
-/// Data associated with a specific artifact
+/// Detailed description of a specific artifact
 #[derive(Debug, Clone)]
-pub struct ArtifactData {
+pub struct ArtifactDescription {
     /// The artifact in question
     pub artifact: ArtifactId,
     /// The pr of the artifact if known
     pub pr: Option<u32>,
-    /// Statistics based on benchmark, profile and scenario
-    pub statistics: StatisticsMap,
     /// Bootstrap data in the form "$crate" -> nanoseconds
     pub bootstrap: HashMap<String, u64>,
 }
 
-type StatisticsMap = HashMap<(Benchmark, Profile, Scenario), f64>;
+type StatisticsMap = HashMap<TestCase, f64>;
+type TestCase = (Benchmark, Profile, Scenario);
 
-impl ArtifactData {
+impl ArtifactDescription {
     /// For the given `ArtifactId`, consume the first datapoint in each of the given `SeriesResponse`
     ///
     /// It is assumed that the provided `ArtifactId` matches the artifact id of the next data
     /// point for all of `SeriesResponse<T>`. If this is not true, this function will panic.
-    async fn consume_one<'a, T>(
+    async fn for_artifact(
         conn: &dyn database::Connection,
         artifact: ArtifactId,
-        series: &mut [selector::SeriesResponse<T>],
         master_commits: &[collector::MasterCommit],
-    ) -> Self
-    where
-        T: Iterator<Item = (ArtifactId, Option<f64>)>,
-    {
-        let statistics = statistics_from_series(series);
-
+    ) -> Self {
         let bootstrap = conn
             .get_bootstrap(&[conn.artifact_id(&artifact).await])
             .await;
@@ -345,7 +374,6 @@ impl ArtifactData {
         Self {
             pr,
             artifact,
-            statistics,
             bootstrap,
         }
     }
@@ -372,16 +400,9 @@ where
     stats
 }
 
-impl From<ArtifactData> for api::comparison::ArtifactData {
-    fn from(data: ArtifactData) -> Self {
-        let mut stats: HashMap<String, Vec<(String, f64)>> = HashMap::new();
-        for ((benchmark, profile, scenario), value) in data.statistics {
-            stats
-                .entry(format!("{}-{}", benchmark, profile))
-                .or_default()
-                .push((scenario.to_string(), value))
-        }
-        api::comparison::ArtifactData {
+impl From<ArtifactDescription> for api::comparison::ArtifactDescription {
+    fn from(data: ArtifactDescription) -> Self {
+        api::comparison::ArtifactDescription {
             commit: match data.artifact.clone() {
                 ArtifactId::Commit(c) => c.sha,
                 ArtifactId::Tag(t) => t,
@@ -392,7 +413,6 @@ impl From<ArtifactData> for api::comparison::ArtifactData {
                 None
             },
             pr: data.pr,
-            data: stats,
             bootstrap: data.bootstrap,
         }
     }
@@ -400,12 +420,10 @@ impl From<ArtifactData> for api::comparison::ArtifactData {
 
 // A comparison of two artifacts
 pub struct Comparison {
-    /// Data on how variable benchmarks have historically been
-    ///
-    /// Is `None` if we cannot determine historical variance
-    pub benchmark_variances: Option<BenchmarkVariances>,
-    pub a: ArtifactData,
-    pub b: ArtifactData,
+    pub a: ArtifactDescription,
+    pub b: ArtifactDescription,
+    /// Statistics based on test case
+    pub statistics: HashSet<BenchmarkComparison>,
 }
 
 impl Comparison {
@@ -437,34 +455,16 @@ impl Comparison {
         next_commit(&self.b.artifact, master_commits).map(|c| c.sha.clone())
     }
 
-    fn get_benchmarks(&self) -> Vec<BenchmarkComparison> {
-        let mut result = Vec::new();
-        for (&(benchmark, profile, scenario), &a) in self.a.statistics.iter() {
-            if profile == Profile::Doc {
-                continue;
-            }
-
-            if let Some(&b) = self.b.statistics.get(&(benchmark, profile, scenario)) {
-                result.push(BenchmarkComparison {
-                    benchmark,
-                    profile,
-                    scenario,
-                    results: (a, b),
-                })
-            }
-        }
-
-        result
+    fn get_benchmarks(&self) -> impl Iterator<Item = &BenchmarkComparison> {
+        self.statistics.iter().filter(|b| b.profile != Profile::Doc)
     }
 }
 
 /// A description of the amount of variance a certain benchmark is historically
 /// experiencing at a given point in time.
 pub struct BenchmarkVariances {
-    /// Variance data on a per benchmark basis
-    /// Key: $benchmark-$profile-$cache
-    /// Value: `BenchmarkVariance`
-    pub data: HashMap<String, BenchmarkVariance>,
+    /// Variance data on a per test case basis
+    pub data: HashMap<(Benchmark, Profile, Scenario), BenchmarkVariance>,
 }
 
 impl BenchmarkVariances {
@@ -493,21 +493,18 @@ impl BenchmarkVariances {
             .statistic_series(query, previous_commits.clone())
             .await?;
 
-        let mut variance_data: HashMap<String, BenchmarkVariance> = HashMap::new();
+        let mut variance_data: HashMap<(Benchmark, Profile, Scenario), BenchmarkVariance> =
+            HashMap::new();
         for _ in previous_commits.iter() {
-            let series_data = statistics_from_series(&mut previous_commit_series);
-            for ((bench, profile, scenario), value) in series_data {
-                variance_data
-                    .entry(format!("{}-{}-{}", bench, profile, scenario))
-                    .or_default()
-                    .push(value);
+            for (test_case, stat) in statistics_from_series(&mut previous_commit_series) {
+                variance_data.entry(test_case).or_default().push(stat);
             }
         }
         if variance_data.len() < Self::MIN_PREVIOUS_COMMITS {
             return Ok(None);
         }
 
-        for (bench, results) in variance_data.iter_mut() {
+        for ((bench, _, _), results) in variance_data.iter_mut() {
             debug!("Calculating variance for: {}", bench);
             results.calculate_description();
         }
@@ -576,6 +573,15 @@ impl BenchmarkVariance {
             self.description = BenchmarkVarianceDescription::Noisy(percent_change);
         }
     }
+
+    /// Whether we can trust this benchmark or not
+    fn is_dodgy(&self) -> bool {
+        matches!(
+            self.description,
+            BenchmarkVarianceDescription::Noisy(_)
+                | BenchmarkVarianceDescription::HighlyVariable(_)
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -626,11 +632,12 @@ pub fn next_commit<'a>(
 }
 
 // A single comparison based on benchmark and cache state
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BenchmarkComparison {
     benchmark: Benchmark,
     profile: Profile,
     scenario: Scenario,
+    variance: Option<BenchmarkVariance>,
     results: (f64, f64),
 }
 
@@ -704,6 +711,22 @@ impl BenchmarkComparison {
             percent, self.scenario, self.benchmark
         )
         .unwrap();
+    }
+}
+impl std::cmp::PartialEq for BenchmarkComparison {
+    fn eq(&self, other: &Self) -> bool {
+        self.benchmark == other.benchmark
+            && self.profile == other.profile
+            && self.scenario == other.scenario
+    }
+}
+impl std::cmp::Eq for BenchmarkComparison {}
+
+impl std::hash::Hash for BenchmarkComparison {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.benchmark.hash(state);
+        self.profile.hash(state);
+        self.scenario.hash(state);
     }
 }
 
