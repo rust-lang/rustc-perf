@@ -103,11 +103,7 @@ pub async fn handle_compare(
             benchmark: comparison.benchmark.to_string(),
             profile: comparison.profile.to_string(),
             scenario: comparison.scenario.to_string(),
-            is_dodgy: comparison
-                .variance
-                .as_ref()
-                .map(|v| v.is_dodgy())
-                .unwrap_or(false),
+            is_dodgy: comparison.is_dodgy(),
             is_significant: comparison.is_significant(),
             historical_statistics: comparison.variance.map(|v| v.data),
             statistics: comparison.results,
@@ -135,8 +131,8 @@ async fn populate_report(comparison: &Comparison, report: &mut HashMap<Direction
 }
 
 pub struct ComparisonSummary {
-    hi: Option<BenchmarkComparison>,
-    lo: Option<BenchmarkComparison>,
+    hi: Option<TestResultComparison>,
+    lo: Option<TestResultComparison>,
 }
 
 impl ComparisonSummary {
@@ -147,7 +143,7 @@ impl ComparisonSummary {
             return None;
         }
 
-        let cmp = |b1: &BenchmarkComparison, b2: &BenchmarkComparison| {
+        let cmp = |b1: &TestResultComparison, b2: &TestResultComparison| {
             b1.log_change()
                 .partial_cmp(&b2.log_change())
                 .unwrap_or(std::cmp::Ordering::Equal)
@@ -183,7 +179,7 @@ impl ComparisonSummary {
     }
 
     /// The changes ordered by their signficance (most significant first)
-    pub fn ordered_changes(&self) -> Vec<&BenchmarkComparison> {
+    pub fn ordered_changes(&self) -> Vec<&TestResultComparison> {
         match (&self.hi, &self.lo) {
             (None, None) => Vec::new(),
             (Some(b), None) => vec![b],
@@ -276,7 +272,7 @@ async fn compare_given_commits(
         .filter_map(|(test_case, a)| {
             statistics_for_b
                 .get(&test_case)
-                .map(|&b| BenchmarkComparison {
+                .map(|&b| TestResultComparison {
                     benchmark: test_case.0,
                     profile: test_case.1,
                     scenario: test_case.2,
@@ -423,7 +419,7 @@ pub struct Comparison {
     pub a: ArtifactDescription,
     pub b: ArtifactDescription,
     /// Statistics based on test case
-    pub statistics: HashSet<BenchmarkComparison>,
+    pub statistics: HashSet<TestResultComparison>,
 }
 
 impl Comparison {
@@ -455,7 +451,7 @@ impl Comparison {
         next_commit(&self.b.artifact, master_commits).map(|c| c.sha.clone())
     }
 
-    fn get_benchmarks(&self) -> impl Iterator<Item = &BenchmarkComparison> {
+    fn get_benchmarks(&self) -> impl Iterator<Item = &TestResultComparison> {
         self.statistics.iter().filter(|b| b.profile != Profile::Doc)
     }
 }
@@ -631,9 +627,9 @@ pub fn next_commit<'a>(
     }
 }
 
-// A single comparison based on benchmark and cache state
+// A single comparison between two test results
 #[derive(Debug, Clone)]
-pub struct BenchmarkComparison {
+pub struct TestResultComparison {
     benchmark: Benchmark,
     profile: Profile,
     scenario: Scenario,
@@ -641,8 +637,15 @@ pub struct BenchmarkComparison {
     results: (f64, f64),
 }
 
-const SIGNIFICANCE_THRESHOLD: f64 = 0.001;
-impl BenchmarkComparison {
+impl TestResultComparison {
+    /// The amount of relative change considered significant when
+    /// the test case is not dodgy
+    const SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD: f64 = 0.01;
+
+    /// The amount of relative change considered significant when
+    /// the test case is dodgy
+    const SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD_DODGY: f64 = 1.0;
+
     fn log_change(&self) -> f64 {
         let (a, b) = self.results;
         (b / a).ln()
@@ -654,15 +657,20 @@ impl BenchmarkComparison {
     }
 
     fn is_significant(&self) -> bool {
-        // This particular test case frequently varies
-        if &self.benchmark == "coercions"
-            && self.profile == Profile::Debug
-            && matches!(self.scenario, Scenario::IncrementalPatch(p) if &p == "println")
-        {
-            self.relative_change().abs() > 2.0
+        let threshold = if self.is_dodgy() {
+            Self::SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD_DODGY
         } else {
-            self.log_change().abs() > SIGNIFICANCE_THRESHOLD
-        }
+            Self::SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD
+        };
+
+        self.relative_change().abs() > threshold
+    }
+
+    fn is_dodgy(&self) -> bool {
+        self.variance
+            .as_ref()
+            .map(|v| v.is_dodgy())
+            .unwrap_or(false)
     }
 
     fn relative_change(&self) -> f64 {
@@ -671,7 +679,7 @@ impl BenchmarkComparison {
     }
 
     fn direction(&self) -> Direction {
-        if self.log_change() > 0.0 {
+        if self.relative_change() > 0.0 {
             Direction::Regression
         } else {
             Direction::Improvement
@@ -680,7 +688,7 @@ impl BenchmarkComparison {
 
     pub fn summary_line(&self, summary: &mut String, link: Option<&str>) {
         use std::fmt::Write;
-        let magnitude = self.log_change().abs();
+        let magnitude = self.relative_change().abs();
         let size = if magnitude > 0.10 {
             "Very large"
         } else if magnitude > 0.05 {
@@ -713,16 +721,16 @@ impl BenchmarkComparison {
         .unwrap();
     }
 }
-impl std::cmp::PartialEq for BenchmarkComparison {
+impl std::cmp::PartialEq for TestResultComparison {
     fn eq(&self, other: &Self) -> bool {
         self.benchmark == other.benchmark
             && self.profile == other.profile
             && self.scenario == other.scenario
     }
 }
-impl std::cmp::Eq for BenchmarkComparison {}
+impl std::cmp::Eq for TestResultComparison {}
 
-impl std::hash::Hash for BenchmarkComparison {
+impl std::hash::Hash for TestResultComparison {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.benchmark.hash(state);
         self.profile.hash(state);
