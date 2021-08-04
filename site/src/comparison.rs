@@ -640,7 +640,7 @@ pub struct TestResultComparison {
 impl TestResultComparison {
     /// The amount of relative change considered significant when
     /// the test case is not dodgy
-    const SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD: f64 = 0.01;
+    const SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD: f64 = 0.001;
 
     /// The amount of relative change considered significant when
     /// the test case is dodgy
