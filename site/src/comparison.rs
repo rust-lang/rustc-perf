@@ -161,13 +161,10 @@ impl ComparisonSummary {
 
     /// The direction of the changes
     pub fn direction(&self) -> Option<Direction> {
-        let d = match (
-            self.largest_positive_change(),
-            &self.largest_negative_change(),
-        ) {
+        let d = match (self.largest_improvement(), self.largest_regression()) {
             (None, None) => return None,
-            (Some(b), None) => b.direction(),
-            (None, Some(b)) => b.direction(),
+            (Some(c), None) => c.direction(),
+            (None, Some(c)) => c.direction(),
             (Some(a), Some(b)) if a.is_increase() == b.is_increase() => a.direction(),
             _ => Direction::Mixed,
         };
@@ -186,12 +183,12 @@ impl ComparisonSummary {
         changes
     }
 
-    pub fn largest_positive_change(&self) -> Option<&TestResultComparison> {
-        self.comparisons.first().filter(|s| s.is_increase())
+    pub fn largest_improvement(&self) -> Option<&TestResultComparison> {
+        self.comparisons.iter().filter(|s| !s.is_increase()).next()
     }
 
-    pub fn largest_negative_change(&self) -> Option<&TestResultComparison> {
-        self.comparisons.last().filter(|s| !s.is_increase())
+    pub fn largest_regression(&self) -> Option<&TestResultComparison> {
+        self.comparisons.iter().filter(|s| s.is_increase()).next()
     }
 
     pub fn confidence(&self) -> ComparisonConfidence {
@@ -228,7 +225,7 @@ impl ComparisonSummary {
 
 /// The amount of confidence we have that a comparison actually represents a real
 /// change in the performance characteristics.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum ComparisonConfidence {
     MaybeRelevant,
     ProbablyRelevant,
@@ -658,7 +655,7 @@ pub struct TestResultComparison {
 impl TestResultComparison {
     /// The amount of relative change considered significant when
     /// the test case is not dodgy
-    const SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD: f64 = 0.001;
+    const SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD: f64 = 0.002;
 
     /// The amount of relative change considered significant when
     /// the test case is dodgy
@@ -757,7 +754,7 @@ impl std::hash::Hash for TestResultComparison {
 }
 
 // The direction of a performance change
-#[derive(PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq, Hash, Debug)]
 pub enum Direction {
     Improvement,
     Regression,
