@@ -928,15 +928,11 @@ impl Connection for SqliteConnection {
                 .unwrap()
                 .map(|r| r.unwrap())
                 .collect();
-            for (krate, duration) in rows {
+            for (krate, min_duration) in rows {
                 let v = results
                     .entry(krate)
-                    .or_insert_with(|| Vec::with_capacity(aids.len()));
-
-                if v.len() != idx {
-                    v.resize_with(idx, || None);
-                }
-                v.push(Some(Duration::from_nanos(duration as u64)));
+                    .or_insert_with(|| vec![None; aids.len()]);
+                v[idx] = Some(Duration::from_nanos(min_duration as u64));
             }
         }
 
