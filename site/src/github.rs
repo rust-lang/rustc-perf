@@ -630,7 +630,7 @@ async fn categorize_benchmark(
         "This change led to significant {} in compiler performance.\n",
         category
     );
-    for change in summary.largest_changes(2) {
+    for change in summary.relevant_changes().iter().filter_map(|c| *c) {
         write!(result, "- ").unwrap();
         change.summary_line(&mut result, None)
     }

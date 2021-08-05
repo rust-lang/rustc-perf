@@ -22,7 +22,16 @@ At the core of comparison analysis are the collection of test results for the tw
 
 Analysis of the changes is performed in order to determine whether artifact B represents a performance change over artifact A. At a high level the analysis performed takes the following form:
 
-How many _significant_ test results indicate performance changes? If all significant test results indicate regressions (i.e., all percent relative changes are positive), then artifact B represents a performance regression over artifact A. If all significant test results indicate improvements (i.e., all percent relative changes are negative), then artifact B represents a performance improvement over artifact B. If some significant test results indicate improvement and others indicate regressions, then the performance change is mixed.
+How many _significant_ test results indicate performance changes and what is the magnitude of the changes (i.e., how large are the changes regardless of the direction of change)? 
+
+* If there are improvements and regressions with magnitude of medium or above then the comparison is mixed.
+* If there are only either improvements or regressions then the comparison is labeled with that kind.
+* If one kind of changes are of medium or above magnitude (and the other kind are not), then the comparison is mixed if 15% or more of the total changes are the other (small magnitude) kind. For example:
+  * given 20 regressions (with at least 1 of medium magnitude) and all improvements of low magnitude, the comparison is only mixed if there are 4 or more improvements.
+  * given 5 regressions (with at least 1 of medium magnitude) and all improvements of low magnitude, the comparison is only mixed if there 1 or more improvements.
+* If both kinds of changes are all low magnitude changes, then the comparison is mixed unless 90% or more of total changes are of one kind. For example:
+  * given 20 changes of different kinds all of low magnitude, the result is mixed unless only 2 or fewer of the changes are of one kind.
+  * given 5 changes of different kinds all of low magnitude, the result is always mixed.
 
 Whether we actually _report_ an analysis or not depends on the context and how _confident_ we are in the summary of the results (see below for an explanation of how confidence is derived). For example, in pull request performance "try" runs, we report a performance change if we are at least confident that the results are "probably relevant", while for the triage report, we only report if the we are confident the results are "definitely relevant".
 
@@ -48,10 +57,9 @@ A noisy test case is one where of all the non-significant relative delta changes
 
 ### How is confidence in whether a test analysis is "relevant" determined?
 
-The confidence in whether a test analysis is relevant depends on the number of significant test results. Depending on that number a confidence level is reached:
+The confidence in whether a test analysis is relevant depends on the number of significant test results and their magnitude (how large a change is regardless of the direction of the change).
 
-* Maybe relevant: 0-3 changes 
-* Probably relevant: 4-6 changes 
-* Definitely relevant: >6 changes 
-
-Note: changes can be any combination of positive or negative changes.
+The actual algorithm for determining confidence may change, but in general the following rules apply:
+* Definitely relevant: any number of very large changes, a small amount of large and/or medium changes, or a large amount of small changes.
+* Probably relevant: any number of large changes, more than 1 medium change, or smaller but still substantial amount of small changes.
+* Maybe relevant: if it doesn't fit into the above two categories, it ends in this category.

@@ -133,7 +133,7 @@ async fn populate_report(comparison: &Comparison, report: &mut HashMap<Direction
 }
 
 pub struct ComparisonSummary {
-    /// Significant comparisons
+    /// Significant comparisons ordered by magnitude
     comparisons: Vec<TestResultComparison>,
 }
 
@@ -150,8 +150,8 @@ impl ComparisonSummary {
         }
 
         let cmp = |b1: &TestResultComparison, b2: &TestResultComparison| {
-            b1.log_change()
-                .partial_cmp(&b2.log_change())
+            b2.log_change()
+                .partial_cmp(&b1.log_change())
                 .unwrap_or(std::cmp::Ordering::Equal)
         };
         comparisons.sort_by(cmp);
@@ -161,41 +161,108 @@ impl ComparisonSummary {
 
     /// The direction of the changes
     pub fn direction(&self) -> Option<Direction> {
-        let d = match (self.largest_improvement(), self.largest_regression()) {
-            (None, None) => return None,
-            (Some(c), None) => c.direction(),
-            (None, Some(c)) => c.direction(),
-            (Some(a), Some(b)) if a.is_increase() == b.is_increase() => a.direction(),
-            _ => Direction::Mixed,
-        };
-        Some(d)
+        if self.comparisons.len() == 0 {
+            return None;
+        }
+
+        let (regressions, improvements): (Vec<&TestResultComparison>, _) =
+            self.comparisons.iter().partition(|c| c.is_regression());
+
+        if regressions.len() == 0 {
+            return Some(Direction::Improvement);
+        }
+
+        if improvements.len() == 0 {
+            return Some(Direction::Regression);
+        }
+
+        let total_num = self.comparisons.len();
+        let regressions_ratio = regressions.len() as f64 / total_num as f64;
+
+        let has_medium_and_above_regressions = regressions
+            .iter()
+            .any(|c| c.magnitude().is_medium_or_above());
+        let has_medium_and_above_improvements = improvements
+            .iter()
+            .any(|c| c.magnitude().is_medium_or_above());
+        match (
+            has_medium_and_above_improvements,
+            has_medium_and_above_regressions,
+        ) {
+            (true, true) => return Some(Direction::Mixed),
+            (true, false) => {
+                if regressions_ratio >= 0.15 {
+                    Some(Direction::Mixed)
+                } else {
+                    Some(Direction::Improvement)
+                }
+            }
+            (false, true) => {
+                if regressions_ratio < 0.85 {
+                    Some(Direction::Mixed)
+                } else {
+                    Some(Direction::Regression)
+                }
+            }
+            (false, false) => {
+                if regressions_ratio >= 0.1 && regressions_ratio <= 0.9 {
+                    Some(Direction::Mixed)
+                } else if regressions_ratio <= 0.1 {
+                    Some(Direction::Improvement)
+                } else {
+                    Some(Direction::Regression)
+                }
+            }
+        }
     }
 
-    /// The n largest changes ordered by the magnitude of their change
-    pub fn largest_changes(&self, n: usize) -> Vec<&TestResultComparison> {
-        let mut changes: Vec<&TestResultComparison> = self.comparisons.iter().take(n).collect();
-        changes.sort_by(|a, b| {
-            b.log_change()
-                .abs()
-                .partial_cmp(&a.log_change().abs())
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        changes
+    pub fn relevant_changes<'a>(&'a self) -> [Option<&TestResultComparison>; 2] {
+        match self.direction() {
+            Some(Direction::Improvement) => [self.largest_improvement(), None],
+            Some(Direction::Regression) => [self.largest_regression(), None],
+            Some(Direction::Mixed) => [self.largest_improvement(), self.largest_regression()],
+            None => [None, None],
+        }
     }
 
     pub fn largest_improvement(&self) -> Option<&TestResultComparison> {
-        self.comparisons.iter().filter(|s| !s.is_increase()).next()
+        self.comparisons
+            .iter()
+            .filter(|s| !s.is_regression())
+            .next()
     }
 
     pub fn largest_regression(&self) -> Option<&TestResultComparison> {
-        self.comparisons.iter().filter(|s| s.is_increase()).next()
+        self.comparisons.iter().filter(|s| s.is_regression()).next()
     }
 
     pub fn confidence(&self) -> ComparisonConfidence {
-        match self.comparisons.len() {
-            0..=3 => ComparisonConfidence::MaybeRelevant,
-            4..=6 => ComparisonConfidence::ProbablyRelevant,
-            _ => ComparisonConfidence::DefinitelyRelevant,
+        let mut num_small_changes = 0;
+        let mut num_medium_changes = 0;
+        let mut num_large_changes = 0;
+        let mut num_very_large_changes = 0;
+        for c in self.comparisons.iter() {
+            match c.magnitude() {
+                Magnitude::Small => num_small_changes += 1,
+                Magnitude::Medium => num_medium_changes += 1,
+                Magnitude::Large => num_large_changes += 1,
+                Magnitude::VeryLarge => num_very_large_changes += 1,
+            }
+        }
+
+        match (
+            num_medium_changes,
+            num_large_changes,
+            num_very_large_changes,
+        ) {
+            (_, _, vl) if vl > 0 => ComparisonConfidence::DefinitelyRelevant,
+            (m, l, _) if m + (l * 2) > 5 => ComparisonConfidence::DefinitelyRelevant,
+            (m, l, _) if m > 1 || l > 0 => ComparisonConfidence::ProbablyRelevant,
+            (m, _, _) => match m * 2 + num_small_changes {
+                0..=5 => ComparisonConfidence::MaybeRelevant,
+                6..=10 => ComparisonConfidence::ProbablyRelevant,
+                _ => ComparisonConfidence::DefinitelyRelevant,
+            },
         }
     }
 
@@ -215,7 +282,7 @@ impl ComparisonSummary {
         let end = &comparison.b.artifact;
         let link = &compare_link(start, end);
 
-        for change in self.largest_changes(2) {
+        for change in self.relevant_changes().iter().filter_map(|s| *s) {
             write!(result, "- ").unwrap();
             change.summary_line(&mut result, Some(link))
         }
@@ -666,7 +733,7 @@ impl TestResultComparison {
         (b / a).ln()
     }
 
-    fn is_increase(&self) -> bool {
+    fn is_regression(&self) -> bool {
         let (a, b) = self.results;
         b > a
     }
@@ -679,6 +746,19 @@ impl TestResultComparison {
         };
 
         self.relative_change().abs() > threshold
+    }
+
+    fn magnitude(&self) -> Magnitude {
+        let mag = self.relative_change().abs();
+        if mag < 0.01 {
+            Magnitude::Small
+        } else if mag < 0.04 {
+            Magnitude::Medium
+        } else if mag < 0.1 {
+            Magnitude::Large
+        } else {
+            Magnitude::VeryLarge
+        }
     }
 
     fn is_dodgy(&self) -> bool {
@@ -703,24 +783,13 @@ impl TestResultComparison {
 
     pub fn summary_line(&self, summary: &mut String, link: Option<&str>) {
         use std::fmt::Write;
-        let magnitude = self.relative_change().abs();
-        let size = if magnitude > 0.10 {
-            "Very large"
-        } else if magnitude > 0.05 {
-            "Large"
-        } else if magnitude > 0.01 {
-            "Moderate"
-        } else if magnitude > 0.005 {
-            "Small"
-        } else {
-            "Very small"
-        };
+        let magnitude = self.magnitude();
 
         let percent = self.relative_change() * 100.0;
         write!(
             summary,
             "{} {} in {}",
-            size,
+            magnitude,
             self.direction(),
             match link {
                 Some(l) => format!("[instruction counts]({})", l),
@@ -736,6 +805,7 @@ impl TestResultComparison {
         .unwrap();
     }
 }
+
 impl std::cmp::PartialEq for TestResultComparison {
     fn eq(&self, other: &Self) -> bool {
         self.benchmark == other.benchmark
@@ -743,6 +813,7 @@ impl std::cmp::PartialEq for TestResultComparison {
             && self.scenario == other.scenario
     }
 }
+
 impl std::cmp::Eq for TestResultComparison {}
 
 impl std::hash::Hash for TestResultComparison {
@@ -769,6 +840,33 @@ impl std::fmt::Display for Direction {
             Direction::Mixed => "mixed",
         };
         write!(f, "{}", description)
+    }
+}
+
+/// The relative size of a performance change
+#[derive(Debug)]
+enum Magnitude {
+    Small,
+    Medium,
+    Large,
+    VeryLarge,
+}
+
+impl Magnitude {
+    fn is_medium_or_above(&self) -> bool {
+        !matches!(self, Self::Small)
+    }
+}
+
+impl std::fmt::Display for Magnitude {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let s = match self {
+            Self::Small => "Small",
+            Self::Medium => "Moderate",
+            Self::Large => "Large",
+            Self::VeryLarge => "Very large",
+        };
+        f.write_str(s)
     }
 }
 
