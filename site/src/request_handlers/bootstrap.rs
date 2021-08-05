@@ -19,7 +19,7 @@ pub async fn handle_bootstrap(
         .collect::<FuturesOrdered<_>>()
         .collect::<Vec<_>>()
         .await;
-    let by_crate = conn.get_bootstrap(&ids).await;
+    let by_crate = conn.get_bootstrap_by_crate(&ids).await;
     let mut by_crate = by_crate
         .into_iter()
         .filter_map(|(k, v)| {

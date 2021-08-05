@@ -68,7 +68,7 @@ pub trait Connection: Send + Sync {
         value: Duration,
     );
 
-    async fn get_bootstrap(
+    async fn get_bootstrap_by_crate(
         &self,
         aids: &[ArtifactIdNumber],
     ) -> HashMap<String, Vec<Option<Duration>>>;
