@@ -545,8 +545,8 @@ impl BenchmarkVariance {
     const SIGNFICANT_DELTA_THRESHOLD: f64 = 0.01;
     /// The percentage of significant changes that we consider too high
     const SIGNFICANT_CHANGE_THRESHOLD: f64 = 5.0;
-    /// The percentage of change that constitutes noisy data
-    const NOISE_THRESHOLD: f64 = 0.1;
+    /// The ratio of change that constitutes noisy data
+    const NOISE_THRESHOLD: f64 = 0.001;
 
     fn push(&mut self, value: f64) {
         self.data.push(value);
@@ -580,17 +580,16 @@ impl BenchmarkVariance {
         );
 
         if percent_significant_changes > Self::SIGNFICANT_CHANGE_THRESHOLD {
-            self.description =
-                BenchmarkVarianceDescription::HighlyVariable(percent_significant_changes);
+            self.description = BenchmarkVarianceDescription::HighlyVariable;
             return;
         }
 
         let delta_mean =
             non_significant.iter().map(|(&d, _)| d).sum::<f64>() / (non_significant.len() as f64);
-        let percent_change = (delta_mean / results_mean) * 100.0;
-        debug!("Percent change: {:.3}%", percent_change);
-        if percent_change > Self::NOISE_THRESHOLD {
-            self.description = BenchmarkVarianceDescription::Noisy(percent_change);
+        let ratio_change = delta_mean / results_mean;
+        debug!("Ratio change: {:.3}", ratio_change);
+        if ratio_change > Self::NOISE_THRESHOLD {
+            self.description = BenchmarkVarianceDescription::Noisy;
         }
     }
 
@@ -598,8 +597,7 @@ impl BenchmarkVariance {
     fn is_dodgy(&self) -> bool {
         matches!(
             self.description,
-            BenchmarkVarianceDescription::Noisy(_)
-                | BenchmarkVarianceDescription::HighlyVariable(_)
+            BenchmarkVarianceDescription::Noisy | BenchmarkVarianceDescription::HighlyVariable
         )
     }
 }
@@ -610,14 +608,10 @@ pub enum BenchmarkVarianceDescription {
     Normal,
     /// A highly variable benchmark that produces many significant changes.
     /// This might indicate a benchmark which is very sensitive to compiler changes.
-    ///
-    /// Cotains the percentage of significant changes.
-    HighlyVariable(f64),
+    HighlyVariable,
     /// A noisy benchmark which is likely to see changes in performance simply between
     /// compiler runs.
-    ///
-    /// Contains the percent change that happens on average
-    Noisy(f64),
+    Noisy,
 }
 
 impl Default for BenchmarkVarianceDescription {
@@ -668,7 +662,7 @@ impl TestResultComparison {
 
     /// The amount of relative change considered significant when
     /// the test case is dodgy
-    const SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD_DODGY: f64 = 1.0;
+    const SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD_DODGY: f64 = 0.01;
 
     fn log_change(&self) -> f64 {
         let (a, b) = self.results;
