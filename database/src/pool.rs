@@ -67,7 +67,12 @@ pub trait Connection: Send + Sync {
         krate: &str,
         value: Duration,
     );
-
+    // Returns vector of bootstrap build times for the given artifacts. The kth
+    // element is the minimum build time for the kth artifact in `aids`, across
+    // all collections for the artifact, or none if there is no bootstrap data
+    // for that artifact (for example, because the rustc benchmark wasn't
+    // executed for that artifact).
+    async fn get_bootstrap(&self, aids: &[ArtifactIdNumber]) -> Vec<Option<Duration>>;
     // Returns map from rustc crate name to vector of build times for that crate
     // for the given artifacts. Within a crate's corresponding vector, the kth
     // element is the minimum build time for the kth artifact in `aids`, across

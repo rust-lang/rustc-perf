@@ -73,6 +73,7 @@
         <h3>This may take a while!</h3>
     </div>
     <div id="charts"></div>
+    <div id="totalChart"></div>
     <div id="as-of"></div>
     <a href="https://github.com/rust-lang-nursery/rustc-perf">
         <img style="position: absolute; top: 0; right: 0; border: 0;"
@@ -253,7 +254,7 @@
             }
 
             let plotOpts = genPlotOpts({
-                title: "Bootstrap timings for crates >= 30 seconds",
+                title: "Bootstrap time for crates >= 30 seconds",
                 width: Math.floor(window.innerWidth) - 16,
                 height: window.innerHeight * 0.75,
                 yAxisLabel: "",
@@ -262,6 +263,20 @@
             });
 
             let u = new uPlot(plotOpts, plotData, document.querySelector("#charts"));
+
+            let totalPlotData = [xVals, data.total_build_times];
+
+            let totalPlotOpts = genPlotOpts({
+                title: "Total bootstrap time",
+                width: Math.floor(window.innerWidth) - 16,
+                height: window.innerHeight * 0.75,
+                yAxisLabel: "",
+                series: [{}, { label: "rustc", stroke: '#7cb5ec' }],
+                commits: data.commits,
+            });
+
+            let totalPlot = new uPlot(totalPlotOpts, totalPlotData, document.querySelector("#totalChart"));
+
             document.querySelector("#loading").style.display = 'none';
         }
 

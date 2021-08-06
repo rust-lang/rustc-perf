@@ -264,6 +264,7 @@ impl<'a> Transaction for PostgresTransaction<'a> {
 pub struct CachedStatements {
     get_pstat: Statement,
     get_rustc_compilation: Statement,
+    get_rustc_compilation_by_crate: Statement,
     insert_pstat: Statement,
     insert_rustc: Statement,
     get_self_profile_query: Statement,
@@ -356,6 +357,16 @@ impl PostgresConnection {
                     .await
                     .unwrap(),
                 get_rustc_compilation: conn.prepare("
+                        select aid, min(total)
+                        from (
+                            select aid, sum(duration) as total
+                            from rustc_compilation
+                            where aid = any($1)
+                            group by cid
+                        )
+                        group by aid
+                    ").await.unwrap(),
+                get_rustc_compilation_by_crate: conn.prepare("
                         select
                             aid,
                             crate,
@@ -1184,6 +1195,35 @@ where
             .collect()
     }
 
+    async fn get_bootstrap(&self, aids: &[ArtifactIdNumber]) -> Vec<Option<Duration>> {
+        let mut result = vec![None; aids.len()];
+
+        let aid_to_idx = aids
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(idx, v)| (v, idx))
+            .collect::<HashMap<ArtifactIdNumber, usize>>();
+
+        let rows = self
+            .conn()
+            .query(
+                &self.statements().get_rustc_compilation,
+                &[&aids.iter().map(|v| v.0 as i32).collect::<Vec<_>>()],
+            )
+            .await
+            .unwrap();
+
+        for row in rows {
+            let aid = ArtifactIdNumber(row.get::<_, i32>(0) as u32);
+            let min_duration = row.get::<_, i64>(1);
+
+            result[aid_to_idx[&aid]] = Some(Duration::from_nanos(min_duration as u64));
+        }
+
+        result
+    }
+
     async fn get_bootstrap_by_crate(
         &self,
         aids: &[ArtifactIdNumber],
@@ -1198,7 +1238,7 @@ where
         let rows = self
             .conn()
             .query(
-                &self.statements().get_rustc_compilation,
+                &self.statements().get_rustc_compilation_by_crate,
                 &[&aids.iter().map(|v| v.0 as i32).collect::<Vec<_>>()],
             )
             .await

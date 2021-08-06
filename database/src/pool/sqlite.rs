@@ -911,6 +911,31 @@ impl Connection for SqliteConnection {
         Vec::new()
     }
 
+    async fn get_bootstrap(&self, aids: &[ArtifactIdNumber]) -> Vec<Option<Duration>> {
+        aids.into_iter()
+            .map(|aid| {
+                self.raw_ref()
+                    .prepare(
+                        "
+                        select min(total)
+                        from (
+                            select sum(duration) as total
+                            from rustc_compilation
+                            where aid = ?
+                            group by cid
+                        )
+                    ",
+                    )
+                    .unwrap()
+                    .query_row(params![&aid.0], |row| {
+                        Ok(Duration::from_nanos(row.get::<_, i64>(0)? as u64))
+                    })
+                    .optional()
+                    .unwrap()
+            })
+            .collect()
+    }
+
     async fn get_bootstrap_by_crate(
         &self,
         aids: &[ArtifactIdNumber],

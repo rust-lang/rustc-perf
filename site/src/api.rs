@@ -134,6 +134,8 @@ pub mod bootstrap {
         pub commits: Vec<(i64, String)>,
         // Optional nanoseconds
         pub by_crate: HashMap<String, Vec<Option<u64>>>,
+        // Each commit's total rustc build time in nanoseconds
+        pub total_build_times: Vec<Option<u64>>,
     }
 }
 
