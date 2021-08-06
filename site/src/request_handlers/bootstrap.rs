@@ -22,13 +22,13 @@ pub async fn handle_bootstrap(
         .collect::<Vec<_>>()
         .await;
 
-    let by_crate = conn.get_bootstrap_by_crate(&ids).await;
+    let by_crate_build_times = conn.get_bootstrap_by_crate(&ids).await;
 
     fn duration_as_nanos_u64(d: Duration) -> u64 {
         d.as_nanos() as u64
     }
 
-    let by_crate = by_crate
+    let by_crate_build_times = by_crate_build_times
         .into_iter()
         .filter_map(|(k, v)| {
             // We show any line that has at least one point exceeding the
@@ -61,7 +61,7 @@ pub async fn handle_bootstrap(
                 ArtifactId::Tag(_) => todo!(),
             })
             .collect(),
-        by_crate,
+        by_crate_build_times,
         total_build_times,
     })
 }
