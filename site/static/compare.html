@@ -443,7 +443,7 @@
                     <th v-if="bootstrapTotals.a && bootstrapTotals.b">
                         Total: {{(bootstrapTotals.b - bootstrapTotals.a).toFixed(1)}}
                         <div v-bind:class="diffClass(bootstrapTotals.b - bootstrapTotals.a)">
-                            ({{((bootstrapTotals.b - bootstrapTotals.a ) / bootstrapTotals.a).toFixed(3)}}%)
+                            ({{((bootstrapTotals.b - bootstrapTotals.a ) / bootstrapTotals.a * 100).toFixed(3)}}%)
                         </div>
                     </th>
                 </tr>
