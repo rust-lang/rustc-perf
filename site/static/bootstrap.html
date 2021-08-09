@@ -256,7 +256,7 @@
             let byChartPlotOpts = genPlotOpts({
                 title: "Bootstrap time for crates >= 30 seconds",
                 width: Math.floor(window.innerWidth) - 16,
-                height: window.innerHeight * 0.75,
+                height: window.innerHeight * 0.56,
                 yAxisLabel: "",
                 series: byChartSeriesOpts,
                 commits: data.commits,
@@ -269,7 +269,7 @@
             let totalPlotOpts = genPlotOpts({
                 title: "Total bootstrap time",
                 width: Math.floor(window.innerWidth) - 16,
-                height: window.innerHeight * 0.75,
+                height: window.innerHeight * 0.26,
                 yAxisLabel: "",
                 series: [{}, { label: "rustc", stroke: '#7cb5ec' }],
                 commits: data.commits,
