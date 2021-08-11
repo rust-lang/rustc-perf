@@ -314,7 +314,7 @@ impl ArtifactData {
         let data = data_from_series(series);
 
         let bootstrap = conn
-            .get_bootstrap_by_crate(&[conn.artifact_id(&artifact).await])
+            .get_bootstrap(&[conn.artifact_id(&artifact).await])
             .await;
         let bootstrap = bootstrap
             .into_iter()
