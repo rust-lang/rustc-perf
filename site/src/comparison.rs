@@ -945,7 +945,9 @@ Revision range: [{first_commit}..{last_commit}](https://perf.rust-lang.org/?star
 #### Probably changed
 
 The following is a list of comparisons which *probably* represent real performance changes,
-but we're not 100% sure.
+but we're not 100% sure. Please move things from this category into the categories
+above for changes you think *are* definitely relevant and file an issue for each so that
+we can consider how to change our heuristics.
 
 {unlabeled}
 
