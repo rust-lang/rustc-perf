@@ -911,32 +911,7 @@ impl Connection for SqliteConnection {
         Vec::new()
     }
 
-    async fn get_bootstrap(&self, aids: &[ArtifactIdNumber]) -> Vec<Option<Duration>> {
-        aids.into_iter()
-            .map(|aid| {
-                self.raw_ref()
-                    .prepare(
-                        "
-                        select min(total)
-                        from (
-                            select sum(duration) as total
-                            from rustc_compilation
-                            where aid = ?
-                            group by cid
-                        )
-                    ",
-                    )
-                    .unwrap()
-                    .query_row(params![&aid.0], |row| {
-                        Ok(Duration::from_nanos(row.get::<_, i64>(0)? as u64))
-                    })
-                    .optional()
-                    .unwrap()
-            })
-            .collect()
-    }
-
-    async fn get_bootstrap_by_crate(
+    async fn get_bootstrap(
         &self,
         aids: &[ArtifactIdNumber],
     ) -> HashMap<String, Vec<Option<Duration>>> {
@@ -953,11 +928,15 @@ impl Connection for SqliteConnection {
                 .unwrap()
                 .map(|r| r.unwrap())
                 .collect();
-            for (krate, min_duration) in rows {
+            for (krate, duration) in rows {
                 let v = results
                     .entry(krate)
-                    .or_insert_with(|| vec![None; aids.len()]);
-                v[idx] = Some(Duration::from_nanos(min_duration as u64));
+                    .or_insert_with(|| Vec::with_capacity(aids.len()));
+
+                if v.len() != idx {
+                    v.resize_with(idx, || None);
+                }
+                v.push(Some(Duration::from_nanos(duration as u64)));
             }
         }
 
