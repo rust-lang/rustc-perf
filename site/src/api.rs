@@ -138,7 +138,6 @@ pub mod bootstrap {
 }
 
 pub mod comparison {
-    use crate::comparison;
     use collector::Bound;
     use database::Date;
     use serde::{Deserialize, Serialize};
@@ -153,13 +152,12 @@ pub mod comparison {
 
     #[derive(Debug, Clone, Serialize)]
     pub struct Response {
-        /// The variance data for each benchmark, if any.
-        pub variance: Option<HashMap<String, comparison::BenchmarkVariance>>,
         /// The names for the previous artifact before `a`, if any.
         pub prev: Option<String>,
 
-        pub a: ArtifactData,
-        pub b: ArtifactData,
+        pub a: ArtifactDescription,
+        pub b: ArtifactDescription,
+        pub comparisons: Vec<Comparison>,
 
         /// The names for the next artifact after `b`, if any.
         pub next: Option<String>,
@@ -169,14 +167,24 @@ pub mod comparison {
         pub is_contiguous: bool,
     }
 
-    /// A serializable wrapper for `comparison::ArtifactData`.
     #[derive(Debug, Clone, Serialize)]
-    pub struct ArtifactData {
+    pub struct ArtifactDescription {
         pub commit: String,
         pub date: Option<Date>,
         pub pr: Option<u32>,
-        pub data: HashMap<String, Vec<(String, f64)>>,
         pub bootstrap: HashMap<String, u64>,
+    }
+
+    /// A serializable wrapper for `comparison::ArtifactData`.
+    #[derive(Debug, Clone, Serialize)]
+    pub struct Comparison {
+        pub benchmark: String,
+        pub profile: String,
+        pub scenario: String,
+        pub is_significant: bool,
+        pub is_dodgy: bool,
+        pub historical_statistics: Option<Vec<f64>>,
+        pub statistics: (f64, f64),
     }
 }
 

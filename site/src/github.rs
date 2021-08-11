@@ -606,7 +606,7 @@ async fn categorize_benchmark(
     const DISAGREEMENT: &str = "If you disagree with this performance assessment, \
     please file an issue in [rust-lang/rustc-perf](https://github.com/rust-lang/rustc-perf/issues/new).";
     let (summary, direction) = match ComparisonSummary::summarize_comparison(&comparison) {
-        Some(s) if s.direction().is_some() => {
+        Some(s) if s.confidence().is_atleast_probably_relevant() => {
             let direction = s.direction().unwrap();
             (s, direction)
         }
@@ -630,7 +630,7 @@ async fn categorize_benchmark(
         "This change led to significant {} in compiler performance.\n",
         category
     );
-    for change in summary.ordered_changes() {
+    for change in summary.relevant_changes().iter().filter_map(|c| *c) {
         write!(result, "- ").unwrap();
         change.summary_line(&mut result, None)
     }
