@@ -37,6 +37,7 @@ pub async fn handle_triage(
     let mut report = HashMap::new();
     let mut before = start.clone();
 
+    let mut num_comparisons = 0;
     loop {
         let comparison = match compare_given_commits(
             before,
@@ -56,6 +57,7 @@ pub async fn handle_triage(
                 break;
             }
         };
+        num_comparisons += 1;
         log::info!(
             "Comparing {} to {}",
             comparison.b.artifact,
@@ -77,7 +79,7 @@ pub async fn handle_triage(
     }
     let end = end.unwrap_or(next);
 
-    let report = generate_report(&start, &end, report).await;
+    let report = generate_report(&start, &end, report, num_comparisons).await;
     Ok(api::triage::Response(report))
 }
 
@@ -120,11 +122,17 @@ pub async fn handle_compare(
     })
 }
 
-async fn populate_report(comparison: &Comparison, report: &mut HashMap<Direction, Vec<String>>) {
+async fn populate_report(
+    comparison: &Comparison,
+    report: &mut HashMap<Option<Direction>, Vec<String>>,
+) {
     if let Some(summary) = ComparisonSummary::summarize_comparison(comparison) {
-        if summary.confidence().is_definitely_relevant() {
+        let confidence = summary.confidence();
+        if confidence.is_atleast_probably_relevant() {
             if let Some(direction) = summary.direction() {
-                let entry = report.entry(direction).or_default();
+                let entry = report
+                    .entry(confidence.is_definitely_relevant().then(|| direction))
+                    .or_default();
 
                 entry.push(summary.write(comparison).await)
             }
@@ -140,7 +148,7 @@ pub struct ComparisonSummary {
 impl ComparisonSummary {
     pub fn summarize_comparison(comparison: &Comparison) -> Option<ComparisonSummary> {
         let mut comparisons = comparison
-            .get_benchmarks()
+            .get_individual_comparisons()
             .filter(|c| c.is_significant())
             .cloned()
             .collect::<Vec<_>>();
@@ -150,8 +158,9 @@ impl ComparisonSummary {
         }
 
         let cmp = |b1: &TestResultComparison, b2: &TestResultComparison| {
-            b2.log_change()
-                .partial_cmp(&b1.log_change())
+            b2.relative_change()
+                .abs()
+                .partial_cmp(&b1.relative_change().abs())
                 .unwrap_or(std::cmp::Ordering::Equal)
         };
         comparisons.sort_by(cmp);
@@ -256,13 +265,15 @@ impl ComparisonSummary {
             num_very_large_changes,
         ) {
             (_, _, vl) if vl > 0 => ComparisonConfidence::DefinitelyRelevant,
-            (m, l, _) if m + (l * 2) > 5 => ComparisonConfidence::DefinitelyRelevant,
+            (m, l, _) if m + (l * 2) > 4 => ComparisonConfidence::DefinitelyRelevant,
             (m, l, _) if m > 1 || l > 0 => ComparisonConfidence::ProbablyRelevant,
-            (m, _, _) => match m * 2 + num_small_changes {
-                0..=5 => ComparisonConfidence::MaybeRelevant,
-                6..=10 => ComparisonConfidence::ProbablyRelevant,
-                _ => ComparisonConfidence::DefinitelyRelevant,
-            },
+            (m, _, _) => {
+                if (m * 2 + num_small_changes) > 10 {
+                    ComparisonConfidence::ProbablyRelevant
+                } else {
+                    ComparisonConfidence::MaybeRelevant
+                }
+            }
         }
     }
 
@@ -539,7 +550,7 @@ impl Comparison {
         next_commit(&self.b.artifact, master_commits).map(|c| c.sha.clone())
     }
 
-    fn get_benchmarks(&self) -> impl Iterator<Item = &TestResultComparison> {
+    fn get_individual_comparisons(&self) -> impl Iterator<Item = &TestResultComparison> {
         self.statistics.iter().filter(|b| b.profile != Profile::Doc)
     }
 }
@@ -726,12 +737,7 @@ impl TestResultComparison {
 
     /// The amount of relative change considered significant when
     /// the test case is dodgy
-    const SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD_DODGY: f64 = 0.01;
-
-    fn log_change(&self) -> f64 {
-        let (a, b) = self.results;
-        (b / a).ln()
-    }
+    const SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD_DODGY: f64 = 0.008;
 
     fn is_regression(&self) -> bool {
         let (a, b) = self.results;
@@ -739,22 +745,25 @@ impl TestResultComparison {
     }
 
     fn is_significant(&self) -> bool {
-        let threshold = if self.is_dodgy() {
+        self.relative_change().abs() > self.signifcance_threshold()
+    }
+
+    fn signifcance_threshold(&self) -> f64 {
+        if self.is_dodgy() {
             Self::SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD_DODGY
         } else {
             Self::SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD
-        };
-
-        self.relative_change().abs() > threshold
+        }
     }
 
     fn magnitude(&self) -> Magnitude {
         let mag = self.relative_change().abs();
-        if mag < 0.01 {
+        let threshold = self.signifcance_threshold();
+        if mag < threshold * 3.0 {
             Magnitude::Small
-        } else if mag < 0.04 {
+        } else if mag < threshold * 10.0 {
             Magnitude::Medium
-        } else if mag < 0.1 {
+        } else if mag < threshold * 25.0 {
             Magnitude::Large
         } else {
             Magnitude::VeryLarge
@@ -873,7 +882,8 @@ impl std::fmt::Display for Magnitude {
 async fn generate_report(
     start: &Bound,
     end: &Bound,
-    mut report: HashMap<Direction, Vec<String>>,
+    mut report: HashMap<Option<Direction>, Vec<String>>,
+    num_comparisons: usize,
 ) -> String {
     fn fmt_bound(bound: &Bound) -> String {
         match bound {
@@ -884,9 +894,14 @@ async fn generate_report(
     }
     let start = fmt_bound(start);
     let end = fmt_bound(end);
-    let regressions = report.remove(&Direction::Regression).unwrap_or_default();
-    let improvements = report.remove(&Direction::Improvement).unwrap_or_default();
-    let mixed = report.remove(&Direction::Mixed).unwrap_or_default();
+    let regressions = report
+        .remove(&Some(Direction::Regression))
+        .unwrap_or_default();
+    let improvements = report
+        .remove(&Some(Direction::Improvement))
+        .unwrap_or_default();
+    let mixed = report.remove(&Some(Direction::Mixed)).unwrap_or_default();
+    let unlabeled = report.remove(&None).unwrap_or_default();
     let untriaged = match github::untriaged_perf_regressions().await {
         Ok(u) => u
             .iter()
@@ -910,6 +925,8 @@ TODO: Summary
 
 Triage done by **@???**.
 Revision range: [{first_commit}..{last_commit}](https://perf.rust-lang.org/?start={first_commit}&end={last_commit}&absolute=false&stat=instructions%3Au)
+{num_comparisons} comparisons made in total
+{num_def_relevant} definitely relevant comparisons and {num_prob_relevant} probably relevant comparisons
 
 {num_regressions} Regressions, {num_improvements} Improvements, {num_mixed} Mixed; ??? of them in rollups
 
@@ -925,6 +942,13 @@ Revision range: [{first_commit}..{last_commit}](https://perf.rust-lang.org/?star
 
 {mixed}
 
+#### Probably changed
+
+The following is a list of comparisons which *probably* represent real performance changes,
+but we're not 100% sure.
+
+{unlabeled}
+
 #### Untriaged Pull Requests
 
 {untriaged}
@@ -937,12 +961,16 @@ TODO: Nags
         date = chrono::Utc::today().format("%Y-%m-%d"),
         first_commit = start,
         last_commit = end,
+        num_comparisons = num_comparisons,
+        num_def_relevant = regressions.len() + improvements.len() + mixed.len(),
+        num_prob_relevant = unlabeled.len(),
         num_regressions = regressions.len(),
         num_improvements = improvements.len(),
         num_mixed = mixed.len(),
         regressions = regressions.join("\n\n"),
         improvements = improvements.join("\n\n"),
         mixed = mixed.join("\n\n"),
+        unlabeled = unlabeled.join("\n\n"),
         untriaged = untriaged
     )
 }
