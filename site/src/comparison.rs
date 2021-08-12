@@ -266,9 +266,9 @@ impl ComparisonSummary {
         ) {
             (_, _, vl) if vl > 0 => ComparisonConfidence::DefinitelyRelevant,
             (m, l, _) if m + (l * 2) > 4 => ComparisonConfidence::DefinitelyRelevant,
-            (m, l, _) if m > 1 || l > 0 => ComparisonConfidence::ProbablyRelevant,
-            (m, _, _) => {
-                if (m * 2 + num_small_changes) > 10 {
+            (m, l, _) if m > 0 || l > 0 => ComparisonConfidence::ProbablyRelevant,
+            _ => {
+                if num_small_changes > 8 {
                     ComparisonConfidence::ProbablyRelevant
                 } else {
                     ComparisonConfidence::MaybeRelevant
