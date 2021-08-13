@@ -161,3 +161,22 @@ jobs:
           cargo build --bin site --release
           timeout 5s cargo run --bin site --release 'postgresql://postgres:postgres@localhost:5432/postgres' 2>&1 | tee -a log || true
           grep -Fxq "Loading complete but no data identified; exiting." log
+
+  database-check-sqlite:
+    name: Database Check (sqlite)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v2
+
+      - name: Install stable
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Connect to SQLite
+        run: |
+          cargo build --bin site --release
+          timeout 5s cargo run --bin site --release 2>&1 | tee -a log || true
+          grep -Fxq "Loading complete but no data identified; exiting." log
