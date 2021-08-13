@@ -436,7 +436,7 @@ impl ArtifactDescription {
         master_commits: &[collector::MasterCommit],
     ) -> Self {
         let bootstrap = conn
-            .get_bootstrap(&[conn.artifact_id(&artifact).await])
+            .get_bootstrap_by_crate(&[conn.artifact_id(&artifact).await])
             .await;
         let bootstrap = bootstrap
             .into_iter()

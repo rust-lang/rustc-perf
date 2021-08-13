@@ -72,7 +72,8 @@
         <h2>Loading &amp; rendering data..</h2>
         <h3>This may take a while!</h3>
     </div>
-    <div id="charts"></div>
+    <div id="byCrateChart"></div>
+    <div id="totalChart"></div>
     <div id="as-of"></div>
     <a href="https://github.com/rust-lang-nursery/rustc-perf">
         <img style="position: absolute; top: 0; right: 0; border: 0;"
@@ -232,36 +233,50 @@
         }
 
         function renderPlots(data, state) {
-            let seriesOpts = [{}];
+            let byChartSeriesOpts = [{}];
 
             let xVals = data.commits.map(c => c[0]);
-            let plotData = [xVals];
+            let byChartPlotData = [xVals];
             // https://sashamaps.net/docs/resources/20-colors/
             let colors = [
                 '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231',
                 '#911eb4', '#46f0f0', '#f032e6', '#a09b13', '#0ab0be',
                 'red', 'green', 'blue', 'purple'
             ];
-            let crates = Object.keys(data.by_crate).sort();
+            let crates = Object.keys(data.by_crate_build_times).sort();
             for (let crate of crates) {
-                plotData.push(data.by_crate[crate]);
+                byChartPlotData.push(data.by_crate_build_times[crate]);
 
-                seriesOpts.push({
+                byChartSeriesOpts.push({
                     label: crate,
                     stroke: colors.length ? colors.pop() : 'black',
                 });
             }
 
-            let plotOpts = genPlotOpts({
-                title: "Bootstrap timings for crates >= 30 seconds",
+            let byChartPlotOpts = genPlotOpts({
+                title: "Bootstrap time for crates >= 30 seconds",
                 width: Math.floor(window.innerWidth) - 16,
-                height: window.innerHeight * 0.75,
+                height: window.innerHeight * 0.56,
                 yAxisLabel: "",
-                series: seriesOpts,
+                series: byChartSeriesOpts,
                 commits: data.commits,
             });
 
-            let u = new uPlot(plotOpts, plotData, document.querySelector("#charts"));
+            let byChartPlot = new uPlot(byChartPlotOpts, byChartPlotData, document.querySelector("#byCrateChart"));
+
+            let totalPlotData = [xVals, data.total_build_times];
+
+            let totalPlotOpts = genPlotOpts({
+                title: "Total bootstrap time",
+                width: Math.floor(window.innerWidth) - 16,
+                height: window.innerHeight * 0.26,
+                yAxisLabel: "",
+                series: [{}, { label: "rustc", stroke: '#7cb5ec' }],
+                commits: data.commits,
+            });
+
+            let totalPlot = new uPlot(totalPlotOpts, totalPlotData, document.querySelector("#totalChart"));
+
             document.querySelector("#loading").style.display = 'none';
         }
 
