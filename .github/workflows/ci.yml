@@ -131,3 +131,33 @@ jobs:
       - name: Check benchmarks
         run: sh -x -c "ci/check-profiling.sh"
 
+  database-check-postgres:
+    name: Database Check (postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v2
+
+      - name: Install stable
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Connect to PostgreSQL
+        run: |
+          cargo build --bin site --release
+          timeout 5s cargo run --bin site --release 'postgresql://postgres:postgres@localhost:5432/postgres' 2>&1 | tee -a log || true
+          grep -Fxq "Loading complete but no data identified; exiting." log
