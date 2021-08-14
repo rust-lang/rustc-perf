@@ -15,7 +15,7 @@ pub trait InternString {
 #[macro_export]
 macro_rules! intern {
     (pub struct $for_ty:ident) => {
-        #[derive(Serialize, Debug, Copy, Clone)]
+        #[derive(Serialize, Debug, Copy, Clone, PartialEq, Eq, Hash)]
         pub struct $for_ty($crate::ArenaStr);
 
         impl $for_ty {
@@ -23,14 +23,6 @@ macro_rules! intern {
                 self.0.as_str()
             }
         }
-
-        impl std::cmp::PartialEq for $for_ty {
-            fn eq(&self, other: &Self) -> bool {
-                self.0.hash_ptr() == other.0.hash_ptr()
-            }
-        }
-
-        impl std::cmp::Eq for $for_ty {}
 
         impl std::cmp::PartialOrd for $for_ty {
             fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
@@ -41,12 +33,6 @@ macro_rules! intern {
         impl std::cmp::Ord for $for_ty {
             fn cmp(&self, other: &Self) -> std::cmp::Ordering {
                 self.0.as_str().cmp(other.0.as_str())
-            }
-        }
-
-        impl std::hash::Hash for $for_ty {
-            fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-                state.write_usize(self.0.hash_ptr());
             }
         }
 
@@ -135,56 +121,14 @@ lazy_static::lazy_static! {
 }
 
 pub fn preloaded<T: InternString>(value: &str) -> Option<T> {
-    let set = INTERNED.0.load();
-    unsafe { Some(T::to_interned(*set.get(value)?)) }
+    ArenaStr::preloaded(value).map(|s| unsafe { T::to_interned(s) })
 }
 
 pub fn intern<T: InternString>(value: &str) -> T {
-    preloaded(value).unwrap_or_else(|| {
-        let mut guard = INTERNED.1.lock();
-
-        if let Some(o) = preloaded(value) {
-            return o;
-        }
-
-        let (ref mut set, ref mut arena) = &mut *guard;
-        assert_eq!(set.len(), INTERNED.0.load().len());
-
-        let allocated = unsafe {
-            let ptr = arena.alloc_layout(
-                Layout::from_size_align(std::mem::size_of::<usize>() + value.len(), 1).unwrap(),
-            );
-            let start_at = ptr.as_ptr();
-            ptr::write(start_at as *mut _, value.len().to_ne_bytes());
-            let bytes = start_at.add(std::mem::size_of::<usize>());
-            ptr::copy_nonoverlapping(value.as_ptr(), bytes, value.len());
-
-            ArenaStr(ptr)
-        };
-
-        assert!(set.insert(allocated));
-        let ret = unsafe { T::to_interned(allocated) };
-
-        // We know that we have a Mutex around the arena so we're not worried
-        // about racing here, only one thread can store at a time.
-        let mut old = INTERNED.0.swap(Arc::new(std::mem::take(&mut guard.0)));
-
-        loop {
-            match Arc::try_unwrap(old) {
-                Ok(mut o) => {
-                    o.insert(allocated);
-                    guard.0 = o;
-                    break;
-                }
-                Err(e) => old = e,
-            }
-        }
-
-        ret
-    })
+    unsafe { T::to_interned(ArenaStr::intern(value)) }
 }
 
-#[derive(serde_derive::Serialize, Copy, Clone, PartialEq, Eq)]
+#[derive(serde_derive::Serialize, Copy, Clone, PartialEq, Eq, Hash)]
 #[serde(into = "&'static str")]
 pub struct ArenaStr(NonNull<u8>);
 
@@ -207,20 +151,59 @@ impl ArenaStr {
         }
     }
 
-    pub fn hash_ptr(self) -> usize {
-        self.0.as_ptr() as usize
+    pub fn preloaded(value: &str) -> Option<ArenaStr> {
+        let set = INTERNED.0.load();
+        Some(*set.get(value)?)
+    }
+
+    pub fn intern(value: &str) -> ArenaStr {
+        ArenaStr::preloaded(value).unwrap_or_else(|| {
+            let mut guard = INTERNED.1.lock();
+
+            if let Some(o) = ArenaStr::preloaded(value) {
+                return o;
+            }
+
+            let (ref mut set, ref mut arena) = &mut *guard;
+            assert_eq!(set.len(), INTERNED.0.load().len());
+
+            let allocated = unsafe {
+                let ptr = arena.alloc_layout(
+                    Layout::from_size_align(std::mem::size_of::<usize>() + value.len(), 1).unwrap(),
+                );
+                let start_at = ptr.as_ptr();
+                ptr::write(start_at as *mut _, value.len().to_ne_bytes());
+                let bytes = start_at.add(std::mem::size_of::<usize>());
+                ptr::copy_nonoverlapping(value.as_ptr(), bytes, value.len());
+
+                ArenaStr(ptr)
+            };
+
+            assert!(set.insert(allocated));
+
+            // We know that we have a Mutex around the arena so we're not worried
+            // about racing here, only one thread can store at a time.
+            let mut old = INTERNED.0.swap(Arc::new(std::mem::take(&mut guard.0)));
+
+            loop {
+                match Arc::try_unwrap(old) {
+                    Ok(mut o) => {
+                        o.insert(allocated);
+                        guard.0 = o;
+                        break;
+                    }
+                    Err(e) => old = e,
+                }
+            }
+
+            allocated
+        })
     }
 }
 
 impl fmt::Debug for ArenaStr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(self.as_str(), f)
-    }
-}
-
-impl std::hash::Hash for ArenaStr {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.as_str().hash(state);
     }
 }
 
