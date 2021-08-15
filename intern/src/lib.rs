@@ -9,14 +9,14 @@ use std::ptr::NonNull;
 use std::sync::Arc;
 
 pub trait InternString {
-    unsafe fn to_interned(s: ArenaStr) -> Self;
+    unsafe fn to_interned(s: InternedArenaStr) -> Self;
 }
 
 #[macro_export]
 macro_rules! intern {
     (pub struct $for_ty:ident) => {
         #[derive(Serialize, Debug, Copy, Clone, PartialEq, Eq, Hash)]
-        pub struct $for_ty($crate::ArenaStr);
+        pub struct $for_ty($crate::InternedArenaStr);
 
         impl $for_ty {
             pub fn as_str(&self) -> &'static str {
@@ -95,7 +95,7 @@ macro_rules! intern {
         }
 
         impl $crate::InternString for $for_ty {
-            unsafe fn to_interned(v: $crate::ArenaStr) -> $for_ty {
+            unsafe fn to_interned(v: $crate::InternedArenaStr) -> $for_ty {
                 $for_ty(v)
             }
         }
@@ -116,32 +116,32 @@ macro_rules! intern {
 }
 
 lazy_static::lazy_static! {
-    static ref INTERNED: (ArcSwap<HashSet<ArenaStr>>, Mutex<(HashSet<ArenaStr>, Bump)>)
+    static ref INTERNED: (ArcSwap<HashSet<InternedArenaStr>>, Mutex<(HashSet<InternedArenaStr>, Bump)>)
         = (ArcSwap::new(Arc::new(HashSet::new())), Mutex::new((HashSet::new(), Bump::new())));
 }
 
 pub fn preloaded<T: InternString>(value: &str) -> Option<T> {
-    ArenaStr::preloaded(value).map(|s| unsafe { T::to_interned(s) })
+    InternedArenaStr::preloaded(value).map(|s| unsafe { T::to_interned(s) })
 }
 
 pub fn intern<T: InternString>(value: &str) -> T {
-    unsafe { T::to_interned(ArenaStr::intern(value)) }
+    unsafe { T::to_interned(InternedArenaStr::intern(value)) }
 }
 
 #[derive(serde_derive::Serialize, Copy, Clone, PartialEq, Eq, Hash)]
 #[serde(into = "&'static str")]
-pub struct ArenaStr(NonNull<u8>);
+pub struct InternedArenaStr(NonNull<u8>);
 
-impl Into<&'static str> for ArenaStr {
+impl Into<&'static str> for InternedArenaStr {
     fn into(self) -> &'static str {
         self.as_str()
     }
 }
 
-unsafe impl Send for ArenaStr {}
-unsafe impl Sync for ArenaStr {}
+unsafe impl Send for InternedArenaStr {}
+unsafe impl Sync for InternedArenaStr {}
 
-impl ArenaStr {
+impl InternedArenaStr {
     pub fn as_str(self) -> &'static str {
         unsafe {
             let mut ptr = self.0.as_ptr();
@@ -151,16 +151,16 @@ impl ArenaStr {
         }
     }
 
-    pub fn preloaded(value: &str) -> Option<ArenaStr> {
+    pub fn preloaded(value: &str) -> Option<InternedArenaStr> {
         let set = INTERNED.0.load();
         Some(*set.get(value)?)
     }
 
-    pub fn intern(value: &str) -> ArenaStr {
-        ArenaStr::preloaded(value).unwrap_or_else(|| {
+    pub fn intern(value: &str) -> InternedArenaStr {
+        InternedArenaStr::preloaded(value).unwrap_or_else(|| {
             let mut guard = INTERNED.1.lock();
 
-            if let Some(o) = ArenaStr::preloaded(value) {
+            if let Some(o) = InternedArenaStr::preloaded(value) {
                 return o;
             }
 
@@ -176,7 +176,7 @@ impl ArenaStr {
                 let bytes = start_at.add(std::mem::size_of::<usize>());
                 ptr::copy_nonoverlapping(value.as_ptr(), bytes, value.len());
 
-                ArenaStr(ptr)
+                InternedArenaStr(ptr)
             };
 
             assert!(set.insert(allocated));
@@ -201,13 +201,13 @@ impl ArenaStr {
     }
 }
 
-impl fmt::Debug for ArenaStr {
+impl fmt::Debug for InternedArenaStr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(self.as_str(), f)
     }
 }
 
-impl std::borrow::Borrow<str> for ArenaStr {
+impl std::borrow::Borrow<str> for InternedArenaStr {
     fn borrow(&self) -> &str {
         self.as_str()
     }
