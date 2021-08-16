@@ -605,21 +605,22 @@ async fn categorize_benchmark(
     };
     const DISAGREEMENT: &str = "If you disagree with this performance assessment, \
     please file an issue in [rust-lang/rustc-perf](https://github.com/rust-lang/rustc-perf/issues/new).";
-    let (summary, direction) = match ComparisonSummary::summarize_comparison(&comparison) {
-        Some(s) if s.confidence().is_atleast_probably_relevant() => {
-            let direction = s.direction().unwrap();
-            (s, direction)
-        }
-        _ => {
-            return (
-                format!(
-                    "This benchmark run did not return any significant changes.\n\n{}",
-                    DISAGREEMENT
-                ),
-                None,
-            )
-        }
-    };
+    let (summary, (direction, magnitude)) =
+        match ComparisonSummary::summarize_comparison(&comparison) {
+            Some(s) if s.confidence().is_atleast_probably_relevant() => {
+                let direction_and_magnitude = s.direction_and_magnitude().unwrap();
+                (s, direction_and_magnitude)
+            }
+            _ => {
+                return (
+                    format!(
+                        "This benchmark run did not return any relevant changes.\n\n{}",
+                        DISAGREEMENT
+                    ),
+                    None,
+                )
+            }
+        };
 
     let category = match direction {
         Direction::Improvement => "improvements 🎉",
@@ -627,7 +628,8 @@ async fn categorize_benchmark(
         Direction::Mixed => "mixed results 🤷",
     };
     let mut result = format!(
-        "This change led to significant {} in compiler performance.\n",
+        "This change led to {} relevant {} in compiler performance.\n",
+        magnitude.display(),
         category
     );
     for change in summary.relevant_changes().iter().filter_map(|c| *c) {
