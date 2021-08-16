@@ -141,7 +141,7 @@ async fn populate_report(
 }
 
 pub struct ComparisonSummary {
-    /// Significant comparisons ordered by magnitude
+    /// Significant comparisons ordered by magnitude from largest to smallest
     comparisons: Vec<TestResultComparison>,
 }
 
@@ -168,8 +168,15 @@ impl ComparisonSummary {
         Some(ComparisonSummary { comparisons })
     }
 
+    /// Gets the overall direction and magnitude of the changes
+    ///
+    /// Returns `None` if there are no relevant changes.
+    pub fn direction_and_magnitude(&self) -> Option<(Direction, Magnitude)> {
+        self.direction().zip(self.magnitude())
+    }
+
     /// The direction of the changes
-    pub fn direction(&self) -> Option<Direction> {
+    fn direction(&self) -> Option<Direction> {
         if self.comparisons.len() == 0 {
             return None;
         }
@@ -225,6 +232,16 @@ impl ComparisonSummary {
         }
     }
 
+    /// Get the largest magnitude of any change in the comparison.
+    ///
+    /// Returns `None` if there are no relevant_changes
+    fn magnitude(&self) -> Option<Magnitude> {
+        [self.largest_improvement(), self.largest_regression()]
+            .iter()
+            .filter_map(|c| c.map(|c| c.magnitude()))
+            .max_by(|c1, c2| c1.cmp(c2))
+    }
+
     pub fn relevant_changes<'a>(&'a self) -> [Option<&TestResultComparison>; 2] {
         match self.direction() {
             Some(Direction::Improvement) => [self.largest_improvement(), None],
@@ -234,15 +251,12 @@ impl ComparisonSummary {
         }
     }
 
-    pub fn largest_improvement(&self) -> Option<&TestResultComparison> {
-        self.comparisons
-            .iter()
-            .filter(|s| !s.is_regression())
-            .next()
+    fn largest_improvement(&self) -> Option<&TestResultComparison> {
+        self.comparisons.iter().find(|s| s.is_improvement())
     }
 
-    pub fn largest_regression(&self) -> Option<&TestResultComparison> {
-        self.comparisons.iter().filter(|s| s.is_regression()).next()
+    fn largest_regression(&self) -> Option<&TestResultComparison> {
+        self.comparisons.iter().find(|s| s.is_regression())
     }
 
     pub fn confidence(&self) -> ComparisonConfidence {
@@ -744,6 +758,10 @@ impl TestResultComparison {
         b > a
     }
 
+    fn is_improvement(&self) -> bool {
+        !self.is_regression()
+    }
+
     fn is_significant(&self) -> bool {
         self.relative_change().abs() > self.signifcance_threshold()
     }
@@ -798,7 +816,7 @@ impl TestResultComparison {
         write!(
             summary,
             "{} {} in {}",
-            magnitude,
+            magnitude.display_as_title(),
             self.direction(),
             match link {
                 Some(l) => format!("[instruction counts]({})", l),
@@ -853,8 +871,8 @@ impl std::fmt::Display for Direction {
 }
 
 /// The relative size of a performance change
-#[derive(Debug)]
-enum Magnitude {
+#[derive(Debug, PartialOrd, PartialEq, Ord, Eq)]
+pub enum Magnitude {
     Small,
     Medium,
     Large,
@@ -865,17 +883,23 @@ impl Magnitude {
     fn is_medium_or_above(&self) -> bool {
         !matches!(self, Self::Small)
     }
-}
 
-impl std::fmt::Display for Magnitude {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let s = match self {
+    pub fn display_as_title(&self) -> &'static str {
+        match self {
             Self::Small => "Small",
             Self::Medium => "Moderate",
             Self::Large => "Large",
             Self::VeryLarge => "Very large",
-        };
-        f.write_str(s)
+        }
+    }
+
+    pub fn display(&self) -> &'static str {
+        match self {
+            Self::Small => "small",
+            Self::Medium => "moderate",
+            Self::Large => "large",
+            Self::VeryLarge => "very large",
+        }
     }
 }
 
