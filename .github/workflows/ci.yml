@@ -158,8 +158,8 @@ jobs:
 
       - name: Connect to PostgreSQL
         run: |
-          cargo build --bin site --release
-          timeout 5s cargo run --bin site --release 'postgresql://postgres:postgres@localhost:5432/postgres' 2>&1 | tee -a log || true
+          cargo build --bin site
+          timeout 5s ./target/debug/site 'postgresql://postgres:postgres@localhost:5432/postgres' 2>&1 | tee -a log || true
           grep -Fxq "Loading complete but no data identified; exiting." log
 
   database-check-sqlite:
@@ -177,6 +177,6 @@ jobs:
 
       - name: Connect to SQLite
         run: |
-          cargo build --bin site --release
-          timeout 5s cargo run --bin site --release 2>&1 | tee -a log || true
+          cargo build --bin site
+          timeout 5s ./target/debug/site 2>&1 | tee -a log || true
           grep -Fxq "Loading complete but no data identified; exiting." log
