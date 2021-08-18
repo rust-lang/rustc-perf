@@ -125,14 +125,13 @@ fn get_args(full_event: &analyzeme::Event) -> Option<HashMap<String, String>> {
 }
 
 /// Returns JSON blob fit, `chrome_profiler.json`.
-pub fn generate(pieces: super::Pieces, opt: Opt) -> anyhow::Result<Vec<u8>> {
+pub fn generate(self_profile_data: Vec<u8>, opt: Opt) -> anyhow::Result<Vec<u8>> {
     let mut serializer = serde_json::Serializer::new(Vec::new());
 
     let mut seq = serializer.serialize_seq(None)?;
 
-    let data =
-        ProfilingData::from_buffers(pieces.string_data, pieces.string_index, pieces.events, None)
-            .map_err(|e| anyhow::format_err!("{:?}", e))?;
+    let data = ProfilingData::from_paged_buffer(self_profile_data)
+        .map_err(|e| anyhow::format_err!("{:?}", e))?;
 
     let thread_to_collapsed_thread =
         generate_thread_to_collapsed_thread_mapping(opt.collapse_threads, &data);
