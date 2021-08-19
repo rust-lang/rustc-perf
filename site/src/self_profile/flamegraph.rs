@@ -5,10 +5,9 @@ use inferno::flamegraph::{from_lines, Options as FlamegraphOptions};
 #[derive(serde::Deserialize, Debug)]
 pub struct Opt {}
 
-pub fn generate(title: &str, pieces: super::Pieces, _: Opt) -> anyhow::Result<Vec<u8>> {
-    let profiling_data =
-        ProfilingData::from_buffers(pieces.string_data, pieces.string_index, pieces.events, None)
-            .map_err(|e| anyhow::format_err!("{:?}", e))?;
+pub fn generate(title: &str, self_profile_data: Vec<u8>, _: Opt) -> anyhow::Result<Vec<u8>> {
+    let profiling_data = ProfilingData::from_paged_buffer(self_profile_data)
+        .map_err(|e| anyhow::format_err!("{:?}", e))?;
 
     let recorded_stacks = collapse_stacks(&profiling_data)
         .iter()

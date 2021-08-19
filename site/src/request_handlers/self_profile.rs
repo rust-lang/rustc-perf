@@ -25,14 +25,33 @@ pub async fn handle_self_profile_processed_download(
         body.benchmark,
         body.run_name
     );
+
     let start = Instant::now();
-    let pieces = match get_pieces(body, ctxt).await {
+
+    let (url, is_tarball) = match handle_self_profile_raw(body, ctxt).await {
+        Ok(v) => (v.url, v.is_tarball),
+        Err(e) => {
+            let mut resp = Response::new(e.into());
+            *resp.status_mut() = StatusCode::BAD_REQUEST;
+            return resp;
+        }
+    };
+
+    if is_tarball {
+        let mut resp =
+            Response::new("Processing legacy format self-profile data is not supported".into());
+        *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+        return resp;
+    }
+
+    let data = match get_self_profile_raw_data(&url).await {
         Ok(v) => v,
         Err(e) => return e,
     };
-    log::trace!("got pieces {:?} in {:?}", pieces, start.elapsed());
 
-    let output = match crate::self_profile::generate(&title, pieces, params) {
+    log::trace!("got data in {:?}", start.elapsed());
+
+    let output = match crate::self_profile::generate(&title, data, params) {
         Ok(c) => c,
         Err(e) => {
             log::error!("Failed to generate json {:?}", e);
@@ -166,22 +185,10 @@ fn get_self_profile_data(
     Ok(profile)
 }
 
-async fn get_pieces(
-    body: crate::api::self_profile_raw::Request,
-    ctxt: &SiteCtxt,
-) -> Result<crate::self_profile::Pieces, Response> {
-    let res = handle_self_profile_raw(body, ctxt).await;
-    let url = match res {
-        Ok(v) => v.url,
-        Err(e) => {
-            let mut resp = Response::new(e.into());
-            *resp.status_mut() = StatusCode::BAD_REQUEST;
-            return Err(resp);
-        }
-    };
+async fn get_self_profile_raw_data(url: &str) -> Result<Vec<u8>, Response> {
     log::trace!("downloading {}", url);
 
-    let resp = match reqwest::get(&url).await {
+    let resp = match reqwest::get(url).await {
         Ok(r) => r,
         Err(e) => {
             let mut resp = Response::new(format!("{:?}", e).into());
@@ -197,7 +204,7 @@ async fn get_pieces(
         return Err(resp);
     }
 
-    let tarball = match resp.bytes().await {
+    let compressed = match resp.bytes().await {
         Ok(b) => b,
         Err(e) => {
             let mut resp =
@@ -206,18 +213,19 @@ async fn get_pieces(
             return Err(resp);
         }
     };
-    let tarball = tar::Archive::new(std::io::BufReader::new(snap::read::FrameDecoder::new(
-        tarball.reader(),
-    )));
-    let pieces = match crate::self_profile::Pieces::from_tarball(tarball) {
+
+    let mut data = Vec::new();
+
+    match snap::read::FrameDecoder::new(compressed.reader()).read_to_end(&mut data) {
         Ok(v) => v,
         Err(e) => {
-            let mut resp = Response::new(format!("could not extract from tarball: {:?}", e).into());
+            let mut resp = Response::new(format!("could not decode: {:?}", e).into());
             *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
             return Err(resp);
         }
     };
-    Ok(pieces)
+
+    Ok(data)
 }
 
 pub async fn handle_self_profile_raw_download(
