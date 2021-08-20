@@ -70,8 +70,8 @@
             <thead>
                 <tr id="table-header">
                     <th data-sort-idx="1" data-default-sort-dir="1">Query/Function</th>
-                    <th data-sort-idx="2" data-default-sort-dir="-1">Time (s)</th>
                     <th data-sort-idx="10" data-default-sort-dir="-1">Time (%)</th>
+                    <th data-sort-idx="2" data-default-sort-dir="-1">Time (s)</th>
                     <th data-sort-idx="11" data-default-sort-dir="-1" class="delta">Time delta</th>
                     <th data-sort-idx="5" data-default-sort-dir="-1">Executions</th>
                     <th data-sort-idx="12" data-default-sort-dir="-1" class="delta">Executions delta</th>
@@ -239,7 +239,6 @@
                     return td;
                 }
                 td(row, cur.label);
-                td(row, to_seconds(cur.self_time).toFixed(3));
                 if (cur.percent_total_time < 0) {
                     td(row, "-").setAttribute("title", "No wall-time stat collected for this run");
                 } else {
@@ -249,6 +248,7 @@
                         t.setAttribute("title", "% of cpu-time stat");
                     }
                 }
+                td(row, to_seconds(cur.self_time).toFixed(3));
                 if (delta) {
                     td(row, fmt_delta(to_seconds(cur.self_time), to_seconds(delta.self_time)), true);
                 } else {
