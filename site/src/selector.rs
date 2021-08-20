@@ -393,14 +393,6 @@ impl QueryData {
         std::time::Duration::from_nanos(self.self_time)
     }
 
-    pub fn blocked_time(&self) -> std::time::Duration {
-        std::time::Duration::from_nanos(self.blocked_time)
-    }
-
-    pub fn incremental_load_time(&self) -> std::time::Duration {
-        std::time::Duration::from_nanos(self.incremental_load_time)
-    }
-
     pub fn number_of_cache_misses(&self) -> u32 {
         self.invocation_count - self.number_of_cache_hits
     }

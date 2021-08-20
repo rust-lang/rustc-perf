@@ -253,7 +253,6 @@ pub mod self_profile_raw {
 pub mod self_profile {
     use database::QueryLabel;
     use serde::{Deserialize, Serialize};
-    use std::time::Duration;
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct Request {
@@ -267,7 +266,7 @@ pub mod self_profile {
 
     #[derive(Debug, Clone, Serialize)]
     pub struct Response {
-        pub base_profile: Option<SelfProfile>,
+        pub base_profile_delta: Option<SelfProfileDelta>,
         pub profile: SelfProfile,
     }
 
@@ -280,13 +279,26 @@ pub mod self_profile {
     #[derive(Serialize, Deserialize, Clone, Debug)]
     pub struct QueryData {
         pub label: QueryLabel,
-        pub self_time: Duration,
+        pub self_time: u64,
         pub percent_total_time: f32,
         pub number_of_cache_misses: u32,
         pub number_of_cache_hits: u32,
         pub invocation_count: u32,
-        pub blocked_time: Duration,
-        pub incremental_load_time: Duration,
+        pub blocked_time: u64,
+        pub incremental_load_time: u64,
+    }
+
+    #[derive(Serialize, Debug, Clone)]
+    pub struct SelfProfileDelta {
+        pub totals: QueryDataDelta,
+        pub query_data: Vec<Option<QueryDataDelta>>,
+    }
+
+    #[derive(Serialize, Clone, Debug)]
+    pub struct QueryDataDelta {
+        pub self_time: i64,
+        pub invocation_count: i32,
+        pub incremental_load_time: i64,
     }
 }
 

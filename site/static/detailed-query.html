@@ -71,12 +71,12 @@
                     <th data-sort-idx="1" data-default-sort-dir="1">Query/Function</th>
                     <th data-sort-idx="2" data-default-sort-dir="-1">Time (s)</th>
                     <th data-sort-idx="10" data-default-sort-dir="-1">Time (%)</th>
-                    <th class="delta">Time delta</th>
+                    <th data-sort-idx="11" data-default-sort-dir="-1" class="delta">Time delta</th>
                     <th data-sort-idx="5" data-default-sort-dir="-1">Executions</th>
-                    <th class="delta">Executions delta</th>
+                    <th data-sort-idx="12" data-default-sort-dir="-1" class="delta">Executions delta</th>
                     <th class="incr" data-sort-idx="7" data-default-sort-dir="-1" title="Incremental loading time">
                         Incremental loading (s)</th>
-                    <th class="incr delta">Incremental loading delta</th>
+                    <th class="incr delta" data-sort-idx="13" data-default-sort-dir="-1">Incremental loading delta</th>
                 </tr>
             </thead>
             <tbody id="primary-table">
@@ -87,11 +87,11 @@
     <script src="shared.js"></script>
     <script>
         function to_seconds(time) {
-            return time[0] + time[1] / 1000000000;
+            return time / 1000000000;
         }
 
-        function fmt_delta(from, to) {
-            let delta = to - from;
+        function fmt_delta(to, delta) {
+            let from = to - delta;
             let pct = (to - from) / from * 100;
             if (from == to) {
                 pct = 0;
@@ -110,7 +110,7 @@
                 if (Math.abs(delta) <= 0.05) {
                     classes = "neutral";
                 }
-                return `<span class="${classes}" title="${from.toFixed(3)} to ${to.toFixed(3)} ≈ ${delta.toFixed(3)}">${pct.toFixed(1)}% (${delta.toFixed(3)})</span>`;
+                return `<span class="${classes}" title="${from.toFixed(3)} to ${to.toFixed(3)} ≈ ${delta.toFixed(3)}">${delta.toFixed(3)}(${pct.toFixed(1)}%)</span>`;
             } else {
                 return `<span title="error pct=${pct}" style="color: orange;">-</span>`;
             }
@@ -175,7 +175,7 @@
             }
             document.querySelector("#raw-urls").innerHTML = txt;
             let sort_idx = state.sort_idx;
-            if (!data.base_profile) {
+            if (!data.base_profile_delta) {
                 document.body.classList.add("hide-delta");
             }
             let header = document.getElementById("table-header");
@@ -218,13 +218,12 @@
             let idx = 0;
             for (let element of [data.profile.totals, ...data.profile.query_data]) {
                 let cur = to_object(element);
-                let prev = null;
-                if (data.base_profile) {
-                    for (let prev_el of [data.base_profile.totals, ...data.base_profile.query_data]) {
-                        if (to_object(prev_el).label == cur.label) {
-                            prev = to_object(prev_el);
-                            break;
-                        }
+                let delta = null;
+                if (data.base_profile_delta) {
+                    if (idx == 0) {
+                        delta = data.base_profile_delta.totals;
+                    } else {
+                        delta = data.base_profile_delta.query_data[idx - 1];
                     }
                 }
                 let row = document.createElement("tr");
@@ -248,24 +247,24 @@
                         t.setAttribute("title", "% of cpu-time stat");
                     }
                 }
-                if (prev) {
-                    td(row, fmt_delta(to_seconds(prev.self_time), to_seconds(cur.self_time)), true);
+                if (delta) {
+                    td(row, fmt_delta(to_seconds(cur.self_time), to_seconds(delta.self_time)), true);
                 } else {
                     td(row, "-", true);
                 }
                 td(row, cur.invocation_count);
-                if (prev) {
-                    td(row, fmt_delta(prev.invocation_count, cur.invocation_count), true);
+                if (delta) {
+                    td(row, fmt_delta(cur.invocation_count, delta.invocation_count), true);
                 } else {
                     td(row, "-", true);
                 }
                 td(row,
                     to_seconds(cur.incremental_load_time).toFixed(3)).classList.add("incr");
-                if (prev) {
+                if (delta) {
                     td(row,
                         fmt_delta(
-                            to_seconds(prev.incremental_load_time),
                             to_seconds(cur.incremental_load_time),
+                            to_seconds(delta.incremental_load_time),
                         ),
                         true).classList.add("incr");
                 } else {
@@ -281,13 +280,13 @@
                 element = [
                     // escape html, to prevent rendering queries like <unknown> as tags
                     escapeHtml(element.label),
-                    [element.self_time.secs, element.self_time.nanos],
+                    element.self_time,
                     element.percent_total_time,
                     element.number_of_cache_misses,
                     element.number_of_cache_hits,
                     element.invocation_count,
-                    [element.blocked_time.secs, element.blocked_time.nanos],
-                    [element.incremental_load_time.secs, element.incremental_load_time.nanos],
+                    element.blocked_time,
+                    element.incremental_load_time,
                 ];
             }
             let [
