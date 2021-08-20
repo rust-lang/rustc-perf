@@ -593,7 +593,7 @@ pub async fn handle_self_profile(
                         .find(|a| **a == *bc.as_str())
                         .map(|a| ArtifactId::Tag(a.to_owned()))
                 })
-                .ok_or(format!("could not find artifact {}", body.commit))?,
+                .ok_or(format!("could not find artifact {}", bc))?,
         );
     }
 
