@@ -279,12 +279,15 @@ pub mod self_profile {
     #[derive(Serialize, Deserialize, Clone, Debug)]
     pub struct QueryData {
         pub label: QueryLabel,
+        // Nanoseconds
         pub self_time: u64,
         pub percent_total_time: f32,
         pub number_of_cache_misses: u32,
         pub number_of_cache_hits: u32,
         pub invocation_count: u32,
+        // Nanoseconds
         pub blocked_time: u64,
+        // Nanoseconds
         pub incremental_load_time: u64,
     }
 
@@ -296,8 +299,10 @@ pub mod self_profile {
 
     #[derive(Serialize, Clone, Debug)]
     pub struct QueryDataDelta {
+        // Nanoseconds
         pub self_time: i64,
         pub invocation_count: i32,
+        // Nanoseconds
         pub incremental_load_time: i64,
     }
 }
