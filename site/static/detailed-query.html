@@ -27,6 +27,7 @@
         #primary-table td,
         #primary-table th {
             padding-left: 1.5em;
+            white-space: pre;
         }
 
         #primary-table tr:nth-child(2n+1) {
@@ -110,7 +111,8 @@
                 if (Math.abs(delta) <= 0.05) {
                     classes = "neutral";
                 }
-                return `<span class="${classes}" title="${from.toFixed(3)} to ${to.toFixed(3)} ≈ ${delta.toFixed(3)}">${delta.toFixed(3)}(${pct.toFixed(1)}%)</span>`;
+                let text = delta.toFixed(3) + `(${pct.toFixed(1)}%)`.padStart(10, ' ');
+                return `<span class="${classes}" title="${from.toFixed(3)} to ${to.toFixed(3)} ≈ ${delta.toFixed(3)}">${text}</span>`;
             } else {
                 return `<span title="error pct=${pct}" style="color: orange;">-</span>`;
             }
