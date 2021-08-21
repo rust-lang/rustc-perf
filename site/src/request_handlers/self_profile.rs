@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::io::Read;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use bytes::Buf;
 use headers::{ContentType, Header};
@@ -90,16 +90,15 @@ pub async fn handle_self_profile_processed_download(
 fn get_self_profile_data(
     cpu_clock: Option<f64>,
     self_profile: Option<crate::selector::SelfProfileData>,
-    sort_idx: Option<i32>,
 ) -> ServerResult<self_profile::SelfProfile> {
     let profile = self_profile
         .as_ref()
         .ok_or(format!("No self profile results for this commit"))?
         .clone();
-    let total_time = profile.query_data.iter().map(|qd| qd.self_time()).sum();
+    let total_time: Duration = profile.query_data.iter().map(|qd| qd.self_time()).sum();
     let totals = self_profile::QueryData {
         label: "Totals".into(),
-        self_time: total_time,
+        self_time: total_time.as_nanos() as u64,
         // TODO: check against wall-time from perf stats
         percent_total_time: cpu_clock
             .map(|w| ((total_time.as_secs_f64() / w) * 100.0) as f32)
@@ -120,69 +119,139 @@ fn get_self_profile_data(
             .iter()
             .map(|qd| qd.invocation_count)
             .sum(),
-        blocked_time: profile.query_data.iter().map(|qd| qd.blocked_time()).sum(),
+        blocked_time: profile.query_data.iter().map(|qd| qd.blocked_time).sum(),
         incremental_load_time: profile
             .query_data
             .iter()
-            .map(|qd| qd.incremental_load_time())
+            .map(|qd| qd.incremental_load_time)
             .sum(),
     };
-    let mut profile = self_profile::SelfProfile {
+    let profile = self_profile::SelfProfile {
         query_data: profile
             .query_data
             .iter()
             .map(|qd| self_profile::QueryData {
                 label: qd.label,
-                self_time: qd.self_time(),
-                percent_total_time: ((qd.self_time().as_secs_f64()
-                    / totals.self_time.as_secs_f64())
+                self_time: qd.self_time,
+                percent_total_time: ((qd.self_time().as_secs_f64() / total_time.as_secs_f64())
                     * 100.0) as f32,
                 number_of_cache_misses: qd.number_of_cache_misses(),
                 number_of_cache_hits: qd.number_of_cache_hits,
                 invocation_count: qd.invocation_count,
-                blocked_time: qd.blocked_time(),
-                incremental_load_time: qd.incremental_load_time(),
+                blocked_time: qd.blocked_time,
+                incremental_load_time: qd.incremental_load_time,
             })
             .collect(),
         totals,
     };
 
-    if let Some(sort_idx) = sort_idx {
-        loop {
-            match sort_idx.abs() {
-                1 => profile.query_data.sort_by_key(|qd| qd.label.clone()),
-                2 => profile.query_data.sort_by_key(|qd| qd.self_time),
-                3 => profile
-                    .query_data
-                    .sort_by_key(|qd| qd.number_of_cache_misses),
-                4 => profile.query_data.sort_by_key(|qd| qd.number_of_cache_hits),
-                5 => profile.query_data.sort_by_key(|qd| qd.invocation_count),
-                6 => profile.query_data.sort_by_key(|qd| qd.blocked_time),
-                7 => profile
-                    .query_data
-                    .sort_by_key(|qd| qd.incremental_load_time),
-                9 => profile.query_data.sort_by_key(|qd| {
-                    // convert to displayed percentage
-                    ((qd.number_of_cache_hits as f64 / qd.invocation_count as f64) * 10_000.0)
-                        as u64
-                }),
-                10 => profile.query_data.sort_by(|a, b| {
-                    a.percent_total_time
-                        .partial_cmp(&b.percent_total_time)
-                        .unwrap()
-                }),
-                _ => break,
-            }
+    Ok(profile)
+}
 
-            // Only apply this if at least one of the conditions above was met
-            if sort_idx < 0 {
-                profile.query_data.reverse();
+fn get_self_profile_delta(
+    profile: &self_profile::SelfProfile,
+    base_profile: &Option<self_profile::SelfProfile>,
+) -> Option<self_profile::SelfProfileDelta> {
+    let base_profile = match base_profile.as_ref() {
+        Some(bp) => bp,
+        None => return None,
+    };
+
+    let totals = self_profile::QueryDataDelta {
+        self_time: profile.totals.self_time as i64 - base_profile.totals.self_time as i64,
+        invocation_count: profile.totals.invocation_count as i32
+            - base_profile.totals.invocation_count as i32,
+        incremental_load_time: profile.totals.incremental_load_time as i64
+            - base_profile.totals.incremental_load_time as i64,
+    };
+
+    let mut query_data = Vec::new();
+
+    for qd in &profile.query_data {
+        match base_profile
+            .query_data
+            .iter()
+            .find(|base_qd| base_qd.label == qd.label)
+        {
+            Some(base_qd) => {
+                let delta = self_profile::QueryDataDelta {
+                    self_time: qd.self_time as i64 - base_qd.self_time as i64,
+                    invocation_count: qd.invocation_count as i32 - base_qd.invocation_count as i32,
+                    incremental_load_time: qd.incremental_load_time as i64
+                        - base_qd.incremental_load_time as i64,
+                };
+
+                query_data.push(Some(delta));
             }
-            break;
+            None => {
+                query_data.push(None);
+            }
         }
     }
 
-    Ok(profile)
+    Some(self_profile::SelfProfileDelta { totals, query_data })
+}
+
+fn sort_self_profile(
+    profile: &mut self_profile::SelfProfile,
+    base_profile_delta: &mut Option<self_profile::SelfProfileDelta>,
+    sort_idx: i32,
+) {
+    let queries = std::mem::take(&mut profile.query_data);
+
+    let deltas = match base_profile_delta.as_mut() {
+        Some(bpd) => std::mem::take(&mut bpd.query_data),
+        None => vec![None; queries.len()],
+    };
+
+    let mut query_data: Vec<_> = queries.into_iter().zip(deltas).collect();
+
+    loop {
+        match sort_idx.abs() {
+            1 => query_data.sort_by_key(|qd| qd.0.label.clone()),
+            2 => query_data.sort_by_key(|qd| qd.0.self_time),
+            3 => query_data.sort_by_key(|qd| qd.0.number_of_cache_misses),
+            4 => query_data.sort_by_key(|qd| qd.0.number_of_cache_hits),
+            5 => query_data.sort_by_key(|qd| qd.0.invocation_count),
+            6 => query_data.sort_by_key(|qd| qd.0.blocked_time),
+            7 => query_data.sort_by_key(|qd| qd.0.incremental_load_time),
+            9 => query_data.sort_by_key(|qd| {
+                // convert to displayed percentage
+                ((qd.0.number_of_cache_hits as f64 / qd.0.invocation_count as f64) * 10_000.0)
+                    as u64
+            }),
+            10 => query_data.sort_by(|a, b| {
+                a.0.percent_total_time
+                    .partial_cmp(&b.0.percent_total_time)
+                    .unwrap()
+            }),
+            11 if base_profile_delta.is_some() => {
+                query_data.sort_by_key(|qd| qd.1.as_ref().map(|delta| delta.self_time));
+            }
+            12 if base_profile_delta.is_some() => {
+                query_data.sort_by_key(|qd| qd.1.as_ref().map(|delta| delta.invocation_count));
+            }
+            13 if base_profile_delta.is_some() => {
+                query_data.sort_by_key(|qd| qd.1.as_ref().map(|delta| delta.incremental_load_time));
+            }
+            _ => break,
+        }
+
+        // Only apply this if at least one of the conditions above was met
+        if sort_idx < 0 {
+            query_data.reverse();
+        }
+
+        break;
+    }
+
+    let (queries, deltas) = query_data.into_iter().unzip();
+
+    profile.query_data = queries;
+
+    if let Some(bpd) = base_profile_delta {
+        bpd.query_data = deltas;
+    }
 }
 
 async fn get_self_profile_raw_data(url: &str) -> Result<Vec<u8>, Response> {
@@ -524,7 +593,7 @@ pub async fn handle_self_profile(
                         .find(|a| **a == *bc.as_str())
                         .map(|a| ArtifactId::Tag(a.to_owned()))
                 })
-                .ok_or(format!("could not find artifact {}", body.commit))?,
+                .ok_or(format!("could not find artifact {}", bc))?,
         );
     }
 
@@ -558,10 +627,9 @@ pub async fn handle_self_profile(
     assert_eq!(cpu_responses.len(), 1, "all selectors are exact");
     let mut cpu_response = cpu_responses.remove(0).series;
 
-    let profile = get_self_profile_data(
+    let mut profile = get_self_profile_data(
         cpu_response.next().unwrap().1,
         sp_response.next().unwrap().1,
-        Some(sort_idx),
     )
     .map_err(|e| format!("{}: {}", body.commit, e))?;
     let base_profile = if body.base_commit.is_some() {
@@ -569,7 +637,6 @@ pub async fn handle_self_profile(
             get_self_profile_data(
                 cpu_response.next().unwrap().1,
                 sp_response.next().unwrap().1,
-                None,
             )
             .map_err(|e| format!("{}: {}", body.base_commit.as_ref().unwrap(), e))?,
         )
@@ -577,8 +644,11 @@ pub async fn handle_self_profile(
         None
     };
 
+    let mut base_profile_delta = get_self_profile_delta(&profile, &base_profile);
+    sort_self_profile(&mut profile, &mut base_profile_delta, sort_idx);
+
     Ok(self_profile::Response {
-        base_profile,
+        base_profile_delta,
         profile,
     })
 }
