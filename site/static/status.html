@@ -110,7 +110,7 @@
                 if (data.current.artifact.Commit) {
                     artifact_desc = commit_url(data.current.artifact.Commit);
                 } else {
-                    artifact_desc = data.current.artifact.Artifact;
+                    artifact_desc = data.current.artifact.Tag;
                 }
                 element.innerHTML = `Currently benchmarking: ${artifact_desc}.
                 <br>Time left: ${format_duration(left)}`;
