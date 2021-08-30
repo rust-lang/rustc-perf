@@ -260,34 +260,28 @@ impl ComparisonSummary {
     }
 
     pub fn confidence(&self) -> ComparisonConfidence {
+        let mut num_very_small_changes = 0;
         let mut num_small_changes = 0;
         let mut num_medium_changes = 0;
-        let mut num_large_changes = 0;
-        let mut num_very_large_changes = 0;
         for c in self.comparisons.iter() {
             match c.magnitude() {
+                Magnitude::VerySmall => num_very_small_changes += 1,
                 Magnitude::Small => num_small_changes += 1,
                 Magnitude::Medium => num_medium_changes += 1,
-                Magnitude::Large => num_large_changes += 1,
-                Magnitude::VeryLarge => num_very_large_changes += 1,
+                Magnitude::Large => return ComparisonConfidence::DefinitelyRelevant,
+                Magnitude::VeryLarge => return ComparisonConfidence::DefinitelyRelevant,
             }
         }
 
         match (
+            num_very_small_changes,
+            num_small_changes,
             num_medium_changes,
-            num_large_changes,
-            num_very_large_changes,
         ) {
-            (_, _, vl) if vl > 0 => ComparisonConfidence::DefinitelyRelevant,
-            (m, l, _) if m + (l * 2) > 4 => ComparisonConfidence::DefinitelyRelevant,
-            (m, l, _) if m > 0 || l > 0 => ComparisonConfidence::ProbablyRelevant,
-            _ => {
-                if num_small_changes > 8 {
-                    ComparisonConfidence::ProbablyRelevant
-                } else {
-                    ComparisonConfidence::MaybeRelevant
-                }
-            }
+            (_, _, m) if m > 1 => ComparisonConfidence::DefinitelyRelevant,
+            (_, _, m) if m > 0 => ComparisonConfidence::ProbablyRelevant,
+            (vs, s, _) if (s * 2) + vs > 10 => ComparisonConfidence::ProbablyRelevant,
+            _ => ComparisonConfidence::MaybeRelevant,
         }
     }
 
@@ -777,7 +771,9 @@ impl TestResultComparison {
     fn magnitude(&self) -> Magnitude {
         let mag = self.relative_change().abs();
         let threshold = self.signifcance_threshold();
-        if mag < threshold * 3.0 {
+        if mag < threshold * 1.5 {
+            Magnitude::VerySmall
+        } else if mag < threshold * 3.0 {
             Magnitude::Small
         } else if mag < threshold * 10.0 {
             Magnitude::Medium
@@ -873,6 +869,7 @@ impl std::fmt::Display for Direction {
 /// The relative size of a performance change
 #[derive(Debug, PartialOrd, PartialEq, Ord, Eq)]
 pub enum Magnitude {
+    VerySmall,
     Small,
     Medium,
     Large,
@@ -881,11 +878,12 @@ pub enum Magnitude {
 
 impl Magnitude {
     fn is_medium_or_above(&self) -> bool {
-        !matches!(self, Self::Small)
+        *self >= Self::Medium
     }
 
     pub fn display_as_title(&self) -> &'static str {
         match self {
+            Self::VerySmall => "Very small",
             Self::Small => "Small",
             Self::Medium => "Moderate",
             Self::Large => "Large",
@@ -895,6 +893,7 @@ impl Magnitude {
 
     pub fn display(&self) -> &'static str {
         match self {
+            Self::VerySmall => "very small",
             Self::Small => "small",
             Self::Medium => "moderate",
             Self::Large => "large",
@@ -949,10 +948,9 @@ TODO: Summary
 
 Triage done by **@???**.
 Revision range: [{first_commit}..{last_commit}](https://perf.rust-lang.org/?start={first_commit}&end={last_commit}&absolute=false&stat=instructions%3Au)
-{num_comparisons} comparisons made in total
-{num_def_relevant} definitely relevant comparisons and {num_prob_relevant} probably relevant comparisons
 
 {num_regressions} Regressions, {num_improvements} Improvements, {num_mixed} Mixed; ??? of them in rollups
+{num_comparisons} comparisons made in total
 
 #### Regressions
 
@@ -988,8 +986,6 @@ TODO: Nags
         first_commit = start,
         last_commit = end,
         num_comparisons = num_comparisons,
-        num_def_relevant = regressions.len() + improvements.len() + mixed.len(),
-        num_prob_relevant = unlabeled.len(),
         num_regressions = regressions.len(),
         num_improvements = improvements.len(),
         num_mixed = mixed.len(),
