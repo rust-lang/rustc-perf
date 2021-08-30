@@ -126,6 +126,7 @@ pub mod bootstrap {
     pub struct Request {
         pub start: Bound,
         pub end: Bound,
+        pub min_seconds: u32,
     }
 
     #[derive(Debug, Clone, Serialize)]

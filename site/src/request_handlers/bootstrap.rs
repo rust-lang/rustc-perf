@@ -33,7 +33,9 @@ pub async fn handle_bootstrap(
         .filter_map(|(k, v)| {
             // We show any line that has at least one point exceeding the
             // critical line.
-            if v.iter().any(|v| v.map_or(false, |v| v.as_secs() >= 30)) {
+            if v.iter()
+                .any(|v| v.map_or(false, |v| v.as_secs() >= body.min_seconds as u64))
+            {
                 Some((
                     k,
                     v.into_iter()

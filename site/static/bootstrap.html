@@ -188,10 +188,10 @@
             };
         }
 
-        function genPlotOpts({ title, width, height, yAxisLabel, series, commits, alpha = 0.3, prox = 5 }) {
+        function genPlotOpts({ title, height, yAxisLabel, series, commits, alpha = 0.3, prox = 5 }) {
             return {
                 title,
-                width,
+                width: window.innerWidth * 0.9,
                 height,
                 series,
                 legend: {
@@ -254,8 +254,7 @@
             }
 
             let byChartPlotOpts = genPlotOpts({
-                title: "Bootstrap time for crates >= 30 seconds",
-                width: Math.floor(window.innerWidth) - 16,
+                title: `Bootstrap time for crates >= ${state.min_seconds} seconds`,
                 height: window.innerHeight * 0.56,
                 yAxisLabel: "",
                 series: byChartSeriesOpts,
@@ -268,7 +267,6 @@
 
             let totalPlotOpts = genPlotOpts({
                 title: "Total bootstrap time",
-                width: Math.floor(window.innerWidth) - 16,
                 height: window.innerHeight * 0.26,
                 yAxisLabel: "",
                 series: [{}, { label: "rustc", stroke: '#7cb5ec' }],
@@ -300,6 +298,7 @@
             let values = Object.assign({}, {
                 start: "",
                 end: "",
+                min_seconds: 25,
             }, state);
             post_json("/bootstrap", values).then(data => renderPlots(data, values));
         });
