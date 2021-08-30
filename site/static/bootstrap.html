@@ -254,7 +254,7 @@
             }
 
             let byChartPlotOpts = genPlotOpts({
-                title: "Bootstrap time for crates >= 30 seconds",
+                title: `Bootstrap time for crates >= ${state.min_seconds} seconds`,
                 height: window.innerHeight * 0.56,
                 yAxisLabel: "",
                 series: byChartSeriesOpts,
@@ -298,6 +298,7 @@
             let values = Object.assign({}, {
                 start: "",
                 end: "",
+                min_seconds: 25,
             }, state);
             post_json("/bootstrap", values).then(data => renderPlots(data, values));
         });
