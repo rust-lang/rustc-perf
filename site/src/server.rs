@@ -301,6 +301,69 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
                 .handle_get_async(&req, |c| request_handlers::handle_next_commit(c))
                 .await;
         }
+        "/perf/triage" => {
+            let input: triage::Request = if *req.method() == http::Method::GET {
+                let url = url::Url::parse(&format!("http://example.com{}", req.uri())).unwrap();
+                let parts = url
+                    .query_pairs()
+                    .into_owned()
+                    .collect::<HashMap<String, String>>();
+                match serde_json::from_str(&serde_json::to_string(&parts).unwrap()) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        return Ok(http::Response::builder()
+                            .header_typed(ContentType::text_utf8())
+                            .status(StatusCode::BAD_REQUEST)
+                            .body(hyper::Body::from(format!(
+                                "failed to deserialize request {}: {:?}",
+                                req.uri(),
+                                e,
+                            )))
+                            .unwrap());
+                    }
+                }
+            } else if *req.method() == http::Method::POST {
+                let mut body = Vec::new();
+                let (_req, mut body_stream) = req.into_parts();
+                while let Some(chunk) = body_stream.next().await {
+                    let chunk =
+                        chunk.map_err(|e| ServerError(format!("failed to read chunk: {:?}", e)))?;
+                    body.extend_from_slice(&chunk);
+                    // More than 10 MB of data
+                    if body.len() > 1024 * 1024 * 10 {
+                        return Ok(http::Response::builder()
+                            .status(StatusCode::PAYLOAD_TOO_LARGE)
+                            .body(hyper::Body::empty())
+                            .unwrap());
+                    }
+                }
+                match parse_body(&body) {
+                    Ok(b) => b,
+                    Err(e) => return Ok(e),
+                }
+            } else {
+                return Ok(http::Response::builder()
+                    .status(StatusCode::BAD_REQUEST)
+                    .header_typed(ContentType::text_utf8())
+                    .body(hyper::Body::from("bad method, only GET and POST supported"))
+                    .unwrap());
+            };
+            let ctxt: Arc<SiteCtxt> = server.ctxt.read().as_ref().unwrap().clone();
+            let response = crate::comparison::handle_triage(input, &ctxt).await;
+            match response {
+                Ok(result) => {
+                    let response = http::Response::builder().header_typed(ContentType::text());
+                    return Ok(response.body(hyper::Body::from(result.0)).unwrap());
+                }
+                Err(err) => {
+                    return Ok(http::Response::builder()
+                        .status(StatusCode::INTERNAL_SERVER_ERROR)
+                        .header_typed(ContentType::text_utf8())
+                        .body(hyper::Body::from(err.to_string()))
+                        .unwrap())
+                }
+            }
+        }
         "/perf/metrics" => {
             return Ok(server.handle_metrics(req).await);
         }
@@ -356,20 +419,6 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
         "/perf/graph" => Ok(to_response(
             request_handlers::handle_graph(body!(parse_body(&body)), &ctxt).await,
         )),
-        "/perf/triage" => {
-            let response = crate::comparison::handle_triage(body!(parse_body(&body)), &ctxt).await;
-            match response {
-                Ok(result) => {
-                    let response = http::Response::builder().header_typed(ContentType::text());
-                    Ok(response.body(hyper::Body::from(result.0)).unwrap())
-                }
-                Err(err) => Ok(http::Response::builder()
-                    .status(StatusCode::INTERNAL_SERVER_ERROR)
-                    .header_typed(ContentType::text_utf8())
-                    .body(hyper::Body::from(err.to_string()))
-                    .unwrap()),
-            }
-        }
         "/perf/get" => Ok(to_response(
             crate::comparison::handle_compare(body!(parse_body(&body)), &ctxt)
                 .await

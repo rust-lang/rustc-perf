@@ -88,7 +88,7 @@ impl<'de> Deserialize<'de> for Bound {
                 }
 
                 let bound = value
-                    .parse::<NaiveDate>()
+                    .parse::<chrono::NaiveDate>()
                     .map(|d| Bound::Date(d))
                     .unwrap_or(Bound::Commit(value.to_string()));
                 Ok(bound)
