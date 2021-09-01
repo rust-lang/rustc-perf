@@ -551,7 +551,10 @@
 
                     let benches =
                         data.comparisons.
-                            filter(n => filter.name && filter.name.trim() ? n.benchmark.includes(filter.name.trim()) : true).
+                            filter(n => {
+                                const f = filter.name && filter.name.trim();
+                                return !f || (n.benchmark + "-" + n.profile).includes(f);
+                            }).
                             reduce((accum, next) => {
                                 accum[next.benchmark + "-" + next.profile] ||= [];
                                 accum[next.benchmark + "-" + next.profile].push(next);
