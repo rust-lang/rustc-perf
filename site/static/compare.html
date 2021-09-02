@@ -556,8 +556,11 @@
                                 return !f || (n.benchmark + "-" + n.profile).includes(f);
                             }).
                             reduce((accum, next) => {
-                                accum[next.benchmark + "-" + next.profile] ||= [];
-                                accum[next.benchmark + "-" + next.profile].push(next);
+                                const key = next.benchmark + "-" + next.profile;
+                                if (!accum[key]) {
+                                    accum[key] = [];
+                                }
+                                accum[key].push(next);
                                 return accum;
                             }, {});
                     benches = Object.entries(benches).
