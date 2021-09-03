@@ -23,6 +23,7 @@ pub enum MissingReason {
     /// This commmit has not yet been benchmarked
     Master {
         pr: u32,
+        parent_sha: String,
     },
     TryParent,
     Try {
@@ -32,6 +33,16 @@ pub enum MissingReason {
         runs: Option<i32>,
     },
     InProgress(Option<Box<MissingReason>>),
+}
+
+impl MissingReason {
+    /// If the commit is a master commit get its PR and parent_sha
+    pub fn master_commit_pr_and_parent(&self) -> Option<(u32, &str)> {
+        match self {
+            Self::Master { pr, parent_sha } => Some((*pr, parent_sha)),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq)]
@@ -177,6 +188,7 @@ impl SiteCtxt {
                     // All recent master commits should have an associated PR
                     MissingReason::Master {
                         pr: c.pr.unwrap_or(0),
+                        parent_sha: c.parent_sha,
                     },
                 )
             })
