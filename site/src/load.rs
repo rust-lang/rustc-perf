@@ -147,27 +147,26 @@ impl SiteCtxt {
 
     pub async fn missing_commits(&self) -> Vec<(Commit, MissingReason)> {
         let conn = self.conn().await;
-        let (master_commits, queued_commits, in_progress_artifacts) = futures::join!(
+        let (master_commits, queued_try_commits, in_progress_artifacts) = futures::join!(
             collector::master_commits(),
             conn.queued_commits(),
             conn.in_progress_artifacts()
         );
-        let commits = master_commits
+        let master_commits = master_commits
             .map_err(|e| anyhow::anyhow!("{:?}", e))
             .context("getting master commit list")
             .unwrap();
 
         let index = self.index.load();
-        let mut have = index
+        let mut all_commits = index
             .commits()
             .iter()
             .map(|commit| commit.sha.clone())
             .collect::<HashSet<_>>();
 
         let now = Utc::now();
-        let mut missing = commits
-            .iter()
-            .cloned()
+        let mut master_commits = master_commits
+            .into_iter()
             .filter(|c| now.signed_duration_since(c.time) < Duration::days(29))
             .map(|c| {
                 (
@@ -182,9 +181,9 @@ impl SiteCtxt {
                 )
             })
             .collect::<Vec<_>>();
-        missing.reverse();
-        let mut commits = Vec::new();
-        commits.reserve(queued_commits.len() * 2); // Two commits per every try commit
+        master_commits.reverse();
+
+        let mut missing = Vec::with_capacity(queued_try_commits.len() * 2 + master_commits.len()); // Two commits per every try commit and all master commits
         for database::QueuedCommit {
             sha,
             parent_sha,
@@ -192,15 +191,18 @@ impl SiteCtxt {
             include,
             exclude,
             runs,
-        } in queued_commits
+        } in queued_try_commits
         {
             // Enqueue the `TryParent` commit before the `TryCommit` itself, so that
             // all of the `try` run's data is complete when the benchmark results
             // of that commit are available.
-            if let Some((commit, _)) = missing.iter().find(|c| c.0.sha == *parent_sha.as_str()) {
-                commits.push((commit.clone(), MissingReason::TryParent));
+            if let Some((try_parent, _)) = master_commits
+                .iter()
+                .find(|(m, _)| m.sha == parent_sha.as_str())
+            {
+                missing.push((try_parent.clone(), MissingReason::TryParent));
             }
-            commits.push((
+            missing.push((
                 Commit {
                     sha: sha.to_string(),
                     date: Date::ymd_hms(2001, 01, 01, 0, 0, 0),
@@ -213,39 +215,39 @@ impl SiteCtxt {
                 },
             ));
         }
-        commits.extend(missing);
+        missing.extend(master_commits);
 
         for aid in in_progress_artifacts {
             match aid {
                 ArtifactId::Commit(c) => {
-                    let previous = commits
+                    let previous = missing
                         .iter()
                         .find(|(i, _)| i.sha == c.sha)
                         .map(|v| Box::new(v.1.clone()));
-                    have.remove(&c.sha);
-                    commits.insert(0, (c, MissingReason::InProgress(previous)));
+                    all_commits.remove(&c.sha);
+                    missing.insert(0, (c, MissingReason::InProgress(previous)));
                 }
                 ArtifactId::Tag(_) => {
-                    // do nothing, for now, though eventually we'll want an artifact
-                    // queue
+                    // do nothing, for now, though eventually we'll want an artifact queue
                 }
             }
         }
 
-        let mut seen = HashSet::with_capacity(commits.len());
-        seen.extend(have);
+        let mut already_tested = HashSet::with_capacity(all_commits.len());
+        already_tested.extend(all_commits);
 
+        // Remove commits from missing that have already been tested
         // FIXME: replace with Vec::drain_filter when it stabilizes
         let mut i = 0;
-        while i != commits.len() {
-            if !seen.insert(commits[i].0.sha.clone()) {
-                commits.remove(i);
+        while i != missing.len() {
+            if !already_tested.insert(missing[i].0.sha.clone()) {
+                missing.remove(i);
             } else {
                 i += 1;
             }
         }
 
-        commits
+        missing
     }
 }
 
