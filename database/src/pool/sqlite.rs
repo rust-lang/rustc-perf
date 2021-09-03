@@ -163,6 +163,16 @@ static MIGRATIONS: &[&str] = &[
     );
     "#,
     r#"alter table pull_request_builds rename to pull_request_build"#,
+    r#"
+    create table raw_self_profile(
+        aid integer references artifact(id) on delete cascade on update cascade,
+        cid integer references collection(id) on delete cascade on update cascade,
+        crate text not null references benchmark(name) on delete cascade on update cascade,
+        profile text not null,
+        cache text not null,
+        PRIMARY KEY(aid, cid, crate, profile, cache)
+    );
+    "#,
 ];
 
 #[async_trait::async_trait]
