@@ -568,74 +568,82 @@ async fn post_comparison_comment(ctxt: &SiteCtxt, commit: QueuedCommit, is_maste
     )
     .await;
 
-    let mut label = String::new();
-    if !is_master_commit {
-        label.push_str("+S-waiting-on-review -S-waiting-on-perf ");
-    };
-    label.push_str(match direction {
+    let body = format!(
+        "Finished benchmarking commit ({sha}): [comparison url]({url}).
+
+**Summary**: {summary}
+{rest}",
+        sha = commit.sha,
+        url = comparison_url,
+        summary = summary,
+        rest = if is_master_commit {
+            master_run_body(direction)
+        } else {
+            try_run_body(direction)
+        }
+    );
+
+    post_comment(&ctxt.config, commit.pr, body).await;
+}
+
+fn master_run_body(direction: Option<Direction>) -> String {
+    let label = match direction {
         Some(Direction::Regression | Direction::Mixed) => "+perf-regression",
         Some(Direction::Improvement) | None => "-perf-regression",
-    });
-
-    let rollup_msg = if is_master_commit {
-        ""
-    } else {
-        "Benchmarking this pull request likely means that it is \
-perf-sensitive, so we're automatically marking it as not fit \
-for rolling up. "
     };
-
-    let next_steps_msg = direction
-        .map(|d| {
-            format!(
-                "{}{}",
-                if is_master_commit {
-                    ""
-                } else {
-                    "While you can manually mark this PR as fit \
-            for rollup, we strongly recommend not doing so since this PR led to changes in \
-            compiler perf."
-                },
-                match d {
-                    Direction::Regression | Direction::Mixed =>
-                        "\n\n**Next Steps**: If you can justify the \
+    let next_steps = match direction {
+        Some(Direction::Regression | Direction::Mixed) => {
+            "\n\n**Next Steps**: If you can justify the \
                 regressions found in this perf run, please indicate this with \
                 `@rustbot label: +perf-regression-triaged` along with \
                 sufficient written justification. If you cannot justify the regressions \
-                please fix the regressions (either in this PR if it's not yet merged or \
-                in another PR), and then add the `perf-regression-triaged` label to this PR.",
-                    Direction::Improvement => "",
-                }
-            )
-        })
-        .unwrap_or(String::new());
-    let bors_msg = if is_master_commit {
-        ""
-    } else {
-        "@bors rollup=never\n"
+                please open an issue or create a new PR that fixes the regressions, \
+                add a comment linking to the newly created issue or PR, \
+                and then add the `perf-regression-triaged` label to this PR."
+        }
+        Some(Direction::Improvement) | None => "",
     };
 
-    post_comment(
-        &ctxt.config,
-        commit.pr,
-        format!(
-            "Finished benchmarking commit ({sha}): [comparison url]({url}).
+    format!(
+        "
+{next_steps} 
 
-**Summary**: {summary}
-
-{rollup}{next_steps} 
-{bors}
 @rustbot label: {label}",
-            sha = commit.sha,
-            url = comparison_url,
-            summary = summary,
-            rollup = rollup_msg,
-            next_steps = next_steps_msg,
-            bors = bors_msg,
-            label = label
-        ),
+        next_steps = next_steps,
+        label = label
     )
-    .await;
+}
+
+fn try_run_body(direction: Option<Direction>) -> String {
+    let label = match direction {
+        Some(Direction::Regression | Direction::Mixed) => "+perf-regression",
+        Some(Direction::Improvement) | None => "-perf-regression",
+    };
+    let next_steps = match direction {
+        Some(Direction::Regression | Direction::Mixed) => {
+            "\n\n**Next Steps**: If you can justify the regressions found in \
+            this try perf run, please indicate this with \
+            `@rustbot label: +perf-regression-triaged` along with \
+            sufficient written justification. If you cannot justify the regressions \
+            please fix the regressions and do another perf run. If the next run \
+            shows neutral or positive results, the label will be automatically removed."
+        }
+        Some(Direction::Improvement) | None => "",
+    };
+
+    format!(
+        "
+Benchmarking this pull request likely means that it is \
+perf-sensitive, so we're automatically marking it as not fit \
+for rolling up. While you can manually mark this PR as fit \
+for rollup, we strongly recommend not doing so since this PR led to changes in \
+compiler perf.{next_steps} 
+
+@bors rollup=never
+@rustbot label: +S-waiting-on-review -S-waiting-on-perf {label}",
+        next_steps = next_steps,
+        label = label
+    )
 }
 
 async fn categorize_benchmark(
