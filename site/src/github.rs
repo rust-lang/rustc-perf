@@ -1,5 +1,5 @@
 use crate::api::github::Issue;
-use crate::comparison::{ComparisonSummary, Direction};
+use crate::comparison::{ComparisonConfidence, ComparisonSummary, Direction};
 use crate::load::{Config, SiteCtxt, TryCommit};
 
 use anyhow::Context as _;
@@ -560,8 +560,13 @@ async fn post_comparison_comment(ctxt: &SiteCtxt, commit: QueuedCommit, is_maste
         "https://perf.rust-lang.org/compare.html?start={}&end={}",
         commit.parent_sha, commit.sha
     );
-    let (summary, direction) =
-        categorize_benchmark(commit.sha.clone(), commit.parent_sha, ctxt).await;
+    let (summary, direction) = categorize_benchmark(
+        ctxt,
+        commit.sha.clone(),
+        commit.parent_sha,
+        is_master_commit,
+    )
+    .await;
 
     let mut label = String::new();
     if !is_master_commit {
@@ -634,9 +639,10 @@ for rolling up. "
 }
 
 async fn categorize_benchmark(
+    ctxt: &SiteCtxt,
     commit_sha: String,
     parent_sha: String,
-    ctxt: &SiteCtxt,
+    is_master_commit: bool,
 ) -> (String, Option<Direction>) {
     let comparison = match crate::comparison::compare(
         collector::Bound::Commit(parent_sha),
@@ -653,7 +659,7 @@ async fn categorize_benchmark(
     please file an issue in [rust-lang/rustc-perf](https://github.com/rust-lang/rustc-perf/issues/new).";
     let (summary, (direction, magnitude)) =
         match ComparisonSummary::summarize_comparison(&comparison) {
-            Some(s) if s.confidence().is_atleast_probably_relevant() => {
+            Some(s) if comparison_is_relevant(s.confidence(), is_master_commit) => {
                 let direction_and_magnitude = s.direction_and_magnitude().unwrap();
                 (s, direction_and_magnitude)
             }
@@ -684,6 +690,16 @@ async fn categorize_benchmark(
     }
     write!(result, "\n{}", DISAGREEMENT).unwrap();
     (result, Some(direction))
+}
+
+/// Whether a comparison is relevant enough to show
+fn comparison_is_relevant(confidence: ComparisonConfidence, is_master_commit: bool) -> bool {
+    if is_master_commit {
+        confidence.is_definitely_relevant()
+    } else {
+        // is try run
+        confidence.is_atleast_probably_relevant()
+    }
 }
 
 pub(crate) struct PullRequest {
