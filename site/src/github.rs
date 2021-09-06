@@ -562,10 +562,16 @@ async fn post_comparison_comment(ctxt: &SiteCtxt, commit: QueuedCommit, is_maste
     );
     let (summary, direction) =
         categorize_benchmark(commit.sha.clone(), commit.parent_sha, ctxt).await;
-    let label = match direction {
+
+    let mut label = String::new();
+    if !is_master_commit {
+        label.push_str("+S-waiting-on-review -S-waiting-on-perf ");
+    };
+    label.push_str(match direction {
         Some(Direction::Regression | Direction::Mixed) => "+perf-regression",
         Some(Direction::Improvement) | None => "-perf-regression",
-    };
+    });
+
     let rollup_msg = if is_master_commit {
         ""
     } else {
@@ -573,6 +579,7 @@ async fn post_comparison_comment(ctxt: &SiteCtxt, commit: QueuedCommit, is_maste
 perf-sensitive, so we're automatically marking it as not fit \
 for rolling up. "
     };
+
     let next_steps_msg = direction
         .map(|d| {
             format!(
@@ -602,6 +609,7 @@ for rolling up. "
     } else {
         "@bors rollup=never\n"
     };
+
     post_comment(
         &ctxt.config,
         commit.pr,
@@ -612,7 +620,7 @@ for rolling up. "
 
 {rollup}{next_steps} 
 {bors}
-@rustbot label: +S-waiting-on-review -S-waiting-on-perf {label}",
+@rustbot label: {label}",
             sha = commit.sha,
             url = comparison_url,
             summary = summary,
