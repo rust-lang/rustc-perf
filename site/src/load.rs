@@ -35,16 +35,6 @@ pub enum MissingReason {
     InProgress(Option<Box<MissingReason>>),
 }
 
-impl MissingReason {
-    /// If the commit is a master commit get its PR and parent_sha
-    pub fn master_commit_pr_and_parent(&self) -> Option<(u32, &str)> {
-        match self {
-            Self::Master { pr, parent_sha } => Some((*pr, parent_sha)),
-            _ => None,
-        }
-    }
-}
-
 #[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq)]
 pub struct TryCommit {
     pub sha: String,
@@ -156,9 +146,10 @@ impl SiteCtxt {
         self.pool.connection().await
     }
 
+    /// Returns the not yet tested commits
     pub async fn missing_commits(&self) -> Vec<(Commit, MissingReason)> {
         let conn = self.conn().await;
-        let (master_commits, queued_try_commits, in_progress_artifacts) = futures::join!(
+        let (master_commits, queued_pr_commits, in_progress_artifacts) = futures::join!(
             collector::master_commits(),
             conn.queued_commits(),
             conn.in_progress_artifacts()
@@ -195,7 +186,7 @@ impl SiteCtxt {
             .collect::<Vec<_>>();
         master_commits.reverse();
 
-        let mut missing = Vec::with_capacity(queued_try_commits.len() * 2 + master_commits.len()); // Two commits per every try commit and all master commits
+        let mut missing = Vec::with_capacity(queued_pr_commits.len() * 2 + master_commits.len()); // Two commits per every try commit and all master commits
         for database::QueuedCommit {
             sha,
             parent_sha,
@@ -203,7 +194,10 @@ impl SiteCtxt {
             include,
             exclude,
             runs,
-        } in queued_try_commits
+        } in queued_pr_commits
+            .into_iter()
+            // filter out any queued PR master commits (leaving only try commits)
+            .filter(|c| !master_commits.iter().any(|(mc, _)| mc.sha == c.sha))
         {
             // Enqueue the `TryParent` commit before the `TryCommit` itself, so that
             // all of the `try` run's data is complete when the benchmark results

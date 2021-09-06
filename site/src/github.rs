@@ -501,6 +501,8 @@ pub struct PostComment {
     pub body: String,
 }
 
+/// Post messages to GitHub for all queued commits that have
+/// not yet been marked as completed.
 pub async fn post_finished(ctxt: &SiteCtxt) {
     // If the github token is not configured, do not run this -- we don't want
     // to mark things as complete without posting the comment.
@@ -509,7 +511,7 @@ pub async fn post_finished(ctxt: &SiteCtxt) {
     }
     let conn = ctxt.conn().await;
     let index = ctxt.index.load();
-    let mut already_tested_commits = index
+    let mut known_commits = index
         .commits()
         .into_iter()
         .map(|c| c.sha.to_string())
@@ -519,36 +521,41 @@ pub async fn post_finished(ctxt: &SiteCtxt) {
         conn.queued_commits(),
         conn.in_progress_artifacts()
     );
-    let master_commits = master_commits
-        .unwrap()
-        .into_iter()
-        .map(|c| c.sha)
-        .collect::<HashSet<_>>();
+    let master_commits = if let Ok(mcs) = master_commits {
+        mcs.into_iter().map(|c| c.sha).collect::<HashSet<_>>()
+    } else {
+        // If we can't fetch master commits, return.
+        // We'll eventually try again later
+        return;
+    };
 
     for aid in in_progress_artifacts {
         match aid {
             ArtifactId::Commit(c) => {
-                already_tested_commits.remove(&c.sha);
+                known_commits.remove(&c.sha);
             }
             ArtifactId::Tag(_) => {
                 // do nothing, for now, though eventually we'll want an artifact queue
             }
         }
     }
-    for commit in queued_pr_commits
+    for queued_commit in queued_pr_commits
         .into_iter()
-        .filter(|c| already_tested_commits.contains(&c.sha))
+        .filter(|c| known_commits.contains(&c.sha))
     {
-        if let Some(completed) = conn.mark_complete(&commit.sha).await {
-            assert_eq!(completed, commit);
+        if let Some(completed) = conn.mark_complete(&queued_commit.sha).await {
+            assert_eq!(completed, queued_commit);
 
-            let is_master_commit = master_commits.contains(&commit.sha);
-            post_comparison_comment(commit, ctxt, is_master_commit).await;
+            let is_master_commit = master_commits.contains(&queued_commit.sha);
+            post_comparison_comment(ctxt, queued_commit, is_master_commit).await;
         }
     }
 }
 
-async fn post_comparison_comment(commit: QueuedCommit, ctxt: &SiteCtxt, is_master_commit: bool) {
+/// Posts a comment to GitHub summarizing the comparison of the queued commit with its parent
+///
+/// `is_master_commit` is used to differentiate messages for try runs and post-merge runs.
+async fn post_comparison_comment(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: bool) {
     let comparison_url = format!(
         "https://perf.rust-lang.org/compare.html?start={}&end={}",
         commit.parent_sha, commit.sha
@@ -558,6 +565,13 @@ async fn post_comparison_comment(commit: QueuedCommit, ctxt: &SiteCtxt, is_maste
     let label = match direction {
         Some(Direction::Regression | Direction::Mixed) => "+perf-regression",
         Some(Direction::Improvement) | None => "-perf-regression",
+    };
+    let rollup_msg = if is_master_commit {
+        ""
+    } else {
+        "Benchmarking this pull request likely means that it is \
+perf-sensitive, so we're automatically marking it as not fit \
+for rolling up. "
     };
     let next_steps_msg = direction
         .map(|d| {
@@ -577,19 +591,12 @@ async fn post_comparison_comment(commit: QueuedCommit, ctxt: &SiteCtxt, is_maste
                 `@rustbot label: +perf-regression-triaged` along with \
                 sufficient written justification. If you cannot justify the regressions \
                 please fix the regressions (either in this PR if it's not yet merged or \
-                in another PR) and do another perf run.",
+                in another PR), and then add the `perf-regression-triaged` label to this PR.",
                     Direction::Improvement => "",
                 }
             )
         })
         .unwrap_or(String::new());
-    let rollup_msg = if is_master_commit {
-        ""
-    } else {
-        "Benchmarking this pull request likely means that it is \
-perf-sensitive, so we're automatically marking it as not fit \
-for rolling up. "
-    };
     let bors_msg = if is_master_commit {
         ""
     } else {
@@ -599,14 +606,20 @@ for rolling up. "
         &ctxt.config,
         commit.pr,
         format!(
-            "Finished benchmarking commit ({}): [comparison url]({}).
+            "Finished benchmarking commit ({sha}): [comparison url]({url}).
 
-**Summary**: {}
+**Summary**: {summary}
 
-{}{} 
-{}
-@rustbot label: +S-waiting-on-review -S-waiting-on-perf {}",
-            commit.sha, comparison_url, summary, rollup_msg, next_steps_msg, bors_msg, label
+{rollup}{next_steps} 
+{bors}
+@rustbot label: +S-waiting-on-review -S-waiting-on-perf {label}",
+            sha = commit.sha,
+            url = comparison_url,
+            summary = summary,
+            rollup = rollup_msg,
+            next_steps = next_steps_msg,
+            bors = bors_msg,
+            label = label
         ),
     )
     .await;
