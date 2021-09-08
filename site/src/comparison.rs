@@ -639,24 +639,30 @@ impl BenchmarkVariance {
         self.data.iter().sum::<f64>() / self.data.len() as f64
     }
 
+    /// The percent change of the deltas sorted from smallest delta to largest
+    fn percent_changes(&self) -> Vec<f64> {
+        let mut deltas = self
+            .deltas()
+            .zip(self.data.iter())
+            .map(|(d, &r)| d / r)
+            .collect::<Vec<_>>();
+        deltas.sort_by(|d1, d2| d1.partial_cmp(d2).unwrap_or(std::cmp::Ordering::Equal));
+        deltas
+    }
+
     fn calculate_description(&mut self) {
         self.description = BenchmarkVarianceDescription::Normal;
 
         let results_mean = self.mean();
-        let mut deltas = self
-            .data
-            .windows(2)
-            .map(|window| (window[0] - window[1]).abs())
-            .collect::<Vec<_>>();
-        deltas.sort_by(|d1, d2| d1.partial_cmp(d2).unwrap_or(std::cmp::Ordering::Equal));
-        let non_significant = deltas
+        let percent_changes = self.percent_changes();
+        let non_significant = percent_changes
             .iter()
-            .zip(self.data.iter())
-            .take_while(|(&d, &r)| d / r < Self::SIGNFICANT_DELTA_THRESHOLD)
+            .take_while(|&&c| c < Self::SIGNFICANT_DELTA_THRESHOLD)
             .collect::<Vec<_>>();
 
-        let percent_significant_changes =
-            ((deltas.len() - non_significant.len()) as f64 / deltas.len() as f64) * 100.0;
+        let percent_significant_changes = ((percent_changes.len() - non_significant.len()) as f64
+            / percent_changes.len() as f64)
+            * 100.0;
         debug!(
             "Percent significant changes: {:.1}%",
             percent_significant_changes
@@ -668,12 +674,18 @@ impl BenchmarkVariance {
         }
 
         let delta_mean =
-            non_significant.iter().map(|(&d, _)| d).sum::<f64>() / (non_significant.len() as f64);
+            non_significant.iter().cloned().sum::<f64>() / (non_significant.len() as f64);
         let ratio_change = delta_mean / results_mean;
-        debug!("Ratio change: {:.3}", ratio_change);
         if ratio_change > Self::NOISE_THRESHOLD {
             self.description = BenchmarkVarianceDescription::Noisy;
         }
+    }
+
+    // Absolute deltas between adjacent results
+    fn deltas(&self) -> impl Iterator<Item = f64> + '_ {
+        self.data
+            .windows(2)
+            .map(|window| (window[0] - window[1]).abs())
     }
 
     /// Whether we can trust this benchmark or not
@@ -740,12 +752,8 @@ pub struct TestResultComparison {
 
 impl TestResultComparison {
     /// The amount of relative change considered significant when
-    /// the test case is not dodgy
+    /// we cannot determine from historical data
     const SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD: f64 = 0.002;
-
-    /// The amount of relative change considered significant when
-    /// the test case is dodgy
-    const SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD_DODGY: f64 = 0.008;
 
     fn is_regression(&self) -> bool {
         let (a, b) = self.results;
@@ -761,8 +769,28 @@ impl TestResultComparison {
     }
 
     fn signifcance_threshold(&self) -> f64 {
-        if self.is_dodgy() {
-            Self::SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD_DODGY
+        if let Some(pcs) = self.variance.as_ref().map(|s| s.percent_changes()) {
+            fn median(data: &[f64]) -> f64 {
+                if data.len() % 2 == 0 {
+                    (data[(data.len() - 1) / 2] + data[data.len() / 2]) / 2.0
+                } else {
+                    data[data.len() / 2]
+                }
+            }
+
+            let len = pcs.len();
+            let (h1_end, h2_begin) = if len % 2 == 0 {
+                (len / 2 - 2, len / 2 + 1)
+            } else {
+                (len / 2 - 1, len / 2 + 1)
+            };
+            // significance is determined by the upper
+            // interquartile range fence
+            let q1 = median(&pcs[..=h1_end]);
+            let q3 = median(&pcs[h2_begin..]);
+            let iqr = q3 - q1;
+            let upper_fence = q3 + (iqr * 1.5);
+            upper_fence
         } else {
             Self::SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD
         }

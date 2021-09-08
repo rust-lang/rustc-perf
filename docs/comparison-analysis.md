@@ -18,11 +18,11 @@ At the core of comparison analysis are the collection of test results for the tw
 100 * ((statisticForArtifactB - statisticForArtifactA) / statisticForArtifactA)
 ```
 
-## High-level analysis description 
+## High-level analysis description
 
 Analysis of the changes is performed in order to determine whether artifact B represents a performance change over artifact A. At a high level the analysis performed takes the following form:
 
-How many _significant_ test results indicate performance changes and what is the magnitude of the changes (i.e., how large are the changes regardless of the direction of change)? 
+How many _significant_ test results indicate performance changes and what is the magnitude of the changes (i.e., how large are the changes regardless of the direction of change)?
 
 * If there are improvements and regressions with magnitude of medium or above then the comparison is mixed.
 * If there are only either improvements or regressions then the comparison is labeled with that kind.
@@ -37,7 +37,16 @@ Whether we actually _report_ an analysis or not depends on the context and how _
 
 ### What makes a test result significant?
 
-A test result is significant if the relative change percentage meets some threshold. What the threshold is depends of whether the test case is "dodgy" or not (see below for an examination of "dodginess"). For dodgy test cases, the threshold is set at 1%. For non-dodgy test cases, the threshold is set to 0.1%.
+A test result is significant if the relative change percentage is considered an outlier against historical data. Determining whether a value is an outlier is done through interquartile range "fencing" (i.e., whether a value exceeds a threshold equal to the third quartile plus 1.5 times the interquartile range):
+
+```
+interquartile_range = Q3 - Q1
+result > Q3 + (interquartile_range * 1.5)
+```
+
+(Assuming the data is ordered, Q3 is the median of the upper half of the data while Q1 is the median of the lower half.)
+
+We ignore the lower fence, because result data is bounded by 0.
 
 ### What makes a test case "dodgy"?
 
