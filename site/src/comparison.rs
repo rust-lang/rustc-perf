@@ -45,6 +45,7 @@ pub async fn handle_triage(
             "instructions:u".to_owned(),
             ctxt,
             &master_commits,
+            body.calcNewSig.unwrap_or(false),
         )
         .await?
         {
@@ -89,10 +90,16 @@ pub async fn handle_compare(
 ) -> Result<api::comparison::Response, BoxedError> {
     let master_commits = collector::master_commits().await?;
     let end = body.end;
-    let comparison =
-        compare_given_commits(body.start, end.clone(), body.stat, ctxt, &master_commits)
-            .await?
-            .ok_or_else(|| format!("could not find end commit for bound {:?}", end))?;
+    let comparison = compare_given_commits(
+        body.start,
+        end.clone(),
+        body.stat,
+        ctxt,
+        &master_commits,
+        body.calcNewSig.unwrap_or(false),
+    )
+    .await?
+    .ok_or_else(|| format!("could not find end commit for bound {:?}", end))?;
 
     let conn = ctxt.conn().await;
     let prev = comparison.prev(&master_commits);
@@ -338,7 +345,7 @@ pub async fn compare(
     ctxt: &SiteCtxt,
 ) -> Result<Option<Comparison>, BoxedError> {
     let master_commits = collector::master_commits().await?;
-    compare_given_commits(start, end, stat, ctxt, &master_commits).await
+    compare_given_commits(start, end, stat, ctxt, &master_commits, false).await
 }
 
 /// Compare two bounds on a given stat
@@ -348,6 +355,7 @@ async fn compare_given_commits(
     stat: String,
     ctxt: &SiteCtxt,
     master_commits: &[collector::MasterCommit],
+    calc_new_sig: bool,
 ) -> Result<Option<Comparison>, BoxedError> {
     let a = ctxt
         .artifact_id_for_bound(start.clone(), true)
@@ -387,6 +395,7 @@ async fn compare_given_commits(
                         .as_ref()
                         .and_then(|v| v.data.get(&test_case).cloned()),
                     results: (a, b),
+                    calc_new_sig,
                 })
         })
         .collect();
@@ -635,28 +644,53 @@ impl BenchmarkVariance {
         self.data.push(value);
     }
 
-    fn mean(&self) -> f64 {
-        self.data.iter().sum::<f64>() / self.data.len() as f64
+    /// The percent change of the deltas sorted from smallest delta to largest
+    fn percent_changes(&self) -> Vec<f64> {
+        let mut deltas = self
+            .deltas()
+            .zip(self.data.iter())
+            .map(|(d, &r)| d / r)
+            .collect::<Vec<_>>();
+        deltas.sort_by(|d1, d2| d1.partial_cmp(d2).unwrap_or(std::cmp::Ordering::Equal));
+        deltas
+    }
+
+    fn upper_fence(&self) -> f64 {
+        let pcs = self.percent_changes();
+        fn median(data: &[f64]) -> f64 {
+            if data.len() % 2 == 0 {
+                (data[(data.len() - 1) / 2] + data[data.len() / 2]) / 2.0
+            } else {
+                data[data.len() / 2]
+            }
+        }
+
+        let len = pcs.len();
+        let (h1_end, h2_begin) = if len % 2 == 0 {
+            (len / 2 - 2, len / 2 + 1)
+        } else {
+            (len / 2 - 1, len / 2 + 1)
+        };
+        // significance is determined by the upper
+        // interquartile range fence
+        let q1 = median(&pcs[..=h1_end]);
+        let q3 = median(&pcs[h2_begin..]);
+        let iqr = q3 - q1;
+        q3 + (iqr * 1.5)
     }
 
     fn calculate_description(&mut self) {
         self.description = BenchmarkVarianceDescription::Normal;
 
-        let results_mean = self.mean();
-        let mut deltas = self
-            .data
-            .windows(2)
-            .map(|window| (window[0] - window[1]).abs())
-            .collect::<Vec<_>>();
-        deltas.sort_by(|d1, d2| d1.partial_cmp(d2).unwrap_or(std::cmp::Ordering::Equal));
-        let non_significant = deltas
+        let percent_changes = self.percent_changes();
+        let non_significant = percent_changes
             .iter()
-            .zip(self.data.iter())
-            .take_while(|(&d, &r)| d / r < Self::SIGNFICANT_DELTA_THRESHOLD)
+            .take_while(|&&c| c < Self::SIGNFICANT_DELTA_THRESHOLD)
             .collect::<Vec<_>>();
 
-        let percent_significant_changes =
-            ((deltas.len() - non_significant.len()) as f64 / deltas.len() as f64) * 100.0;
+        let percent_significant_changes = ((percent_changes.len() - non_significant.len()) as f64
+            / percent_changes.len() as f64)
+            * 100.0;
         debug!(
             "Percent significant changes: {:.1}%",
             percent_significant_changes
@@ -668,20 +702,30 @@ impl BenchmarkVariance {
         }
 
         let delta_mean =
-            non_significant.iter().map(|(&d, _)| d).sum::<f64>() / (non_significant.len() as f64);
-        let ratio_change = delta_mean / results_mean;
-        debug!("Ratio change: {:.3}", ratio_change);
-        if ratio_change > Self::NOISE_THRESHOLD {
+            non_significant.iter().cloned().sum::<f64>() / (non_significant.len() as f64);
+        debug!("Ratio change: {:.4}", delta_mean);
+        if delta_mean > Self::NOISE_THRESHOLD {
             self.description = BenchmarkVarianceDescription::Noisy;
         }
     }
 
+    // Absolute deltas between adjacent results
+    fn deltas(&self) -> impl Iterator<Item = f64> + '_ {
+        self.data
+            .windows(2)
+            .map(|window| (window[0] - window[1]).abs())
+    }
+
     /// Whether we can trust this benchmark or not
-    fn is_dodgy(&self) -> bool {
-        matches!(
-            self.description,
-            BenchmarkVarianceDescription::Noisy | BenchmarkVarianceDescription::HighlyVariable
-        )
+    fn is_dodgy(&self, calc_new_sig: bool) -> bool {
+        if !calc_new_sig {
+            matches!(
+                self.description,
+                BenchmarkVarianceDescription::Noisy | BenchmarkVarianceDescription::HighlyVariable
+            )
+        } else {
+            self.upper_fence() > 0.002
+        }
     }
 }
 
@@ -736,11 +780,12 @@ pub struct TestResultComparison {
     scenario: Scenario,
     variance: Option<BenchmarkVariance>,
     results: (f64, f64),
+    calc_new_sig: bool,
 }
 
 impl TestResultComparison {
     /// The amount of relative change considered significant when
-    /// the test case is not dodgy
+    /// we cannot determine from historical data
     const SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD: f64 = 0.002;
 
     /// The amount of relative change considered significant when
@@ -761,33 +806,74 @@ impl TestResultComparison {
     }
 
     fn signifcance_threshold(&self) -> f64 {
-        if self.is_dodgy() {
-            Self::SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD_DODGY
+        if !self.calc_new_sig {
+            if self.is_dodgy() {
+                Self::SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD_DODGY
+            } else {
+                Self::SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD
+            }
         } else {
-            Self::SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD
+            self.variance
+                .as_ref()
+                .map(|s| s.upper_fence())
+                .unwrap_or(Self::SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD)
         }
     }
 
     fn magnitude(&self) -> Magnitude {
-        let mag = self.relative_change().abs();
+        let change = self.relative_change().abs();
         let threshold = self.signifcance_threshold();
-        if mag < threshold * 1.5 {
+        let over_threshold = if change < threshold * 1.5 {
             Magnitude::VerySmall
-        } else if mag < threshold * 3.0 {
+        } else if change < threshold * 3.0 {
             Magnitude::Small
-        } else if mag < threshold * 10.0 {
+        } else if change < threshold * 10.0 {
             Magnitude::Medium
-        } else if mag < threshold * 25.0 {
+        } else if change < threshold * 25.0 {
             Magnitude::Large
         } else {
             Magnitude::VeryLarge
+        };
+        if !self.calc_new_sig {
+            return over_threshold;
         }
+        let change_magnitude = if change < 0.002 {
+            Magnitude::VerySmall
+        } else if change < 0.01 {
+            Magnitude::Small
+        } else if change < 0.02 {
+            Magnitude::Medium
+        } else if change < 0.05 {
+            Magnitude::Large
+        } else {
+            Magnitude::VeryLarge
+        };
+        fn as_u8(m: Magnitude) -> u8 {
+            match m {
+                Magnitude::VerySmall => 1,
+                Magnitude::Small => 2,
+                Magnitude::Medium => 3,
+                Magnitude::Large => 4,
+                Magnitude::VeryLarge => 5,
+            }
+        }
+        fn from_u8(m: u8) -> Magnitude {
+            match m {
+                1 => Magnitude::VerySmall,
+                2 => Magnitude::Small,
+                3 => Magnitude::Medium,
+                4 => Magnitude::Large,
+                _ => Magnitude::VeryLarge,
+            }
+        }
+
+        from_u8((as_u8(over_threshold) + as_u8(change_magnitude)) / 2)
     }
 
     fn is_dodgy(&self) -> bool {
         self.variance
             .as_ref()
-            .map(|v| v.is_dodgy())
+            .map(|v| v.is_dodgy(self.calc_new_sig))
             .unwrap_or(false)
     }
 
@@ -867,7 +953,7 @@ impl std::fmt::Display for Direction {
 }
 
 /// The relative size of a performance change
-#[derive(Debug, PartialOrd, PartialEq, Ord, Eq)]
+#[derive(Clone, Copy, Debug, PartialOrd, PartialEq, Ord, Eq)]
 pub enum Magnitude {
     VerySmall,
     Small,

@@ -766,6 +766,7 @@
                 end: "",
                 stat: "instructions:u",
             }, state);
+            values["calcNewSig"] = values.calcNewSig === 'true';
             makeRequest("/get", values).then(function (data) {
                 app.data = data;
             });
