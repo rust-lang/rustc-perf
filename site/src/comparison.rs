@@ -797,19 +797,50 @@ impl TestResultComparison {
     }
 
     fn magnitude(&self) -> Magnitude {
-        let mag = self.relative_change().abs();
+        let change = self.relative_change().abs();
         let threshold = self.signifcance_threshold();
-        if mag < threshold * 1.5 {
+        let over_threshold = if change < threshold * 1.5 {
             Magnitude::VerySmall
-        } else if mag < threshold * 3.0 {
+        } else if change < threshold * 3.0 {
             Magnitude::Small
-        } else if mag < threshold * 10.0 {
+        } else if change < threshold * 10.0 {
             Magnitude::Medium
-        } else if mag < threshold * 25.0 {
+        } else if change < threshold * 25.0 {
             Magnitude::Large
         } else {
             Magnitude::VeryLarge
+        };
+        let change_magnitude = if change < 0.002 {
+            Magnitude::VerySmall
+        } else if change < 0.01 {
+            Magnitude::Small
+        } else if change < 0.02 {
+            Magnitude::Medium
+        } else if change < 0.05 {
+            Magnitude::Large
+        } else {
+            Magnitude::VeryLarge
+        };
+        fn as_u8(m: Magnitude) -> u8 {
+            match m {
+                Magnitude::VerySmall => 1,
+                Magnitude::Small => 2,
+                Magnitude::Medium => 3,
+                Magnitude::Large => 4,
+                Magnitude::VeryLarge => 5,
+            }
         }
+        fn from_u8(m: u8) -> Magnitude {
+            match m {
+                1 => Magnitude::VerySmall,
+                2 => Magnitude::Small,
+                3 => Magnitude::Medium,
+                4 => Magnitude::Large,
+                _ => Magnitude::VeryLarge,
+            }
+        }
+
+        from_u8((as_u8(over_threshold) + as_u8(change_magnitude)) / 2)
     }
 
     fn is_dodgy(&self) -> bool {
@@ -895,7 +926,7 @@ impl std::fmt::Display for Direction {
 }
 
 /// The relative size of a performance change
-#[derive(Debug, PartialOrd, PartialEq, Ord, Eq)]
+#[derive(Clone, Copy, Debug, PartialOrd, PartialEq, Ord, Eq)]
 pub enum Magnitude {
     VerySmall,
     Small,
