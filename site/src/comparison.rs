@@ -644,10 +644,6 @@ impl BenchmarkVariance {
         self.data.push(value);
     }
 
-    fn mean(&self) -> f64 {
-        self.data.iter().sum::<f64>() / self.data.len() as f64
-    }
-
     /// The percent change of the deltas sorted from smallest delta to largest
     fn percent_changes(&self) -> Vec<f64> {
         let mut deltas = self
@@ -686,7 +682,6 @@ impl BenchmarkVariance {
     fn calculate_description(&mut self) {
         self.description = BenchmarkVarianceDescription::Normal;
 
-        let results_mean = self.mean();
         let percent_changes = self.percent_changes();
         let non_significant = percent_changes
             .iter()
@@ -708,8 +703,8 @@ impl BenchmarkVariance {
 
         let delta_mean =
             non_significant.iter().cloned().sum::<f64>() / (non_significant.len() as f64);
-        let ratio_change = delta_mean / results_mean;
-        if ratio_change > Self::NOISE_THRESHOLD {
+        debug!("Ratio change: {:.4}", delta_mean);
+        if delta_mean > Self::NOISE_THRESHOLD {
             self.description = BenchmarkVarianceDescription::Noisy;
         }
     }
