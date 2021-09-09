@@ -1,6 +1,6 @@
 # Comparison Analysis
 
-The following is a detailed explanation of the process undertaken to automate the analysis of test results for two artifacts of interest (artifact A and B). 
+The following is a detailed explanation of the process undertaken to automate the analysis of test results for two artifacts of interest (artifact A and B).
 
 This analysis can be done by hand, by using the [comparison page](https://perf.rust-lang.org/compare.html) and entering the two artifacts of interest in the form at the top.
 
@@ -48,27 +48,27 @@ result > Q3 + (interquartile_range * 1.5)
 
 We ignore the lower fence, because result data is bounded by 0.
 
-### What makes a test case "dodgy"?
-
-A test case is "dodgy" if it shows signs of either being noisy or highly variable.
-
-To determine noise and high variability, the previous 100 test results for the test case in question are examined by calculating relative delta changes between adjacent test results. This is done with the following formula (where `testResult1` is the test result immediately proceeding `testResult2`):
-
-```
-testResult2 - testResult1 / testResult1
-```
-
-Any relative delta change that is above a threshold (currently 0.1) is considered "significant" for the purposes of dodginess detection.
-
-A highly variable test case is one where a certain percentage (currently 5%) of relative delta changes are significant. The logic being that test cases should only display significant relative delta changes a small percentage of the time.
-
-A noisy test case is one where of all the non-significant relative delta changes, the average delta change is still above some threshold (0.001). The logic being that non-significant changes should, on average, being very close to 0. If they are not close to zero, then they are noisy.
+This upper fence is often called the "significance threshold".
 
 ### How is confidence in whether a test analysis is "relevant" determined?
 
-The confidence in whether a test analysis is relevant depends on the number of significant test results and their magnitude (how large a change is regardless of the direction of the change).
+The confidence in whether a test analysis is relevant depends on the number of significant test results and their magnitude.
+
+#### Magnitude
+
+Magnitude is a combination of two factors:
+* how large a change is regardless of the direction of the change
+* how much that change went over the significance threshold
+
+If a large change only happens to go over the significance threshold by a small factor, then the over magnitude of the change is considered small.
+
+#### Confidence algorithm
 
 The actual algorithm for determining confidence may change, but in general the following rules apply:
-* Definitely relevant: any number of very large changes, a small amount of large and/or medium changes, or a large amount of small changes.
-* Probably relevant: any number of large changes, more than 1 medium change, or smaller but still substantial amount of small changes.
+* Definitely relevant: any number of very large or large changes, a small amount of medium changes, or a large amount of small or very small changes.
+* Probably relevant: any number of very large or large changes, any medium change, or smaller but still substantial amount of small or very small changes.
 * Maybe relevant: if it doesn't fit into the above two categories, it ends in this category.
+
+### "Dodgy" Test Cases
+
+"Dodgy" test cases are test cases that tend to produce unreliable results (i.e., noise). A test case is considered "dodgy" if its significance threshold is sufficiently far enough away from 0.
