@@ -426,7 +426,7 @@
                                     </a>
                                 </td>
                                 <td>
-                                    {{ run.significanceThreshold.toFixed(2) }}%
+                                    {{ Math.abs(run.percent / run.significanceThreshold).toFixed(2) }}x
                                 </td>
                             </tr>
                         </template>
