@@ -425,6 +425,9 @@
                                         </span>
                                     </a>
                                 </td>
+                                <td>
+                                    {{ run.significanceThreshold.toFixed(2) }}%
+                                </td>
                             </tr>
                         </template>
                     </tbody>
@@ -541,6 +544,7 @@
                                     datumB,
                                     percent,
                                     isDodgy,
+                                    significanceThreshold: r.significance_threshold,
                                     isSignificant
                                 });
                             }

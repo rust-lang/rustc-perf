@@ -187,6 +187,7 @@ pub mod comparison {
         pub profile: String,
         pub scenario: String,
         pub is_significant: bool,
+        pub significance_threshold: f64,
         pub is_dodgy: bool,
         pub historical_statistics: Option<Vec<f64>>,
         pub statistics: (f64, f64),
