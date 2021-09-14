@@ -640,6 +640,8 @@ impl BenchmarkVariance {
     const SIGNFICANT_CHANGE_THRESHOLD: f64 = 5.0;
     /// The ratio of change that constitutes noisy data
     const NOISE_THRESHOLD: f64 = 0.001;
+    /// The multiple of the IQR above Q3 that signifies significance
+    const IQR_MULTIPLIER: f64 = 3.0;
 
     fn push(&mut self, value: f64) {
         self.data.push(value);
@@ -677,7 +679,7 @@ impl BenchmarkVariance {
         let q1 = median(&pcs[..=h1_end]);
         let q3 = median(&pcs[h2_begin..]);
         let iqr = q3 - q1;
-        q3 + (iqr * 1.5)
+        q3 + (iqr * Self::IQR_MULTIPLIER)
     }
 
     fn calculate_description(&mut self) {
