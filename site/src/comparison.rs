@@ -114,6 +114,7 @@ pub async fn handle_compare(
             scenario: comparison.scenario.to_string(),
             is_dodgy: comparison.is_dodgy(),
             is_significant: comparison.is_significant(),
+            significance_threshold: comparison.signifcance_threshold() * 100.0,
             historical_statistics: comparison.variance.map(|v| v.data),
             statistics: comparison.results,
         })
