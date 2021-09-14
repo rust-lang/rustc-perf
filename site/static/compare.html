@@ -192,8 +192,15 @@
             text-align: center;
         }
 
-        #benches th {
+        #benches tbody:first-child th {
+            text-align: center;
+        }
+
+        #benches tbody:not(:first-child) th {
             border-right: dotted 1px;
+        }
+
+        #benches th {
             text-align: left;
             word-break: break-word;
             width: 25%;
@@ -401,6 +408,26 @@
                 </div>
             </div>
             <table id="benches" class="compare">
+                <tbody>
+                    <tr>
+                        <th>Name & Profile</th>
+                        <th>Scenario</th>
+                        <th>{{before}}</th>
+                        <th>{{after}}</th>
+                        <th>% Change</th>
+                        <th>
+                            Significance Factor<span class="tooltip">?
+                                <span class="tooltiptext">
+                                    How much a particular result is over the significance threshold. A factor of 2.50x
+                                    means
+                                    the result is 2.5 times over the significance threshold. You can see <a
+                                        href="https://github.com/rust-lang/rustc-perf/blob/master/docs/comparison-analysis.md#what-makes-a-test-result-significant">
+                                        here</a> how the significance threshold is calculated.
+                                </span>
+                            </span>
+                        </th>
+                    </tr>
+                </tbody>
                 <template v-for="bench in benches">
                     <tbody>
                         <template v-for="run in bench.variants">
@@ -424,6 +451,9 @@
                                             {{ run.percent.toFixed(2) }}%{{run.isDodgy ? "?" : ""}}
                                         </span>
                                     </a>
+                                </td>
+                                <td>
+                                    {{ Math.abs(run.percent / run.significanceThreshold).toFixed(2) }}x
                                 </td>
                             </tr>
                         </template>
@@ -541,6 +571,7 @@
                                     datumB,
                                     percent,
                                     isDodgy,
+                                    significanceThreshold: r.significance_threshold,
                                     isSignificant
                                 });
                             }
