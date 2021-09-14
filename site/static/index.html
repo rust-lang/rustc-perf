@@ -62,7 +62,11 @@
     <div id="settings">
         start: <input placeholder="yyyy-mm-dd or commit" id="start-bound" />
         end: <input placeholder="yyyy-mm-dd or commit" id="end-bound" />
-        Absolute data: <input id='absolute' name="absolute" type="checkbox">
+        Graph kind: <select id='kind' name="kind">
+            <option selected="selected" value="raw">Raw</option>
+            <option value="percentfromfirst">Percent Delta from First</option>
+            <option value="percentrelative">Percent Delta from Previous</option>
+        </select>
         <select id='stats' name="stat"></select>
         <a href="#" onClick="submit_settings(); return false;">Submit</a>
     </div>
@@ -366,7 +370,7 @@
                         isInterpolated(dataIdx) {
                             return cacheStates.full.is_interpolated.has(dataIdx);
                         },
-                        absoluteMode: state.absolute,
+                        absoluteMode: state.kind == "raw",
                     });
 
                     let u = new uPlot(plotOpts, plotData,
@@ -415,13 +419,11 @@
         function submit_settings() {
             let start = document.getElementById("start-bound").value;
             let end = document.getElementById("end-bound").value;
-            let absolute = document.getElementById("absolute").checked;
-            let stat = getSelected("stats");
             let params = new URLSearchParams();
             params.append("start", start);
             params.append("end", end);
-            params.append("absolute", absolute);
-            params.append("stat", stat);
+            params.append("kind", getSelected("kind"));
+            params.append("stat", getSelected("stats"));
             window.location.search = params.toString();
         }
 
@@ -430,7 +432,7 @@
                 start: "",
                 end: "",
                 stat: "instructions:u",
-                absolute: true,
+                kind: "raw",
             }, state);
             post_json("/graph-new", values).then(prepData).then(data =>
                 renderPlots(data, values));

@@ -38,7 +38,10 @@ function getSelected(name) {
 function setSelected(id, text) {
     let e = document.getElementById(id);
     for (let i = 0; i < e.options.length; i++) {
-        if (e.options[i].text === text) {
+        e.options[i].selected = false;
+    }
+    for (let i = 0; i < e.options.length; i++) {
+        if (e.options[i].text === text || e.options[i].value == text) {
             e.options[i].selected = true;
             return;
         }
@@ -192,9 +195,6 @@ function loadState(callback, skip_settings) {
     for (let param of params) {
         let key = param[0];
         let value = param[1];
-        if (key == "absolute") {
-            value = value == "true" ? true : false;
-        }
         state[key] = value;
     }
     if (state.start) {
@@ -203,19 +203,13 @@ function loadState(callback, skip_settings) {
     if (state.end) {
         document.getElementById("end-bound").value = state.end;
     }
-    if (state.absolute === true || state.absolute === false) {
-        document.getElementById("absolute").checked = state.absolute;
-    } else {
-        // check absolute by default
-        let element = document.getElementById("absolute");
-        if (element) {
-            element.checked = true;
-        }
-    }
     if (!skip_settings) {
         make_settings(() => {
             if (state.stat) {
                 setSelected("stats", state.stat);
+            }
+            if (state.kind) {
+                setSelected("kind", state.kind);
             }
             callback(state);
         });

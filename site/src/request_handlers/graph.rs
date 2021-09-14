@@ -5,6 +5,7 @@ use std::convert::TryInto;
 use std::str;
 use std::sync::Arc;
 
+use crate::api::graph::GraphKind;
 use crate::api::{graph, ServerResult};
 use crate::db::{self, ArtifactId, Benchmark, Profile, Scenario};
 use crate::interpolate::Interpolated;
@@ -75,7 +76,7 @@ pub async fn handle_graph(
             start: Bound::None,
             end: Bound::None,
             stat: String::from("instructions:u"),
-            absolute: true,
+            kind: graph::GraphKind::Raw,
         };
 
     if is_default_query {
@@ -106,7 +107,7 @@ pub async fn handle_graph(
         .into_iter()
         .map(|sr| {
             sr.interpolate()
-                .map(|series| to_graph_data(&cc, body.absolute, series).collect::<Vec<_>>())
+                .map(|series| to_graph_data(&cc, body.kind, series).collect::<Vec<_>>())
         })
         .collect::<Vec<_>>();
 
@@ -176,7 +177,7 @@ pub async fn handle_graph(
                 .collect(),
         )
         .map(|((c, d), i)| ((c, Some(d.expect("interpolated") / against)), i));
-        let graph_data = to_graph_data(&cc, body.absolute, averaged).collect::<Vec<_>>();
+        let graph_data = to_graph_data(&cc, body.kind, averaged).collect::<Vec<_>>();
         series.push(selector::SeriesResponse {
             path: selector::Path::new()
                 .set(PathComponent::Benchmark("Summary".into()))
@@ -263,10 +264,11 @@ impl CommitIdxCache {
 
 fn to_graph_data<'a>(
     cc: &'a CommitIdxCache,
-    is_absolute: bool,
+    kind: GraphKind,
     points: impl Iterator<Item = ((ArtifactId, Option<f64>), Interpolated)> + 'a,
 ) -> impl Iterator<Item = graph::GraphData> + 'a {
     let mut first = None;
+    let mut prev = None;
     points.map(move |((aid, point), interpolated)| {
         let commit = if let ArtifactId::Commit(commit) = aid {
             commit
@@ -276,15 +278,18 @@ fn to_graph_data<'a>(
         let point = point.expect("interpolated");
         first = Some(first.unwrap_or(point));
         let first = first.unwrap();
-        let percent = (point - first) / first * 100.0;
+        let percent_first = (point - first) / first * 100.0;
+        let previous_point = prev.unwrap_or(point);
+        let percent_prev = (point - previous_point) / previous_point * 100.0;
+        prev = Some(point);
         graph::GraphData {
             commit: cc.lookup(commit.sha),
             absolute: point as f32,
-            percent: percent as f32,
-            y: if is_absolute {
-                point as f32
-            } else {
-                percent as f32
+            percent_first: percent_first as f32,
+            y: match kind {
+                GraphKind::Raw => point as f32,
+                GraphKind::PercentRelative => percent_prev as f32,
+                GraphKind::PercentFromFirst => percent_first as f32,
             },
             x: commit.date.0.timestamp() as u64 * 1000, // all dates are since 1970
             is_interpolated: interpolated.is_interpolated(),

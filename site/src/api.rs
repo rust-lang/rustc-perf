@@ -80,14 +80,26 @@ pub mod graph {
         pub start: Bound,
         pub end: Bound,
         pub stat: String,
-        pub absolute: bool,
+        pub kind: GraphKind,
+    }
+
+    #[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
+    #[serde(rename_all = "lowercase")]
+    pub enum GraphKind {
+        // Raw data
+        Raw,
+        // Change from the first value
+        PercentFromFirst,
+        // Change from the previous value, useful for looking for noise.
+        PercentRelative,
     }
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct GraphData {
         pub commit: u16,
         pub absolute: f32,
-        pub percent: f32,
+        // Percent change from the first datapoint shown
+        pub percent_first: f32,
         pub y: f32,
         pub x: u64,
         pub is_interpolated: bool,
