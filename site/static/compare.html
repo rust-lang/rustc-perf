@@ -616,6 +616,10 @@
                         filter(b => b.variants.length > 0);
 
                     const largestChange = a => Math.max(Math.abs(a.minPct), Math.abs(a.maxPct));
+                    // Sort by name first, so that there is a canonical ordering
+                    // of benches. This ensures the overall order is stable, even if
+                    // individual benchmarks have the same largestChange value.
+                    benches.sort((a, b) => a.name.localeCompare(b.name));
                     benches.sort((a, b) => largestChange(b) - largestChange(a));
 
                     return benches;
