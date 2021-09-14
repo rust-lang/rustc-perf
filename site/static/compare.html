@@ -453,7 +453,7 @@
                                     </a>
                                 </td>
                                 <td>
-                                    {{ Math.abs(run.percent / run.significanceThreshold).toFixed(2) }}x
+                                    {{ run.significance_factor ? run.significance_factor.toFixed(2) + "x" :"-" }}
                                 </td>
                             </tr>
                         </template>
@@ -571,7 +571,7 @@
                                     datumB,
                                     percent,
                                     isDodgy,
-                                    significanceThreshold: r.significance_threshold,
+                                    significance_factor: r.significance_factor,
                                     isSignificant
                                 });
                             }
