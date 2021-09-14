@@ -114,7 +114,7 @@ pub async fn handle_compare(
             scenario: comparison.scenario.to_string(),
             is_dodgy: comparison.is_dodgy(),
             is_significant: comparison.is_significant(),
-            significance_threshold: comparison.signifcance_threshold() * 100.0,
+            significance_factor: comparison.significance_factor(),
             historical_statistics: comparison.variance.map(|v| v.data),
             statistics: comparison.results,
         })
@@ -658,7 +658,30 @@ impl BenchmarkVariance {
         deltas
     }
 
-    fn upper_fence(&self) -> f64 {
+    // This is an absolute value indicating the noise barrier for changes on
+    // this benchmark.
+    //
+    // A number line could be divded like this:
+    //
+    // ------o-------o----------
+    //       ^   ^   ^
+    //       |   |   |
+    //       |   |   |
+    //       |   |   ---- +significance_threshold
+    //       |   |
+    //       |   - not significant, includes zero
+    //       |
+    //       ---- -significance_threshold()
+    fn significance_threshold(&self) -> f64 {
+        let (q1, median, q3) = self.quartiles();
+
+        // Changes that are IQR_MULTIPLIER away from the median are considered
+        // significant (i.e. outliers).
+        median + (q3 - q1) * Self::IQR_MULTIPLIER
+    }
+
+    // (q1, q2=median, q3)
+    fn quartiles(&self) -> (f64, f64, f64) {
         let pcs = self.percent_changes();
         fn median(data: &[f64]) -> f64 {
             if data.len() % 2 == 0 {
@@ -674,12 +697,11 @@ impl BenchmarkVariance {
         } else {
             (len / 2 - 1, len / 2 + 1)
         };
-        // significance is determined by the upper
-        // interquartile range fence
         let q1 = median(&pcs[..=h1_end]);
+        let q2 = median(&pcs[..]);
         let q3 = median(&pcs[h2_begin..]);
-        let iqr = q3 - q1;
-        q3 + (iqr * Self::IQR_MULTIPLIER)
+
+        (q1, q2, q3)
     }
 
     fn calculate_description(&mut self) {
@@ -727,7 +749,9 @@ impl BenchmarkVariance {
                 BenchmarkVarianceDescription::Noisy | BenchmarkVarianceDescription::HighlyVariable
             )
         } else {
-            self.upper_fence() > 0.002
+            // If changes are judged significant only exceeding 0.2%, then the
+            // benchmark as a whole is dodgy.
+            self.significance_threshold() * 100.0 > 0.2
         }
     }
 }
@@ -805,10 +829,11 @@ impl TestResultComparison {
     }
 
     fn is_significant(&self) -> bool {
-        self.relative_change().abs() > self.signifcance_threshold()
+        self.relative_change().abs() >= self.significance_threshold()
     }
 
-    fn signifcance_threshold(&self) -> f64 {
+    // Magnitude of change considered significant
+    fn significance_threshold(&self) -> f64 {
         if !self.calc_new_sig {
             if self.is_dodgy() {
                 Self::SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD_DODGY
@@ -818,14 +843,22 @@ impl TestResultComparison {
         } else {
             self.variance
                 .as_ref()
-                .map(|s| s.upper_fence())
+                .map(|v| v.significance_threshold())
                 .unwrap_or(Self::SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD)
         }
     }
 
+    /// This is a numeric magnitude of a particular change.
+    fn significance_factor(&self) -> Option<f64> {
+        let change = self.relative_change();
+        let threshold = self.significance_threshold();
+        // How many times the treshold this change is.
+        Some(change.abs() / threshold)
+    }
+
     fn magnitude(&self) -> Magnitude {
         let change = self.relative_change().abs();
-        let threshold = self.signifcance_threshold();
+        let threshold = self.significance_threshold();
         let over_threshold = if change < threshold * 1.5 {
             Magnitude::VerySmall
         } else if change < threshold * 3.0 {
