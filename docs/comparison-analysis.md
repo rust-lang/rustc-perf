@@ -41,7 +41,7 @@ A test result is significant if the relative change percentage is considered an 
 
 ```
 interquartile_range = Q3 - Q1
-result > Q3 + (interquartile_range * 1.5)
+result > Q3 + (interquartile_range * 3)
 ```
 
 (Assuming the data is ordered, Q3 is the median of the upper half of the data while Q1 is the median of the lower half.)
