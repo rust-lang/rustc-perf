@@ -673,15 +673,15 @@ impl BenchmarkVariance {
     //       |
     //       ---- -significance_threshold()
     fn significance_threshold(&self) -> f64 {
-        let (q1, median, q3) = self.quartiles();
+        let (q1, q3) = self.quartiles();
 
-        // Changes that are IQR_MULTIPLIER away from the median are considered
-        // significant (i.e. outliers).
-        median + (q3 - q1) * Self::IQR_MULTIPLIER
+        // Changes that are IQR_MULTIPLIER away from the Q3 are considered
+        // outliers, and we judge those as significant.
+        q3 + (q3 - q1) * Self::IQR_MULTIPLIER
     }
 
-    // (q1, q2=median, q3)
-    fn quartiles(&self) -> (f64, f64, f64) {
+    // (q1, q3)
+    fn quartiles(&self) -> (f64, f64) {
         let pcs = self.percent_changes();
         fn median(data: &[f64]) -> f64 {
             if data.len() % 2 == 0 {
@@ -698,10 +698,9 @@ impl BenchmarkVariance {
             (len / 2 - 1, len / 2 + 1)
         };
         let q1 = median(&pcs[..=h1_end]);
-        let q2 = median(&pcs[..]);
         let q3 = median(&pcs[h2_begin..]);
 
-        (q1, q2, q3)
+        (q1, q3)
     }
 
     fn calculate_description(&mut self) {
