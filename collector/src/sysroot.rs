@@ -1,17 +1,10 @@
 use anyhow::{anyhow, Context};
-use chrono::{DateTime, Utc};
 use std::fmt;
 use std::fs::{self, File};
 use std::io::{BufReader, Read};
 use std::path::PathBuf;
 use tar::Archive;
 use xz2::bufread::XzDecoder;
-
-#[derive(Debug, Clone)]
-struct Commit {
-    sha: String,
-    date: DateTime<Utc>,
-}
 
 pub struct Sysroot {
     pub sha: String,
