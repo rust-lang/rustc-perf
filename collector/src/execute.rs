@@ -1166,9 +1166,8 @@ impl Benchmark {
             }
         }
 
-        patches.sort();
-
-        let patches = patches.into_iter().map(|p| Patch::new(p)).collect();
+        let mut patches: Vec<_> = patches.into_iter().map(|p| Patch::new(p)).collect();
+        patches.sort_by_key(|p| p.index);
 
         let config_path = path.join("perf-config.json");
         let config: BenchmarkConfig = if config_path.exists() {
