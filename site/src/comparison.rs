@@ -393,9 +393,7 @@ async fn compare_given_commits(
                     benchmark: test_case.0,
                     profile: test_case.1,
                     scenario: test_case.2,
-                    variance: variances
-                        .as_ref()
-                        .and_then(|v| v.data.get(&test_case).cloned()),
+                    variance: variances.data.get(&test_case).cloned(),
                     results: (a, b),
                     calc_new_sig,
                 })
@@ -586,7 +584,22 @@ impl BenchmarkVariances {
         from: ArtifactId,
         master_commits: &[collector::MasterCommit],
         stat: String,
-    ) -> Result<Option<Self>, BoxedError> {
+    ) -> Result<Self, BoxedError> {
+        let mut variance_data = HashMap::new();
+
+        let previous_commits = Arc::new(previous_commits(
+            from,
+            Self::NUM_PREVIOUS_COMMITS,
+            master_commits,
+        ));
+
+        // Return early if we don't have enough data to calculate variance.
+        if previous_commits.len() < Self::MIN_PREVIOUS_COMMITS {
+            return Ok(Self {
+                data: variance_data,
+            });
+        }
+
         // get all crates, cache, and profile combinations for the given stat
         let query = selector::Query::new()
             .set::<String>(Tag::Benchmark, selector::Selector::All)
@@ -594,33 +607,27 @@ impl BenchmarkVariances {
             .set::<String>(Tag::Profile, selector::Selector::All)
             .set(Tag::Metric, selector::Selector::One(stat));
 
-        let previous_commits = Arc::new(previous_commits(
-            from,
-            Self::NUM_PREVIOUS_COMMITS,
-            master_commits,
-        ));
         let mut previous_commit_series = ctxt
             .statistic_series(query, previous_commits.clone())
             .await?;
 
-        let mut variance_data: HashMap<(Benchmark, Profile, Scenario), BenchmarkVariance> =
-            HashMap::new();
         for _ in previous_commits.iter() {
             for (test_case, stat) in statistics_from_series(&mut previous_commit_series) {
                 variance_data.entry(test_case).or_default().push(stat);
             }
         }
-        if variance_data.len() < Self::MIN_PREVIOUS_COMMITS {
-            return Ok(None);
-        }
+
+        // Only retain test cases for which we have enough data to calculate variance.
+        variance_data.retain(|_, v| v.data.len() >= Self::MIN_PREVIOUS_COMMITS);
 
         for ((bench, _, _), results) in variance_data.iter_mut() {
             debug!("Calculating variance for: {}", bench);
             results.calculate_description();
         }
-        Ok(Some(Self {
+
+        Ok(Self {
             data: variance_data,
-        }))
+        })
     }
 }
 
