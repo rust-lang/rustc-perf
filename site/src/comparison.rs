@@ -156,7 +156,8 @@ pub struct ComparisonSummary {
 impl ComparisonSummary {
     pub fn summarize_comparison(comparison: &Comparison) -> Option<ComparisonSummary> {
         let mut comparisons = comparison
-            .get_individual_comparisons()
+            .statistics
+            .iter()
             .filter(|c| c.is_significant())
             .cloned()
             .collect::<Vec<_>>();
@@ -566,10 +567,6 @@ impl Comparison {
     /// Gets the sha of the next commit after `b`
     pub fn next(&self, master_commits: &[collector::MasterCommit]) -> Option<String> {
         next_commit(&self.b.artifact, master_commits).map(|c| c.sha.clone())
-    }
-
-    fn get_individual_comparisons(&self) -> impl Iterator<Item = &TestResultComparison> {
-        self.statistics.iter().filter(|b| b.profile != Profile::Doc)
     }
 }
 
