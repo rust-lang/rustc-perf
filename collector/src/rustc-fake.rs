@@ -52,7 +52,7 @@ fn main() {
                     .env("LC_NUMERIC", "C")
                     .arg("-x;")
                     .arg("-e")
-                    .arg("instructions:u,cycles:u,task-clock,cpu-clock,faults")
+                    .arg("instructions:u,cycles:u,task-clock,cpu-clock,faults,context-switches")
                     .arg("--log-fd")
                     .arg("1")
                     .arg("setarch")
