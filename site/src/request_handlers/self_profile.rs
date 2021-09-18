@@ -257,6 +257,7 @@ fn sort_self_profile(
 async fn get_self_profile_raw_data(url: &str) -> Result<Vec<u8>, Response> {
     log::trace!("downloading {}", url);
 
+    let start = Instant::now();
     let resp = match reqwest::get(url).await {
         Ok(r) => r,
         Err(e) => {
@@ -282,6 +283,12 @@ async fn get_self_profile_raw_data(url: &str) -> Result<Vec<u8>, Response> {
             return Err(resp);
         }
     };
+
+    log::trace!(
+        "downloaded {} bytes in {:?}",
+        compressed.len(),
+        start.elapsed()
+    );
 
     let mut data = Vec::new();
 
@@ -462,7 +469,7 @@ pub async fn handle_self_profile_raw(
     let aids_and_cids = conn
         .list_self_profile(
             ArtifactId::Commit(database::Commit {
-                sha: body.commit,
+                sha: body.commit.clone(),
                 date: database::Date::empty(),
             }),
             bench_name,
@@ -473,7 +480,7 @@ pub async fn handle_self_profile_raw(
     let (aid, first_cid) = aids_and_cids
         .first()
         .copied()
-        .ok_or_else(|| format!("No results for this commit"))?;
+        .ok_or_else(|| format!("No results for {}", body.commit))?;
 
     let cid = match body.cid {
         Some(cid) => {
