@@ -159,7 +159,6 @@
                 return `<a href="${ff_url}">Firefox profiler</a>`;
             };
             if (state.base_commit) {
-                txt += "<br>";
                 txt += `Download/view
                     ${dl_link(state.base_commit, state.benchmark, state.run_name)},
                     ${processed_link(state.base_commit, state.benchmark, state.run_name, "flamegraph")},
@@ -167,8 +166,9 @@
                     (${speedscope_link(state.base_commit, state.benchmark, state.run_name)},
                      ${firefox_profiler_link(state.base_commit, state.benchmark, state.run_name)})
                     results for ${state.base_commit.substring(0, 10)} (base commit)`;
+                txt += "<br>";
             }
-            txt = `Download/view
+            txt += `Download/view
                 ${dl_link(state.commit, state.benchmark, state.run_name)},
                 ${processed_link(state.commit, state.benchmark, state.run_name, "flamegraph")},
                 ${processed_link(state.commit, state.benchmark, state.run_name, "crox")}
