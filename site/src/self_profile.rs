@@ -4,6 +4,7 @@
 use anyhow::Context;
 use std::collections::HashMap;
 
+mod codegen_schedule;
 pub mod crox;
 pub mod flamegraph;
 
@@ -15,6 +16,7 @@ pub struct Output {
 
 pub fn generate(
     title: &str,
+    self_profile_base_data: Option<Vec<u8>>,
     self_profile_data: Vec<u8>,
     mut params: HashMap<String, String>,
 ) -> anyhow::Result<Output> {
@@ -38,6 +40,21 @@ pub fn generate(
                 is_download: false,
             })
         }
-        _ => anyhow::bail!("Unknown type, specify type={crox,flamegraph}"),
+        Some("codegen-schedule") => {
+            let opt =
+                serde_json::from_str(&serde_json::to_string(&params).unwrap()).context("params")?;
+            Ok(Output {
+                filename: "schedule.html",
+                data: codegen_schedule::generate(
+                    title,
+                    self_profile_base_data,
+                    self_profile_data,
+                    opt,
+                )
+                .context("codegen_schedule")?,
+                is_download: false,
+            })
+        }
+        _ => anyhow::bail!("Unknown type, specify type={crox,flamegraph,codegen-schedule}"),
     }
 }
