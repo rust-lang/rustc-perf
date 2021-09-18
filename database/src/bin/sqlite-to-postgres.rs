@@ -612,20 +612,27 @@ impl<'a> TryFrom<rusqlite::types::ValueRef<'a>> for Nullable<&'a str> {
 async fn main() -> anyhow::Result<()> {
     env_logger::init();
 
-    let mut args = std::env::args();
-    let executable = args.next().unwrap();
+    let matches = clap::App::new("sqlite-to-postgres")
+        .about("Exports a rustc-perf SQLite database to a Postgres database")
+        .arg(
+            clap::Arg::with_name("sqlite-db")
+                .required(true)
+                .value_name("SQLITE_DB")
+                .help("SQLite database file"),
+        )
+        .arg(
+            clap::Arg::with_name("postgres-db")
+                .required(true)
+                .value_name("POSTGRES_DB")
+                .help(
+                    "Postgres database connection string, \
+                        e.g. postgres://user:password@localhost:5432",
+                ),
+        )
+        .get_matches();
 
-    if args.len() != 2 {
-        eprintln!(
-            "Usage: {0} <sqlite-db> <postgres-db>\n\
-            E.g.: {0} results.db postgres://user:password@localhost:5432",
-            executable,
-        );
-        std::process::exit(1);
-    }
-
-    let sqlite = args.next().unwrap();
-    let postgres = args.next().unwrap();
+    let postgres = matches.value_of("postgres-db").unwrap();
+    let sqlite = matches.value_of("sqlite-db").unwrap();
 
     let mut sqlite = sqlite::Sqlite::new(sqlite.into())
         .open()
