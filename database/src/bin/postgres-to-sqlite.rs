@@ -474,6 +474,11 @@ async fn main() -> anyhow::Result<()> {
                 .help("Exclude given tables (as foreign key constraints allow)"),
         )
         .arg(
+            clap::Arg::with_name("no-self-profile")
+                .long("no-self-profile")
+                .help("Exclude some potentially large self-profile tables (additive with --exclude-tables)"),
+        )
+        .arg(
             clap::Arg::with_name("since-weeks-ago")
                 .long("since-weeks-ago")
                 .takes_value(true)
@@ -505,10 +510,16 @@ async fn main() -> anyhow::Result<()> {
     let postgres = matches.value_of("postgres-db").unwrap();
     let sqlite = matches.value_of("sqlite-db").unwrap();
 
-    let exclude_tables: Vec<_> = matches
+    let mut exclude_tables: std::collections::HashSet<_> = matches
         .values_of("exclude-tables")
         .unwrap_or_default()
         .collect();
+
+    if matches.is_present("no-self-profile") {
+        exclude_tables.insert(SelfProfileQuerySeries.name());
+        exclude_tables.insert(SelfProfileQuery.name());
+        // `RawSelfProfile` is intentionally kept.
+    }
 
     let since_weeks_ago = match clap::value_t!(matches, "since-weeks-ago", u32) {
         Ok(weeks) => Some(weeks),
