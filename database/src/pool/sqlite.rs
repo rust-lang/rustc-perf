@@ -914,12 +914,35 @@ impl Connection for SqliteConnection {
     }
     async fn list_self_profile(
         &self,
-        _aid: ArtifactId,
-        _crate_: &str,
-        _profile: &str,
-        _scenario: &str,
+        aid: ArtifactId,
+        crate_: &str,
+        profile: &str,
+        scenario: &str,
     ) -> Vec<(ArtifactIdNumber, i32)> {
-        Vec::new()
+        self.raw_ref()
+            .prepare(
+                "select aid, cid from raw_self_profile where
+        crate = ?1 and
+        profile = ?2 and
+        cache = ?3 and
+        aid = (select id from artifact where name = ?4);",
+            )
+            .unwrap()
+            .query_map(
+                params![
+                    &crate_,
+                    profile,
+                    scenario,
+                    &match aid {
+                        ArtifactId::Commit(c) => c.sha,
+                        ArtifactId::Tag(a) => a,
+                    }
+                ],
+                |r| Ok((ArtifactIdNumber(r.get::<_, i32>(0)? as u32), r.get(1)?)),
+            )
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap()
     }
 
     async fn get_bootstrap(&self, aids: &[ArtifactIdNumber]) -> Vec<Option<Duration>> {
