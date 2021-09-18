@@ -30,7 +30,9 @@ fn by_thread(self_profile_data: Vec<u8>) -> anyhow::Result<(u64, HashMap<u32, Ve
             break;
         }
     }
-    let start = start.ok_or(anyhow::format_err!("no codegen_crate event"))?;
+    let start = start.ok_or(anyhow::format_err!(
+        "no interesting events. does this profile run codegen?"
+    ))?;
 
     let mut end = start;
     let mut by_thread = HashMap::new();
