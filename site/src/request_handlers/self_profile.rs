@@ -16,20 +16,70 @@ use crate::server::{Request, Response, ResponseHeaders};
 
 pub async fn handle_self_profile_processed_download(
     body: self_profile_raw::Request,
-    params: HashMap<String, String>,
+    mut params: HashMap<String, String>,
     ctxt: &SiteCtxt,
 ) -> http::Response<hyper::Body> {
-    let title = format!(
-        "{}: {} {}",
-        &body.commit[..std::cmp::min(7, body.commit.len())],
-        body.benchmark,
-        body.run_name
-    );
+    let diff_against = params.remove("base_commit");
+    if params
+        .get("type")
+        .map_or(false, |t| t != "codegen-schedule")
+        && diff_against.is_some()
+    {
+        let mut resp = Response::new("Only codegen_schedule supports diffing right now.".into());
+        *resp.status_mut() = StatusCode::BAD_REQUEST;
+        return resp;
+    }
+
+    let title = if let Some(diff_against) = diff_against.as_ref() {
+        format!(
+            "{} vs {}: {} {}",
+            &diff_against[..std::cmp::min(7, diff_against.len())],
+            &body.commit[..std::cmp::min(7, body.commit.len())],
+            body.benchmark,
+            body.run_name
+        )
+    } else {
+        format!(
+            "{}: {} {}",
+            &body.commit[..std::cmp::min(7, body.commit.len())],
+            body.benchmark,
+            body.run_name
+        )
+    };
 
     let start = Instant::now();
 
-    let (url, is_tarball) = match handle_self_profile_raw(body, ctxt).await {
-        Ok(v) => (v.url, v.is_tarball),
+    let base_data = if let Some(diff_against) = diff_against {
+        match handle_self_profile_raw(
+            self_profile_raw::Request {
+                commit: diff_against,
+                benchmark: body.benchmark.clone(),
+                run_name: body.run_name.clone(),
+                cid: None,
+            },
+            ctxt,
+        )
+        .await
+        {
+            Ok(v) => match get_self_profile_raw_data(&v.url).await {
+                Ok(v) => Some(v),
+                Err(e) => return e,
+            },
+            Err(e) => {
+                let mut resp = Response::new(e.into());
+                *resp.status_mut() = StatusCode::BAD_REQUEST;
+                return resp;
+            }
+        }
+    } else {
+        None
+    };
+
+    let data = match handle_self_profile_raw(body, ctxt).await {
+        Ok(v) => match get_self_profile_raw_data(&v.url).await {
+            Ok(v) => v,
+            Err(e) => return e,
+        },
         Err(e) => {
             let mut resp = Response::new(e.into());
             *resp.status_mut() = StatusCode::BAD_REQUEST;
@@ -37,21 +87,9 @@ pub async fn handle_self_profile_processed_download(
         }
     };
 
-    if is_tarball {
-        let mut resp =
-            Response::new("Processing legacy format self-profile data is not supported".into());
-        *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-        return resp;
-    }
-
-    let data = match get_self_profile_raw_data(&url).await {
-        Ok(v) => v,
-        Err(e) => return e,
-    };
-
     log::trace!("got data in {:?}", start.elapsed());
 
-    let output = match crate::self_profile::generate(&title, data, params) {
+    let output = match crate::self_profile::generate(&title, base_data, data, params) {
         Ok(c) => c,
         Err(e) => {
             log::error!("Failed to generate json {:?}", e);
@@ -63,8 +101,12 @@ pub async fn handle_self_profile_processed_download(
     let mut builder = http::Response::builder()
         .header_typed(if output.filename.ends_with("json") {
             ContentType::json()
-        } else {
+        } else if output.filename.ends_with("svg") {
             ContentType::from("image/svg+xml".parse::<mime::Mime>().unwrap())
+        } else if output.filename.ends_with("html") {
+            ContentType::html()
+        } else {
+            unreachable!()
         })
         .status(StatusCode::OK);
 
@@ -257,6 +299,7 @@ fn sort_self_profile(
 async fn get_self_profile_raw_data(url: &str) -> Result<Vec<u8>, Response> {
     log::trace!("downloading {}", url);
 
+    let start = Instant::now();
     let resp = match reqwest::get(url).await {
         Ok(r) => r,
         Err(e) => {
@@ -282,6 +325,12 @@ async fn get_self_profile_raw_data(url: &str) -> Result<Vec<u8>, Response> {
             return Err(resp);
         }
     };
+
+    log::trace!(
+        "downloaded {} bytes in {:?}",
+        compressed.len(),
+        start.elapsed()
+    );
 
     let mut data = Vec::new();
 
@@ -462,7 +511,7 @@ pub async fn handle_self_profile_raw(
     let aids_and_cids = conn
         .list_self_profile(
             ArtifactId::Commit(database::Commit {
-                sha: body.commit,
+                sha: body.commit.clone(),
                 date: database::Date::empty(),
             }),
             bench_name,
@@ -473,7 +522,7 @@ pub async fn handle_self_profile_raw(
     let (aid, first_cid) = aids_and_cids
         .first()
         .copied()
-        .ok_or_else(|| format!("No results for this commit"))?;
+        .ok_or_else(|| format!("No results for {}", body.commit))?;
 
     let cid = match body.cid {
         Some(cid) => {
@@ -500,27 +549,15 @@ pub async fn handle_self_profile_raw(
         .map(|(_, cid)| cid)
         .collect::<Vec<_>>();
 
-    return match fetch(&cids, cid, format!("{}.mm_profdata.sz", url_prefix), false).await {
+    return match fetch(&cids, cid, format!("{}.mm_profdata.sz", url_prefix)).await {
         Ok(fetched) => Ok(fetched),
-        Err(new_error) => {
-            match fetch(&cids, cid, format!("{}.tar.sz", url_prefix), true).await {
-                Ok(fetched) => Ok(fetched),
-                Err(old_error) => {
-                    // Both files failed to fetch; return the errors for both:
-                    Err(format!(
-                        "mm_profdata download failed: {:?}, tarball download failed: {:?}",
-                        new_error, old_error
-                    ))
-                }
-            }
-        }
+        Err(new_error) => Err(format!("mm_profdata download failed: {:?}", new_error,)),
     };
 
     async fn fetch(
         cids: &[i32],
         cid: i32,
         url: String,
-        is_tarball: bool,
     ) -> ServerResult<self_profile_raw::Response> {
         let resp = reqwest::Client::new()
             .head(&url)
@@ -538,7 +575,7 @@ pub async fn handle_self_profile_raw(
             cids: cids.to_vec(),
             cid,
             url,
-            is_tarball,
+            is_tarball: false,
         })
     }
 }

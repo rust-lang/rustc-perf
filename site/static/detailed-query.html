@@ -139,8 +139,8 @@
             let processed_url = (commit, bench, run, ty) => {
                 return `/perf/processed-self-profile?commit=${commit}&benchmark=${bench}&run_name=${run}&type=${ty}`;
             };
-            let processed_link = (commit, bench, run, ty) => {
-                let url = processed_url(commit, bench, run, ty);
+            let processed_link = (commit, {benchmark, run_name}, ty) => {
+                let url = processed_url(commit, benchmark, run_name, ty);
                 return `<a href="${url}">${ty}</a>`;
             };
             let processed_crox_url = (commit, bench, run) => {
@@ -158,11 +158,13 @@
                 let ff_url = `https://profiler.firefox.com/from-url/${crox_url}/marker-chart/?v=5`;
                 return `<a href="${ff_url}">Firefox profiler</a>`;
             };
+            txt = "";
             if (state.base_commit) {
                 txt += `Download/view
                     ${dl_link(state.base_commit, state.benchmark, state.run_name)},
-                    ${processed_link(state.base_commit, state.benchmark, state.run_name, "flamegraph")},
-                    ${processed_link(state.base_commit, state.benchmark, state.run_name, "crox")}
+                    ${processed_link(state.base_commit, state, "flamegraph")},
+                    ${processed_link(state.base_commit, state, "crox")},
+                    ${processed_link(state.base_commit, state, "codegen-schedule")}
                     (${speedscope_link(state.base_commit, state.benchmark, state.run_name)},
                      ${firefox_profiler_link(state.base_commit, state.benchmark, state.run_name)})
                     results for ${state.base_commit.substring(0, 10)} (base commit)`;
@@ -170,11 +172,18 @@
             }
             txt += `Download/view
                 ${dl_link(state.commit, state.benchmark, state.run_name)},
-                ${processed_link(state.commit, state.benchmark, state.run_name, "flamegraph")},
-                ${processed_link(state.commit, state.benchmark, state.run_name, "crox")}
+                ${processed_link(state.commit, state, "flamegraph")},
+                ${processed_link(state.commit, state, "crox")},
+                ${processed_link(state.commit, state, "codegen-schedule")}
                 (${speedscope_link(state.commit, state.benchmark, state.run_name)},
                  ${firefox_profiler_link(state.commit, state.benchmark, state.run_name)})
                 results for ${state.commit.substring(0, 10)} (new commit)`;
+            if (state.base_commit) {
+                txt += "<br>";
+                        txt += `Diff: <a
+                        href="/perf/processed-self-profile?commit=${state.commit}&base_commit=${state.base_commit}&benchmark=${state.benchmark}&run_name=${state.run_name}&type=codegen-schedule"
+                        >codegen-schedule</a>`;
+            }
             document.querySelector("#raw-urls").innerHTML = txt;
             let sort_idx = state.sort_idx;
             if (!data.base_profile_delta) {

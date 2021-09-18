@@ -1,0 +1,61 @@
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>{{title}}</title>
+        <script>
+            window.TOTAL_DURATION_BOTH = {{TOTAL_DURATION_BOTH}};
+            window.TOTAL_DURATION_BASE = {{TOTAL_DURATION_BASE}};
+            window.TOTAL_DURATION_NEW = {{TOTAL_DURATION_NEW}};
+            window.BY_THREAD_BASE = {{BY_THREAD_BASE}};
+            window.BY_THREAD = {{BY_THREAD}};
+        </script>
+        <style>
+            .legend {
+                display: inline-block;
+                width: 1em;
+                height: 1em;
+                margin-left: 0.5em;
+            }
+
+            .legend.codegen_module_optimize {
+                background-color: #aa95e8;
+            }
+
+            .legend.codegen_module {
+                background-color: #6adb00;
+            }
+
+            .legend.codegen_module_perform_lto {
+                background-color: #428eff;
+            }
+
+            [mouse-details] {
+                display: none;
+            }
+
+            #prev {
+                display: none;
+            }
+        </style>
+        <script src="../schedule.js"></script>
+    </head>
+    <body>
+        <h3>{{title}}</h3>
+        <p>Full width is {{TOTAL_DURATION_BOTH}}ms</p>
+        <p>Legend:
+            <span class="codegen_module legend"></span> codegen_module (MIR lowering)
+            <span class="codegen_module_optimize legend"></span> codegen_module_optimize (LLVM)
+            <span class="codegen_module_perform_lto legend"></span> codegen_module_perform_lto (LLVM)
+        </p>
+        <canvas id="prev"></canvas>
+        <canvas id="current"></canvas>
+        <div mouse-details class="prev">
+            <p>Details (prev):</p>
+            <p mouse-details-content-js></p>
+        </div>
+        <div mouse-details class="current">
+            <p>Details (current):</p>
+            <p mouse-details-content-js></p>
+        </div>
+    </body>
+</html>

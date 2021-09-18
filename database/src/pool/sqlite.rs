@@ -162,6 +162,17 @@ static MIGRATIONS: &[&str] = &[
         PRIMARY KEY(aid, cid, crate)
     );
     "#,
+    r#"alter table pull_request_builds rename to pull_request_build"#,
+    r#"
+    create table raw_self_profile(
+        aid integer references artifact(id) on delete cascade on update cascade,
+        cid integer references collection(id) on delete cascade on update cascade,
+        crate text not null references benchmark(name) on delete cascade on update cascade,
+        profile text not null,
+        cache text not null,
+        PRIMARY KEY(aid, cid, crate, profile, cache)
+    );
+    "#,
 ];
 
 #[async_trait::async_trait]
@@ -470,7 +481,7 @@ impl Connection for SqliteConnection {
     ) {
         self.raw_ref()
             .prepare_cached(
-                "insert into pull_request_builds (pr, complete, requested, include, exclude, runs) VALUES (?, 0, strftime('%s','now'), ?, ?, ?)",
+                "insert into pull_request_build (pr, complete, requested, include, exclude, runs) VALUES (?, 0, strftime('%s','now'), ?, ?, ?)",
             )
             .unwrap()
             .execute(params![pr, include, exclude, &runs])
@@ -479,7 +490,7 @@ impl Connection for SqliteConnection {
     async fn pr_attach_commit(&self, pr: u32, sha: &str, parent_sha: &str) -> bool {
         self.raw_ref()
             .prepare_cached(
-                "update pull_request_builds SET bors_sha = ?, parent_sha = ?
+                "update pull_request_build SET bors_sha = ?, parent_sha = ?
                 where pr = ? and bors_sha is null",
             )
             .unwrap()
@@ -490,7 +501,7 @@ impl Connection for SqliteConnection {
     async fn queued_commits(&self) -> Vec<QueuedCommit> {
         self.raw_ref()
             .prepare_cached(
-                "select pr, bors_sha, parent_sha, include, exclude, runs from pull_request_builds
+                "select pr, bors_sha, parent_sha, include, exclude, runs from pull_request_build
                 where complete is false and bors_sha is not null
                 order by requested asc",
             )
@@ -514,7 +525,7 @@ impl Connection for SqliteConnection {
         let count = self
             .raw_ref()
             .execute(
-                "update pull_request_builds SET complete = 1 where sha = ? and complete = 0",
+                "update pull_request_build SET complete = 1 where sha = ? and complete = 0",
                 params![sha],
             )
             .unwrap();
@@ -524,7 +535,7 @@ impl Connection for SqliteConnection {
         assert_eq!(count, 1, "sha is unique column");
         self.raw_ref()
             .query_row(
-                "select pr, sha, parent_sha, include, exclude, runs from pull_request_builds
+                "select pr, sha, parent_sha, include, exclude, runs from pull_request_build
             where sha = ?",
                 params![sha],
                 |row| {
@@ -867,7 +878,7 @@ impl Connection for SqliteConnection {
     async fn parent_of(&self, sha: &str) -> Option<String> {
         let mut shas = self
             .raw_ref()
-            .prepare_cached("select parent_sha from pull_request_builds where bors_sha = ?")
+            .prepare_cached("select parent_sha from pull_request_build where bors_sha = ?")
             .unwrap()
             .query(params![sha])
             .unwrap()
@@ -880,7 +891,7 @@ impl Connection for SqliteConnection {
     async fn pr_of(&self, sha: &str) -> Option<u32> {
         self.raw_ref()
             .query_row(
-                "select pr from pull_request_builds where bors_sha = ?",
+                "select pr from pull_request_build where bors_sha = ?",
                 params![sha],
                 |row| Ok(row.get(0).unwrap()),
             )
@@ -903,12 +914,35 @@ impl Connection for SqliteConnection {
     }
     async fn list_self_profile(
         &self,
-        _aid: ArtifactId,
-        _crate_: &str,
-        _profile: &str,
-        _scenario: &str,
+        aid: ArtifactId,
+        crate_: &str,
+        profile: &str,
+        scenario: &str,
     ) -> Vec<(ArtifactIdNumber, i32)> {
-        Vec::new()
+        self.raw_ref()
+            .prepare(
+                "select aid, cid from raw_self_profile where
+        crate = ?1 and
+        profile = ?2 and
+        cache = ?3 and
+        aid = (select id from artifact where name = ?4);",
+            )
+            .unwrap()
+            .query_map(
+                params![
+                    &crate_,
+                    profile,
+                    scenario,
+                    &match aid {
+                        ArtifactId::Commit(c) => c.sha,
+                        ArtifactId::Tag(a) => a,
+                    }
+                ],
+                |r| Ok((ArtifactIdNumber(r.get::<_, i32>(0)? as u32), r.get(1)?)),
+            )
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap()
     }
 
     async fn get_bootstrap(&self, aids: &[ArtifactIdNumber]) -> Vec<Option<Duration>> {

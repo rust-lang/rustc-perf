@@ -128,7 +128,7 @@ series      aid         cid         value
 
 **TODO**
 
-### pull_request_builds
+### pull_request_build
 
 **TODO**
 
