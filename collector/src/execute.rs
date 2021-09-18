@@ -13,6 +13,7 @@ use std::fmt;
 use std::fs::{self, File};
 use std::hash;
 use std::io::Read;
+use std::io::Write;
 use std::mem::ManuallyDrop;
 use std::path::{Path, PathBuf};
 use std::process::{self, Command};
@@ -178,6 +179,7 @@ pub enum Profiler {
     Massif,
     Eprintln,
     LlvmLines,
+    MonoItems,
 }
 
 impl Profiler {
@@ -198,6 +200,7 @@ impl Profiler {
             "massif" => Ok(Profiler::Massif),
             "eprintln" => Ok(Profiler::Eprintln),
             "llvm-lines" => Ok(Profiler::LlvmLines),
+            "mono-items" => Ok(Profiler::MonoItems),
             _ => Err(anyhow!("'{}' is not a known profiler", name)),
         }
     }
@@ -218,6 +221,7 @@ impl Profiler {
             Profiler::Massif => "massif",
             Profiler::Eprintln => "eprintln",
             Profiler::LlvmLines => "llvm-lines",
+            Profiler::MonoItems => "mono-items",
         }
     }
 
@@ -237,6 +241,7 @@ impl Profiler {
             | Profiler::Callgrind
             | Profiler::DHAT
             | Profiler::Massif
+            | Profiler::MonoItems
             | Profiler::Eprintln => {
                 if build_kind == BuildKind::Doc {
                     Some("rustdoc")
@@ -265,6 +270,7 @@ impl Profiler {
             | Profiler::Callgrind
             | Profiler::DHAT
             | Profiler::Massif
+            | Profiler::MonoItems
             | Profiler::Eprintln => true,
             Profiler::LlvmLines => scenario_kind == ScenarioKind::Full,
         }
@@ -1130,6 +1136,51 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 let eprintln_file = filepath(self.output_dir, &out_file("eprintln"));
 
                 fs::copy(&tmp_eprintln_file, &eprintln_file)?;
+            }
+
+            // mono item results are redirected (via rustc-fake) to a file
+            // called `mono-items`. We copy it from the temp dir to the output
+            // dir, giving it a new name in the process.
+            Profiler::MonoItems => {
+                let tmp_file = filepath(data.cwd.as_ref(), "mono-items");
+                let out_dir = self.output_dir.join(&out_file("mono-items"));
+                let _ = fs::create_dir_all(&out_dir);
+                let result_file = filepath(&out_dir, "raw");
+
+                fs::copy(&tmp_file, &result_file)?;
+
+                let mut by_cgu: HashMap<&str, Vec<(&str, &str)>> = HashMap::new();
+                let mono_items = std::fs::read_to_string(&tmp_file)?;
+                for line in mono_items.lines() {
+                    let line = if let Some(line) = line.strip_prefix("MONO_ITEM ") {
+                        line
+                    } else {
+                        continue;
+                    };
+
+                    let (name, cgus) = if let Some(parts) = line.split_once(" @@ ") {
+                        parts
+                    } else {
+                        continue;
+                    };
+
+                    for cgu in cgus.split(' ') {
+                        let cgu_name_end = cgu.rfind('[').expect(&cgu);
+                        let cgu_name = &cgu[..cgu_name_end];
+                        let linkage = &cgu[cgu_name_end + 1..cgu.len() - 1];
+                        by_cgu.entry(cgu_name).or_default().push((name, linkage));
+                    }
+                }
+
+                for (cgu, items) in &by_cgu {
+                    let cgu_file = filepath(&out_dir, cgu);
+                    let mut file = std::io::BufWriter::new(
+                        fs::File::create(&cgu_file).with_context(|| format!("{:?}", cgu_file))?,
+                    );
+                    for (name, linkage) in items {
+                        writeln!(&mut file, "{} {}", name, linkage)?;
+                    }
+                }
             }
 
             // `cargo llvm-lines` writes its output to stdout. We copy that

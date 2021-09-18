@@ -359,6 +359,13 @@ The mandatory `<PROFILER>` argument must be one of the following.
   - **Output**. Human-readable output is written to files with an `ll` prefix.
   - **Notes**. Does not work with the `Check` build kind. Also does not work
     with the `IncrFull`, `IncrUnchanged`, and `IncrPatched` run kinds.
+- `mono-items`: Dump monomorphization items for each (merged) CGU in the crate.
+  These are also post-processed from the raw format into per-file dumps.
+  - **Purpose**. This is useful to investigate changes in CGU partionining.
+  - **Slowdown**. Equivalent to normal compilation.
+  - **Output**. File per CGU, currently, placed in a directory inside results.
+  - **Notes**. Will likely work best with `Full` builds, on either Debug or Opt
+    profiles.
 
 The mandatory `<RUSTC>` argument is a patch to a rustc executable, similar to
 `bench_local`.
