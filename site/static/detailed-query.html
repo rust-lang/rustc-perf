@@ -158,23 +158,23 @@
                 let ff_url = `https://profiler.firefox.com/from-url/${crox_url}/marker-chart/?v=5`;
                 return `<a href="${ff_url}">Firefox profiler</a>`;
             };
-            txt = `Download/view
-                ${dl_link(state.commit, state.benchmark, state.run_name)},
-                ${processed_link(state.commit, state.benchmark, state.run_name, "flamegraph")},
-                ${processed_link(state.commit, state.benchmark, state.run_name, "crox")}
-                (${speedscope_link(state.commit, state.benchmark, state.run_name)}, 
-                 ${firefox_profiler_link(state.commit, state.benchmark, state.run_name)})
-                results for ${state.commit.substring(0, 10)}`;
             if (state.base_commit) {
                 txt += "<br>";
                 txt += `Download/view
                     ${dl_link(state.base_commit, state.benchmark, state.run_name)},
                     ${processed_link(state.base_commit, state.benchmark, state.run_name, "flamegraph")},
                     ${processed_link(state.base_commit, state.benchmark, state.run_name, "crox")}
-                    (${speedscope_link(state.base_commit, state.benchmark, state.run_name)}, 
+                    (${speedscope_link(state.base_commit, state.benchmark, state.run_name)},
                      ${firefox_profiler_link(state.base_commit, state.benchmark, state.run_name)})
-                    results for ${state.base_commit.substring(0, 10)}`;
+                    results for ${state.base_commit.substring(0, 10)} (base commit)`;
             }
+            txt = `Download/view
+                ${dl_link(state.commit, state.benchmark, state.run_name)},
+                ${processed_link(state.commit, state.benchmark, state.run_name, "flamegraph")},
+                ${processed_link(state.commit, state.benchmark, state.run_name, "crox")}
+                (${speedscope_link(state.commit, state.benchmark, state.run_name)},
+                 ${firefox_profiler_link(state.commit, state.benchmark, state.run_name)})
+                results for ${state.commit.substring(0, 10)} (new commit)`;
             document.querySelector("#raw-urls").innerHTML = txt;
             let sort_idx = state.sort_idx;
             if (!data.base_profile_delta) {
