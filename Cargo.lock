@@ -329,6 +329,7 @@ dependencies = [
  "async-trait",
  "bytes",
  "chrono",
+ "clap",
  "csv",
  "env_logger",
  "futures",
