@@ -158,6 +158,7 @@
                 let ff_url = `https://profiler.firefox.com/from-url/${crox_url}/marker-chart/?v=5`;
                 return `<a href="${ff_url}">Firefox profiler</a>`;
             };
+            txt = "";
             if (state.base_commit) {
                 txt += `Download/view
                     ${dl_link(state.base_commit, state.benchmark, state.run_name)},
