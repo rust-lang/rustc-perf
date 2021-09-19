@@ -26,8 +26,11 @@ fn by_thread(self_profile_data: Vec<u8>) -> anyhow::Result<(u64, HashMap<u32, Ve
     for event in data.iter().filter(|e| !e.timestamp.is_instant()) {
         let full_event = event.to_event();
         if is_interesting(&full_event.label) {
-            start = Some(event.timestamp.start());
-            break;
+            if start.is_some() {
+                start = std::cmp::min(start, Some(event.timestamp.start()));
+            } else {
+                start = Some(event.timestamp.start());
+            }
         }
     }
     let start = start.ok_or(anyhow::format_err!(
