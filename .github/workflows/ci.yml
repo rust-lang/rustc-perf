@@ -168,3 +168,18 @@ jobs:
         run: |
           timeout 5s ./target/debug/site 2>&1 | tee -a log || true
           grep -Fxq "Loading complete but no data identified; exiting." log
+
+      - name: Build Postgres to SQLite exporter
+        run: cargo build --bin postgres-to-sqlite
+
+      - name: Export empty Postgres DB to SQLite
+        run: ./target/debug/postgres-to-sqlite 'postgresql://postgres:postgres@localhost:5432/postgres' "$(mktemp)"
+
+      - name: Export empty Postgres DB to SQLite with date filter
+        run: ./target/debug/postgres-to-sqlite --since-weeks-ago=1 'postgresql://postgres:postgres@localhost:5432/postgres' "$(mktemp)"
+
+      - name: Build SQLite to Postgres exporter
+        run: cargo build --bin sqlite-to-postgres
+
+      - name: Export empty SQLite DB to Postgres
+        run: ./target/debug/sqlite-to-postgres "$(mktemp)" 'postgresql://postgres:postgres@localhost:5432/postgres'
