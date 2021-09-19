@@ -131,8 +131,8 @@ jobs:
       - name: Check benchmarks
         run: sh -x -c "ci/check-profiling.sh"
 
-  database-check-postgres:
-    name: Database Check (postgres)
+  database-check:
+    name: Database Check
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -156,27 +156,15 @@ jobs:
         with:
           toolchain: stable
 
+      - name: Build site
+        run: cargo build --bin site
+
       - name: Connect to PostgreSQL
         run: |
-          cargo build --bin site
           timeout 5s ./target/debug/site 'postgresql://postgres:postgres@localhost:5432/postgres' 2>&1 | tee -a log || true
           grep -Fxq "Loading complete but no data identified; exiting." log
 
-  database-check-sqlite:
-    name: Database Check (sqlite)
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Check out repository code
-        uses: actions/checkout@v2
-
-      - name: Install stable
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-
       - name: Connect to SQLite
         run: |
-          cargo build --bin site
           timeout 5s ./target/debug/site 2>&1 | tee -a log || true
           grep -Fxq "Loading complete but no data identified; exiting." log
