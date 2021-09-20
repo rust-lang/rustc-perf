@@ -64,115 +64,259 @@ impl Sqlite {
     }
 }
 
-static MIGRATIONS: &[&str] = &[
-    "",
-    r#"
-    create table benchmark(
-        name text primary key,
-        -- Whether this benchmark supports stable
-        stabilized bool not null
-    );
-    create table artifact(
-        id integer primary key not null,
-        name text not null unique,
-        date integer,
-        type text not null
-    );
-    create table collection(
-        id integer primary key not null
-    );
-    create table error_series(
-        id integer primary key not null,
-        crate text not null unique references benchmark(name) on delete cascade on update cascade
-    );
-    create table error(
-        series integer not null references error_series(id) on delete cascade on update cascade,
-        aid integer not null references artifact(id) on delete cascade on update cascade,
-        error text,
-        PRIMARY KEY(series, aid)
-    );
-    create table pstat_series(
-        id integer primary key not null,
-        crate text not null references benchmark(name) on delete cascade on update cascade,
-        profile text not null,
-        cache text not null,
-        statistic text not null,
-        UNIQUE(crate, profile, cache, statistic)
-    );
-    create table pstat(
-        series integer references pstat_series(id) on delete cascade on update cascade,
-        aid integer references artifact(id) on delete cascade on update cascade,
-        cid integer references collection(id) on delete cascade on update cascade,
-        value double not null,
-        PRIMARY KEY(series, aid, cid)
-    );
-    create table self_profile_query_series(
-        id integer primary key not null,
-        crate text not null references benchmark(name) on delete cascade on update cascade,
-        profile text not null,
-        cache text not null,
-        query text not null,
-        UNIQUE(crate, profile, cache, query)
-    );
-    create table self_profile_query(
-        series integer references self_profile_query_series(id) on delete cascade on update cascade,
-        aid integer references artifact(id) on delete cascade on update cascade,
-        cid integer references collection(id) on delete cascade on update cascade,
-        self_time integer,
-        blocked_time integer,
-        incremental_load_time integer,
-        number_of_cache_hits integer,
-        invocation_count integer,
-        PRIMARY KEY(series, aid, cid)
-    );
-    create table pull_request_builds(
-        bors_sha text unique,
-        pr integer not null,
-        parent_sha text,
-        complete boolean,
-        requested timestamp without time zone
-    );
-    "#,
-    r#"
-    create table artifact_collection_duration(
-        aid integer primary key not null references artifact(id) on delete cascade on update cascade,
-        date_recorded timestamp without time zone not null,
-        duration integer not null
-    );
-    "#,
-    r#"
-    create table collector_progress(
-        aid integer not null references artifact(id) on delete cascade on update cascade,
-        step text not null,
-        start integer,
-        end integer,
-        UNIQUE(aid, step)
-    );
-    "#,
-    r#"alter table collection add column perf_commit text;"#,
-    r#"alter table pull_request_builds add column include text;"#,
-    r#"alter table pull_request_builds add column exclude text;"#,
-    r#"alter table pull_request_builds add column runs integer;"#,
-    r#"
-    create table rustc_compilation(
-        aid integer references artifact(id) on delete cascade on update cascade,
-        cid integer references collection(id) on delete cascade on update cascade,
-        crate text not null,
-        duration integer not null,
-        PRIMARY KEY(aid, cid, crate)
-    );
-    "#,
-    r#"alter table pull_request_builds rename to pull_request_build"#,
-    r#"
-    create table raw_self_profile(
-        aid integer references artifact(id) on delete cascade on update cascade,
-        cid integer references collection(id) on delete cascade on update cascade,
-        crate text not null references benchmark(name) on delete cascade on update cascade,
-        profile text not null,
-        cache text not null,
-        PRIMARY KEY(aid, cid, crate, profile, cache)
-    );
-    "#,
+struct Migration {
+    /// One or more SQL statements, each terminated by a semicolon.
+    sql: &'static str,
+
+    /// If false, indicates that foreign key checking should be delayed until after execution of
+    /// the migration SQL, and foreign key `ON UPDATE` and `ON DELETE` actions disabled completely.
+    foreign_key_constraints_enabled: bool,
+}
+
+impl Migration {
+    /// Returns a `Migration` with foreign key constraints enabled during execution.
+    const fn new(sql: &'static str) -> Migration {
+        Migration {
+            sql,
+            foreign_key_constraints_enabled: true,
+        }
+    }
+
+    /// Returns a `Migration` with foreign key checking delayed until after execution, and foreign
+    /// key `ON UPDATE` and `ON DELETE` actions disabled completely.
+    ///
+    /// SQLite has limited `ALTER TABLE` capabilities, so some schema alterations require the
+    /// approach of replacing a table with a new one having the desired schema. Because there might
+    /// be other tables with foreign key constraints on the table, these constraints need to be
+    /// disabled during execution of such migration SQL, and reenabled after. Otherwise, dropping
+    /// the old table may trigger `ON DELETE` actions in the referencing tables. See [SQLite
+    /// documentation](https://www.sqlite.org/lang_altertable.html) for more information.
+    const fn without_foreign_key_constraints(sql: &'static str) -> Migration {
+        Migration {
+            sql,
+            foreign_key_constraints_enabled: false,
+        }
+    }
+
+    fn execute(&self, conn: &mut rusqlite::Connection, migration_id: i32) {
+        if self.foreign_key_constraints_enabled {
+            let tx = conn.transaction().unwrap();
+            tx.execute_batch(&self.sql).unwrap();
+            tx.pragma_update(None, "user_version", &migration_id)
+                .unwrap();
+            tx.commit().unwrap();
+            return;
+        }
+
+        // The following steps are reproduced from https://www.sqlite.org/lang_altertable.html,
+        // from the section titled, "Making Other Kinds Of Table Schema Changes".
+
+        // 1.  If foreign key constraints are enabled, disable them using PRAGMA foreign_keys=OFF.
+        conn.pragma_update(None, "foreign_keys", &"OFF").unwrap();
+
+        // 2.  Start a transaction.
+        let tx = conn.transaction().unwrap();
+
+        // The migration SQL is responsible for steps 3 through 9.
+
+        // 3.  Remember the format of all indexes, triggers, and views associated with table X.
+        //     This information will be needed in step 8 below. One way to do this is to run a
+        //     query like the following: SELECT type, sql FROM sqlite_schema WHERE tbl_name='X'.
+        //
+        // 4.  Use CREATE TABLE to construct a new table "new_X" that is in the desired revised
+        //     format of table X. Make sure that the name "new_X" does not collide with any
+        //     existing table name, of course.
+        //
+        // 5.  Transfer content from X into new_X using a statement like: INSERT INTO new_X SELECT
+        //     ... FROM X.
+        //
+        // 6.  Drop the old table X: DROP TABLE X.
+        //
+        // 7.  Change the name of new_X to X using: ALTER TABLE new_X RENAME TO X.
+        //
+        // 8.  Use CREATE INDEX, CREATE TRIGGER, and CREATE VIEW to reconstruct indexes, triggers,
+        //     and views associated with table X. Perhaps use the old format of the triggers,
+        //     indexes, and views saved from step 3 above as a guide, making changes as appropriate
+        //     for the alteration.
+        //
+        // 9.  If any views refer to table X in a way that is affected by the schema change, then
+        //     drop those views using DROP VIEW and recreate them with whatever changes are
+        //     necessary to accommodate the schema change using CREATE VIEW.
+        tx.execute_batch(&self.sql).unwrap();
+
+        // 10. If foreign key constraints were originally enabled then run PRAGMA foreign_key_check
+        //     to verify that the schema change did not break any foreign key constraints.
+        tx.pragma_query(None, "foreign_key_check", |row| {
+            let table: String = row.get_unwrap(0);
+            let row_id: Option<i64> = row.get_unwrap(1);
+            let foreign_table: String = row.get_unwrap(2);
+            let fk_idx: i64 = row.get_unwrap(3);
+
+            tx.query_row::<(), _, _>(
+                "select * from pragma_foreign_key_list(?) where id = ?",
+                params![&table, &fk_idx],
+                |row| {
+                    let col: String = row.get_unwrap(3);
+                    let foreign_col: String = row.get_unwrap(4);
+                    panic!(
+                        "Foreign key violation encountered during migration\n\
+                            table: {},\n\
+                            column: {},\n\
+                            row_id: {:?},\n\
+                            foreign table: {},\n\
+                            foreign column: {}\n\
+                            migration ID: {}\n",
+                        table, col, row_id, foreign_table, foreign_col, migration_id,
+                    );
+                },
+            )
+            .unwrap();
+            Ok(())
+        })
+        .unwrap();
+
+        tx.pragma_update(None, "user_version", &migration_id)
+            .unwrap();
+
+        // 11. Commit the transaction started in step 2.
+        tx.commit().unwrap();
+
+        // 12. If foreign keys constraints were originally enabled, reenable them now.
+        conn.pragma_update(None, "foreign_keys", &"ON").unwrap();
+    }
+}
+
+static MIGRATIONS: &[Migration] = &[
+    Migration::new(""),
+    Migration::new(
+        r#"
+        create table benchmark(
+            name text primary key,
+            -- Whether this benchmark supports stable
+            stabilized bool not null
+        );
+        create table artifact(
+            id integer primary key not null,
+            name text not null unique,
+            date integer,
+            type text not null
+        );
+        create table collection(
+            id integer primary key not null
+        );
+        create table error_series(
+            id integer primary key not null,
+            crate text not null unique references benchmark(name) on delete cascade on update cascade
+        );
+        create table error(
+            series integer not null references error_series(id) on delete cascade on update cascade,
+            aid integer not null references artifact(id) on delete cascade on update cascade,
+            error text,
+            PRIMARY KEY(series, aid)
+        );
+        create table pstat_series(
+            id integer primary key not null,
+            crate text not null references benchmark(name) on delete cascade on update cascade,
+            profile text not null,
+            cache text not null,
+            statistic text not null,
+            UNIQUE(crate, profile, cache, statistic)
+        );
+        create table pstat(
+            series integer references pstat_series(id) on delete cascade on update cascade,
+            aid integer references artifact(id) on delete cascade on update cascade,
+            cid integer references collection(id) on delete cascade on update cascade,
+            value double not null,
+            PRIMARY KEY(series, aid, cid)
+        );
+        create table self_profile_query_series(
+            id integer primary key not null,
+            crate text not null references benchmark(name) on delete cascade on update cascade,
+            profile text not null,
+            cache text not null,
+            query text not null,
+            UNIQUE(crate, profile, cache, query)
+        );
+        create table self_profile_query(
+            series integer references self_profile_query_series(id) on delete cascade on update cascade,
+            aid integer references artifact(id) on delete cascade on update cascade,
+            cid integer references collection(id) on delete cascade on update cascade,
+            self_time integer,
+            blocked_time integer,
+            incremental_load_time integer,
+            number_of_cache_hits integer,
+            invocation_count integer,
+            PRIMARY KEY(series, aid, cid)
+        );
+        create table pull_request_builds(
+            bors_sha text unique,
+            pr integer not null,
+            parent_sha text,
+            complete boolean,
+            requested timestamp without time zone
+        );
+        "#,
+    ),
+    Migration::new(
+        r#"
+        create table artifact_collection_duration(
+            aid integer primary key not null references artifact(id) on delete cascade on update cascade,
+            date_recorded timestamp without time zone not null,
+            duration integer not null
+        );
+        "#,
+    ),
+    Migration::new(
+        r#"
+        create table collector_progress(
+            aid integer not null references artifact(id) on delete cascade on update cascade,
+            step text not null,
+            start integer,
+            end integer,
+            UNIQUE(aid, step)
+        );
+        "#,
+    ),
+    Migration::new("alter table collection add column perf_commit text"),
+    Migration::new("alter table pull_request_builds add column include text"),
+    Migration::new("alter table pull_request_builds add column exclude text"),
+    Migration::new("alter table pull_request_builds add column runs integer"),
+    Migration::new(
+        r#"
+        create table rustc_compilation(
+            aid integer references artifact(id) on delete cascade on update cascade,
+            cid integer references collection(id) on delete cascade on update cascade,
+            crate text not null,
+            duration integer not null,
+            PRIMARY KEY(aid, cid, crate)
+        );
+        "#,
+    ),
+    Migration::new("alter table pull_request_builds rename to pull_request_build"),
+    Migration::new(
+        r#"
+        create table raw_self_profile(
+            aid integer references artifact(id) on delete cascade on update cascade,
+            cid integer references collection(id) on delete cascade on update cascade,
+            crate text not null references benchmark(name) on delete cascade on update cascade,
+            profile text not null,
+            cache text not null,
+            PRIMARY KEY(aid, cid, crate, profile, cache)
+        );
+        "#,
+    ),
+    // Add not null constraint to benchmark name.
+    Migration::without_foreign_key_constraints(
+        r#"
+        create table benchmark_new(
+            name text primary key not null,
+            stabilized bool not null
+        );
+        insert into benchmark_new select * from benchmark where name is not null;
+        drop table benchmark;
+        alter table benchmark_new rename to benchmark;
+        "#,
+    ),
 ];
 
 #[async_trait::async_trait]
@@ -193,12 +337,7 @@ impl ConnectionManager for Sqlite {
                 )
                 .unwrap();
             for mid in (version as usize + 1)..MIGRATIONS.len() {
-                let sql = MIGRATIONS[mid];
-                let tx = conn.transaction().unwrap();
-                tx.execute_batch(&sql).unwrap();
-                tx.pragma_update(None, "user_version", &(mid as i32))
-                    .unwrap();
-                tx.commit().unwrap();
+                MIGRATIONS[mid].execute(&mut conn, mid as i32);
             }
         });
 

@@ -15,7 +15,7 @@ async-trait = "0.1"
 tokio = { version = "1.6", features = ["sync", "macros"] }
 snap = "1"
 intern = { path = "../intern" }
-chrono = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
 reqwest = { version = "0.11", features = ["blocking"] }
 postgres-native-tls = "0.5"
 native-tls = "0.2"
@@ -23,3 +23,6 @@ lazy_static = "1"
 env_logger = "0.8"
 futures = "0.3.5"
 log = "0.4"
+bytes = "1"
+csv = "1"
+clap = "2.25"

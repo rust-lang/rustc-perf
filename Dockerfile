@@ -24,7 +24,7 @@ COPY ./database ./database
 COPY ./intern ./intern
 
 RUN bash -c 'source $HOME/.cargo/env && cargo build --release -p site'
-RUN bash -c 'source $HOME/.cargo/env && cargo build --release --bin export-to-sqlite'
+RUN bash -c 'source $HOME/.cargo/env && cargo build --release --bin postgres-to-sqlite'
 
 FROM ubuntu:20.04 as binary
 
@@ -32,7 +32,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
     ca-certificates \
     git
 
-COPY --from=build /target/release/export-to-sqlite /usr/local/bin/rustc-perf-export-to-sqlite
+COPY --from=build /target/release/postgres-to-sqlite /usr/local/bin/rustc-perf-postgres-to-sqlite
 COPY --from=build /target/release/site /usr/local/bin/rustc-perf-site
 COPY --from=build site/static /site/static
 
