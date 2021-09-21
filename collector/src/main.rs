@@ -397,15 +397,41 @@ fn get_local_toolchain(
     // + prefixed rustc is an indicator to fetch the rustc of the toolchain
     // specified. This follows the similar pattern used by rustup's binaries
     // (e.g., `rustc +stage1`).
-    let rustc = if rustc.starts_with('+') {
-        let s = String::from_utf8(
-            Command::new("rustup")
-                .args(&["which", "rustc", "--toolchain", &rustc[1..]])
-                .output()
+    let rustc = if let Some(toolchain) = rustc.strip_prefix('+') {
+        let output = Command::new("rustup")
+            .args(&["which", "rustc", "--toolchain", &toolchain])
+            .output()
+            .context("failed to run `rustup which rustc`")?;
+
+        // Looks like a commit hash? Try to install it...
+        if output.status.code() == Some(101) && toolchain.len() == 40 {
+            // No such toolchain exists, so let's try to install it with
+            // rustup-toolchain-install-master.
+
+            if !Command::new("rustup-toolchain-install-master")
+                .arg(&toolchain)
+                .status()
                 .context("failed to run `rustup which rustc`")?
-                .stdout,
-        )
-        .context("failed to convert `rustup which rustc` output to utf8")?;
+                .success()
+            {
+                anyhow::bail!(
+                    "commit-like toolchain {} did not install successfully",
+                    toolchain
+                )
+            }
+        }
+
+        let output = Command::new("rustup")
+            .args(&["which", "rustc", "--toolchain", &toolchain])
+            .output()
+            .context("failed to run `rustup which rustc`")?;
+
+        if !output.status.success() {
+            anyhow::bail!("did not manage to obtain toolchain {}", toolchain);
+        }
+
+        let s = String::from_utf8(output.stdout)
+            .context("failed to convert `rustup which rustc` output to utf8")?;
 
         let rustc = PathBuf::from(s.trim());
         debug!("found rustc: {:?}", &rustc);
