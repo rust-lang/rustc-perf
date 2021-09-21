@@ -313,7 +313,7 @@
                     <ul id="states-list">
                         <li>
                             <label>
-                                <input type="checkbox" id="build-full" v-model="filter.cache.full" />
+                                <input type="checkbox" id="build-full" v-model="filter.scenario.full" />
                                 <span class="cache-label">full</span>
                             </label>
                             <div class="tooltip">?
@@ -324,7 +324,7 @@
                         </li>
                         <li>
                             <label>
-                                <input type="checkbox" id="build-incremental-full" v-model="filter.cache.incrFull" />
+                                <input type="checkbox" id="build-incremental-full" v-model="filter.scenario.incrFull" />
                                 <span class="cache-label">incr-full</span>
                             </label>
                             <div class="tooltip">?
@@ -336,7 +336,7 @@
                         <li>
                             <label>
                                 <input type="checkbox" id="build-incremental-unchanged"
-                                    v-model="filter.cache.incrUnchanged" />
+                                    v-model="filter.scenario.incrUnchanged" />
                                 <span class="cache-label">incr-unchanged</span>
                             </label>
                             <div class="tooltip">?
@@ -349,7 +349,7 @@
                         <li>
                             <label>
                                 <input type="checkbox" id="build-incremental-patched"
-                                    v-model="filter.cache.incrPatched" />
+                                    v-model="filter.scenario.incrPatched" />
                                 <span class="cache-label">incr-patched</span>
                             </label>
                             <div class="tooltip">?
@@ -373,6 +373,19 @@
                         </span>
                     </div>
                     <input type="checkbox" v-model="filter.showOnlySignificant" style="margin-left: 20px;" />
+                </div>
+                <div class="section">
+                    <div class="section-heading"><span>Filter out very small changes</span>
+                        <span class="tooltip">?
+                            <span class="tooltiptext">
+                                Whether to filter out test cases that have a very small magnitude. Magnitude is
+                                calculated both on the absolute magnitude (i.e., how large of a percentage change)
+                                as well as the magnitude of the significance (i.e., by how many time the change was
+                                over the significance threshold).
+                            </span>
+                        </span>
+                    </div>
+                    <input type="checkbox" v-model="filter.filterVerySmall" style="margin-left: 20px;" />
                 </div>
             </div>
         </fieldset>
@@ -430,30 +443,31 @@
                 </tbody>
                 <template v-for="bench in benches">
                     <tbody>
-                        <template v-for="run in bench.variants">
+                        <template v-for="testCase in bench.testCases">
                             <tr>
-                                <th v-if="run.first" v-bind:rowspan="bench.variants.length">{{bench.name}}</th>
-                                <td>{{ run.casename }}</td>
+                                <th v-if="testCase.first" v-bind:rowspan="bench.testCases.length">{{bench.name}}</th>
+                                <td>{{ testCase.scenario }}</td>
                                 <td>
-                                    <a v-bind:href="detailedQueryLink(data.a.commit, bench.name, run.casename)">
-                                        {{ run.datumA }}
+                                    <a v-bind:href="detailedQueryLink(data.a.commit, bench.name, testCase.scenario)">
+                                        {{ testCase.datumA }}
                                     </a>
                                 </td>
                                 <td>
-                                    <a v-bind:href="detailedQueryLink(data.b.commit, bench.name, run.casename)">
-                                        {{ run.datumB }}
+                                    <a v-bind:href="detailedQueryLink(data.b.commit, bench.name, testCase.scenario)">
+                                        {{ testCase.datumB }}
                                     </a>
                                 </td>
                                 <td>
                                     <a
-                                        v-bind:href="percentLink(data.b.commit, data.a.commit, bench.name, run.casename)">
-                                        <span v-bind:class="percentClass(run.percent)">
-                                            {{ run.percent.toFixed(2) }}%{{run.isDodgy ? "?" : ""}}
+                                        v-bind:href="percentLink(data.b.commit, data.a.commit, bench.name, testCase.scenario)">
+                                        <span v-bind:class="percentClass(testCase.percent)">
+                                            {{ testCase.percent.toFixed(2) }}%{{testCase.isDodgy ? "?" : ""}}
                                         </span>
                                     </a>
                                 </td>
                                 <td>
-                                    {{ run.significance_factor ? run.significance_factor.toFixed(2) + "x" :"-" }}
+                                    {{ testCase.significanceFactor ? testCase.significanceFactor.toFixed(2) + "x" :"-"
+                                    }}
                                 </td>
                             </tr>
                         </template>
@@ -515,7 +529,8 @@
                 filter: {
                     name: null,
                     showOnlySignificant: true,
-                    cache: {
+                    filterVerySmall: true,
+                    scenario: {
                         full: true,
                         incrFull: true,
                         incrUnchanged: true,
@@ -541,51 +556,62 @@
                     let data = this.data;
                     const filter = this.filter;
 
-                    function shouldShowBuild(name) {
-                        if (name === "full") {
-                            return filter.cache.full;
-                        } else if (name === "incr-full") {
-                            return filter.cache.incrFull;
-                        } else if (name === "incr-unchanged") {
-                            return filter.cache.incrUnchanged;
-                        } else if (name.startsWith("incr-patched")) {
-                            return filter.cache.incrPatched;
+                    function scenarioFilter(scenario) {
+                        if (scenario === "full") {
+                            return filter.scenario.full;
+                        } else if (scenario === "incr-full") {
+                            return filter.scenario.incrFull;
+                        } else if (scenario === "incr-unchanged") {
+                            return filter.scenario.incrUnchanged;
+                        } else if (scenario.startsWith("incr-patched")) {
+                            return filter.scenario.incrPatched;
                         } else {
                             // Unknown, but by default we should show things
                             return true;
                         }
                     }
-                    function toVariants(results) {
-                        let variants = [];
+
+                    function shouldShowTestCase(testCase) {
+                        let nameFilter = filter.name && filter.name.trim();
+                        nameFilter = !nameFilter || (testCase.benchmark + "-" + testCase.profile).includes(nameFilter);
+
+                        const significanceFilter = filter.showOnlySignificant ? testCase.isSignificant : true;
+
+                        const magnitudeFilter = filter.filterVerySmall ? testCase.magnitude != "very small" : true;
+
+                        return scenarioFilter(testCase.scenario) && significanceFilter && nameFilter && magnitudeFilter;
+                    }
+
+                    function toTestCases(results) {
+                        let testCases = [];
                         for (let r of results) {
-                            const scenarioName = r.scenario;
+                            const scenario = r.scenario;
                             const datumA = r.statistics[0];
                             const datumB = r.statistics[1];
                             const isSignificant = r.is_significant;
-                            let percent = (100 * (datumB - datumA) / datumA);
-                            let isDodgy = r.is_dodgy;
-                            if (shouldShowBuild(scenarioName)) {
-                                variants.push({
-                                    casename: scenarioName,
-                                    datumA,
-                                    datumB,
-                                    percent,
-                                    isDodgy,
-                                    significance_factor: r.significance_factor,
-                                    isSignificant
-                                });
+                            const significanceFactor = r.significance_factor;
+                            const isDodgy = r.is_dodgy;
+                            let percent = 100 * ((datumB - datumA) / datumA);
+                            let testCase = {
+                                scenario,
+                                datumA,
+                                datumB,
+                                isSignificant,
+                                magnitude: r.magnitude,
+                                significanceFactor,
+                                isDodgy,
+                                percent,
+                            };
+                            if (shouldShowTestCase(testCase)) {
+                                testCases.push(testCase);
                             }
                         }
 
-                        return variants;
+                        return testCases;
                     }
 
                     let benches =
                         data.comparisons.
-                            filter(n => {
-                                const f = filter.name && filter.name.trim();
-                                return !f || (n.benchmark + "-" + n.profile).includes(f);
-                            }).
                             reduce((accum, next) => {
                                 const key = next.benchmark + "-" + next.profile;
                                 if (!accum[key]) {
@@ -598,22 +624,22 @@
                         map(c => {
                             const name = c[0];
                             const comparison = c[1];
-                            const variants = toVariants(comparison).filter(v => filter.showOnlySignificant ? v.isSignificant : true);
-                            const pcts = variants.map(field => parseFloat(field.percent));
+                            const testCases = toTestCases(comparison);
+                            const pcts = testCases.map(tc => parseFloat(tc.percent));
                             const maxPct = Math.max(...pcts).toFixed(1);
                             const minPct = Math.min(...pcts).toFixed(1);
-                            if (variants.length > 0) {
-                                variants[0].first = true;
+                            if (testCases.length > 0) {
+                                testCases[0].first = true;
                             }
 
                             return {
                                 name,
-                                variants,
+                                testCases,
                                 maxPct,
                                 minPct,
                             };
                         }).
-                        filter(b => b.variants.length > 0);
+                        filter(b => b.testCases.length > 0);
 
                     const largestChange = a => Math.max(Math.abs(a.minPct), Math.abs(a.maxPct));
                     // Sort by name first, so that there is a canonical ordering
@@ -679,7 +705,7 @@
                 },
                 summary() {
                     // Create object with each test case that is not filtered out as a key
-                    const filtered = Object.fromEntries(this.benches.flatMap(b => b.variants.map(v => [b.name + "-" + v.casename, true])));
+                    const filtered = Object.fromEntries(this.benches.flatMap(b => b.testCases.map(v => [b.name + "-" + v.scenario, true])));
                     const newCount = { regressions: 0, improvements: 0, unchanged: 0 }
                     let result = { all: { ...newCount }, filtered: { ...newCount } }
                     for (let d of this.data.comparisons) {
@@ -734,11 +760,11 @@
                     return klass;
 
                 },
-                detailedQueryLink(commit, bench, run) {
-                    return `/detailed-query.html?commit=${commit}&benchmark=${bench}&run_name=${run}`;
+                detailedQueryLink(commit, bench, testCase) {
+                    return `/detailed-query.html?commit=${commit}&benchmark=${bench}&run_name=${testCase}`;
                 },
-                percentLink(commit, baseCommit, bench, run) {
-                    return `/detailed-query.html?commit=${commit}&base_commit=${baseCommit}&benchmark=${bench}&run_name=${run}`;
+                percentLink(commit, baseCommit, bench, testCase) {
+                    return `/detailed-query.html?commit=${commit}&base_commit=${baseCommit}&benchmark=${bench}&run_name=${testCase}`;
                 },
                 commitLink(commit) {
                     return `https://github.com/rust-lang/rust/commit/${commit}`;

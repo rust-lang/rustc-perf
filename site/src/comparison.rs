@@ -115,6 +115,7 @@ pub async fn handle_compare(
             is_dodgy: comparison.is_dodgy(),
             is_significant: comparison.is_significant(),
             significance_factor: comparison.significance_factor(),
+            magnitude: comparison.magnitude().display().to_owned(),
             historical_statistics: comparison.variance.map(|v| v.data),
             statistics: comparison.results,
         })
@@ -149,7 +150,8 @@ async fn populate_report(
 }
 
 pub struct ComparisonSummary {
-    /// Significant comparisons ordered by magnitude from largest to smallest
+    /// Significant comparisons of magnitude small and above
+    /// and ordered by magnitude from largest to smallest
     comparisons: Vec<TestResultComparison>,
 }
 
@@ -159,6 +161,7 @@ impl ComparisonSummary {
             .statistics
             .iter()
             .filter(|c| c.is_significant())
+            .filter(|c| c.magnitude().is_small_or_above())
             .cloned()
             .collect::<Vec<_>>();
         // Skip empty commits, sometimes happens if there's a compiler bug or so.
@@ -269,27 +272,22 @@ impl ComparisonSummary {
     }
 
     pub fn confidence(&self) -> ComparisonConfidence {
-        let mut num_very_small_changes = 0;
         let mut num_small_changes = 0;
         let mut num_medium_changes = 0;
         for c in self.comparisons.iter() {
             match c.magnitude() {
-                Magnitude::VerySmall => num_very_small_changes += 1,
                 Magnitude::Small => num_small_changes += 1,
                 Magnitude::Medium => num_medium_changes += 1,
                 Magnitude::Large => return ComparisonConfidence::DefinitelyRelevant,
                 Magnitude::VeryLarge => return ComparisonConfidence::DefinitelyRelevant,
+                Magnitude::VerySmall => unreachable!(),
             }
         }
 
-        match (
-            num_very_small_changes,
-            num_small_changes,
-            num_medium_changes,
-        ) {
-            (_, _, m) if m > 1 => ComparisonConfidence::DefinitelyRelevant,
-            (_, _, m) if m > 0 => ComparisonConfidence::ProbablyRelevant,
-            (vs, s, _) if (s * 2) + vs > 10 => ComparisonConfidence::ProbablyRelevant,
+        match (num_small_changes, num_medium_changes) {
+            (_, m) if m > 1 => ComparisonConfidence::DefinitelyRelevant,
+            (_, 1) => ComparisonConfidence::ProbablyRelevant,
+            (s, 0) if s > 10 => ComparisonConfidence::ProbablyRelevant,
             _ => ComparisonConfidence::MaybeRelevant,
         }
     }
@@ -866,9 +864,9 @@ impl TestResultComparison {
             Magnitude::VerySmall
         } else if change < threshold * 3.0 {
             Magnitude::Small
-        } else if change < threshold * 10.0 {
+        } else if change < threshold * 6.0 {
             Magnitude::Medium
-        } else if change < threshold * 25.0 {
+        } else if change < threshold * 18.0 {
             Magnitude::Large
         } else {
             Magnitude::VeryLarge
@@ -1002,6 +1000,10 @@ pub enum Magnitude {
 }
 
 impl Magnitude {
+    fn is_small_or_above(&self) -> bool {
+        *self >= Self::Small
+    }
+
     fn is_medium_or_above(&self) -> bool {
         *self >= Self::Medium
     }
