@@ -115,6 +115,7 @@ pub async fn handle_compare(
             is_dodgy: comparison.is_dodgy(),
             is_significant: comparison.is_significant(),
             significance_factor: comparison.significance_factor(),
+            magnitude: comparison.magnitude().display().to_owned(),
             historical_statistics: comparison.variance.map(|v| v.data),
             statistics: comparison.results,
         })

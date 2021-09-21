@@ -201,6 +201,7 @@ pub mod comparison {
         pub is_significant: bool,
         pub significance_factor: Option<f64>,
         pub is_dodgy: bool,
+        pub magnitude: String,
         pub historical_statistics: Option<Vec<f64>>,
         pub statistics: (f64, f64),
     }
