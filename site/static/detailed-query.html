@@ -91,7 +91,7 @@
             return time / 1000000000;
         }
 
-        function fmt_delta(to, delta) {
+        function fmt_delta(to, delta, is_integral_delta) {
             let from = to - delta;
             let pct = (to - from) / from * 100;
             if (from == to) {
@@ -110,7 +110,12 @@
             if (Math.abs(delta) <= 0.05) {
                 classes = "neutral";
             }
-            let text = delta.toFixed(3);
+            let text;
+            if (is_integral_delta) {
+                text = delta.toString();
+            } else {
+                text = delta.toFixed(3);
+            }
             if (pct != Infinity && pct != -Infinity) {
                 text += `(${pct.toFixed(1)}%)`.padStart(10, ' ');
             } else {
@@ -260,13 +265,13 @@
                 }
                 td(row, to_seconds(cur.self_time).toFixed(3));
                 if (delta) {
-                    td(row, fmt_delta(to_seconds(cur.self_time), to_seconds(delta.self_time)), true);
+                    td(row, fmt_delta(to_seconds(cur.self_time), to_seconds(delta.self_time), false), true);
                 } else {
                     td(row, "-", true);
                 }
                 td(row, cur.invocation_count);
                 if (delta) {
-                    td(row, fmt_delta(cur.invocation_count, delta.invocation_count), true);
+                    td(row, fmt_delta(cur.invocation_count, delta.invocation_count, true), true);
                 } else {
                     td(row, "-", true);
                 }
@@ -277,6 +282,7 @@
                         fmt_delta(
                             to_seconds(cur.incremental_load_time),
                             to_seconds(delta.incremental_load_time),
+                           false,
                         ),
                         true).classList.add("incr");
                 } else {
