@@ -11,7 +11,7 @@ use std::fs;
 use std::io::{stderr, Write};
 use std::path::{Path, PathBuf};
 use std::process;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::{str, time::Instant};
 use tokio::runtime::Runtime;
 
@@ -486,6 +486,117 @@ fn get_local_toolchain(
     Ok((rustc, rustdoc, cargo))
 }
 
+fn generate_cachegrind_diffs(
+    id1: &str,
+    id2: &str,
+    out_dir: &Path,
+    benchmarks: &[Benchmark],
+    build_kinds: &[BuildKind],
+    scenario_kinds: &[ScenarioKind],
+    errors: &mut BenchmarkErrors,
+) {
+    for benchmark in benchmarks {
+        for &build_kind in build_kinds {
+            for &scenario_kind in scenario_kinds {
+                if let ScenarioKind::IncrPatched = scenario_kind {
+                    continue;
+                }
+                let filename = |prefix, id| {
+                    format!(
+                        "{}-{}-{}-{:?}-{:?}",
+                        prefix, id, benchmark.name, build_kind, scenario_kind
+                    )
+                };
+                let id_diff = format!("{}-{}", id1, id2);
+                let cgout1 = out_dir.join(filename("cgout", id1));
+                let cgout2 = out_dir.join(filename("cgout", id2));
+                let cgdiff = out_dir.join(filename("cgdiff", &id_diff));
+                let cgann = out_dir.join(filename("cgann", &id_diff));
+
+                if let Err(e) = cg_diff(&cgout1, &cgout2, &cgdiff) {
+                    errors.incr();
+                    eprintln!("collector error: {:?}", e);
+                    continue;
+                }
+                if let Err(e) = cg_annotate(&cgdiff, &cgann) {
+                    errors.incr();
+                    eprintln!("collector error: {:?}", e);
+                    continue;
+                }
+            }
+        }
+    }
+}
+
+/// Compares two Cachegrind output files using cg_diff and writes result to path.
+fn cg_diff(cgout1: &Path, cgout2: &Path, path: &Path) -> anyhow::Result<()> {
+    let output = Command::new("cg_diff")
+        .arg("--mod-filename=s#/rustc/[^/]*/##")
+        .arg("--mod-funcname=s/[.]llvm[.].*//")
+        .arg(cgout1)
+        .arg(cgout2)
+        .stderr(Stdio::inherit())
+        .output()
+        .context("failed to run `cg_diff`")?;
+
+    if !output.status.success() {
+        anyhow::bail!("failed to generate cachegrind diff");
+    }
+
+    fs::write(path, output.stdout).context("failed to write `cg_diff` output")?;
+
+    Ok(())
+}
+
+/// Post process Cachegrind output file and writes resutl to path.
+fn cg_annotate(cgout: &Path, path: &Path) -> anyhow::Result<()> {
+    let output = Command::new("cg_annotate")
+        .arg("--show-percs=no")
+        .arg(cgout)
+        .stderr(Stdio::inherit())
+        .output()
+        .context("failed to run `cg_annotate`")?;
+
+    if !output.status.success() {
+        anyhow::bail!("failed to annotate cachegrind output");
+    }
+
+    fs::write(path, output.stdout).context("failed to write `cg_annotate` output")?;
+
+    Ok(())
+}
+
+fn profile(
+    compiler: Compiler,
+    id: &str,
+    profiler: Profiler,
+    out_dir: &Path,
+    benchmarks: &[Benchmark],
+    build_kinds: &[BuildKind],
+    scenario_kinds: &[ScenarioKind],
+    errors: &mut BenchmarkErrors,
+) {
+    eprintln!("Profiling {} with {:?}", id, profiler);
+    for (i, benchmark) in benchmarks.iter().enumerate() {
+        eprintln!("{}", n_benchmarks_remaining(benchmarks.len() - i));
+        let mut processor = execute::ProfileProcessor::new(profiler, out_dir, id);
+        let result = benchmark.measure(
+            &mut processor,
+            &build_kinds,
+            &scenario_kinds,
+            compiler,
+            Some(1),
+        );
+        if let Err(ref s) = result {
+            errors.incr();
+            eprintln!(
+                "collector error: Failed to profile '{}' with {:?}, recorded: {:?}",
+                benchmark.name, profiler, s
+            );
+        }
+    }
+}
+
 fn main() {
     match main_result() {
         Ok(code) => process::exit(code),
@@ -566,6 +677,35 @@ fn main_result() -> anyhow::Result<i32> {
              'eprintln', 'llvm-lines'")
             (@arg RUSTC:    +required +takes_value "The path to the local rustc to benchmark")
             (@arg ID:       +required +takes_value "Identifier to associate benchmark results with")
+
+             // Options
+            (@arg BUILDS: --builds       +takes_value
+             "One or more (comma-separated) of: 'Check', \n\
+             'Debug', 'Doc', 'Opt', 'All'")
+            (@arg CARGO:   --cargo       +takes_value "The path to the local Cargo to use")
+            (@arg EXCLUDE: --exclude     +takes_value
+             "Exclude all benchmarks matching anything in\n\
+             this comma-separated list of patterns")
+            (@arg INCLUDE: --include     +takes_value
+             "Include only benchmarks matching something in\n\
+             this comma-separated list of patterns")
+            (@arg OUT_DIR: --("out-dir") +takes_value "Output directory")
+            (@arg RUNS:    --runs        +takes_value
+             "One or more (comma-separated) of: 'Full',\n\
+             'IncrFull', 'IncrUnchanged', 'IncrPatched', 'All'")
+            (@arg RUSTDOC: --rustdoc +takes_value "The path to the local rustdoc to benchmark")
+        )
+
+        (@subcommand diff_local =>
+            (about: "Profiles and compares two toolchains with one of several profilers")
+
+            // Mandatory arguments
+            (@arg PROFILER: +required +takes_value
+             "One of: 'self-profile', 'time-passes', 'perf-record',\n\
+             'oprofile', 'cachegrind', 'callgrind', 'dhat', 'massif',\n\
+             'eprintln', 'llvm-lines'")
+            (@arg RUSTC_BEFORE: +required +takes_value "The path to the local rustc to benchmark")
+            (@arg RUSTC_AFTER:  +required +takes_value "The path to the local rustc to benchmark")
 
              // Options
             (@arg BUILDS: --builds       +takes_value
@@ -796,7 +936,6 @@ fn main_result() -> anyhow::Result<i32> {
             let rustdoc = sub_m.value_of("RUSTDOC");
 
             let (rustc, rustdoc, cargo) = get_local_toolchain(&build_kinds, rustc, rustdoc, cargo)?;
-
             let compiler = Compiler {
                 rustc: &rustc,
                 rustdoc: rustdoc.as_deref(),
@@ -804,30 +943,80 @@ fn main_result() -> anyhow::Result<i32> {
                 triple: &target_triple,
                 is_nightly: true,
             };
+            let benchmarks = get_benchmarks(&benchmark_dir, include, exclude)?;
+            let mut errors = BenchmarkErrors::new();
+            profile(
+                compiler,
+                id,
+                profiler,
+                &out_dir,
+                &benchmarks,
+                &build_kinds,
+                &scenario_kinds,
+                &mut errors,
+            );
+            errors.fail_if_nonzero()?;
+            Ok(0)
+        }
+
+        ("diff_local", Some(sub_m)) => {
+            // Mandatory arguments
+            let profiler = Profiler::from_name(sub_m.value_of("PROFILER").unwrap())?;
+            let rustc1 = sub_m.value_of("RUSTC_BEFORE").unwrap();
+            let rustc2 = sub_m.value_of("RUSTC_AFTER").unwrap();
+
+            // Options
+            let build_kinds = build_kinds_from_arg(&sub_m.value_of("BUILDS"))?;
+            let cargo = sub_m.value_of("CARGO");
+            let exclude = sub_m.value_of("EXCLUDE");
+            let include = sub_m.value_of("INCLUDE");
+            let out_dir = PathBuf::from(sub_m.value_of_os("OUT_DIR").unwrap_or(default_out_dir));
+            let scenario_kinds = scenario_kinds_from_arg(sub_m.value_of("RUNS"))?;
+            let rustdoc = sub_m.value_of("RUSTDOC");
+
+            let id1 = rustc1.strip_prefix('+').unwrap_or("before");
+            let id2 = rustc2.strip_prefix('+').unwrap_or("after");
+            let mut toolchains = Vec::new();
+            for (id, rustc) in [(id1, rustc1), (id2, rustc2)] {
+                let (rustc, rustdoc, cargo) =
+                    get_local_toolchain(&build_kinds, rustc, rustdoc, cargo)?;
+                toolchains.push((id.to_owned(), rustc, rustdoc, cargo));
+            }
 
             let benchmarks = get_benchmarks(&benchmark_dir, include, exclude)?;
-
-            eprintln!("Profiling with {:?}", profiler);
-
             let mut errors = BenchmarkErrors::new();
-            for (i, benchmark) in benchmarks.iter().enumerate() {
-                eprintln!("{}", n_benchmarks_remaining(benchmarks.len() - i));
-                let mut processor = execute::ProfileProcessor::new(profiler, &out_dir, &id);
-                let result = benchmark.measure(
-                    &mut processor,
+            for (id, rustc, rustdoc, cargo) in &toolchains {
+                let compiler = Compiler {
+                    rustc: &rustc,
+                    rustdoc: rustdoc.as_deref(),
+                    cargo: &cargo,
+                    triple: &target_triple,
+                    is_nightly: true,
+                };
+                profile(
+                    compiler,
+                    id,
+                    profiler,
+                    &out_dir,
+                    &benchmarks,
                     &build_kinds,
                     &scenario_kinds,
-                    compiler,
-                    Some(1),
+                    &mut errors,
                 );
-                if let Err(ref s) = result {
-                    errors.incr();
-                    eprintln!(
-                        "collector error: Failed to profile '{}' with {:?}, recorded: {:?}",
-                        benchmark.name, profiler, s
-                    );
-                }
             }
+
+            if let Profiler::Cachegrind = profiler {
+                generate_cachegrind_diffs(
+                    id1,
+                    id2,
+                    &out_dir,
+                    &benchmarks,
+                    &build_kinds,
+                    &scenario_kinds,
+                    &mut errors,
+                );
+            }
+
             errors.fail_if_nonzero()?;
             Ok(0)
         }
