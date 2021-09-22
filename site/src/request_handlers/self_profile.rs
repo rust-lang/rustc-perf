@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -190,6 +190,42 @@ fn get_self_profile_data(
     Ok(profile)
 }
 
+// Add query data entries to `profile` for any queries in `base_profile` which are not present in
+// `profile` (i.e. queries not invoked during the compilation that generated `profile`). This is
+// bit of a hack to enable showing rows for these queries in the table on the self-profile page.
+fn add_uninvoked_base_profile_queries(
+    profile: &mut self_profile::SelfProfile,
+    base_profile: &Option<self_profile::SelfProfile>,
+) {
+    let base_profile = match base_profile.as_ref() {
+        Some(bp) => bp,
+        None => return,
+    };
+
+    let profile_queries: HashSet<_> = profile
+        .query_data
+        .iter()
+        .map(|qd| qd.label.as_str())
+        .collect();
+
+    for qd in &base_profile.query_data {
+        if !profile_queries.contains(qd.label.as_str()) {
+            let uninvoked_query_data = self_profile::QueryData {
+                label: qd.label,
+                self_time: 0,
+                percent_total_time: 0.0,
+                number_of_cache_misses: 0,
+                number_of_cache_hits: 0,
+                invocation_count: 0,
+                blocked_time: 0,
+                incremental_load_time: 0,
+            };
+
+            profile.query_data.push(uninvoked_query_data);
+        }
+    }
+}
+
 fn get_self_profile_delta(
     profile: &self_profile::SelfProfile,
     base_profile: &Option<self_profile::SelfProfile>,
@@ -223,10 +259,16 @@ fn get_self_profile_delta(
                         - base_qd.incremental_load_time as i64,
                 };
 
-                query_data.push(Some(delta));
+                query_data.push(delta);
             }
             None => {
-                query_data.push(None);
+                let delta = self_profile::QueryDataDelta {
+                    self_time: qd.self_time as i64,
+                    invocation_count: qd.invocation_count as i32,
+                    incremental_load_time: qd.incremental_load_time as i64,
+                };
+
+                query_data.push(delta);
             }
         }
     }
@@ -239,60 +281,58 @@ fn sort_self_profile(
     base_profile_delta: &mut Option<self_profile::SelfProfileDelta>,
     sort_idx: i32,
 ) {
-    let queries = std::mem::take(&mut profile.query_data);
+    let qd = &mut profile.query_data;
+    let qd_deltas = base_profile_delta.as_mut().map(|bpd| &mut bpd.query_data);
+    let mut indices: Vec<_> = (0..qd.len()).collect();
 
-    let deltas = match base_profile_delta.as_mut() {
-        Some(bpd) => std::mem::take(&mut bpd.query_data),
-        None => vec![None; queries.len()],
-    };
-
-    let mut query_data: Vec<_> = queries.into_iter().zip(deltas).collect();
-
-    loop {
-        match sort_idx.abs() {
-            1 => query_data.sort_by_key(|qd| qd.0.label.clone()),
-            2 => query_data.sort_by_key(|qd| qd.0.self_time),
-            3 => query_data.sort_by_key(|qd| qd.0.number_of_cache_misses),
-            4 => query_data.sort_by_key(|qd| qd.0.number_of_cache_hits),
-            5 => query_data.sort_by_key(|qd| qd.0.invocation_count),
-            6 => query_data.sort_by_key(|qd| qd.0.blocked_time),
-            7 => query_data.sort_by_key(|qd| qd.0.incremental_load_time),
-            9 => query_data.sort_by_key(|qd| {
-                // convert to displayed percentage
-                ((qd.0.number_of_cache_hits as f64 / qd.0.invocation_count as f64) * 10_000.0)
-                    as u64
-            }),
-            10 => query_data.sort_by(|a, b| {
-                a.0.percent_total_time
-                    .partial_cmp(&b.0.percent_total_time)
-                    .unwrap()
-            }),
-            11 if base_profile_delta.is_some() => {
-                query_data.sort_by_key(|qd| qd.1.as_ref().map(|delta| delta.self_time));
+    match sort_idx.abs() {
+        1 => indices.sort_by_key(|&i| qd[i].label.clone()),
+        2 => indices.sort_by_key(|&i| qd[i].self_time),
+        3 => indices.sort_by_key(|&i| qd[i].number_of_cache_misses),
+        4 => indices.sort_by_key(|&i| qd[i].number_of_cache_hits),
+        5 => indices.sort_by_key(|&i| qd[i].invocation_count),
+        6 => indices.sort_by_key(|&i| qd[i].blocked_time),
+        7 => indices.sort_by_key(|&i| qd[i].incremental_load_time),
+        9 => indices.sort_by_key(|&i| {
+            // convert to displayed percentage
+            ((qd[i].number_of_cache_hits as f64 / qd[i].invocation_count as f64) * 10_000.0) as u64
+        }),
+        10 => indices.sort_by(|&a, &b| {
+            qd[a]
+                .percent_total_time
+                .partial_cmp(&qd[b].percent_total_time)
+                .unwrap()
+        }),
+        11 => {
+            if let Some(ref deltas) = qd_deltas {
+                indices.sort_by_key(|&i| deltas[i].self_time);
             }
-            12 if base_profile_delta.is_some() => {
-                query_data.sort_by_key(|qd| qd.1.as_ref().map(|delta| delta.invocation_count));
-            }
-            13 if base_profile_delta.is_some() => {
-                query_data.sort_by_key(|qd| qd.1.as_ref().map(|delta| delta.incremental_load_time));
-            }
-            _ => break,
         }
-
-        // Only apply this if at least one of the conditions above was met
-        if sort_idx < 0 {
-            query_data.reverse();
+        12 => {
+            if let Some(ref deltas) = qd_deltas {
+                indices.sort_by_key(|&i| deltas[i].invocation_count);
+            }
         }
-
-        break;
+        13 => {
+            if let Some(ref deltas) = qd_deltas {
+                indices.sort_by_key(|&i| deltas[i].incremental_load_time);
+            }
+        }
+        _ => return,
     }
 
-    let (queries, deltas) = query_data.into_iter().unzip();
+    profile.query_data = if sort_idx < 0 {
+        indices.iter().map(|&i| qd[i].clone()).rev().collect()
+    } else {
+        indices.iter().map(|&i| qd[i].clone()).collect()
+    };
 
-    profile.query_data = queries;
-
-    if let Some(bpd) = base_profile_delta {
-        bpd.query_data = deltas;
+    if let Some(deltas) = qd_deltas {
+        base_profile_delta.as_mut().unwrap().query_data = if sort_idx < 0 {
+            indices.iter().map(|&i| deltas[i].clone()).rev().collect()
+        } else {
+            indices.iter().map(|&i| deltas[i].clone()).collect()
+        };
     }
 }
 
@@ -681,6 +721,7 @@ pub async fn handle_self_profile(
         None
     };
 
+    add_uninvoked_base_profile_queries(&mut profile, &base_profile);
     let mut base_profile_delta = get_self_profile_delta(&profile, &base_profile);
     sort_self_profile(&mut profile, &mut base_profile_delta, sort_idx);
 

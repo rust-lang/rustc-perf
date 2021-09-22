@@ -311,7 +311,7 @@ pub mod self_profile {
     #[derive(Serialize, Debug, Clone)]
     pub struct SelfProfileDelta {
         pub totals: QueryDataDelta,
-        pub query_data: Vec<Option<QueryDataDelta>>,
+        pub query_data: Vec<QueryDataDelta>,
     }
 
     #[derive(Serialize, Clone, Debug)]
