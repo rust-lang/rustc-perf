@@ -22,10 +22,12 @@ type BoxedError = Box<dyn Error + Send + Sync>;
 pub async fn handle_triage(
     body: api::triage::Request,
     ctxt: &SiteCtxt,
-) -> Result<api::triage::Response, BoxedError> {
+) -> api::ServerResult<api::triage::Response> {
     let start = body.start;
     let end = body.end;
-    let master_commits = collector::master_commits().await?;
+    let master_commits = collector::master_commits()
+        .await
+        .map_err(|e| format!("error retrieving master commit list: {}", e))?;
 
     let start_artifact = ctxt
         .artifact_id_for_bound(start.clone(), true)
@@ -47,7 +49,8 @@ pub async fn handle_triage(
             &master_commits,
             body.calcNewSig.unwrap_or(false),
         )
-        .await?
+        .await
+        .map_err(|e| format!("error comparing commits: {}", e))?
         {
             Some(c) => c,
             None => {
@@ -87,8 +90,10 @@ pub async fn handle_triage(
 pub async fn handle_compare(
     body: api::comparison::Request,
     ctxt: &SiteCtxt,
-) -> Result<api::comparison::Response, BoxedError> {
-    let master_commits = collector::master_commits().await?;
+) -> api::ServerResult<api::comparison::Response> {
+    let master_commits = collector::master_commits()
+        .await
+        .map_err(|e| format!("error retrieving master commit list: {}", e))?;
     let end = body.end;
     let comparison = compare_given_commits(
         body.start,
@@ -98,7 +103,8 @@ pub async fn handle_compare(
         &master_commits,
         body.calcNewSig.unwrap_or(false),
     )
-    .await?
+    .await
+    .map_err(|e| format!("error comparing commits: {}", e))?
     .ok_or_else(|| format!("could not find end commit for bound {:?}", end))?;
 
     let conn = ctxt.conn().await;
