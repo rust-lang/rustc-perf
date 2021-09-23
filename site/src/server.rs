@@ -310,50 +310,10 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
                 .handle_get_async(&req, |c| request_handlers::handle_next_commit(c))
                 .await;
         }
-        "/perf/triage" => {
-            let input: triage::Request = if *req.method() == http::Method::GET {
-                check!(parse_query_string(req.uri()))
-            } else if *req.method() == http::Method::POST {
-                let mut body = Vec::new();
-                let (_req, mut body_stream) = req.into_parts();
-                while let Some(chunk) = body_stream.next().await {
-                    let chunk =
-                        chunk.map_err(|e| ServerError(format!("failed to read chunk: {:?}", e)))?;
-                    body.extend_from_slice(&chunk);
-                    // More than 10 MB of data
-                    if body.len() > 1024 * 1024 * 10 {
-                        return Ok(http::Response::builder()
-                            .status(StatusCode::PAYLOAD_TOO_LARGE)
-                            .body(hyper::Body::empty())
-                            .unwrap());
-                    }
-                }
-                match parse_body(&body) {
-                    Ok(b) => b,
-                    Err(e) => return Ok(e),
-                }
-            } else {
-                return Ok(http::Response::builder()
-                    .status(StatusCode::BAD_REQUEST)
-                    .header_typed(ContentType::text_utf8())
-                    .body(hyper::Body::from("bad method, only GET and POST supported"))
-                    .unwrap());
-            };
+        "/perf/triage" if *req.method() == http::Method::GET => {
             let ctxt: Arc<SiteCtxt> = server.ctxt.read().as_ref().unwrap().clone();
-            let response = crate::comparison::handle_triage(input, &ctxt).await;
-            match response {
-                Ok(result) => {
-                    let response = http::Response::builder().header_typed(ContentType::text());
-                    return Ok(response.body(hyper::Body::from(result.0)).unwrap());
-                }
-                Err(err) => {
-                    return Ok(http::Response::builder()
-                        .status(StatusCode::INTERNAL_SERVER_ERROR)
-                        .header_typed(ContentType::text_utf8())
-                        .body(hyper::Body::from(err.to_string()))
-                        .unwrap())
-                }
-            }
+            let input: triage::Request = check!(parse_query_string(req.uri()));
+            return Ok(to_triage_response(crate::comparison::handle_triage(input, &ctxt).await));
         }
         "/perf/metrics" => {
             return Ok(server.handle_metrics(req).await);
@@ -491,6 +451,9 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
                     .unwrap(),
             },
         ),
+        "/perf/triage" => Ok(to_triage_response(
+            crate::comparison::handle_triage(check!(parse_body(&body)), &ctxt).await
+        )),
         _ => Ok(http::Response::builder()
             .header_typed(ContentType::html())
             .status(StatusCode::NOT_FOUND)
@@ -634,6 +597,22 @@ where
             .header_typed(CacheControl::new().with_no_cache().with_no_store())
             .body(hyper::Body::from(err))
             .unwrap(),
+    }
+}
+
+fn to_triage_response(result: ServerResult<api::triage::Response>) -> Response {
+    match result {
+        Ok(result) => {
+            let response = http::Response::builder().header_typed(ContentType::text());
+            response.body(hyper::Body::from(result.0)).unwrap()
+        }
+        Err(err) => {
+            http::Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .header_typed(ContentType::text_utf8())
+                .body(hyper::Body::from(err.to_string()))
+                .unwrap()
+        }
     }
 }
 
