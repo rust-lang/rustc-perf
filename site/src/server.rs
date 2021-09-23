@@ -321,17 +321,16 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
         "/perf/onpush" => {
             return Ok(server.handle_push(req).await);
         }
-        "/perf/download-raw-self-profile" | "/perf/processed-self-profile" => {
+        "/perf/download-raw-self-profile" => {
+            let ctxt: Arc<SiteCtxt> = server.ctxt.read().as_ref().unwrap().clone();
+            let req = check!(parse_query_string(req.uri()));
+            return Ok(request_handlers::handle_self_profile_raw_download(req, &ctxt).await);
+        }
+        "/perf/processed-self-profile" => {
             return match request_handlers::get_self_profile_raw(&req) {
                 Ok((parts, v)) => {
                     let ctxt: Arc<SiteCtxt> = server.ctxt.read().as_ref().unwrap().clone();
-                    let response = if path.contains("processed") {
-                        request_handlers::handle_self_profile_processed_download(v, parts, &ctxt)
-                            .await
-                    } else {
-                        request_handlers::handle_self_profile_raw_download(v, &ctxt).await
-                    };
-                    Ok(response)
+                    Ok(request_handlers::handle_self_profile_processed_download(v, parts, &ctxt).await)
                 }
                 Err(e) => Ok(e),
             };
