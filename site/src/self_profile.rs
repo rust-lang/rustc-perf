@@ -8,6 +8,8 @@ mod codegen_schedule;
 pub mod crox;
 pub mod flamegraph;
 
+pub type ProcessorType = crate::api::self_profile_processed::ProcessorType;
+
 pub struct Output {
     pub data: Vec<u8>,
     pub filename: &'static str,
@@ -16,13 +18,13 @@ pub struct Output {
 
 pub fn generate(
     title: &str,
+    processor_type: ProcessorType,
     self_profile_base_data: Option<Vec<u8>>,
     self_profile_data: Vec<u8>,
-    mut params: HashMap<String, String>,
+    params: HashMap<String, String>,
 ) -> anyhow::Result<Output> {
-    let removed = params.remove("type");
-    match removed.as_deref() {
-        Some("crox") => {
+    match processor_type {
+        ProcessorType::Crox => {
             let opt = serde_json::from_str(&serde_json::to_string(&params).unwrap())
                 .context("crox opts")?;
             Ok(Output {
@@ -31,7 +33,7 @@ pub fn generate(
                 is_download: true,
             })
         }
-        Some("flamegraph") => {
+        ProcessorType::Flamegraph => {
             let opt = serde_json::from_str(&serde_json::to_string(&params).unwrap())
                 .context("flame opts")?;
             Ok(Output {
@@ -40,7 +42,7 @@ pub fn generate(
                 is_download: false,
             })
         }
-        Some("codegen-schedule") => {
+        ProcessorType::CodegenSchedule => {
             let opt =
                 serde_json::from_str(&serde_json::to_string(&params).unwrap()).context("params")?;
             Ok(Output {

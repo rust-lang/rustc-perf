@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::io::Read;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -6,26 +6,25 @@ use std::time::{Duration, Instant};
 use bytes::Buf;
 use headers::{ContentType, Header};
 use hyper::StatusCode;
-use log::error;
 
-use crate::api::{self_profile, self_profile_raw, ServerResult};
+use crate::api::{self_profile, self_profile_processed, self_profile_raw, ServerResult};
 use crate::db::ArtifactId;
 use crate::load::SiteCtxt;
 use crate::selector::{self, Tag};
-use crate::server::{Request, Response, ResponseHeaders};
+use crate::server::{Response, ResponseHeaders};
 
 pub async fn handle_self_profile_processed_download(
-    body: self_profile_raw::Request,
-    mut params: HashMap<String, String>,
+    body: self_profile_processed::Request,
     ctxt: &SiteCtxt,
 ) -> http::Response<hyper::Body> {
+    log::info!("handle_self_profile_processed_download({:?})", body);
+    let mut params = body.params.clone();
     let diff_against = params.remove("base_commit");
-    if params
-        .get("type")
-        .map_or(false, |t| t != "codegen-schedule")
+
+    if body.processor_type != self_profile_processed::ProcessorType::CodegenSchedule
         && diff_against.is_some()
     {
-        let mut resp = Response::new("Only codegen_schedule supports diffing right now.".into());
+        let mut resp = Response::new("Only codegen-schedule supports diffing right now.".into());
         *resp.status_mut() = StatusCode::BAD_REQUEST;
         return resp;
     }
@@ -75,7 +74,17 @@ pub async fn handle_self_profile_processed_download(
         None
     };
 
-    let data = match handle_self_profile_raw(body, ctxt).await {
+    let data = match handle_self_profile_raw(
+        self_profile_raw::Request {
+            commit: body.commit,
+            benchmark: body.benchmark.clone(),
+            run_name: body.run_name.clone(),
+            cid: body.cid,
+        },
+        ctxt,
+    )
+    .await
+    {
         Ok(v) => match get_self_profile_raw_data(&v.url).await {
             Ok(v) => v,
             Err(e) => return e,
@@ -89,15 +98,16 @@ pub async fn handle_self_profile_processed_download(
 
     log::trace!("got data in {:?}", start.elapsed());
 
-    let output = match crate::self_profile::generate(&title, base_data, data, params) {
-        Ok(c) => c,
-        Err(e) => {
-            log::error!("Failed to generate json {:?}", e);
-            let mut resp = http::Response::new(format!("{:?}", e).into());
-            *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-            return resp;
-        }
-    };
+    let output =
+        match crate::self_profile::generate(&title, body.processor_type, base_data, data, params) {
+            Ok(c) => c,
+            Err(e) => {
+                log::error!("Failed to generate json {:?}", e);
+                let mut resp = http::Response::new(format!("{:?}", e).into());
+                *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+                return resp;
+            }
+        };
     let mut builder = http::Response::builder()
         .header_typed(if output.filename.ends_with("json") {
             ContentType::json()
@@ -390,9 +400,9 @@ pub async fn handle_self_profile_raw_download(
     body: self_profile_raw::Request,
     ctxt: &SiteCtxt,
 ) -> http::Response<hyper::Body> {
-    let res = handle_self_profile_raw(body, ctxt).await;
-    let (url, is_tarball) = match res {
-        Ok(v) => (v.url, v.is_tarball),
+    log::info!("handle_self_profile_raw_download({:?})", body);
+    let url = match handle_self_profile_raw(body, ctxt).await {
+        Ok(v) => v.url,
         Err(e) => {
             let mut resp = http::Response::new(e.into());
             *resp.status_mut() = StatusCode::BAD_REQUEST;
@@ -427,73 +437,14 @@ pub async fn handle_self_profile_raw_download(
         .insert(hyper::header::CONTENT_TYPE, header.pop().unwrap());
     server_resp.headers_mut().insert(
         hyper::header::CONTENT_DISPOSITION,
-        hyper::header::HeaderValue::from_maybe_shared(format!(
-            "attachment; filename=\"{}\"",
-            if is_tarball {
-                "self-profile.tar"
-            } else {
-                "self-profile.mm_profdata"
-            }
-        ))
+        hyper::header::HeaderValue::from_maybe_shared(
+            "attachment; filename=\"self-profile.mm_profdata\"",
+        )
         .expect("valid header"),
     );
     *server_resp.status_mut() = StatusCode::OK;
     tokio::spawn(tarball(resp, sender));
     server_resp
-}
-
-pub fn get_self_profile_raw(
-    req: &Request,
-) -> Result<(HashMap<String, String>, self_profile_raw::Request), http::Response<hyper::Body>> {
-    // FIXME: how should this look?
-    let url = match url::Url::parse(&format!("http://example.com{}", req.uri())) {
-        Ok(v) => v,
-        Err(e) => {
-            error!("failed to parse url {}: {:?}", req.uri(), e);
-            return Err(http::Response::builder()
-                .header_typed(ContentType::text_utf8())
-                .status(StatusCode::BAD_REQUEST)
-                .body(hyper::Body::from(format!(
-                    "failed to parse url {}: {:?}",
-                    req.uri(),
-                    e
-                )))
-                .unwrap());
-        }
-    };
-    let mut parts = url
-        .query_pairs()
-        .into_owned()
-        .collect::<HashMap<String, String>>();
-    macro_rules! key_or_error {
-        ($ident:ident) => {
-            if let Some(v) = parts.remove(stringify!($ident)) {
-                v
-            } else {
-                error!(
-                    "failed to deserialize request {}: missing {} in query string",
-                    req.uri(),
-                    stringify!($ident)
-                );
-                return Err(http::Response::builder()
-                    .header_typed(ContentType::text_utf8())
-                    .status(StatusCode::BAD_REQUEST)
-                    .body(hyper::Body::from(format!(
-                        "failed to deserialize request {}: missing {} in query string",
-                        req.uri(),
-                        stringify!($ident)
-                    )))
-                    .unwrap());
-            }
-        };
-    }
-    let request = self_profile_raw::Request {
-        commit: key_or_error!(commit),
-        benchmark: key_or_error!(benchmark),
-        run_name: key_or_error!(run_name),
-        cid: None,
-    };
-    return Ok((parts, request));
 }
 
 async fn tarball(resp: reqwest::Response, mut sender: hyper::body::Sender) {
@@ -615,7 +566,6 @@ pub async fn handle_self_profile_raw(
             cids: cids.to_vec(),
             cid,
             url,
-            is_tarball: false,
         })
     }
 }

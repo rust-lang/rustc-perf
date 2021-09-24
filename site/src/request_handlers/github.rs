@@ -24,6 +24,7 @@ pub async fn handle_github(
     request: github::Request,
     ctxt: Arc<SiteCtxt>,
 ) -> ServerResult<github::Response> {
+    log::info!("handle_github({:?})", request);
     if request.comment.body.contains(" homu: ") {
         if let Some(sha) = parse_homu_comment(&request.comment.body).await {
             enqueue_sha(request.issue, &ctxt, sha).await?;

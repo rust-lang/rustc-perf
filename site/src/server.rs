@@ -19,7 +19,7 @@ use serde::Serialize;
 
 pub use crate::api::{
     self, bootstrap, comparison, dashboard, github, graph, info, self_profile, self_profile_raw,
-    status, triage, CommitResponse, ServerResult, StyledBenchmarkName,
+    status, triage, ServerResult,
 };
 use crate::db::{self, ArtifactId};
 use crate::load::{Config, SiteCtxt};
@@ -284,6 +284,15 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
         return Ok(response);
     }
 
+    macro_rules! check {
+        ($e:expr) => {
+            match $e {
+                Ok(v) => v,
+                Err(e) => return Ok(e),
+            }
+        };
+    }
+
     match path {
         "/perf/info" => return server.handle_get(&req, request_handlers::handle_info),
         "/perf/dashboard" => {
@@ -301,68 +310,12 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
                 .handle_get_async(&req, |c| request_handlers::handle_next_commit(c))
                 .await;
         }
-        "/perf/triage" => {
-            let input: triage::Request = if *req.method() == http::Method::GET {
-                let url = url::Url::parse(&format!("http://example.com{}", req.uri())).unwrap();
-                let parts = url
-                    .query_pairs()
-                    .into_owned()
-                    .collect::<HashMap<String, String>>();
-                match serde_json::from_str(&serde_json::to_string(&parts).unwrap()) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        return Ok(http::Response::builder()
-                            .header_typed(ContentType::text_utf8())
-                            .status(StatusCode::BAD_REQUEST)
-                            .body(hyper::Body::from(format!(
-                                "failed to deserialize request {}: {:?}",
-                                req.uri(),
-                                e,
-                            )))
-                            .unwrap());
-                    }
-                }
-            } else if *req.method() == http::Method::POST {
-                let mut body = Vec::new();
-                let (_req, mut body_stream) = req.into_parts();
-                while let Some(chunk) = body_stream.next().await {
-                    let chunk =
-                        chunk.map_err(|e| ServerError(format!("failed to read chunk: {:?}", e)))?;
-                    body.extend_from_slice(&chunk);
-                    // More than 10 MB of data
-                    if body.len() > 1024 * 1024 * 10 {
-                        return Ok(http::Response::builder()
-                            .status(StatusCode::PAYLOAD_TOO_LARGE)
-                            .body(hyper::Body::empty())
-                            .unwrap());
-                    }
-                }
-                match parse_body(&body) {
-                    Ok(b) => b,
-                    Err(e) => return Ok(e),
-                }
-            } else {
-                return Ok(http::Response::builder()
-                    .status(StatusCode::BAD_REQUEST)
-                    .header_typed(ContentType::text_utf8())
-                    .body(hyper::Body::from("bad method, only GET and POST supported"))
-                    .unwrap());
-            };
+        "/perf/triage" if *req.method() == http::Method::GET => {
             let ctxt: Arc<SiteCtxt> = server.ctxt.read().as_ref().unwrap().clone();
-            let response = crate::comparison::handle_triage(input, &ctxt).await;
-            match response {
-                Ok(result) => {
-                    let response = http::Response::builder().header_typed(ContentType::text());
-                    return Ok(response.body(hyper::Body::from(result.0)).unwrap());
-                }
-                Err(err) => {
-                    return Ok(http::Response::builder()
-                        .status(StatusCode::INTERNAL_SERVER_ERROR)
-                        .header_typed(ContentType::text_utf8())
-                        .body(hyper::Body::from(err.to_string()))
-                        .unwrap())
-                }
-            }
+            let input: triage::Request = check!(parse_query_string(req.uri()));
+            return Ok(to_triage_response(
+                crate::comparison::handle_triage(input, &ctxt).await,
+            ));
         }
         "/perf/metrics" => {
             return Ok(server.handle_metrics(req).await);
@@ -370,20 +323,15 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
         "/perf/onpush" => {
             return Ok(server.handle_push(req).await);
         }
-        "/perf/download-raw-self-profile" | "/perf/processed-self-profile" => {
-            return match request_handlers::get_self_profile_raw(&req) {
-                Ok((parts, v)) => {
-                    let ctxt: Arc<SiteCtxt> = server.ctxt.read().as_ref().unwrap().clone();
-                    let response = if path.contains("processed") {
-                        request_handlers::handle_self_profile_processed_download(v, parts, &ctxt)
-                            .await
-                    } else {
-                        request_handlers::handle_self_profile_raw_download(v, &ctxt).await
-                    };
-                    Ok(response)
-                }
-                Err(e) => Ok(e),
-            };
+        "/perf/download-raw-self-profile" => {
+            let ctxt: Arc<SiteCtxt> = server.ctxt.read().as_ref().unwrap().clone();
+            let req = check!(parse_query_string(req.uri()));
+            return Ok(request_handlers::handle_self_profile_raw_download(req, &ctxt).await);
+        }
+        "/perf/processed-self-profile" => {
+            let ctxt: Arc<SiteCtxt> = server.ctxt.read().as_ref().unwrap().clone();
+            let req = check!(parse_query_string(req.uri()));
+            return Ok(request_handlers::handle_self_profile_processed_download(req, &ctxt).await);
         }
         _ if req.method() == http::Method::GET => return Ok(not_found()),
         _ => {}
@@ -406,21 +354,12 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
         }
     }
 
-    macro_rules! body {
-        ($e:expr) => {
-            match $e {
-                Ok(v) => v,
-                Err(e) => return Ok(e),
-            }
-        };
-    }
-
     match path {
         "/perf/graph" => Ok(to_response(
-            request_handlers::handle_graph(body!(parse_body(&body)), &ctxt).await,
+            request_handlers::handle_graph(check!(parse_body(&body)), &ctxt).await,
         )),
         "/perf/get" => Ok(to_response(
-            crate::comparison::handle_compare(body!(parse_body(&body)), &ctxt)
+            crate::comparison::handle_compare(check!(parse_body(&body)), &ctxt)
                 .await
                 .map_err(|e| e.to_string()),
         )),
@@ -453,7 +392,7 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
             };
             match event.as_str() {
                 "issue_comment" => Ok(to_response(
-                    request_handlers::handle_github(body!(parse_body(&body)), ctxt.clone()).await,
+                    request_handlers::handle_github(check!(parse_body(&body)), ctxt.clone()).await,
                 )),
                 _ => Ok(http::Response::builder()
                     .status(StatusCode::OK)
@@ -462,13 +401,13 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
             }
         }
         "/perf/self-profile" => Ok(to_response(
-            request_handlers::handle_self_profile(body!(parse_body(&body)), &ctxt).await,
+            request_handlers::handle_self_profile(check!(parse_body(&body)), &ctxt).await,
         )),
         "/perf/self-profile-raw" => Ok(to_response(
-            request_handlers::handle_self_profile_raw(body!(parse_body(&body)), &ctxt).await,
+            request_handlers::handle_self_profile_raw(check!(parse_body(&body)), &ctxt).await,
         )),
         "/perf/graph-new" => Ok(
-            match request_handlers::handle_graph_new(body!(parse_body(&body)), &ctxt).await {
+            match request_handlers::handle_graph_new(check!(parse_body(&body)), &ctxt).await {
                 Ok(result) => {
                     let mut response = http::Response::builder()
                         .header_typed(ContentType::json())
@@ -489,7 +428,7 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
             },
         ),
         "/perf/bootstrap" => Ok(
-            match request_handlers::handle_bootstrap(body!(parse_body(&body)), &ctxt).await {
+            match request_handlers::handle_bootstrap(check!(parse_body(&body)), &ctxt).await {
                 Ok(result) => {
                     let mut response = http::Response::builder()
                         .header_typed(ContentType::json())
@@ -509,6 +448,9 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
                     .unwrap(),
             },
         ),
+        "/perf/triage" => Ok(to_triage_response(
+            crate::comparison::handle_triage(check!(parse_body(&body)), &ctxt).await,
+        )),
         _ => Ok(http::Response::builder()
             .header_typed(ContentType::html())
             .status(StatusCode::NOT_FOUND)
@@ -533,8 +475,36 @@ where
                 .header_typed(ContentType::text_utf8())
                 .status(StatusCode::BAD_REQUEST)
                 .body(hyper::Body::from(format!(
-                    "Failed to deserialize request; {:?}",
+                    "Failed to deserialize request: {:?}",
                     err
+                )))
+                .unwrap());
+        }
+    }
+}
+
+fn parse_query_string<D>(uri: &http::Uri) -> Result<D, Response>
+where
+    D: DeserializeOwned,
+{
+    let params: HashMap<String, String> = uri
+        .query()
+        .map(|v| {
+            url::form_urlencoded::parse(v.as_bytes())
+                .into_owned()
+                .collect()
+        })
+        .unwrap_or_else(HashMap::new);
+
+    match serde_json::from_str(&serde_json::to_string(&params).unwrap()) {
+        Ok(d) => Ok(d),
+        Err(err) => {
+            return Err(http::Response::builder()
+                .header_typed(ContentType::text_utf8())
+                .status(StatusCode::BAD_REQUEST)
+                .body(hyper::Body::from(format!(
+                    "Failed to deserialize request {}: {:?}",
+                    uri, err,
                 )))
                 .unwrap());
         }
@@ -623,6 +593,20 @@ where
             .header_typed(ContentType::text_utf8())
             .header_typed(CacheControl::new().with_no_cache().with_no_store())
             .body(hyper::Body::from(err))
+            .unwrap(),
+    }
+}
+
+fn to_triage_response(result: ServerResult<api::triage::Response>) -> Response {
+    match result {
+        Ok(result) => {
+            let response = http::Response::builder().header_typed(ContentType::text());
+            response.body(hyper::Body::from(result.0)).unwrap()
+        }
+        Err(err) => http::Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .header_typed(ContentType::text_utf8())
+            .body(hyper::Body::from(err.to_string()))
             .unwrap(),
     }
 }
