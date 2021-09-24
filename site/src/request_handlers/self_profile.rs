@@ -390,9 +390,8 @@ pub async fn handle_self_profile_raw_download(
     body: self_profile_raw::Request,
     ctxt: &SiteCtxt,
 ) -> http::Response<hyper::Body> {
-    let res = handle_self_profile_raw(body, ctxt).await;
-    let (url, is_tarball) = match res {
-        Ok(v) => (v.url, v.is_tarball),
+    let url = match handle_self_profile_raw(body, ctxt).await {
+        Ok(v) => v.url,
         Err(e) => {
             let mut resp = http::Response::new(e.into());
             *resp.status_mut() = StatusCode::BAD_REQUEST;
@@ -427,14 +426,9 @@ pub async fn handle_self_profile_raw_download(
         .insert(hyper::header::CONTENT_TYPE, header.pop().unwrap());
     server_resp.headers_mut().insert(
         hyper::header::CONTENT_DISPOSITION,
-        hyper::header::HeaderValue::from_maybe_shared(format!(
-            "attachment; filename=\"{}\"",
-            if is_tarball {
-                "self-profile.tar"
-            } else {
-                "self-profile.mm_profdata"
-            }
-        ))
+        hyper::header::HeaderValue::from_maybe_shared(
+            "attachment; filename=\"self-profile.mm_profdata\"",
+        )
         .expect("valid header"),
     );
     *server_resp.status_mut() = StatusCode::OK;
@@ -615,7 +609,6 @@ pub async fn handle_self_profile_raw(
             cids: cids.to_vec(),
             cid,
             url,
-            is_tarball: false,
         })
     }
 }
