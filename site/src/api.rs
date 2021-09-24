@@ -266,6 +266,38 @@ pub mod self_profile_raw {
     }
 }
 
+pub mod self_profile_processed {
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
+    #[serde(rename_all = "lowercase")]
+    pub enum ProcessorType {
+        #[serde(rename = "codegen-schedule")]
+        CodegenSchedule,
+        Crox,
+        Flamegraph,
+    }
+
+    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+    pub struct Request {
+        pub commit: String,
+        pub benchmark: String,
+        pub run_name: String,
+        pub cid: Option<i32>,
+        #[serde(rename = "type")]
+        pub processor_type: ProcessorType,
+        #[serde(default, flatten)]
+        pub params: std::collections::HashMap<String, String>,
+    }
+
+    #[derive(Debug, Clone, Serialize)]
+    pub struct Response {
+        pub cids: Vec<i32>,
+        pub cid: i32,
+        pub url: String,
+    }
+}
+
 pub mod self_profile {
     use database::QueryLabel;
     use serde::{Deserialize, Serialize};

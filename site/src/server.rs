@@ -313,7 +313,9 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
         "/perf/triage" if *req.method() == http::Method::GET => {
             let ctxt: Arc<SiteCtxt> = server.ctxt.read().as_ref().unwrap().clone();
             let input: triage::Request = check!(parse_query_string(req.uri()));
-            return Ok(to_triage_response(crate::comparison::handle_triage(input, &ctxt).await));
+            return Ok(to_triage_response(
+                crate::comparison::handle_triage(input, &ctxt).await,
+            ));
         }
         "/perf/metrics" => {
             return Ok(server.handle_metrics(req).await);
@@ -327,13 +329,9 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
             return Ok(request_handlers::handle_self_profile_raw_download(req, &ctxt).await);
         }
         "/perf/processed-self-profile" => {
-            return match request_handlers::get_self_profile_raw(&req) {
-                Ok((parts, v)) => {
-                    let ctxt: Arc<SiteCtxt> = server.ctxt.read().as_ref().unwrap().clone();
-                    Ok(request_handlers::handle_self_profile_processed_download(v, parts, &ctxt).await)
-                }
-                Err(e) => Ok(e),
-            };
+            let ctxt: Arc<SiteCtxt> = server.ctxt.read().as_ref().unwrap().clone();
+            let req = check!(parse_query_string(req.uri()));
+            return Ok(request_handlers::handle_self_profile_processed_download(req, &ctxt).await);
         }
         _ if req.method() == http::Method::GET => return Ok(not_found()),
         _ => {}
@@ -451,7 +449,7 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
             },
         ),
         "/perf/triage" => Ok(to_triage_response(
-            crate::comparison::handle_triage(check!(parse_body(&body)), &ctxt).await
+            crate::comparison::handle_triage(check!(parse_body(&body)), &ctxt).await,
         )),
         _ => Ok(http::Response::builder()
             .header_typed(ContentType::html())
@@ -605,13 +603,11 @@ fn to_triage_response(result: ServerResult<api::triage::Response>) -> Response {
             let response = http::Response::builder().header_typed(ContentType::text());
             response.body(hyper::Body::from(result.0)).unwrap()
         }
-        Err(err) => {
-            http::Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .header_typed(ContentType::text_utf8())
-                .body(hyper::Body::from(err.to_string()))
-                .unwrap()
-        }
+        Err(err) => http::Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .header_typed(ContentType::text_utf8())
+            .body(hyper::Body::from(err.to_string()))
+            .unwrap(),
     }
 }
 
