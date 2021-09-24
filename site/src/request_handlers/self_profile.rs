@@ -17,6 +17,7 @@ pub async fn handle_self_profile_processed_download(
     body: self_profile_processed::Request,
     ctxt: &SiteCtxt,
 ) -> http::Response<hyper::Body> {
+    log::info!("handle_self_profile_processed_download({:?})", body);
     let mut params = body.params.clone();
     let diff_against = params.remove("base_commit");
 
@@ -399,6 +400,7 @@ pub async fn handle_self_profile_raw_download(
     body: self_profile_raw::Request,
     ctxt: &SiteCtxt,
 ) -> http::Response<hyper::Body> {
+    log::info!("handle_self_profile_raw_download({:?})", body);
     let url = match handle_self_profile_raw(body, ctxt).await {
         Ok(v) => v.url,
         Err(e) => {

@@ -23,6 +23,7 @@ pub async fn handle_triage(
     body: api::triage::Request,
     ctxt: &SiteCtxt,
 ) -> api::ServerResult<api::triage::Response> {
+    log::info!("handle_triage({:?})", body);
     let start = body.start;
     let end = body.end;
     let master_commits = collector::master_commits()
@@ -91,6 +92,7 @@ pub async fn handle_compare(
     body: api::comparison::Request,
     ctxt: &SiteCtxt,
 ) -> api::ServerResult<api::comparison::Response> {
+    log::info!("handle_compare({:?})", body);
     let master_commits = collector::master_commits()
         .await
         .map_err(|e| format!("error retrieving master commit list: {}", e))?;
