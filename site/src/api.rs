@@ -4,31 +4,7 @@
 //!
 //! The responses are calculated in the server.rs file.
 
-use database::Benchmark;
-use serde::{Deserialize, Serialize};
-use std::fmt;
 use std::result::Result as StdResult;
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct StyledBenchmarkName {
-    pub name: Benchmark,
-    pub profile: crate::db::Profile,
-}
-
-impl fmt::Display for StyledBenchmarkName {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}-{}", self.name, self.profile)
-    }
-}
-
-impl Serialize for StyledBenchmarkName {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::ser::Serializer,
-    {
-        serializer.collect_str(&self)
-    }
-}
 
 pub type ServerResult<T> = StdResult<T, String>;
 
@@ -63,11 +39,6 @@ pub mod dashboard {
         pub debug: Cases,
         pub opt: Cases,
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct CommitResponse {
-    pub commit: Option<String>,
 }
 
 pub mod graph {
@@ -308,7 +279,6 @@ pub mod self_profile {
         pub base_commit: Option<String>,
         pub benchmark: String,
         pub run_name: String,
-
         pub sort_idx: String,
     }
 

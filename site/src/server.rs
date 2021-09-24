@@ -19,7 +19,7 @@ use serde::Serialize;
 
 pub use crate::api::{
     self, bootstrap, comparison, dashboard, github, graph, info, self_profile, self_profile_raw,
-    status, triage, CommitResponse, ServerResult, StyledBenchmarkName,
+    status, triage, ServerResult,
 };
 use crate::db::{self, ArtifactId};
 use crate::load::{Config, SiteCtxt};
