@@ -161,6 +161,7 @@ fn main() {
 
             "self-profile" => {
                 let mut cmd = Command::new(&tool);
+                cmd.arg("-Zself-profile-events=all");
                 cmd.arg("-Zself-profile=Zsp").args(&args);
 
                 assert!(cmd.status().expect("failed to spawn").success());
