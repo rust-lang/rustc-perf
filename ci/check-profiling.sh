@@ -107,15 +107,21 @@ test   -f results/eprintln-Test-helloworld-Check-Full
 test ! -s results/eprintln-Test-helloworld-Check-Full
 
 # llvm-lines. `Debug` not `Check` because it doesn't support `Check` builds.
+# Including both `helloworld` and `futures` benchmarks, as they exercise the
+# zero dependency and the greater than zero dependency cases, respectively, the
+# latter of which has broken before.
 RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
     cargo run -p collector --bin collector -- \
     profile_local llvm-lines $bindir/rustc Test \
         --builds Debug \
         --cargo $bindir/cargo \
-        --include helloworld \
+        --include helloworld,futures \
         --runs Full
 test -f results/ll-Test-helloworld-Debug-Full
 grep -q "Lines.*Copies.*Function name" results/ll-Test-helloworld-Debug-Full
+test -f results/ll-Test-futures-Debug-Full
+grep -q "Lines.*Copies.*Function name" results/ll-Test-futures-Debug-Full
+
 
 #----------------------------------------------------------------------------
 # Test option handling
