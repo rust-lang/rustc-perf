@@ -89,6 +89,9 @@ programs.
   performance](https://github.com/rust-lang/rust/issues/46449) in the past.
 - **issue-58319**: A small program that caused [poor
   performance](https://github.com/rust-lang/rust/issues/58319) in the past.
+- **issue-88862**: A MCVE of a program that had a
+  [severe performance regression](https://github.com/rust-lang/rust/issues/88862)
+  when trying to normalize large opaque types with late-bound regions.
 - **many-assoc-items**: Contains a struct with many associated items, which
   caused [quadratic behavior](https://github.com/rust-lang/rust/issues/68957)
   in the past.
