@@ -53,6 +53,8 @@ jobs:
 
       - name: cargo check
         run: cargo check
+        env:
+            RUSTFLAGS: -Dwarnings
 
   test_benchmarks:
     strategy:
