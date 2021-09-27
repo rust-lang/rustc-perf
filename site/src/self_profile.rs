@@ -57,6 +57,5 @@ pub fn generate(
                 is_download: false,
             })
         }
-        _ => anyhow::bail!("Unknown type, specify type={crox,flamegraph,codegen-schedule}"),
     }
 }
