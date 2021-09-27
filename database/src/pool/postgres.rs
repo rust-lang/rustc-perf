@@ -202,6 +202,10 @@ static MIGRATIONS: &[&str] = &[
     alter table rustc_compilation alter column aid set data type integer;
     alter table self_profile_query alter column aid set data type integer;
     "#,
+    // For the in_progress_steps() query.
+    r#"
+    create index if not exists collector_progress_start_time_step_idx on collector_progress (start_time, step) where start_time is not null and end_time is not null;
+    "#,
 ];
 
 #[async_trait::async_trait]
