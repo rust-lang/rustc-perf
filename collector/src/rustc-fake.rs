@@ -285,6 +285,15 @@ fn main() {
                 assert!(cmd.status().expect("failed to spawn").success());
             }
 
+            "mono-items" => {
+                // Lazy item collection is the default (i.e., without this
+                // option)
+                args.push("-Zprint-mono-items=lazy".into());
+                let mut cmd = bash_command(tool, args, "1> mono-items");
+
+                assert!(cmd.status().expect("failed to spawn").success());
+            }
+
             _ => {
                 panic!("unknown wrapper: {}", wrapper);
             }
