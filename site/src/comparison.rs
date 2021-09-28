@@ -874,7 +874,7 @@ impl TestResultComparison {
             Magnitude::Small
         } else if change < threshold * 6.0 {
             Magnitude::Medium
-        } else if change < threshold * 18.0 {
+        } else if change < threshold * 12.0 {
             Magnitude::Large
         } else {
             Magnitude::VeryLarge
