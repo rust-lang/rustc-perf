@@ -43,7 +43,9 @@ where
                 }
                 Some(point) => {
                     count += 1;
-                    sum += point.value().expect("present");
+                    sum += point
+                        .value()
+                        .expect("Uninterpolated iterators are not supported");
                     i += 1;
                     if let Some(t) = &mut first {
                         if point.interpolated() {
@@ -73,5 +75,79 @@ where
                 Some(t)
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::average;
+
+    #[test]
+    fn test_no_interpolation_average() {
+        // Test that averaging works without interpolation.
+        use crate::db::Point;
+
+        let v = vec![
+            vec![("a", 0.0), ("b", 200.0)],
+            vec![("a", 100.0), ("b", 300.0)],
+        ];
+
+        let iterators: Vec<_> = v.into_iter().map(|v| v.into_iter()).collect();
+        let mut average = average(iterators);
+
+        let a = average.next().unwrap();
+        assert_eq!(a, ("a", 50.0));
+        assert_eq!(a.interpolated(), false);
+
+        let b = average.next().unwrap();
+        assert_eq!(b, ("b", 250.0));
+        assert_eq!(b.interpolated(), false);
+
+        assert!(average.next().is_none());
+    }
+
+    #[test]
+    fn test_interpolation_average() {
+        // Test that averaging works with interpolation.
+        use crate::db::Point;
+        use crate::interpolate::{Interpolate, Interpolated};
+
+        let v = vec![
+            vec![("a", Some(0.0)), ("b", Some(200.0))],
+            vec![("a", Some(100.0)), ("b", None)],
+        ];
+
+        let iterators: Vec<_> = v
+            .into_iter()
+            .map(|v| Interpolate::new(v.into_iter()))
+            .collect();
+
+        let mut average = average(iterators);
+
+        let a = average.next().unwrap();
+        assert_eq!(a, (("a", Some(50.0)), Interpolated::No));
+        assert_eq!(a.interpolated(), false);
+
+        let b = average.next().unwrap();
+        assert_eq!(b, (("b", Some(150.0)), Interpolated::Yes));
+        assert_eq!(b.interpolated(), true);
+
+        assert!(average.next().is_none());
+    }
+
+    #[test]
+    #[should_panic(expected = "Uninterpolated iterators are not supported")]
+    fn test_uninterpolated_iterator() {
+        let v = vec![vec![("a", Some(1.0)), ("b", Some(2.0))], vec![("a", None)]];
+        let iterators: Vec<_> = v.into_iter().map(|v| v.into_iter()).collect();
+        let _ = average(iterators).next();
+    }
+
+    #[test]
+    #[should_panic(expected = "Not all iterators of the same length")]
+    fn test_unequal_length_iterators() {
+        let v = vec![vec![("a", 1.0), ("b", 2.0)], vec![("a", 3.0)]];
+        let iterators: Vec<_> = v.into_iter().map(|v| v.into_iter()).collect();
+        for _ in average(iterators) {}
     }
 }

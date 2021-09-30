@@ -81,7 +81,12 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(mut item) = self.consumed.pop() {
             item.set_value(self.last_seen.unwrap());
-            return Some((item, Interpolated::Yes));
+            let interpolation = if self.consumed.is_empty() {
+                Interpolated::No
+            } else {
+                Interpolated::Yes
+            };
+            return Some((item, interpolation));
         }
 
         let mut item = self.iterator.next()?;
@@ -129,5 +134,65 @@ where
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Interpolate, Interpolated};
+
+    #[test]
+    fn test_no_interpolation() {
+        let v = vec![("a", 1.0), ("b", 2.0)];
+        let mut iter = Interpolate::new(v.into_iter());
+
+        assert_eq!(iter.next().unwrap(), (("a", 1.0), Interpolated::No));
+        assert_eq!(iter.next().unwrap(), (("b", 2.0), Interpolated::No));
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn test_leading_interpolation() {
+        let v = vec![("a", None), ("b", None), ("c", Some(3.0)), ("d", Some(4.0))];
+        let mut iter = Interpolate::new(v.into_iter());
+
+        assert_eq!(iter.next().unwrap(), (("a", Some(3.0)), Interpolated::Yes));
+        assert_eq!(iter.next().unwrap(), (("b", Some(3.0)), Interpolated::Yes));
+        assert_eq!(iter.next().unwrap(), (("c", Some(3.0)), Interpolated::No));
+        assert_eq!(iter.next().unwrap(), (("d", Some(4.0)), Interpolated::No));
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn test_inner_interpolation() {
+        let v = vec![
+            ("a", Some(1.0)),
+            ("b", Some(2.0)),
+            ("c", None),
+            ("d", None),
+            ("e", Some(5.0)),
+            ("f", Some(6.0)),
+        ];
+        let mut iter = Interpolate::new(v.into_iter());
+
+        assert_eq!(iter.next().unwrap(), (("a", Some(1.0)), Interpolated::No));
+        assert_eq!(iter.next().unwrap(), (("b", Some(2.0)), Interpolated::No));
+        assert_eq!(iter.next().unwrap(), (("c", Some(2.0)), Interpolated::Yes));
+        assert_eq!(iter.next().unwrap(), (("d", Some(2.0)), Interpolated::Yes));
+        assert_eq!(iter.next().unwrap(), (("e", Some(5.0)), Interpolated::No));
+        assert_eq!(iter.next().unwrap(), (("f", Some(6.0)), Interpolated::No));
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn test_trailing_interpolation() {
+        let v = vec![("a", Some(1.0)), ("b", Some(2.0)), ("c", None), ("d", None)];
+        let mut iter = Interpolate::new(v.into_iter());
+
+        assert_eq!(iter.next().unwrap(), (("a", Some(1.0)), Interpolated::No));
+        assert_eq!(iter.next().unwrap(), (("b", Some(2.0)), Interpolated::No));
+        assert_eq!(iter.next().unwrap(), (("c", Some(2.0)), Interpolated::Yes));
+        assert_eq!(iter.next().unwrap(), (("d", Some(2.0)), Interpolated::Yes));
+        assert!(iter.next().is_none());
     }
 }
