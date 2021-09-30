@@ -411,7 +411,7 @@ fn get_local_toolchain(
             if !Command::new("rustup-toolchain-install-master")
                 .arg(&toolchain)
                 .status()
-                .context("failed to run `rustup which rustc`")?
+                .context("failed to run `rustup-toolchain-install-master`")?
                 .success()
             {
                 anyhow::bail!(
