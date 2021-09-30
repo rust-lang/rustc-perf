@@ -81,7 +81,12 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(mut item) = self.consumed.pop() {
             item.set_value(self.last_seen.unwrap());
-            return Some((item, Interpolated::Yes));
+            let interpolation = if self.consumed.is_empty() {
+                Interpolated::No
+            } else {
+                Interpolated::Yes
+            };
+            return Some((item, interpolation));
         }
 
         let mut item = self.iterator.next()?;
