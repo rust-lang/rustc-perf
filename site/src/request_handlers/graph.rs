@@ -7,7 +7,7 @@ use crate::api::{graph, ServerResult};
 use crate::db::{self, ArtifactId, Benchmark, Profile, Scenario};
 use crate::interpolate::Interpolated;
 use crate::load::SiteCtxt;
-use crate::selector::{self, PathComponent, Tag};
+use crate::selector::{Path, PathComponent, Query, Selector, SeriesResponse, Tag};
 
 pub async fn handle_graph(
     body: graph::Request,
@@ -95,15 +95,15 @@ async fn handle_graph_impl(
     let range = ctxt.data_range(body.start.clone()..=body.end.clone());
     let commits: Arc<Vec<_>> = Arc::new(range.iter().map(|c| c.clone().into()).collect());
 
-    let metric_selector = selector::Selector::One(body.stat.clone());
+    let metric_selector = Selector::One(body.stat.clone());
 
     let series = ctxt
         .statistic_series(
-            selector::Query::new()
-                .set::<String>(selector::Tag::Benchmark, selector::Selector::All)
-                .set::<String>(selector::Tag::Profile, selector::Selector::All)
-                .set::<String>(selector::Tag::Scenario, selector::Selector::All)
-                .set::<String>(selector::Tag::Metric, metric_selector.clone()),
+            Query::new()
+                .set::<String>(Tag::Benchmark, Selector::All)
+                .set::<String>(Tag::Profile, Selector::All)
+                .set::<String>(Tag::Scenario, Selector::All)
+                .set::<String>(Tag::Metric, metric_selector.clone()),
             commits.clone(),
         )
         .await?;
@@ -126,11 +126,11 @@ async fn handle_graph_impl(
         vec![body.stat.clone()]
     )
     .map(|(scenario, profile, metric)| {
-        selector::Query::new()
-            .set::<String>(selector::Tag::Benchmark, selector::Selector::All)
-            .set(selector::Tag::Profile, selector::Selector::One(profile))
-            .set(selector::Tag::Scenario, selector::Selector::One(scenario))
-            .set::<String>(selector::Tag::Metric, selector::Selector::One(metric))
+        Query::new()
+            .set::<String>(Tag::Benchmark, Selector::All)
+            .set(Tag::Profile, Selector::One(profile))
+            .set(Tag::Scenario, Selector::One(scenario))
+            .set::<String>(Tag::Metric, Selector::One(metric))
     });
 
     for query in summary_queries {
@@ -148,17 +148,11 @@ async fn handle_graph_impl(
             .assert_one()
             .parse::<Scenario>()
             .unwrap();
-        let q = selector::Query::new()
-            .set::<String>(selector::Tag::Benchmark, selector::Selector::All)
-            .set(selector::Tag::Profile, selector::Selector::One(profile))
-            .set(
-                selector::Tag::Scenario,
-                selector::Selector::One(Scenario::Empty),
-            )
-            .set(
-                selector::Tag::Metric,
-                query.get(Tag::Metric).unwrap().raw.clone(),
-            );
+        let q = Query::new()
+            .set::<String>(Tag::Benchmark, Selector::All)
+            .set(Tag::Profile, Selector::One(profile))
+            .set(Tag::Scenario, Selector::One(Scenario::Empty))
+            .set(Tag::Metric, query.get(Tag::Metric).unwrap().raw.clone());
         let against = match baselines.entry(q.clone()) {
             std::collections::hash_map::Entry::Occupied(o) => *o.get(),
             std::collections::hash_map::Entry::Vacant(v) => {
@@ -183,8 +177,8 @@ async fn handle_graph_impl(
         )
         .map(|((c, d), i)| ((c, Some(d.expect("interpolated") / against)), i));
         let graph_data = to_graph_points(body.kind, averaged).collect::<Vec<_>>();
-        series.push(selector::SeriesResponse {
-            path: selector::Path::new()
+        series.push(SeriesResponse {
+            path: Path::new()
                 .set(PathComponent::Benchmark("Summary".into()))
                 .set(PathComponent::Profile(profile))
                 .set(PathComponent::Scenario(scenario))
