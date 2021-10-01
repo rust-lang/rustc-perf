@@ -448,9 +448,6 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
                     .unwrap(),
             },
         ),
-        "/perf/triage" => Ok(to_triage_response(
-            crate::comparison::handle_triage(check!(parse_body(&body)), &ctxt).await,
-        )),
         _ => Ok(http::Response::builder()
             .header_typed(ContentType::html())
             .status(StatusCode::NOT_FOUND)

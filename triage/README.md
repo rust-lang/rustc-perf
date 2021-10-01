@@ -16,7 +16,7 @@ and so it means the PR to include the triage details in TWiR can be merged short
 before publication. This time is also shortly before the weekly Rust compiler 
 meeting, where the results are looked at.
 
-## Generating the report 
+## Generating the report
 
 First, check the previous triage log entry. Look for responses in PRs, and
 follow up on any promised actions. (i.e. nag people!)
@@ -28,7 +28,7 @@ be the parent commit that we use for the current round of triage.
 Use the API endpoint to automate building the file:
 
 ```
-% curl https://perf.rust-lang.org/perf/triage -d "{\"start\": \"$PARENT\"}" > YYYY-MM-DD.md
+% curl "https://perf.rust-lang.org/perf/triage?start=$PARENT" > YYYY-MM-DD.md
 ```
 
 ## Analysis
