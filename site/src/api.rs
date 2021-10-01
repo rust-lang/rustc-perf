@@ -65,25 +65,6 @@ pub mod graph {
         PercentRelative,
     }
 
-    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-    pub struct GraphData {
-        pub commit: u16,
-        pub absolute: f32,
-        // Percent change from the first datapoint shown
-        pub percent_first: f32,
-        pub y: f32,
-        pub x: u64,
-        pub is_interpolated: bool,
-    }
-
-    #[derive(Debug, PartialEq, Clone, Serialize)]
-    pub struct Response {
-        pub benchmarks: HashMap<String, HashMap<String, Vec<(String, Vec<GraphData>)>>>,
-        pub max: HashMap<String, f32>,
-        pub colors: Vec<String>,
-        pub commits: Vec<String>,
-    }
-
     #[derive(Debug, PartialEq, Clone, Serialize)]
     pub struct Series {
         // y-values

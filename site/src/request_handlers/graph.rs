@@ -1,8 +1,5 @@
 use collector::Bound;
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::convert::TryInto;
-use std::str;
 use std::sync::Arc;
 
 use crate::api::graph::GraphKind;
@@ -38,9 +35,9 @@ pub async fn handle_graph(
 
     let mut benchmarks = HashMap::new();
 
-    let raw = handle_graph_impl(body, ctxt).await?;
+    let benchmarks_impl = handle_graph_impl(body, ctxt).await?;
 
-    for (benchmark_, benchmark_data) in raw.benchmarks.iter() {
+    for (benchmark_, benchmark_data) in benchmarks_impl.iter() {
         let mut by_profile = HashMap::with_capacity(3);
 
         for (profile, series) in benchmark_data.iter() {
@@ -86,13 +83,15 @@ pub async fn handle_graph(
     Ok(resp)
 }
 
-static INTERPOLATED_COLOR: &str = "#fcb0f1";
+struct GraphData {
+    y: f32,
+    is_interpolated: bool,
+}
 
 async fn handle_graph_impl(
     body: graph::Request,
     ctxt: &SiteCtxt,
-) -> ServerResult<graph::Response> {
-    let cc = CommitIdxCache::new();
+) -> ServerResult<HashMap<String, HashMap<String, Vec<(String, Vec<GraphData>)>>>> {
     let range = ctxt.data_range(body.start.clone()..=body.end.clone());
     let commits: Arc<Vec<_>> = Arc::new(range.iter().map(|c| c.clone().into()).collect());
 
@@ -113,7 +112,7 @@ async fn handle_graph_impl(
         .into_iter()
         .map(|sr| {
             sr.interpolate()
-                .map(|series| to_graph_data(&cc, body.kind, series).collect::<Vec<_>>())
+                .map(|series| to_graph_data(body.kind, series).collect::<Vec<_>>())
         })
         .collect::<Vec<_>>();
 
@@ -183,7 +182,7 @@ async fn handle_graph_impl(
                 .collect(),
         )
         .map(|((c, d), i)| ((c, Some(d.expect("interpolated") / against)), i));
-        let graph_data = to_graph_data(&cc, body.kind, averaged).collect::<Vec<_>>();
+        let graph_data = to_graph_data(body.kind, averaged).collect::<Vec<_>>();
         series.push(selector::SeriesResponse {
             path: selector::Path::new()
                 .set(PathComponent::Benchmark("Summary".into()))
@@ -203,17 +202,8 @@ async fn handle_graph_impl(
     }
 
     let mut by_test_case = HashMap::new();
-    let mut by_benchmark_max = HashMap::new();
     for sr in series {
         let benchmark = sr.path.get::<Benchmark>()?.to_string();
-        let max = by_benchmark_max
-            .entry(benchmark.clone())
-            .or_insert(f32::MIN);
-        *max = sr
-            .series
-            .iter()
-            .map(|p| p.y)
-            .fold(*max, |max, p| max.max(p));
         by_test_case
             .entry(benchmark)
             .or_insert_with(HashMap::new)
@@ -222,59 +212,16 @@ async fn handle_graph_impl(
             .push((sr.path.get::<Scenario>()?.to_string(), sr.series));
     }
 
-    Ok(graph::Response {
-        max: by_benchmark_max,
-        benchmarks: by_test_case,
-        colors: vec![String::new(), String::from(INTERPOLATED_COLOR)],
-        commits: cc.into_commits(),
-    })
-}
-
-struct CommitIdxCache {
-    commit_idx: RefCell<HashMap<String, u16>>,
-    commits: RefCell<Vec<String>>,
-}
-
-impl CommitIdxCache {
-    fn new() -> Self {
-        Self {
-            commit_idx: RefCell::new(HashMap::new()),
-            commits: RefCell::new(Vec::new()),
-        }
-    }
-
-    fn into_commits(self) -> Vec<String> {
-        std::mem::take(&mut *self.commits.borrow_mut())
-    }
-
-    fn lookup(&self, commit: String) -> u16 {
-        *self
-            .commit_idx
-            .borrow_mut()
-            .entry(commit.clone())
-            .or_insert_with(|| {
-                let idx = self.commits.borrow().len();
-                self.commits.borrow_mut().push(commit);
-                idx.try_into().unwrap_or_else(|_| {
-                    panic!("{} too big", idx);
-                })
-            })
-    }
+    Ok(by_test_case)
 }
 
 fn to_graph_data<'a>(
-    cc: &'a CommitIdxCache,
     kind: GraphKind,
     points: impl Iterator<Item = ((ArtifactId, Option<f64>), Interpolated)> + 'a,
-) -> impl Iterator<Item = graph::GraphData> + 'a {
+) -> impl Iterator<Item = GraphData> + 'a {
     let mut first = None;
     let mut prev = None;
-    points.map(move |((aid, point), interpolated)| {
-        let commit = if let ArtifactId::Commit(commit) = aid {
-            commit
-        } else {
-            unimplemented!()
-        };
+    points.map(move |((_aid, point), interpolated)| {
         let point = point.expect("interpolated");
         first = Some(first.unwrap_or(point));
         let first = first.unwrap();
@@ -282,16 +229,12 @@ fn to_graph_data<'a>(
         let previous_point = prev.unwrap_or(point);
         let percent_prev = (point - previous_point) / previous_point * 100.0;
         prev = Some(point);
-        graph::GraphData {
-            commit: cc.lookup(commit.sha),
-            absolute: point as f32,
-            percent_first: percent_first as f32,
+        GraphData {
             y: match kind {
                 GraphKind::Raw => point as f32,
                 GraphKind::PercentRelative => percent_prev as f32,
                 GraphKind::PercentFromFirst => percent_first as f32,
             },
-            x: commit.date.0.timestamp() as u64 * 1000, // all dates are since 1970
             is_interpolated: interpolated.is_interpolated(),
         }
     })
