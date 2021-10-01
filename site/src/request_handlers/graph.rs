@@ -95,6 +95,7 @@ async fn handle_graph_impl(
     let range = ctxt.data_range(body.start.clone()..=body.end.clone());
     let commits: Arc<Vec<_>> = Arc::new(range.iter().map(|c| c.clone().into()).collect());
 
+    let metric: database::Metric = body.stat.parse().unwrap();
     let metric_selector = Selector::One(body.stat.clone());
 
     let series = ctxt
@@ -117,47 +118,30 @@ async fn handle_graph_impl(
         .collect::<Vec<_>>();
 
     let mut baselines = HashMap::new();
-    let c = commits.clone();
-    let baselines = &mut baselines;
 
-    let summary_queries = iproduct!(
+    let summary_query_cases = iproduct!(
         ctxt.summary_scenarios(),
-        vec![Profile::Check, Profile::Debug, Profile::Opt],
-        vec![body.stat.clone()]
-    )
-    .map(|(scenario, profile, metric)| {
-        Query::new()
+        vec![Profile::Check, Profile::Debug, Profile::Opt]
+    );
+
+    for (scenario, profile) in summary_query_cases {
+        let query = Query::new()
             .set::<String>(Tag::Benchmark, Selector::All)
             .set(Tag::Profile, Selector::One(profile))
             .set(Tag::Scenario, Selector::One(scenario))
-            .set::<String>(Tag::Metric, Selector::One(metric))
-    });
+            .set(Tag::Metric, metric_selector.clone());
 
-    for query in summary_queries {
-        let profile = query
-            .get(Tag::Profile)
-            .unwrap()
-            .raw
-            .assert_one()
-            .parse::<Profile>()
-            .unwrap();
-        let scenario = query
-            .get(Tag::Scenario)
-            .unwrap()
-            .raw
-            .assert_one()
-            .parse::<Scenario>()
-            .unwrap();
-        let q = Query::new()
+        let baseline_query = Query::new()
             .set::<String>(Tag::Benchmark, Selector::All)
             .set(Tag::Profile, Selector::One(profile))
             .set(Tag::Scenario, Selector::One(Scenario::Empty))
-            .set(Tag::Metric, query.get(Tag::Metric).unwrap().raw.clone());
-        let against = match baselines.entry(q.clone()) {
+            .set(Tag::Metric, metric_selector.clone());
+
+        let baseline = match baselines.entry(baseline_query.clone()) {
             std::collections::hash_map::Entry::Occupied(o) => *o.get(),
             std::collections::hash_map::Entry::Vacant(v) => {
                 let value = db::average(
-                    ctxt.statistic_series(q, c.clone())
+                    ctxt.statistic_series(baseline_query, commits.clone())
                         .await?
                         .into_iter()
                         .map(|sr| sr.interpolate().series)
@@ -168,29 +152,24 @@ async fn handle_graph_impl(
                 *v.insert(value)
             }
         };
-        let averaged = db::average(
+
+        let avg_vs_baseline = db::average(
             ctxt.statistic_series(query.clone(), commits.clone())
                 .await?
                 .into_iter()
                 .map(|sr| sr.interpolate().series)
                 .collect(),
         )
-        .map(|((c, d), i)| ((c, Some(d.expect("interpolated") / against)), i));
-        let graph_data = to_graph_points(body.kind, averaged).collect::<Vec<_>>();
+        .map(|((c, d), i)| ((c, Some(d.expect("interpolated") / baseline)), i));
+
+        let graph_data = to_graph_points(body.kind, avg_vs_baseline).collect::<Vec<_>>();
+
         series.push(SeriesResponse {
             path: Path::new()
                 .set(PathComponent::Benchmark("Summary".into()))
                 .set(PathComponent::Profile(profile))
                 .set(PathComponent::Scenario(scenario))
-                .set(PathComponent::Metric(
-                    query
-                        .get(Tag::Metric)
-                        .unwrap()
-                        .raw
-                        .assert_one()
-                        .parse()
-                        .unwrap(),
-                )),
+                .set(PathComponent::Metric(metric)),
             series: graph_data,
         })
     }
