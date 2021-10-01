@@ -434,7 +434,7 @@
                 stat: "instructions:u",
                 kind: "raw",
             }, state);
-            post_json("/graph-new", values).then(prepData).then(data =>
+            post_json("/graph", values).then(prepData).then(data =>
                 renderPlots(data, values));
         });
     </script>

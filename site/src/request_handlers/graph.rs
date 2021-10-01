@@ -12,17 +12,17 @@ use crate::interpolate::Interpolated;
 use crate::load::SiteCtxt;
 use crate::selector::{self, PathComponent, Tag};
 
-pub async fn handle_graph_new(
+pub async fn handle_graph(
     body: graph::Request,
     ctxt: &SiteCtxt,
 ) -> ServerResult<graph::NewResponse> {
-    log::info!("handle_graph_new({:?})", body);
+    log::info!("handle_graph({:?})", body);
     let range = ctxt.data_range(body.start.clone()..=body.end.clone());
     let commits: Vec<ArtifactId> = range.iter().map(|c| c.clone().into()).collect();
 
     let mut benchmarks = HashMap::new();
 
-    let raw = handle_graph(body, ctxt).await?;
+    let raw = handle_graph_impl(body, ctxt).await?;
 
     for (benchmark_, benchmark_data) in raw.benchmarks.iter() {
         let mut by_profile = HashMap::with_capacity(3);
@@ -66,11 +66,10 @@ pub async fn handle_graph_new(
 
 static INTERPOLATED_COLOR: &str = "#fcb0f1";
 
-pub async fn handle_graph(
+async fn handle_graph_impl(
     body: graph::Request,
     ctxt: &SiteCtxt,
 ) -> ServerResult<Arc<graph::Response>> {
-    log::info!("handle_graph({:?})", body);
     let is_default_query = body
         == graph::Request {
             start: Bound::None,
