@@ -571,9 +571,9 @@
                         }
                     }
 
-                    function shouldShowTestCase(testCase) {
+                    function shouldShowTestCase(name, testCase) {
                         let nameFilter = filter.name && filter.name.trim();
-                        nameFilter = !nameFilter || (testCase.benchmark + "-" + testCase.profile).includes(nameFilter);
+                        nameFilter = !nameFilter || name.includes(nameFilter);
 
                         const significanceFilter = filter.showOnlySignificant ? testCase.isSignificant : true;
 
@@ -582,9 +582,8 @@
                         return scenarioFilter(testCase.scenario) && significanceFilter && nameFilter && magnitudeFilter;
                     }
 
-                    function toTestCases(results) {
-                        let testCases = [];
-                        for (let r of results) {
+                    function toTestCases(name, results) {
+                        return results.map(r => {
                             const scenario = r.scenario;
                             const datumA = r.statistics[0];
                             const datumB = r.statistics[1];
@@ -592,7 +591,7 @@
                             const significanceFactor = r.significance_factor;
                             const isDodgy = r.is_dodgy;
                             let percent = 100 * ((datumB - datumA) / datumA);
-                            let testCase = {
+                            return {
                                 scenario,
                                 datumA,
                                 datumB,
@@ -602,12 +601,7 @@
                                 isDodgy,
                                 percent,
                             };
-                            if (shouldShowTestCase(testCase)) {
-                                testCases.push(testCase);
-                            }
-                        }
-
-                        return testCases;
+                        }).filter(tc => shouldShowTestCase(name, tc))
                     }
 
                     let benches =
@@ -624,7 +618,7 @@
                         map(c => {
                             const name = c[0];
                             const comparison = c[1];
-                            const testCases = toTestCases(comparison);
+                            const testCases = toTestCases(name, comparison);
                             const pcts = testCases.map(tc => parseFloat(tc.percent));
                             const maxPct = Math.max(...pcts).toFixed(1);
                             const minPct = Math.min(...pcts).toFixed(1);
