@@ -50,7 +50,7 @@ pub async fn handle_graph(
                 };
 
                 for (idx, point) in points.iter().enumerate() {
-                    series.points.push(point.y);
+                    series.points.push(point.value);
                     if point.is_interpolated {
                         series.is_interpolated.insert(idx as u16);
                     }
@@ -83,15 +83,15 @@ pub async fn handle_graph(
     Ok(resp)
 }
 
-struct GraphData {
-    y: f32,
+struct GraphPoint {
+    value: f32,
     is_interpolated: bool,
 }
 
 async fn handle_graph_impl(
     body: graph::Request,
     ctxt: &SiteCtxt,
-) -> ServerResult<HashMap<String, HashMap<String, Vec<(String, Vec<GraphData>)>>>> {
+) -> ServerResult<HashMap<String, HashMap<String, Vec<(String, Vec<GraphPoint>)>>>> {
     let range = ctxt.data_range(body.start.clone()..=body.end.clone());
     let commits: Arc<Vec<_>> = Arc::new(range.iter().map(|c| c.clone().into()).collect());
 
@@ -112,7 +112,7 @@ async fn handle_graph_impl(
         .into_iter()
         .map(|sr| {
             sr.interpolate()
-                .map(|series| to_graph_data(body.kind, series).collect::<Vec<_>>())
+                .map(|series| to_graph_points(body.kind, series).collect::<Vec<_>>())
         })
         .collect::<Vec<_>>();
 
@@ -182,7 +182,7 @@ async fn handle_graph_impl(
                 .collect(),
         )
         .map(|((c, d), i)| ((c, Some(d.expect("interpolated") / against)), i));
-        let graph_data = to_graph_data(body.kind, averaged).collect::<Vec<_>>();
+        let graph_data = to_graph_points(body.kind, averaged).collect::<Vec<_>>();
         series.push(selector::SeriesResponse {
             path: selector::Path::new()
                 .set(PathComponent::Benchmark("Summary".into()))
@@ -215,10 +215,10 @@ async fn handle_graph_impl(
     Ok(by_test_case)
 }
 
-fn to_graph_data<'a>(
+fn to_graph_points<'a>(
     kind: GraphKind,
     points: impl Iterator<Item = ((ArtifactId, Option<f64>), Interpolated)> + 'a,
-) -> impl Iterator<Item = GraphData> + 'a {
+) -> impl Iterator<Item = GraphPoint> + 'a {
     let mut first = None;
     let mut prev = None;
     points.map(move |((_aid, point), interpolated)| {
@@ -229,8 +229,8 @@ fn to_graph_data<'a>(
         let previous_point = prev.unwrap_or(point);
         let percent_prev = (point - previous_point) / previous_point * 100.0;
         prev = Some(point);
-        GraphData {
-            y: match kind {
+        GraphPoint {
+            value: match kind {
                 GraphKind::Raw => point as f32,
                 GraphKind::PercentRelative => percent_prev as f32,
                 GraphKind::PercentFromFirst => percent_first as f32,
