@@ -15,8 +15,24 @@ use crate::selector::{self, PathComponent, Tag};
 pub async fn handle_graph(
     body: graph::Request,
     ctxt: &SiteCtxt,
-) -> ServerResult<graph::NewResponse> {
+) -> ServerResult<Arc<graph::NewResponse>> {
     log::info!("handle_graph({:?})", body);
+
+    let is_default_query = body
+        == graph::Request {
+            start: Bound::None,
+            end: Bound::None,
+            stat: String::from("instructions:u"),
+            kind: graph::GraphKind::Raw,
+        };
+
+    if is_default_query {
+        match &**ctxt.landing_page.load() {
+            Some(resp) => return Ok(resp.clone()),
+            None => {}
+        }
+    }
+
     let range = ctxt.data_range(body.start.clone()..=body.end.clone());
     let commits: Vec<ArtifactId> = range.iter().map(|c| c.clone().into()).collect();
 
@@ -52,7 +68,7 @@ pub async fn handle_graph(
         benchmarks.insert(benchmark_.clone(), by_profile);
     }
 
-    Ok(graph::NewResponse {
+    let resp = Arc::new(graph::NewResponse {
         commits: commits
             .into_iter()
             .map(|c| match c {
@@ -61,7 +77,13 @@ pub async fn handle_graph(
             })
             .collect(),
         benchmarks,
-    })
+    });
+
+    if is_default_query {
+        ctxt.landing_page.store(Arc::new(Some(resp.clone())));
+    }
+
+    Ok(resp)
 }
 
 static INTERPOLATED_COLOR: &str = "#fcb0f1";
@@ -69,22 +91,7 @@ static INTERPOLATED_COLOR: &str = "#fcb0f1";
 async fn handle_graph_impl(
     body: graph::Request,
     ctxt: &SiteCtxt,
-) -> ServerResult<Arc<graph::Response>> {
-    let is_default_query = body
-        == graph::Request {
-            start: Bound::None,
-            end: Bound::None,
-            stat: String::from("instructions:u"),
-            kind: graph::GraphKind::Raw,
-        };
-
-    if is_default_query {
-        match &**ctxt.landing_page.load() {
-            Some(resp) => return Ok(resp.clone()),
-            None => {}
-        }
-    }
-
+) -> ServerResult<graph::Response> {
     let cc = CommitIdxCache::new();
     let range = ctxt.data_range(body.start.clone()..=body.end.clone());
     let commits: Arc<Vec<_>> = Arc::new(range.iter().map(|c| c.clone().into()).collect());
@@ -215,18 +222,12 @@ async fn handle_graph_impl(
             .push((sr.path.get::<Scenario>()?.to_string(), sr.series));
     }
 
-    let resp = Arc::new(graph::Response {
+    Ok(graph::Response {
         max: by_benchmark_max,
         benchmarks: by_test_case,
         colors: vec![String::new(), String::from(INTERPOLATED_COLOR)],
         commits: cc.into_commits(),
-    });
-
-    if is_default_query {
-        ctxt.landing_page.store(Arc::new(Some(resp.clone())));
-    }
-
-    Ok(resp)
+    })
 }
 
 struct CommitIdxCache {
