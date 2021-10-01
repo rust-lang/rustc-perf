@@ -7,7 +7,7 @@ use crate::api::{graph, ServerResult};
 use crate::db::{self, ArtifactId, Benchmark, Profile, Scenario};
 use crate::interpolate::Interpolated;
 use crate::load::SiteCtxt;
-use crate::selector::{Path, PathComponent, Query, Selector, SeriesResponse, Tag};
+use crate::selector::{Query, Selector, SeriesResponse, Tag};
 
 pub async fn handle_graph(
     body: graph::Request,
@@ -30,51 +30,7 @@ pub async fn handle_graph(
         }
     }
 
-    let range = ctxt.data_range(body.start.clone()..=body.end.clone());
-    let commits: Vec<ArtifactId> = range.iter().map(|c| c.clone().into()).collect();
-
-    let mut benchmarks = HashMap::new();
-
-    let benchmarks_impl = handle_graph_impl(body, ctxt).await?;
-
-    for (benchmark_, benchmark_data) in benchmarks_impl.iter() {
-        let mut by_profile = HashMap::with_capacity(3);
-
-        for (profile, series) in benchmark_data.iter() {
-            let mut by_run = HashMap::with_capacity(3);
-
-            for (name, points) in series.iter() {
-                let mut series = graph::Series {
-                    points: Vec::new(),
-                    is_interpolated: Default::default(),
-                };
-
-                for (idx, point) in points.iter().enumerate() {
-                    series.points.push(point.value);
-                    if point.is_interpolated {
-                        series.is_interpolated.insert(idx as u16);
-                    }
-                }
-
-                by_run.insert(name.clone(), series);
-            }
-
-            by_profile.insert(profile.parse::<Profile>().unwrap(), by_run);
-        }
-
-        benchmarks.insert(benchmark_.clone(), by_profile);
-    }
-
-    let resp = Arc::new(graph::Response {
-        commits: commits
-            .into_iter()
-            .map(|c| match c {
-                ArtifactId::Commit(c) => (c.date.0.timestamp(), c.sha),
-                ArtifactId::Tag(_) => unreachable!(),
-            })
-            .collect(),
-        benchmarks,
-    });
+    let resp = graph_response(body, ctxt).await?;
 
     if is_default_query {
         ctxt.landing_page.store(Arc::new(Some(resp.clone())));
@@ -83,22 +39,16 @@ pub async fn handle_graph(
     Ok(resp)
 }
 
-struct GraphPoint {
-    value: f32,
-    is_interpolated: bool,
-}
-
-async fn handle_graph_impl(
+async fn graph_response(
     body: graph::Request,
     ctxt: &SiteCtxt,
-) -> ServerResult<HashMap<String, HashMap<String, Vec<(String, Vec<GraphPoint>)>>>> {
+) -> ServerResult<Arc<graph::Response>> {
     let range = ctxt.data_range(body.start.clone()..=body.end.clone());
-    let commits: Arc<Vec<_>> = Arc::new(range.iter().map(|c| c.clone().into()).collect());
-
-    let metric: database::Metric = body.stat.parse().unwrap();
+    let commits: Arc<Vec<_>> = Arc::new(range.into_iter().map(|c| c.clone().into()).collect());
     let metric_selector = Selector::One(body.stat.clone());
+    let mut benchmarks = HashMap::new();
 
-    let series = ctxt
+    let series_iterator = ctxt
         .statistic_series(
             Query::new()
                 .set::<String>(Tag::Benchmark, Selector::All)
@@ -107,17 +57,26 @@ async fn handle_graph_impl(
                 .set::<String>(Tag::Metric, metric_selector.clone()),
             commits.clone(),
         )
-        .await?;
-
-    let mut series = series
+        .await?
         .into_iter()
-        .map(|sr| {
-            sr.interpolate()
-                .map(|series| to_graph_points(body.kind, series).collect::<Vec<_>>())
-        })
-        .collect::<Vec<_>>();
+        .map(SeriesResponse::interpolate);
+
+    for series_response in series_iterator {
+        let benchmark = series_response.path.get::<Benchmark>()?.to_string();
+        let profile = *series_response.path.get::<Profile>()?;
+        let scenario = series_response.path.get::<Scenario>()?.to_string();
+        let graph_series = graph_series(body.kind, series_response.series);
+
+        benchmarks
+            .entry(benchmark)
+            .or_insert_with(HashMap::new)
+            .entry(profile)
+            .or_insert_with(HashMap::new)
+            .insert(scenario, graph_series);
+    }
 
     let mut baselines = HashMap::new();
+    let mut summary_benchmark = HashMap::new();
 
     let summary_query_cases = iproduct!(
         ctxt.summary_scenarios(),
@@ -162,39 +121,42 @@ async fn handle_graph_impl(
         )
         .map(|((c, d), i)| ((c, Some(d.expect("interpolated") / baseline)), i));
 
-        let graph_data = to_graph_points(body.kind, avg_vs_baseline).collect::<Vec<_>>();
+        let graph_series = graph_series(body.kind, avg_vs_baseline);
 
-        series.push(SeriesResponse {
-            path: Path::new()
-                .set(PathComponent::Benchmark("Summary".into()))
-                .set(PathComponent::Profile(profile))
-                .set(PathComponent::Scenario(scenario))
-                .set(PathComponent::Metric(metric)),
-            series: graph_data,
-        })
-    }
-
-    let mut by_test_case = HashMap::new();
-    for sr in series {
-        let benchmark = sr.path.get::<Benchmark>()?.to_string();
-        by_test_case
-            .entry(benchmark)
+        summary_benchmark
+            .entry(profile)
             .or_insert_with(HashMap::new)
-            .entry(sr.path.get::<Profile>()?.to_string())
-            .or_insert_with(Vec::new)
-            .push((sr.path.get::<Scenario>()?.to_string(), sr.series));
+            .insert(scenario.to_string(), graph_series);
     }
 
-    Ok(by_test_case)
+    benchmarks.insert("Summary".to_string(), summary_benchmark);
+
+    Ok(Arc::new(graph::Response {
+        commits: Arc::try_unwrap(commits)
+            .unwrap()
+            .into_iter()
+            .map(|c| match c {
+                ArtifactId::Commit(c) => (c.date.0.timestamp(), c.sha),
+                ArtifactId::Tag(_) => unreachable!(),
+            })
+            .collect(),
+        benchmarks,
+    }))
 }
 
-fn to_graph_points<'a>(
+fn graph_series(
     kind: GraphKind,
-    points: impl Iterator<Item = ((ArtifactId, Option<f64>), Interpolated)> + 'a,
-) -> impl Iterator<Item = GraphPoint> + 'a {
+    points: impl Iterator<Item = ((ArtifactId, Option<f64>), Interpolated)>,
+) -> graph::Series {
+    let mut graph_series = graph::Series {
+        points: Vec::new(),
+        is_interpolated: Default::default(),
+    };
+
     let mut first = None;
     let mut prev = None;
-    points.map(move |((_aid, point), interpolated)| {
+
+    for (idx, ((_aid, point), interpolated)) in points.enumerate() {
         let point = point.expect("interpolated");
         first = Some(first.unwrap_or(point));
         let first = first.unwrap();
@@ -202,13 +164,19 @@ fn to_graph_points<'a>(
         let previous_point = prev.unwrap_or(point);
         let percent_prev = (point - previous_point) / previous_point * 100.0;
         prev = Some(point);
-        GraphPoint {
-            value: match kind {
-                GraphKind::Raw => point as f32,
-                GraphKind::PercentRelative => percent_prev as f32,
-                GraphKind::PercentFromFirst => percent_first as f32,
-            },
-            is_interpolated: interpolated.is_interpolated(),
+
+        let value = match kind {
+            GraphKind::Raw => point as f32,
+            GraphKind::PercentRelative => percent_prev as f32,
+            GraphKind::PercentFromFirst => percent_first as f32,
+        };
+
+        graph_series.points.push(value);
+
+        if interpolated.is_interpolated() {
+            graph_series.is_interpolated.insert(idx as u16);
         }
-    })
+    }
+
+    graph_series
 }
