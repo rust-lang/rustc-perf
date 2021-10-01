@@ -12,7 +12,7 @@ use crate::selector::{self, PathComponent, Tag};
 pub async fn handle_graph(
     body: graph::Request,
     ctxt: &SiteCtxt,
-) -> ServerResult<Arc<graph::NewResponse>> {
+) -> ServerResult<Arc<graph::Response>> {
     log::info!("handle_graph({:?})", body);
 
     let is_default_query = body
@@ -65,7 +65,7 @@ pub async fn handle_graph(
         benchmarks.insert(benchmark_.clone(), by_profile);
     }
 
-    let resp = Arc::new(graph::NewResponse {
+    let resp = Arc::new(graph::Response {
         commits: commits
             .into_iter()
             .map(|c| match c {

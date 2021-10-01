@@ -79,7 +79,7 @@ pub struct SiteCtxt {
     /// Site configuration
     pub config: Config,
     /// Cached site landing page
-    pub landing_page: ArcSwap<Option<Arc<crate::api::graph::NewResponse>>>,
+    pub landing_page: ArcSwap<Option<Arc<crate::api::graph::Response>>>,
     /// Index of various common queries
     pub index: ArcSwap<crate::db::Index>,
     /// Database connection pool

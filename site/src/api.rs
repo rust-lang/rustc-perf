@@ -74,7 +74,7 @@ pub mod graph {
     }
 
     #[derive(Debug, PartialEq, Clone, Serialize)]
-    pub struct NewResponse {
+    pub struct Response {
         // (UTC timestamp in seconds, sha)
         pub commits: Vec<(i64, String)>,
         pub benchmarks: HashMap<String, HashMap<database::Profile, HashMap<String, Series>>>,
