@@ -510,10 +510,22 @@ fn generate_cachegrind_diffs(
                 let id_diff = format!("{}-{}", id1, id2);
                 let cgout1 = out_dir.join(filename("cgout", id1));
                 let cgout2 = out_dir.join(filename("cgout", id2));
+                let cgfilt1 = out_dir.join(filename("cgfilt", id1));
+                let cgfilt2 = out_dir.join(filename("cgfilt", id2));
                 let cgdiff = out_dir.join(filename("cgdiff", &id_diff));
                 let cgann = out_dir.join(filename("cgann", &id_diff));
 
-                if let Err(e) = cg_diff(&cgout1, &cgout2, &cgdiff) {
+                if let Err(e) = rustfilt(&cgout1, &cgfilt1) {
+                    errors.incr();
+                    eprintln!("collector error: {:?}", e);
+                    continue;
+                }
+                if let Err(e) = rustfilt(&cgout2, &cgfilt2) {
+                    errors.incr();
+                    eprintln!("collector error: {:?}", e);
+                    continue;
+                }
+                if let Err(e) = cg_diff(&cgfilt1, &cgfilt2, &cgdiff) {
                     errors.incr();
                     eprintln!("collector error: {:?}", e);
                     continue;
@@ -526,6 +538,24 @@ fn generate_cachegrind_diffs(
             }
         }
     }
+}
+
+/// Demangles symbols in a file using rustfilt and writes result to path.
+fn rustfilt(cgout: &Path, path: &Path) -> anyhow::Result<()> {
+    let output = Command::new("rustfilt")
+        .arg("-i")
+        .arg(cgout)
+        .stderr(Stdio::inherit())
+        .output()
+        .context("failed to run `rustfilt`")?;
+
+    if !output.status.success() {
+        anyhow::bail!("failed to process output with rustfilt");
+    }
+
+    fs::write(path, output.stdout).context("failed to write `rustfilt` output")?;
+
+    Ok(())
 }
 
 /// Compares two Cachegrind output files using cg_diff and writes result to path.
