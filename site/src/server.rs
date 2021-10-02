@@ -403,16 +403,12 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
         "/perf/self-profile-raw" => Ok(to_response(
             request_handlers::handle_self_profile_raw(check!(parse_body(&body)), &ctxt).await,
         )),
-        "/perf/graph" => Ok(
-            match request_handlers::handle_graph(check!(parse_body(&body)), &ctxt).await {
+        "/perf/graphs" => Ok(
+            match request_handlers::handle_graphs(check!(parse_body(&body)), &ctxt).await {
                 Ok(result) => {
-                    let mut response = http::Response::builder()
+                    let response = http::Response::builder()
                         .header_typed(ContentType::json())
                         .header_typed(CacheControl::new().with_no_cache().with_no_store());
-                    response.headers_mut().unwrap().insert(
-                        hyper::header::ACCESS_CONTROL_ALLOW_ORIGIN,
-                        hyper::header::HeaderValue::from_static("*"),
-                    );
                     let body = serde_json::to_vec(&result).unwrap();
                     response.body(hyper::Body::from(body)).unwrap()
                 }
