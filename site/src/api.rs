@@ -42,6 +42,28 @@ pub mod dashboard {
 }
 
 pub mod graph {
+    use super::graphs::{GraphKind, Series};
+    use collector::Bound;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+    pub struct Request {
+        pub benchmark: String,
+        pub profile: String,
+        pub scenario: String,
+        pub metric: String,
+        pub start: Bound,
+        pub end: Bound,
+        pub kind: GraphKind,
+    }
+
+    #[derive(Debug, PartialEq, Clone, Serialize)]
+    pub struct Response {
+        pub series: Series,
+    }
+}
+
+pub mod graphs {
     use collector::Bound;
     use serde::{Deserialize, Serialize};
     use std::collections::{HashMap, HashSet};

@@ -2,25 +2,31 @@ use collector::Bound;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::api::graph::GraphKind;
-use crate::api::{graph, ServerResult};
+use crate::api::graphs::GraphKind;
+use crate::api::{graph, graphs, ServerResult};
 use crate::db::{self, ArtifactId, Benchmark, Profile, Scenario};
 use crate::interpolate::IsInterpolated;
 use crate::load::SiteCtxt;
 use crate::selector::{Query, Selector, SeriesResponse, Tag};
 
-pub async fn handle_graphs(
-    body: graph::Request,
-    ctxt: &SiteCtxt,
-) -> ServerResult<Arc<graph::Response>> {
+pub async fn handle_graph(body: graph::Request, ctxt: &SiteCtxt) -> ServerResult<graph::Response> {
     log::info!("handle_graph({:?})", body);
 
+    create_graph(body, ctxt).await
+}
+
+pub async fn handle_graphs(
+    body: graphs::Request,
+    ctxt: &SiteCtxt,
+) -> ServerResult<Arc<graphs::Response>> {
+    log::info!("handle_graphs({:?})", body);
+
     let is_default_query = body
-        == graph::Request {
+        == graphs::Request {
             start: Bound::None,
             end: Bound::None,
             stat: String::from("instructions:u"),
-            kind: graph::GraphKind::Raw,
+            kind: graphs::GraphKind::Raw,
         };
 
     if is_default_query {
@@ -30,7 +36,7 @@ pub async fn handle_graphs(
         }
     }
 
-    let resp = graph_response(body, ctxt).await?;
+    let resp = create_graphs(body, ctxt).await?;
 
     if is_default_query {
         ctxt.landing_page.store(Arc::new(Some(resp.clone())));
@@ -38,13 +44,33 @@ pub async fn handle_graphs(
 
     Ok(resp)
 }
+async fn create_graph(body: graph::Request, ctxt: &SiteCtxt) -> ServerResult<graph::Response> {
+    let artifact_ids = artifact_ids_for_range(ctxt, body.start, body.end);
+    let mut series_iterator = ctxt
+        .statistic_series(
+            Query::new()
+                .set::<String>(Tag::Benchmark, Selector::One(body.benchmark))
+                .set::<String>(Tag::Profile, Selector::One(body.profile))
+                .set::<String>(Tag::Scenario, Selector::One(body.scenario))
+                .set::<String>(Tag::Metric, Selector::One(body.metric)),
+            Arc::new(artifact_ids),
+        )
+        .await?
+        .into_iter()
+        .map(SeriesResponse::interpolate);
 
-async fn graph_response(
-    body: graph::Request,
+    let result = series_iterator.next().unwrap();
+    let graph_series = graph_series(result.series, body.kind);
+    Ok(graph::Response {
+        series: graph_series,
+    })
+}
+
+async fn create_graphs(
+    body: graphs::Request,
     ctxt: &SiteCtxt,
-) -> ServerResult<Arc<graph::Response>> {
-    let range = ctxt.data_range(body.start..=body.end);
-    let commits: Arc<Vec<_>> = Arc::new(range.into_iter().map(|c| c.into()).collect());
+) -> ServerResult<Arc<graphs::Response>> {
+    let artifact_ids = Arc::new(artifact_ids_for_range(ctxt, body.start, body.end));
     let mut benchmarks = HashMap::new();
 
     let interpolated_responses: Vec<_> = ctxt
@@ -54,7 +80,7 @@ async fn graph_response(
                 .set::<String>(Tag::Profile, Selector::All)
                 .set::<String>(Tag::Scenario, Selector::All)
                 .set::<String>(Tag::Metric, Selector::One(body.stat)),
-            commits.clone(),
+            artifact_ids.clone(),
         )
         .await?
         .into_iter()
@@ -79,8 +105,8 @@ async fn graph_response(
             .insert(scenario, graph_series);
     }
 
-    Ok(Arc::new(graph::Response {
-        commits: Arc::try_unwrap(commits)
+    Ok(Arc::new(graphs::Response {
+        commits: Arc::try_unwrap(artifact_ids)
             .unwrap()
             .into_iter()
             .map(|c| match c {
@@ -92,13 +118,18 @@ async fn graph_response(
     }))
 }
 
+fn artifact_ids_for_range(ctxt: &SiteCtxt, start: Bound, end: Bound) -> Vec<ArtifactId> {
+    let range = ctxt.data_range(start..=end);
+    range.into_iter().map(|c| c.into()).collect()
+}
+
 /// Creates a summary "benchmark" that averages the results of all other
 /// test cases per profile type
 fn create_summary(
     ctxt: &SiteCtxt,
     interpolated_responses: &[SeriesResponse<Vec<((ArtifactId, Option<f64>), IsInterpolated)>>],
     graph_kind: GraphKind,
-) -> ServerResult<HashMap<Profile, HashMap<String, graph::Series>>> {
+) -> ServerResult<HashMap<Profile, HashMap<String, graphs::Series>>> {
     let mut baselines = HashMap::new();
     let mut summary_benchmark = HashMap::new();
     let summary_query_cases = iproduct!(
@@ -152,8 +183,8 @@ fn create_summary(
 fn graph_series(
     points: impl Iterator<Item = ((ArtifactId, Option<f64>), IsInterpolated)>,
     kind: GraphKind,
-) -> graph::Series {
-    let mut graph_series = graph::Series {
+) -> graphs::Series {
+    let mut graph_series = graphs::Series {
         points: Vec::new(),
         interpolated_indices: Default::default(),
     };

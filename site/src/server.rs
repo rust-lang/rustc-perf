@@ -18,7 +18,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 pub use crate::api::{
-    self, bootstrap, comparison, dashboard, github, graph, info, self_profile, self_profile_raw,
+    self, bootstrap, comparison, dashboard, github, graphs, info, self_profile, self_profile_raw,
     status, triage, ServerResult,
 };
 use crate::db::{self, ArtifactId};
@@ -403,6 +403,23 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
         "/perf/self-profile-raw" => Ok(to_response(
             request_handlers::handle_self_profile_raw(check!(parse_body(&body)), &ctxt).await,
         )),
+        "/perf/graph" => Ok(
+            match request_handlers::handle_graph(check!(parse_body(&body)), &ctxt).await {
+                Ok(result) => {
+                    let response = http::Response::builder()
+                        .header_typed(ContentType::json())
+                        .header_typed(CacheControl::new().with_no_cache().with_no_store());
+                    let body = serde_json::to_vec(&result).unwrap();
+                    response.body(hyper::Body::from(body)).unwrap()
+                }
+                Err(err) => http::Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .header_typed(ContentType::text_utf8())
+                    .header_typed(CacheControl::new().with_no_cache().with_no_store())
+                    .body(hyper::Body::from(err))
+                    .unwrap(),
+            },
+        ),
         "/perf/graphs" => Ok(
             match request_handlers::handle_graphs(check!(parse_body(&body)), &ctxt).await {
                 Ok(result) => {
