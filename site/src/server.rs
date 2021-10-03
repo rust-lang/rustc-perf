@@ -355,9 +355,6 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
     }
 
     match path {
-        "/perf/graph" => Ok(to_response(
-            request_handlers::handle_graph(check!(parse_body(&body)), &ctxt).await,
-        )),
         "/perf/get" => Ok(to_response(
             crate::comparison::handle_compare(check!(parse_body(&body)), &ctxt)
                 .await
@@ -406,8 +403,8 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
         "/perf/self-profile-raw" => Ok(to_response(
             request_handlers::handle_self_profile_raw(check!(parse_body(&body)), &ctxt).await,
         )),
-        "/perf/graph-new" => Ok(
-            match request_handlers::handle_graph_new(check!(parse_body(&body)), &ctxt).await {
+        "/perf/graph" => Ok(
+            match request_handlers::handle_graph(check!(parse_body(&body)), &ctxt).await {
                 Ok(result) => {
                     let mut response = http::Response::builder()
                         .header_typed(ContentType::json())
