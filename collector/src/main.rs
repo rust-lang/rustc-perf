@@ -674,7 +674,7 @@ fn main_result() -> anyhow::Result<i32> {
             (@arg PROFILER: +required +takes_value
              "One of: 'self-profile', 'time-passes', 'perf-record',\n\
              'oprofile', 'cachegrind', 'callgrind', 'dhat', 'massif',\n\
-             'eprintln', 'llvm-lines', 'mono-items'")
+             'eprintln', 'llvm-lines', 'mono-items', 'dep-graph'")
             (@arg RUSTC:    +required +takes_value "The path to the local rustc to benchmark")
             (@arg ID:       +required +takes_value "Identifier to associate benchmark results with")
 
@@ -703,7 +703,7 @@ fn main_result() -> anyhow::Result<i32> {
             (@arg PROFILER: +required +takes_value
              "One of: 'self-profile', 'time-passes', 'perf-record',\n\
              'oprofile', 'cachegrind', 'callgrind', 'dhat', 'massif',\n\
-             'eprintln', 'llvm-lines', 'mono-items'")
+             'eprintln', 'llvm-lines', 'mono-items', 'dep-graph'")
             (@arg RUSTC_BEFORE: +required +takes_value "The path to the local rustc to benchmark")
             (@arg RUSTC_AFTER:  +required +takes_value "The path to the local rustc to benchmark")
 
