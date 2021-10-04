@@ -88,6 +88,15 @@ impl ScenarioKind {
         vec![ScenarioKind::Full]
     }
 
+    fn is_incr(self) -> bool {
+        match self {
+            ScenarioKind::Full => false,
+            ScenarioKind::IncrFull | ScenarioKind::IncrUnchanged | ScenarioKind::IncrPatched => {
+                true
+            }
+        }
+    }
+
     fn default() -> Vec<ScenarioKind> {
         Self::all()
     }
@@ -499,6 +508,9 @@ fn generate_cachegrind_diffs(
         for &build_kind in build_kinds {
             for &scenario_kind in scenario_kinds {
                 if let ScenarioKind::IncrPatched = scenario_kind {
+                    continue;
+                }
+                if build_kind == BuildKind::Doc && scenario_kind.is_incr() {
                     continue;
                 }
                 let filename = |prefix, id| {
