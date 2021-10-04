@@ -48,7 +48,7 @@ pub async fn handle_triage(
             "instructions:u".to_owned(),
             ctxt,
             &master_commits,
-            body.calcNewSig.unwrap_or(false),
+            body.calcNewSig.unwrap_or(true),
         )
         .await
         .map_err(|e| format!("error comparing commits: {}", e))?
@@ -103,7 +103,7 @@ pub async fn handle_compare(
         body.stat,
         ctxt,
         &master_commits,
-        body.calcNewSig.unwrap_or(false),
+        body.calcNewSig.unwrap_or(true),
     )
     .await
     .map_err(|e| format!("error comparing commits: {}", e))?
@@ -353,7 +353,7 @@ pub async fn compare(
     ctxt: &SiteCtxt,
 ) -> Result<Option<Comparison>, BoxedError> {
     let master_commits = collector::master_commits().await?;
-    compare_given_commits(start, end, stat, ctxt, &master_commits, false).await
+    compare_given_commits(start, end, stat, ctxt, &master_commits, true).await
 }
 
 /// Compare two bounds on a given stat
