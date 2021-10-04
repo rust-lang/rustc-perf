@@ -110,7 +110,7 @@ mod tests {
     fn test_interpolation_average() {
         // Test that averaging works with interpolation.
         use crate::db::Point;
-        use crate::interpolate::{Interpolate, Interpolated};
+        use crate::interpolate::{Interpolate, IsInterpolated};
 
         let v = vec![
             vec![("a", Some(0.0)), ("b", Some(200.0))],
@@ -125,11 +125,11 @@ mod tests {
         let mut average = average(iterators);
 
         let a = average.next().unwrap();
-        assert_eq!(a, (("a", Some(50.0)), Interpolated::No));
+        assert_eq!(a, (("a", Some(50.0)), IsInterpolated::No));
         assert_eq!(a.interpolated(), false);
 
         let b = average.next().unwrap();
-        assert_eq!(b, (("b", Some(150.0)), Interpolated::Yes));
+        assert_eq!(b, (("b", Some(150.0)), IsInterpolated::Yes));
         assert_eq!(b.interpolated(), true);
 
         assert!(average.next().is_none());

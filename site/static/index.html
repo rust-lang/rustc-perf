@@ -74,6 +74,11 @@
         See <a href="/compare.html">compare page</a> for descriptions of what
         the names mean.
     </div>
+    <div>
+        <strong>Note:</strong> pink in the graphs represent data points that are interpolated
+        due to missing data. Interpolated data is simply the last known data point repeated until
+        another known data point is found.
+    </div>
     <div id="loading">
         <h2>Loading &amp; rendering data..</h2>
         <h3>This may take a while!</h3>
@@ -368,7 +373,7 @@
                         commits: data.commits,
                         stat: state.stat,
                         isInterpolated(dataIdx) {
-                            return cacheStates.full.is_interpolated.has(dataIdx);
+                            return cacheStates.full.interpolated_indices.has(dataIdx);
                         },
                         absoluteMode: state.kind == "raw",
                     });
@@ -396,7 +401,7 @@
 
             function optInterpolated(buildKind) {
                 for (let cacheState in buildKind)
-                    buildKind[cacheState].is_interpolated = new Set(buildKind[cacheState].is_interpolated);
+                    buildKind[cacheState].interpolated_indices = new Set(buildKind[cacheState].interpolated_indices);
 
                 return buildKind;
             }
@@ -434,7 +439,7 @@
                 stat: "instructions:u",
                 kind: "raw",
             }, state);
-            post_json("/graph", values).then(prepData).then(data =>
+            post_json("/graphs", values).then(prepData).then(data =>
                 renderPlots(data, values));
         });
     </script>

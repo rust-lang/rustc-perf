@@ -70,7 +70,7 @@ pub mod graph {
         // y-values
         pub points: Vec<f32>,
         // The index of interpolated coordinates
-        pub is_interpolated: HashSet<u16>,
+        pub interpolated_indices: HashSet<u16>,
     }
 
     #[derive(Debug, PartialEq, Clone, Serialize)]
