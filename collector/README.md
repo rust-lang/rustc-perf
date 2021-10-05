@@ -366,6 +366,12 @@ The mandatory `<PROFILER>` argument must be one of the following.
   - **Output**. File per CGU, currently, placed in a directory inside results.
   - **Notes**. Will likely work best with `Full` builds, on either Debug or Opt
     profiles.
+- `dep-graph`: Dump the incremental dependency graph (as produced by
+  -Zdump-dep-graph).
+  - **Purpose**. This is useful when debugging changes to incremental behavior.
+  - **Slowdown**. Equivalent to normal compilation.
+  - **Output**. .dot and .txt file (.txt likely is what you want to see first).
+  - **Notes**. Works primarily with incremental compilation kinds.
 
 The mandatory `<RUSTC>` argument is a patch to a rustc executable, similar to
 `bench_local`.

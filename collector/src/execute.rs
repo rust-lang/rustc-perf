@@ -180,6 +180,7 @@ pub enum Profiler {
     Eprintln,
     LlvmLines,
     MonoItems,
+    DepGraph,
 }
 
 impl Profiler {
@@ -201,6 +202,7 @@ impl Profiler {
             "eprintln" => Ok(Profiler::Eprintln),
             "llvm-lines" => Ok(Profiler::LlvmLines),
             "mono-items" => Ok(Profiler::MonoItems),
+            "dep-graph" => Ok(Profiler::DepGraph),
             _ => Err(anyhow!("'{}' is not a known profiler", name)),
         }
     }
@@ -222,6 +224,7 @@ impl Profiler {
             Profiler::Eprintln => "eprintln",
             Profiler::LlvmLines => "llvm-lines",
             Profiler::MonoItems => "mono-items",
+            Profiler::DepGraph => "dep-graph",
         }
     }
 
@@ -241,6 +244,7 @@ impl Profiler {
             | Profiler::Callgrind
             | Profiler::DHAT
             | Profiler::Massif
+            | Profiler::DepGraph
             | Profiler::MonoItems
             | Profiler::Eprintln => {
                 if build_kind == BuildKind::Doc {
@@ -272,6 +276,8 @@ impl Profiler {
             | Profiler::Massif
             | Profiler::MonoItems
             | Profiler::Eprintln => true,
+            // only incremental
+            Profiler::DepGraph => scenario_kind != ScenarioKind::Full,
             Profiler::LlvmLines => scenario_kind == ScenarioKind::Full,
         }
     }
@@ -1181,6 +1187,21 @@ impl<'a> Processor for ProfileProcessor<'a> {
                         writeln!(&mut file, "{} {}", name, linkage)?;
                     }
                 }
+            }
+
+            Profiler::DepGraph => {
+                let tmp_file = filepath(data.cwd.as_ref(), "dep_graph.txt");
+                let output =
+                    filepath(self.output_dir, &out_file("dep-graph")).with_extension("txt");
+
+                fs::copy(&tmp_file, &output)?;
+
+                let tmp_file = filepath(data.cwd.as_ref(), "dep_graph.dot");
+                let output =
+                    filepath(self.output_dir, &out_file("dep-graph")).with_extension("dot");
+
+                // May not exist if not incremental, but then that's OK.
+                fs::copy(&tmp_file, &output)?;
             }
 
             // `cargo llvm-lines` writes its output to stdout. We copy that

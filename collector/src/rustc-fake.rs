@@ -294,6 +294,15 @@ fn main() {
                 assert!(cmd.status().expect("failed to spawn").success());
             }
 
+            "dep-graph" => {
+                args.push("-Zdump-dep-graph".into());
+                args.push("-Zquery-dep-graph".into());
+                let mut cmd = Command::new(tool);
+                cmd.args(&args);
+
+                assert!(cmd.status().expect("failed to spawn").success());
+            }
+
             _ => {
                 panic!("unknown wrapper: {}", wrapper);
             }
