@@ -63,7 +63,7 @@ jobs:
           "--exclude webrender-wrench,style-servo,cargo,rustc",
           "--include webrender-wrench,style-servo,cargo --exclude rustc",
         ]
-        BUILD_KINDS: [
+        PROFILE_KINDS: [
           "Check,Doc,Debug",
           "Opt",
         ]
@@ -98,7 +98,7 @@ jobs:
         env:
           JEMALLOC_OVERRIDE: /usr/lib/x86_64-linux-gnu/libjemalloc.so
           BENCH_INCLUDE_EXCLUDE_OPTS: ${{ matrix.BENCH_INCLUDE_EXCLUDE_OPTS }}
-          BUILD_KINDS: ${{ matrix.BUILD_KINDS }}
+          PROFILE_KINDS: ${{ matrix.PROFILE_KINDS }}
           SHELL: "/bin/bash"
 
   test_profiling:
