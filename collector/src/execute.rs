@@ -1,6 +1,6 @@
 //! Execute benchmarks.
 
-use crate::{BuildKind, Compiler, ScenarioKind};
+use crate::{Compiler, ProfileKind, ScenarioKind};
 use anyhow::{anyhow, bail, Context};
 use collector::command_output;
 use collector::etw_parser;
@@ -230,7 +230,7 @@ impl Profiler {
 
     // What cargo subcommand do we need to run for this profiler? If not
     // `rustc`, must be a subcommand that itself invokes `rustc`.
-    fn subcommand(&self, build_kind: BuildKind) -> Option<&'static str> {
+    fn subcommand(&self, build_kind: ProfileKind) -> Option<&'static str> {
         match self {
             Profiler::PerfStat
             | Profiler::PerfStatSelfProfile
@@ -247,15 +247,15 @@ impl Profiler {
             | Profiler::DepGraph
             | Profiler::MonoItems
             | Profiler::Eprintln => {
-                if build_kind == BuildKind::Doc {
+                if build_kind == ProfileKind::Doc {
                     Some("rustdoc")
                 } else {
                     Some("rustc")
                 }
             }
             Profiler::LlvmLines => match build_kind {
-                BuildKind::Debug | BuildKind::Opt => Some("llvm-lines"),
-                BuildKind::Check | BuildKind::Doc => None,
+                ProfileKind::Debug | ProfileKind::Opt => Some("llvm-lines"),
+                ProfileKind::Check | ProfileKind::Doc => None,
             },
         }
     }
@@ -286,7 +286,7 @@ impl Profiler {
 struct CargoProcess<'a> {
     compiler: Compiler<'a>,
     cwd: &'a Path,
-    build_kind: BuildKind,
+    build_kind: ProfileKind,
     incremental: bool,
     processor_etc: Option<(
         &'a mut dyn Processor,
@@ -393,7 +393,7 @@ impl<'a> CargoProcess<'a> {
                     }
                 } else {
                     match self.build_kind {
-                        BuildKind::Doc => "rustdoc",
+                        ProfileKind::Doc => "rustdoc",
                         _ => "rustc",
                     }
                 };
@@ -401,12 +401,12 @@ impl<'a> CargoProcess<'a> {
             let mut cmd = self.base_command(self.cwd, subcommand);
             cmd.arg("-p").arg(self.get_pkgid(self.cwd)?);
             match self.build_kind {
-                BuildKind::Check => {
+                ProfileKind::Check => {
                     cmd.arg("--profile").arg("check");
                 }
-                BuildKind::Debug => {}
-                BuildKind::Doc => {}
-                BuildKind::Opt => {
+                ProfileKind::Debug => {}
+                ProfileKind::Doc => {}
+                ProfileKind::Opt => {
                     cmd.arg("--release");
                 }
             }
@@ -534,7 +534,7 @@ pub enum Retry {
 pub struct ProcessOutputData<'a> {
     name: BenchmarkName,
     cwd: &'a Path,
-    build_kind: BuildKind,
+    build_kind: ProfileKind,
     scenario_kind: ScenarioKind,
     scenario_kind_str: &'a str,
     patch: Option<&'a Patch>,
@@ -544,7 +544,7 @@ pub struct ProcessOutputData<'a> {
 /// processing.
 pub trait Processor {
     /// The `Profiler` being used.
-    fn profiler(&self, _: BuildKind) -> Profiler;
+    fn profiler(&self, _: ProfileKind) -> Profiler;
 
     /// Process the output produced by the particular `Profiler` being used.
     fn process_output(
@@ -563,7 +563,7 @@ pub trait Processor {
     ///
     /// Return "true" if planning on doing something different for second
     /// iteration.
-    fn finished_first_collection(&mut self, _: BuildKind) -> bool {
+    fn finished_first_collection(&mut self, _: ProfileKind) -> bool {
         false
     }
 
@@ -626,7 +626,7 @@ impl<'a> MeasureProcessor<'a> {
     fn insert_stats(
         &mut self,
         scenario: database::Scenario,
-        build_kind: BuildKind,
+        build_kind: ProfileKind,
         stats: (Stats, Option<SelfProfile>, Option<SelfProfileFiles>),
     ) {
         let version = String::from_utf8(
@@ -643,10 +643,10 @@ impl<'a> MeasureProcessor<'a> {
 
         let collection = self.rt.block_on(self.conn.collection_id(&version));
         let profile = match build_kind {
-            BuildKind::Check => database::Profile::Check,
-            BuildKind::Debug => database::Profile::Debug,
-            BuildKind::Doc => database::Profile::Doc,
-            BuildKind::Opt => database::Profile::Opt,
+            ProfileKind::Check => database::Profile::Check,
+            ProfileKind::Debug => database::Profile::Debug,
+            ProfileKind::Doc => database::Profile::Doc,
+            ProfileKind::Opt => database::Profile::Opt,
         };
 
         if let Some(files) = stats.2 {
@@ -806,7 +806,7 @@ impl Upload {
 }
 
 impl<'a> Processor for MeasureProcessor<'a> {
-    fn profiler(&self, _build: BuildKind) -> Profiler {
+    fn profiler(&self, _build: ProfileKind) -> Profiler {
         if self.is_first_collection && self.is_self_profile {
             if cfg!(unix) {
                 Profiler::PerfStatSelfProfile
@@ -826,7 +826,7 @@ impl<'a> Processor for MeasureProcessor<'a> {
         self.is_first_collection = true;
     }
 
-    fn finished_first_collection(&mut self, build: BuildKind) -> bool {
+    fn finished_first_collection(&mut self, build: ProfileKind) -> bool {
         let original = self.profiler(build);
         self.is_first_collection = false;
         // We need to run again if we're going to use a different profiler
@@ -919,7 +919,7 @@ impl<'a> ProfileProcessor<'a> {
 }
 
 impl<'a> Processor for ProfileProcessor<'a> {
-    fn profiler(&self, _: BuildKind) -> Profiler {
+    fn profiler(&self, _: ProfileKind) -> Profiler {
         self.profiler
     }
 
@@ -1292,7 +1292,7 @@ impl Benchmark {
         &'a self,
         compiler: Compiler<'a>,
         cwd: &'a Path,
-        build_kind: BuildKind,
+        build_kind: ProfileKind,
     ) -> CargoProcess<'a> {
         let mut cargo_args = self
             .config
@@ -1339,7 +1339,7 @@ impl Benchmark {
     pub fn measure(
         &self,
         processor: &mut dyn Processor,
-        build_kinds: &[BuildKind],
+        build_kinds: &[ProfileKind],
         scenario_kinds: &[ScenarioKind],
         compiler: Compiler<'_>,
         iterations: Option<usize>,
@@ -1429,7 +1429,7 @@ impl Benchmark {
                 }
 
                 // Rustdoc does not support incremental compilation
-                if build_kind != BuildKind::Doc {
+                if build_kind != ProfileKind::Doc {
                     // An incremental build from scratch (slowest incremental case).
                     // This is required for any subsequent incremental builds.
                     if scenario_kinds.contains(&ScenarioKind::IncrFull)

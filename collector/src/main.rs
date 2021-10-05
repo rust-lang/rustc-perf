@@ -43,26 +43,26 @@ impl<'a> Compiler<'a> {
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum BuildKind {
+pub enum ProfileKind {
     Check,
     Debug,
     Doc,
     Opt,
 }
 
-impl BuildKind {
+impl ProfileKind {
     fn all() -> Vec<Self> {
         vec![
-            BuildKind::Check,
-            BuildKind::Debug,
-            BuildKind::Doc,
-            BuildKind::Opt,
+            ProfileKind::Check,
+            ProfileKind::Debug,
+            ProfileKind::Doc,
+            ProfileKind::Opt,
         ]
     }
 
     fn default() -> Vec<Self> {
         // Don't run rustdoc by default.
-        vec![BuildKind::Check, BuildKind::Debug, BuildKind::Opt]
+        vec![ProfileKind::Check, ProfileKind::Debug, ProfileKind::Opt]
     }
 }
 
@@ -102,12 +102,12 @@ impl ScenarioKind {
     }
 }
 
-// How the --builds arg maps to BuildKinds.
-const STRINGS_AND_BUILD_KINDS: &[(&str, BuildKind)] = &[
-    ("Check", BuildKind::Check),
-    ("Debug", BuildKind::Debug),
-    ("Doc", BuildKind::Doc),
-    ("Opt", BuildKind::Opt),
+// How the --builds arg maps to ProfileKinds.
+const STRINGS_AND_PROFILE_KINDS: &[(&str, ProfileKind)] = &[
+    ("Check", ProfileKind::Check),
+    ("Debug", ProfileKind::Debug),
+    ("Doc", ProfileKind::Doc),
+    ("Opt", ProfileKind::Opt),
 ];
 
 // How the --runs arg maps to ScenarioKinds.
@@ -118,11 +118,11 @@ const STRINGS_AND_SCENARIO_KINDS: &[(&str, ScenarioKind)] = &[
     ("IncrPatched", ScenarioKind::IncrPatched),
 ];
 
-fn build_kinds_from_arg(arg: &Option<&str>) -> anyhow::Result<Vec<BuildKind>> {
+fn build_kinds_from_arg(arg: &Option<&str>) -> anyhow::Result<Vec<ProfileKind>> {
     if let Some(arg) = arg {
-        kinds_from_arg("build", STRINGS_AND_BUILD_KINDS, arg)
+        kinds_from_arg("build", STRINGS_AND_PROFILE_KINDS, arg)
     } else {
-        Ok(BuildKind::default())
+        Ok(ProfileKind::default())
     }
 }
 
@@ -211,7 +211,7 @@ fn bench(
     rt: &mut Runtime,
     pool: database::Pool,
     artifact_id: &ArtifactId,
-    build_kinds: &[BuildKind],
+    build_kinds: &[ProfileKind],
     scenario_kinds: &[ScenarioKind],
     compiler: Compiler<'_>,
     benchmarks: &[Benchmark],
@@ -398,7 +398,7 @@ fn get_benchmarks(
 /// - `cargo`: if one is given, check if it is acceptable. Otherwise, look
 ///   for the nightly Cargo via `rustup`.
 fn get_local_toolchain(
-    build_kinds: &[BuildKind],
+    build_kinds: &[ProfileKind],
     rustc: &str,
     rustdoc: Option<&str>,
     cargo: Option<&str>,
@@ -456,7 +456,7 @@ fn get_local_toolchain(
             Some(PathBuf::from(rustdoc).canonicalize().with_context(|| {
                 format!("failed to canonicalize rustdoc executable '{}'", rustdoc)
             })?)
-        } else if build_kinds.contains(&BuildKind::Doc) {
+        } else if build_kinds.contains(&ProfileKind::Doc) {
             // We need a `rustdoc`. Look for one next to `rustc`.
             if let Ok(rustdoc) = rustc.with_file_name("rustdoc").canonicalize() {
                 debug!("found rustdoc: {:?}", &rustdoc);
@@ -500,7 +500,7 @@ fn generate_cachegrind_diffs(
     id2: &str,
     out_dir: &Path,
     benchmarks: &[Benchmark],
-    build_kinds: &[BuildKind],
+    build_kinds: &[ProfileKind],
     scenario_kinds: &[ScenarioKind],
     errors: &mut BenchmarkErrors,
 ) {
@@ -510,7 +510,7 @@ fn generate_cachegrind_diffs(
                 if let ScenarioKind::IncrPatched = scenario_kind {
                     continue;
                 }
-                if build_kind == BuildKind::Doc && scenario_kind.is_incr() {
+                if build_kind == ProfileKind::Doc && scenario_kind.is_incr() {
                     continue;
                 }
                 let filename = |prefix, id| {
@@ -614,7 +614,7 @@ fn profile(
     profiler: Profiler,
     out_dir: &Path,
     benchmarks: &[Benchmark],
-    build_kinds: &[BuildKind],
+    build_kinds: &[ProfileKind],
     scenario_kinds: &[ScenarioKind],
     errors: &mut BenchmarkErrors,
 ) {
@@ -875,7 +875,7 @@ fn main_result() -> anyhow::Result<i32> {
                 &mut rt,
                 pool,
                 &ArtifactId::Commit(commit),
-                &BuildKind::all(),
+                &ProfileKind::all(),
                 &ScenarioKind::all(),
                 Compiler::from_sysroot(&sysroot),
                 &benchmarks,
@@ -912,10 +912,10 @@ fn main_result() -> anyhow::Result<i32> {
                 ScenarioKind::all_non_incr()
             };
             let build_kinds = if collector::version_supports_doc(toolchain) {
-                BuildKind::all()
+                ProfileKind::all()
             } else {
-                let mut all = BuildKind::all();
-                let doc = all.iter().position(|bk| *bk == BuildKind::Doc).unwrap();
+                let mut all = ProfileKind::all();
+                let doc = all.iter().position(|bk| *bk == ProfileKind::Doc).unwrap();
                 all.remove(doc);
                 all
             };
