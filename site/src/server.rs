@@ -131,6 +131,39 @@ impl Server {
             .unwrap())
     }
 
+    async fn handle_fallible_get_async<F, R, S, E>(
+        &self,
+        req: &Request,
+        handler: F,
+    ) -> Result<Response, ServerError>
+    where
+        F: FnOnce(Arc<SiteCtxt>) -> R,
+        R: std::future::Future<Output = Result<S, E>> + Send,
+        S: Serialize,
+        E: Into<Vec<u8>>,
+    {
+        check_http_method!(*req.method(), http::Method::GET);
+        let ctxt = self.ctxt.clone();
+        let ctxt = ctxt.read().as_ref().unwrap().clone();
+        let result = handler(ctxt).await;
+        let response = match result {
+            Ok(result) => {
+                let response = http::Response::builder()
+                    .header_typed(ContentType::json())
+                    .header_typed(CacheControl::new().with_no_cache().with_no_store());
+                let body = serde_json::to_vec(&result).unwrap();
+                response.body(hyper::Body::from(body)).unwrap()
+            }
+            Err(err) => http::Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .header_typed(ContentType::text_utf8())
+                .header_typed(CacheControl::new().with_no_cache().with_no_store())
+                .body(hyper::Body::from(err.into()))
+                .unwrap(),
+        };
+        Ok(response)
+    }
+
     fn check_auth(&self, req: &http::request::Parts) -> bool {
         if let Some(auth) = req
             .headers
@@ -317,6 +350,18 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
                 crate::comparison::handle_triage(input, &ctxt).await,
             ));
         }
+        "/perf/graph" => {
+            let query = check!(parse_query_string(req.uri()));
+            return server
+                .handle_fallible_get_async(&req, |c| request_handlers::handle_graph(query, c))
+                .await;
+        }
+        "/perf/graphs" => {
+            let query = check!(parse_query_string(req.uri()));
+            return server
+                .handle_fallible_get_async(&req, |c| request_handlers::handle_graphs(query, c))
+                .await;
+        }
         "/perf/metrics" => {
             return Ok(server.handle_metrics(req).await);
         }
@@ -403,40 +448,6 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
         "/perf/self-profile-raw" => Ok(to_response(
             request_handlers::handle_self_profile_raw(check!(parse_body(&body)), &ctxt).await,
         )),
-        "/perf/graph" => Ok(
-            match request_handlers::handle_graph(check!(parse_body(&body)), &ctxt).await {
-                Ok(result) => {
-                    let response = http::Response::builder()
-                        .header_typed(ContentType::json())
-                        .header_typed(CacheControl::new().with_no_cache().with_no_store());
-                    let body = serde_json::to_vec(&result).unwrap();
-                    response.body(hyper::Body::from(body)).unwrap()
-                }
-                Err(err) => http::Response::builder()
-                    .status(StatusCode::INTERNAL_SERVER_ERROR)
-                    .header_typed(ContentType::text_utf8())
-                    .header_typed(CacheControl::new().with_no_cache().with_no_store())
-                    .body(hyper::Body::from(err))
-                    .unwrap(),
-            },
-        ),
-        "/perf/graphs" => Ok(
-            match request_handlers::handle_graphs(check!(parse_body(&body)), &ctxt).await {
-                Ok(result) => {
-                    let response = http::Response::builder()
-                        .header_typed(ContentType::json())
-                        .header_typed(CacheControl::new().with_no_cache().with_no_store());
-                    let body = serde_json::to_vec(&result).unwrap();
-                    response.body(hyper::Body::from(body)).unwrap()
-                }
-                Err(err) => http::Response::builder()
-                    .status(StatusCode::INTERNAL_SERVER_ERROR)
-                    .header_typed(ContentType::text_utf8())
-                    .header_typed(CacheControl::new().with_no_cache().with_no_store())
-                    .body(hyper::Body::from(err))
-                    .unwrap(),
-            },
-        ),
         "/perf/bootstrap" => Ok(
             match request_handlers::handle_bootstrap(check!(parse_body(&body)), &ctxt).await {
                 Ok(result) => {

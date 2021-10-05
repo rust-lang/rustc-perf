@@ -9,19 +9,22 @@ use crate::interpolate::IsInterpolated;
 use crate::load::SiteCtxt;
 use crate::selector::{Query, Selector, SeriesResponse, Tag};
 
-pub async fn handle_graph(body: graph::Request, ctxt: &SiteCtxt) -> ServerResult<graph::Response> {
-    log::info!("handle_graph({:?})", body);
+pub async fn handle_graph(
+    request: graph::Request,
+    ctxt: Arc<SiteCtxt>,
+) -> ServerResult<graph::Response> {
+    log::info!("handle_graph({:?})", request);
 
-    create_graph(body, ctxt).await
+    create_graph(request, ctxt).await
 }
 
 pub async fn handle_graphs(
-    body: graphs::Request,
-    ctxt: &SiteCtxt,
+    request: graphs::Request,
+    ctxt: Arc<SiteCtxt>,
 ) -> ServerResult<Arc<graphs::Response>> {
-    log::info!("handle_graphs({:?})", body);
+    log::info!("handle_graphs({:?})", request);
 
-    let is_default_query = body
+    let is_default_query = request
         == graphs::Request {
             start: Bound::None,
             end: Bound::None,
@@ -36,7 +39,7 @@ pub async fn handle_graphs(
         }
     }
 
-    let resp = create_graphs(body, ctxt).await?;
+    let resp = create_graphs(request, &ctxt).await?;
 
     if is_default_query {
         ctxt.landing_page.store(Arc::new(Some(resp.clone())));
@@ -44,15 +47,19 @@ pub async fn handle_graphs(
 
     Ok(resp)
 }
-async fn create_graph(body: graph::Request, ctxt: &SiteCtxt) -> ServerResult<graph::Response> {
-    let artifact_ids = artifact_ids_for_range(ctxt, body.start, body.end);
+
+async fn create_graph(
+    request: graph::Request,
+    ctxt: Arc<SiteCtxt>,
+) -> ServerResult<graph::Response> {
+    let artifact_ids = artifact_ids_for_range(&ctxt, request.start, request.end);
     let mut series_iterator = ctxt
         .statistic_series(
             Query::new()
-                .set::<String>(Tag::Benchmark, Selector::One(body.benchmark))
-                .set::<String>(Tag::Profile, Selector::One(body.profile))
-                .set::<String>(Tag::Scenario, Selector::One(body.scenario))
-                .set::<String>(Tag::Metric, Selector::One(body.metric)),
+                .set::<String>(Tag::Benchmark, Selector::One(request.benchmark))
+                .set::<String>(Tag::Profile, Selector::One(request.profile))
+                .set::<String>(Tag::Scenario, Selector::One(request.scenario))
+                .set::<String>(Tag::Metric, Selector::One(request.metric)),
             Arc::new(artifact_ids),
         )
         .await?
@@ -60,17 +67,17 @@ async fn create_graph(body: graph::Request, ctxt: &SiteCtxt) -> ServerResult<gra
         .map(SeriesResponse::interpolate);
 
     let result = series_iterator.next().unwrap();
-    let graph_series = graph_series(result.series, body.kind);
+    let graph_series = graph_series(result.series, request.kind);
     Ok(graph::Response {
         series: graph_series,
     })
 }
 
 async fn create_graphs(
-    body: graphs::Request,
+    request: graphs::Request,
     ctxt: &SiteCtxt,
 ) -> ServerResult<Arc<graphs::Response>> {
-    let artifact_ids = Arc::new(artifact_ids_for_range(ctxt, body.start, body.end));
+    let artifact_ids = Arc::new(artifact_ids_for_range(ctxt, request.start, request.end));
     let mut benchmarks = HashMap::new();
 
     let interpolated_responses: Vec<_> = ctxt
@@ -79,7 +86,7 @@ async fn create_graphs(
                 .set::<String>(Tag::Benchmark, Selector::All)
                 .set::<String>(Tag::Profile, Selector::All)
                 .set::<String>(Tag::Scenario, Selector::All)
-                .set::<String>(Tag::Metric, Selector::One(body.stat)),
+                .set::<String>(Tag::Metric, Selector::One(request.stat)),
             artifact_ids.clone(),
         )
         .await?
@@ -87,7 +94,7 @@ async fn create_graphs(
         .map(|sr| sr.interpolate().map(|series| series.collect::<Vec<_>>()))
         .collect();
 
-    let summary_benchmark = create_summary(ctxt, &interpolated_responses, body.kind)?;
+    let summary_benchmark = create_summary(ctxt, &interpolated_responses, request.kind)?;
 
     benchmarks.insert("Summary".to_string(), summary_benchmark);
 
@@ -95,7 +102,7 @@ async fn create_graphs(
         let benchmark = response.path.get::<Benchmark>()?.to_string();
         let profile = *response.path.get::<Profile>()?;
         let scenario = response.path.get::<Scenario>()?.to_string();
-        let graph_series = graph_series(response.series.into_iter(), body.kind);
+        let graph_series = graph_series(response.series.into_iter(), request.kind);
 
         benchmarks
             .entry(benchmark)
