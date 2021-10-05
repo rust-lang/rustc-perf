@@ -45,27 +45,31 @@ async fn graph_response(
 ) -> ServerResult<Arc<graph::Response>> {
     let range = ctxt.data_range(body.start..=body.end);
     let commits: Arc<Vec<_>> = Arc::new(range.into_iter().map(|c| c.into()).collect());
-    let metric_selector = Selector::One(body.stat);
     let mut benchmarks = HashMap::new();
 
-    let series_iterator = ctxt
+    let interpolated_responses: Vec<_> = ctxt
         .statistic_series(
             Query::new()
                 .set::<String>(Tag::Benchmark, Selector::All)
                 .set::<String>(Tag::Profile, Selector::All)
                 .set::<String>(Tag::Scenario, Selector::All)
-                .set::<String>(Tag::Metric, metric_selector.clone()),
+                .set::<String>(Tag::Metric, Selector::One(body.stat)),
             commits.clone(),
         )
         .await?
         .into_iter()
-        .map(SeriesResponse::interpolate);
+        .map(|sr| sr.interpolate().map(|series| series.collect::<Vec<_>>()))
+        .collect();
 
-    for series_response in series_iterator {
-        let benchmark = series_response.path.get::<Benchmark>()?.to_string();
-        let profile = *series_response.path.get::<Profile>()?;
-        let scenario = series_response.path.get::<Scenario>()?.to_string();
-        let graph_series = graph_series(series_response.series, body.kind);
+    let summary_benchmark = create_summary(ctxt, &interpolated_responses, body.kind)?;
+
+    benchmarks.insert("Summary".to_string(), summary_benchmark);
+
+    for response in interpolated_responses {
+        let benchmark = response.path.get::<Benchmark>()?.to_string();
+        let profile = *response.path.get::<Profile>()?;
+        let scenario = response.path.get::<Scenario>()?.to_string();
+        let graph_series = graph_series(response.series.into_iter(), body.kind);
 
         benchmarks
             .entry(benchmark)
@@ -74,10 +78,6 @@ async fn graph_response(
             .or_insert_with(HashMap::new)
             .insert(scenario, graph_series);
     }
-
-    let summary_benchmark = create_summary(ctxt, metric_selector, &commits, body.kind).await?;
-
-    benchmarks.insert("Summary".to_string(), summary_benchmark);
 
     Ok(Arc::new(graph::Response {
         commits: Arc::try_unwrap(commits)
@@ -94,10 +94,9 @@ async fn graph_response(
 
 /// Creates a summary "benchmark" that averages the results of all other
 /// test cases per profile type
-async fn create_summary(
+fn create_summary(
     ctxt: &SiteCtxt,
-    metric_selector: Selector<String>,
-    commits: &Arc<Vec<ArtifactId>>,
+    interpolated_responses: &[SeriesResponse<Vec<((ArtifactId, Option<f64>), IsInterpolated)>>],
     graph_kind: GraphKind,
 ) -> ServerResult<HashMap<Profile, HashMap<String, graph::Series>>> {
     let mut baselines = HashMap::new();
@@ -107,42 +106,38 @@ async fn create_summary(
         vec![Profile::Check, Profile::Debug, Profile::Opt]
     );
     for (scenario, profile) in summary_query_cases {
-        let query = Query::new()
-            .set::<String>(Tag::Benchmark, Selector::All)
-            .set(Tag::Profile, Selector::One(profile))
-            .set(Tag::Scenario, Selector::One(scenario))
-            .set(Tag::Metric, metric_selector.clone());
-
-        let baseline_query = Query::new()
-            .set::<String>(Tag::Benchmark, Selector::All)
-            .set(Tag::Profile, Selector::One(profile))
-            .set(Tag::Scenario, Selector::One(Scenario::Empty))
-            .set(Tag::Metric, metric_selector.clone());
-
-        let baseline = match baselines.entry(baseline_query.clone()) {
+        let baseline = match baselines.entry((profile, scenario)) {
             std::collections::hash_map::Entry::Occupied(o) => *o.get(),
             std::collections::hash_map::Entry::Vacant(v) => {
-                let value = db::average(
-                    ctxt.statistic_series(baseline_query, commits.clone())
-                        .await?
-                        .into_iter()
-                        .map(|sr| sr.interpolate().series)
-                        .collect::<Vec<_>>(),
-                )
-                .next()
-                .map_or(0.0, |((_c, d), _interpolated)| d.expect("interpolated"));
+                let baseline_responses = interpolated_responses
+                    .iter()
+                    .filter(|sr| {
+                        let p = sr.path.get::<Profile>().unwrap();
+                        let s = sr.path.get::<Scenario>().unwrap();
+                        *p == profile && *s == Scenario::Empty
+                    })
+                    .map(|sr| sr.series.iter().cloned())
+                    .collect();
+
+                let value = db::average(baseline_responses)
+                    .next()
+                    .map_or(0.0, |((_c, d), _interpolated)| d.expect("interpolated"));
                 *v.insert(value)
             }
         };
 
-        let avg_vs_baseline = db::average(
-            ctxt.statistic_series(query.clone(), commits.clone())
-                .await?
-                .into_iter()
-                .map(|sr| sr.interpolate().series)
-                .collect(),
-        )
-        .map(|((c, d), i)| ((c, Some(d.expect("interpolated") / baseline)), i));
+        let summary_case_responses = interpolated_responses
+            .iter()
+            .filter(|sr| {
+                let p = sr.path.get::<Profile>().unwrap();
+                let s = sr.path.get::<Scenario>().unwrap();
+                *p == profile && *s == scenario
+            })
+            .map(|sr| sr.series.iter().cloned())
+            .collect();
+
+        let avg_vs_baseline = db::average(summary_case_responses)
+            .map(|((c, d), i)| ((c, Some(d.expect("interpolated") / baseline)), i));
 
         let graph_series = graph_series(avg_vs_baseline, graph_kind);
 
