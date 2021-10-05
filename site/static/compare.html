@@ -819,9 +819,13 @@
             let values = Object.assign({}, {
                 start: "",
                 end: "",
+                calcNewSig: true,
                 stat: "instructions:u",
             }, state);
-            values["calcNewSig"] = values.calcNewSig === 'true';
+            // Make sure we pass a boolean.
+            if (typeof values.calcNewSig === "string") {
+                values.calcNewSig = values.calcNewSig === "true";
+            }
             makeRequest("/get", values).then(function (data) {
                 app.data = data;
             });
