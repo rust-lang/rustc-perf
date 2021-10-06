@@ -175,16 +175,35 @@ impl SiteCtxt {
     }
 }
 
+/// Calculating the missing commits.
 fn calculate_missing(
     master_commits: Vec<collector::MasterCommit>,
     queued_pr_commits: Vec<database::QueuedCommit>,
     in_progress_artifacts: Vec<ArtifactId>,
-    mut all_commits: HashSet<String>,
+    all_commits: HashSet<String>,
 ) -> Vec<(Commit, MissingReason)> {
-    let now = Utc::now();
+    calculate_missing_from(
+        master_commits,
+        queued_pr_commits,
+        in_progress_artifacts,
+        all_commits,
+        Utc::now(),
+    )
+}
+
+/// Calculate the missing commits filtering out any that are 29 days or older than the supplied time.
+///
+/// This is used by `calculate_missing` is exists as a separate function for testing purposes.
+fn calculate_missing_from(
+    master_commits: Vec<collector::MasterCommit>,
+    queued_pr_commits: Vec<database::QueuedCommit>,
+    in_progress_artifacts: Vec<ArtifactId>,
+    mut all_commits: HashSet<String>,
+    time: chrono::DateTime<chrono::Utc>,
+) -> Vec<(Commit, MissingReason)> {
     let mut master_commits = master_commits
         .into_iter()
-        .filter(|c| now.signed_duration_since(c.time) < Duration::days(29))
+        .filter(|c| time.signed_duration_since(c.time) < Duration::days(29))
         .map(|c| {
             (
                 Commit {
@@ -359,11 +378,12 @@ mod tests {
         ];
         assert_eq!(
             expected,
-            calculate_missing(
+            calculate_missing_from(
                 master_commits,
                 queued_pr_commits,
                 in_progress_artifacts,
-                all_commits
+                all_commits,
+                time
             )
         );
     }
