@@ -186,7 +186,6 @@ pub fn robocopy(
 }
 
 fn run_command_with_output(cmd: &mut Command) -> anyhow::Result<process::Output> {
-    log::trace!("running: {:?}", cmd);
     let mut child = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
 
     let mut stdout = Vec::new();
@@ -218,8 +217,8 @@ fn run_command_with_output(cmd: &mut Command) -> anyhow::Result<process::Output>
 
     Ok(process::Output {
         status,
-        stdout: stdout,
-        stderr: stderr,
+        stdout,
+        stderr,
     })
 }
 
@@ -228,7 +227,7 @@ pub fn command_output(cmd: &mut Command) -> anyhow::Result<process::Output> {
 
     if !output.status.success() {
         return Err(anyhow::anyhow!(
-            "expected success, got {}\n\nstderr={}\n\n stdout={}",
+            "expected success, got {}\n\nstderr={}\n\n stdout={}\n",
             output.status,
             String::from_utf8_lossy(&output.stderr),
             String::from_utf8_lossy(&output.stdout)
