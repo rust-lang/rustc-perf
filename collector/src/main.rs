@@ -118,7 +118,7 @@ const STRINGS_AND_SCENARIO_KINDS: &[(&str, ScenarioKind)] = &[
     ("IncrPatched", ScenarioKind::IncrPatched),
 ];
 
-fn build_kinds_from_arg(arg: &Option<&str>) -> anyhow::Result<Vec<ProfileKind>> {
+fn profile_kinds_from_arg(arg: &Option<&str>) -> anyhow::Result<Vec<ProfileKind>> {
     if let Some(arg) = arg {
         kinds_from_arg("build", STRINGS_AND_PROFILE_KINDS, arg)
     } else {
@@ -211,7 +211,7 @@ fn bench(
     rt: &mut Runtime,
     pool: database::Pool,
     artifact_id: &ArtifactId,
-    build_kinds: &[ProfileKind],
+    profile_kinds: &[ProfileKind],
     scenario_kinds: &[ScenarioKind],
     compiler: Compiler<'_>,
     benchmarks: &[Benchmark],
@@ -280,7 +280,7 @@ fn bench(
         );
         let result = benchmark.measure(
             &mut processor,
-            build_kinds,
+            profile_kinds,
             scenario_kinds,
             compiler,
             iterations,
@@ -398,7 +398,7 @@ fn get_benchmarks(
 /// - `cargo`: if one is given, check if it is acceptable. Otherwise, look
 ///   for the nightly Cargo via `rustup`.
 fn get_local_toolchain(
-    build_kinds: &[ProfileKind],
+    profile_kinds: &[ProfileKind],
     rustc: &str,
     rustdoc: Option<&str>,
     cargo: Option<&str>,
@@ -456,7 +456,7 @@ fn get_local_toolchain(
             Some(PathBuf::from(rustdoc).canonicalize().with_context(|| {
                 format!("failed to canonicalize rustdoc executable '{}'", rustdoc)
             })?)
-        } else if build_kinds.contains(&ProfileKind::Doc) {
+        } else if profile_kinds.contains(&ProfileKind::Doc) {
             // We need a `rustdoc`. Look for one next to `rustc`.
             if let Ok(rustdoc) = rustc.with_file_name("rustdoc").canonicalize() {
                 debug!("found rustdoc: {:?}", &rustdoc);
@@ -500,23 +500,23 @@ fn generate_cachegrind_diffs(
     id2: &str,
     out_dir: &Path,
     benchmarks: &[Benchmark],
-    build_kinds: &[ProfileKind],
+    profile_kinds: &[ProfileKind],
     scenario_kinds: &[ScenarioKind],
     errors: &mut BenchmarkErrors,
 ) {
     for benchmark in benchmarks {
-        for &build_kind in build_kinds {
+        for &profile_kind in profile_kinds {
             for &scenario_kind in scenario_kinds {
                 if let ScenarioKind::IncrPatched = scenario_kind {
                     continue;
                 }
-                if build_kind == ProfileKind::Doc && scenario_kind.is_incr() {
+                if profile_kind == ProfileKind::Doc && scenario_kind.is_incr() {
                     continue;
                 }
                 let filename = |prefix, id| {
                     format!(
                         "{}-{}-{}-{:?}-{:?}",
-                        prefix, id, benchmark.name, build_kind, scenario_kind
+                        prefix, id, benchmark.name, profile_kind, scenario_kind
                     )
                 };
                 let id_diff = format!("{}-{}", id1, id2);
@@ -614,7 +614,7 @@ fn profile(
     profiler: Profiler,
     out_dir: &Path,
     benchmarks: &[Benchmark],
-    build_kinds: &[ProfileKind],
+    profile_kinds: &[ProfileKind],
     scenario_kinds: &[ScenarioKind],
     errors: &mut BenchmarkErrors,
 ) {
@@ -624,7 +624,7 @@ fn profile(
         let mut processor = execute::ProfileProcessor::new(profiler, out_dir, id);
         let result = benchmark.measure(
             &mut processor,
-            &build_kinds,
+            &profile_kinds,
             &scenario_kinds,
             compiler,
             Some(1),
@@ -800,7 +800,7 @@ fn main_result() -> anyhow::Result<i32> {
             let id = sub_m.value_of("ID").unwrap();
 
             // Options
-            let build_kinds = build_kinds_from_arg(&sub_m.value_of("BUILDS"))?;
+            let profile_kinds = profile_kinds_from_arg(&sub_m.value_of("BUILDS"))?;
             let cargo = sub_m.value_of("CARGO");
             let db = sub_m.value_of("DB").unwrap_or(default_db);
             let exclude = sub_m.value_of("EXCLUDE");
@@ -812,7 +812,8 @@ fn main_result() -> anyhow::Result<i32> {
 
             let pool = database::Pool::open(db);
 
-            let (rustc, rustdoc, cargo) = get_local_toolchain(&build_kinds, rustc, rustdoc, cargo)?;
+            let (rustc, rustdoc, cargo) =
+                get_local_toolchain(&profile_kinds, rustc, rustdoc, cargo)?;
 
             let benchmarks = get_benchmarks(&benchmark_dir, include, exclude)?;
 
@@ -820,7 +821,7 @@ fn main_result() -> anyhow::Result<i32> {
                 &mut rt,
                 pool,
                 &ArtifactId::Tag(id.to_string()),
-                &build_kinds,
+                &profile_kinds,
                 &scenario_kinds,
                 Compiler {
                     rustc: &rustc,
@@ -911,7 +912,7 @@ fn main_result() -> anyhow::Result<i32> {
             } else {
                 ScenarioKind::all_non_incr()
             };
-            let build_kinds = if collector::version_supports_doc(toolchain) {
+            let proile_kinds = if collector::version_supports_doc(toolchain) {
                 ProfileKind::all()
             } else {
                 let mut all = ProfileKind::all();
@@ -945,7 +946,7 @@ fn main_result() -> anyhow::Result<i32> {
                 &mut rt,
                 pool,
                 &ArtifactId::Tag(toolchain.to_string()),
-                &build_kinds,
+                &proile_kinds,
                 &scenario_kinds,
                 Compiler {
                     rustc: Path::new(rustc.trim()),
@@ -969,7 +970,7 @@ fn main_result() -> anyhow::Result<i32> {
             let id = sub_m.value_of("ID").unwrap();
 
             // Options
-            let build_kinds = build_kinds_from_arg(&sub_m.value_of("BUILDS"))?;
+            let profile_kinds = profile_kinds_from_arg(&sub_m.value_of("BUILDS"))?;
             let cargo = sub_m.value_of("CARGO");
             let exclude = sub_m.value_of("EXCLUDE");
             let include = sub_m.value_of("INCLUDE");
@@ -977,7 +978,8 @@ fn main_result() -> anyhow::Result<i32> {
             let scenario_kinds = scenario_kinds_from_arg(sub_m.value_of("RUNS"))?;
             let rustdoc = sub_m.value_of("RUSTDOC");
 
-            let (rustc, rustdoc, cargo) = get_local_toolchain(&build_kinds, rustc, rustdoc, cargo)?;
+            let (rustc, rustdoc, cargo) =
+                get_local_toolchain(&profile_kinds, rustc, rustdoc, cargo)?;
             let compiler = Compiler {
                 rustc: &rustc,
                 rustdoc: rustdoc.as_deref(),
@@ -993,7 +995,7 @@ fn main_result() -> anyhow::Result<i32> {
                 profiler,
                 &out_dir,
                 &benchmarks,
-                &build_kinds,
+                &profile_kinds,
                 &scenario_kinds,
                 &mut errors,
             );
@@ -1008,7 +1010,7 @@ fn main_result() -> anyhow::Result<i32> {
             let rustc2 = sub_m.value_of("RUSTC_AFTER").unwrap();
 
             // Options
-            let build_kinds = build_kinds_from_arg(&sub_m.value_of("BUILDS"))?;
+            let profile_kinds = profile_kinds_from_arg(&sub_m.value_of("BUILDS"))?;
             let cargo = sub_m.value_of("CARGO");
             let exclude = sub_m.value_of("EXCLUDE");
             let include = sub_m.value_of("INCLUDE");
@@ -1021,7 +1023,7 @@ fn main_result() -> anyhow::Result<i32> {
             let mut toolchains = Vec::new();
             for (id, rustc) in [(id1, rustc1), (id2, rustc2)] {
                 let (rustc, rustdoc, cargo) =
-                    get_local_toolchain(&build_kinds, rustc, rustdoc, cargo)?;
+                    get_local_toolchain(&profile_kinds, rustc, rustdoc, cargo)?;
                 toolchains.push((id.to_owned(), rustc, rustdoc, cargo));
             }
 
@@ -1041,7 +1043,7 @@ fn main_result() -> anyhow::Result<i32> {
                     profiler,
                     &out_dir,
                     &benchmarks,
-                    &build_kinds,
+                    &profile_kinds,
                     &scenario_kinds,
                     &mut errors,
                 );
@@ -1053,7 +1055,7 @@ fn main_result() -> anyhow::Result<i32> {
                     id2,
                     &out_dir,
                     &benchmarks,
-                    &build_kinds,
+                    &profile_kinds,
                     &scenario_kinds,
                     &mut errors,
                 );
