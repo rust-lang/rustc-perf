@@ -321,18 +321,18 @@ fn bench(
 }
 
 fn check_measureme_installed() -> Result<(), String> {
-    let error = |name| {
-        format!("To run this command you need the `{0}` binary on your PATH. To install run `cargo install --git https://github.com/rust-lang/measureme --branch stable {0}`\n", name)
-    };
-    Command::new("summarize")
-        .output()
-        .map_err(|_| error("summarize"))?;
-    Command::new("crox").output().map_err(|_| error("crox"))?;
-    Command::new("flamegraph")
-        .output()
-        .map_err(|_| error("flamegraph"))?;
+    let mut binaries = vec![];
 
-    Ok(())
+    for name in ["summarize", "crox", "flamegraph"] {
+        if let Err(_) = Command::new(name).output() {
+            binaries.push(name);
+        }
+    }
+    if binaries.is_empty() {
+        Ok(())
+    } else {
+        Err(format!("To run this command you need {0} on your PATH. To install run `cargo install --git https://github.com/rust-lang/measureme --branch stable {0}`\n", binaries.join(" ")))
+    }
 }
 
 fn get_benchmarks(
