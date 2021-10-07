@@ -225,13 +225,10 @@ fn bench(
         artifact_id, compiler.triple
     );
 
-    let has_measureme = Command::new("summarize").output().is_ok();
     if is_self_profile {
-        assert!(
-            has_measureme,
-            "needs `summarize` in PATH for self profile.\n\
-             Omit --self-profile` to opt out"
-        );
+        if let Err(e) = check_measureme_installed() {
+            panic!("{}Or omit --self-profile` to opt out\n", e);
+        }
     }
 
     let steps = benchmarks
@@ -321,6 +318,21 @@ fn bench(
         conn.maybe_create_indices().await;
     });
     errors
+}
+
+fn check_measureme_installed() -> Result<(), String> {
+    let mut binaries = vec![];
+
+    for name in ["summarize", "crox", "flamegraph"] {
+        if let Err(_) = Command::new(name).output() {
+            binaries.push(name);
+        }
+    }
+    if binaries.is_empty() {
+        Ok(())
+    } else {
+        Err(format!("To run this command you need {0} on your PATH. To install run `cargo install --git https://github.com/rust-lang/measureme --branch stable {0}`\n", binaries.join(" ")))
+    }
 }
 
 fn get_benchmarks(
@@ -619,6 +631,9 @@ fn profile(
     errors: &mut BenchmarkErrors,
 ) {
     eprintln!("Profiling {} with {:?}", id, profiler);
+    if let Profiler::SelfProfile = profiler {
+        check_measureme_installed().unwrap();
+    }
     for (i, benchmark) in benchmarks.iter().enumerate() {
         eprintln!("{}", n_benchmarks_remaining(benchmarks.len() - i));
         let mut processor = execute::ProfileProcessor::new(profiler, out_dir, id);
