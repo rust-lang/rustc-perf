@@ -15,6 +15,9 @@ while : ; do
         git reset --hard @{upstream}
         cargo +nightly build --release -p collector
 
+        # Install measureme tooling
+        cargo install --git https://github.com/rust-lang/measureme --branch stable flamegraph crox summarize
+
         touch todo-artifacts
         for x in $(cat todo-artifacts) ; do
                 echo "Benching $x from todo-artifacts"
