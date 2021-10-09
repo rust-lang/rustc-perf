@@ -24,8 +24,8 @@ pub enum MissingReason {
     Master {
         pr: u32,
         parent_sha: String,
+        is_try_parent: bool,
     },
-    TryParent,
     Try {
         pr: u32,
         include: Option<String>,
@@ -214,6 +214,7 @@ fn calculate_missing_from(
                 MissingReason::Master {
                     pr: c.pr.unwrap_or(0),
                     parent_sha: c.parent_sha,
+                    is_try_parent: false,
                 },
             )
         })
@@ -235,11 +236,31 @@ fn calculate_missing_from(
         // Enqueue the `TryParent` commit before the `TryCommit` itself, so that
         // all of the `try` run's data is complete when the benchmark results
         // of that commit are available.
-        if let Some((try_parent, _)) = master_commits
+        if let Some((try_parent, metadata)) = master_commits
             .iter()
             .find(|(m, _)| m.sha == parent_sha.as_str())
         {
-            missing.push((try_parent.clone(), MissingReason::TryParent));
+            let (pr, parent_sha) = if let MissingReason::Master {
+                pr,
+                parent_sha,
+                is_try_parent: _,
+            } = &metadata
+            {
+                (*pr, parent_sha.clone())
+            } else {
+                unreachable!(
+                    "non-master missing reason in master_commits: {:?}",
+                    metadata
+                );
+            };
+            missing.push((
+                try_parent.clone(),
+                MissingReason::Master {
+                    pr,
+                    parent_sha,
+                    is_try_parent: true,
+                },
+            ));
         }
         missing.push((
             Commit {
@@ -351,7 +372,11 @@ mod tests {
                     sha: "foo".into(),
                     date: database::Date(time),
                 },
-                MissingReason::TryParent,
+                MissingReason::Master {
+                    pr: 77,
+                    parent_sha: "bar".into(),
+                    is_try_parent: true,
+                },
             ),
             (
                 Commit {
@@ -373,6 +398,7 @@ mod tests {
                 MissingReason::Master {
                     pr: 11,
                     parent_sha: "345".into(),
+                    is_try_parent: false,
                 },
             ),
         ];
