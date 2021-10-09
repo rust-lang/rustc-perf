@@ -175,7 +175,9 @@
                 return `${reason_to_string(reason.InProgress)} - in progress`;
             } else if (reason["Master"] != undefined && reason.Master.pr) {
                 return `<a href="https://github.com/rust-lang/rust/pull/${reason["Master"].pr}">
-                    #${reason["Master"].pr}</a>`;
+                    #${reason["Master"].pr}</a>${
+                    reason.Master.is_try_parent ? " - Try commit parent" : ""
+                    }`;
             } else if (reason["Master"] != undefined && reason.Master.pr == 0) {
                 return "Master";
             } else if (reason["Try"] != undefined && reason.Try.pr) {

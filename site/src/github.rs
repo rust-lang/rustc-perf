@@ -521,12 +521,14 @@ pub async fn post_finished(ctxt: &SiteCtxt) {
         conn.queued_commits(),
         conn.in_progress_artifacts()
     );
-    let master_commits = if let Ok(mcs) = master_commits {
-        mcs.into_iter().map(|c| c.sha).collect::<HashSet<_>>()
-    } else {
-        // If we can't fetch master commits, return.
-        // We'll eventually try again later
-        return;
+    let master_commits = match master_commits {
+        Ok(mcs) => mcs.into_iter().map(|c| c.sha).collect::<HashSet<_>>(),
+        Err(e) => {
+            log::error!("posting finished did not load master commits: {:?}", e);
+            // If we can't fetch master commits, return.
+            // We'll eventually try again later
+            return;
+        }
     };
 
     for aid in in_progress_artifacts {
@@ -606,7 +608,7 @@ fn master_run_body(direction: Option<Direction>) -> String {
 
     format!(
         "
-{next_steps} 
+{next_steps}
 
 @rustbot label: {label}",
         next_steps = next_steps,
@@ -637,7 +639,7 @@ Benchmarking this pull request likely means that it is \
 perf-sensitive, so we're automatically marking it as not fit \
 for rolling up. While you can manually mark this PR as fit \
 for rollup, we strongly recommend not doing so since this PR led to changes in \
-compiler perf.{next_steps} 
+compiler perf.{next_steps}
 
 @bors rollup=never
 @rustbot label: +S-waiting-on-review -S-waiting-on-perf {label}",

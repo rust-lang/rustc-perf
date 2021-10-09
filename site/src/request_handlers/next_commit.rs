@@ -9,7 +9,10 @@ pub async fn handle_next_commit(ctxt: Arc<SiteCtxt>) -> next_commit::Response {
     let next_commit = if let Some((commit, missing_reason)) = next_commit {
         // If we're going to run a master commit next, make sure
         // it's been enqueued in the pull_request_build table
-        if let MissingReason::Master { pr, ref parent_sha } = missing_reason {
+        if let MissingReason::Master {
+            pr, ref parent_sha, ..
+        } = missing_reason
+        {
             let conn = ctxt.conn().await;
             // TODO: add capability of doing the following in one step
             // to avoid possibile illegal inbetween states.
