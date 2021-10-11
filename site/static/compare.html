@@ -423,10 +423,7 @@
             <table id="benches" class="compare">
                 <tbody>
                     <tr>
-                        <th>Name & Profile</th>
-                        <th>Scenario</th>
-                        <th>{{before}}</th>
-                        <th>{{after}}</th>
+                        <th>Benchmark Profile Scenario</th>
                         <th>% Change</th>
                         <th>
                             Significance Factor<span class="tooltip">?
@@ -439,40 +436,36 @@
                                 </span>
                             </span>
                         </th>
+                        <th>{{before}} &lt;=&gt; {{after}}</th>
                     </tr>
                 </tbody>
-                <template v-for="bench in benches">
-                    <tbody>
-                        <template v-for="testCase in bench.testCases">
-                            <tr>
-                                <th v-if="testCase.first" v-bind:rowspan="bench.testCases.length">{{bench.name}}</th>
-                                <td>{{ testCase.scenario }}</td>
-                                <td>
-                                    <a v-bind:href="detailedQueryLink(data.a.commit, bench.name, testCase.scenario)">
-                                        {{ testCase.datumA }}
-                                    </a>
-                                </td>
-                                <td>
-                                    <a v-bind:href="detailedQueryLink(data.b.commit, bench.name, testCase.scenario)">
-                                        {{ testCase.datumB }}
-                                    </a>
-                                </td>
-                                <td>
-                                    <a
-                                        v-bind:href="percentLink(data.b.commit, data.a.commit, bench.name, testCase.scenario)">
-                                        <span v-bind:class="percentClass(testCase.percent)">
-                                            {{ testCase.percent.toFixed(2) }}%{{testCase.isDodgy ? "?" : ""}}
-                                        </span>
-                                    </a>
-                                </td>
-                                <td>
-                                    {{ testCase.significanceFactor ? testCase.significanceFactor.toFixed(2) + "x" :"-"
-                                    }}
-                                </td>
-                            </tr>
-                        </template>
-                    </tbody>
-                </template>
+                <tbody>
+                    <template v-for="testCase in testCases">
+                        <tr>
+                            <td>{{ testCase.benchmark }} {{ testCase.profile }} <br /> {{ testCase.scenario }}</td>
+                            <td>
+                                <a v-bind:href="percentLink(data.b.commit, data.a.commit, testCase)">
+                                    <span v-bind:class="percentClass(testCase.percent)">
+                                        {{ testCase.percent.toFixed(2) }}%{{testCase.isDodgy ? "?" : ""}}
+                                    </span>
+                                </a>
+                            </td>
+                            <td>
+                                {{ testCase.significanceFactor ? testCase.significanceFactor.toFixed(2) + "x" :"-"
+                                }}
+                            </td>
+                            <td>
+                                <a v-bind:href="detailedQueryLink(data.a.commit, testCase)">
+                                    {{ testCase.datumA }}
+                                </a>
+                                &lt;=&gt;
+                                <a v-bind:href="detailedQueryLink(data.b.commit, testCase)">
+                                    {{ testCase.datumB }}
+                                </a>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
             </table>
             <br />
             <table id="bootstrap" class="compare" style="margin: auto;"
@@ -552,7 +545,7 @@
                 compareLink() {
                     return `https://github.com/rust-lang/rust/compare/${this.data.a.commit}...${this.data.b.commit}`;
                 },
-                benches() {
+                testCases() {
                     let data = this.data;
                     const filter = this.filter;
 
@@ -571,7 +564,8 @@
                         }
                     }
 
-                    function shouldShowTestCase(name, testCase) {
+                    function shouldShowTestCase(testCase) {
+                        const name = `${testCase.benchmark} ${testCase.profile} ${testCase.scenario}`;
                         let nameFilter = filter.name && filter.name.trim();
                         nameFilter = !nameFilter || name.includes(nameFilter);
 
@@ -582,67 +576,34 @@
                         return scenarioFilter(testCase.scenario) && significanceFilter && nameFilter && magnitudeFilter;
                     }
 
-                    function toTestCases(name, results) {
-                        return results.map(r => {
-                            const scenario = r.scenario;
-                            const datumA = r.statistics[0];
-                            const datumB = r.statistics[1];
-                            const isSignificant = r.is_significant;
-                            const significanceFactor = r.significance_factor;
-                            const isDodgy = r.is_dodgy;
-                            let percent = 100 * ((datumB - datumA) / datumA);
-                            return {
-                                scenario,
-                                datumA,
-                                datumB,
-                                isSignificant,
-                                magnitude: r.magnitude,
-                                significanceFactor,
-                                isDodgy,
-                                percent,
-                            };
-                        }).filter(tc => shouldShowTestCase(name, tc))
-                    }
+                    let testCases =
+                        data.comparisons
+                            .map(c => {
+                                const datumA = c.statistics[0];
+                                const datumB = c.statistics[1];
+                                const percent = 100 * ((datumB - datumA) / datumA);
+                                return {
+                                    benchmark: c.benchmark,
+                                    profile: c.profile,
+                                    scenario: c.scenario,
+                                    magnitude: c.magnitude,
+                                    isSignificant: c.is_significant,
+                                    significanceFactor: c.significance_factor,
+                                    isDodgy: c.is_dodgy,
+                                    datumA,
+                                    datumB,
+                                    percent,
+                                };
+                            })
+                            .filter(tc => shouldShowTestCase(tc))
 
-                    let benches =
-                        data.comparisons.
-                            reduce((accum, next) => {
-                                const key = next.benchmark + "-" + next.profile;
-                                if (!accum[key]) {
-                                    accum[key] = [];
-                                }
-                                accum[key].push(next);
-                                return accum;
-                            }, {});
-                    benches = Object.entries(benches).
-                        map(c => {
-                            const name = c[0];
-                            const comparison = c[1];
-                            const testCases = toTestCases(name, comparison);
-                            const pcts = testCases.map(tc => parseFloat(tc.percent));
-                            const maxPct = Math.max(...pcts).toFixed(1);
-                            const minPct = Math.min(...pcts).toFixed(1);
-                            if (testCases.length > 0) {
-                                testCases[0].first = true;
-                            }
-
-                            return {
-                                name,
-                                testCases,
-                                maxPct,
-                                minPct,
-                            };
-                        }).
-                        filter(b => b.testCases.length > 0);
-
-                    const largestChange = a => Math.max(Math.abs(a.minPct), Math.abs(a.maxPct));
                     // Sort by name first, so that there is a canonical ordering
-                    // of benches. This ensures the overall order is stable, even if
+                    // of test cases. This ensures the overall order is stable, even if
                     // individual benchmarks have the same largestChange value.
-                    benches.sort((a, b) => a.name.localeCompare(b.name));
-                    benches.sort((a, b) => largestChange(b) - largestChange(a));
+                    testCases.sort((a, b) => a.benchmark.localeCompare(b.benchmark));
+                    testCases.sort((a, b) => Math.abs(b.percent) - Math.abs(a.percent));
 
-                    return benches;
+                    return testCases;
                 },
                 bootstrapTotals() {
                     const sum = bootstrap => Object.entries(bootstrap).map(e => e[1] / 1e9).reduce((sum, next) => sum + next, 0);
@@ -699,7 +660,10 @@
                 },
                 summary() {
                     // Create object with each test case that is not filtered out as a key
-                    const filtered = Object.fromEntries(this.benches.flatMap(b => b.testCases.map(v => [b.name + "-" + v.scenario, true])));
+                    const filtered = this.testCases.reduce((sum, next) => {
+                        sum[testCaseString(next)] = true;
+                        return sum;
+                    }, {});
                     const newCount = { regressions: 0, improvements: 0, unchanged: 0 }
                     let result = { all: { ...newCount }, filtered: { ...newCount } }
                     for (let d of this.data.comparisons) {
@@ -734,15 +698,14 @@
                     let klass = "";
                     if (pct > 1) {
                         klass = 'positive';
-                    } else if (pct >= 0.2) {
+                    } else if (pct > 0) {
                         klass = 'slightly-positive';
                     } else if (pct < -1) {
                         klass = 'negative';
-                    } else if (pct <= -0.2) {
+                    } else if (pct < -0) {
                         klass = 'slightly-negative';
                     }
                     return klass;
-
                 },
                 diffClass(diff) {
                     let klass = "";
@@ -754,11 +717,11 @@
                     return klass;
 
                 },
-                detailedQueryLink(commit, bench, testCase) {
-                    return `/detailed-query.html?commit=${commit}&benchmark=${bench}&run_name=${testCase}`;
+                detailedQueryLink(commit, testCase) {
+                    return `/detailed-query.html?commit=${commit}&benchmark=${testCase.benchmark + "-" + testCase.profile}&run_name=${testCase.scenario}`;
                 },
-                percentLink(commit, baseCommit, bench, testCase) {
-                    return `/detailed-query.html?commit=${commit}&base_commit=${baseCommit}&benchmark=${bench}&run_name=${testCase}`;
+                percentLink(commit, baseCommit, testCase) {
+                    return `/detailed-query.html?commit=${commit}&base_commit=${baseCommit}&benchmark=${testCase.benchmark + "-" + testCase.profile}&run_name=${testCase.scenario}`;
                 },
                 commitLink(commit) {
                     return `https://github.com/rust-lang/rust/commit/${commit}`;
