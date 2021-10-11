@@ -423,7 +423,8 @@
             <table id="benches" class="compare">
                 <tbody>
                     <tr>
-                        <th>Benchmark Profile Scenario</th>
+                        <th>Benchmark & Profile</th>
+                        <th>Scenario</th>
                         <th>% Change</th>
                         <th>
                             Significance Factor<span class="tooltip">?
@@ -436,13 +437,15 @@
                                 </span>
                             </span>
                         </th>
-                        <th>{{before}} &lt;=&gt; {{after}}</th>
+                        <th>{{before}}</th>
+                        <th>{{after}}</th>
                     </tr>
                 </tbody>
                 <tbody>
                     <template v-for="testCase in testCases">
                         <tr>
-                            <td>{{ testCase.benchmark }} {{ testCase.profile }} <br /> {{ testCase.scenario }}</td>
+                            <td>{{ testCase.benchmark }} {{ testCase.profile }}</td>
+                            <td>{{ testCase.scenario }}</td>
                             <td>
                                 <a v-bind:href="percentLink(data.b.commit, data.a.commit, testCase)">
                                     <span v-bind:class="percentClass(testCase.percent)">
@@ -458,7 +461,8 @@
                                 <a v-bind:href="detailedQueryLink(data.a.commit, testCase)">
                                     {{ testCase.datumA }}
                                 </a>
-                                &lt;=&gt;
+                            </td>
+                            <td>
                                 <a v-bind:href="detailedQueryLink(data.b.commit, testCase)">
                                     {{ testCase.datumB }}
                                 </a>
