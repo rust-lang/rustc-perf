@@ -18,6 +18,8 @@ meeting, where the results are looked at.
 
 ## Generating the report
 
+(The `do-triage.sh` script automates some of the steps written here.)
+
 First, check the previous triage log entry. Look for responses in PRs, and
 follow up on any promised actions. (i.e. nag people!)
 
