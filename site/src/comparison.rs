@@ -9,7 +9,6 @@ use crate::load::SiteCtxt;
 use crate::selector::{self, Tag};
 
 use collector::Bound;
-use log::debug;
 use serde::Serialize;
 
 use std::collections::{HashMap, HashSet};
@@ -627,7 +626,7 @@ impl BenchmarkVariances {
         variance_data.retain(|_, v| v.data.len() >= Self::MIN_PREVIOUS_COMMITS);
 
         for ((bench, _, _), results) in variance_data.iter_mut() {
-            debug!("Calculating variance for: {}", bench);
+            log::trace!("Calculating variance for: {}", bench);
             results.calculate_description();
         }
 
@@ -725,7 +724,7 @@ impl BenchmarkVariance {
         let percent_significant_changes = ((percent_changes.len() - non_significant.len()) as f64
             / percent_changes.len() as f64)
             * 100.0;
-        debug!(
+        log::trace!(
             "Percent significant changes: {:.1}%",
             percent_significant_changes
         );
@@ -737,7 +736,7 @@ impl BenchmarkVariance {
 
         let delta_mean =
             non_significant.iter().cloned().sum::<f64>() / (non_significant.len() as f64);
-        debug!("Ratio change: {:.4}", delta_mean);
+        log::trace!("Ratio change: {:.4}", delta_mean);
         if delta_mean > Self::NOISE_THRESHOLD {
             self.description = BenchmarkVarianceDescription::Noisy;
         }
