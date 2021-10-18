@@ -442,6 +442,7 @@ pub struct ArtifactDescription {
     pub pr: Option<u32>,
     /// Bootstrap data in the form "$crate" -> nanoseconds
     pub bootstrap: HashMap<String, u64>,
+    pub bootstrap_total: u64,
 }
 
 type StatisticsMap = HashMap<TestCase, f64>;
@@ -460,6 +461,15 @@ impl ArtifactDescription {
         let bootstrap = conn
             .get_bootstrap_by_crate(&[conn.artifact_id(&artifact).await])
             .await;
+        let bootstrap_total = bootstrap
+            .values()
+            .filter_map(|v| {
+                v.get(0)
+                    .copied()
+                    .unwrap_or_default()
+                    .map(|v| v.as_nanos() as u64)
+            })
+            .sum::<u64>();
         let bootstrap = bootstrap
             .into_iter()
             .filter_map(|(k, mut v)| {
@@ -492,6 +502,7 @@ impl ArtifactDescription {
             pr,
             artifact,
             bootstrap,
+            bootstrap_total,
         }
     }
 }
@@ -531,6 +542,7 @@ impl From<ArtifactDescription> for api::comparison::ArtifactDescription {
             },
             pr: data.pr,
             bootstrap: data.bootstrap,
+            bootstrap_total: data.bootstrap_total,
         }
     }
 }

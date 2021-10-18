@@ -164,6 +164,7 @@ pub mod comparison {
         pub date: Option<Date>,
         pub pr: Option<u32>,
         pub bootstrap: HashMap<String, u64>,
+        pub bootstrap_total: u64,
     }
 
     /// A serializable wrapper for `comparison::ArtifactData`.
