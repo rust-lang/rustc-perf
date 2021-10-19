@@ -610,9 +610,8 @@
                     return testCases;
                 },
                 bootstrapTotals() {
-                    const sum = bootstrap => Object.entries(bootstrap).map(e => e[1] / 1e9).reduce((sum, next) => sum + next, 0);
-                    const a = sum(this.data.a.bootstrap);
-                    const b = sum(this.data.b.bootstrap);
+                    const a = this.data.a.bootstrap_total / 1e9;
+                    const b = this.data.b.bootstrap_total / 1e9;
                     return { a, b };
                 },
                 bootstraps() {
@@ -628,7 +627,8 @@
                             b: format(b),
                             percent: 100 * (b - a) / a
                         };
-                    }).sort((a, b) => Math.abs(b.percent) - Math.abs(a.percent));
+                    })
+                    .sort((a, b) => Math.abs(b.percent) - Math.abs(a.percent));
                 },
                 before() {
                     if (!this.data) {
