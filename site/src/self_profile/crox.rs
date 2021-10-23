@@ -62,14 +62,19 @@ fn generate_thread_to_collapsed_thread_mapping(
         // collect start and end times for all threads
         let mut thread_start_and_end: HashMap<u32, (SystemTime, SystemTime)> = HashMap::default();
         for event in data.iter() {
+            let timestamp = if let Some(t) = event.timestamp() {
+                t
+            } else {
+                continue;
+            };
             thread_start_and_end
                 .entry(event.thread_id)
                 .and_modify(|(thread_start, thread_end)| {
-                    let (event_min, event_max) = timestamp_to_min_max(event.timestamp);
+                    let (event_min, event_max) = timestamp_to_min_max(timestamp);
                     *thread_start = cmp::min(*thread_start, event_min);
                     *thread_end = cmp::max(*thread_end, event_max);
                 })
-                .or_insert_with(|| timestamp_to_min_max(event.timestamp));
+                .or_insert_with(|| timestamp_to_min_max(timestamp));
         }
         // collect the the threads in order of the end time
         let mut end_and_thread = thread_start_and_end
@@ -130,7 +135,7 @@ pub fn generate(self_profile_data: Vec<u8>, opt: Opt) -> anyhow::Result<Vec<u8>>
 
     let mut seq = serializer.serialize_seq(None)?;
 
-    let data = ProfilingData::from_paged_buffer(self_profile_data)
+    let data = ProfilingData::from_paged_buffer(self_profile_data, None)
         .map_err(|e| anyhow::format_err!("{:?}", e))?;
 
     let thread_to_collapsed_thread =
@@ -138,21 +143,29 @@ pub fn generate(self_profile_data: Vec<u8>, opt: Opt) -> anyhow::Result<Vec<u8>>
 
     // Chrome does not seem to like how many QueryCacheHit events we generate
     // only handle Interval events for now
-    for event in data.iter().filter(|e| !e.timestamp.is_instant()) {
+    for event in data
+        .iter()
+        .filter(|e| e.timestamp().map_or(false, |t| !t.is_instant()))
+    {
         let duration = event.duration().unwrap();
         if let Some(minimum_duration) = opt.minimum_duration {
             if duration.as_micros() < minimum_duration {
                 continue;
             }
         }
-        let full_event = event.to_event();
+        let full_event = data.to_full_event(&event);
         let crox_event = Event {
             name: full_event.label.clone().into_owned(),
             category: full_event.event_kind.clone().into_owned(),
             event_type: EventType::Complete,
-            timestamp: event.timestamp.start().duration_since(UNIX_EPOCH).unwrap(),
+            timestamp: event
+                .timestamp()
+                .unwrap()
+                .start()
+                .duration_since(UNIX_EPOCH)
+                .unwrap(),
             duration,
-            process_id: data.metadata.process_id,
+            process_id: data.metadata().process_id,
             thread_id: *thread_to_collapsed_thread
                 .get(&event.thread_id)
                 .unwrap_or(&event.thread_id),
@@ -162,12 +175,12 @@ pub fn generate(self_profile_data: Vec<u8>, opt: Opt) -> anyhow::Result<Vec<u8>>
     }
     // add crate name for the process_id
     let index_of_crate_name = data
-        .metadata
+        .metadata()
         .cmd
         .find(" --crate-name ")
         .map(|index| index + 14);
     if let Some(index) = index_of_crate_name {
-        let (_, last) = data.metadata.cmd.split_at(index);
+        let (_, last) = data.metadata().cmd.split_at(index);
         let (crate_name, _) = last.split_at(last.find(" ").unwrap_or(last.len()));
 
         let process_name = json!({
@@ -176,7 +189,7 @@ pub fn generate(self_profile_data: Vec<u8>, opt: Opt) -> anyhow::Result<Vec<u8>>
             "ts" : 0,
             "tid" : 0,
             "cat" : "",
-            "pid" : data.metadata.process_id,
+            "pid" : data.metadata().process_id,
             "args": {
                 "name" : crate_name
             }
@@ -190,9 +203,9 @@ pub fn generate(self_profile_data: Vec<u8>, opt: Opt) -> anyhow::Result<Vec<u8>>
         "ts" : 0,
         "tid" : 0,
         "cat" : "",
-        "pid" : data.metadata.process_id,
+        "pid" : data.metadata().process_id,
         "args": {
-            "sort_index" : data.metadata.start_time.duration_since(UNIX_EPOCH).unwrap().as_micros() as u64
+            "sort_index" : data.metadata().start_time.duration_since(UNIX_EPOCH).unwrap().as_micros() as u64
         }
     });
     seq.serialize_element(&process_name)?;

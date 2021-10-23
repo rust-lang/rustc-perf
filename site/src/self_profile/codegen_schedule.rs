@@ -19,17 +19,20 @@ fn is_interesting(name: &str) -> bool {
 }
 
 fn by_thread(self_profile_data: Vec<u8>) -> anyhow::Result<(u64, HashMap<u32, Vec<Event>>)> {
-    let data = ProfilingData::from_paged_buffer(self_profile_data)
+    let data = ProfilingData::from_paged_buffer(self_profile_data, None)
         .map_err(|e| anyhow::format_err!("{:?}", e))?;
 
     let mut start = None;
-    for event in data.iter().filter(|e| !e.timestamp.is_instant()) {
-        let full_event = event.to_event();
+    for event in data
+        .iter()
+        .filter(|e| e.timestamp().map_or(false, |t| !t.is_instant()))
+    {
+        let full_event = data.to_full_event(&event);
         if is_interesting(&full_event.label) {
             if start.is_some() {
-                start = std::cmp::min(start, Some(event.timestamp.start()));
+                start = std::cmp::min(start, Some(event.timestamp().unwrap().start()));
             } else {
-                start = Some(event.timestamp.start());
+                start = Some(event.timestamp().unwrap().start());
             }
         }
     }
@@ -39,8 +42,11 @@ fn by_thread(self_profile_data: Vec<u8>) -> anyhow::Result<(u64, HashMap<u32, Ve
 
     let mut end = start;
     let mut by_thread = HashMap::new();
-    for event in data.iter().filter(|e| !e.timestamp.is_instant()) {
-        let full_event = event.to_event();
+    for event in data
+        .iter()
+        .filter(|e| e.timestamp().map_or(false, |t| !t.is_instant()))
+    {
+        let full_event = data.to_full_event(&event);
 
         if is_interesting(&full_event.label) {
             by_thread
@@ -48,10 +54,20 @@ fn by_thread(self_profile_data: Vec<u8>) -> anyhow::Result<(u64, HashMap<u32, Ve
                 .or_insert_with(Vec::new)
                 .push(Event {
                     name: full_event.label.into(),
-                    start: event.timestamp.start().duration_since(start).unwrap(),
-                    end: event.timestamp.end().duration_since(start).unwrap(),
+                    start: event
+                        .timestamp()
+                        .unwrap()
+                        .start()
+                        .duration_since(start)
+                        .unwrap(),
+                    end: event
+                        .timestamp()
+                        .unwrap()
+                        .end()
+                        .duration_since(start)
+                        .unwrap(),
                 });
-            end = std::cmp::max(end, event.timestamp.end());
+            end = std::cmp::max(end, event.timestamp().unwrap().end());
         }
     }
 
