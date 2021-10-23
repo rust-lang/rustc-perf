@@ -6,7 +6,7 @@ use inferno::flamegraph::{from_lines, Options as FlamegraphOptions};
 pub struct Opt {}
 
 pub fn generate(title: &str, self_profile_data: Vec<u8>, _: Opt) -> anyhow::Result<Vec<u8>> {
-    let profiling_data = ProfilingData::from_paged_buffer(self_profile_data)
+    let profiling_data = ProfilingData::from_paged_buffer(self_profile_data, None)
         .map_err(|e| anyhow::format_err!("{:?}", e))?;
 
     let recorded_stacks = collapse_stacks(&profiling_data)

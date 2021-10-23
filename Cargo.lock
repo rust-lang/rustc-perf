@@ -35,11 +35,26 @@ dependencies = [
 
 [[package]]
 name = "analyzeme"
-version = "9.1.2"
-source = "git+https://github.com/rust-lang/measureme#b5768e3343bf15baaa1e99af13af7dfc7a8677f2"
+version = "9.2.0"
+source = "git+https://github.com/rust-lang/measureme?tag=9.2.0#9f51cde2e5dd3ef0392f0f6a7201f4946502ef41"
 dependencies = [
  "byteorder",
- "measureme",
+ "measureme 9.2.0",
+ "memchr",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "analyzeme"
+version = "10.0.0"
+source = "git+https://github.com/rust-lang/measureme?branch=stable#6129647e1727be1f9855f0158be4a0a538298514"
+dependencies = [
+ "analyzeme 9.2.0",
+ "byteorder",
+ "decodeme",
+ "measureme 10.0.0",
  "memchr",
  "rustc-hash",
  "serde",
@@ -346,6 +361,18 @@ dependencies = [
  "snap",
  "tokio",
  "tokio-postgres",
+]
+
+[[package]]
+name = "decodeme"
+version = "10.0.0"
+source = "git+https://github.com/rust-lang/measureme?branch=stable#6129647e1727be1f9855f0158be4a0a538298514"
+dependencies = [
+ "measureme 10.0.0",
+ "memchr",
+ "rustc-hash",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -950,8 +977,21 @@ dependencies = [
 
 [[package]]
 name = "measureme"
-version = "9.1.2"
-source = "git+https://github.com/rust-lang/measureme#b5768e3343bf15baaa1e99af13af7dfc7a8677f2"
+version = "9.2.0"
+source = "git+https://github.com/rust-lang/measureme?tag=9.2.0#9f51cde2e5dd3ef0392f0f6a7201f4946502ef41"
+dependencies = [
+ "log",
+ "memmap2",
+ "parking_lot",
+ "perf-event-open-sys",
+ "rustc-hash",
+ "smallvec",
+]
+
+[[package]]
+name = "measureme"
+version = "10.0.0"
+source = "git+https://github.com/rust-lang/measureme?branch=stable#6129647e1727be1f9855f0158be4a0a538298514"
 dependencies = [
  "log",
  "memmap2",
@@ -1678,7 +1718,7 @@ checksum = "cbce6d4507c7e4a3962091436e56e95290cb71fa302d0d270e32130b75fbff27"
 name = "site"
 version = "0.1.0"
 dependencies = [
- "analyzeme",
+ "analyzeme 10.0.0",
  "anyhow",
  "arc-swap",
  "async-trait",
