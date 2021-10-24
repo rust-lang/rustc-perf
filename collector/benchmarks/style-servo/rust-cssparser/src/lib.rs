@@ -118,7 +118,7 @@ mod cssparser {
 }
 
 #[macro_use]
-mod macros;
+pub mod macros;
 
 mod rules_and_declarations;
 
