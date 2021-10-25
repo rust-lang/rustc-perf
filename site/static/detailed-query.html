@@ -52,6 +52,13 @@
         [data-sorted-by="asc"]::after {
             content: "▼";
         }
+
+        /* Per MDN -- https://developer.mozilla.org/en-US/docs/Web/HTML/Element/code */
+        code {
+            background-color: #eee;
+            border-radius: 3px;
+            user-select: all;
+        }
     </style>
 </head>
 
@@ -184,11 +191,35 @@
                 (${speedscope_link(state.commit, state.benchmark, state.run_name)},
                  ${firefox_profiler_link(state.commit, state.benchmark, state.run_name)})
                 results for ${state.commit.substring(0, 10)} (new commit)`;
+            let profile = b => b.endsWith("-opt") ? "Opt" :
+                        b.endsWith("-doc") ? "Doc" :
+                        b.endsWith("-debug") ? "Debug" :
+                        b.endsWith("-check") ? "Check" : "???";
+            let bench_name = b => b.replace(/-[^-]*$/, "");
+            let run_filter = r => r == "full" ? "Full" :
+                        r == "incr-full" ? "IncrFull" :
+                        r == "incr-unchanged" ? "IncrUnchanged" :
+                        r.startsWith("incr-patched") ? "IncrPatched" :
+                        "???";
             if (state.base_commit) {
                 txt += "<br>";
-                        txt += `Diff: <a
+                txt += `Diff: <a
                         href="/perf/processed-self-profile?commit=${state.commit}&base_commit=${state.base_commit}&benchmark=${state.benchmark}&run_name=${state.run_name}&type=codegen-schedule"
                         >codegen-schedule</a>`;
+                txt += "<br>Local profile (base): <code>" +
+                    `./target/release/collector profile_local cachegrind
+                    +${state.base_commit} --include ${bench_name(state.benchmark)} --builds
+                ${profile(state.benchmark)} --runs ${run_filter(state.run_name)}</code>`;
+            }
+            txt += "<br>Local profile (new): <code>" +
+                `./target/release/collector profile_local cachegrind
+                +${state.commit} --include ${bench_name(state.benchmark)} --builds
+                ${profile(state.benchmark)} --runs ${run_filter(state.run_name)}</code>`;
+            if (state.base_commit) {
+            txt += "<br>Local profile (diff): <code>" +
+                `./target/release/collector diff_local cachegrind
+                +${state.base_commit} +${state.commit} --include ${bench_name(state.benchmark)} --builds
+                ${profile(state.benchmark)} --runs ${run_filter(state.run_name)}</code>`;
             }
             document.querySelector("#raw-urls").innerHTML = txt;
             let sort_idx = state.sort_idx;
