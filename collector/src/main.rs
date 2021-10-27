@@ -515,7 +515,8 @@ fn generate_cachegrind_diffs(
     profile_kinds: &[ProfileKind],
     scenario_kinds: &[ScenarioKind],
     errors: &mut BenchmarkErrors,
-) {
+) -> Vec<PathBuf> {
+    let mut annotated_diffs = Vec::new();
     for benchmark in benchmarks {
         for &profile_kind in profile_kinds {
             for &scenario_kind in scenario_kinds {
@@ -559,9 +560,12 @@ fn generate_cachegrind_diffs(
                     eprintln!("collector error: {:?}", e);
                     continue;
                 }
+
+                annotated_diffs.push(cgann);
             }
         }
     }
+    annotated_diffs
 }
 
 /// Demangles symbols in a file using rustfilt and writes result to path.
@@ -1065,7 +1069,7 @@ fn main_result() -> anyhow::Result<i32> {
             }
 
             if let Profiler::Cachegrind = profiler {
-                generate_cachegrind_diffs(
+                let diffs = generate_cachegrind_diffs(
                     id1,
                     id2,
                     &out_dir,
@@ -1074,6 +1078,17 @@ fn main_result() -> anyhow::Result<i32> {
                     &scenario_kinds,
                     &mut errors,
                 );
+                if diffs.len() > 1 {
+                    eprintln!("Diffs:");
+                    for diff in diffs {
+                        eprintln!("{}", diff.to_string_lossy());
+                    }
+                } else if diffs.len() == 1 {
+                    let short = out_dir.join("cgdiffann-latest");
+                    std::fs::copy(&diffs[0], &short).expect("copy to short path");
+                    eprintln!("Original diff at: {}", diffs[0].to_string_lossy());
+                    eprintln!("Short path: {}", short.to_string_lossy());
+                }
             }
 
             errors.fail_if_nonzero()?;
