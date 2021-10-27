@@ -1084,7 +1084,10 @@ fn main_result() -> anyhow::Result<i32> {
                         eprintln!("{}", diff.to_string_lossy());
                     }
                 } else if diffs.len() == 1 {
-                    eprintln!("Diff: {}", diffs[0].to_string_lossy());
+                    let short = out_dir.join("cgdiffann-latest");
+                    std::fs::copy(&diffs[0], &short).expect("copy to short path");
+                    eprintln!("Original diff at: {}", diffs[0].to_string_lossy());
+                    eprintln!("Short path: {}", short.to_string_lossy());
                 }
             }
 
