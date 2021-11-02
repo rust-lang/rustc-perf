@@ -7,11 +7,14 @@ use bytes::Buf;
 use headers::{ContentType, Header};
 use hyper::StatusCode;
 
+use crate::api::self_profile::ArtifactSizeDelta;
 use crate::api::{self_profile, self_profile_processed, self_profile_raw, ServerResult};
 use crate::db::ArtifactId;
 use crate::load::SiteCtxt;
 use crate::selector::{self, Tag};
 use crate::server::{Response, ResponseHeaders};
+
+use std::collections::BTreeMap;
 
 pub async fn handle_self_profile_processed_download(
     body: self_profile_processed::Request,
@@ -142,6 +145,7 @@ pub async fn handle_self_profile_processed_download(
 fn get_self_profile_data(
     cpu_clock: Option<f64>,
     self_profile: Option<crate::selector::SelfProfileData>,
+    raw_data: Vec<u8>,
 ) -> ServerResult<self_profile::SelfProfile> {
     let profile = self_profile
         .as_ref()
@@ -178,6 +182,7 @@ fn get_self_profile_data(
             .map(|qd| qd.incremental_load_time)
             .sum(),
     };
+    let artifact_sizes = raw_mmprof_data_to_artifact_sizes(raw_data).ok();
     let profile = self_profile::SelfProfile {
         query_data: profile
             .query_data
@@ -195,6 +200,7 @@ fn get_self_profile_data(
             })
             .collect(),
         totals,
+        artifact_sizes,
     };
 
     Ok(profile)
@@ -239,6 +245,8 @@ fn add_uninvoked_base_profile_queries(
 fn get_self_profile_delta(
     profile: &self_profile::SelfProfile,
     base_profile: &Option<self_profile::SelfProfile>,
+    raw_data: Vec<u8>,
+    base_raw_data: Vec<u8>,
 ) -> Option<self_profile::SelfProfileDelta> {
     let base_profile = match base_profile.as_ref() {
         Some(bp) => bp,
@@ -283,7 +291,21 @@ fn get_self_profile_delta(
         }
     }
 
-    Some(self_profile::SelfProfileDelta { totals, query_data })
+    let first = raw_mmprof_data_to_artifact_sizes(raw_data).unwrap_or_else(|_| Vec::new());
+    let base = raw_mmprof_data_to_artifact_sizes(base_raw_data).unwrap_or_else(|_| Vec::new());
+    let artifact_sizes = first
+        .into_iter()
+        .zip(base.into_iter())
+        .map(|(a1, a2)| ArtifactSizeDelta {
+            bytes: a1.bytes - a2.bytes,
+        })
+        .collect();
+
+    Some(self_profile::SelfProfileDelta {
+        totals,
+        query_data,
+        artifact_sizes,
+    })
 }
 
 fn sort_self_profile(
@@ -489,10 +511,10 @@ pub async fn handle_self_profile_raw(
 ) -> ServerResult<self_profile_raw::Response> {
     log::info!("handle_self_profile_raw({:?})", body);
     let mut it = body.benchmark.rsplitn(2, '-');
-    let bench_ty = it.next().ok_or(format!("no benchmark type"))?;
+    let profile = it.next().ok_or(format!("no benchmark type"))?;
     let bench_name = it.next().ok_or(format!("no benchmark name"))?;
 
-    let cache = body
+    let scenario = body
         .run_name
         .parse::<database::Scenario>()
         .map_err(|e| format!("invalid run name: {:?}", e))?;
@@ -506,7 +528,7 @@ pub async fn handle_self_profile_raw(
                 date: database::Date::empty(),
             }),
             bench_name,
-            bench_ty,
+            profile,
             &body.run_name,
         )
         .await;
@@ -526,19 +548,19 @@ pub async fn handle_self_profile_raw(
         _ => first_cid,
     };
 
-    let url_prefix = format!(
-        "https://perf-data.rust-lang.org/self-profile/{}/{}/{}/{}/self-profile-{}",
-        aid.0,
-        bench_name,
-        bench_ty,
-        cache.to_id(),
-        cid,
-    );
-
     let cids = aids_and_cids
         .into_iter()
         .map(|(_, cid)| cid)
         .collect::<Vec<_>>();
+
+    let url_prefix = format!(
+        "https://perf-data.rust-lang.org/self-profile/{}/{}/{}/{}/self-profile-{}",
+        aid.0,
+        bench_name,
+        profile,
+        scenario.to_id(),
+        cid,
+    );
 
     return match fetch(&cids, cid, format!("{}.mm_profdata.sz", url_prefix)).await {
         Ok(fetched) => Ok(fetched),
@@ -568,6 +590,21 @@ pub async fn handle_self_profile_raw(
             url,
         })
     }
+}
+
+pub async fn fetch_raw_self_profile_data(
+    aid: &str,
+    benchmark: &str,
+    profile: &str,
+    scenario: &str,
+    cid: i32,
+) -> Result<Vec<u8>, Response> {
+    let url = format!(
+        "https://perf-data.rust-lang.org/self-profile/{}/{}/{}/{}/self-profile-{}",
+        aid, benchmark, profile, scenario, cid,
+    );
+
+    get_self_profile_raw_data(&url).await
 }
 
 pub async fn handle_self_profile(
@@ -653,10 +690,32 @@ pub async fn handle_self_profile(
         .await?;
     assert_eq!(cpu_responses.len(), 1, "all selectors are exact");
     let mut cpu_response = cpu_responses.remove(0).series;
-
+    let mut raw_data = Vec::new();
+    let conn = ctxt.conn().await;
+    for commit in commits.iter() {
+        let aid = match commit {
+            ArtifactId::Commit(c) => c.sha.as_str(),
+            ArtifactId::Tag(t) => t.as_str(),
+        };
+        let aids_and_cids = conn
+            .list_self_profile(commit.clone(), bench_name, profile, &body.run_name)
+            .await;
+        if let Some((_, cid)) = aids_and_cids.first() {
+            match fetch_raw_self_profile_data(aid, bench_name, profile, &body.run_name, *cid).await
+            {
+                Ok(d) => raw_data.push(d),
+                Err(_resp) => {
+                    eprintln!("could not fetch raw self_profile data");
+                }
+            };
+        }
+    }
+    let raw_datum = raw_data.remove(0);
+    let base_raw_datum = raw_data.remove(0);
     let mut profile = get_self_profile_data(
         cpu_response.next().unwrap().1,
         sp_response.next().unwrap().1,
+        raw_datum.clone(),
     )
     .map_err(|e| format!("{}: {}", body.commit, e))?;
     let base_profile = if body.base_commit.is_some() {
@@ -664,6 +723,7 @@ pub async fn handle_self_profile(
             get_self_profile_data(
                 cpu_response.next().unwrap().1,
                 sp_response.next().unwrap().1,
+                base_raw_datum.clone(),
             )
             .map_err(|e| format!("{}: {}", body.base_commit.as_ref().unwrap(), e))?,
         )
@@ -672,11 +732,41 @@ pub async fn handle_self_profile(
     };
 
     add_uninvoked_base_profile_queries(&mut profile, &base_profile);
-    let mut base_profile_delta = get_self_profile_delta(&profile, &base_profile);
+    let mut base_profile_delta =
+        get_self_profile_delta(&profile, &base_profile, raw_datum, base_raw_datum);
     sort_self_profile(&mut profile, &mut base_profile_delta, sort_idx);
 
     Ok(self_profile::Response {
         base_profile_delta,
         profile,
     })
+}
+
+fn raw_mmprof_data_to_artifact_sizes(
+    data: Vec<u8>,
+) -> anyhow::Result<Vec<self_profile::ArtifactSize>> {
+    let profiling_data = analyzeme::ProfilingData::from_paged_buffer(data, None)
+        .map_err(|_| anyhow::Error::msg("could not parse profiling data"))?;
+
+    let mut artifact_sizes: BTreeMap<_, u64> = Default::default();
+
+    for event in profiling_data.iter_full() {
+        // TODO: Use constant from measureme::rustc
+        if event.event_kind == "ArtifactSize" {
+            if !event.payload.is_integer() {
+                anyhow::bail!("Found ArtifactSize payload that is not an integer")
+            }
+
+            let bytes = event.payload.integer().unwrap();
+            *artifact_sizes.entry(event.label).or_default() += bytes;
+        }
+    }
+
+    Ok(artifact_sizes
+        .iter()
+        .map(|(k, v)| self_profile::ArtifactSize {
+            label: k[..].into(),
+            bytes: *v,
+        })
+        .collect())
 }
