@@ -9,7 +9,7 @@
 # Infer previous week's triage report: look for files from 6, 7, and 8 days ago.
 # (Usually it will be 7.)
 
-LAST_WEEK_FILE=$(for i in 6 7 8 ; do ls $(printf "%04d-%02d-%02d.md " $(date +%Y) $(date +%m) $(echo $(date +%d) - $i | bc)) 2> /dev/null ; done)
+LAST_WEEK_FILE=$(for i in 6 7 8 ; do ls  $(date -d "$i days ago" +%04Y-%02m-%02d).md ; done)
 echo "last week: $LAST_WEEK_FILE"
 
 # Turn on exit error code checking. (We cannot do it above because the `ls` invocation above includes ones with error exits.)
