@@ -389,6 +389,7 @@
                 </div>
             </div>
         </fieldset>
+        <p v-if="dataLoading && !data">Loading ...</p>
         <div v-if="data" id="content" style="margin-top: 15px">
             <div id="summary">
                 <div v-for="summaryPair in Object.entries(summary)" style="display: flex;">
@@ -421,7 +422,7 @@
                 </div>
             </div>
             <table id="benches" class="compare">
-                <tbody>
+                <thead>
                     <tr>
                         <th>Benchmark & Profile</th>
                         <th>Scenario</th>
@@ -440,8 +441,11 @@
                         <th>{{before}}</th>
                         <th>{{after}}</th>
                     </tr>
+                </thead>
+                <tbody v-if="testCases.length === 0">
+                    <tr><td colspan="6">No results</td></tr>
                 </tbody>
-                <tbody>
+                <tbody v-else>
                     <template v-for="testCase in testCases">
                         <tr>
                             <td>{{ testCase.benchmark }} {{ testCase.profile }}</td>
@@ -534,7 +538,8 @@
                         incrPatched: true
                     }
                 },
-                data: null
+                data: null,
+                dataLoading: false
             },
             computed: {
                 notContinuous() {
@@ -783,6 +788,7 @@
         }
 
         function makeData(state) {
+            app.dataLoading = true;
             let values = Object.assign({}, {
                 start: "",
                 end: "",
@@ -795,6 +801,8 @@
             }
             makeRequest("/get", values).then(function (data) {
                 app.data = data;
+            }).finally(function () {
+                app.dataLoading = false;
             });
         }
 
