@@ -389,6 +389,22 @@
                 </div>
             </div>
         </fieldset>
+        <fieldset id="display">
+            <legend id="display-toggle" class="section-heading">Display<span id="display-toggle-indicator"></span>
+            </legend>
+            <div id="display-content" style="display: none;">
+                <div class="section">
+                    <div class="section-heading"><span>Display raw data</span>
+                        <span class="tooltip">?
+                            <span class="tooltiptext">
+                                Whether to display or not raw data columns.
+                            </span>
+                        </span>
+                    </div>
+                    <input type="checkbox" v-model="showRawData" style="margin-left: 20px;" />
+                </div>
+            </div>
+        </fieldset>
         <p v-if="dataLoading && !data">Loading ...</p>
         <div v-if="data" id="content" style="margin-top: 15px">
             <div id="summary">
@@ -438,8 +454,8 @@
                                 </span>
                             </span>
                         </th>
-                        <th>{{before}}</th>
-                        <th>{{after}}</th>
+                        <th v-if="showRawData">{{before}}</th>
+                        <th v-if="showRawData">{{after}}</th>
                     </tr>
                 </thead>
                 <tbody v-if="testCases.length === 0">
@@ -458,17 +474,16 @@
                                 </a>
                             </td>
                             <td>
-                                {{ testCase.significanceFactor ? testCase.significanceFactor.toFixed(2) + "x" :"-"
-                                }}
+                                {{ testCase.significanceFactor ? testCase.significanceFactor.toFixed(2) + "x" : "-" }}
                             </td>
-                            <td>
+                            <td v-if="showRawData">
                                 <a v-bind:href="detailedQueryLink(data.a.commit, testCase)">
-                                    {{ testCase.datumA }}
+                                    <abbr :title="testCase.datumA">{{ testCase.datumA.toFixed(2) }}</abbr>
                                 </a>
                             </td>
-                            <td>
+                            <td v-if="showRawData">
                                 <a v-bind:href="detailedQueryLink(data.b.commit, testCase)">
-                                    {{ testCase.datumB }}
+                                    <abbr :title="testCase.datumB">{{ testCase.datumB.toFixed(2) }}</abbr>
                                 </a>
                             </td>
                         </tr>
@@ -538,6 +553,7 @@
                         incrPatched: true
                     }
                 },
+                showRawData: false,
                 data: null,
                 dataLoading: false
             },
@@ -767,6 +783,7 @@
         }
         toggleFilters("filters-content", "filters-toggle-indicator");
         toggleFilters("search-content", "search-toggle-indicator");
+        toggleFilters("display-content", "display-toggle-indicator");
 
         function testCaseString(testCase) {
             return testCase.benchmark + "-" + testCase.profile + "-" + testCase.scenario;
@@ -777,6 +794,9 @@
         };
         document.getElementById("search-toggle").onclick = (e) => {
             toggleFilters("search-content", "search-toggle-indicator");
+        };
+        document.getElementById("display-toggle").onclick = (e) => {
+            toggleFilters("display-content", "display-toggle-indicator");
         };
 
         function unique(arr) {
