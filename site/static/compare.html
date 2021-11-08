@@ -784,6 +784,8 @@
         }
         toggleFilters("filters-content", "filters-toggle-indicator");
         toggleFilters("search-content", "search-toggle-indicator");
+        // Toggle twice in order to display the icon and keep the section closed
+        toggleFilters("display-content", "display-toggle-indicator");
         toggleFilters("display-content", "display-toggle-indicator");
 
         function testCaseString(testCase) {
