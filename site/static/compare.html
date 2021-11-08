@@ -387,12 +387,6 @@
                     </div>
                     <input type="checkbox" v-model="filter.filterVerySmall" style="margin-left: 20px;" />
                 </div>
-            </div>
-        </fieldset>
-        <fieldset id="display">
-            <legend id="display-toggle" class="section-heading">Display<span id="display-toggle-indicator"></span>
-            </legend>
-            <div id="display-content" style="display: none;">
                 <div class="section">
                     <div class="section-heading"><span>Display raw data</span>
                         <span class="tooltip">?
@@ -784,7 +778,6 @@
         }
         toggleFilters("filters-content", "filters-toggle-indicator");
         toggleFilters("search-content", "search-toggle-indicator");
-        toggleFilters("display-content", "display-toggle-indicator");
 
         function testCaseString(testCase) {
             return testCase.benchmark + "-" + testCase.profile + "-" + testCase.scenario;
@@ -795,9 +788,6 @@
         };
         document.getElementById("search-toggle").onclick = (e) => {
             toggleFilters("search-content", "search-toggle-indicator");
-        };
-        document.getElementById("display-toggle").onclick = (e) => {
-            toggleFilters("display-content", "display-toggle-indicator");
         };
 
         function unique(arr) {
