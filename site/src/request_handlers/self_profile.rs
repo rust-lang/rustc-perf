@@ -3,6 +3,7 @@ use std::io::Read;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use analyzeme::ProfilingData;
 use bytes::Buf;
 use database::ArtifactIdNumber;
 use headers::{ContentType, Header};
@@ -144,7 +145,7 @@ pub async fn handle_self_profile_processed_download(
 fn get_self_profile_data(
     cpu_clock: Option<f64>,
     self_profile: Option<crate::selector::SelfProfileData>,
-    raw_data: Vec<u8>,
+    profiling_data: &ProfilingData,
 ) -> ServerResult<self_profile::SelfProfile> {
     let profile = self_profile
         .as_ref()
@@ -181,7 +182,7 @@ fn get_self_profile_data(
             .map(|qd| qd.incremental_load_time)
             .sum(),
     };
-    let artifact_sizes = raw_mmprof_data_to_artifact_sizes(raw_data).ok();
+    let artifact_sizes = raw_mmprof_data_to_artifact_sizes(profiling_data).ok();
     let profile = self_profile::SelfProfile {
         query_data: profile
             .query_data
@@ -244,11 +245,11 @@ fn add_uninvoked_base_profile_queries(
 fn get_self_profile_delta(
     profile: &self_profile::SelfProfile,
     base_profile: &Option<self_profile::SelfProfile>,
-    raw_data: Vec<u8>,
-    base_raw_data: Option<Vec<u8>>,
+    profiling_data: &ProfilingData,
+    base_profiling_data: Option<&ProfilingData>,
 ) -> Option<self_profile::SelfProfileDelta> {
     let base_profile = base_profile.as_ref()?;
-    let base_raw_data = base_raw_data?;
+    let base_raw_data = base_profiling_data?;
 
     let totals = self_profile::QueryDataDelta {
         self_time: profile.totals.self_time as i64 - base_profile.totals.self_time as i64,
@@ -288,13 +289,13 @@ fn get_self_profile_delta(
         }
     }
 
-    let first = raw_mmprof_data_to_artifact_sizes(raw_data).unwrap_or_else(|_| Vec::new());
+    let first = raw_mmprof_data_to_artifact_sizes(profiling_data).unwrap_or_else(|_| Vec::new());
     let base = raw_mmprof_data_to_artifact_sizes(base_raw_data).unwrap_or_else(|_| Vec::new());
     let artifact_sizes = first
         .into_iter()
         .zip(base.into_iter())
         .map(|(a1, a2)| ArtifactSizeDelta {
-            bytes: a1.bytes - a2.bytes,
+            bytes: a1.bytes as i64 - a2.bytes as i64,
         })
         .collect();
 
@@ -687,7 +688,7 @@ pub async fn handle_self_profile(
         .await?;
     assert_eq!(cpu_responses.len(), 1, "all selectors are exact");
     let mut cpu_response = cpu_responses.remove(0).series;
-    let mut raw_self_profile_data = Vec::new();
+    let mut self_profile_data = Vec::new();
     let conn = ctxt.conn().await;
     for commit in commits.iter() {
         let aids_and_cids = conn
@@ -696,34 +697,37 @@ pub async fn handle_self_profile(
         if let Some((aid, cid)) = aids_and_cids.first() {
             match fetch_raw_self_profile_data(*aid, bench_name, profile, &body.run_name, *cid).await
             {
-                Ok(d) => raw_self_profile_data.push(d),
+                Ok(d) => self_profile_data.push(
+                    extract_profiling_data(d)
+                        .map_err(|e| format!("error extracting self profiling data: {}", e))?,
+                ),
                 Err(_) => return Err(format!("could not fetch raw profile data")),
             };
         }
     }
-    let raw_data = raw_self_profile_data.remove(0);
+    let profiling_data = self_profile_data.get(0).unwrap();
     let mut profile = get_self_profile_data(
         cpu_response.next().unwrap().1,
         sp_response.next().unwrap().1,
-        raw_data.clone(),
+        profiling_data,
     )
     .map_err(|e| format!("{}: {}", body.commit, e))?;
     let (base_profile, base_raw_data) = if body.base_commit.is_some() {
-        let base_raw_data = raw_self_profile_data.remove(0);
+        let base_profiling_data = self_profile_data.get(1).unwrap();
         let profile = get_self_profile_data(
             cpu_response.next().unwrap().1,
             sp_response.next().unwrap().1,
-            base_raw_data.clone(),
+            base_profiling_data,
         )
         .map_err(|e| format!("{}: {}", body.base_commit.as_ref().unwrap(), e))?;
-        (Some(profile), Some(base_raw_data))
+        (Some(profile), Some(base_profiling_data))
     } else {
         (None, None)
     };
 
     add_uninvoked_base_profile_queries(&mut profile, &base_profile);
     let mut base_profile_delta =
-        get_self_profile_delta(&profile, &base_profile, raw_data, base_raw_data);
+        get_self_profile_delta(&profile, &base_profile, profiling_data, base_raw_data);
     sort_self_profile(&mut profile, &mut base_profile_delta, sort_idx);
 
     Ok(self_profile::Response {
@@ -733,11 +737,8 @@ pub async fn handle_self_profile(
 }
 
 fn raw_mmprof_data_to_artifact_sizes(
-    data: Vec<u8>,
+    profiling_data: &ProfilingData,
 ) -> anyhow::Result<Vec<self_profile::ArtifactSize>> {
-    let profiling_data = analyzeme::ProfilingData::from_paged_buffer(data, None)
-        .map_err(|_| anyhow::Error::msg("could not parse profiling data"))?;
-
     let mut artifact_sizes: BTreeMap<_, u64> = Default::default();
 
     for event in profiling_data.iter_full() {
@@ -759,4 +760,9 @@ fn raw_mmprof_data_to_artifact_sizes(
             bytes: *v,
         })
         .collect())
+}
+
+fn extract_profiling_data(data: Vec<u8>) -> Result<analyzeme::ProfilingData, anyhow::Error> {
+    analyzeme::ProfilingData::from_paged_buffer(data, None)
+        .map_err(|_| anyhow::Error::msg("could not parse profiling data"))
 }
