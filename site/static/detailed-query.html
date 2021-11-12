@@ -59,6 +59,14 @@
             border-radius: 3px;
             user-select: all;
         }
+
+        #artifact-table th {
+            text-align: center;
+        }
+
+        #artifact-table td {
+            padding: 0 0 0 20px;
+        }
     </style>
 </head>
 
@@ -70,6 +78,18 @@
     <div id="content">
         <h3 id="title"></h3>
         <div id="raw-urls"></div>
+        <h4>Artifact Size</h4>
+        <table id="artifact-table">
+            <thead>
+                <tr id="table-header">
+                    <th>Artifact</th>
+                    <th>Size</th>
+                    <th>Size delta</th>
+                </tr>
+            </thead>
+            <tbody id="artifact-body">
+            </tbody>
+        </table>
         <p>'Time (%)' is the percentage of the cpu-clock time spent on this query (we do not use
             wall-time as we want to account for parallelism).</p>
         <p>Executions do not include cached executions.</p>
@@ -152,7 +172,7 @@
             let processed_url = (commit, bench, run, ty) => {
                 return `/perf/processed-self-profile?commit=${commit}&benchmark=${bench}&run_name=${run}&type=${ty}`;
             };
-            let processed_link = (commit, {benchmark, run_name}, ty) => {
+            let processed_link = (commit, { benchmark, run_name }, ty) => {
                 let url = processed_url(commit, benchmark, run_name, ty);
                 return `<a href="${url}">${ty}</a>`;
             };
@@ -313,13 +333,32 @@
                         fmt_delta(
                             to_seconds(cur.incremental_load_time),
                             to_seconds(delta.incremental_load_time),
-                           false,
+                            false,
                         ),
                         true).classList.add("incr");
                 } else {
                     td(row, "-", true).classList.add("incr");
                 }
                 table.appendChild(row);
+                idx += 1;
+            }
+
+            let artifactTable = document.getElementById("artifact-body");
+            function td(row, content) {
+                let td = document.createElement("td");
+                td.innerHTML = content;
+                row.appendChild(td);
+                return td;
+            }
+            for (let [idx, element] of data.profile.artifact_sizes.entries()) {
+                let row = document.createElement("tr");
+                const label = td(row, element.label);
+                label.style.textAlign = "center";
+                td(row, element.bytes);
+                if (data.base_profile_delta && data.base_profile_delta.artifact_sizes[idx]) {
+                    td(row, data.base_profile_delta.artifact_sizes[idx].bytes);
+                }
+                artifactTable.appendChild(row);
                 idx += 1;
             }
         }

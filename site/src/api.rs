@@ -296,6 +296,7 @@ pub mod self_profile {
     pub struct SelfProfile {
         pub totals: QueryData,
         pub query_data: Vec<QueryData>,
+        pub artifact_sizes: Option<Vec<ArtifactSize>>,
     }
 
     #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -313,10 +314,17 @@ pub mod self_profile {
         pub incremental_load_time: u64,
     }
 
+    #[derive(Serialize, Deserialize, Clone, Debug)]
+    pub struct ArtifactSize {
+        pub label: QueryLabel,
+        pub bytes: u64,
+    }
+
     #[derive(Serialize, Debug, Clone)]
     pub struct SelfProfileDelta {
         pub totals: QueryDataDelta,
         pub query_data: Vec<QueryDataDelta>,
+        pub artifact_sizes: Vec<ArtifactSizeDelta>,
     }
 
     #[derive(Serialize, Clone, Debug)]
@@ -326,6 +334,11 @@ pub mod self_profile {
         pub invocation_count: i32,
         // Nanoseconds
         pub incremental_load_time: i64,
+    }
+
+    #[derive(Serialize, Clone, Debug)]
+    pub struct ArtifactSizeDelta {
+        pub bytes: u64,
     }
 }
 
