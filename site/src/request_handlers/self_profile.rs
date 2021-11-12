@@ -1,9 +1,10 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::io::Read;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use bytes::Buf;
+use database::ArtifactIdNumber;
 use headers::{ContentType, Header};
 use hyper::StatusCode;
 
@@ -13,8 +14,6 @@ use crate::db::ArtifactId;
 use crate::load::SiteCtxt;
 use crate::selector::{self, Tag};
 use crate::server::{Response, ResponseHeaders};
-
-use std::collections::BTreeMap;
 
 pub async fn handle_self_profile_processed_download(
     body: self_profile_processed::Request,
@@ -246,12 +245,10 @@ fn get_self_profile_delta(
     profile: &self_profile::SelfProfile,
     base_profile: &Option<self_profile::SelfProfile>,
     raw_data: Vec<u8>,
-    base_raw_data: Vec<u8>,
+    base_raw_data: Option<Vec<u8>>,
 ) -> Option<self_profile::SelfProfileDelta> {
-    let base_profile = match base_profile.as_ref() {
-        Some(bp) => bp,
-        None => return None,
-    };
+    let base_profile = base_profile.as_ref()?;
+    let base_raw_data = base_raw_data?;
 
     let totals = self_profile::QueryDataDelta {
         self_time: profile.totals.self_time as i64 - base_profile.totals.self_time as i64,
@@ -593,15 +590,15 @@ pub async fn handle_self_profile_raw(
 }
 
 pub async fn fetch_raw_self_profile_data(
-    aid: &str,
+    aid: ArtifactIdNumber,
     benchmark: &str,
     profile: &str,
     scenario: &str,
     cid: i32,
 ) -> Result<Vec<u8>, Response> {
     let url = format!(
-        "https://perf-data.rust-lang.org/self-profile/{}/{}/{}/{}/self-profile-{}",
-        aid, benchmark, profile, scenario, cid,
+        "https://perf-data.rust-lang.org/self-profile/{}/{}/{}/{}/self-profile-{}.mm_profdata.sz",
+        aid.0, benchmark, profile, scenario, cid,
     );
 
     get_self_profile_raw_data(&url).await
@@ -690,50 +687,43 @@ pub async fn handle_self_profile(
         .await?;
     assert_eq!(cpu_responses.len(), 1, "all selectors are exact");
     let mut cpu_response = cpu_responses.remove(0).series;
-    let mut raw_data = Vec::new();
+    let mut raw_self_profile_data = Vec::new();
     let conn = ctxt.conn().await;
     for commit in commits.iter() {
-        let aid = match commit {
-            ArtifactId::Commit(c) => c.sha.as_str(),
-            ArtifactId::Tag(t) => t.as_str(),
-        };
         let aids_and_cids = conn
             .list_self_profile(commit.clone(), bench_name, profile, &body.run_name)
             .await;
-        if let Some((_, cid)) = aids_and_cids.first() {
-            match fetch_raw_self_profile_data(aid, bench_name, profile, &body.run_name, *cid).await
+        if let Some((aid, cid)) = aids_and_cids.first() {
+            match fetch_raw_self_profile_data(*aid, bench_name, profile, &body.run_name, *cid).await
             {
-                Ok(d) => raw_data.push(d),
-                Err(_resp) => {
-                    eprintln!("could not fetch raw self_profile data");
-                }
+                Ok(d) => raw_self_profile_data.push(d),
+                Err(_) => return Err(format!("could not fetch raw profile data")),
             };
         }
     }
-    let raw_datum = raw_data.remove(0);
-    let base_raw_datum = raw_data.remove(0);
+    let raw_data = raw_self_profile_data.remove(0);
     let mut profile = get_self_profile_data(
         cpu_response.next().unwrap().1,
         sp_response.next().unwrap().1,
-        raw_datum.clone(),
+        raw_data.clone(),
     )
     .map_err(|e| format!("{}: {}", body.commit, e))?;
-    let base_profile = if body.base_commit.is_some() {
-        Some(
-            get_self_profile_data(
-                cpu_response.next().unwrap().1,
-                sp_response.next().unwrap().1,
-                base_raw_datum.clone(),
-            )
-            .map_err(|e| format!("{}: {}", body.base_commit.as_ref().unwrap(), e))?,
+    let (base_profile, base_raw_data) = if body.base_commit.is_some() {
+        let base_raw_data = raw_self_profile_data.remove(0);
+        let profile = get_self_profile_data(
+            cpu_response.next().unwrap().1,
+            sp_response.next().unwrap().1,
+            base_raw_data.clone(),
         )
+        .map_err(|e| format!("{}: {}", body.base_commit.as_ref().unwrap(), e))?;
+        (Some(profile), Some(base_raw_data))
     } else {
-        None
+        (None, None)
     };
 
     add_uninvoked_base_profile_queries(&mut profile, &base_profile);
     let mut base_profile_delta =
-        get_self_profile_delta(&profile, &base_profile, raw_datum, base_raw_datum);
+        get_self_profile_delta(&profile, &base_profile, raw_data, base_raw_data);
     sort_self_profile(&mut profile, &mut base_profile_delta, sort_idx);
 
     Ok(self_profile::Response {
