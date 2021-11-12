@@ -701,7 +701,7 @@ pub async fn handle_self_profile(
                     extract_profiling_data(d)
                         .map_err(|e| format!("error extracting self profiling data: {}", e))?,
                 ),
-                Err(_) => return Err(format!("could not fetch raw profile data")),
+                Err(e) => return Err(format!("could not fetch raw profile data: {:?}", e.body())),
             };
         }
     }
