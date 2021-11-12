@@ -338,7 +338,7 @@ pub mod self_profile {
 
     #[derive(Serialize, Clone, Debug)]
     pub struct ArtifactSizeDelta {
-        pub bytes: u64,
+        pub bytes: i64,
     }
 }
 
