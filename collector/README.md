@@ -74,10 +74,11 @@ benchmarks, runs, or builds. Progress output is printed to stderr.
 The following arguments are mandatory.
 
 - `<RUSTC>`: a path (relative or absolute) to a rustc executable that will be
-  benchmarked. Some benchmarks use plugins, which require a stage 2 compiler.
-  Therefore, the value is likely to be something like
-  `$RUST/build/x86_64-unknown-linux-gnu/stage2/bin/rustc`, where `$RUST` is a
-  path (relative or absolute) to a `rust` repository.
+  benchmarked. The value is likely to be something like
+  `$RUST/build/x86_64-unknown-linux-gnu/stage1/bin/rustc`, where `$RUST` is a
+  path (relative or absolute) to a `rust` repository. You can use either a
+  stage 1 or a stage 2 compiler, but if you're comparing two versions you
+  should choose consistently.
 
 - `<ID>`: an identifier which will be used to identify the results in the
   database.
