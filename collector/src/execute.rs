@@ -159,7 +159,7 @@ impl fmt::Display for BenchmarkName {
 pub struct Benchmark {
     pub name: BenchmarkName,
     pub path: PathBuf,
-    patches: Vec<Patch>,
+    pub patches: Vec<Patch>,
     config: BenchmarkConfig,
 }
 
