@@ -519,16 +519,22 @@ fn generate_cachegrind_diffs(
     let mut annotated_diffs = Vec::new();
     for benchmark in benchmarks {
         for &profile_kind in profile_kinds {
-            for &scenario_kind in scenario_kinds {
-                if let ScenarioKind::IncrPatched = scenario_kind {
-                    continue;
+            for scenario_kind in scenario_kinds.iter().flat_map(|kind| {
+                if profile_kind == ProfileKind::Doc && kind.is_incr() {
+                    return vec![];
                 }
-                if profile_kind == ProfileKind::Doc && scenario_kind.is_incr() {
-                    continue;
+                match kind {
+                    ScenarioKind::Full | ScenarioKind::IncrFull | ScenarioKind::IncrUnchanged => {
+                        vec![format!("{:?}", kind)]
+                    }
+                    ScenarioKind::IncrPatched => (0..benchmark.patches.len())
+                        .map(|i| format!("{:?}{}", kind, i))
+                        .collect::<Vec<_>>(),
                 }
+            }) {
                 let filename = |prefix, id| {
                     format!(
-                        "{}-{}-{}-{:?}-{:?}",
+                        "{}-{}-{}-{:?}-{}",
                         prefix, id, benchmark.name, profile_kind, scenario_kind
                     )
                 };
