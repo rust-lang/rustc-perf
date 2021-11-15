@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 
 use analyzeme::ProfilingData;
 use bytes::Buf;
-use database::ArtifactIdNumber;
+use database::{ArtifactIdNumber, Scenario};
 use headers::{ContentType, Header};
 use hyper::StatusCode;
 
@@ -380,8 +380,14 @@ async fn get_self_profile_raw_data(url: &str) -> Result<Vec<u8>, Response> {
     };
 
     if !resp.status().is_success() {
-        let mut resp =
-            Response::new(format!("upstream status {:?} is not successful", resp.status()).into());
+        let mut resp = Response::new(
+            format!(
+                "upstream status {:?} is not successful.\nurl={}",
+                resp.status(),
+                url
+            )
+            .into(),
+        );
         *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
         return Err(resp);
     }
@@ -594,12 +600,13 @@ pub async fn fetch_raw_self_profile_data(
     aid: ArtifactIdNumber,
     benchmark: &str,
     profile: &str,
-    scenario: &str,
+    scenario: Scenario,
     cid: i32,
 ) -> Result<Vec<u8>, Response> {
-    let url = format!(
+    let url =
+        format!(
         "https://perf-data.rust-lang.org/self-profile/{}/{}/{}/{}/self-profile-{}.mm_profdata.sz",
-        aid.0, benchmark, profile, scenario, cid,
+        aid.0, benchmark, profile, scenario.to_id(), cid,
     );
 
     get_self_profile_raw_data(&url).await
@@ -613,6 +620,10 @@ pub async fn handle_self_profile(
     let mut it = body.benchmark.rsplitn(2, '-');
     let profile = it.next().ok_or(format!("no benchmark type"))?;
     let bench_name = it.next().ok_or(format!("no benchmark name"))?;
+    let scenario = body
+        .run_name
+        .parse::<database::Scenario>()
+        .map_err(|e| format!("invalid run name: {:?}", e))?;
     let index = ctxt.index.load();
 
     let sort_idx = body
@@ -695,8 +706,7 @@ pub async fn handle_self_profile(
             .list_self_profile(commit.clone(), bench_name, profile, &body.run_name)
             .await;
         if let Some((aid, cid)) = aids_and_cids.first() {
-            match fetch_raw_self_profile_data(*aid, bench_name, profile, &body.run_name, *cid).await
-            {
+            match fetch_raw_self_profile_data(*aid, bench_name, profile, scenario, *cid).await {
                 Ok(d) => self_profile_data.push(
                     extract_profiling_data(d)
                         .map_err(|e| format!("error extracting self profiling data: {}", e))?,
