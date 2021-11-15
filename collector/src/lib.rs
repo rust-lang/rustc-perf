@@ -186,7 +186,12 @@ pub fn robocopy(
 }
 
 fn run_command_with_output(cmd: &mut Command) -> anyhow::Result<process::Output> {
-    let mut child = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
+    use anyhow::Context;
+    let mut child = cmd
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .with_context(|| format!("failed to spawn process for cmd: {:?}", cmd))?;
 
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
@@ -213,7 +218,9 @@ fn run_command_with_output(cmd: &mut Command) -> anyhow::Result<process::Output>
         },
     )?;
 
-    let status = child.wait()?;
+    let status = child
+        .wait()
+        .with_context(|| "failed to wait on child process")?;
 
     Ok(process::Output {
         status,
