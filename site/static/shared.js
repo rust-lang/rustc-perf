@@ -197,6 +197,11 @@ function loadState(callback, skip_settings) {
         let value = param[1];
         state[key] = value;
     }
+    // Handle renaming of `run_name` to `scenario`
+    if (state.run_name && !state.scenario) {
+        state.scenario = state.run_name;
+        state.run_name = undefined;
+    }
     if (state.start) {
         document.getElementById("start-bound").value = state.start;
     }

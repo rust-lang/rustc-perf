@@ -38,14 +38,14 @@ pub async fn handle_self_profile_processed_download(
             &diff_against[..std::cmp::min(7, diff_against.len())],
             &body.commit[..std::cmp::min(7, body.commit.len())],
             body.benchmark,
-            body.run_name
+            body.scenario
         )
     } else {
         format!(
             "{}: {} {}",
             &body.commit[..std::cmp::min(7, body.commit.len())],
             body.benchmark,
-            body.run_name
+            body.scenario
         )
     };
 
@@ -56,7 +56,7 @@ pub async fn handle_self_profile_processed_download(
             self_profile_raw::Request {
                 commit: diff_against,
                 benchmark: body.benchmark.clone(),
-                run_name: body.run_name.clone(),
+                scenario: body.scenario.clone(),
                 cid: None,
             },
             ctxt,
@@ -81,7 +81,7 @@ pub async fn handle_self_profile_processed_download(
         self_profile_raw::Request {
             commit: body.commit,
             benchmark: body.benchmark.clone(),
-            run_name: body.run_name.clone(),
+            scenario: body.scenario.clone(),
             cid: body.cid,
         },
         ctxt,
@@ -519,7 +519,7 @@ pub async fn handle_self_profile_raw(
     let bench_name = it.next().ok_or(format!("no benchmark name"))?;
 
     let scenario = body
-        .run_name
+        .scenario
         .parse::<database::Scenario>()
         .map_err(|e| format!("invalid run name: {:?}", e))?;
 
@@ -533,7 +533,7 @@ pub async fn handle_self_profile_raw(
             }),
             bench_name,
             profile,
-            &body.run_name,
+            &body.scenario,
         )
         .await;
     let (aid, first_cid) = aids_and_cids
@@ -621,7 +621,7 @@ pub async fn handle_self_profile(
     let profile = it.next().ok_or(format!("no benchmark type"))?;
     let bench_name = it.next().ok_or(format!("no benchmark name"))?;
     let scenario = body
-        .run_name
+        .scenario
         .parse::<database::Scenario>()
         .map_err(|e| format!("invalid run name: {:?}", e))?;
     let index = ctxt.index.load();
@@ -637,7 +637,7 @@ pub async fn handle_self_profile(
         .set(Tag::Profile, selector::Selector::One(profile))
         .set(
             Tag::Scenario,
-            selector::Selector::One(body.run_name.clone()),
+            selector::Selector::One(body.scenario.clone()),
         );
 
     let mut commits = vec![index
@@ -703,7 +703,7 @@ pub async fn handle_self_profile(
     let conn = ctxt.conn().await;
     for commit in commits.iter() {
         let aids_and_cids = conn
-            .list_self_profile(commit.clone(), bench_name, profile, &body.run_name)
+            .list_self_profile(commit.clone(), bench_name, profile, &body.scenario)
             .await;
         if let Some((aid, cid)) = aids_and_cids.first() {
             match fetch_raw_self_profile_data(*aid, bench_name, profile, scenario, *cid).await {
