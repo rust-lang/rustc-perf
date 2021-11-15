@@ -209,7 +209,14 @@ fn main() {
 
                 // With --cache-sim=no and --branch-sim=no, Cachegrind just
                 // collects instruction counts.
-                cmd.arg("--tool=cachegrind")
+                cmd
+                    // We disable jemalloc's delayed purging to eliminate noise
+                    // when benchmarks are around the 10 second mark.
+                    //
+                    // See https://github.com/rust-lang/rust/pull/77162 for some
+                    // further details.
+                    .env("MALLOC_CONF", "dirty_decay_ms:0,muzzy_decay_ms:0")
+                    .arg("--tool=cachegrind")
                     .arg("--cache-sim=no")
                     .arg("--branch-sim=no")
                     .arg("--cachegrind-out-file=cgout")
