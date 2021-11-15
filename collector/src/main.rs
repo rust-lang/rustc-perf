@@ -321,18 +321,25 @@ fn bench(
 }
 
 fn check_measureme_installed() -> Result<(), String> {
-    let mut binaries = vec![];
-
-    for name in ["summarize", "crox", "flamegraph"] {
-        if let Err(_) = Command::new(name).output() {
-            binaries.push(name);
-        }
-    }
-    if binaries.is_empty() {
+    let not_installed = std::array::IntoIter::new(["summarize", "crox", "flamegraph"])
+        .filter(|n| !is_installed(n))
+        .collect::<Vec<_>>();
+    if not_installed.is_empty() {
         Ok(())
     } else {
-        Err(format!("To run this command you need {0} on your PATH. To install run `cargo install --git https://github.com/rust-lang/measureme --branch stable {0}`\n", binaries.join(" ")))
+        Err(format!("To run this command you need {0} on your PATH. To install run `cargo install --git https://github.com/rust-lang/measureme --branch stable {0}`\n", not_installed.join(" ")))
     }
+}
+
+fn check_installed(name: &str) -> anyhow::Result<()> {
+    if !is_installed(name) {
+        anyhow::bail!("`{}` is not installed but must be", name);
+    }
+    Ok(())
+}
+
+fn is_installed(name: &str) -> bool {
+    Command::new(name).output().is_ok()
 }
 
 fn get_benchmarks(
@@ -490,14 +497,19 @@ fn get_local_toolchain(
             .with_context(|| format!("failed to canonicalize cargo executable '{}'", cargo))?
     } else {
         // Use the nightly cargo from `rustup`.
-        let s = String::from_utf8(
-            Command::new("rustup")
-                .args(&["which", "cargo", "--toolchain=nightly"])
-                .output()
-                .context("failed to run `rustup which cargo`")?
-                .stdout,
-        )
-        .context("failed to convert `rustup which cargo` output to utf8")?;
+        let output = Command::new("rustup")
+            .args(&["which", "cargo", "--toolchain=nightly"])
+            .output()
+            .context("failed to run `rustup which cargo`")?;
+        if !output.status.success() {
+            anyhow::bail!(
+                "`rustup which cargo` exited with status {}\nstderr={}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+            )
+        }
+        let s = String::from_utf8(output.stdout)
+            .context("failed to convert `rustup which cargo` output to utf8")?;
 
         let cargo = PathBuf::from(s.trim());
         debug!("found cargo: {:?}", &cargo);
@@ -576,6 +588,9 @@ fn generate_cachegrind_diffs(
 
 /// Demangles symbols in a file using rustfilt and writes result to path.
 fn rustfilt(cgout: &Path, path: &Path) -> anyhow::Result<()> {
+    if !is_installed("rustfilt") {
+        anyhow::bail!("`rustfilt` not installed.");
+    }
     let output = Command::new("rustfilt")
         .arg("-i")
         .arg(cgout)
@@ -594,6 +609,9 @@ fn rustfilt(cgout: &Path, path: &Path) -> anyhow::Result<()> {
 
 /// Compares two Cachegrind output files using cg_diff and writes result to path.
 fn cg_diff(cgout1: &Path, cgout2: &Path, path: &Path) -> anyhow::Result<()> {
+    if !is_installed("cg_diff") {
+        anyhow::bail!("`cg_diff` not installed.");
+    }
     let output = Command::new("cg_diff")
         .arg("--mod-filename=s#/rustc/[^/]*/##")
         .arg("--mod-funcname=s/[.]llvm[.].*//")
@@ -1042,6 +1060,10 @@ fn main_result() -> anyhow::Result<i32> {
             let out_dir = PathBuf::from(sub_m.value_of_os("OUT_DIR").unwrap_or(default_out_dir));
             let scenario_kinds = scenario_kinds_from_arg(sub_m.value_of("RUNS"))?;
             let rustdoc = sub_m.value_of("RUSTDOC");
+            check_installed("valgrind")?;
+            check_installed("cg_annotate")?;
+            check_installed("rustup-toolchain-install-master")?;
+            check_installed("rustfilt")?;
 
             let id1 = rustc1.strip_prefix('+').unwrap_or("before");
             let id2 = rustc2.strip_prefix('+').unwrap_or("after");
