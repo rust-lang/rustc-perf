@@ -454,7 +454,9 @@
                     </tr>
                 </thead>
                 <tbody v-if="testCases.length === 0">
-                    <tr><td colspan="6">No results</td></tr>
+                    <tr>
+                        <td colspan="6">No results</td>
+                    </tr>
                 </tbody>
                 <tbody v-else>
                     <template v-for="testCase in testCases">
@@ -644,7 +646,7 @@
                             percent: 100 * (b - a) / a
                         };
                     })
-                    .sort((a, b) => Math.abs(b.percent) - Math.abs(a.percent));
+                        .sort((a, b) => Math.abs(b.percent) - Math.abs(a.percent));
                 },
                 before() {
                     if (!this.data) {
@@ -738,10 +740,10 @@
 
                 },
                 detailedQueryLink(commit, testCase) {
-                    return `/detailed-query.html?commit=${commit}&benchmark=${testCase.benchmark + "-" + testCase.profile}&run_name=${testCase.scenario}`;
+                    return `/detailed-query.html?commit=${commit}&benchmark=${testCase.benchmark + "-" + testCase.profile}&scenario=${testCase.scenario}`;
                 },
                 percentLink(commit, baseCommit, testCase) {
-                    return `/detailed-query.html?commit=${commit}&base_commit=${baseCommit}&benchmark=${testCase.benchmark + "-" + testCase.profile}&run_name=${testCase.scenario}`;
+                    return `/detailed-query.html?commit=${commit}&base_commit=${baseCommit}&benchmark=${testCase.benchmark + "-" + testCase.profile}&scenario=${testCase.scenario}`;
                 },
                 commitLink(commit) {
                     return `https://github.com/rust-lang/rust/commit/${commit}`;

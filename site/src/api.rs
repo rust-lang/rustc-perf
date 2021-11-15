@@ -229,7 +229,8 @@ pub mod self_profile_raw {
     pub struct Request {
         pub commit: String,
         pub benchmark: String,
-        pub run_name: String,
+        #[serde(alias = "run_name")]
+        pub scenario: String,
         pub cid: Option<i32>,
     }
 
@@ -257,7 +258,8 @@ pub mod self_profile_processed {
     pub struct Request {
         pub commit: String,
         pub benchmark: String,
-        pub run_name: String,
+        #[serde(alias = "run_name")]
+        pub scenario: String,
         pub cid: Option<i32>,
         #[serde(rename = "type")]
         pub processor_type: ProcessorType,
@@ -282,7 +284,8 @@ pub mod self_profile {
         pub commit: String,
         pub base_commit: Option<String>,
         pub benchmark: String,
-        pub run_name: String,
+        #[serde(alias = "run_name")]
+        pub scenario: String,
         pub sort_idx: String,
     }
 
