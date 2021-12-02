@@ -317,8 +317,6 @@ The mandatory `<PROFILER>` argument must be one of the following.
     functions (as they often are). It also gives insight into peak memory
     usage, similar to Massif.
   - **Slowdown**. Roughly 5--20x.
-  - **Prerequisites**. DHAT may require a rustc configured with `jemalloc =
-    false` to work well.
   - **Configuration**. DHAT is configured within `profile_local` to run with
     the non-default `--num-callers=4` option, which dictates stack depths.
     (This value of 4 does not include inlined stack frames, so in practice the
@@ -333,8 +331,6 @@ The mandatory `<PROFILER>` argument must be one of the following.
   - **Purpose**. Massif is designed to give insight into a program's peak
     memory usage.
   - **Slowdown**. Roughly 3--10x.
-  - **Prerequisites**. Massif may require a rustc configured with `jemalloc =
-    false` to work well.
   - **Output**. Raw output is written to files with a `msout` prefix. Those
     files can be post-processed with `ms_print` or viewed with the graphical
     [`massif-visualizer`](https://github.com/KDE/massif-visualizer); the latter
