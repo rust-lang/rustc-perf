@@ -782,6 +782,8 @@ impl Upload {
         let child = Command::new("aws")
             .arg("s3")
             .arg("cp")
+            .arg("--storage-class")
+            .arg("INTELLIGENT_TIERING")
             .arg("--only-show-errors")
             .arg(upload.path())
             .arg(&format!(
