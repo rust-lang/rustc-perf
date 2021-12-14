@@ -682,7 +682,7 @@ impl BenchmarkVariance {
     // This is an absolute value indicating the noise barrier for changes on
     // this benchmark.
     //
-    // A number line could be divded like this:
+    // A number line could be divided like this:
     //
     // ------o-------o----------
     //       ^   ^   ^
