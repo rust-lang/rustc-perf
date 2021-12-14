@@ -32,9 +32,13 @@ pub async fn handle_triage(
     let start_artifact = ctxt
         .artifact_id_for_bound(start.clone(), true)
         .ok_or(format!("could not find start commit for bound {:?}", start))?;
+    // This gives a better error, but is still not great -- the common case here
+    // is that we've had a 422 error and as such had a fork. It's possible we
+    // could diagnose that and give a nicer error here telling the user which
+    // commit to use.
     let mut next = next_commit(&start_artifact, &master_commits)
         .map(|c| Bound::Commit(c.sha.clone()))
-        .unwrap(); // TODO: handle no next commit
+        .ok_or(format!("no next commit for {:?}", start_artifact))?;
 
     let mut report = HashMap::new();
     let mut before = start.clone();
