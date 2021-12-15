@@ -5,11 +5,15 @@ edition = "2018"
 publish = false
 
 [lib]
+# Documenting the library means that we try to rebuild it after src/main.rs
+# changes, as of rust-lang/cargo#10172. Since our benchmarks don't actually care
+# about it being built, disable that.
+doc = false
 path = "src/lib.rs"
 proc-macro = true
 
 [[bin]]
-name = "token-stream-stress"
+name = "token-stream-stress-bin"
 path = "src/main.rs"
 
 [workspace]
