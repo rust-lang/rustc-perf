@@ -30,6 +30,7 @@ fn main() {
 
     args.push(OsString::from("-Adeprecated"));
     args.push(OsString::from("-Aunknown-lints"));
+    args.push(OsString::from("-Zincremental-verify-ich"));
 
     if let Some(pos) = args.iter().position(|arg| arg == "--wrap-rustc-with") {
         // Strip out the flag and its argument, and run rustc under the wrapper
