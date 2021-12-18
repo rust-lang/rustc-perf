@@ -1,4 +1,4 @@
 {
-    "cargo_opts": "--bin token-stream-stress",
+    "cargo_opts": "--bin token-stream-stress-bin",
     "touch_file": "src/main.rs"
 }
