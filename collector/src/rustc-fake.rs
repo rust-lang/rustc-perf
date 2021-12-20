@@ -7,6 +7,16 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::{Duration, Instant};
 
+fn determinism_env(cmd: &mut Command) {
+    // Since rust-lang/rust#89836, rustc stable crate IDs include a hash of the
+    // rustc version (including the git commit it's built from), which means
+    // that hashmaps or other structures have different behavior when comparing
+    // different rustc builds. This is bad for rustc-perf, as it means that
+    // comparing two commits has a source of noise that makes it harder to know
+    // what the actual change between two artifacts is.
+    cmd.env("RUSTC_FORCE_INCR_COMP_ARTIFACT_HEADER", "rustc-perf");
+}
+
 fn main() {
     let mut args_os = env::args_os();
     let name = args_os.next().unwrap().into_string().unwrap();
@@ -30,6 +40,14 @@ fn main() {
 
     args.push(OsString::from("-Adeprecated"));
     args.push(OsString::from("-Aunknown-lints"));
+
+    // This forces incremental query hash verification on. Currently, rustc
+    // hashes 1/32 of queries loaded from disk without this flag, but that 1/32
+    // is based on the (expected) hash of the data, which can vary from build to
+    // build, adding a source of noise to our measurements, which we prefer to
+    // avoid. rustc-perf can accept the higher cost of always verifying hashes,
+    // and we currently prefer to avoid exposing a means of hard-disabling
+    // verification.
     args.push(OsString::from("-Zincremental-verify-ich"));
 
     if let Some(pos) = args.iter().position(|arg| arg == "--wrap-rustc-with") {
@@ -44,6 +62,7 @@ fn main() {
         match wrapper {
             "perf-stat" | "perf-stat-self-profile" => {
                 let mut cmd = Command::new("perf");
+                determinism_env(&mut cmd);
                 let has_perf = cmd.output().is_ok();
                 assert!(has_perf);
                 cmd.arg("stat")
@@ -121,6 +140,7 @@ fn main() {
                 assert!(status.success(), "tracelog did not complete successfully");
 
                 let mut tool = Command::new(tool);
+                determinism_env(&mut tool);
                 tool.args(&args);
 
                 let prof_out_dir = std::env::current_dir().unwrap().join("self-profile-output");
@@ -162,6 +182,7 @@ fn main() {
 
             "self-profile" => {
                 let mut cmd = Command::new(&tool);
+                determinism_env(&mut cmd);
                 cmd.arg("-Zself-profile-events=all");
                 cmd.arg("-Zself-profile=Zsp").args(&args);
 
@@ -172,6 +193,7 @@ fn main() {
                 args.insert(0, "-Ztime-passes".into());
 
                 let mut cmd = Command::new(&tool);
+                determinism_env(&mut cmd);
                 cmd.args(args).stderr(std::process::Stdio::from(
                     std::fs::File::create("Ztp").unwrap(),
                 ));
@@ -180,6 +202,7 @@ fn main() {
 
             "perf-record" => {
                 let mut cmd = Command::new("perf");
+                determinism_env(&mut cmd);
                 let has_perf = cmd.output().is_ok();
                 assert!(has_perf);
                 cmd.arg("record")
@@ -195,6 +218,7 @@ fn main() {
 
             "oprofile" => {
                 let mut cmd = Command::new("operf");
+                determinism_env(&mut cmd);
                 let has_oprofile = cmd.output().is_ok();
                 assert!(has_oprofile);
                 // Other possibly useful args: --callgraph, --separate-thread
@@ -205,6 +229,7 @@ fn main() {
 
             "cachegrind" => {
                 let mut cmd = Command::new("valgrind");
+                determinism_env(&mut cmd);
                 let has_valgrind = cmd.output().is_ok();
                 assert!(has_valgrind);
 
@@ -229,6 +254,7 @@ fn main() {
 
             "callgrind" => {
                 let mut cmd = Command::new("valgrind");
+                determinism_env(&mut cmd);
                 let has_valgrind = cmd.output().is_ok();
                 assert!(has_valgrind);
 
@@ -246,6 +272,7 @@ fn main() {
 
             "dhat" => {
                 let mut cmd = Command::new("valgrind");
+                determinism_env(&mut cmd);
                 let has_valgrind = cmd.output().is_ok();
                 assert!(has_valgrind);
                 cmd.arg("--tool=dhat")
@@ -259,6 +286,7 @@ fn main() {
 
             "massif" => {
                 let mut cmd = Command::new("valgrind");
+                determinism_env(&mut cmd);
                 let has_valgrind = cmd.output().is_ok();
                 assert!(has_valgrind);
                 cmd.arg("--tool=massif")
@@ -275,6 +303,7 @@ fn main() {
 
             "eprintln" => {
                 let mut cmd = bash_command(tool, args, "2> eprintln");
+                determinism_env(&mut cmd);
 
                 assert!(cmd.status().expect("failed to spawn").success());
             }
@@ -288,6 +317,7 @@ fn main() {
                 // `rustc` (which this file wraps) doesn't produce the output,
                 // this file can't redirect that output.
                 let mut cmd = Command::new(&tool);
+                determinism_env(&mut cmd);
                 cmd.args(&args);
 
                 assert!(cmd.status().expect("failed to spawn").success());
@@ -298,6 +328,7 @@ fn main() {
                 // option)
                 args.push("-Zprint-mono-items=lazy".into());
                 let mut cmd = bash_command(tool, args, "1> mono-items");
+                determinism_env(&mut cmd);
 
                 assert!(cmd.status().expect("failed to spawn").success());
             }
@@ -306,6 +337,7 @@ fn main() {
                 args.push("-Zdump-dep-graph".into());
                 args.push("-Zquery-dep-graph".into());
                 let mut cmd = Command::new(tool);
+                determinism_env(&mut cmd);
                 cmd.args(&args);
 
                 assert!(cmd.status().expect("failed to spawn").success());
@@ -332,6 +364,7 @@ fn main() {
         }
 
         let mut cmd = Command::new(&tool);
+        determinism_env(&mut cmd);
         cmd.args(&args);
         exec(&mut cmd);
     }
