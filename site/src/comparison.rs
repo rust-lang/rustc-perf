@@ -3,7 +3,7 @@
 //! comparison endpoints
 
 use crate::api;
-use crate::db::{ArtifactId, Benchmark, Profile, Scenario};
+use crate::db::{ArtifactId, Benchmark, Lookup, Profile, Scenario};
 use crate::github;
 use crate::load::SiteCtxt;
 use crate::selector::{self, Tag};
@@ -132,11 +132,14 @@ pub async fn handle_compare(
         })
         .collect();
 
+    let mut new_errors = comparison.new_errors.into_iter().collect::<Vec<_>>();
+    new_errors.sort();
     Ok(api::comparison::Response {
         prev,
         a: comparison.a.into(),
         b: comparison.b.into(),
         comparisons,
+        new_errors,
         next,
         is_contiguous,
     })
@@ -323,6 +326,21 @@ impl ComparisonSummary {
             write!(result, "- ").unwrap();
             change.summary_line(&mut result, Some(link))
         }
+
+        if !comparison.new_errors.is_empty() {
+            write!(
+                result,
+                "- New errors in {}",
+                comparison
+                    .new_errors
+                    .keys()
+                    .map(|k| k.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+            .unwrap();
+        }
+
         result
     }
 }
@@ -368,6 +386,7 @@ async fn compare_given_commits(
     master_commits: &[collector::MasterCommit],
     calc_new_sig: bool,
 ) -> Result<Option<Comparison>, BoxedError> {
+    let idx = ctxt.index.load();
     let a = ctxt
         .artifact_id_for_bound(start.clone(), true)
         .ok_or(format!("could not find start commit for bound {:?}", start))?;
@@ -408,10 +427,22 @@ async fn compare_given_commits(
                 })
         })
         .collect();
+
+    let mut errors = conn.get_error(b.lookup(&idx).unwrap()).await;
+    for (name, error) in conn.get_error(a.lookup(&idx).unwrap()).await {
+        if error.is_some() {
+            errors.remove(&name);
+        }
+    }
+
     Ok(Some(Comparison {
         a: ArtifactDescription::for_artifact(&*conn, a.clone(), master_commits).await,
         b: ArtifactDescription::for_artifact(&*conn, b.clone(), master_commits).await,
         statistics,
+        new_errors: errors
+            .into_iter()
+            .filter_map(|(k, v)| v.map(|v| (k, v)))
+            .collect(),
     }))
 }
 
@@ -557,6 +588,7 @@ pub struct Comparison {
     pub b: ArtifactDescription,
     /// Statistics based on test case
     pub statistics: HashSet<TestResultComparison>,
+    pub new_errors: HashMap<String, String>,
 }
 
 impl Comparison {
