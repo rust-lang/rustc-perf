@@ -431,6 +431,14 @@
                     </div>
                 </div>
             </div>
+            <div v-if="data.new_errors.length">
+                <p><b>Newly broken benchmarks</b>:</p>
+                <details v-for="[crate, error] in data.new_errors">
+                    <summary>{{ crate }}</summary>
+                    <pre>{{ error }}</pre>
+                </details>
+                <hr />
+            </div>
             <table id="benches" class="compare">
                 <thead>
                     <tr>

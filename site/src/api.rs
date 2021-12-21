@@ -150,6 +150,8 @@ pub mod comparison {
         pub b: ArtifactDescription,
         pub comparisons: Vec<Comparison>,
 
+        pub new_errors: Vec<(String, String)>,
+
         /// The names for the next artifact after `b`, if any.
         pub next: Option<String>,
 
