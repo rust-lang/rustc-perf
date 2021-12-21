@@ -321,7 +321,7 @@ fn bench(
 }
 
 fn check_measureme_installed() -> Result<(), String> {
-    let not_installed = std::array::IntoIter::new(["summarize", "crox", "flamegraph"])
+    let not_installed = IntoIterator::into_iter(["summarize", "crox", "flamegraph"])
         .filter(|n| !is_installed(n))
         .collect::<Vec<_>>();
     if not_installed.is_empty() {
