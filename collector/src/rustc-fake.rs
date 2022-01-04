@@ -323,6 +323,16 @@ fn main() {
                 assert!(cmd.status().expect("failed to spawn").success());
             }
 
+            "llvm-ir" => {
+                args.push("--emit=llvm-ir=./llvm-ir".into());
+                args.push("-Cno-prepopulate-passes".into());
+                args.push("-Cpasses=name-anon-globals".into());
+                let mut cmd = Command::new(tool);
+                cmd.args(args);
+                determinism_env(&mut cmd);
+                assert!(cmd.status().expect("failed to spawn").success());
+            }
+
             "mono-items" => {
                 // Lazy item collection is the default (i.e., without this
                 // option)

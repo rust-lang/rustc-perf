@@ -181,6 +181,7 @@ pub enum Profiler {
     LlvmLines,
     MonoItems,
     DepGraph,
+    LlvmIr,
 }
 
 impl Profiler {
@@ -203,6 +204,7 @@ impl Profiler {
             "llvm-lines" => Ok(Profiler::LlvmLines),
             "mono-items" => Ok(Profiler::MonoItems),
             "dep-graph" => Ok(Profiler::DepGraph),
+            "llvm-ir" => Ok(Profiler::LlvmIr),
             _ => Err(anyhow!("'{}' is not a known profiler", name)),
         }
     }
@@ -225,6 +227,7 @@ impl Profiler {
             Profiler::LlvmLines => "llvm-lines",
             Profiler::MonoItems => "mono-items",
             Profiler::DepGraph => "dep-graph",
+            Profiler::LlvmIr => "llvm-ir",
         }
     }
 
@@ -246,6 +249,7 @@ impl Profiler {
             | Profiler::Massif
             | Profiler::DepGraph
             | Profiler::MonoItems
+            | Profiler::LlvmIr
             | Profiler::Eprintln => {
                 if profile_kind == ProfileKind::Doc {
                     Some("rustdoc")
@@ -275,6 +279,7 @@ impl Profiler {
             | Profiler::DHAT
             | Profiler::Massif
             | Profiler::MonoItems
+            | Profiler::LlvmIr
             | Profiler::Eprintln => true,
             // only incremental
             Profiler::DepGraph => scenario_kind != ScenarioKind::Full,
@@ -1203,6 +1208,12 @@ impl<'a> Processor for ProfileProcessor<'a> {
                     filepath(self.output_dir, &out_file("dep-graph")).with_extension("dot");
 
                 // May not exist if not incremental, but then that's OK.
+                fs::copy(&tmp_file, &output)?;
+            }
+
+            Profiler::LlvmIr => {
+                let tmp_file = filepath(data.cwd.as_ref(), "llvm-ir");
+                let output = filepath(self.output_dir, &out_file("llir"));
                 fs::copy(&tmp_file, &output)?;
             }
 
