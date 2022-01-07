@@ -567,9 +567,8 @@ pub trait Processor {
         false
     }
 
-    fn measure_rustc(&mut self, _: Compiler<'_>) -> anyhow::Result<()> {
-        Ok(())
-    }
+    /// Measure the special `rustc` benchmark.
+    fn measure_rustc(&mut self, _: Compiler<'_>) -> anyhow::Result<()>;
 }
 
 pub struct BenchProcessor<'a> {
@@ -1216,10 +1215,17 @@ impl<'a> Processor for ProfileProcessor<'a> {
         }
         Ok(Retry::No)
     }
+
+    // The profiling commands don't request the special `rustc` benchmark.
+    fn measure_rustc(&mut self, _compiler: Compiler<'_>) -> anyhow::Result<()> {
+        unreachable!();
+    }
 }
 
 impl Benchmark {
     pub fn new(name: String, path: PathBuf) -> anyhow::Result<Self> {
+        // The special `rustc` benchmark. Its code is is downloaded when
+        // necessary rather than being present in the repository.
         if name == "rustc" {
             return Ok(Benchmark {
                 name: BenchmarkName(name),
@@ -1348,6 +1354,8 @@ impl Benchmark {
     ) -> anyhow::Result<()> {
         let iterations = iterations.unwrap_or(self.config.runs);
 
+        // The special `rustc` benchmark, which has an entirely different way
+        // of working.
         if self.name.0 == "rustc" {
             return processor.measure_rustc(compiler).context("measure rustc");
         }

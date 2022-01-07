@@ -342,10 +342,18 @@ fn is_installed(name: &str) -> bool {
     Command::new(name).output().is_ok()
 }
 
+// Should we include the special `rustc` benchmark, which works differently to
+// all the others?
+enum IncludeRustc {
+    No,
+    Yes,
+}
+
 fn get_benchmarks(
     benchmark_dir: &Path,
     include: Option<&str>,
     exclude: Option<&str>,
+    include_rustc: IncludeRustc,
 ) -> anyhow::Result<Vec<Benchmark>> {
     let mut benchmarks = Vec::new();
 
@@ -373,7 +381,9 @@ fn get_benchmarks(
 
         paths.push((path, name));
     }
-    paths.push((PathBuf::from("rustc"), String::from("rustc")));
+    if let IncludeRustc::Yes = include_rustc {
+        paths.push((PathBuf::from("rustc"), String::from("rustc")));
+    }
 
     'outer: for (path, name) in paths {
         if let Some(include) = include {
@@ -732,7 +742,7 @@ fn main_result() -> anyhow::Result<i32> {
         )
 
         (@subcommand bench_next =>
-            (about: "Benchmarks the next commit for perf.rust-lang.org")
+            (about: "Benchmarks the next commit for perf.rust-lang.org, including the special `rustc` benchmark")
 
             // Mandatory arguments
             (@arg SITE_URL: +required +takes_value "Site URL")
@@ -858,7 +868,7 @@ fn main_result() -> anyhow::Result<i32> {
             let (rustc, rustdoc, cargo) =
                 get_local_toolchain(&profile_kinds, rustc, rustdoc, cargo)?;
 
-            let benchmarks = get_benchmarks(&benchmark_dir, include, exclude)?;
+            let benchmarks = get_benchmarks(&benchmark_dir, include, exclude, IncludeRustc::No)?;
 
             let res = bench(
                 &mut rt,
@@ -913,6 +923,7 @@ fn main_result() -> anyhow::Result<i32> {
                 &benchmark_dir,
                 next.include.as_deref(),
                 next.exclude.as_deref(),
+                IncludeRustc::Yes,
             )?;
 
             let res = bench(
@@ -982,7 +993,7 @@ fn main_result() -> anyhow::Result<i32> {
             let cargo = which("cargo")?;
 
             // Exclude benchmarks that don't work with a stable compiler.
-            let mut benchmarks = get_benchmarks(&benchmark_dir, None, None)?;
+            let mut benchmarks = get_benchmarks(&benchmark_dir, None, None, IncludeRustc::No)?;
             benchmarks.retain(|b| b.supports_stable());
 
             let res = bench(
@@ -1030,7 +1041,7 @@ fn main_result() -> anyhow::Result<i32> {
                 triple: &target_triple,
                 is_nightly: true,
             };
-            let benchmarks = get_benchmarks(&benchmark_dir, include, exclude)?;
+            let benchmarks = get_benchmarks(&benchmark_dir, include, exclude, IncludeRustc::No)?;
             let mut errors = BenchmarkErrors::new();
             profile(
                 compiler,
@@ -1074,7 +1085,7 @@ fn main_result() -> anyhow::Result<i32> {
                 toolchains.push((id.to_owned(), rustc, rustdoc, cargo));
             }
 
-            let benchmarks = get_benchmarks(&benchmark_dir, include, exclude)?;
+            let benchmarks = get_benchmarks(&benchmark_dir, include, exclude, IncludeRustc::No)?;
             let mut errors = BenchmarkErrors::new();
             for (id, rustc, rustdoc, cargo) in &toolchains {
                 let compiler = Compiler {
