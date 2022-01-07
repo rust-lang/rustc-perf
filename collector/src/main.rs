@@ -1082,8 +1082,17 @@ fn main_result() -> anyhow::Result<i32> {
             let rustdoc = sub_m.value_of("RUSTDOC");
             check_installed("valgrind")?;
             check_installed("cg_annotate")?;
-            check_installed("rustup-toolchain-install-master")?;
             check_installed("rustfilt")?;
+            // Avoid just straight running rustup-toolchain-install-master which
+            // will install the current master commit (fetching quite a bit of
+            // data, including hitting GitHub)...
+            if Command::new("rustup-toolchain-install-master")
+                .arg("-V")
+                .output()
+                .is_err()
+            {
+                anyhow::bail!("rustup-toolchain-install-master is not installed but must be");
+            }
 
             let id1 = rustc1.strip_prefix('+').unwrap_or("before");
             let id2 = rustc2.strip_prefix('+').unwrap_or("after");
