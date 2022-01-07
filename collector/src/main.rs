@@ -375,32 +375,52 @@ fn get_benchmarks(
     }
     paths.push((PathBuf::from("rustc"), String::from("rustc")));
 
-    'outer: for (path, name) in paths {
-        if let Some(include) = include {
-            if !include
-                .split(',')
-                .any(|to_include| name.contains(to_include))
-            {
+    let mut includes = include.map(|list| list.split(',').collect::<HashSet<_>>());
+    let mut excludes = exclude.map(|list| list.split(',').collect::<HashSet<_>>());
+
+    for (path, name) in paths {
+        let mut skip = false;
+        if let Some(includes) = includes.as_mut() {
+            if !includes.remove(name.as_str()) {
                 debug!(
-                    "benchmark {} - doesn't match --include argument, skipping",
+                    "benchmark {} - not named by --include argument, skipping",
                     name
                 );
-                continue 'outer;
+                skip = true;
             }
         }
 
-        if let Some(exclude) = exclude {
-            for exc in exclude.split(',') {
-                if name.contains(exc) {
-                    debug!("benchmark {} - matches --exclude argument, skipping", name);
-                    continue 'outer;
-                }
+        if let Some(excludes) = excludes.as_mut() {
+            if excludes.remove(name.as_str()) {
+                debug!("benchmark {} - named by --exclude argument, skipping", name);
+                skip = true;
             }
+        }
+        if skip {
+            continue;
         }
 
         debug!("benchmark `{}`- registered", name);
         benchmarks.push(Benchmark::new(name, path)?);
     }
+
+    if let Some(includes) = includes {
+        if !includes.is_empty() {
+            bail!(
+                "Warning: one or more invalid --include entries: {:?}",
+                includes
+            );
+        }
+    }
+    if let Some(excludes) = excludes {
+        if !excludes.is_empty() {
+            bail!(
+                "Warning: one or more invalid --exclude entries: {:?}",
+                excludes
+            );
+        }
+    }
+
     benchmarks.sort_by_key(|benchmark| benchmark.name.clone());
 
     if benchmarks.is_empty() {
@@ -717,10 +737,10 @@ fn main_result() -> anyhow::Result<i32> {
             (@arg CARGO:   --cargo   +takes_value "The path to the local Cargo to use")
             (@arg DB:      --db      +takes_value "Database output file")
             (@arg EXCLUDE: --exclude     +takes_value
-             "Exclude all benchmarks matching anything in\n\
+             "Exclude all benchmarks that are listed in\n\
              this comma-separated list of patterns")
             (@arg INCLUDE: --include     +takes_value
-             "Include only benchmarks matching something in\n\
+             "Include only benchmarks that are listed in\n\
              this comma-separated list of patterns")
             (@arg RUNS:    --runs    +takes_value
              "One or more (comma-separated) of: 'Full',\n\
@@ -769,10 +789,10 @@ fn main_result() -> anyhow::Result<i32> {
              'Debug', 'Doc', 'Opt', 'All'")
             (@arg CARGO:   --cargo       +takes_value "The path to the local Cargo to use")
             (@arg EXCLUDE: --exclude     +takes_value
-             "Exclude all benchmarks matching anything in\n\
+             "Exclude all benchmarks that are listed in\n\
              this comma-separated list of patterns")
             (@arg INCLUDE: --include     +takes_value
-             "Include only benchmarks matching something in\n\
+             "Include only benchmarks that are listed in\n\
              this comma-separated list of patterns")
             (@arg OUT_DIR: --("out-dir") +takes_value "Output directory")
             (@arg RUNS:    --runs        +takes_value
@@ -798,10 +818,10 @@ fn main_result() -> anyhow::Result<i32> {
              'Debug', 'Doc', 'Opt', 'All'")
             (@arg CARGO:   --cargo       +takes_value "The path to the local Cargo to use")
             (@arg EXCLUDE: --exclude     +takes_value
-             "Exclude all benchmarks matching anything in\n\
+             "Exclude all benchmarks that are listed in\n\
              this comma-separated list of patterns")
             (@arg INCLUDE: --include     +takes_value
-             "Include only benchmarks matching something in\n\
+             "Include only benchmarks that are listed in\n\
              this comma-separated list of patterns")
             (@arg OUT_DIR: --("out-dir") +takes_value "Output directory")
             (@arg RUNS:    --runs        +takes_value
