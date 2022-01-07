@@ -577,7 +577,7 @@ pub trait Processor {
     }
 }
 
-pub struct MeasureProcessor<'a> {
+pub struct BenchProcessor<'a> {
     rt: &'a mut Runtime,
     benchmark: &'a BenchmarkName,
     conn: &'a mut dyn database::Connection,
@@ -589,7 +589,7 @@ pub struct MeasureProcessor<'a> {
     tries: u8,
 }
 
-impl<'a> MeasureProcessor<'a> {
+impl<'a> BenchProcessor<'a> {
     pub fn new(
         rt: &'a mut Runtime,
         conn: &'a mut dyn database::Connection,
@@ -615,7 +615,7 @@ impl<'a> MeasureProcessor<'a> {
             assert!(has_tracelog);
         }
 
-        MeasureProcessor {
+        BenchProcessor {
             rt,
             upload: None,
             conn,
@@ -812,7 +812,7 @@ impl Upload {
     }
 }
 
-impl<'a> Processor for MeasureProcessor<'a> {
+impl<'a> Processor for BenchProcessor<'a> {
     fn profiler(&self, _profile: ProfileKind) -> Profiler {
         if self.is_first_collection && self.is_self_profile {
             if cfg!(unix) {

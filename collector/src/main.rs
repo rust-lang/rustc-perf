@@ -267,7 +267,7 @@ fn bench(
             n_benchmarks_remaining(benchmarks.len() - nth_benchmark)
         );
 
-        let mut processor = execute::MeasureProcessor::new(
+        let mut processor = execute::BenchProcessor::new(
             rt,
             tx.conn(),
             &benchmark.name,
