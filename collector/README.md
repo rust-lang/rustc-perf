@@ -100,13 +100,13 @@ The following options alter the behaviour of the `bench_local` subcommand.
   supports postgres as a backend and the URL can be specified (beginning with
   `postgres://`), but this is unlikely to be useful for local collection.
 - `--exclude <EXCLUDE>`: this is used to run a subset of the benchmarks. The
-  argument is a comma-separated list of strings. When this option is specified,
-  a benchmark is excluded from the run if its name contains one or more of the
-  given strings.
+  argument is a comma-separated list of benchmark names. When this option is
+  specified, a benchmark is excluded from the run if its name matches one or
+  more of the given names.
 - `--include <INCLUDE>`: the inverse of `--exclude`. The argument is a
-  comma-separated list of strings. When this option is specified, a benchmark
-  is included in the run only if its name contains one or more of the given
-  strings.
+  comma-separated list of benchmark names. When this option is specified, a
+  benchmark is included in the run only if its name matches one or more of the
+  given names.
 - `--runs $RUNS`: the run kinds to be benchmarked. The possible choices are one
   or more (comma-separated) of `Full`, `IncrFull`, `IncrUnchanged`,
   `IncrPatched`, and `All`. The default is `All`. Note that `IncrFull` is
