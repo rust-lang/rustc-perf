@@ -571,10 +571,6 @@ pub trait Processor {
     fn finished_first_collection(&mut self, _: ProfileKind) -> bool {
         false
     }
-
-    fn measure_rustc(&mut self, _: Compiler<'_>) -> anyhow::Result<()> {
-        Ok(())
-    }
 }
 
 pub struct BenchProcessor<'a> {
@@ -721,6 +717,16 @@ impl<'a> BenchProcessor<'a> {
 
         self.rt
             .block_on(async move { while let Some(()) = buf.next().await {} });
+    }
+
+    pub fn measure_rustc(&mut self, compiler: Compiler<'_>) -> anyhow::Result<()> {
+        rustc::measure(
+            self.rt,
+            self.conn,
+            compiler,
+            self.artifact,
+            self.artifact_row_id,
+        )
     }
 }
 
@@ -896,16 +902,6 @@ impl<'a> Processor for BenchProcessor<'a> {
                 panic!("process_perf_stat_output failed: {:?}", e);
             }
         }
-    }
-
-    fn measure_rustc(&mut self, compiler: Compiler<'_>) -> anyhow::Result<()> {
-        rustc::measure(
-            self.rt,
-            self.conn,
-            compiler,
-            self.artifact,
-            self.artifact_row_id,
-        )
     }
 }
 
@@ -1231,15 +1227,6 @@ impl<'a> Processor for ProfileProcessor<'a> {
 
 impl Benchmark {
     pub fn new(name: String, path: PathBuf) -> anyhow::Result<Self> {
-        if name == "rustc" {
-            return Ok(Benchmark {
-                name: BenchmarkName(name),
-                path,
-                patches: vec![],
-                config: BenchmarkConfig::default(),
-            });
-        }
-
         let mut patches = vec![];
         for entry in fs::read_dir(&path)? {
             let entry = entry?;
@@ -1358,10 +1345,6 @@ impl Benchmark {
         iterations: Option<usize>,
     ) -> anyhow::Result<()> {
         let iterations = iterations.unwrap_or(self.config.runs);
-
-        if self.name.0 == "rustc" {
-            return processor.measure_rustc(compiler).context("measure rustc");
-        }
 
         if self.config.disabled || profile_kinds.is_empty() {
             eprintln!("Skipping {}: disabled", self.name);
