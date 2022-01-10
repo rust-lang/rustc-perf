@@ -356,6 +356,14 @@ The mandatory `<PROFILER>` argument must be one of the following.
   - **Output**. Human-readable output is written to files with an `ll` prefix.
   - **Notes**. Does not work with the `Check` build kind. Also does not work
     with the `IncrFull`, `IncrUnchanged`, and `IncrPatched` run kinds.
+- `llvm-ir`: Dump rustc-generated LLVM IR (before any LLVM passes)
+   - Purpose. This command provides access to the raw LLVM IR rustc produces,
+     which can be used for targeted improvements to functions (e.g., those
+     that get monomorphized a lot) and optimization of rustc IR emission in
+     general.
+   - Slowdown. Likely runs faster than regular builds due to skipping most of
+     the LLVM work.
+   - Output. Produces `llir` prefixed files, in LLVM IR textual format.
 - `mono-items`: Dump monomorphization items for each (merged) CGU in the crate.
   These are also post-processed from the raw format into per-file dumps.
   - **Purpose**. This is useful to investigate changes in CGU partionining.
