@@ -1,7 +1,7 @@
 //! Execute benchmarks.
 
 use crate::{Compiler, ProfileKind, ScenarioKind};
-use anyhow::{anyhow, bail, Context};
+use anyhow::{bail, Context};
 use collector::command_output;
 use collector::etw_parser;
 use database::{PatchName, QueryLabel};
@@ -163,19 +163,25 @@ pub struct Benchmark {
     config: BenchmarkConfig,
 }
 
+// Tools usable with the benchmarking subcommands.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Profiler {
+pub enum Bencher {
     PerfStat,
     PerfStatSelfProfile,
     XperfStat,
     XperfStatSelfProfile,
+}
+
+// Tools usable with the profiling subcommands, and named on the command line.
+#[derive(Clone, Copy, Debug, PartialEq, clap::ArgEnum)]
+pub enum Profiler {
     SelfProfile,
     TimePasses,
     PerfRecord,
-    OProfile,
+    Oprofile,
     Cachegrind,
     Callgrind,
-    DHAT,
+    Dhat,
     Massif,
     Eprintln,
     LlvmLines,
@@ -184,106 +190,80 @@ pub enum Profiler {
     LlvmIr,
 }
 
-impl Profiler {
-    pub fn from_name(name: &str) -> anyhow::Result<Profiler> {
-        match name {
-            // Even though `PerfStat` is a valid `Profiler` value, "perf-stat"
-            // is rejected because it can't be used with the `profiler`
-            // subcommand. (It's used with `bench_local` instead.)
-            "perf-stat" => Err(anyhow!("'perf-stat' cannot be used as the profiler")),
-            "xperf-stat" => Err(anyhow!("'xperf-stat' cannot be used as the profiler")),
-            "self-profile" => Ok(Profiler::SelfProfile),
-            "time-passes" => Ok(Profiler::TimePasses),
-            "perf-record" => Ok(Profiler::PerfRecord),
-            "oprofile" => Ok(Profiler::OProfile),
-            "cachegrind" => Ok(Profiler::Cachegrind),
-            "callgrind" => Ok(Profiler::Callgrind),
-            "dhat" => Ok(Profiler::DHAT),
-            "massif" => Ok(Profiler::Massif),
-            "eprintln" => Ok(Profiler::Eprintln),
-            "llvm-lines" => Ok(Profiler::LlvmLines),
-            "mono-items" => Ok(Profiler::MonoItems),
-            "dep-graph" => Ok(Profiler::DepGraph),
-            "llvm-ir" => Ok(Profiler::LlvmIr),
-            _ => Err(anyhow!("'{}' is not a known profiler", name)),
-        }
-    }
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum PerfTool {
+    Profile(Profiler),
+    Bench(Bencher),
+}
 
-    fn name(&self) -> &'static str {
+impl PerfTool {
+    fn name(&self) -> String {
         match self {
-            Profiler::PerfStat => "perf-stat",
-            Profiler::PerfStatSelfProfile => "perf-stat-self-profile",
-            Profiler::XperfStat => "xperf-stat",
-            Profiler::XperfStatSelfProfile => "xperf-stat-self-profile",
-            Profiler::SelfProfile => "self-profile",
-            Profiler::TimePasses => "time-passes",
-            Profiler::PerfRecord => "perf-record",
-            Profiler::OProfile => "oprofile",
-            Profiler::Cachegrind => "cachegrind",
-            Profiler::Callgrind => "callgrind",
-            Profiler::DHAT => "dhat",
-            Profiler::Massif => "massif",
-            Profiler::Eprintln => "eprintln",
-            Profiler::LlvmLines => "llvm-lines",
-            Profiler::MonoItems => "mono-items",
-            Profiler::DepGraph => "dep-graph",
-            Profiler::LlvmIr => "llvm-ir",
+            PerfTool::Bench(b) => format!("{:?}", b),
+            PerfTool::Profile(p) => format!("{:?}", p),
         }
     }
 
     // What cargo subcommand do we need to run for this profiler? If not
     // `rustc`, must be a subcommand that itself invokes `rustc`.
-    fn subcommand(&self, profile_kind: ProfileKind) -> Option<&'static str> {
+    fn cargo_subcommand(&self, profile_kind: ProfileKind) -> Option<&'static str> {
+        use Bencher::*;
+        use PerfTool::*;
+        use Profiler::*;
         match self {
-            Profiler::PerfStat
-            | Profiler::PerfStatSelfProfile
-            | Profiler::XperfStat
-            | Profiler::XperfStatSelfProfile
-            | Profiler::SelfProfile
-            | Profiler::TimePasses
-            | Profiler::PerfRecord
-            | Profiler::OProfile
-            | Profiler::Cachegrind
-            | Profiler::Callgrind
-            | Profiler::DHAT
-            | Profiler::Massif
-            | Profiler::DepGraph
-            | Profiler::MonoItems
-            | Profiler::LlvmIr
-            | Profiler::Eprintln => {
+            Bench(PerfStat)
+            | Bench(PerfStatSelfProfile)
+            | Bench(XperfStat)
+            | Bench(XperfStatSelfProfile)
+            | Profile(SelfProfile)
+            | Profile(TimePasses)
+            | Profile(PerfRecord)
+            | Profile(Oprofile)
+            | Profile(Cachegrind)
+            | Profile(Callgrind)
+            | Profile(Dhat)
+            | Profile(Massif)
+            | Profile(Eprintln)
+            | Profile(DepGraph)
+            | Profile(MonoItems)
+            | Profile(LlvmIr) => {
                 if profile_kind == ProfileKind::Doc {
                     Some("rustdoc")
                 } else {
                     Some("rustc")
                 }
             }
-            Profiler::LlvmLines => match profile_kind {
+            Profile(LlvmLines) => match profile_kind {
                 ProfileKind::Debug | ProfileKind::Opt => Some("llvm-lines"),
                 ProfileKind::Check | ProfileKind::Doc => None,
+                ProfileKind::All => unreachable!(),
             },
         }
     }
 
     fn is_scenario_kind_allowed(&self, scenario_kind: ScenarioKind) -> bool {
+        use Bencher::*;
+        use PerfTool::*;
+        use Profiler::*;
         match self {
-            Profiler::PerfStat
-            | Profiler::PerfStatSelfProfile
-            | Profiler::XperfStat
-            | Profiler::XperfStatSelfProfile
-            | Profiler::SelfProfile
-            | Profiler::TimePasses
-            | Profiler::PerfRecord
-            | Profiler::OProfile
-            | Profiler::Cachegrind
-            | Profiler::Callgrind
-            | Profiler::DHAT
-            | Profiler::Massif
-            | Profiler::MonoItems
-            | Profiler::LlvmIr
-            | Profiler::Eprintln => true,
+            Bench(PerfStat)
+            | Bench(PerfStatSelfProfile)
+            | Bench(XperfStat)
+            | Bench(XperfStatSelfProfile)
+            | Profile(SelfProfile)
+            | Profile(TimePasses)
+            | Profile(PerfRecord)
+            | Profile(Oprofile)
+            | Profile(Cachegrind)
+            | Profile(Callgrind)
+            | Profile(Dhat)
+            | Profile(Massif)
+            | Profile(MonoItems)
+            | Profile(LlvmIr)
+            | Profile(Eprintln) => true,
             // only incremental
-            Profiler::DepGraph => scenario_kind != ScenarioKind::Full,
-            Profiler::LlvmLines => scenario_kind == ScenarioKind::Full,
+            Profile(DepGraph) => scenario_kind != ScenarioKind::Full,
+            Profile(LlvmLines) => scenario_kind == ScenarioKind::Full,
         }
     }
 }
@@ -377,20 +357,20 @@ impl<'a> CargoProcess<'a> {
             // Get the subcommand. If it's not `rustc` it must should be a
             // subcommand that itself invokes `rustc` (so that the `FAKE_RUSTC`
             // machinery works).
-            let subcommand =
+            let cargo_subcommand =
                 if let Some((ref mut processor, scenario_kind, ..)) = self.processor_etc {
-                    let profiler = processor.profiler(self.profile_kind);
-                    if !profiler.is_scenario_kind_allowed(scenario_kind) {
+                    let perf_tool = processor.perf_tool(self.profile_kind);
+                    if !perf_tool.is_scenario_kind_allowed(scenario_kind) {
                         return Err(anyhow::anyhow!(
-                            "this profiler doesn't support {:?} scenarios",
+                            "this perf tool doesn't support {:?} scenarios",
                             scenario_kind
                         ));
                     }
 
-                    match profiler.subcommand(self.profile_kind) {
+                    match perf_tool.cargo_subcommand(self.profile_kind) {
                         None => {
                             return Err(anyhow::anyhow!(
-                                "this profiler doesn't support the {:?} profile",
+                                "this perf tool doesn't support the {:?} profile",
                                 self.profile_kind
                             ))
                         }
@@ -403,7 +383,7 @@ impl<'a> CargoProcess<'a> {
                     }
                 };
 
-            let mut cmd = self.base_command(self.cwd, subcommand);
+            let mut cmd = self.base_command(self.cwd, cargo_subcommand);
             cmd.arg("-p").arg(self.get_pkgid(self.cwd)?);
             match self.profile_kind {
                 ProfileKind::Check => {
@@ -414,6 +394,7 @@ impl<'a> CargoProcess<'a> {
                 ProfileKind::Opt => {
                     cmd.arg("--release");
                 }
+                ProfileKind::All => unreachable!(),
             }
             cmd.args(&self.cargo_args);
             if env::var_os("CARGO_RECORD_TIMING").is_some() {
@@ -433,13 +414,13 @@ impl<'a> CargoProcess<'a> {
                     .as_mut()
                     .map(|v| &mut v.0)
                     .expect("needs_final needs a processor");
-                let profiler = processor.profiler(self.profile_kind).name();
+                let perf_tool_name = processor.perf_tool(self.profile_kind).name();
                 // If we're using a processor, we expect that only the crate
                 // we're interested in benchmarking will be built, not any
                 // dependencies.
                 cmd.env("EXPECT_ONLY_WRAPPED_RUSTC", "1");
                 cmd.arg("--wrap-rustc-with");
-                cmd.arg(profiler);
+                cmd.arg(perf_tool_name);
                 cmd.args(&self.rustc_args);
 
                 // If we're not going to be in a processor, then there's no
@@ -548,8 +529,8 @@ pub struct ProcessOutputData<'a> {
 /// Trait used by `Benchmark::measure()` to provide different kinds of
 /// processing.
 pub trait Processor {
-    /// The `Profiler` being used.
-    fn profiler(&self, _: ProfileKind) -> Profiler;
+    /// The `PerfTool` being used.
+    fn perf_tool(&self, _: ProfileKind) -> PerfTool;
 
     /// Process the output produced by the particular `Profiler` being used.
     fn process_output(
@@ -648,6 +629,7 @@ impl<'a> BenchProcessor<'a> {
             ProfileKind::Debug => database::Profile::Debug,
             ProfileKind::Doc => database::Profile::Doc,
             ProfileKind::Opt => database::Profile::Opt,
+            ProfileKind::All => unreachable!(),
         };
 
         if let Some(files) = stats.2 {
@@ -819,18 +801,18 @@ impl Upload {
 }
 
 impl<'a> Processor for BenchProcessor<'a> {
-    fn profiler(&self, _profile: ProfileKind) -> Profiler {
+    fn perf_tool(&self, _profile: ProfileKind) -> PerfTool {
         if self.is_first_collection && self.is_self_profile {
             if cfg!(unix) {
-                Profiler::PerfStatSelfProfile
+                PerfTool::Bench(Bencher::PerfStatSelfProfile)
             } else {
-                Profiler::XperfStatSelfProfile
+                PerfTool::Bench(Bencher::XperfStatSelfProfile)
             }
         } else {
             if cfg!(unix) {
-                Profiler::PerfStat
+                PerfTool::Bench(Bencher::PerfStat)
             } else {
-                Profiler::XperfStat
+                PerfTool::Bench(Bencher::XperfStat)
             }
         }
     }
@@ -840,10 +822,10 @@ impl<'a> Processor for BenchProcessor<'a> {
     }
 
     fn finished_first_collection(&mut self, profile: ProfileKind) -> bool {
-        let original = self.profiler(profile);
+        let original = self.perf_tool(profile);
         self.is_first_collection = false;
-        // We need to run again if we're going to use a different profiler
-        self.profiler(profile) != original
+        // We need to run again if we're going to use a different perf tool
+        self.perf_tool(profile) != original
     }
 
     fn process_output(
@@ -879,6 +861,7 @@ impl<'a> Processor for BenchProcessor<'a> {
                             res,
                         );
                     }
+                    ScenarioKind::All => unreachable!(),
                 }
                 Ok(Retry::No)
             }
@@ -922,8 +905,8 @@ impl<'a> ProfileProcessor<'a> {
 }
 
 impl<'a> Processor for ProfileProcessor<'a> {
-    fn profiler(&self, _: ProfileKind) -> Profiler {
-        self.profiler
+    fn perf_tool(&self, _: ProfileKind) -> PerfTool {
+        PerfTool::Profile(self.profiler)
     }
 
     fn process_output(
@@ -949,13 +932,6 @@ impl<'a> Processor for ProfileProcessor<'a> {
         };
 
         match self.profiler {
-            Profiler::PerfStat
-            | Profiler::PerfStatSelfProfile
-            | Profiler::XperfStat
-            | Profiler::XperfStatSelfProfile => {
-                panic!("unexpected profiler");
-            }
-
             // -Zself-profile produces (via rustc-fake) a data directory called
             // `Zsp` containing three files with names of the form
             // `$BENCHMARK-$PID.{events,string_data,string_index}`. We copy it
@@ -1043,7 +1019,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
             // `oprofile_data`. We copy it from the temp dir to the output dir,
             // giving it a new name in the process, and then post-process it
             // twice to produce another two data files in the output dir.
-            Profiler::OProfile => {
+            Profiler::Oprofile => {
                 let tmp_opout_dir = filepath(data.cwd.as_ref(), "oprofile_data");
                 let opout_dir = filepath(self.output_dir, &out_file("opout"));
                 let oprep_file = filepath(self.output_dir, &out_file("oprep"));
@@ -1120,7 +1096,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
             // DHAT produces (via rustc-fake) a data file called `dhout`. We
             // copy it from the temp dir to the output dir, giving it a new
             // name in the process.
-            Profiler::DHAT => {
+            Profiler::Dhat => {
                 let tmp_dhout_file = filepath(data.cwd.as_ref(), "dhout");
                 let dhout_file = filepath(self.output_dir, &out_file("dhout"));
 

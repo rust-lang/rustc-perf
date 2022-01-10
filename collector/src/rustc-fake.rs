@@ -59,8 +59,9 @@ fn main() {
 
         raise_priority();
 
+        // These strings come from `PerfTool::name()`.
         match wrapper {
-            "perf-stat" | "perf-stat-self-profile" => {
+            "PerfStat" | "PerfStatSelfProfile" => {
                 let mut cmd = Command::new("perf");
                 determinism_env(&mut cmd);
                 let has_perf = cmd.output().is_ok();
@@ -102,22 +103,27 @@ fn main() {
                 }
             }
 
-            "xperf-stat" | "xperf-stat-self-profile" => {
-                // For Windows, we use a combination of xperf and tracelog to capture ETW events including hardware performance counters.
-                // To do this, we start an ETW trace using tracelog, telling it to include the InstructionRetired and TotalCycles PMCs
-                // for each CSwitch event that is recorded. Then when ETW records a context switch event, it will be preceeded by a
-                // PMC event which contains the raw counters at that instant. After we've finished compilation, we then use xperf
-                // to stop the trace and dump the results to a plain text file. This file is then processed by the `etw_parser` module
-                // which finds events related to the rustc process and calculates the total values for those performance counters.
-                // Conceptually, this is similar to how `perf` works on Linux except we have to do more of the work ourselves as there
-                // isn't an out of the box way to get the data we care about.
+            "XperfStat" | "XperfStatSelfProfile" => {
+                // For Windows, we use a combination of xperf and tracelog to capture ETW events
+                // including hardware performance counters. To do this, we start an ETW trace using
+                // tracelog, telling it to include the InstructionRetired and TotalCycles PMCs for
+                // each CSwitch event that is recorded. Then when ETW records a context switch
+                // event, it will be preceeded by a PMC event which contains the raw counters at
+                // that instant. After we've finished compilation, we then use xperf to stop the
+                // trace and dump the results to a plain text file. This file is then processed by
+                // the `etw_parser` module which finds events related to the rustc process and
+                // calculates the total values for those performance counters. Conceptually, this
+                // is similar to how `perf` works on Linux except we have to do more of the work
+                // ourselves as there isn't an out of the box way to get the data we care about.
 
-                // Read the path to xperf.exe and tracelog.exe from an environment variable, falling back to assuming it's on the PATH.
+                // Read the path to xperf.exe and tracelog.exe from an environment variable,
+                // falling back to assuming it's on the PATH.
                 let xperf = std::env::var("XPERF").unwrap_or("xperf.exe".to_string());
                 let mut cmd = Command::new(&xperf);
                 assert!(cmd.output().is_ok(), "xperf.exe could not be started");
 
-                // go ahead and run `xperf -stop rustc-perf-counters` in case there are leftover counters running from a failed prior attempt
+                // Go ahead and run `xperf -stop rustc-perf-counters` in case there are leftover
+                // counters running from a failed prior attempt.
                 let mut cmd = Command::new(&xperf);
                 cmd.args(&["-stop", "rustc-perf-counters"]);
                 cmd.status().expect("failed to spawn xperf");
@@ -180,7 +186,7 @@ fn main() {
                 }
             }
 
-            "self-profile" => {
+            "SelfProfile" => {
                 let mut cmd = Command::new(&tool);
                 determinism_env(&mut cmd);
                 cmd.arg("-Zself-profile-events=all");
@@ -189,7 +195,7 @@ fn main() {
                 assert!(cmd.status().expect("failed to spawn").success());
             }
 
-            "time-passes" => {
+            "TimePasses" => {
                 args.insert(0, "-Ztime-passes".into());
 
                 let mut cmd = Command::new(&tool);
@@ -200,7 +206,7 @@ fn main() {
                 assert!(cmd.status().expect("failed to spawn").success());
             }
 
-            "perf-record" => {
+            "PerfRecord" => {
                 let mut cmd = Command::new("perf");
                 determinism_env(&mut cmd);
                 let has_perf = cmd.output().is_ok();
@@ -216,7 +222,7 @@ fn main() {
                 assert!(cmd.status().expect("failed to spawn").success());
             }
 
-            "oprofile" => {
+            "Oprofile" => {
                 let mut cmd = Command::new("operf");
                 determinism_env(&mut cmd);
                 let has_oprofile = cmd.output().is_ok();
@@ -227,7 +233,7 @@ fn main() {
                 assert!(cmd.status().expect("failed to spawn").success());
             }
 
-            "cachegrind" => {
+            "Cachegrind" => {
                 let mut cmd = Command::new("valgrind");
                 determinism_env(&mut cmd);
                 let has_valgrind = cmd.output().is_ok();
@@ -252,7 +258,7 @@ fn main() {
                 assert!(cmd.status().expect("failed to spawn").success());
             }
 
-            "callgrind" => {
+            "Callgrind" => {
                 let mut cmd = Command::new("valgrind");
                 determinism_env(&mut cmd);
                 let has_valgrind = cmd.output().is_ok();
@@ -270,7 +276,7 @@ fn main() {
                 assert!(cmd.status().expect("failed to spawn").success());
             }
 
-            "dhat" => {
+            "Dhat" => {
                 let mut cmd = Command::new("valgrind");
                 determinism_env(&mut cmd);
                 let has_valgrind = cmd.output().is_ok();
@@ -284,7 +290,7 @@ fn main() {
                 assert!(cmd.status().expect("failed to spawn").success());
             }
 
-            "massif" => {
+            "Massif" => {
                 let mut cmd = Command::new("valgrind");
                 determinism_env(&mut cmd);
                 let has_valgrind = cmd.output().is_ok();
@@ -301,14 +307,14 @@ fn main() {
                 assert!(cmd.status().expect("failed to spawn").success());
             }
 
-            "eprintln" => {
+            "Eprintln" => {
                 let mut cmd = bash_command(tool, args, "2> eprintln");
                 determinism_env(&mut cmd);
 
                 assert!(cmd.status().expect("failed to spawn").success());
             }
 
-            "llvm-lines" => {
+            "LlvmLines" => {
                 // `cargo llvm-lines` writes its output to stdout. But we can't
                 // redirect it to a file here like we do for "time-passes" and
                 // "eprintln". This is because `cargo llvm-lines` invokes rustc
@@ -323,7 +329,7 @@ fn main() {
                 assert!(cmd.status().expect("failed to spawn").success());
             }
 
-            "llvm-ir" => {
+            "LlvmIr" => {
                 args.push("--emit=llvm-ir=./llvm-ir".into());
                 args.push("-Cno-prepopulate-passes".into());
                 args.push("-Cpasses=name-anon-globals".into());
@@ -333,7 +339,7 @@ fn main() {
                 assert!(cmd.status().expect("failed to spawn").success());
             }
 
-            "mono-items" => {
+            "MonoItems" => {
                 // Lazy item collection is the default (i.e., without this
                 // option)
                 args.push("-Zprint-mono-items=lazy".into());
@@ -343,7 +349,7 @@ fn main() {
                 assert!(cmd.status().expect("failed to spawn").success());
             }
 
-            "dep-graph" => {
+            "DepGraph" => {
                 args.push("-Zdump-dep-graph".into());
                 args.push("-Zquery-dep-graph".into());
                 let mut cmd = Command::new(tool);

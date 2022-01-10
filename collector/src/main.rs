@@ -1,14 +1,11 @@
 #![recursion_limit = "1024"]
 
-#[macro_use]
-extern crate clap;
-
 use anyhow::{bail, Context};
+use clap::Parser;
 use database::{ArtifactId, Commit};
 use log::debug;
 use std::collections::HashSet;
 use std::fs;
-use std::io::{stderr, Write};
 use std::path::{Path, PathBuf};
 use std::process;
 use std::process::{Command, Stdio};
@@ -42,12 +39,17 @@ impl<'a> Compiler<'a> {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, clap::ArgEnum)]
+#[clap(rename_all = "PascalCase")]
 pub enum ProfileKind {
     Check,
     Debug,
     Doc,
     Opt,
+
+    // This one is only specified from the command line, and is converted to
+    // one of the above variants by `expand_all()`.
+    All,
 }
 
 impl ProfileKind {
@@ -60,18 +62,30 @@ impl ProfileKind {
         ]
     }
 
-    fn default() -> Vec<Self> {
-        // Don't run rustdoc by default.
+    fn all_non_doc() -> Vec<Self> {
         vec![ProfileKind::Check, ProfileKind::Debug, ProfileKind::Opt]
+    }
+
+    fn expand_all(vec: Vec<Self>) -> Vec<Self> {
+        if vec.contains(&ProfileKind::All) {
+            Self::all()
+        } else {
+            vec
+        }
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, clap::ArgEnum)]
+#[clap(rename_all = "PascalCase")]
 pub enum ScenarioKind {
     Full,
     IncrFull,
     IncrUnchanged,
     IncrPatched,
+
+    // This one is only specified from the command line, and is converted to
+    // one of the above variants by `expand_all()`.
+    All,
 }
 
 impl ScenarioKind {
@@ -88,99 +102,23 @@ impl ScenarioKind {
         vec![ScenarioKind::Full]
     }
 
+    fn expand_all(vec: Vec<Self>) -> Vec<Self> {
+        if vec.contains(&ScenarioKind::All) {
+            Self::all()
+        } else {
+            vec
+        }
+    }
+
     fn is_incr(self) -> bool {
         match self {
             ScenarioKind::Full => false,
             ScenarioKind::IncrFull | ScenarioKind::IncrUnchanged | ScenarioKind::IncrPatched => {
                 true
             }
+            ScenarioKind::All => unreachable!(),
         }
     }
-
-    fn default() -> Vec<ScenarioKind> {
-        Self::all()
-    }
-}
-
-// How the --builds arg maps to ProfileKinds.
-const STRINGS_AND_PROFILE_KINDS: &[(&str, ProfileKind)] = &[
-    ("Check", ProfileKind::Check),
-    ("Debug", ProfileKind::Debug),
-    ("Doc", ProfileKind::Doc),
-    ("Opt", ProfileKind::Opt),
-];
-
-// How the --runs arg maps to ScenarioKinds.
-const STRINGS_AND_SCENARIO_KINDS: &[(&str, ScenarioKind)] = &[
-    ("Full", ScenarioKind::Full),
-    ("IncrFull", ScenarioKind::IncrFull),
-    ("IncrUnchanged", ScenarioKind::IncrUnchanged),
-    ("IncrPatched", ScenarioKind::IncrPatched),
-];
-
-fn profile_kinds_from_arg(arg: &Option<&str>) -> anyhow::Result<Vec<ProfileKind>> {
-    if let Some(arg) = arg {
-        kinds_from_arg("build", STRINGS_AND_PROFILE_KINDS, arg)
-    } else {
-        Ok(ProfileKind::default())
-    }
-}
-
-fn scenario_kinds_from_arg(arg: Option<&str>) -> anyhow::Result<Vec<ScenarioKind>> {
-    if let Some(arg) = arg {
-        kinds_from_arg("run", STRINGS_AND_SCENARIO_KINDS, arg)
-    } else {
-        Ok(ScenarioKind::default())
-    }
-}
-
-fn iterations_from_arg(arg: Option<&str>) -> anyhow::Result<usize> {
-    if let Some(arg) = arg {
-        if let Ok(iterations) = usize::from_str_radix(arg, 10) {
-            Ok(iterations)
-        } else {
-            anyhow::bail!(
-                "cannot parse iteration count '{}'. Must be a decimal number.",
-                arg
-            );
-        }
-    } else {
-        Ok(1)
-    }
-}
-
-// Converts a comma-separated list of kind names to a vector of kinds with no
-// duplicates.
-fn kinds_from_arg<K>(
-    name: &str,
-    strings_and_kinds: &[(&str, K)],
-    arg: &str,
-) -> anyhow::Result<Vec<K>>
-where
-    K: Copy + Eq + ::std::hash::Hash,
-{
-    let mut kind_set = HashSet::new();
-
-    for s in arg.split(',') {
-        if let Some((_s, k)) = strings_and_kinds.iter().find(|(str, _k)| s == *str) {
-            kind_set.insert(k);
-        } else if s == "All" {
-            for (_, k) in strings_and_kinds.iter() {
-                kind_set.insert(k);
-            }
-        } else {
-            anyhow::bail!("'{}' is not a known {} kind", s, name);
-        }
-    }
-
-    // Nb: the element order of `v` must match that of `strings_and_kinds`.
-    let mut v = vec![];
-    for (_s, k) in strings_and_kinds.iter() {
-        if kind_set.contains(k) {
-            v.push(*k);
-        }
-    }
-    Ok(v)
 }
 
 fn n_normal_benchmarks_remaining(n: usize) -> String {
@@ -378,8 +316,8 @@ fn is_installed(name: &str) -> bool {
 
 fn get_benchmarks(
     benchmark_dir: &Path,
-    include: Option<&str>,
-    exclude: Option<&str>,
+    include: Option<String>,
+    exclude: Option<String>,
 ) -> anyhow::Result<Vec<Benchmark>> {
     let mut benchmarks = Vec::new();
 
@@ -408,8 +346,10 @@ fn get_benchmarks(
         paths.push((path, name));
     }
 
-    let mut includes = include.map(|list| list.split(',').collect::<HashSet<_>>());
-    let mut excludes = exclude.map(|list| list.split(',').collect::<HashSet<_>>());
+    let include = include.as_ref();
+    let exclude = exclude.as_ref();
+    let mut includes = include.map(|list| list.split(',').collect::<HashSet<&str>>());
+    let mut excludes = exclude.map(|list| list.split(',').collect::<HashSet<&str>>());
 
     for (path, name) in paths {
         let mut skip = false;
@@ -472,10 +412,10 @@ fn get_benchmarks(
 fn get_local_toolchain(
     profile_kinds: &[ProfileKind],
     rustc: &str,
-    rustdoc: Option<&str>,
-    cargo: Option<&str>,
+    rustdoc: Option<&Path>,
+    cargo: Option<&Path>,
 ) -> anyhow::Result<(PathBuf, Option<PathBuf>, PathBuf)> {
-    // + prefixed rustc is an indicator to fetch the rustc of the toolchain
+    // `+`-prefixed rustc is an indicator to fetch the rustc of the toolchain
     // specified. This follows the similar pattern used by rustup's binaries
     // (e.g., `rustc +stage1`).
     let rustc = if let Some(toolchain) = rustc.strip_prefix('+') {
@@ -520,13 +460,13 @@ fn get_local_toolchain(
     } else {
         PathBuf::from(rustc)
             .canonicalize()
-            .with_context(|| format!("failed to canonicalize rustc executable '{}'", rustc))?
+            .with_context(|| format!("failed to canonicalize rustc executable {:?}", rustc))?
     };
 
     let rustdoc =
-        if let Some(rustdoc) = rustdoc {
-            Some(PathBuf::from(rustdoc).canonicalize().with_context(|| {
-                format!("failed to canonicalize rustdoc executable '{}'", rustdoc)
+        if let Some(rustdoc) = &rustdoc {
+            Some(rustdoc.canonicalize().with_context(|| {
+                format!("failed to canonicalize rustdoc executable {:?}", rustdoc)
             })?)
         } else if profile_kinds.contains(&ProfileKind::Doc) {
             // We need a `rustdoc`. Look for one next to `rustc`.
@@ -544,10 +484,10 @@ fn get_local_toolchain(
             None
         };
 
-    let cargo = if let Some(cargo) = cargo {
-        PathBuf::from(cargo)
+    let cargo = if let Some(cargo) = &cargo {
+        cargo
             .canonicalize()
-            .with_context(|| format!("failed to canonicalize cargo executable '{}'", cargo))?
+            .with_context(|| format!("failed to canonicalize cargo executable {:?}", cargo))?
     } else {
         // Use the nightly cargo from `rustup`.
         let output = Command::new("rustup")
@@ -595,6 +535,7 @@ fn generate_cachegrind_diffs(
                     ScenarioKind::IncrPatched => (0..benchmark.patches.len())
                         .map(|i| format!("{:?}{}", kind, i))
                         .collect::<Vec<_>>(),
+                    ScenarioKind::All => unreachable!(),
                 }
             }) {
                 let filename = |prefix, id| {
@@ -745,137 +686,196 @@ fn main() {
     }
 }
 
+#[derive(Debug, clap::Parser)]
+#[clap(about, version, author)]
+struct Cli {
+    #[clap(subcommand)]
+    command: Commands,
+}
+
+#[derive(Debug, clap::Args)]
+struct RustcOption {
+    /// The path to the local rustc to benchmark
+    // Not a `PathBuf` because it can be a file path *or* a `+`-prefixed
+    // toolchain name, and `PathBuf` doesn't work well for the latter.
+    rustc: String,
+}
+
+#[derive(Debug, clap::Args)]
+struct IdOption {
+    /// Identifier to associate benchmark results with
+    id: String,
+}
+
+#[derive(Debug, clap::Args)]
+struct LocalOptions {
+    /// Measure the build profiles in this comma-separated list
+    // This must be normalized via `ProfilerKind::expand_all()` before use.
+    #[clap(
+        long = "builds",
+        arg_enum,
+        multiple_values = true,
+        use_delimiter = true,
+        require_delimiter = true,
+        // Don't run rustdoc by default
+        default_value = "Check,Debug,Opt",
+    )]
+    profile_kinds: Vec<ProfileKind>,
+
+    /// The path to the local Cargo to use
+    #[clap(long, parse(from_os_str))]
+    cargo: Option<PathBuf>,
+
+    /// Exclude all benchmarks in this comma-separated list
+    #[clap(long)]
+    exclude: Option<String>,
+
+    /// Include only benchmarks in this comma-separated list
+    #[clap(long)]
+    include: Option<String>,
+
+    /// The path to the local rustdoc to benchmark
+    #[clap(long, parse(from_os_str))]
+    rustdoc: Option<PathBuf>,
+
+    /// Measure the scenarios in this comma-separated list
+    #[clap(
+        long = "runs",
+        arg_enum,
+        multiple_values = true,
+        use_delimiter = true,
+        require_delimiter = true,
+        default_value = "All"
+    )]
+    scenario_kinds: Vec<ScenarioKind>,
+}
+
+#[derive(Debug, clap::Args)]
+struct SelfProfileOption {
+    /// Collect self-profile data
+    #[clap(long = "self-profile")]
+    self_profile: bool,
+}
+
+#[derive(Debug, clap::Args)]
+struct DbOption {
+    /// Database output file
+    // This would be better as a `PathBuf`, but it's used in various ways that
+    // make that tricky without adjusting several points in the code.
+    #[clap(long, default_value = "results.db")]
+    db: String,
+}
+
+#[derive(Debug, clap::Args)]
+struct BenchRustcOption {
+    // Run the special `rustc` benchmark
+    #[clap(long = "bench-rustc")]
+    bench_rustc: bool,
+}
+
+// For each subcommand we list the mandatory arguments in the required
+// order, followed by the options in alphabetical order.
+#[derive(Debug, clap::Subcommand)]
+#[clap(rename_all = "snake_case")]
+enum Commands {
+    /// Benchmarks a local rustc
+    BenchLocal {
+        #[clap(flatten)]
+        rustc: RustcOption,
+
+        #[clap(flatten)]
+        id: IdOption,
+
+        #[clap(flatten)]
+        local: LocalOptions,
+
+        #[clap(flatten)]
+        db: DbOption,
+
+        #[clap(flatten)]
+        bench_rustc: BenchRustcOption,
+
+        /// The number of iterations to do for each benchmark
+        #[clap(long, default_value = "1")]
+        iterations: usize,
+
+        #[clap(flatten)]
+        self_profile: SelfProfileOption,
+    },
+
+    /// Benchmarks the next commit for perf.rust-lang.org
+    BenchNext {
+        /// Site URL
+        site_url: String,
+
+        #[clap(flatten)]
+        db: DbOption,
+
+        #[clap(flatten)]
+        bench_rustc: BenchRustcOption,
+
+        #[clap(flatten)]
+        self_profile: SelfProfileOption,
+    },
+
+    /// Benchmarks a published toolchain for perf.rust-lang.org's dashboard
+    BenchPublished {
+        /// Toolchain (e.g. stable, beta, 1.26.0)
+        toolchain: String,
+
+        #[clap(flatten)]
+        db: DbOption,
+    },
+
+    /// Profiles a local rustc with one of several profilers
+    ProfileLocal {
+        /// Profiler to use
+        #[clap(arg_enum)]
+        profiler: Profiler,
+
+        #[clap(flatten)]
+        rustc: RustcOption,
+
+        #[clap(flatten)]
+        id: IdOption,
+
+        #[clap(flatten)]
+        local: LocalOptions,
+
+        /// Output directory
+        #[clap(long = "out-dir", default_value = "results/")]
+        out_dir: PathBuf,
+    },
+
+    /// Profiles and compares two toolchains with one of several profilers. If
+    /// the profiler is Cachegrind, also performs a diff
+    DiffLocal {
+        /// Profiler to use
+        #[clap(arg_enum)]
+        profiler: Profiler,
+
+        /// The path to the first local rustc to benchmark
+        rustc_before: String,
+
+        /// The path to the second local rustc to benchmark
+        rustc_after: String,
+
+        #[clap(flatten)]
+        local: LocalOptions,
+
+        /// Output directory
+        #[clap(long = "out-dir", default_value = "results/")]
+        out_dir: PathBuf,
+    },
+
+    /// Installs the next commit for perf.rust-lang.org
+    InstallNext,
+}
+
 fn main_result() -> anyhow::Result<i32> {
     env_logger::init();
 
-    let matches = clap_app!(rustc_perf_collector =>
-        (version: "0.1")
-        (author: "The Rust Compiler Team")
-        (about: "Collects Rust performance data")
-
-         // For each subcommand we list the mandatory arguments in the required
-         // order, followed by the options in alphabetical order.
-
-        (@subcommand bench_local =>
-            (about: "Benchmarks a local rustc")
-
-            // Mandatory arguments
-            (@arg RUSTC: +required +takes_value "The path to the local rustc to benchmark")
-            (@arg ID:    +required +takes_value "Identifier to associate benchmark results with")
-
-            // Options
-            (@arg BUILDS:  --builds  +takes_value
-             "One or more (comma-separated) of: 'Check', 'Debug',\n\
-             'Doc', 'Opt', 'All'")
-            (@arg CARGO:   --cargo   +takes_value "The path to the local Cargo to use")
-            (@arg DB:      --db      +takes_value "Database output file")
-            (@arg EXCLUDE: --exclude     +takes_value
-             "Exclude all benchmarks that are listed in\n\
-             this comma-separated list of patterns")
-            (@arg INCLUDE: --include     +takes_value
-             "Include only benchmarks that are listed in\n\
-             this comma-separated list of patterns")
-            (@arg BENCH_RUSTC: --("bench-rustc")
-             "Run the special `rustc` benchmark")
-            (@arg RUNS:    --runs    +takes_value
-             "One or more (comma-separated) of: 'Full',\n\
-             'IncrFull', 'IncrUnchanged', 'IncrPatched', 'All'")
-            (@arg ITERATIONS: --iterations    +takes_value
-                "The number of iterations to do for each benchmark")
-            (@arg RUSTDOC: --rustdoc +takes_value "The path to the local rustdoc to benchmark")
-            (@arg SELF_PROFILE: --("self-profile") "Collect self-profile data")
-        )
-
-        (@subcommand bench_next =>
-            (about: "Benchmarks the next commit for perf.rust-lang.org, including the special `rustc` benchmark")
-
-            // Mandatory arguments
-            (@arg SITE_URL: +required +takes_value "Site URL")
-
-            // Options
-            (@arg DB:           --db  +takes_value "Database output file")
-            (@arg BENCH_RUSTC: --("bench-rustc")
-             "Run the special `rustc` benchmark")
-            (@arg SELF_PROFILE: --("self-profile") "Collect self-profile data")
-        )
-
-        (@subcommand bench_published =>
-            (about: "Benchmarks a published toolchain for perf.rust-lang.org's dashboard")
-
-            // Mandatory arguments
-            (@arg TOOLCHAIN: +required +takes_value "Toolchain (e.g. stable, beta, 1.26.0)")
-
-            // Options
-            (@arg DB: --db +takes_value "Database output file")
-        )
-
-        (@subcommand profile_local =>
-            (about: "Profiles a local rustc with one of several profilers")
-
-            // Mandatory arguments
-            (@arg PROFILER: +required +takes_value
-             "One of: 'self-profile', 'time-passes', 'perf-record',\n\
-             'oprofile', 'cachegrind', 'callgrind', 'dhat', 'massif',\n\
-             'eprintln', 'llvm-lines', 'mono-items', 'dep-graph'")
-            (@arg RUSTC:    +required +takes_value "The path to the local rustc to benchmark")
-            (@arg ID:       +required +takes_value "Identifier to associate benchmark results with")
-
-             // Options
-            (@arg BUILDS: --builds       +takes_value
-             "One or more (comma-separated) of: 'Check', \n\
-             'Debug', 'Doc', 'Opt', 'All'")
-            (@arg CARGO:   --cargo       +takes_value "The path to the local Cargo to use")
-            (@arg EXCLUDE: --exclude     +takes_value
-             "Exclude all benchmarks that are listed in\n\
-             this comma-separated list of patterns")
-            (@arg INCLUDE: --include     +takes_value
-             "Include only benchmarks that are listed in\n\
-             this comma-separated list of patterns")
-            (@arg OUT_DIR: --("out-dir") +takes_value "Output directory")
-            (@arg RUNS:    --runs        +takes_value
-             "One or more (comma-separated) of: 'Full',\n\
-             'IncrFull', 'IncrUnchanged', 'IncrPatched', 'All'")
-            (@arg RUSTDOC: --rustdoc +takes_value "The path to the local rustdoc to benchmark")
-        )
-
-        (@subcommand diff_local =>
-            (about: "Profiles and compares two toolchains with one of several profilers")
-
-            // Mandatory arguments
-            (@arg PROFILER: +required +takes_value
-             "One of: 'self-profile', 'time-passes', 'perf-record',\n\
-             'oprofile', 'cachegrind', 'callgrind', 'dhat', 'massif',\n\
-             'eprintln', 'llvm-lines', 'mono-items', 'dep-graph'")
-            (@arg RUSTC_BEFORE: +required +takes_value "The path to the local rustc to benchmark")
-            (@arg RUSTC_AFTER:  +required +takes_value "The path to the local rustc to benchmark")
-
-             // Options
-            (@arg BUILDS: --builds       +takes_value
-             "One or more (comma-separated) of: 'Check', \n\
-             'Debug', 'Doc', 'Opt', 'All'")
-            (@arg CARGO:   --cargo       +takes_value "The path to the local Cargo to use")
-            (@arg EXCLUDE: --exclude     +takes_value
-             "Exclude all benchmarks that are listed in\n\
-             this comma-separated list of patterns")
-            (@arg INCLUDE: --include     +takes_value
-             "Include only benchmarks that are listed in\n\
-             this comma-separated list of patterns")
-            (@arg OUT_DIR: --("out-dir") +takes_value "Output directory")
-            (@arg RUNS:    --runs        +takes_value
-             "One or more (comma-separated) of: 'Full',\n\
-             'IncrFull', 'IncrUnchanged', 'IncrPatched', 'All'")
-            (@arg RUSTDOC: --rustdoc +takes_value "The path to the local rustdoc to benchmark")
-        )
-
-        (@subcommand install_next =>
-            (about: "Installs the next commit for perf.rust-lang.org")
-
-            // Mandatory arguments: (none)
-
-            // Options: (none)
-        )
-    )
-    .get_matches();
+    let args = Cli::parse();
 
     let benchmark_dir = PathBuf::from("collector/benchmarks");
 
@@ -887,44 +887,40 @@ fn main_result() -> anyhow::Result<i32> {
         .enable_io();
     let mut rt = builder.build().expect("built runtime");
 
-    let default_db = "results.db";
-    let default_out_dir = std::ffi::OsStr::new("results");
-
     // XXX: This doesn't necessarily work for all archs
     let target_triple = format!("{}-unknown-linux-gnu", std::env::consts::ARCH);
 
-    let ret = match matches.subcommand() {
-        ("bench_local", Some(sub_m)) => {
-            // Mandatory arguments
-            let rustc = sub_m.value_of("RUSTC").unwrap();
-            let id = sub_m.value_of("ID").unwrap();
+    match args.command {
+        Commands::BenchLocal {
+            rustc,
+            id,
+            local,
+            db,
+            bench_rustc,
+            iterations,
+            self_profile,
+        } => {
+            let profile_kinds = ProfileKind::expand_all(local.profile_kinds);
+            let scenario_kinds = ScenarioKind::expand_all(local.scenario_kinds);
 
-            // Options
-            let profile_kinds = profile_kinds_from_arg(&sub_m.value_of("BUILDS"))?;
-            let cargo = sub_m.value_of("CARGO");
-            let db = sub_m.value_of("DB").unwrap_or(default_db);
-            let exclude = sub_m.value_of("EXCLUDE");
-            let include = sub_m.value_of("INCLUDE");
-            let bench_rustc = sub_m.is_present("BENCH_RUSTC");
-            let scenario_kinds = scenario_kinds_from_arg(sub_m.value_of("RUNS"))?;
-            let iterations = iterations_from_arg(sub_m.value_of("ITERATIONS"))?;
-            let rustdoc = sub_m.value_of("RUSTDOC");
-            let is_self_profile = sub_m.is_present("SELF_PROFILE");
+            let pool = database::Pool::open(&db.db);
 
-            let pool = database::Pool::open(db);
+            let (rustc, rustdoc, cargo) = get_local_toolchain(
+                &profile_kinds,
+                &rustc.rustc,
+                local.rustdoc.as_deref(),
+                local.cargo.as_deref(),
+            )?;
 
-            let (rustc, rustdoc, cargo) =
-                get_local_toolchain(&profile_kinds, rustc, rustdoc, cargo)?;
-
-            let benchmarks = get_benchmarks(&benchmark_dir, include, exclude)?;
+            let benchmarks = get_benchmarks(&benchmark_dir, local.include, local.exclude)?;
 
             let res = bench(
                 &mut rt,
                 pool,
-                &ArtifactId::Tag(id.to_string()),
+                &ArtifactId::Tag(id.id),
                 &profile_kinds,
                 &scenario_kinds,
-                bench_rustc,
+                bench_rustc.bench_rustc,
                 Compiler {
                     rustc: &rustc,
                     rustdoc: rustdoc.as_deref(),
@@ -934,21 +930,18 @@ fn main_result() -> anyhow::Result<i32> {
                 },
                 &benchmarks,
                 Some(iterations),
-                is_self_profile,
+                self_profile.self_profile,
             );
             res.fail_if_nonzero()?;
             Ok(0)
         }
 
-        ("bench_next", Some(sub_m)) => {
-            // Mandatory arguments
-            let site_url = sub_m.value_of("SITE_URL").unwrap();
-
-            // Options
-            let db = sub_m.value_of("DB").unwrap_or(default_db);
-            let bench_rustc = sub_m.is_present("BENCH_RUSTC");
-            let is_self_profile = sub_m.is_present("SELF_PROFILE");
-
+        Commands::BenchNext {
+            site_url,
+            db,
+            bench_rustc,
+            self_profile,
+        } => {
             println!("processing commits");
             let client = reqwest::blocking::Client::new();
             let response: collector::api::next_commit::Response = client
@@ -964,16 +957,12 @@ fn main_result() -> anyhow::Result<i32> {
             };
             let commit = get_commit_or_fake_it(&next.sha)?;
 
-            let pool = database::Pool::open(db);
+            let pool = database::Pool::open(&db.db);
 
             let sysroot = Sysroot::install(commit.sha.to_string(), &target_triple)
                 .with_context(|| format!("failed to install sysroot for {:?}", commit))?;
 
-            let benchmarks = get_benchmarks(
-                &benchmark_dir,
-                next.include.as_deref(),
-                next.exclude.as_deref(),
-            )?;
+            let benchmarks = get_benchmarks(&benchmark_dir, next.include, next.exclude)?;
 
             let res = bench(
                 &mut rt,
@@ -981,11 +970,11 @@ fn main_result() -> anyhow::Result<i32> {
                 &ArtifactId::Commit(commit),
                 &ProfileKind::all(),
                 &ScenarioKind::all(),
-                bench_rustc,
+                bench_rustc.bench_rustc,
                 Compiler::from_sysroot(&sysroot),
                 &benchmarks,
                 next.runs.map(|v| v as usize),
-                is_self_profile,
+                self_profile.self_profile,
             );
 
             client.post(&format!("{}/perf/onpush", site_url)).send()?;
@@ -994,13 +983,7 @@ fn main_result() -> anyhow::Result<i32> {
             Ok(0)
         }
 
-        ("bench_published", Some(sub_m)) => {
-            // Mandatory arguments
-            let toolchain = sub_m.value_of("TOOLCHAIN").unwrap();
-
-            // Options
-            let db = sub_m.value_of("DB").unwrap_or(default_db);
-
+        Commands::BenchPublished { toolchain, db } => {
             let status = Command::new("rustup")
                 .args(&["install", "--profile=minimal", &toolchain])
                 .status()
@@ -1009,20 +992,17 @@ fn main_result() -> anyhow::Result<i32> {
                 anyhow::bail!("failed to install toolchain for {}", toolchain);
             }
 
-            let pool = database::Pool::open(db);
+            let pool = database::Pool::open(&db.db);
 
-            let scenario_kinds = if collector::version_supports_incremental(toolchain) {
+            let profile_kinds = if collector::version_supports_doc(&toolchain) {
+                ProfileKind::all()
+            } else {
+                ProfileKind::all_non_doc()
+            };
+            let scenario_kinds = if collector::version_supports_incremental(&toolchain) {
                 ScenarioKind::all()
             } else {
                 ScenarioKind::all_non_incr()
-            };
-            let proile_kinds = if collector::version_supports_doc(toolchain) {
-                ProfileKind::all()
-            } else {
-                let mut all = ProfileKind::all();
-                let doc = all.iter().position(|bk| *bk == ProfileKind::Doc).unwrap();
-                all.remove(doc);
-                all
             };
 
             let which = |tool| {
@@ -1049,8 +1029,8 @@ fn main_result() -> anyhow::Result<i32> {
             let res = bench(
                 &mut rt,
                 pool,
-                &ArtifactId::Tag(toolchain.to_string()),
-                &proile_kinds,
+                &ArtifactId::Tag(toolchain),
+                &profile_kinds,
                 &scenario_kinds,
                 /* bench_rustc */ false,
                 Compiler {
@@ -1068,23 +1048,23 @@ fn main_result() -> anyhow::Result<i32> {
             Ok(0)
         }
 
-        ("profile_local", Some(sub_m)) => {
-            // Mandatory arguments
-            let profiler = Profiler::from_name(sub_m.value_of("PROFILER").unwrap())?;
-            let rustc = sub_m.value_of("RUSTC").unwrap();
-            let id = sub_m.value_of("ID").unwrap();
-
+        Commands::ProfileLocal {
+            profiler,
+            rustc,
+            id,
+            local,
+            out_dir,
+        } => {
             // Options
-            let profile_kinds = profile_kinds_from_arg(&sub_m.value_of("BUILDS"))?;
-            let cargo = sub_m.value_of("CARGO");
-            let exclude = sub_m.value_of("EXCLUDE");
-            let include = sub_m.value_of("INCLUDE");
-            let out_dir = PathBuf::from(sub_m.value_of_os("OUT_DIR").unwrap_or(default_out_dir));
-            let scenario_kinds = scenario_kinds_from_arg(sub_m.value_of("RUNS"))?;
-            let rustdoc = sub_m.value_of("RUSTDOC");
+            let profile_kinds = ProfileKind::expand_all(local.profile_kinds);
+            let scenario_kinds = ScenarioKind::expand_all(local.scenario_kinds);
 
-            let (rustc, rustdoc, cargo) =
-                get_local_toolchain(&profile_kinds, rustc, rustdoc, cargo)?;
+            let (rustc, rustdoc, cargo) = get_local_toolchain(
+                &profile_kinds,
+                &rustc.rustc,
+                local.rustdoc.as_deref(),
+                local.cargo.as_deref(),
+            )?;
             let compiler = Compiler {
                 rustc: &rustc,
                 rustdoc: rustdoc.as_deref(),
@@ -1092,11 +1072,11 @@ fn main_result() -> anyhow::Result<i32> {
                 triple: &target_triple,
                 is_nightly: true,
             };
-            let benchmarks = get_benchmarks(&benchmark_dir, include, exclude)?;
+            let benchmarks = get_benchmarks(&benchmark_dir, local.include, local.exclude)?;
             let mut errors = BenchmarkErrors::new();
             profile(
                 compiler,
-                id,
+                &id.id,
                 profiler,
                 &out_dir,
                 &benchmarks,
@@ -1108,23 +1088,20 @@ fn main_result() -> anyhow::Result<i32> {
             Ok(0)
         }
 
-        ("diff_local", Some(sub_m)) => {
-            // Mandatory arguments
-            let profiler = Profiler::from_name(sub_m.value_of("PROFILER").unwrap())?;
-            let rustc1 = sub_m.value_of("RUSTC_BEFORE").unwrap();
-            let rustc2 = sub_m.value_of("RUSTC_AFTER").unwrap();
+        Commands::DiffLocal {
+            profiler,
+            rustc_before,
+            rustc_after,
+            local,
+            out_dir,
+        } => {
+            let profile_kinds = ProfileKind::expand_all(local.profile_kinds);
+            let scenario_kinds = ScenarioKind::expand_all(local.scenario_kinds);
 
-            // Options
-            let profile_kinds = profile_kinds_from_arg(&sub_m.value_of("BUILDS"))?;
-            let cargo = sub_m.value_of("CARGO");
-            let exclude = sub_m.value_of("EXCLUDE");
-            let include = sub_m.value_of("INCLUDE");
-            let out_dir = PathBuf::from(sub_m.value_of_os("OUT_DIR").unwrap_or(default_out_dir));
-            let scenario_kinds = scenario_kinds_from_arg(sub_m.value_of("RUNS"))?;
-            let rustdoc = sub_m.value_of("RUSTDOC");
             check_installed("valgrind")?;
             check_installed("cg_annotate")?;
             check_installed("rustfilt")?;
+
             // Avoid just straight running rustup-toolchain-install-master which
             // will install the current master commit (fetching quite a bit of
             // data, including hitting GitHub)...
@@ -1136,16 +1113,20 @@ fn main_result() -> anyhow::Result<i32> {
                 anyhow::bail!("rustup-toolchain-install-master is not installed but must be");
             }
 
-            let id1 = rustc1.strip_prefix('+').unwrap_or("before");
-            let id2 = rustc2.strip_prefix('+').unwrap_or("after");
+            let id1 = rustc_before.strip_prefix('+').unwrap_or("before");
+            let id2 = rustc_after.strip_prefix('+').unwrap_or("after");
             let mut toolchains = Vec::new();
-            for (id, rustc) in [(id1, rustc1), (id2, rustc2)] {
-                let (rustc, rustdoc, cargo) =
-                    get_local_toolchain(&profile_kinds, rustc, rustdoc, cargo)?;
+            for (id, rustc) in [(id1, &rustc_before), (id2, &rustc_after)] {
+                let (rustc, rustdoc, cargo) = get_local_toolchain(
+                    &profile_kinds,
+                    rustc,
+                    local.rustdoc.as_deref(),
+                    local.cargo.as_deref(),
+                )?;
                 toolchains.push((id.to_owned(), rustc, rustdoc, cargo));
             }
 
-            let benchmarks = get_benchmarks(&benchmark_dir, include, exclude)?;
+            let benchmarks = get_benchmarks(&benchmark_dir, local.include, local.exclude)?;
             let mut errors = BenchmarkErrors::new();
             for (id, rustc, rustdoc, cargo) in &toolchains {
                 let compiler = Compiler {
@@ -1194,11 +1175,7 @@ fn main_result() -> anyhow::Result<i32> {
             Ok(0)
         }
 
-        ("install_next", Some(_sub_m)) => {
-            // Mandatory arguments: (none)
-
-            // Options: (none)
-
+        Commands::InstallNext => {
             let last_sha = Command::new("git")
                 .arg("ls-remote")
                 .arg("https://github.com/rust-lang/rust.git")
@@ -1218,13 +1195,7 @@ fn main_result() -> anyhow::Result<i32> {
 
             Ok(0)
         }
-
-        _ => {
-            let _ = writeln!(stderr(), "{}", matches.usage());
-            Ok(2)
-        }
-    };
-    ret
+    }
 }
 
 pub fn get_commit_or_fake_it(sha: &str) -> anyhow::Result<Commit> {
