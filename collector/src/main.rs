@@ -18,7 +18,7 @@ use tokio::runtime::Runtime;
 mod execute;
 mod sysroot;
 
-use execute::{Benchmark, Profiler};
+use execute::{BenchProcessor, Benchmark, BenchmarkName, ProfileProcessor, Profiler};
 use sysroot::Sysroot;
 
 #[derive(Debug, Copy, Clone)]
@@ -254,52 +254,52 @@ fn bench(
     let start = Instant::now();
     let mut skipped = false;
 
-    let mut measure_and_record = |benchmark_name: &execute::BenchmarkName,
-                                  benchmark_supports_stable: bool,
-                                  print_intro: &dyn Fn(),
-                                  measure: &dyn Fn(
-        &mut execute::BenchProcessor,
-    ) -> Result<(), anyhow::Error>| {
-        let is_fresh = rt.block_on(conn.collector_start_step(artifact_row_id, &benchmark_name.0));
-        if !is_fresh {
-            skipped = true;
-            eprintln!("skipping {} -- already benchmarked", benchmark_name);
-            return;
-        }
-        let mut tx = rt.block_on(conn.transaction());
-        rt.block_on(
-            tx.conn()
-                .record_benchmark(&benchmark_name.0, Some(benchmark_supports_stable)),
-        );
-        print_intro();
-
-        let mut processor = execute::BenchProcessor::new(
-            rt,
-            tx.conn(),
-            benchmark_name,
-            &artifact_id,
-            artifact_row_id,
-            is_self_profile,
-        );
-        let result = measure(&mut processor);
-        if let Err(s) = result {
-            eprintln!(
-                "collector error: Failed to benchmark '{}', recorded: {:#}",
-                benchmark_name, s
+    let mut measure_and_record =
+        |benchmark_name: &BenchmarkName,
+         benchmark_supports_stable: bool,
+         print_intro: &dyn Fn(),
+         measure: &dyn Fn(&mut BenchProcessor) -> anyhow::Result<()>| {
+            let is_fresh =
+                rt.block_on(conn.collector_start_step(artifact_row_id, &benchmark_name.0));
+            if !is_fresh {
+                skipped = true;
+                eprintln!("skipping {} -- already benchmarked", benchmark_name);
+                return;
+            }
+            let mut tx = rt.block_on(conn.transaction());
+            rt.block_on(
+                tx.conn()
+                    .record_benchmark(&benchmark_name.0, Some(benchmark_supports_stable)),
             );
-            errors.incr();
-            rt.block_on(tx.conn().record_error(
+            print_intro();
+
+            let mut processor = BenchProcessor::new(
+                rt,
+                tx.conn(),
+                benchmark_name,
+                &artifact_id,
                 artifact_row_id,
-                &benchmark_name.0,
-                &format!("{:?}", s),
-            ));
+                is_self_profile,
+            );
+            let result = measure(&mut processor);
+            if let Err(s) = result {
+                eprintln!(
+                    "collector error: Failed to benchmark '{}', recorded: {:#}",
+                    benchmark_name, s
+                );
+                errors.incr();
+                rt.block_on(tx.conn().record_error(
+                    artifact_row_id,
+                    &benchmark_name.0,
+                    &format!("{:?}", s),
+                ));
+            };
+            rt.block_on(
+                tx.conn()
+                    .collector_end_step(artifact_row_id, &benchmark_name.0),
+            );
+            rt.block_on(tx.commit()).expect("committed");
         };
-        rt.block_on(
-            tx.conn()
-                .collector_end_step(artifact_row_id, &benchmark_name.0),
-        );
-        rt.block_on(tx.commit()).expect("committed");
-    };
 
     // Normal benchmarks.
     for (nth_benchmark, benchmark) in benchmarks.iter().enumerate() {
@@ -327,7 +327,7 @@ fn bench(
     // The special rustc benchmark, if requested.
     if bench_rustc {
         measure_and_record(
-            &execute::BenchmarkName("rustc".to_string()),
+            &BenchmarkName("rustc".to_string()),
             /* supports_stable */ false,
             &|| eprintln!("Special benchmark commencing (due to `--bench-rustc`)"),
             &|processor| processor.measure_rustc(compiler).context("measure rustc"),
@@ -717,7 +717,7 @@ fn profile(
     }
     for (i, benchmark) in benchmarks.iter().enumerate() {
         eprintln!("{}", n_normal_benchmarks_remaining(benchmarks.len() - i));
-        let mut processor = execute::ProfileProcessor::new(profiler, out_dir, id);
+        let mut processor = ProfileProcessor::new(profiler, out_dir, id);
         let result = benchmark.measure(
             &mut processor,
             &profile_kinds,
