@@ -768,7 +768,7 @@ struct DbOption {
 
 #[derive(Debug, clap::Args)]
 struct BenchRustcOption {
-    // Run the special `rustc` benchmark
+    /// Run the special `rustc` benchmark
     #[clap(long = "bench-rustc")]
     bench_rustc: bool,
 }
@@ -1217,4 +1217,12 @@ pub fn get_commit_or_fake_it(sha: &str) -> anyhow::Result<Commit> {
                 date: database::Date::ymd_hms(2000, 01, 01, 0, 0, 0),
             }
         }))
+}
+
+#[test]
+fn verify_app() {
+    // By default, clap lazily checks subcommands. This provides eager testing
+    // without having to run the binary for each subcommand.
+    use clap::IntoApp;
+    Cli::into_app().debug_assert()
 }
