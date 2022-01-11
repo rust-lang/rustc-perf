@@ -15,6 +15,7 @@ use std::{collections::HashMap, process::Command};
 use std::{path::Path, time::Duration};
 use tokio::runtime::Runtime;
 
+/// Measure the special rustc benchmark.
 pub fn measure(
     rt: &mut Runtime,
     conn: &mut dyn database::Connection,
@@ -22,6 +23,8 @@ pub fn measure(
     artifact: &database::ArtifactId,
     aid: database::ArtifactIdNumber,
 ) -> anyhow::Result<()> {
+    eprintln!("Running rustc");
+
     checkout(&artifact).context("checking out rust-lang/rust")?;
 
     record(rt, conn, compiler, artifact, aid)?;

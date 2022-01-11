@@ -571,13 +571,9 @@ pub trait Processor {
     fn finished_first_collection(&mut self, _: ProfileKind) -> bool {
         false
     }
-
-    fn measure_rustc(&mut self, _: Compiler<'_>) -> anyhow::Result<()> {
-        Ok(())
-    }
 }
 
-pub struct MeasureProcessor<'a> {
+pub struct BenchProcessor<'a> {
     rt: &'a mut Runtime,
     benchmark: &'a BenchmarkName,
     conn: &'a mut dyn database::Connection,
@@ -589,7 +585,7 @@ pub struct MeasureProcessor<'a> {
     tries: u8,
 }
 
-impl<'a> MeasureProcessor<'a> {
+impl<'a> BenchProcessor<'a> {
     pub fn new(
         rt: &'a mut Runtime,
         conn: &'a mut dyn database::Connection,
@@ -615,7 +611,7 @@ impl<'a> MeasureProcessor<'a> {
             assert!(has_tracelog);
         }
 
-        MeasureProcessor {
+        BenchProcessor {
             rt,
             upload: None,
             conn,
@@ -722,6 +718,16 @@ impl<'a> MeasureProcessor<'a> {
         self.rt
             .block_on(async move { while let Some(()) = buf.next().await {} });
     }
+
+    pub fn measure_rustc(&mut self, compiler: Compiler<'_>) -> anyhow::Result<()> {
+        rustc::measure(
+            self.rt,
+            self.conn,
+            compiler,
+            self.artifact,
+            self.artifact_row_id,
+        )
+    }
 }
 
 struct Upload(std::process::Child, tempfile::NamedTempFile);
@@ -812,7 +818,7 @@ impl Upload {
     }
 }
 
-impl<'a> Processor for MeasureProcessor<'a> {
+impl<'a> Processor for BenchProcessor<'a> {
     fn profiler(&self, _profile: ProfileKind) -> Profiler {
         if self.is_first_collection && self.is_self_profile {
             if cfg!(unix) {
@@ -896,16 +902,6 @@ impl<'a> Processor for MeasureProcessor<'a> {
                 panic!("process_perf_stat_output failed: {:?}", e);
             }
         }
-    }
-
-    fn measure_rustc(&mut self, compiler: Compiler<'_>) -> anyhow::Result<()> {
-        rustc::measure(
-            self.rt,
-            self.conn,
-            compiler,
-            self.artifact,
-            self.artifact_row_id,
-        )
     }
 }
 
@@ -1231,15 +1227,6 @@ impl<'a> Processor for ProfileProcessor<'a> {
 
 impl Benchmark {
     pub fn new(name: String, path: PathBuf) -> anyhow::Result<Self> {
-        if name == "rustc" {
-            return Ok(Benchmark {
-                name: BenchmarkName(name),
-                path,
-                patches: vec![],
-                config: BenchmarkConfig::default(),
-            });
-        }
-
         let mut patches = vec![];
         for entry in fs::read_dir(&path)? {
             let entry = entry?;
@@ -1358,10 +1345,6 @@ impl Benchmark {
         iterations: Option<usize>,
     ) -> anyhow::Result<()> {
         let iterations = iterations.unwrap_or(self.config.runs);
-
-        if self.name.0 == "rustc" {
-            return processor.measure_rustc(compiler).context("measure rustc");
-        }
 
         if self.config.disabled || profile_kinds.is_empty() {
             eprintln!("Skipping {}: disabled", self.name);

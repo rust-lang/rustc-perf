@@ -26,6 +26,6 @@ while : ; do
         rm todo-artifacts
         touch todo-artifacts
 
-        target/release/collector bench_next $SITE_URL --self-profile --db $DATABASE;
+        target/release/collector bench_next $SITE_URL --self-profile --bench-rustc --db $DATABASE;
         echo finished run at `date`;
 done

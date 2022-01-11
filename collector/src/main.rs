@@ -18,7 +18,7 @@ use tokio::runtime::Runtime;
 mod execute;
 mod sysroot;
 
-use execute::{Benchmark, Profiler};
+use execute::{BenchProcessor, Benchmark, BenchmarkName, ProfileProcessor, Profiler};
 use sysroot::Sysroot;
 
 #[derive(Debug, Copy, Clone)]
@@ -183,9 +183,9 @@ where
     Ok(v)
 }
 
-fn n_benchmarks_remaining(n: usize) -> String {
+fn n_normal_benchmarks_remaining(n: usize) -> String {
     let suffix = if n == 1 { "" } else { "s" };
-    format!("{} benchmark{} remaining", n, suffix)
+    format!("{} normal benchmark{} remaining", n, suffix)
 }
 
 struct BenchmarkErrors(usize);
@@ -213,6 +213,7 @@ fn bench(
     artifact_id: &ArtifactId,
     profile_kinds: &[ProfileKind],
     scenario_kinds: &[ScenarioKind],
+    bench_rustc: bool,
     compiler: Compiler<'_>,
     benchmarks: &[Benchmark],
     iterations: Option<usize>,
@@ -231,10 +232,13 @@ fn bench(
         }
     }
 
-    let steps = benchmarks
+    let mut steps = benchmarks
         .iter()
         .map(|b| b.name.to_string())
         .collect::<Vec<_>>();
+    if bench_rustc {
+        steps.push("rustc".to_string());
+    }
 
     // Make sure there is no observable time when the artifact ID is available
     // but the in-progress steps are not.
@@ -249,57 +253,87 @@ fn bench(
 
     let start = Instant::now();
     let mut skipped = false;
-    for (nth_benchmark, benchmark) in benchmarks.iter().enumerate() {
-        let is_fresh =
-            rt.block_on(conn.collector_start_step(artifact_row_id, &benchmark.name.to_string()));
-        if !is_fresh {
-            skipped = true;
-            eprintln!("skipping {} -- already benchmarked", benchmark.name);
-            continue;
-        }
-        let mut tx = rt.block_on(conn.transaction());
-        rt.block_on(
-            tx.conn()
-                .record_benchmark(benchmark.name.0.as_str(), Some(benchmark.supports_stable())),
-        );
-        eprintln!(
-            "{}",
-            n_benchmarks_remaining(benchmarks.len() - nth_benchmark)
-        );
 
-        let mut processor = execute::MeasureProcessor::new(
-            rt,
-            tx.conn(),
-            &benchmark.name,
-            &artifact_id,
-            artifact_row_id,
-            is_self_profile,
-        );
-        let result = benchmark.measure(
-            &mut processor,
-            profile_kinds,
-            scenario_kinds,
-            compiler,
-            iterations,
-        );
-        if let Err(s) = result {
-            eprintln!(
-                "collector error: Failed to benchmark '{}', recorded: {:#}",
-                benchmark.name, s
+    let mut measure_and_record =
+        |benchmark_name: &BenchmarkName,
+         benchmark_supports_stable: bool,
+         print_intro: &dyn Fn(),
+         measure: &dyn Fn(&mut BenchProcessor) -> anyhow::Result<()>| {
+            let is_fresh =
+                rt.block_on(conn.collector_start_step(artifact_row_id, &benchmark_name.0));
+            if !is_fresh {
+                skipped = true;
+                eprintln!("skipping {} -- already benchmarked", benchmark_name);
+                return;
+            }
+            let mut tx = rt.block_on(conn.transaction());
+            rt.block_on(
+                tx.conn()
+                    .record_benchmark(&benchmark_name.0, Some(benchmark_supports_stable)),
             );
-            errors.incr();
-            rt.block_on(tx.conn().record_error(
+            print_intro();
+
+            let mut processor = BenchProcessor::new(
+                rt,
+                tx.conn(),
+                benchmark_name,
+                &artifact_id,
                 artifact_row_id,
-                benchmark.name.0.as_str(),
-                &format!("{:?}", s),
-            ));
+                is_self_profile,
+            );
+            let result = measure(&mut processor);
+            if let Err(s) = result {
+                eprintln!(
+                    "collector error: Failed to benchmark '{}', recorded: {:#}",
+                    benchmark_name, s
+                );
+                errors.incr();
+                rt.block_on(tx.conn().record_error(
+                    artifact_row_id,
+                    &benchmark_name.0,
+                    &format!("{:?}", s),
+                ));
+            };
+            rt.block_on(
+                tx.conn()
+                    .collector_end_step(artifact_row_id, &benchmark_name.0),
+            );
+            rt.block_on(tx.commit()).expect("committed");
         };
-        rt.block_on(
-            tx.conn()
-                .collector_end_step(artifact_row_id, &benchmark.name.to_string()),
-        );
-        rt.block_on(tx.commit()).expect("committed");
+
+    // Normal benchmarks.
+    for (nth_benchmark, benchmark) in benchmarks.iter().enumerate() {
+        measure_and_record(
+            &benchmark.name,
+            benchmark.supports_stable(),
+            &|| {
+                eprintln!(
+                    "{}",
+                    n_normal_benchmarks_remaining(benchmarks.len() - nth_benchmark)
+                )
+            },
+            &|processor| {
+                benchmark.measure(
+                    processor,
+                    profile_kinds,
+                    scenario_kinds,
+                    compiler,
+                    iterations,
+                )
+            },
+        )
     }
+
+    // The special rustc benchmark, if requested.
+    if bench_rustc {
+        measure_and_record(
+            &BenchmarkName("rustc".to_string()),
+            /* supports_stable */ false,
+            &|| eprintln!("Special benchmark commencing (due to `--bench-rustc`)"),
+            &|processor| processor.measure_rustc(compiler).context("measure rustc"),
+        );
+    }
+
     let end = start.elapsed();
 
     eprintln!(
@@ -373,7 +407,6 @@ fn get_benchmarks(
 
         paths.push((path, name));
     }
-    paths.push((PathBuf::from("rustc"), String::from("rustc")));
 
     let mut includes = include.map(|list| list.split(',').collect::<HashSet<_>>());
     let mut excludes = exclude.map(|list| list.split(',').collect::<HashSet<_>>());
@@ -683,8 +716,8 @@ fn profile(
         check_measureme_installed().unwrap();
     }
     for (i, benchmark) in benchmarks.iter().enumerate() {
-        eprintln!("{}", n_benchmarks_remaining(benchmarks.len() - i));
-        let mut processor = execute::ProfileProcessor::new(profiler, out_dir, id);
+        eprintln!("{}", n_normal_benchmarks_remaining(benchmarks.len() - i));
+        let mut processor = ProfileProcessor::new(profiler, out_dir, id);
         let result = benchmark.measure(
             &mut processor,
             &profile_kinds,
@@ -742,6 +775,8 @@ fn main_result() -> anyhow::Result<i32> {
             (@arg INCLUDE: --include     +takes_value
              "Include only benchmarks that are listed in\n\
              this comma-separated list of patterns")
+            (@arg BENCH_RUSTC: --("bench-rustc")
+             "Run the special `rustc` benchmark")
             (@arg RUNS:    --runs    +takes_value
              "One or more (comma-separated) of: 'Full',\n\
              'IncrFull', 'IncrUnchanged', 'IncrPatched', 'All'")
@@ -752,13 +787,15 @@ fn main_result() -> anyhow::Result<i32> {
         )
 
         (@subcommand bench_next =>
-            (about: "Benchmarks the next commit for perf.rust-lang.org")
+            (about: "Benchmarks the next commit for perf.rust-lang.org, including the special `rustc` benchmark")
 
             // Mandatory arguments
             (@arg SITE_URL: +required +takes_value "Site URL")
 
             // Options
             (@arg DB:           --db  +takes_value "Database output file")
+            (@arg BENCH_RUSTC: --("bench-rustc")
+             "Run the special `rustc` benchmark")
             (@arg SELF_PROFILE: --("self-profile") "Collect self-profile data")
         )
 
@@ -868,6 +905,7 @@ fn main_result() -> anyhow::Result<i32> {
             let db = sub_m.value_of("DB").unwrap_or(default_db);
             let exclude = sub_m.value_of("EXCLUDE");
             let include = sub_m.value_of("INCLUDE");
+            let bench_rustc = sub_m.is_present("BENCH_RUSTC");
             let scenario_kinds = scenario_kinds_from_arg(sub_m.value_of("RUNS"))?;
             let iterations = iterations_from_arg(sub_m.value_of("ITERATIONS"))?;
             let rustdoc = sub_m.value_of("RUSTDOC");
@@ -886,6 +924,7 @@ fn main_result() -> anyhow::Result<i32> {
                 &ArtifactId::Tag(id.to_string()),
                 &profile_kinds,
                 &scenario_kinds,
+                bench_rustc,
                 Compiler {
                     rustc: &rustc,
                     rustdoc: rustdoc.as_deref(),
@@ -907,6 +946,7 @@ fn main_result() -> anyhow::Result<i32> {
 
             // Options
             let db = sub_m.value_of("DB").unwrap_or(default_db);
+            let bench_rustc = sub_m.is_present("BENCH_RUSTC");
             let is_self_profile = sub_m.is_present("SELF_PROFILE");
 
             println!("processing commits");
@@ -941,6 +981,7 @@ fn main_result() -> anyhow::Result<i32> {
                 &ArtifactId::Commit(commit),
                 &ProfileKind::all(),
                 &ScenarioKind::all(),
+                bench_rustc,
                 Compiler::from_sysroot(&sysroot),
                 &benchmarks,
                 next.runs.map(|v| v as usize),
@@ -1011,6 +1052,7 @@ fn main_result() -> anyhow::Result<i32> {
                 &ArtifactId::Tag(toolchain.to_string()),
                 &proile_kinds,
                 &scenario_kinds,
+                /* bench_rustc */ false,
                 Compiler {
                     rustc: Path::new(rustc.trim()),
                     rustdoc: Some(Path::new(rustdoc.trim())),

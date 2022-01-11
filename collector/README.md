@@ -107,6 +107,12 @@ The following options alter the behaviour of the `bench_local` subcommand.
   comma-separated list of benchmark names. When this option is specified, a
   benchmark is included in the run only if its name matches one or more of the
   given names.
+- `--bench-rustc`: there is a special `rustc` benchmark that involves
+  downloading a recent Rust compiler and measuring the time taken to compile
+  it. This benchmark works very differently to all the other benchmarks. For
+  example, `--runs` and `--builds` don't affect it, and the given `ID` is used
+  as the `rust-lang/rust` ref (falling back to `HEAD` if the `ID` is not a
+  valid ref). It is for advanced and CI use only. This option enables it.
 - `--runs $RUNS`: the run kinds to be benchmarked. The possible choices are one
   or more (comma-separated) of `Full`, `IncrFull`, `IncrUnchanged`,
   `IncrPatched`, and `All`. The default is `All`. Note that `IncrFull` is
