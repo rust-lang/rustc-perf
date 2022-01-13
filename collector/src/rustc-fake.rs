@@ -15,6 +15,7 @@ fn determinism_env(cmd: &mut Command) {
     // comparing two commits has a source of noise that makes it harder to know
     // what the actual change between two artifacts is.
     cmd.env("RUSTC_FORCE_INCR_COMP_ARTIFACT_HEADER", "rustc-perf");
+    cmd.env("RUSTC_FORCE_RUSTC_VERSION", "rustc-perf");
 }
 
 fn main() {
