@@ -1000,8 +1000,8 @@ impl TestResultComparison {
         .unwrap();
         writeln!(
             summary,
-            " (up to {:.1}% on `{}` builds of `{}`)",
-            percent, self.scenario, self.benchmark
+            " (up to {:.1}% on `{}` builds of `{} {}`)",
+            percent, self.scenario, self.benchmark, self.profile
         )
         .unwrap();
     }
