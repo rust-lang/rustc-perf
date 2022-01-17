@@ -614,14 +614,15 @@ async fn main() -> anyhow::Result<()> {
 
     let matches = clap::App::new("sqlite-to-postgres")
         .about("Exports a rustc-perf SQLite database to a Postgres database")
+        .version(clap::crate_version!())
         .arg(
-            clap::Arg::with_name("sqlite-db")
+            clap::Arg::new("sqlite-db")
                 .required(true)
                 .value_name("SQLITE_DB")
                 .help("SQLite database file"),
         )
         .arg(
-            clap::Arg::with_name("postgres-db")
+            clap::Arg::new("postgres-db")
                 .required(true)
                 .value_name("POSTGRES_DB")
                 .help(
