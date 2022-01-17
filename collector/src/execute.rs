@@ -12,8 +12,7 @@ use std::env;
 use std::fmt;
 use std::fs::{self, File};
 use std::hash;
-use std::io::Read;
-use std::io::Write;
+use std::io::{BufRead, Read, Write};
 use std::mem::ManuallyDrop;
 use std::path::{Path, PathBuf};
 use std::process::{self, Command};
@@ -1144,7 +1143,22 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 let tmp_eprintln_file = filepath(data.cwd.as_ref(), "eprintln");
                 let eprintln_file = filepath(self.output_dir, &out_file("eprintln"));
 
-                fs::copy(&tmp_eprintln_file, &eprintln_file)?;
+                let mut final_file =
+                    std::io::BufWriter::new(std::fs::File::create(&eprintln_file)?);
+                for line in
+                    std::io::BufReader::new(std::fs::File::open(&tmp_eprintln_file)?).lines()
+                {
+                    let line = line?;
+                    // rustc under Cargo currently ~always emits artifact
+                    // messages -- which we don't want in final
+                    // eprintln output. These messages generally look like:
+                    // {"artifact":"/tmp/.tmpjIe45J/...","emit":"dep-info"}
+                    if line.starts_with(r#"{"artifact":"#) {
+                        continue;
+                    }
+
+                    writeln!(&mut final_file, "{}", line)?;
+                }
             }
 
             // mono item results are redirected (via rustc-fake) to a file
