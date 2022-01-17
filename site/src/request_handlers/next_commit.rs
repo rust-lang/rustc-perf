@@ -7,6 +7,7 @@ pub async fn handle_next_commit(ctxt: Arc<SiteCtxt>) -> next_commit::Response {
     let next_commit = ctxt.missing_commits().await.into_iter().next();
 
     let next_commit = if let Some((commit, missing_reason)) = next_commit {
+        let missing_reason_dbg = format!("{:?}", missing_reason);
         // If we're going to run a master commit next, make sure
         // it's been enqueued in the pull_request_build table
         if let MissingReason::Master {
@@ -17,7 +18,9 @@ pub async fn handle_next_commit(ctxt: Arc<SiteCtxt>) -> next_commit::Response {
             // TODO: add capability of doing the following in one step
             // to avoid possibile illegal inbetween states.
             conn.queue_pr(pr, None, None, None).await;
-            conn.pr_attach_commit(pr, &commit.sha, parent_sha).await;
+            if !conn.pr_attach_commit(pr, &commit.sha, parent_sha).await {
+                log::error!("failed to attach commit {} to PR queue", commit.sha);
+            }
         }
         let (include, exclude, runs) = match missing_reason {
             crate::load::MissingReason::Try {
@@ -41,6 +44,11 @@ pub async fn handle_next_commit(ctxt: Arc<SiteCtxt>) -> next_commit::Response {
             }
             _ => (None, None, None),
         };
+        log::debug!(
+            "next_commit: {} (missing: {})",
+            commit.sha,
+            missing_reason_dbg
+        );
         Some(next_commit::Commit {
             sha: commit.sha,
             include,
