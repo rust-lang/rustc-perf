@@ -16,7 +16,8 @@ RUST_BACKTRACE=1 \
     CARGO_LOG=cargo::core::compiler::fingerprint=info \
     RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
     cargo run -p collector --bin collector -- \
-    bench_local $bindir/rustc Test \
+    bench_local $bindir/rustc \
+        --id Test \
         --builds $PROFILE_KINDS \
         --cargo $bindir/cargo \
         --runs All \
