@@ -1,11 +1,12 @@
 [package]
-authors = ["Mark Simulacrum <mark.simulacrum@gmail.com>"]
+authors = ["The Rust Compiler Team"]
 name = "collector"
 version = "0.1.0"
-edition = '2018'
+edition = "2018"
+description = "Collects Rust performance data"
 
 [dependencies]
-clap = "2.25"
+clap = { version = "3.0.6", features = ["derive"] }
 env_logger = "0.8"
 anyhow = "1"
 thiserror = "1"

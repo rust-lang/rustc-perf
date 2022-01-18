@@ -4,7 +4,6 @@
 //! transactions, and will likely fail if used on a populated database.
 
 use chrono::{DateTime, Utc};
-use clap::value_t;
 use database::pool::{postgres, sqlite, ConnectionManager};
 use futures::StreamExt;
 use rusqlite::params;
@@ -464,8 +463,9 @@ async fn main() -> anyhow::Result<()> {
 
     let matches = clap::App::new("postgres-to-sqlite")
         .about("Exports a rustc-perf Postgres database to a SQLite database")
+        .version(clap::crate_version!())
         .arg(
-            clap::Arg::with_name("exclude-tables")
+            clap::Arg::new("exclude-tables")
                 .long("exclude-tables")
                 .takes_value(true)
                 .value_name("TABLES")
@@ -474,24 +474,24 @@ async fn main() -> anyhow::Result<()> {
                 .help("Exclude given tables (as foreign key constraints allow)"),
         )
         .arg(
-            clap::Arg::with_name("no-self-profile")
+            clap::Arg::new("no-self-profile")
                 .long("no-self-profile")
                 .help("Exclude some potentially large self-profile tables (additive with --exclude-tables)"),
         )
         .arg(
-            clap::Arg::with_name("since-weeks-ago")
+            clap::Arg::new("since-weeks-ago")
                 .long("since-weeks-ago")
                 .takes_value(true)
                 .value_name("WEEKS")
                 .help("Exclude data associated with artifacts whose date value precedes <WEEKS> weeks ago"),
         )
         .arg(
-            clap::Arg::with_name("fast-unsafe")
+            clap::Arg::new("fast-unsafe")
                 .long("fast-unsafe")
                 .help("Enable faster execution at the risk of corrupting SQLite database in the event of a crash"),
         )
         .arg(
-            clap::Arg::with_name("postgres-db")
+            clap::Arg::new("postgres-db")
                 .required(true)
                 .value_name("POSTGRES_DB")
                 .help(
@@ -500,7 +500,7 @@ async fn main() -> anyhow::Result<()> {
                 ),
         )
         .arg(
-            clap::Arg::with_name("sqlite-db")
+            clap::Arg::new("sqlite-db")
                 .required(true)
                 .value_name("SQLITE_DB")
                 .help("SQLite database file"),
@@ -521,7 +521,7 @@ async fn main() -> anyhow::Result<()> {
         // `RawSelfProfile` is intentionally kept.
     }
 
-    let since_weeks_ago = match clap::value_t!(matches, "since-weeks-ago", u32) {
+    let since_weeks_ago = match matches.value_of_t("since-weeks-ago") {
         Ok(weeks) => Some(weeks),
         Err(err) if err.kind == clap::ErrorKind::ArgumentNotFound => None,
         Err(err) => err.exit(),
