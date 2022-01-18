@@ -84,7 +84,7 @@ fn main() {
                     .args(&args);
 
                 let prof_out_dir = std::env::current_dir().unwrap().join("self-profile-output");
-                if wrapper == "perf-stat-self-profile" {
+                if wrapper == "PerfStatSelfProfile" {
                     cmd.arg(&format!(
                         "-Zself-profile={}",
                         prof_out_dir.to_str().unwrap()
@@ -99,7 +99,7 @@ fn main() {
                 assert!(status.success());
                 print_memory();
                 print_time(dur);
-                if wrapper == "perf-stat-self-profile" {
+                if wrapper == "PerfStatSelfProfile" {
                     process_self_profile_output(prof_out_dir, &args[..]);
                 }
             }
@@ -151,7 +151,7 @@ fn main() {
                 tool.args(&args);
 
                 let prof_out_dir = std::env::current_dir().unwrap().join("self-profile-output");
-                if wrapper == "xperf-stat-self-profile" {
+                if wrapper == "XperfStatSelfProfile" {
                     tool.arg(&format!(
                         "-Zself-profile={}",
                         prof_out_dir.to_str().unwrap()
@@ -182,7 +182,7 @@ fn main() {
                 let counters_file = std::env::current_dir().unwrap().join("pmc_counters.txt");
                 println!("!counters-file:{}", counters_file.to_str().unwrap());
 
-                if wrapper == "xperf-stat-self-profile" {
+                if wrapper == "XperfStatSelfProfile" {
                     process_self_profile_output(prof_out_dir, &args[..]);
                 }
             }
