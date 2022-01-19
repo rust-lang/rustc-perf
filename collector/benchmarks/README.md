@@ -100,6 +100,10 @@ programs.
 - **match-stress-exhaustive_patterns**: Contains code extracted from the `syn`
   crate to amplify the perf degradation caused by the `exhaustive_patterns`, as
   measured [here](https://github.com/rust-lang/rust/pull/79394).
+- **projection-caching**: A small program that causes extremely, deeply nested
+  types which stress the trait system's projection cache. Removing that cache
+  resulted in hours long compilations for some programs using futures,
+  actix-web and other libraries with similiarly nested type combinators.
 - **regression-31157**: A small program that caused a [large performance
   regression](https://github.com/rust-lang/rust/issues/31157) from the past.
 - **token-stream-stress**: Constructs a long token stream much like the `quote`
