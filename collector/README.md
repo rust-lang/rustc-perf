@@ -405,16 +405,16 @@ The following options alter the behaviour of the `profile_local` subcommand.
 - `--cargo <CARGO>`: as for `bench_local`.
 - `--exclude <EXCLUDE>`: as for `bench_local`.
 - `--id <ID>`: an identifer that will form part of the output filenames.
-  Also, if `--rustc2` is identified, a `1` will be appended to the ID for the
-  first run and a `2` will be appended to the ID for the second run.
 - `--include <INCLUDE>`: as for `bench_local`.
 - `--out-dir <OUT_DIR>`: a path (relative or absolute) to a directory in
   which the output will be placed. If the directory doesn't exist, it will be
   created. The default is `results/`.
 - `--runs <RUNS>`: as for `bench_local`.
 - `--rustc2 <RUSTC>`: if given, profiles a second Rust compiler for comparison
-  against the first. If the profiler being used is Cachegrind, diff files will
-  also be produced.
+  against the first. If a non-toolchain identifier is being used, a `1` will be
+  appended to the identifier for the first run and a `2` will be appended to
+  the identifier for the second run. If the profiler being used is Cachegrind,
+  diff files will also be produced. 
 - `--rustdoc <RUSTDOC>` as for `bench_local`.
 
 `RUST_LOG=debug` can be specified to enable verbose logging, which is useful

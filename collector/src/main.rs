@@ -1099,6 +1099,9 @@ fn main_result() -> anyhow::Result<i32> {
                 };
 
             if let Some(rustc2) = rustc2 {
+                if local.rustc.starts_with('+') && local.rustc == rustc2 && local.id.is_none() {
+                    anyhow::bail!("identical toolchain IDs; use --id to get distinct IDs");
+                }
                 let id1 = get_toolchain_and_profile(local.rustc.as_str(), "1")?;
                 let id2 = get_toolchain_and_profile(rustc2.as_str(), "2")?;
 
