@@ -66,11 +66,11 @@ impl ProfileKind {
         vec![ProfileKind::Check, ProfileKind::Debug, ProfileKind::Opt]
     }
 
-    fn expand_all(vec: Vec<Self>) -> Vec<Self> {
-        if vec.contains(&ProfileKind::All) {
+    fn expand_all(kinds: &[Self]) -> Vec<Self> {
+        if kinds.contains(&ProfileKind::All) {
             Self::all()
         } else {
-            vec
+            kinds.to_vec()
         }
     }
 }
@@ -102,11 +102,11 @@ impl ScenarioKind {
         vec![ScenarioKind::Full]
     }
 
-    fn expand_all(vec: Vec<Self>) -> Vec<Self> {
-        if vec.contains(&ScenarioKind::All) {
+    fn expand_all(kinds: &[Self]) -> Vec<Self> {
+        if kinds.contains(&ScenarioKind::All) {
             Self::all()
         } else {
-            vec
+            kinds.to_vec()
         }
     }
 
@@ -316,8 +316,8 @@ fn is_installed(name: &str) -> bool {
 
 fn get_benchmarks(
     benchmark_dir: &Path,
-    include: Option<String>,
-    exclude: Option<String>,
+    include: Option<&str>,
+    exclude: Option<&str>,
 ) -> anyhow::Result<Vec<Benchmark>> {
     let mut benchmarks = Vec::new();
 
@@ -346,8 +346,6 @@ fn get_benchmarks(
         paths.push((path, name));
     }
 
-    let include = include.as_ref();
-    let exclude = exclude.as_ref();
     let mut includes = include.map(|list| list.split(',').collect::<HashSet<&str>>());
     let mut excludes = exclude.map(|list| list.split(',').collect::<HashSet<&str>>());
 
@@ -414,11 +412,13 @@ fn get_local_toolchain(
     rustc: &str,
     rustdoc: Option<&Path>,
     cargo: Option<&Path>,
-) -> anyhow::Result<(PathBuf, Option<PathBuf>, PathBuf)> {
+    id: Option<&str>,
+    id_suffix: &str,
+) -> anyhow::Result<(PathBuf, Option<PathBuf>, PathBuf, String)> {
     // `+`-prefixed rustc is an indicator to fetch the rustc of the toolchain
     // specified. This follows the similar pattern used by rustup's binaries
     // (e.g., `rustc +stage1`).
-    let rustc = if let Some(toolchain) = rustc.strip_prefix('+') {
+    let (rustc, id) = if let Some(toolchain) = rustc.strip_prefix('+') {
         let output = Command::new("rustup")
             .args(&["which", "rustc", "--toolchain", &toolchain])
             .output()
@@ -428,6 +428,14 @@ fn get_local_toolchain(
         if output.status.code() == Some(101) && toolchain.len() == 40 {
             // No such toolchain exists, so let's try to install it with
             // rustup-toolchain-install-master.
+
+            if Command::new("rustup-toolchain-install-master")
+                .arg("-V")
+                .output()
+                .is_err()
+            {
+                anyhow::bail!("rustup-toolchain-install-master is not installed but must be");
+            }
 
             if !Command::new("rustup-toolchain-install-master")
                 .arg(&toolchain)
@@ -456,11 +464,31 @@ fn get_local_toolchain(
 
         let rustc = PathBuf::from(s.trim());
         debug!("found rustc: {:?}", &rustc);
-        rustc
+
+        // When the id comes from a +toolchain, the suffix is *not* added.
+        let id = if let Some(id) = id {
+            let mut id = id.to_owned();
+            id.push_str(id_suffix);
+            id
+        } else {
+            toolchain.to_owned()
+        };
+        (rustc, id)
     } else {
-        PathBuf::from(rustc)
+        let rustc = PathBuf::from(rustc)
             .canonicalize()
-            .with_context(|| format!("failed to canonicalize rustc executable {:?}", rustc))?
+            .with_context(|| format!("failed to canonicalize rustc executable {:?}", rustc))?;
+
+        // When specifying rustc via a path, the suffix is always added to the
+        // id.
+        let mut id = if let Some(id) = id {
+            id.to_owned()
+        } else {
+            "Id".to_string()
+        };
+        id.push_str(id_suffix);
+
+        (rustc, id)
     };
 
     let rustdoc =
@@ -509,7 +537,7 @@ fn get_local_toolchain(
         cargo
     };
 
-    Ok((rustc, rustdoc, cargo))
+    Ok((rustc, rustdoc, cargo, id))
 }
 
 fn generate_cachegrind_diffs(
@@ -549,8 +577,8 @@ fn generate_cachegrind_diffs(
                 let cgout2 = out_dir.join(filename("cgout", id2));
                 let cgfilt1 = out_dir.join(filename("cgfilt", id1));
                 let cgfilt2 = out_dir.join(filename("cgfilt", id2));
-                let cgdiff = out_dir.join(filename("cgdiff", &id_diff));
-                let cgann = out_dir.join(filename("cgann", &id_diff));
+                let cgfilt_diff = out_dir.join(filename("cgfilt-diff", &id_diff));
+                let cgann_diff = out_dir.join(filename("cgann-diff", &id_diff));
 
                 if let Err(e) = rustfilt(&cgout1, &cgfilt1) {
                     errors.incr();
@@ -562,18 +590,18 @@ fn generate_cachegrind_diffs(
                     eprintln!("collector error: {:?}", e);
                     continue;
                 }
-                if let Err(e) = cg_diff(&cgfilt1, &cgfilt2, &cgdiff) {
+                if let Err(e) = cg_diff(&cgfilt1, &cgfilt2, &cgfilt_diff) {
                     errors.incr();
                     eprintln!("collector error: {:?}", e);
                     continue;
                 }
-                if let Err(e) = cg_annotate(&cgdiff, &cgann) {
+                if let Err(e) = cg_annotate(&cgfilt_diff, &cgann_diff) {
                     errors.incr();
                     eprintln!("collector error: {:?}", e);
                     continue;
                 }
 
-                annotated_diffs.push(cgann);
+                annotated_diffs.push(cgann_diff);
             }
         }
     }
@@ -694,21 +722,16 @@ struct Cli {
 }
 
 #[derive(Debug, clap::Args)]
-struct RustcOption {
-    /// The path to the local rustc to benchmark
+struct LocalOptions {
+    /// The path to the local rustc to measure
     // Not a `PathBuf` because it can be a file path *or* a `+`-prefixed
     // toolchain name, and `PathBuf` doesn't work well for the latter.
     rustc: String,
-}
 
-#[derive(Debug, clap::Args)]
-struct IdOption {
     /// Identifier to associate benchmark results with
-    id: String,
-}
+    #[clap(long)]
+    id: Option<String>,
 
-#[derive(Debug, clap::Args)]
-struct LocalOptions {
     /// Measure the build profiles in this comma-separated list
     // This must be normalized via `ProfilerKind::expand_all()` before use.
     #[clap(
@@ -734,7 +757,7 @@ struct LocalOptions {
     #[clap(long)]
     include: Option<String>,
 
-    /// The path to the local rustdoc to benchmark
+    /// The path to the local rustdoc to measure
     #[clap(long, parse(from_os_str))]
     rustdoc: Option<PathBuf>,
 
@@ -780,12 +803,6 @@ struct BenchRustcOption {
 enum Commands {
     /// Benchmarks a local rustc
     BenchLocal {
-        #[clap(flatten)]
-        rustc: RustcOption,
-
-        #[clap(flatten)]
-        id: IdOption,
-
         #[clap(flatten)]
         local: LocalOptions,
 
@@ -834,38 +851,17 @@ enum Commands {
         profiler: Profiler,
 
         #[clap(flatten)]
-        rustc: RustcOption,
-
-        #[clap(flatten)]
-        id: IdOption,
-
-        #[clap(flatten)]
         local: LocalOptions,
 
         /// Output directory
         #[clap(long = "out-dir", default_value = "results/")]
         out_dir: PathBuf,
-    },
 
-    /// Profiles and compares two toolchains with one of several profilers. If
-    /// the profiler is Cachegrind, also performs a diff
-    DiffLocal {
-        /// Profiler to use
-        #[clap(arg_enum)]
-        profiler: Profiler,
-
-        /// The path to the first local rustc to benchmark
-        rustc_before: String,
-
-        /// The path to the second local rustc to benchmark
-        rustc_after: String,
-
-        #[clap(flatten)]
-        local: LocalOptions,
-
-        /// Output directory
-        #[clap(long = "out-dir", default_value = "results/")]
-        out_dir: PathBuf,
+        /// The path to the second local rustc (to diff against)
+        // Not a `PathBuf` because it can be a file path *or* a `+`-prefixed
+        // toolchain name, and `PathBuf` doesn't work well for the latter.
+        #[clap(long)]
+        rustc2: Option<String>,
     },
 
     /// Installs the next commit for perf.rust-lang.org
@@ -892,32 +888,36 @@ fn main_result() -> anyhow::Result<i32> {
 
     match args.command {
         Commands::BenchLocal {
-            rustc,
-            id,
             local,
             db,
             bench_rustc,
             iterations,
             self_profile,
         } => {
-            let profile_kinds = ProfileKind::expand_all(local.profile_kinds);
-            let scenario_kinds = ScenarioKind::expand_all(local.scenario_kinds);
+            let profile_kinds = ProfileKind::expand_all(&local.profile_kinds);
+            let scenario_kinds = ScenarioKind::expand_all(&local.scenario_kinds);
 
             let pool = database::Pool::open(&db.db);
 
-            let (rustc, rustdoc, cargo) = get_local_toolchain(
+            let (rustc, rustdoc, cargo, id) = get_local_toolchain(
                 &profile_kinds,
-                &rustc.rustc,
+                &local.rustc,
                 local.rustdoc.as_deref(),
                 local.cargo.as_deref(),
+                local.id.as_deref(),
+                "",
             )?;
 
-            let benchmarks = get_benchmarks(&benchmark_dir, local.include, local.exclude)?;
+            let benchmarks = get_benchmarks(
+                &benchmark_dir,
+                local.include.as_deref(),
+                local.exclude.as_deref(),
+            )?;
 
             let res = bench(
                 &mut rt,
                 pool,
-                &ArtifactId::Tag(id.id),
+                &ArtifactId::Tag(id),
                 &profile_kinds,
                 &scenario_kinds,
                 bench_rustc.bench_rustc,
@@ -962,7 +962,11 @@ fn main_result() -> anyhow::Result<i32> {
             let sysroot = Sysroot::install(commit.sha.to_string(), &target_triple)
                 .with_context(|| format!("failed to install sysroot for {:?}", commit))?;
 
-            let benchmarks = get_benchmarks(&benchmark_dir, next.include, next.exclude)?;
+            let benchmarks = get_benchmarks(
+                &benchmark_dir,
+                next.include.as_deref(),
+                next.exclude.as_deref(),
+            )?;
 
             let res = bench(
                 &mut rt,
@@ -1050,125 +1054,85 @@ fn main_result() -> anyhow::Result<i32> {
 
         Commands::ProfileLocal {
             profiler,
-            rustc,
-            id,
             local,
             out_dir,
+            rustc2,
         } => {
-            // Options
-            let profile_kinds = ProfileKind::expand_all(local.profile_kinds);
-            let scenario_kinds = ScenarioKind::expand_all(local.scenario_kinds);
+            let profile_kinds = ProfileKind::expand_all(&local.profile_kinds);
+            let scenario_kinds = ScenarioKind::expand_all(&local.scenario_kinds);
 
-            let (rustc, rustdoc, cargo) = get_local_toolchain(
-                &profile_kinds,
-                &rustc.rustc,
-                local.rustdoc.as_deref(),
-                local.cargo.as_deref(),
+            let benchmarks = get_benchmarks(
+                &benchmark_dir,
+                local.include.as_deref(),
+                local.exclude.as_deref(),
             )?;
-            let compiler = Compiler {
-                rustc: &rustc,
-                rustdoc: rustdoc.as_deref(),
-                cargo: &cargo,
-                triple: &target_triple,
-                is_nightly: true,
-            };
-            let benchmarks = get_benchmarks(&benchmark_dir, local.include, local.exclude)?;
             let mut errors = BenchmarkErrors::new();
-            profile(
-                compiler,
-                &id.id,
-                profiler,
-                &out_dir,
-                &benchmarks,
-                &profile_kinds,
-                &scenario_kinds,
-                &mut errors,
-            );
-            errors.fail_if_nonzero()?;
-            Ok(0)
-        }
 
-        Commands::DiffLocal {
-            profiler,
-            rustc_before,
-            rustc_after,
-            local,
-            out_dir,
-        } => {
-            let profile_kinds = ProfileKind::expand_all(local.profile_kinds);
-            let scenario_kinds = ScenarioKind::expand_all(local.scenario_kinds);
-
-            check_installed("valgrind")?;
-            check_installed("cg_annotate")?;
-            check_installed("rustfilt")?;
-
-            // Avoid just straight running rustup-toolchain-install-master which
-            // will install the current master commit (fetching quite a bit of
-            // data, including hitting GitHub)...
-            if Command::new("rustup-toolchain-install-master")
-                .arg("-V")
-                .output()
-                .is_err()
-            {
-                anyhow::bail!("rustup-toolchain-install-master is not installed but must be");
-            }
-
-            let id1 = rustc_before.strip_prefix('+').unwrap_or("before");
-            let id2 = rustc_after.strip_prefix('+').unwrap_or("after");
-            let mut toolchains = Vec::new();
-            for (id, rustc) in [(id1, &rustc_before), (id2, &rustc_after)] {
-                let (rustc, rustdoc, cargo) = get_local_toolchain(
-                    &profile_kinds,
-                    rustc,
-                    local.rustdoc.as_deref(),
-                    local.cargo.as_deref(),
-                )?;
-                toolchains.push((id.to_owned(), rustc, rustdoc, cargo));
-            }
-
-            let benchmarks = get_benchmarks(&benchmark_dir, local.include, local.exclude)?;
-            let mut errors = BenchmarkErrors::new();
-            for (id, rustc, rustdoc, cargo) in &toolchains {
-                let compiler = Compiler {
-                    rustc: &rustc,
-                    rustdoc: rustdoc.as_deref(),
-                    cargo: &cargo,
-                    triple: &target_triple,
-                    is_nightly: true,
+            let mut get_toolchain_and_profile =
+                |rustc: &str, suffix: &str| -> anyhow::Result<String> {
+                    let (rustc, rustdoc, cargo, id) = get_local_toolchain(
+                        &profile_kinds,
+                        &rustc,
+                        local.rustdoc.as_deref(),
+                        local.cargo.as_deref(),
+                        local.id.as_deref(),
+                        suffix,
+                    )?;
+                    let compiler = Compiler {
+                        rustc: &rustc,
+                        rustdoc: rustdoc.as_deref(),
+                        cargo: &cargo,
+                        triple: &target_triple,
+                        is_nightly: true,
+                    };
+                    profile(
+                        compiler,
+                        &id,
+                        profiler,
+                        &out_dir,
+                        &benchmarks,
+                        &profile_kinds,
+                        &scenario_kinds,
+                        &mut errors,
+                    );
+                    Ok(id)
                 };
-                profile(
-                    compiler,
-                    id,
-                    profiler,
-                    &out_dir,
-                    &benchmarks,
-                    &profile_kinds,
-                    &scenario_kinds,
-                    &mut errors,
-                );
-            }
 
-            if let Profiler::Cachegrind = profiler {
-                let diffs = generate_cachegrind_diffs(
-                    id1,
-                    id2,
-                    &out_dir,
-                    &benchmarks,
-                    &profile_kinds,
-                    &scenario_kinds,
-                    &mut errors,
-                );
-                if diffs.len() > 1 {
-                    eprintln!("Diffs:");
-                    for diff in diffs {
-                        eprintln!("{}", diff.to_string_lossy());
-                    }
-                } else if diffs.len() == 1 {
-                    let short = out_dir.join("cgdiffann-latest");
-                    std::fs::copy(&diffs[0], &short).expect("copy to short path");
-                    eprintln!("Original diff at: {}", diffs[0].to_string_lossy());
-                    eprintln!("Short path: {}", short.to_string_lossy());
+            if let Some(rustc2) = rustc2 {
+                if local.rustc.starts_with('+') && local.rustc == rustc2 && local.id.is_none() {
+                    anyhow::bail!("identical toolchain IDs; use --id to get distinct IDs");
                 }
+                let id1 = get_toolchain_and_profile(local.rustc.as_str(), "1")?;
+                let id2 = get_toolchain_and_profile(rustc2.as_str(), "2")?;
+
+                if profiler == Profiler::Cachegrind {
+                    check_installed("valgrind")?;
+                    check_installed("cg_annotate")?;
+                    check_installed("rustfilt")?;
+
+                    let diffs = generate_cachegrind_diffs(
+                        &id1,
+                        &id2,
+                        &out_dir,
+                        &benchmarks,
+                        &profile_kinds,
+                        &scenario_kinds,
+                        &mut errors,
+                    );
+                    if diffs.len() > 1 {
+                        eprintln!("Diffs:");
+                        for diff in diffs {
+                            eprintln!("{}", diff.to_string_lossy());
+                        }
+                    } else if diffs.len() == 1 {
+                        let short = out_dir.join("cgann-diff-latest");
+                        std::fs::copy(&diffs[0], &short).expect("copy to short path");
+                        eprintln!("Original diff at: {}", diffs[0].to_string_lossy());
+                        eprintln!("Short path: {}", short.to_string_lossy());
+                    }
+                }
+            } else {
+                get_toolchain_and_profile(local.rustc.as_str(), "")?;
             }
 
             errors.fail_if_nonzero()?;

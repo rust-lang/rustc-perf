@@ -22,7 +22,8 @@ cargo build -p collector --bin rustc-fake
 # time-passes.
 RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
     cargo run -p collector --bin collector -- \
-    profile_local time-passes $bindir/rustc Test \
+    profile_local time-passes $bindir/rustc \
+        --id Test \
         --builds Check \
         --cargo $bindir/cargo \
         --include helloworld \
@@ -35,7 +36,8 @@ grep -q "time:.*total" results/Ztp-Test-helloworld-Check-Full
 # hardware is virtualized and performance counters aren't available?
 #RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
 #    cargo run -p collector --bin collector -- \
-#    profile_local perf-record $bindir/rustc Test \
+#    profile_local perf-record $bindir/rustc \
+#        --id Test \
 #        --builds Check \
 #        --cargo $bindir/cargo \
 #        --include helloworld \
@@ -49,7 +51,8 @@ grep -q "time:.*total" results/Ztp-Test-helloworld-Check-Full
 # Cachegrind.
 RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
     cargo run -p collector --bin collector -- \
-    profile_local cachegrind $bindir/rustc Test \
+    profile_local cachegrind $bindir/rustc \
+        --id Test \
         --builds Check \
         --cargo $bindir/cargo \
         --include helloworld \
@@ -62,7 +65,8 @@ grep -q "PROGRAM TOTALS" results/cgann-Test-helloworld-Check-Full
 # Callgrind.
 RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
     cargo run -p collector --bin collector -- \
-    profile_local callgrind $bindir/rustc Test \
+    profile_local callgrind $bindir/rustc \
+        --id Test \
         --builds Check \
         --cargo $bindir/cargo \
         --include helloworld \
@@ -75,7 +79,8 @@ grep -q "Profile data file" results/clgann-Test-helloworld-Check-Full
 # DHAT.
 RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
     cargo run -p collector --bin collector -- \
-    profile_local dhat $bindir/rustc Test \
+    profile_local dhat $bindir/rustc \
+        --id Test \
         --builds Check \
         --cargo $bindir/cargo \
         --include helloworld \
@@ -86,7 +91,8 @@ grep -q "dhatFileVersion" results/dhout-Test-helloworld-Check-Full
 # Massif.
 RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
     cargo run -p collector --bin collector -- \
-    profile_local massif $bindir/rustc Test \
+    profile_local massif $bindir/rustc \
+        --id Test \
         --builds Check \
         --cargo $bindir/cargo \
         --include helloworld \
@@ -98,7 +104,8 @@ grep -q "snapshot=0" results/msout-Test-helloworld-Check-Full
 # anything to stderr.
 RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
     cargo run -p collector --bin collector -- \
-    profile_local eprintln $bindir/rustc Test \
+    profile_local eprintln $bindir/rustc \
+        --id Test \
         --builds Check \
         --cargo $bindir/cargo \
         --include helloworld \
@@ -112,7 +119,8 @@ test ! -s results/eprintln-Test-helloworld-Check-Full
 # latter of which has broken before.
 RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
     cargo run -p collector --bin collector -- \
-    profile_local llvm-lines $bindir/rustc Test \
+    profile_local llvm-lines $bindir/rustc \
+        --id Test \
         --builds Debug \
         --cargo $bindir/cargo \
         --include helloworld,futures \
@@ -131,7 +139,8 @@ grep -q "Lines.*Copies.*Function name" results/ll-Test-futures-Debug-Full
 # `Doc` files must not be present.
 RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
     cargo run -p collector --bin collector -- \
-    profile_local eprintln $bindir/rustc Builds1 \
+    profile_local eprintln $bindir/rustc \
+        --id Builds1 \
         --cargo $bindir/cargo \
         --include helloworld
 test   -f results/eprintln-Builds1-helloworld-Check-Full
@@ -155,8 +164,9 @@ test ! -e results/eprintln-Builds1-helloworld-Doc-IncrUnchanged
 # present, and `Doc` files must be present (but not for incremental runs).
 RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
     cargo run -p collector --bin collector -- \
-    profile_local eprintln $bindir/rustc Builds2 \
-	--builds Doc \
+    profile_local eprintln $bindir/rustc \
+        --id Builds2 \
+        --builds Doc \
         --cargo $bindir/cargo \
         --include helloworld
 test ! -e results/eprintln-Builds2-helloworld-Check-Full
@@ -180,8 +190,9 @@ test ! -f results/eprintln-Builds2-helloworld-Doc-IncrUnchanged
 # must be present.
 RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
     cargo run -p collector --bin collector -- \
-    profile_local eprintln $bindir/rustc Runs1 \
-	--builds Check \
+    profile_local eprintln $bindir/rustc \
+        --id Runs1 \
+        --builds Check \
         --cargo $bindir/cargo \
         --include helloworld \
         --runs IncrUnchanged
@@ -194,8 +205,9 @@ test ! -e results/eprintln-Runs1-helloworld-Check-IncrPatched0
 # be present.
 RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
     cargo run -p collector --bin collector -- \
-    profile_local eprintln $bindir/rustc Runs2 \
-	--builds Check \
+    profile_local eprintln $bindir/rustc \
+        --id Runs2 \
+        --builds Check \
         --cargo $bindir/cargo \
         --include helloworld \
         --runs IncrPatched

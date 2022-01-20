@@ -237,8 +237,8 @@
                 ${profile(state.benchmark)} --runs ${scenario_filter(state.scenario)}</code>`;
             if (state.base_commit) {
                 txt += "<br>Local profile (diff): <code>" +
-                    `./target/release/collector diff_local cachegrind
-                +${state.base_commit} +${state.commit} --include ${bench_name(state.benchmark)} --builds
+                    `./target/release/collector profile_local cachegrind
+                +${state.base_commit} --rustc2 +${state.commit} --include ${bench_name(state.benchmark)} --builds
                 ${profile(state.benchmark)} --runs ${scenario_filter(state.scenario)}</code>`;
             }
             document.querySelector("#raw-urls").innerHTML = txt;

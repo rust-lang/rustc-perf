@@ -63,7 +63,7 @@ marked with a '?' in the `compare` page.
 
 The following command runs the benchmark suite using a local rustc:
 ```
-./target/release/collector bench_local <RUSTC> <ID>
+./target/release/collector bench_local <RUSTC>
 ```
 
 It will benchmark the entire suite and put the results in a SQLite database
@@ -78,14 +78,26 @@ The following arguments are mandatory.
   `$RUST/build/x86_64-unknown-linux-gnu/stage1/bin/rustc`, where `$RUST` is a
   path (relative or absolute) to a `rust` repository. You can use either a
   stage 1 or a stage 2 compiler, but if you're comparing two versions you
-  should choose consistently.
+  should choose consistently. **Alternatively**, it can be a `+`-prefixed
+  toolchain specifier such as `+nightly` or
+  `+f7bb8e3677ba4277914e85a3060e5d69151aed44` in which case `rustup` will be
+  used to obtain the toolchain, downloading it if necessary.
 
-- `<ID>`: an identifier which will be used to identify the results in the
-  database.
+The identifier under which the results will be put into the database varies.
+- If the `--id` option is specified, that identifer will be used.
+- Otherwise, if rustc is specified via a path, `Id` will be used.
+- Otherwise, rustc is specified via a `+`-prefixed toolchain specifier, and the
+  toolchain name will be used.
 
 ### Benchmarking options
 
 The following options alter the behaviour of the `bench_local` subcommand.
+- `--bench-rustc`: there is a special `rustc` benchmark that involves
+  downloading a recent Rust compiler and measuring the time taken to compile
+  it. This benchmark works very differently to all the other benchmarks. For
+  example, `--runs` and `--builds` don't affect it, and the given `ID` is used
+  as the `rust-lang/rust` ref (falling back to `HEAD` if the `ID` is not a
+  valid ref). It is for advanced and CI use only. This option enables it.
 - `--builds <BUILDS>`: the build kinds to be benchmarked. The possible choices
   are one or more (comma-separated) of `Check`, `Debug`, `Doc`, `Opt`, and
   `All`. The default is `Check,Debug,Opt`.
@@ -103,16 +115,12 @@ The following options alter the behaviour of the `bench_local` subcommand.
   argument is a comma-separated list of benchmark names. When this option is
   specified, a benchmark is excluded from the run if its name matches one or
   more of the given names.
+- `--id <ID>` the identifier that will be used to identify the results in the
+  database.
 - `--include <INCLUDE>`: the inverse of `--exclude`. The argument is a
   comma-separated list of benchmark names. When this option is specified, a
   benchmark is included in the run only if its name matches one or more of the
   given names.
-- `--bench-rustc`: there is a special `rustc` benchmark that involves
-  downloading a recent Rust compiler and measuring the time taken to compile
-  it. This benchmark works very differently to all the other benchmarks. For
-  example, `--runs` and `--builds` don't affect it, and the given `ID` is used
-  as the `rust-lang/rust` ref (falling back to `HEAD` if the `ID` is not a
-  valid ref). It is for advanced and CI use only. This option enables it.
 - `--runs $RUNS`: the run kinds to be benchmarked. The possible choices are one
   or more (comma-separated) of `Full`, `IncrFull`, `IncrUnchanged`,
   `IncrPatched`, and `All`. The default is `All`. Note that `IncrFull` is
@@ -232,7 +240,7 @@ Without this you won't get useful file names and line numbers in the output.
 
 To profile a local rustc with one of several profilers:
 ```
-./target/release/collector profile_local <PROFILER> <RUSTC> <ID>
+./target/release/collector profile_local <PROFILER> <RUSTC>
 ```
 It will profile the entire suite and put the results in a directory called
 `results/`.
@@ -384,11 +392,11 @@ The mandatory `<PROFILER>` argument must be one of the following.
   - **Output**. .dot and .txt file (.txt likely is what you want to see first).
   - **Notes**. Works primarily with incremental compilation kinds.
 
-The mandatory `<RUSTC>` argument is a patch to a rustc executable, similar to
-`bench_local`.
+The mandatory `<RUSTC>` argument is a path to a rustc executable or a
+`+`-prefixed toolchain specifier, the same as for `bench_local`.
 
-The mandatory `<ID>` argument is an identifer that will form part of the
-output filenames.
+The identifier that forms part of the output filenames is chosen in a similar
+fashion to the one chosen for `bench_local`.
 
 ### Profiling options
 
@@ -396,11 +404,17 @@ The following options alter the behaviour of the `profile_local` subcommand.
 - `--builds <BUILDS>`: as for `bench_local`.
 - `--cargo <CARGO>`: as for `bench_local`.
 - `--exclude <EXCLUDE>`: as for `bench_local`.
+- `--id <ID>`: an identifer that will form part of the output filenames.
 - `--include <INCLUDE>`: as for `bench_local`.
 - `--out-dir <OUT_DIR>`: a path (relative or absolute) to a directory in
   which the output will be placed. If the directory doesn't exist, it will be
   created. The default is `results/`.
 - `--runs <RUNS>`: as for `bench_local`.
+- `--rustc2 <RUSTC>`: if given, profiles a second Rust compiler for comparison
+  against the first. If a non-toolchain identifier is being used, a `1` will be
+  appended to the identifier for the first run and a `2` will be appended to
+  the identifier for the second run. If the profiler being used is Cachegrind,
+  diff files will also be produced. 
 - `--rustdoc <RUSTDOC>` as for `bench_local`.
 
 `RUST_LOG=debug` can be specified to enable verbose logging, which is useful
