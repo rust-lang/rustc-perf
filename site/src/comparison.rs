@@ -314,7 +314,7 @@ impl ComparisonSummary {
     }
 
     fn improvements(&self) -> impl Iterator<Item = &TestResultComparison> {
-        self.comparisons.iter().filter(|c| c.is_regression())
+        self.comparisons.iter().filter(|c| c.is_improvement())
     }
 
     fn regressions(&self) -> impl Iterator<Item = &TestResultComparison> {
