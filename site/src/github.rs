@@ -654,6 +654,14 @@ async fn categorize_benchmark(
     parent_sha: String,
     is_master_commit: bool,
 ) -> (String, Option<Direction>) {
+    // Add an "s" to a word unless there's only one.
+    fn ending(word: &'static str, count: usize) -> std::borrow::Cow<'static, str> {
+        if count == 1 {
+            return word.into();
+        }
+        format!("{}s", word).into()
+    }
+
     let comparison = match crate::comparison::compare(
         collector::Bound::Commit(parent_sha),
         collector::Bound::Commit(commit_sha),
@@ -667,37 +675,65 @@ async fn categorize_benchmark(
     };
     const DISAGREEMENT: &str = "If you disagree with this performance assessment, \
     please file an issue in [rust-lang/rustc-perf](https://github.com/rust-lang/rustc-perf/issues/new).";
-    let (summary, (direction, magnitude)) =
-        match ComparisonSummary::summarize_comparison(&comparison) {
-            Some(s) if comparison_is_relevant(s.confidence(), is_master_commit) => {
-                let direction_and_magnitude = s.direction_and_magnitude().unwrap();
-                (s, direction_and_magnitude)
-            }
-            _ => {
-                return (
-                    format!(
-                        "This benchmark run did not return any relevant changes.\n\n{}",
-                        DISAGREEMENT
-                    ),
-                    None,
-                )
-            }
-        };
+    let (summary, direction) = match ComparisonSummary::summarize_comparison(&comparison) {
+        Some(s) if comparison_is_relevant(s.confidence(), is_master_commit) => {
+            let direction = s.direction().unwrap();
+            (s, direction)
+        }
+        Some(_) => {
+            let significant_count = comparison
+                .statistics
+                .iter()
+                .filter(|s| s.is_significant())
+                .count();
+            return (
+                format!(
+                    "This benchmark run did not return any relevant results. {} results were found to be statistically significant but too small to be relevant.\n\n{}",
+                    significant_count,
+                    DISAGREEMENT
+                ),
+                None,
+            );
+        }
+        None => {
+            return (
+                format!(
+                    "This benchmark run did not return any relevant results.\n\n{}",
+                    DISAGREEMENT
+                ),
+                None,
+            );
+        }
+    };
 
-    let category = match direction {
-        Direction::Improvement => "improvements 🎉",
-        Direction::Regression => "regressions 😿",
-        Direction::Mixed => "mixed results 🤷",
+    let num_improvements = summary.number_of_improvements();
+    let num_regressions = summary.number_of_regressions();
+
+    let description = match direction {
+        Direction::Improvement => format!(
+            "{} relevant {} 🎉",
+            num_improvements,
+            ending("improvement", num_improvements)
+        ),
+        Direction::Regression => format!(
+            "{} relevant {} 😿",
+            num_regressions,
+            ending("regression", num_regressions)
+        ),
+        Direction::Mixed => format!(
+            "{} relevant {} 🎉 but {} relevant {} 😿",
+            num_improvements,
+            ending("improvement", num_improvements),
+            num_regressions,
+            ending("regression", num_regressions)
+        ),
     };
     let mut result = format!(
-        "This change led to {} relevant {} in compiler performance.\n",
-        magnitude.display(),
-        category
+        "This benchmark run shows {} to instruction counts.\n",
+        description
     );
-    for change in summary.relevant_changes().iter().filter_map(|c| *c) {
-        write!(result, "- ").unwrap();
-        change.summary_line(&mut result, None)
-    }
+
+    summary.write_summary_lines(&mut result, None);
     write!(result, "\n{}", DISAGREEMENT).unwrap();
     (result, Some(direction))
 }

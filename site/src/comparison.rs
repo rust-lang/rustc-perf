@@ -163,19 +163,36 @@ async fn populate_report(
     }
 }
 
+/// A summary of a given comparison
+///
+/// This summary only includes changes that are significant and relevant (as determined by a changes magnitude).
 pub struct ComparisonSummary {
     /// Significant comparisons of magnitude small and above
     /// and ordered by magnitude from largest to smallest
     comparisons: Vec<TestResultComparison>,
+    /// The cached number of comparisons that are improvements
+    num_improvements: usize,
+    /// The cached number of comparisons that are regressions
+    num_regressions: usize,
 }
 
 impl ComparisonSummary {
     pub fn summarize_comparison(comparison: &Comparison) -> Option<ComparisonSummary> {
+        let mut num_improvements = 0;
+        let mut num_regressions = 0;
+
         let mut comparisons = comparison
             .statistics
             .iter()
             .filter(|c| c.is_significant())
             .filter(|c| c.magnitude().is_small_or_above())
+            .inspect(|c| {
+                if c.is_improvement() {
+                    num_improvements += 1;
+                } else {
+                    num_regressions += 1
+                }
+            })
             .cloned()
             .collect::<Vec<_>>();
         // Skip empty commits, sometimes happens if there's a compiler bug or so.
@@ -191,18 +208,15 @@ impl ComparisonSummary {
         };
         comparisons.sort_by(cmp);
 
-        Some(ComparisonSummary { comparisons })
-    }
-
-    /// Gets the overall direction and magnitude of the changes
-    ///
-    /// Returns `None` if there are no relevant changes.
-    pub fn direction_and_magnitude(&self) -> Option<(Direction, Magnitude)> {
-        self.direction().zip(self.magnitude())
+        Some(ComparisonSummary {
+            comparisons,
+            num_improvements,
+            num_regressions,
+        })
     }
 
     /// The direction of the changes
-    fn direction(&self) -> Option<Direction> {
+    pub fn direction(&self) -> Option<Direction> {
         if self.comparisons.len() == 0 {
             return None;
         }
@@ -258,23 +272,53 @@ impl ComparisonSummary {
         }
     }
 
-    /// Get the largest magnitude of any change in the comparison.
-    ///
-    /// Returns `None` if there are no relevant_changes
-    fn magnitude(&self) -> Option<Magnitude> {
-        [self.largest_improvement(), self.largest_regression()]
-            .iter()
-            .filter_map(|c| c.map(|c| c.magnitude()))
-            .max_by(|c1, c2| c1.cmp(c2))
+    /// The number of improvements that were found to be significant and relevant
+    pub fn number_of_improvements(&self) -> usize {
+        self.num_improvements
     }
 
-    pub fn relevant_changes<'a>(&'a self) -> [Option<&TestResultComparison>; 2] {
+    /// The number of regressions that were found to be significant and relevant
+    pub fn number_of_regressions(&self) -> usize {
+        self.num_regressions
+    }
+
+    /// The most relevant changes (based on size)
+    pub fn most_relevant_changes<'a>(&'a self) -> [Option<&TestResultComparison>; 2] {
         match self.direction() {
             Some(Direction::Improvement) => [self.largest_improvement(), None],
             Some(Direction::Regression) => [self.largest_regression(), None],
             Some(Direction::Mixed) => [self.largest_improvement(), self.largest_regression()],
             None => [None, None],
         }
+    }
+
+    /// The average improvement as a percent
+    pub fn average_improvement(&self) -> f64 {
+        self.average(self.improvements())
+    }
+
+    /// The average regression as a percent
+    pub fn average_regression(&self) -> f64 {
+        self.average(self.regressions())
+    }
+
+    fn average<'a>(&'a self, changes: impl Iterator<Item = &'a TestResultComparison>) -> f64 {
+        let mut count = 0;
+        let mut sum = 0.0;
+        for r in changes {
+            sum += r.relative_change();
+            count += 1;
+        }
+
+        (sum / count as f64) * 100.0
+    }
+
+    fn improvements(&self) -> impl Iterator<Item = &TestResultComparison> {
+        self.comparisons.iter().filter(|c| c.is_improvement())
+    }
+
+    fn regressions(&self) -> impl Iterator<Item = &TestResultComparison> {
+        self.comparisons.iter().filter(|c| c.is_regression())
     }
 
     fn largest_improvement(&self) -> Option<&TestResultComparison> {
@@ -322,10 +366,7 @@ impl ComparisonSummary {
         let end = &comparison.b.artifact;
         let link = &compare_link(start, end);
 
-        for change in self.relevant_changes().iter().filter_map(|s| *s) {
-            write!(result, "- ").unwrap();
-            change.summary_line(&mut result, Some(link))
-        }
+        self.write_summary_lines(&mut result, Some(link));
 
         if !comparison.new_errors.is_empty() {
             write!(
@@ -342,6 +383,30 @@ impl ComparisonSummary {
         }
 
         result
+    }
+
+    pub fn write_summary_lines(&self, result: &mut String, link: Option<&str>) {
+        use std::fmt::Write;
+        if self.num_regressions > 1 {
+            writeln!(
+                result,
+                "- Average relevant regression: {:.1}%",
+                self.average_regression()
+            )
+            .unwrap();
+        }
+        if self.num_improvements > 1 {
+            writeln!(
+                result,
+                "- Average relevant improvement: {:.1}%",
+                self.average_improvement()
+            )
+            .unwrap();
+        }
+        for change in self.most_relevant_changes().iter().filter_map(|s| *s) {
+            write!(result, "- ").unwrap();
+            change.summary_line(result, link)
+        }
     }
 }
 
@@ -884,11 +949,12 @@ impl TestResultComparison {
         !self.is_regression()
     }
 
-    fn is_significant(&self) -> bool {
+    /// Whther the comparison yielded a statistically significant result
+    pub fn is_significant(&self) -> bool {
         self.relative_change().abs() >= self.significance_threshold()
     }
 
-    // Magnitude of change considered significant
+    /// Magnitude of change considered significant
     fn significance_threshold(&self) -> f64 {
         if !self.calc_new_sig {
             if self.is_dodgy() {
@@ -984,24 +1050,19 @@ impl TestResultComparison {
 
     pub fn summary_line(&self, summary: &mut String, link: Option<&str>) {
         use std::fmt::Write;
-        let magnitude = self.magnitude();
-
         let percent = self.relative_change() * 100.0;
-        write!(
+        writeln!(
             summary,
-            "{} {} in {}",
-            magnitude.display_as_title(),
+            "Largest {} in {}: {:.1}% on `{}` builds of `{} {}`",
             self.direction(),
             match link {
                 Some(l) => format!("[instruction counts]({})", l),
                 None => "instruction counts".into(),
-            }
-        )
-        .unwrap();
-        writeln!(
-            summary,
-            " (up to {:.1}% on `{}` builds of `{} {}`)",
-            percent, self.scenario, self.benchmark, self.profile
+            },
+            percent,
+            self.scenario,
+            self.benchmark,
+            self.profile
         )
         .unwrap();
     }
@@ -1061,16 +1122,6 @@ impl Magnitude {
 
     fn is_medium_or_above(&self) -> bool {
         *self >= Self::Medium
-    }
-
-    pub fn display_as_title(&self) -> &'static str {
-        match self {
-            Self::VerySmall => "Very small",
-            Self::Small => "Small",
-            Self::Medium => "Moderate",
-            Self::Large => "Large",
-            Self::VeryLarge => "Very large",
-        }
     }
 
     pub fn display(&self) -> &'static str {
