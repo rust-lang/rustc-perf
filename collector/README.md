@@ -195,8 +195,8 @@ self-profiling results available:
 ```pwsh
 $env:XPERF="C:\Program Files (x86)\Windows Kits\10\Windows Performance Toolkit\xperf.exe"
 $env:TRACELOG="C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x64\tracelog.exe"
-.\target\release\collector.exe bench_local $env:RUST_ORIGINAL Original --builds Debug --include regex --self-profile
-.\target\release\collector.exe bench_local $env:RUST_MODIFIED Modified --builds Debug --include regex --self-profile
+.\target\release\collector.exe bench_local $env:RUST_ORIGINAL --id Original --builds Debug --include regex --self-profile
+.\target\release\collector.exe bench_local $env:RUST_MODIFIED --id Modified --builds Debug --include regex --self-profile
 .\target\release\site.exe .\results.db
 ```
 
