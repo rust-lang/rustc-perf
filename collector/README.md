@@ -146,9 +146,9 @@ second that contains a branch of your changes. To compare the two versions, do
 something like this:
 
 ```
-./target/release/collector bench_local $RUST_ORIGINAL Original
+./target/release/collector bench_local --id Original $RUST_ORIGINAL
 
-./target/release/collector bench_local $RUST_MODIFIED Modified
+./target/release/collector bench_local --id Modified $RUST_MODIFIED
 ```
 
 where `$RUST_ORIGINAL` and `$RUST_MODIFIED` are paths (relative or absolute) to
@@ -414,7 +414,7 @@ The following options alter the behaviour of the `profile_local` subcommand.
   against the first. If a non-toolchain identifier is being used, a `1` will be
   appended to the identifier for the first run and a `2` will be appended to
   the identifier for the second run. If the profiler being used is Cachegrind,
-  diff files will also be produced. 
+  diff files will also be produced.
 - `--rustdoc <RUSTDOC>` as for `bench_local`.
 
 `RUST_LOG=debug` can be specified to enable verbose logging, which is useful
