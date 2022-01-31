@@ -28,11 +28,37 @@ pub enum MissingReason {
     },
     Try {
         pr: u32,
+        parent_sha: String,
         include: Option<String>,
         exclude: Option<String>,
         runs: Option<i32>,
     },
     InProgress(Option<Box<MissingReason>>),
+}
+
+impl MissingReason {
+    fn pr(&self) -> Option<u32> {
+        let mut this = self;
+        loop {
+            match this {
+                MissingReason::Master { pr, .. } => return Some(*pr),
+                MissingReason::Try { pr, .. } => return Some(*pr),
+                MissingReason::InProgress(Some(s)) => this = s,
+                MissingReason::InProgress(None) => return None,
+            }
+        }
+    }
+    fn parent_sha(&self) -> Option<&str> {
+        let mut this = self;
+        loop {
+            match this {
+                MissingReason::Master { parent_sha, .. } => return Some(parent_sha.as_str()),
+                MissingReason::Try { parent_sha, .. } => return Some(parent_sha.as_str()),
+                MissingReason::InProgress(Some(s)) => this = s,
+                MissingReason::InProgress(None) => return None,
+            }
+        }
+    }
 }
 
 #[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq)]
@@ -201,7 +227,7 @@ fn calculate_missing_from(
     mut all_commits: HashSet<String>,
     time: chrono::DateTime<chrono::Utc>,
 ) -> Vec<(Commit, MissingReason)> {
-    let mut master_commits = master_commits
+    let mut queue = master_commits
         .into_iter()
         .filter(|c| time.signed_duration_since(c.time) < Duration::days(29))
         .map(|c| {
@@ -219,8 +245,10 @@ fn calculate_missing_from(
             )
         })
         .collect::<Vec<_>>();
-    master_commits.reverse();
-    let mut missing = Vec::with_capacity(queued_pr_commits.len() * 2 + master_commits.len());
+    let master_commits = queue
+        .iter()
+        .map(|(mc, _)| mc.sha.clone())
+        .collect::<HashSet<_>>();
     for database::QueuedCommit {
         sha,
         parent_sha,
@@ -231,77 +259,135 @@ fn calculate_missing_from(
     } in queued_pr_commits
         .into_iter()
         // filter out any queued PR master commits (leaving only try commits)
-        .filter(|c| !master_commits.iter().any(|(mc, _)| mc.sha == c.sha))
+        .filter(|c| !master_commits.contains(&c.sha))
     {
-        // Enqueue the `TryParent` commit before the `TryCommit` itself, so that
-        // all of the `try` run's data is complete when the benchmark results
-        // of that commit are available.
-        if let Some((try_parent, metadata)) = master_commits
-            .iter()
-            .find(|(m, _)| m.sha == parent_sha.as_str())
-        {
-            let (pr, parent_sha) = if let MissingReason::Master {
-                pr,
-                parent_sha,
-                is_try_parent: _,
-            } = &metadata
-            {
-                (*pr, parent_sha.clone())
+        // Mark the parent commit as a try_parent.
+        if let Some((_, metadata)) = queue.iter_mut().find(|(m, _)| m.sha == parent_sha.as_str()) {
+            if let MissingReason::Master { is_try_parent, .. } = metadata {
+                *is_try_parent = true;
             } else {
-                unreachable!(
-                    "non-master missing reason in master_commits: {:?}",
-                    metadata
-                );
+                unreachable!("try commit has non-master parent {:?}", metadata);
             };
-            missing.push((
-                try_parent.clone(),
-                MissingReason::Master {
-                    pr,
-                    parent_sha,
-                    is_try_parent: true,
-                },
-            ));
         }
-        missing.push((
+        queue.push((
             Commit {
                 sha: sha.to_string(),
                 date: Date::ymd_hms(2001, 01, 01, 0, 0, 0),
             },
             MissingReason::Try {
                 pr,
+                parent_sha,
                 include,
                 exclude,
                 runs,
             },
         ));
     }
-    missing.extend(master_commits);
     for aid in in_progress_artifacts {
         match aid {
             ArtifactId::Commit(c) => {
-                let previous = missing
+                let previous = queue
                     .iter()
                     .find(|(i, _)| i.sha == c.sha)
                     .map(|v| Box::new(v.1.clone()));
                 all_commits.remove(&c.sha);
-                missing.insert(0, (c, MissingReason::InProgress(previous)));
+                queue.insert(0, (c, MissingReason::InProgress(previous)));
             }
             ArtifactId::Tag(_) => {
                 // do nothing, for now, though eventually we'll want an artifact queue
             }
         }
     }
-    let mut already_tested = HashSet::with_capacity(all_commits.len());
-    already_tested.extend(all_commits);
+    let mut already_tested = all_commits.clone();
     let mut i = 0;
-    while i != missing.len() {
-        if !already_tested.insert(missing[i].0.sha.clone()) {
-            missing.remove(i);
+    while i != queue.len() {
+        if !already_tested.insert(queue[i].0.sha.clone()) {
+            queue.remove(i);
         } else {
             i += 1;
         }
     }
-    missing
+    sort_queue(all_commits.clone(), queue)
+}
+
+fn sort_queue(
+    mut done: HashSet<String>,
+    mut unordered_queue: Vec<(Commit, MissingReason)>,
+) -> Vec<(Commit, MissingReason)> {
+    // A topological sort, where each "level" is additionally altered such that
+    // try commits come first, and then sorted by PR # (as a rough heuristic for
+    // earlier requests).
+
+    let mut finished = 0;
+    while finished < unordered_queue.len() {
+        // The next level is those elements in the unordered queue which
+        // are ready to be benchmarked (i.e., those with parent in done or no
+        // parent).
+        let level_len = partition_in_place(unordered_queue[finished..].iter_mut(), |(_, mr)| {
+            mr.parent_sha().map_or(true, |parent| done.contains(parent))
+        });
+        assert!(
+            level_len != 0,
+            "at least one commit is ready done={:#?}, {:?}",
+            done,
+            &unordered_queue[finished..]
+        );
+        let level = &mut unordered_queue[finished..][..level_len];
+        level.sort_unstable_by_key(|(c, mr)| {
+            (
+                // InProgress MR go first (false < true)
+                mr.parent_sha().is_some(),
+                mr.pr().unwrap_or(0),
+                c.sha.clone(),
+            )
+        });
+        for (c, _) in level {
+            done.insert(c.sha.clone());
+        }
+        finished += level_len;
+    }
+    unordered_queue
+}
+
+// Copy of Iterator::partition_in_place, which is currently unstable.
+fn partition_in_place<'a, I, T: 'a, P>(mut iter: I, ref mut predicate: P) -> usize
+where
+    I: Sized + DoubleEndedIterator<Item = &'a mut T>,
+    P: FnMut(&T) -> bool,
+{
+    // FIXME: should we worry about the count overflowing? The only way to have more than
+    // `usize::MAX` mutable references is with ZSTs, which aren't useful to partition...
+
+    // These closure "factory" functions exist to avoid genericity in `Self`.
+
+    #[inline]
+    fn is_false<'a, T>(
+        predicate: &'a mut impl FnMut(&T) -> bool,
+        true_count: &'a mut usize,
+    ) -> impl FnMut(&&mut T) -> bool + 'a {
+        move |x| {
+            let p = predicate(&**x);
+            *true_count += p as usize;
+            !p
+        }
+    }
+
+    #[inline]
+    fn is_true<T>(predicate: &mut impl FnMut(&T) -> bool) -> impl FnMut(&&mut T) -> bool + '_ {
+        move |x| predicate(&**x)
+    }
+
+    // Repeatedly find the first `false` and swap it with the last `true`.
+    let mut true_count = 0;
+    while let Some(head) = iter.find(is_false(predicate, &mut true_count)) {
+        if let Some(tail) = iter.rfind(is_true(predicate)) {
+            std::mem::swap(head, tail);
+            true_count += 1;
+        } else {
+            break;
+        }
+    }
+    true_count
 }
 
 /// One decimal place rounded percent
@@ -381,8 +467,8 @@ mod tests {
             },
         ];
         let in_progress_artifacts = vec![];
-        // Have not benchmarked anything yet.
-        let all_commits = HashSet::new();
+        let mut all_commits = HashSet::new();
+        all_commits.insert("c".into());
 
         let expected = vec![
             (
@@ -414,6 +500,7 @@ mod tests {
                 },
                 MissingReason::Try {
                     pr: 3,
+                    parent_sha: "a".into(),
                     include: None,
                     exclude: None,
                     runs: None,
@@ -479,8 +566,23 @@ mod tests {
         let in_progress_artifacts = vec![];
         let mut all_commits = HashSet::new();
         all_commits.insert(master_commits[1].sha.clone());
+        // Parent trailers
+        all_commits.insert(master_commits[0].parent_sha.clone());
+        all_commits.insert(master_commits[1].parent_sha.clone());
+        all_commits.insert(master_commits[2].parent_sha.clone());
 
         let expected = vec![
+            (
+                Commit {
+                    sha: "123".into(),
+                    date: database::Date(time),
+                },
+                MissingReason::Master {
+                    pr: 11,
+                    parent_sha: "345".into(),
+                    is_try_parent: false,
+                },
+            ),
             (
                 Commit {
                     sha: "foo".into(),
@@ -499,20 +601,10 @@ mod tests {
                 },
                 MissingReason::Try {
                     pr: 101,
+                    parent_sha: "foo".into(),
                     include: None,
                     exclude: None,
                     runs: None,
-                },
-            ),
-            (
-                Commit {
-                    sha: "123".into(),
-                    date: database::Date(time),
-                },
-                MissingReason::Master {
-                    pr: 11,
-                    parent_sha: "345".into(),
-                    is_try_parent: false,
                 },
             ),
         ];
