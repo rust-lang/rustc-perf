@@ -316,6 +316,120 @@ mod tests {
     use database::QueuedCommit;
 
     use super::*;
+
+    // Checks that when we have a setup like the following, where a -> b means b
+    // is the parent of a (i.e., must be tested before we can report comparison
+    // results for a):
+    //
+    // a -> b
+    //   -> try-on-a
+    //
+    // the resulting ordering is:
+    //
+    // b
+    // a
+    // try-on-a
+    //
+    // which ensures that as each commit finishes, we have the results for it.
+    //
+    // Note that try-on-a does *not* have a direct dependency on b's results
+    // being available; we could order b after ([a, try-on-a, b]) but this means
+    // that we have to be more careful about posting comparison results, and to
+    // most observers they expect those posted as soon as the PR's build in the
+    // queue finishes: not doing so will look odd to onlookers.
+    #[test]
+    fn try_commit_ancestors() {
+        let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
+        let master_commits = vec![
+            MasterCommit {
+                sha: "a".into(),
+                parent_sha: "b".into(),
+                pr: Some(2),
+                time,
+            },
+            MasterCommit {
+                sha: "b".into(),
+                parent_sha: "c".into(),
+                pr: Some(1),
+                time,
+            },
+        ];
+        let queued_pr_commits = vec![
+            QueuedCommit {
+                sha: "try-on-a".into(),
+                parent_sha: "a".into(),
+                pr: 3,
+                include: None,
+                exclude: None,
+                runs: None,
+            },
+            QueuedCommit {
+                sha: "b".into(),
+                parent_sha: "c".into(),
+                pr: 1,
+                include: None,
+                exclude: None,
+                runs: None,
+            },
+            QueuedCommit {
+                sha: "a".into(),
+                parent_sha: "b".into(),
+                pr: 2,
+                include: None,
+                exclude: None,
+                runs: None,
+            },
+        ];
+        let in_progress_artifacts = vec![];
+        // Have not benchmarked anything yet.
+        let all_commits = HashSet::new();
+
+        let expected = vec![
+            (
+                Commit {
+                    sha: "b".into(),
+                    date: database::Date(time),
+                },
+                MissingReason::Master {
+                    pr: 1,
+                    parent_sha: "c".into(),
+                    is_try_parent: false,
+                },
+            ),
+            (
+                Commit {
+                    sha: "a".into(),
+                    date: database::Date(time),
+                },
+                MissingReason::Master {
+                    pr: 2,
+                    parent_sha: "b".into(),
+                    is_try_parent: true,
+                },
+            ),
+            (
+                Commit {
+                    sha: "try-on-a".into(),
+                    date: database::Date(time),
+                },
+                MissingReason::Try {
+                    pr: 3,
+                    include: None,
+                    exclude: None,
+                    runs: None,
+                },
+            ),
+        ];
+        let found = calculate_missing_from(
+            master_commits,
+            queued_pr_commits,
+            in_progress_artifacts,
+            all_commits,
+            time,
+        );
+        assert_eq!(expected, found, "{:#?} != {:#?}", expected, found);
+    }
+
     #[test]
     fn calculates_missing_correct() {
         let time = chrono::DateTime::from_str("2021-09-01T00:00:00.000Z").unwrap();
