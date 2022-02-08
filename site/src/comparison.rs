@@ -174,6 +174,8 @@ pub struct ComparisonSummary {
     num_improvements: usize,
     /// The cached number of comparisons that are regressions
     num_regressions: usize,
+    /// Which benchmarks had errors
+    errors_in: Vec<String>,
 }
 
 impl ComparisonSummary {
@@ -208,10 +210,17 @@ impl ComparisonSummary {
         };
         comparisons.sort_by(cmp);
 
+        let errors_in = comparison
+            .new_errors
+            .keys()
+            .map(|k| k.as_str().to_owned())
+            .collect::<Vec<_>>();
+
         Some(ComparisonSummary {
             comparisons,
             num_improvements,
             num_regressions,
+            errors_in,
         })
     }
 
@@ -351,8 +360,6 @@ impl ComparisonSummary {
     }
 
     async fn write(&self, comparison: &Comparison) -> String {
-        use std::fmt::Write;
-
         let mut result = if let Some(pr) = comparison.b.pr {
             let title = github::pr_title(pr).await;
             format!(
@@ -367,20 +374,6 @@ impl ComparisonSummary {
         let link = &compare_link(start, end);
 
         self.write_summary_lines(&mut result, Some(link));
-
-        if !comparison.new_errors.is_empty() {
-            write!(
-                result,
-                "- New errors in {}",
-                comparison
-                    .new_errors
-                    .keys()
-                    .map(|k| k.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
-            .unwrap();
-        }
 
         result
     }
@@ -406,6 +399,15 @@ impl ComparisonSummary {
         for change in self.most_relevant_changes().iter().filter_map(|s| *s) {
             write!(result, "- ").unwrap();
             change.summary_line(result, link)
+        }
+
+        if !self.errors_in.is_empty() {
+            write!(
+                result,
+                "- Benchmark(s) {} started failing to build",
+                self.errors_in.join(", ")
+            )
+            .unwrap();
         }
     }
 }
