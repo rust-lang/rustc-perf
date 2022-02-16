@@ -51,7 +51,6 @@ pub async fn handle_triage(
             "instructions:u".to_owned(),
             ctxt,
             &master_commits,
-            body.calcNewSig.unwrap_or(true),
         )
         .await
         .map_err(|e| format!("error comparing commits: {}", e))?
@@ -100,17 +99,11 @@ pub async fn handle_compare(
         .await
         .map_err(|e| format!("error retrieving master commit list: {}", e))?;
     let end = body.end;
-    let comparison = compare_given_commits(
-        body.start,
-        end.clone(),
-        body.stat,
-        ctxt,
-        &master_commits,
-        body.calcNewSig.unwrap_or(true),
-    )
-    .await
-    .map_err(|e| format!("error comparing commits: {}", e))?
-    .ok_or_else(|| format!("could not find end commit for bound {:?}", end))?;
+    let comparison =
+        compare_given_commits(body.start, end.clone(), body.stat, ctxt, &master_commits)
+            .await
+            .map_err(|e| format!("error comparing commits: {}", e))?
+            .ok_or_else(|| format!("could not find end commit for bound {:?}", end))?;
 
     let conn = ctxt.conn().await;
     let prev = comparison.prev(&master_commits);
@@ -441,7 +434,7 @@ pub async fn compare(
     ctxt: &SiteCtxt,
 ) -> Result<Option<Comparison>, BoxedError> {
     let master_commits = collector::master_commits().await?;
-    compare_given_commits(start, end, stat, ctxt, &master_commits, true).await
+    compare_given_commits(start, end, stat, ctxt, &master_commits).await
 }
 
 /// Compare two bounds on a given stat
@@ -451,7 +444,6 @@ async fn compare_given_commits(
     stat: String,
     ctxt: &SiteCtxt,
     master_commits: &[collector::MasterCommit],
-    calc_new_sig: bool,
 ) -> Result<Option<Comparison>, BoxedError> {
     let idx = ctxt.index.load();
     let a = ctxt
@@ -490,7 +482,6 @@ async fn compare_given_commits(
                     scenario: test_case.2,
                     variance: variances.data.get(&test_case).cloned(),
                     results: (a, b),
-                    calc_new_sig,
                 })
         })
         .collect();
@@ -865,17 +856,10 @@ impl BenchmarkVariance {
     }
 
     /// Whether we can trust this benchmark or not
-    fn is_dodgy(&self, calc_new_sig: bool) -> bool {
-        if !calc_new_sig {
-            matches!(
-                self.description,
-                BenchmarkVarianceDescription::Noisy | BenchmarkVarianceDescription::HighlyVariable
-            )
-        } else {
-            // If changes are judged significant only exceeding 0.2%, then the
-            // benchmark as a whole is dodgy.
-            self.significance_threshold() * 100.0 > 0.2
-        }
+    fn is_dodgy(&self) -> bool {
+        // If changes are judged significant only exceeding 0.2%, then the
+        // benchmark as a whole is dodgy.
+        self.significance_threshold() * 100.0 > 0.2
     }
 }
 
@@ -930,17 +914,12 @@ pub struct TestResultComparison {
     scenario: Scenario,
     variance: Option<BenchmarkVariance>,
     results: (f64, f64),
-    calc_new_sig: bool,
 }
 
 impl TestResultComparison {
     /// The amount of relative change considered significant when
     /// we cannot determine from historical data
     const SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD: f64 = 0.002;
-
-    /// The amount of relative change considered significant when
-    /// the test case is dodgy
-    const SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD_DODGY: f64 = 0.008;
 
     fn is_regression(&self) -> bool {
         let (a, b) = self.results;
@@ -958,18 +937,10 @@ impl TestResultComparison {
 
     /// Magnitude of change considered significant
     fn significance_threshold(&self) -> f64 {
-        if !self.calc_new_sig {
-            if self.is_dodgy() {
-                Self::SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD_DODGY
-            } else {
-                Self::SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD
-            }
-        } else {
-            self.variance
-                .as_ref()
-                .map(|v| v.significance_threshold())
-                .unwrap_or(Self::SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD)
-        }
+        self.variance
+            .as_ref()
+            .map(|v| v.significance_threshold())
+            .unwrap_or(Self::SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD)
     }
 
     /// This is a numeric magnitude of a particular change.
@@ -994,9 +965,6 @@ impl TestResultComparison {
         } else {
             Magnitude::VeryLarge
         };
-        if !self.calc_new_sig {
-            return over_threshold;
-        }
         let change_magnitude = if change < 0.002 {
             Magnitude::VerySmall
         } else if change < 0.01 {
@@ -1033,7 +1001,7 @@ impl TestResultComparison {
     fn is_dodgy(&self) -> bool {
         self.variance
             .as_ref()
-            .map(|v| v.is_dodgy(self.calc_new_sig))
+            .map(|v| v.is_dodgy())
             .unwrap_or(false)
     }
 
