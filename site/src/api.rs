@@ -133,12 +133,10 @@ pub mod comparison {
     use std::collections::HashMap;
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-    #[allow(non_snake_case)]
     pub struct Request {
         pub start: Bound,
         pub end: Bound,
         pub stat: String,
-        pub calcNewSig: Option<bool>,
     }
 
     #[derive(Debug, Clone, Serialize)]
@@ -397,11 +395,9 @@ pub mod triage {
     use serde::{Deserialize, Serialize};
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
-    #[allow(non_snake_case)]
     pub struct Request {
         pub start: Bound,
         pub end: Option<Bound>,
-        pub calcNewSig: Option<bool>,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
