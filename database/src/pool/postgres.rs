@@ -699,13 +699,14 @@ where
         exclude: Option<&str>,
         runs: Option<i32>,
     ) {
-        self.conn()
+        if let Err(e) = self.conn()
             .execute(
-                "insert into pull_request_build (pr, complete, requested, include, exclude, runs) VALUES ($1, false, CURRENT_TIMESTAMP, $2, $3, $4) ON CONFLICT DO NOTHING",
+                "insert into pull_request_build (pr, complete, requested, include, exclude, runs) VALUES ($1, false, CURRENT_TIMESTAMP, $2, $3, $4)",
                 &[&(pr as i32), &include, &exclude, &runs],
             )
-            .await
-            .unwrap();
+            .await {
+                log::error!("failed to queue_pr({}, {:?}, {:?}, {:?}): {:?}", pr, include, exclude, runs, e);
+        }
     }
     async fn pr_attach_commit(&self, pr: u32, sha: &str, parent_sha: &str) -> bool {
         self.conn()
