@@ -1,6 +1,6 @@
 //! Execute benchmarks.
 
-use crate::{Compiler, ProfileKind, ScenarioKind};
+use crate::{Compiler, Profile, Scenario};
 use anyhow::{bail, Context};
 use collector::command_output;
 use collector::etw_parser;
@@ -191,78 +191,78 @@ pub enum Profiler {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum PerfTool {
-    Profile(Profiler),
-    Bench(Bencher),
+    BenchTool(Bencher),
+    ProfileTool(Profiler),
 }
 
 impl PerfTool {
     fn name(&self) -> String {
         match self {
-            PerfTool::Bench(b) => format!("{:?}", b),
-            PerfTool::Profile(p) => format!("{:?}", p),
+            PerfTool::BenchTool(b) => format!("{:?}", b),
+            PerfTool::ProfileTool(p) => format!("{:?}", p),
         }
     }
 
     // What cargo subcommand do we need to run for this profiler? If not
     // `rustc`, must be a subcommand that itself invokes `rustc`.
-    fn cargo_subcommand(&self, profile_kind: ProfileKind) -> Option<&'static str> {
+    fn cargo_subcommand(&self, profile: Profile) -> Option<&'static str> {
         use Bencher::*;
         use PerfTool::*;
         use Profiler::*;
         match self {
-            Bench(PerfStat)
-            | Bench(PerfStatSelfProfile)
-            | Bench(XperfStat)
-            | Bench(XperfStatSelfProfile)
-            | Profile(SelfProfile)
-            | Profile(TimePasses)
-            | Profile(PerfRecord)
-            | Profile(Oprofile)
-            | Profile(Cachegrind)
-            | Profile(Callgrind)
-            | Profile(Dhat)
-            | Profile(Massif)
-            | Profile(Eprintln)
-            | Profile(DepGraph)
-            | Profile(MonoItems)
-            | Profile(LlvmIr) => {
-                if profile_kind == ProfileKind::Doc {
+            BenchTool(PerfStat)
+            | BenchTool(PerfStatSelfProfile)
+            | BenchTool(XperfStat)
+            | BenchTool(XperfStatSelfProfile)
+            | ProfileTool(SelfProfile)
+            | ProfileTool(TimePasses)
+            | ProfileTool(PerfRecord)
+            | ProfileTool(Oprofile)
+            | ProfileTool(Cachegrind)
+            | ProfileTool(Callgrind)
+            | ProfileTool(Dhat)
+            | ProfileTool(Massif)
+            | ProfileTool(Eprintln)
+            | ProfileTool(DepGraph)
+            | ProfileTool(MonoItems)
+            | ProfileTool(LlvmIr) => {
+                if profile == Profile::Doc {
                     Some("rustdoc")
                 } else {
                     Some("rustc")
                 }
             }
-            Profile(LlvmLines) => match profile_kind {
-                ProfileKind::Debug | ProfileKind::Opt => Some("llvm-lines"),
-                ProfileKind::Check | ProfileKind::Doc => None,
-                ProfileKind::All => unreachable!(),
+            ProfileTool(LlvmLines) => match profile {
+                Profile::Debug | Profile::Opt => Some("llvm-lines"),
+                Profile::Check | Profile::Doc => None,
+                Profile::All => unreachable!(),
             },
         }
     }
 
-    fn is_scenario_kind_allowed(&self, scenario_kind: ScenarioKind) -> bool {
+    fn is_scenario_allowed(&self, scenario: Scenario) -> bool {
         use Bencher::*;
         use PerfTool::*;
         use Profiler::*;
         match self {
-            Bench(PerfStat)
-            | Bench(PerfStatSelfProfile)
-            | Bench(XperfStat)
-            | Bench(XperfStatSelfProfile)
-            | Profile(SelfProfile)
-            | Profile(TimePasses)
-            | Profile(PerfRecord)
-            | Profile(Oprofile)
-            | Profile(Cachegrind)
-            | Profile(Callgrind)
-            | Profile(Dhat)
-            | Profile(Massif)
-            | Profile(MonoItems)
-            | Profile(LlvmIr)
-            | Profile(Eprintln) => true,
+            BenchTool(PerfStat)
+            | BenchTool(PerfStatSelfProfile)
+            | BenchTool(XperfStat)
+            | BenchTool(XperfStatSelfProfile)
+            | ProfileTool(SelfProfile)
+            | ProfileTool(TimePasses)
+            | ProfileTool(PerfRecord)
+            | ProfileTool(Oprofile)
+            | ProfileTool(Cachegrind)
+            | ProfileTool(Callgrind)
+            | ProfileTool(Dhat)
+            | ProfileTool(Massif)
+            | ProfileTool(MonoItems)
+            | ProfileTool(LlvmIr)
+            | ProfileTool(Eprintln) => true,
             // only incremental
-            Profile(DepGraph) => scenario_kind != ScenarioKind::Full,
-            Profile(LlvmLines) => scenario_kind == ScenarioKind::Full,
+            ProfileTool(DepGraph) => scenario != Scenario::Full,
+            ProfileTool(LlvmLines) => scenario == Scenario::Full,
         }
     }
 }
@@ -270,14 +270,9 @@ impl PerfTool {
 struct CargoProcess<'a> {
     compiler: Compiler<'a>,
     cwd: &'a Path,
-    profile_kind: ProfileKind,
+    profile: Profile,
     incremental: bool,
-    processor_etc: Option<(
-        &'a mut dyn Processor,
-        ScenarioKind,
-        &'a str,
-        Option<&'a Patch>,
-    )>,
+    processor_etc: Option<(&'a mut dyn Processor, Scenario, &'a str, Option<&'a Patch>)>,
     processor_name: BenchmarkName,
     manifest_path: String,
     cargo_args: Vec<String>,
@@ -295,11 +290,11 @@ impl<'a> CargoProcess<'a> {
     fn processor(
         mut self,
         processor: &'a mut dyn Processor,
-        scenario_kind: ScenarioKind,
-        scenario_kind_str: &'a str,
+        scenario: Scenario,
+        scenario_str: &'a str,
         patch: Option<&'a Patch>,
     ) -> Self {
-        self.processor_etc = Some((processor, scenario_kind, scenario_kind_str, patch));
+        self.processor_etc = Some((processor, scenario, scenario_str, patch));
         self
     }
 
@@ -345,9 +340,9 @@ impl<'a> CargoProcess<'a> {
     // really.
     fn run_rustc(&mut self, needs_final: bool) -> anyhow::Result<()> {
         log::info!(
-            "run_rustc with incremental={}, profile_kind={:?}, scenario_kind={:?}, patch={:?}",
+            "run_rustc with incremental={}, profile={:?}, scenario={:?}, patch={:?}",
             self.incremental,
-            self.profile_kind,
+            self.profile,
             self.processor_etc.as_ref().map(|v| v.1),
             self.processor_etc.as_ref().and_then(|v| v.3)
         );
@@ -357,43 +352,43 @@ impl<'a> CargoProcess<'a> {
             // subcommand that itself invokes `rustc` (so that the `FAKE_RUSTC`
             // machinery works).
             let cargo_subcommand =
-                if let Some((ref mut processor, scenario_kind, ..)) = self.processor_etc {
-                    let perf_tool = processor.perf_tool(self.profile_kind);
-                    if !perf_tool.is_scenario_kind_allowed(scenario_kind) {
+                if let Some((ref mut processor, scenario, ..)) = self.processor_etc {
+                    let perf_tool = processor.perf_tool(self.profile);
+                    if !perf_tool.is_scenario_allowed(scenario) {
                         return Err(anyhow::anyhow!(
                             "this perf tool doesn't support {:?} scenarios",
-                            scenario_kind
+                            scenario
                         ));
                     }
 
-                    match perf_tool.cargo_subcommand(self.profile_kind) {
+                    match perf_tool.cargo_subcommand(self.profile) {
                         None => {
                             return Err(anyhow::anyhow!(
                                 "this perf tool doesn't support the {:?} profile",
-                                self.profile_kind
+                                self.profile
                             ))
                         }
                         Some(sub) => sub,
                     }
                 } else {
-                    match self.profile_kind {
-                        ProfileKind::Doc => "rustdoc",
+                    match self.profile {
+                        Profile::Doc => "rustdoc",
                         _ => "rustc",
                     }
                 };
 
             let mut cmd = self.base_command(self.cwd, cargo_subcommand);
             cmd.arg("-p").arg(self.get_pkgid(self.cwd)?);
-            match self.profile_kind {
-                ProfileKind::Check => {
+            match self.profile {
+                Profile::Check => {
                     cmd.arg("--profile").arg("check");
                 }
-                ProfileKind::Debug => {}
-                ProfileKind::Doc => {}
-                ProfileKind::Opt => {
+                Profile::Debug => {}
+                Profile::Doc => {}
+                Profile::Opt => {
                     cmd.arg("--release");
                 }
-                ProfileKind::All => unreachable!(),
+                Profile::All => unreachable!(),
             }
             cmd.args(&self.cargo_args);
             if env::var_os("CARGO_RECORD_TIMING").is_some() {
@@ -413,7 +408,7 @@ impl<'a> CargoProcess<'a> {
                     .as_mut()
                     .map(|v| &mut v.0)
                     .expect("needs_final needs a processor");
-                let perf_tool_name = processor.perf_tool(self.profile_kind).name();
+                let perf_tool_name = processor.perf_tool(self.profile).name();
                 // If we're using a processor, we expect that only the crate
                 // we're interested in benchmarking will be built, not any
                 // dependencies.
@@ -463,15 +458,13 @@ impl<'a> CargoProcess<'a> {
             log::debug!("{:?}", cmd);
 
             let output = command_output(&mut cmd)?;
-            if let Some((ref mut processor, scenario_kind, scenario_kind_str, patch)) =
-                self.processor_etc
-            {
+            if let Some((ref mut processor, scenario, scenario_str, patch)) = self.processor_etc {
                 let data = ProcessOutputData {
                     name: self.processor_name.clone(),
                     cwd: self.cwd,
-                    profile_kind: self.profile_kind,
-                    scenario_kind,
-                    scenario_kind_str,
+                    profile: self.profile,
+                    scenario,
+                    scenario_str,
                     patch,
                 };
                 match processor.process_output(&data, output) {
@@ -519,9 +512,9 @@ pub enum Retry {
 pub struct ProcessOutputData<'a> {
     name: BenchmarkName,
     cwd: &'a Path,
-    profile_kind: ProfileKind,
-    scenario_kind: ScenarioKind,
-    scenario_kind_str: &'a str,
+    profile: Profile,
+    scenario: Scenario,
+    scenario_str: &'a str,
     patch: Option<&'a Patch>,
 }
 
@@ -529,7 +522,7 @@ pub struct ProcessOutputData<'a> {
 /// processing.
 pub trait Processor {
     /// The `PerfTool` being used.
-    fn perf_tool(&self, _: ProfileKind) -> PerfTool;
+    fn perf_tool(&self, _: Profile) -> PerfTool;
 
     /// Process the output produced by the particular `Profiler` being used.
     fn process_output(
@@ -548,7 +541,7 @@ pub trait Processor {
     ///
     /// Return "true" if planning on doing something different for second
     /// iteration.
-    fn finished_first_collection(&mut self, _: ProfileKind) -> bool {
+    fn finished_first_collection(&mut self, _: Profile) -> bool {
         false
     }
 }
@@ -607,7 +600,7 @@ impl<'a> BenchProcessor<'a> {
     fn insert_stats(
         &mut self,
         scenario: database::Scenario,
-        profile_kind: ProfileKind,
+        profile: Profile,
         stats: (Stats, Option<SelfProfile>, Option<SelfProfileFiles>),
     ) {
         let version = String::from_utf8(
@@ -623,12 +616,12 @@ impl<'a> BenchProcessor<'a> {
         .unwrap();
 
         let collection = self.rt.block_on(self.conn.collection_id(&version));
-        let profile = match profile_kind {
-            ProfileKind::Check => database::Profile::Check,
-            ProfileKind::Debug => database::Profile::Debug,
-            ProfileKind::Doc => database::Profile::Doc,
-            ProfileKind::Opt => database::Profile::Opt,
-            ProfileKind::All => unreachable!(),
+        let profile = match profile {
+            Profile::Check => database::Profile::Check,
+            Profile::Debug => database::Profile::Debug,
+            Profile::Doc => database::Profile::Doc,
+            Profile::Opt => database::Profile::Opt,
+            Profile::All => unreachable!(),
         };
 
         if let Some(files) = stats.2 {
@@ -800,18 +793,18 @@ impl Upload {
 }
 
 impl<'a> Processor for BenchProcessor<'a> {
-    fn perf_tool(&self, _profile: ProfileKind) -> PerfTool {
+    fn perf_tool(&self, _profile: Profile) -> PerfTool {
         if self.is_first_collection && self.is_self_profile {
             if cfg!(unix) {
-                PerfTool::Bench(Bencher::PerfStatSelfProfile)
+                PerfTool::BenchTool(Bencher::PerfStatSelfProfile)
             } else {
-                PerfTool::Bench(Bencher::XperfStatSelfProfile)
+                PerfTool::BenchTool(Bencher::XperfStatSelfProfile)
             }
         } else {
             if cfg!(unix) {
-                PerfTool::Bench(Bencher::PerfStat)
+                PerfTool::BenchTool(Bencher::PerfStat)
             } else {
-                PerfTool::Bench(Bencher::XperfStat)
+                PerfTool::BenchTool(Bencher::XperfStat)
             }
         }
     }
@@ -820,7 +813,7 @@ impl<'a> Processor for BenchProcessor<'a> {
         self.is_first_collection = true;
     }
 
-    fn finished_first_collection(&mut self, profile: ProfileKind) -> bool {
+    fn finished_first_collection(&mut self, profile: Profile) -> bool {
         let original = self.perf_tool(profile);
         self.is_first_collection = false;
         // We need to run again if we're going to use a different perf tool
@@ -834,33 +827,25 @@ impl<'a> Processor for BenchProcessor<'a> {
     ) -> anyhow::Result<Retry> {
         match process_stat_output(output) {
             Ok(res) => {
-                match data.scenario_kind {
-                    ScenarioKind::Full => {
-                        self.insert_stats(database::Scenario::Empty, data.profile_kind, res);
+                match data.scenario {
+                    Scenario::Full => {
+                        self.insert_stats(database::Scenario::Empty, data.profile, res);
                     }
-                    ScenarioKind::IncrFull => {
-                        self.insert_stats(
-                            database::Scenario::IncrementalEmpty,
-                            data.profile_kind,
-                            res,
-                        );
+                    Scenario::IncrFull => {
+                        self.insert_stats(database::Scenario::IncrementalEmpty, data.profile, res);
                     }
-                    ScenarioKind::IncrUnchanged => {
-                        self.insert_stats(
-                            database::Scenario::IncrementalFresh,
-                            data.profile_kind,
-                            res,
-                        );
+                    Scenario::IncrUnchanged => {
+                        self.insert_stats(database::Scenario::IncrementalFresh, data.profile, res);
                     }
-                    ScenarioKind::IncrPatched => {
+                    Scenario::IncrPatched => {
                         let patch = data.patch.unwrap();
                         self.insert_stats(
                             database::Scenario::IncrementalPatch(patch.name),
-                            data.profile_kind,
+                            data.profile,
                             res,
                         );
                     }
-                    ScenarioKind::All => unreachable!(),
+                    Scenario::All => unreachable!(),
                 }
                 Ok(Retry::No)
             }
@@ -904,8 +889,8 @@ impl<'a> ProfileProcessor<'a> {
 }
 
 impl<'a> Processor for ProfileProcessor<'a> {
-    fn perf_tool(&self, _: ProfileKind) -> PerfTool {
-        PerfTool::Profile(self.profiler)
+    fn perf_tool(&self, _: Profile) -> PerfTool {
+        PerfTool::ProfileTool(self.profiler)
     }
 
     fn process_output(
@@ -915,11 +900,11 @@ impl<'a> Processor for ProfileProcessor<'a> {
     ) -> anyhow::Result<Retry> {
         fs::create_dir_all(self.output_dir)?;
 
-        // Produce a name of the form $PREFIX-$ID-$BENCHMARK-$BUILDKIND-$RUNKIND.
+        // Produce a name of the form $PREFIX-$ID-$BENCHMARK-$PROFILE-$SCENARIO.
         let out_file = |prefix: &str| -> String {
             format!(
                 "{}-{}-{}-{:?}-{}",
-                prefix, self.id, data.name, data.profile_kind, data.scenario_kind_str
+                prefix, self.id, data.name, data.profile, data.scenario_str
             )
         };
 
@@ -1282,7 +1267,7 @@ impl Benchmark {
         &'a self,
         compiler: Compiler<'a>,
         cwd: &'a Path,
-        profile_kind: ProfileKind,
+        profile: Profile,
     ) -> CargoProcess<'a> {
         let mut cargo_args = self
             .config
@@ -1303,7 +1288,7 @@ impl Benchmark {
             compiler,
             processor_name: self.name.clone(),
             cwd,
-            profile_kind,
+            profile,
             incremental: false,
             processor_etc: None,
             manifest_path: self
@@ -1329,26 +1314,26 @@ impl Benchmark {
     pub fn measure(
         &self,
         processor: &mut dyn Processor,
-        profile_kinds: &[ProfileKind],
-        scenario_kinds: &[ScenarioKind],
+        profiles: &[Profile],
+        scenarios: &[Scenario],
         compiler: Compiler<'_>,
         iterations: Option<usize>,
     ) -> anyhow::Result<()> {
         let iterations = iterations.unwrap_or(self.config.runs);
 
-        if self.config.disabled || profile_kinds.is_empty() {
+        if self.config.disabled || profiles.is_empty() {
             eprintln!("Skipping {}: disabled", self.name);
             bail!("disabled benchmark");
         }
 
         eprintln!("Preparing {}", self.name);
-        let profile_kind_dirs = profile_kinds
+        let profile_dirs = profiles
             .iter()
-            .map(|kind| Ok((*kind, self.make_temp_dir(&self.path)?)))
+            .map(|profile| Ok((*profile, self.make_temp_dir(&self.path)?)))
             .collect::<anyhow::Result<Vec<_>>>()?;
 
         // In parallel (but with a limit to the number of CPUs), prepare all
-        // builds kinds. This is done in parallel vs. sequentially because:
+        // profiles. This is done in parallel vs. sequentially because:
         //  * We don't record any measurements during this phase, so the
         //    performance need not be consistent.
         //  * We want to make use of the reality that rustc is single-threaded
@@ -1357,7 +1342,7 @@ impl Benchmark {
         //    rather than fully sequentially, where we have long periods of a
         //    single CPU core being used.
         //
-        // As one example, with a full (All builds x All run kinds)
+        // As one example, with a full (All profiles x All scenarios)
         // configuration, script-servo-2 took 2995s without this parallelization
         // and 2915s with. This is a small win, admittedly, but even a few
         // minutes shaved off is important -- and there's not too much mangling
@@ -1371,10 +1356,10 @@ impl Benchmark {
         // target-directory global lock during compilation.
         crossbeam_utils::thread::scope::<_, anyhow::Result<()>>(|s| {
             let server = jobserver::Client::new(num_cpus::get()).context("jobserver::new")?;
-            for (profile_kind, prep_dir) in &profile_kind_dirs {
+            for (profile, prep_dir) in &profile_dirs {
                 let server = server.clone();
                 s.spawn::<_, anyhow::Result<()>>(move |_| {
-                    self.mk_cargo_process(compiler, prep_dir.path(), *profile_kind)
+                    self.mk_cargo_process(compiler, prep_dir.path(), *profile)
                         .jobserver(server)
                         .run_rustc(false)?;
                     Ok(())
@@ -1384,18 +1369,15 @@ impl Benchmark {
         })
         .unwrap()?;
 
-        for (profile_kind, prep_dir) in profile_kind_dirs {
-            eprintln!(
-                "Running {}: {:?} + {:?}",
-                self.name, profile_kind, scenario_kinds
-            );
+        for (profile, prep_dir) in profile_dirs {
+            eprintln!("Running {}: {:?} + {:?}", self.name, profile, scenarios);
 
             // We want at least two runs for all benchmarks (since we run
             // self-profile separately).
             processor.start_first_collection();
             for i in 0..cmp::max(iterations, 2) {
                 if i == 1 {
-                    let different = processor.finished_first_collection(profile_kind);
+                    let different = processor.finished_first_collection(profile);
                     if iterations == 1 && !different {
                         // Don't run twice if this processor doesn't need it and
                         // we've only been asked to run once.
@@ -1408,50 +1390,45 @@ impl Benchmark {
                 let cwd = timing_dir.path();
 
                 // A full non-incremental build.
-                if scenario_kinds.contains(&ScenarioKind::Full) {
-                    self.mk_cargo_process(compiler, cwd, profile_kind)
-                        .processor(processor, ScenarioKind::Full, "Full", None)
+                if scenarios.contains(&Scenario::Full) {
+                    self.mk_cargo_process(compiler, cwd, profile)
+                        .processor(processor, Scenario::Full, "Full", None)
                         .run_rustc(true)?;
                 }
 
                 // Rustdoc does not support incremental compilation
-                if profile_kind != ProfileKind::Doc {
+                if profile != Profile::Doc {
                     // An incremental  from scratch (slowest incremental case).
                     // This is required for any subsequent incremental builds.
-                    if scenario_kinds.iter().any(|s| s.is_incr()) {
-                        self.mk_cargo_process(compiler, cwd, profile_kind)
+                    if scenarios.iter().any(|s| s.is_incr()) {
+                        self.mk_cargo_process(compiler, cwd, profile)
                             .incremental(true)
-                            .processor(processor, ScenarioKind::IncrFull, "IncrFull", None)
+                            .processor(processor, Scenario::IncrFull, "IncrFull", None)
                             .run_rustc(true)?;
                     }
 
                     // An incremental build with no changes (fastest incremental case).
-                    if scenario_kinds.contains(&ScenarioKind::IncrUnchanged) {
-                        self.mk_cargo_process(compiler, cwd, profile_kind)
+                    if scenarios.contains(&Scenario::IncrUnchanged) {
+                        self.mk_cargo_process(compiler, cwd, profile)
                             .incremental(true)
-                            .processor(
-                                processor,
-                                ScenarioKind::IncrUnchanged,
-                                "IncrUnchanged",
-                                None,
-                            )
+                            .processor(processor, Scenario::IncrUnchanged, "IncrUnchanged", None)
                             .run_rustc(true)?;
                     }
 
-                    if scenario_kinds.contains(&ScenarioKind::IncrPatched) {
+                    if scenarios.contains(&Scenario::IncrPatched) {
                         for (i, patch) in self.patches.iter().enumerate() {
                             log::debug!("applying patch {}", patch.name);
                             patch.apply(cwd).map_err(|s| anyhow::anyhow!("{}", s))?;
 
                             // An incremental build with some changes (realistic
                             // incremental case).
-                            let scenario_kind_str = format!("IncrPatched{}", i);
-                            self.mk_cargo_process(compiler, cwd, profile_kind)
+                            let scenario_str = format!("IncrPatched{}", i);
+                            self.mk_cargo_process(compiler, cwd, profile)
                                 .incremental(true)
                                 .processor(
                                     processor,
-                                    ScenarioKind::IncrPatched,
-                                    &scenario_kind_str,
+                                    Scenario::IncrPatched,
+                                    &scenario_str,
                                     Some(&patch),
                                 )
                                 .run_rustc(true)?;

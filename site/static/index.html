@@ -397,11 +397,11 @@
 
             let benchmarks = {};
 
-            function optInterpolated(buildKind) {
-                for (let cacheState in buildKind)
-                    buildKind[cacheState].interpolated_indices = new Set(buildKind[cacheState].interpolated_indices);
+            function optInterpolated(profile) {
+                for (let cacheState in profile)
+                    profile[cacheState].interpolated_indices = new Set(profile[cacheState].interpolated_indices);
 
-                return buildKind;
+                return profile;
             }
 
             sortedBenchNames.forEach(name => {

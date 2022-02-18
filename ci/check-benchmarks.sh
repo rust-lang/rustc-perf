@@ -18,9 +18,9 @@ RUST_BACKTRACE=1 \
     cargo run -p collector --bin collector -- \
     bench_local $bindir/rustc \
         --id Test \
-        --builds $PROFILE_KINDS \
+        --profiles $PROFILES \
         --cargo $bindir/cargo \
-        --runs All \
+        --scenarios All \
         --rustdoc $bindir/rustdoc \
         $BENCH_INCLUDE_EXCLUDE_OPTS
 

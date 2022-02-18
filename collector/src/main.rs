@@ -41,82 +41,75 @@ impl<'a> Compiler<'a> {
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, clap::ArgEnum)]
 #[clap(rename_all = "PascalCase")]
-pub enum ProfileKind {
+pub enum Profile {
     Check,
     Debug,
     Doc,
     Opt,
 
     // This one is only specified from the command line, and is converted to
-    // one of the above variants by `expand_all()`.
+    // the above variants by `expand_all()`.
     All,
 }
 
-impl ProfileKind {
+impl Profile {
     fn all() -> Vec<Self> {
-        vec![
-            ProfileKind::Check,
-            ProfileKind::Debug,
-            ProfileKind::Doc,
-            ProfileKind::Opt,
-        ]
+        vec![Profile::Check, Profile::Debug, Profile::Doc, Profile::Opt]
     }
 
     fn all_non_doc() -> Vec<Self> {
-        vec![ProfileKind::Check, ProfileKind::Debug, ProfileKind::Opt]
+        vec![Profile::Check, Profile::Debug, Profile::Opt]
     }
 
-    fn expand_all(kinds: &[Self]) -> Vec<Self> {
-        if kinds.contains(&ProfileKind::All) {
+    fn expand_all(profiles: &[Self]) -> Vec<Self> {
+        if profiles.contains(&Profile::All) {
             Self::all()
         } else {
-            kinds.to_vec()
+            profiles.to_vec()
         }
     }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, clap::ArgEnum)]
 #[clap(rename_all = "PascalCase")]
-pub enum ScenarioKind {
+pub enum Scenario {
     Full,
     IncrFull,
     IncrUnchanged,
     IncrPatched,
 
     // This one is only specified from the command line, and is converted to
-    // one of the above variants by `expand_all()`.
+    // the above variants by `expand_all()`.
     All,
 }
 
-impl ScenarioKind {
-    fn all() -> Vec<ScenarioKind> {
+impl Scenario {
+    fn all() -> Vec<Scenario> {
         vec![
-            ScenarioKind::Full,
-            ScenarioKind::IncrFull,
-            ScenarioKind::IncrUnchanged,
-            ScenarioKind::IncrPatched,
+            Scenario::Full,
+            Scenario::IncrFull,
+            Scenario::IncrUnchanged,
+            Scenario::IncrPatched,
         ]
     }
 
-    fn all_non_incr() -> Vec<ScenarioKind> {
-        vec![ScenarioKind::Full]
+    fn all_non_incr() -> Vec<Scenario> {
+        vec![Scenario::Full]
     }
 
-    fn expand_all(kinds: &[Self]) -> Vec<Self> {
-        if kinds.contains(&ScenarioKind::All) {
+    fn expand_all(scenarios: &[Self]) -> Vec<Self> {
+        if scenarios.contains(&Scenario::All) {
             Self::all()
         } else {
-            kinds.to_vec()
+            scenarios.to_vec()
         }
     }
 
     fn is_incr(self) -> bool {
         match self {
-            ScenarioKind::Full => false,
-            ScenarioKind::IncrFull | ScenarioKind::IncrUnchanged | ScenarioKind::IncrPatched => {
-                true
-            }
-            ScenarioKind::All => unreachable!(),
+            Scenario::Full => false,
+            Scenario::IncrFull | Scenario::IncrUnchanged | Scenario::IncrPatched => true,
+            Scenario::All => unreachable!(),
         }
     }
 }
@@ -149,8 +142,8 @@ fn bench(
     rt: &mut Runtime,
     pool: database::Pool,
     artifact_id: &ArtifactId,
-    profile_kinds: &[ProfileKind],
-    scenario_kinds: &[ScenarioKind],
+    profiles: &[Profile],
+    scenarios: &[Scenario],
     bench_rustc: bool,
     compiler: Compiler<'_>,
     benchmarks: &[Benchmark],
@@ -250,15 +243,7 @@ fn bench(
                     n_normal_benchmarks_remaining(benchmarks.len() - nth_benchmark)
                 )
             },
-            &|processor| {
-                benchmark.measure(
-                    processor,
-                    profile_kinds,
-                    scenario_kinds,
-                    compiler,
-                    iterations,
-                )
-            },
+            &|processor| benchmark.measure(processor, profiles, scenarios, compiler, iterations),
         )
     }
 
@@ -404,11 +389,11 @@ fn get_benchmarks(
 /// Get a toolchain from the input.
 /// - `rustc`: check if the given one is acceptable.
 /// - `rustdoc`: if one is given, check if it is acceptable. Otherwise, if
-///   `Doc` builds are requested, look for one next to the given `rustc`.
+///   the `Doc` profile is requested, look for one next to the given `rustc`.
 /// - `cargo`: if one is given, check if it is acceptable. Otherwise, look
 ///   for the nightly Cargo via `rustup`.
 fn get_local_toolchain(
-    profile_kinds: &[ProfileKind],
+    profiles: &[Profile],
     rustc: &str,
     rustdoc: Option<&Path>,
     cargo: Option<&Path>,
@@ -496,7 +481,7 @@ fn get_local_toolchain(
             Some(rustdoc.canonicalize().with_context(|| {
                 format!("failed to canonicalize rustdoc executable {:?}", rustdoc)
             })?)
-        } else if profile_kinds.contains(&ProfileKind::Doc) {
+        } else if profiles.contains(&Profile::Doc) {
             // We need a `rustdoc`. Look for one next to `rustc`.
             if let Ok(rustdoc) = rustc.with_file_name("rustdoc").canonicalize() {
                 debug!("found rustdoc: {:?}", &rustdoc);
@@ -545,31 +530,31 @@ fn generate_cachegrind_diffs(
     id2: &str,
     out_dir: &Path,
     benchmarks: &[Benchmark],
-    profile_kinds: &[ProfileKind],
-    scenario_kinds: &[ScenarioKind],
+    profiles: &[Profile],
+    scenarios: &[Scenario],
     errors: &mut BenchmarkErrors,
 ) -> Vec<PathBuf> {
     let mut annotated_diffs = Vec::new();
     for benchmark in benchmarks {
-        for &profile_kind in profile_kinds {
-            for scenario_kind in scenario_kinds.iter().flat_map(|kind| {
-                if profile_kind == ProfileKind::Doc && kind.is_incr() {
+        for &profile in profiles {
+            for scenario in scenarios.iter().flat_map(|scenario| {
+                if profile == Profile::Doc && scenario.is_incr() {
                     return vec![];
                 }
-                match kind {
-                    ScenarioKind::Full | ScenarioKind::IncrFull | ScenarioKind::IncrUnchanged => {
-                        vec![format!("{:?}", kind)]
+                match scenario {
+                    Scenario::Full | Scenario::IncrFull | Scenario::IncrUnchanged => {
+                        vec![format!("{:?}", scenario)]
                     }
-                    ScenarioKind::IncrPatched => (0..benchmark.patches.len())
-                        .map(|i| format!("{:?}{}", kind, i))
+                    Scenario::IncrPatched => (0..benchmark.patches.len())
+                        .map(|i| format!("{:?}{}", scenario, i))
                         .collect::<Vec<_>>(),
-                    ScenarioKind::All => unreachable!(),
+                    Scenario::All => unreachable!(),
                 }
             }) {
                 let filename = |prefix, id| {
                     format!(
                         "{}-{}-{}-{:?}-{}",
-                        prefix, id, benchmark.name, profile_kind, scenario_kind
+                        prefix, id, benchmark.name, profile, scenario
                     )
                 };
                 let id_diff = format!("{}-{}", id1, id2);
@@ -676,8 +661,8 @@ fn profile(
     profiler: Profiler,
     out_dir: &Path,
     benchmarks: &[Benchmark],
-    profile_kinds: &[ProfileKind],
-    scenario_kinds: &[ScenarioKind],
+    profiles: &[Profile],
+    scenarios: &[Scenario],
     errors: &mut BenchmarkErrors,
 ) {
     eprintln!("Profiling {} with {:?}", id, profiler);
@@ -687,13 +672,7 @@ fn profile(
     for (i, benchmark) in benchmarks.iter().enumerate() {
         eprintln!("{}", n_normal_benchmarks_remaining(benchmarks.len() - i));
         let mut processor = ProfileProcessor::new(profiler, out_dir, id);
-        let result = benchmark.measure(
-            &mut processor,
-            &profile_kinds,
-            &scenario_kinds,
-            compiler,
-            Some(1),
-        );
+        let result = benchmark.measure(&mut processor, &profiles, &scenarios, compiler, Some(1));
         if let Err(ref s) = result {
             errors.incr();
             eprintln!(
@@ -733,9 +712,10 @@ struct LocalOptions {
     id: Option<String>,
 
     /// Measure the build profiles in this comma-separated list
-    // This must be normalized via `ProfilerKind::expand_all()` before use.
+    // This must be normalized via `Profile::expand_all()` before use.
     #[clap(
-        long = "builds",
+        long = "profiles",
+        alias = "builds", // the old name, for backward compatibility
         arg_enum,
         multiple_values = true,
         use_delimiter = true,
@@ -743,7 +723,7 @@ struct LocalOptions {
         // Don't run rustdoc by default
         default_value = "Check,Debug,Opt",
     )]
-    profile_kinds: Vec<ProfileKind>,
+    profiles: Vec<Profile>,
 
     /// The path to the local Cargo to use
     #[clap(long, parse(from_os_str))]
@@ -762,15 +742,17 @@ struct LocalOptions {
     rustdoc: Option<PathBuf>,
 
     /// Measure the scenarios in this comma-separated list
+    // This must be normalized via `Scenario::expand_all()` before use.
     #[clap(
-        long = "runs",
+        long = "scenarios",
+        alias = "runs", // the old name, for backward compatibility
         arg_enum,
         multiple_values = true,
         use_delimiter = true,
         require_delimiter = true,
         default_value = "All"
     )]
-    scenario_kinds: Vec<ScenarioKind>,
+    scenarios: Vec<Scenario>,
 }
 
 #[derive(Debug, clap::Args)]
@@ -894,13 +876,13 @@ fn main_result() -> anyhow::Result<i32> {
             iterations,
             self_profile,
         } => {
-            let profile_kinds = ProfileKind::expand_all(&local.profile_kinds);
-            let scenario_kinds = ScenarioKind::expand_all(&local.scenario_kinds);
+            let profiles = Profile::expand_all(&local.profiles);
+            let scenarios = Scenario::expand_all(&local.scenarios);
 
             let pool = database::Pool::open(&db.db);
 
             let (rustc, rustdoc, cargo, id) = get_local_toolchain(
-                &profile_kinds,
+                &profiles,
                 &local.rustc,
                 local.rustdoc.as_deref(),
                 local.cargo.as_deref(),
@@ -918,8 +900,8 @@ fn main_result() -> anyhow::Result<i32> {
                 &mut rt,
                 pool,
                 &ArtifactId::Tag(id),
-                &profile_kinds,
-                &scenario_kinds,
+                &profiles,
+                &scenarios,
                 bench_rustc.bench_rustc,
                 Compiler {
                     rustc: &rustc,
@@ -972,8 +954,8 @@ fn main_result() -> anyhow::Result<i32> {
                 &mut rt,
                 pool,
                 &ArtifactId::Commit(commit),
-                &ProfileKind::all(),
-                &ScenarioKind::all(),
+                &Profile::all(),
+                &Scenario::all(),
                 bench_rustc.bench_rustc,
                 Compiler::from_sysroot(&sysroot),
                 &benchmarks,
@@ -998,15 +980,15 @@ fn main_result() -> anyhow::Result<i32> {
 
             let pool = database::Pool::open(&db.db);
 
-            let profile_kinds = if collector::version_supports_doc(&toolchain) {
-                ProfileKind::all()
+            let profiles = if collector::version_supports_doc(&toolchain) {
+                Profile::all()
             } else {
-                ProfileKind::all_non_doc()
+                Profile::all_non_doc()
             };
-            let scenario_kinds = if collector::version_supports_incremental(&toolchain) {
-                ScenarioKind::all()
+            let scenarios = if collector::version_supports_incremental(&toolchain) {
+                Scenario::all()
             } else {
-                ScenarioKind::all_non_incr()
+                Scenario::all_non_incr()
             };
 
             let which = |tool| {
@@ -1034,8 +1016,8 @@ fn main_result() -> anyhow::Result<i32> {
                 &mut rt,
                 pool,
                 &ArtifactId::Tag(toolchain),
-                &profile_kinds,
-                &scenario_kinds,
+                &profiles,
+                &scenarios,
                 /* bench_rustc */ false,
                 Compiler {
                     rustc: Path::new(rustc.trim()),
@@ -1058,8 +1040,8 @@ fn main_result() -> anyhow::Result<i32> {
             out_dir,
             rustc2,
         } => {
-            let profile_kinds = ProfileKind::expand_all(&local.profile_kinds);
-            let scenario_kinds = ScenarioKind::expand_all(&local.scenario_kinds);
+            let profiles = Profile::expand_all(&local.profiles);
+            let scenarios = Scenario::expand_all(&local.scenarios);
 
             let benchmarks = get_benchmarks(
                 &benchmark_dir,
@@ -1071,7 +1053,7 @@ fn main_result() -> anyhow::Result<i32> {
             let mut get_toolchain_and_profile =
                 |rustc: &str, suffix: &str| -> anyhow::Result<String> {
                     let (rustc, rustdoc, cargo, id) = get_local_toolchain(
-                        &profile_kinds,
+                        &profiles,
                         &rustc,
                         local.rustdoc.as_deref(),
                         local.cargo.as_deref(),
@@ -1091,8 +1073,8 @@ fn main_result() -> anyhow::Result<i32> {
                         profiler,
                         &out_dir,
                         &benchmarks,
-                        &profile_kinds,
-                        &scenario_kinds,
+                        &profiles,
+                        &scenarios,
                         &mut errors,
                     );
                     Ok(id)
@@ -1115,8 +1097,8 @@ fn main_result() -> anyhow::Result<i32> {
                         &id2,
                         &out_dir,
                         &benchmarks,
-                        &profile_kinds,
-                        &scenario_kinds,
+                        &profiles,
+                        &scenarios,
                         &mut errors,
                     );
                     if diffs.len() > 1 {
