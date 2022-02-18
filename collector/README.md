@@ -69,7 +69,7 @@ The following command runs the benchmark suite using a local rustc:
 It will benchmark the entire suite and put the results in a SQLite database
 file called `results.db`. The full benchmark suite takes hours to run, but the
 time can be reduced greatly by using the options below to reduce the number of
-benchmarks, runs, or builds. Progress output is printed to stderr.
+benchmarks, profiles, or scenarios. Progress output is printed to stderr.
 
 The following arguments are mandatory.
 
@@ -95,18 +95,15 @@ The following options alter the behaviour of the `bench_local` subcommand.
 - `--bench-rustc`: there is a special `rustc` benchmark that involves
   downloading a recent Rust compiler and measuring the time taken to compile
   it. This benchmark works very differently to all the other benchmarks. For
-  example, `--runs` and `--builds` don't affect it, and the given `ID` is used
-  as the `rust-lang/rust` ref (falling back to `HEAD` if the `ID` is not a
-  valid ref). It is for advanced and CI use only. This option enables it.
-- `--builds <BUILDS>`: the build kinds to be benchmarked. The possible choices
-  are one or more (comma-separated) of `Check`, `Debug`, `Doc`, `Opt`, and
-  `All`. The default is `Check,Debug,Opt`.
+  example, `--profiles` and `--scenarios` don't affect it, and the given `ID`
+  is used as the `rust-lang/rust` ref (falling back to `HEAD` if the `ID` is
+  not a valid ref). It is for advanced and CI use only. This option enables it.
 - `--cargo <CARGO>`: a path (relative or absolute) to a Cargo executable that
   will be used to build the benchmarks. By default, the nightly Cargo installed
   by `rustup` will be used. This is usually fine, though in rare cases it may
   cause local results to not exactly match production results, because Cargo
   sometimes begins passing (or stops passing) various flags to rustc.
-- `--db $DATABASE`: a path (relative or absolute) to a sqlite database file in
+- `--db <DATABASE>`: a path (relative or absolute) to a sqlite database file in
   which the timing data will be placed. It will be created if it does not
   already exist. The default is `results.db`. Alternatively, the collector
   supports postgres as a backend and the URL can be specified (beginning with
@@ -121,16 +118,19 @@ The following options alter the behaviour of the `bench_local` subcommand.
   comma-separated list of benchmark names. When this option is specified, a
   benchmark is included in the run only if its name matches one or more of the
   given names.
-- `--runs $RUNS`: the run kinds to be benchmarked. The possible choices are one
-  or more (comma-separated) of `Full`, `IncrFull`, `IncrUnchanged`,
-  `IncrPatched`, and `All`. The default is `All`. Note that `IncrFull` is
-  always run (even if not requested) if either of `IncrUnchanged` or
-  `IncrPatched` are run.
+- `--profiles <PROFILES>`: the profiles to be benchmarked. The possible choices
+  are one or more (comma-separated) of `Check`, `Debug`, `Doc`, `Opt`, and
+  `All`. The default is `Check,Debug,Opt`.
 - `--rustdoc <RUSTDOC>`: a path (relative or absolute) to a rustdoc
-  executable that will be benchmarked (but only if a `Doc` build is requested
-  with `--builds`). If a `Doc` build is requested, by default the tool will
+  executable that will be benchmarked (but only if a `Doc` profile is requested
+  with `--profiles`). If a `Doc` profile is requested, by default the tool will
   look for a rustdoc executable next to the rustc specified via the `<RUSTC>`
   argument.
+- `--scenarios <SCENARIOS>`: the scenarios to be benchmarked. The possible
+  choices are one or more (comma-separated) of `Full`, `IncrFull`,
+  `IncrUnchanged`, `IncrPatched`, and `All`. The default is `All`. Note that
+  `IncrFull` is always run if either of `IncrUnchanged` or `IncrPatched` are
+  run (even if not requested).
 - `--self-profile`: use rustc's `-Zself-profile` option to produce
   query/function tables in the output. The `measureme` tool must be installed
   for this to work.
@@ -189,14 +189,14 @@ Finally, while most of the options you can pass to the collector are supported, 
 the profilers used in the `profile_local` command are not. In Windows, the only currently supported
 profiler is the `self-profiler`.
 
-As a complete example, let's run just the `regex` benchmark in the `Debug` build with
-self-profiling results available:
+As a complete example, let's run just the `regex` benchmark in the `Debug`
+profile with self-profiling results available:
 
 ```pwsh
 $env:XPERF="C:\Program Files (x86)\Windows Kits\10\Windows Performance Toolkit\xperf.exe"
 $env:TRACELOG="C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x64\tracelog.exe"
-.\target\release\collector.exe bench_local $env:RUST_ORIGINAL --id Original --builds Debug --include regex --self-profile
-.\target\release\collector.exe bench_local $env:RUST_MODIFIED --id Modified --builds Debug --include regex --self-profile
+.\target\release\collector.exe bench_local $env:RUST_ORIGINAL --id Original --profiles Debug --include regex --self-profile
+.\target\release\collector.exe bench_local $env:RUST_MODIFIED --id Modified --profiles Debug --include regex --self-profile
 .\target\release\site.exe .\results.db
 ```
 
@@ -368,8 +368,8 @@ The mandatory `<PROFILER>` argument must be one of the following.
     a tool for finding code bloat.
   - **Slowdown**. It Is likely to run faster than normal compilation.
   - **Output**. Human-readable output is written to files with an `ll` prefix.
-  - **Notes**. Does not work with the `Check` build kind. Also does not work
-    with the `IncrFull`, `IncrUnchanged`, and `IncrPatched` run kinds.
+  - **Notes**. Does not work with the `Check` profile. Also does not work
+    with the `IncrFull`, `IncrUnchanged`, and `IncrPatched` scenarios.
 - `llvm-ir`: Dump rustc-generated LLVM IR (before any LLVM passes)
    - Purpose. This command provides access to the raw LLVM IR rustc produces,
      which can be used for targeted improvements to functions (e.g., those
@@ -383,14 +383,14 @@ The mandatory `<PROFILER>` argument must be one of the following.
   - **Purpose**. This is useful to investigate changes in CGU partionining.
   - **Slowdown**. Equivalent to normal compilation.
   - **Output**. File per CGU, currently, placed in a directory inside results.
-  - **Notes**. Will likely work best with `Full` builds, on either Debug or Opt
-    profiles.
+  - **Notes**. Will likely work best with the `Full` scenario, on either
+    `Debug` or `Opt` profiles.
 - `dep-graph`: Dump the incremental dependency graph (as produced by
   -Zdump-dep-graph).
   - **Purpose**. This is useful when debugging changes to incremental behavior.
   - **Slowdown**. Equivalent to normal compilation.
   - **Output**. .dot and .txt file (.txt likely is what you want to see first).
-  - **Notes**. Works primarily with incremental compilation kinds.
+  - **Notes**. Works primarily with incremental compilation scenarios.
 
 The mandatory `<RUSTC>` argument is a path to a rustc executable or a
 `+`-prefixed toolchain specifier, the same as for `bench_local`.
@@ -401,7 +401,6 @@ fashion to the one chosen for `bench_local`.
 ### Profiling options
 
 The following options alter the behaviour of the `profile_local` subcommand.
-- `--builds <BUILDS>`: as for `bench_local`.
 - `--cargo <CARGO>`: as for `bench_local`.
 - `--exclude <EXCLUDE>`: as for `bench_local`.
 - `--id <ID>`: an identifer that will form part of the output filenames.
@@ -409,13 +408,14 @@ The following options alter the behaviour of the `profile_local` subcommand.
 - `--out-dir <OUT_DIR>`: a path (relative or absolute) to a directory in
   which the output will be placed. If the directory doesn't exist, it will be
   created. The default is `results/`.
-- `--runs <RUNS>`: as for `bench_local`.
+- `--profiles <PROFILES>`: as for `bench_local`.
 - `--rustc2 <RUSTC>`: if given, profiles a second Rust compiler for comparison
   against the first. If a non-toolchain identifier is being used, a `1` will be
   appended to the identifier for the first run and a `2` will be appended to
   the identifier for the second run. If the profiler being used is Cachegrind,
   diff files will also be produced.
 - `--rustdoc <RUSTDOC>` as for `bench_local`.
+- `--scenarios <SCENARIOS>`: as for `bench_local`.
 
 `RUST_LOG=debug` can be specified to enable verbose logging, which is useful
 for debugging `collector` itself.
