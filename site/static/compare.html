@@ -650,8 +650,23 @@
                             b: format(b),
                             percent: 100 * (b - a) / a
                         };
-                    })
-                        .sort((a, b) => Math.abs(b.percent) - Math.abs(a.percent));
+                    }).sort((a, b) => {
+                        let bp = Math.abs(b.percent);
+                        if (Number.isNaN(bp)) {
+                            bp = 0;
+                        }
+                        let ap = Math.abs(a.percent);
+                        if (Number.isNaN(ap)) {
+                            ap = 0;
+                        }
+                        if (bp < ap) {
+                            return -1;
+                        } else if (bp > ap) {
+                            return 1;
+                        } else {
+                            return a.name.localeCompare(b.name);
+                        }
+                    });
                 },
                 before() {
                     if (!this.data) {
