@@ -435,7 +435,7 @@
                             &nbsp;({{(summaryPair[1].improvements_avg).toFixed(2)}}%)
                         </span>
                         <span class="summary" v-bind:class="percentClass(summaryPair[1].average)">
-                            &nbsp;{{ signIfNegative(summaryPair[1].average) }}{{ (summaryPair[1].average).toFixed(2) }}%
+                            &nbsp;{{ signIfPositive(summaryPair[1].average) }}{{ (summaryPair[1].average).toFixed(2) }}%
                         </span>
                     </div>
                 </div>
@@ -768,11 +768,11 @@
                 prLink(pr) {
                     return `https://github.com/rust-lang/rust/pull/${pr}`;
                 },
-                signIfNegative(pct) {
+                signIfPositive(pct) {
                     if (pct >= 0) {
-                        return "";
+                        return "+";
                     }
-                    return "-";
+                    return "";
                 },
                 percentClass(pct) {
                     let klass = "";
