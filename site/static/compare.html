@@ -227,6 +227,9 @@
             align-items: center;
             width: 20%;
         }
+        .summary-wide {
+            width: 35%;
+        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
 </head>
@@ -262,6 +265,7 @@
                     </div>
                 </div>
                 <input id="submit" type="submit" value="Submit" onclick="submitSettings(); return false;">
+            </div>
         </fieldset>
         <h2>Comparing <span id="stat-header">{{stat}}</span> between <span id="before">{{before}}</span> and
             <span id="after">{{after}}</span>
@@ -405,14 +409,15 @@
                 <div v-for="summaryPair in Object.entries(summary)" style="display: flex;">
                     <span style="font-weight: bold; width: 30%; margin-left: 15%; text-transform: capitalize;">{{
                         summaryPair[0] }}:</span>
-                    <div style="display: flex; justify-content: flex-end; width: 80%; margin-right: 15%;">
-                        <span class="summary positive">
+                    <div style="display: flex; justify-content: flex-end; width: 80%; margin-right: 5%;">
+                        <span class="summary summary-wide positive">
                             {{summaryPair[1].regressions.toString().padStart(3, "&nbsp;")}}
                             <svg style="width:18px;height:18px" viewBox="0 0 24 24">
                                 <path
-                                    d="M16,18L18.29,15.71L13.41,10.83L9.41,14.83L2,7.41L3.41,6L9.41,12L13.41,8L19.71,14.29L22,12V18H16Z">
+                                    d="M16,6L18.29,8.29L13.41,13.17L9.41,9.17L2,16.59L3.41,18L9.41,12L13.41,16L19.71,9.71L22,12V6H16Z">
                                 </path>
                             </svg>
+                            &nbsp;(+{{(summaryPair[1].regressions_avg).toFixed(2)}}%)
                         </span>
                         <span class="summary">
                             {{summaryPair[1].unchanged.toString().padStart(3, "&nbsp;")}}
@@ -420,13 +425,17 @@
                                 <path d="M22,12L18,8V11H3V13H18V16L22,12Z"></path>
                             </svg>
                         </span>
-                        <span class="summary negative">
+                        <span class="summary summary-wide negative">
                             {{summaryPair[1].improvements.toString().padStart(3, "&nbsp;")}}
                             <svg style="width:18px;height:18px" viewBox="0 0 24 24">
                                 <path
-                                    d="M16,6L18.29,8.29L13.41,13.17L9.41,9.17L2,16.59L3.41,18L9.41,12L13.41,16L19.71,9.71L22,12V6H16Z">
+                                    d="M16,18L18.29,15.71L13.41,10.83L9.41,14.83L2,7.41L3.41,6L9.41,12L13.41,8L19.71,14.29L22,12V18H16Z">
                                 </path>
                             </svg>
+                            &nbsp;({{(summaryPair[1].improvements_avg).toFixed(2)}}%)
+                        </span>
+                        <span class="summary" v-bind:class="percentClass(summaryPair[1].average)">
+                            &nbsp;{{ signIfNegative(summaryPair[1].average) }}{{ (summaryPair[1].average).toFixed(2) }}%
                         </span>
                     </div>
                 </div>
@@ -706,25 +715,48 @@
                         sum[testCaseString(next)] = true;
                         return sum;
                     }, {});
-                    const newCount = { regressions: 0, improvements: 0, unchanged: 0 }
+                    const newCount = {
+                        regressions: 0,
+                        regressions_avg: 0,
+                        improvements: 0,
+                        improvements_avg: 0,
+                        unchanged: 0,
+                        average: 0
+                    };
+
+                    const addDatum = (result, datum, percent) => {
+                        if (percent > 0 && datum.is_significant) {
+                            result.regressions += 1;
+                            result.regressions_avg += percent;
+                        } else if (percent < 0 && datum.is_significant) {
+                            result.improvements += 1;
+                            result.improvements_avg += percent;
+                        } else {
+                            result.unchanged += 1;
+                        }
+                        result.average += percent;
+                    };
+
                     let result = { all: { ...newCount }, filtered: { ...newCount } }
                     for (let d of this.data.comparisons) {
                         const testCase = testCaseString(d)
-                        const scenario = d.scenario;
                         const datumA = d.statistics[0];
                         const datumB = d.statistics[1];
                         let percent = 100 * ((datumB - datumA) / datumA);
-                        if (percent > 0 && d.is_significant) {
-                            result.all.regressions += 1;
-                            result.filtered.regressions += filtered[testCase] || 0;
-                        } else if (percent < 0 && d.is_significant) {
-                            result.all.improvements += 1;
-                            result.filtered.improvements += filtered[testCase] || 0;
-                        } else {
-                            result.all.unchanged += 1;
-                            result.filtered.unchanged += filtered[testCase] || 0;
+                        addDatum(result.all, d, percent);
+                        if (filtered[testCase]) {
+                            addDatum(result.filtered, d, percent);
                         }
                     }
+
+                    const computeAvg = (result) => {
+                        result.improvements_avg /= Math.max(result.improvements, 1);
+                        result.regressions_avg /= Math.max(result.regressions, 1);
+                        result.average /= Math.max(result.regressions + result.improvements + result.unchanged, 1);
+                    };
+                    computeAvg(result.all);
+                    computeAvg(result.filtered);
+
                     return result;
 
                 }
@@ -735,6 +767,12 @@
                 },
                 prLink(pr) {
                     return `https://github.com/rust-lang/rust/pull/${pr}`;
+                },
+                signIfNegative(pct) {
+                    if (pct >= 0) {
+                        return "";
+                    }
+                    return "-";
                 },
                 percentClass(pct) {
                     let klass = "";
