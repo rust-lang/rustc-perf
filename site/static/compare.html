@@ -406,6 +406,15 @@
         <p v-if="dataLoading && !data">Loading ...</p>
         <div v-if="data" id="content" style="margin-top: 15px">
             <div id="summary">
+                <div style="display: flex; justify-content: end;">
+                    <span class="tooltip" style="margin-right: 1em;">?
+                        <span class="tooltiptext">
+                            The percents show arithmetic mean amongst regressions, amongst improvements
+                            and finally amongst all benchmarks in each category (all benchmarks or
+                            filtered benchmarks).
+                        </span>
+                    </span>
+                </div>
                 <div v-for="summaryPair in Object.entries(summary)" style="display: flex;">
                     <span style="font-weight: bold; width: 30%; margin-left: 15%; text-transform: capitalize;">{{
                         summaryPair[0] }}:</span>
