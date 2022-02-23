@@ -236,14 +236,41 @@
             border-radius: 6px;
         }
 
+        .summary-container {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 10px;
+        }
         .summary {
             display: flex;
-            justify-content: center;
-            align-items: center;
-            width: 20%;
         }
-        .summary-wide {
-            width: 35%;
+        .summary-values {
+            display: flex;
+            flex-direction: column;
+        }
+        @media (min-width: 650px) {
+            .summary-container {
+                flex-direction: row;
+                margin-bottom: 0;
+                align-items: center;
+            }
+            .summary-container > span {
+                text-align: right;
+                width: 20%;
+            }
+            .summary-values {
+                width: 100%;
+                flex-direction: row;
+                justify-content: flex-end;
+                align-items: center;
+            }
+            .summary {
+                width: 15%;
+                align-items: center;
+            }
+            .summary-wide {
+                width: 20%;
+            }
         }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
@@ -430,10 +457,10 @@
                         </span>
                     </span>
                 </div>
-                <div v-for="summaryPair in Object.entries(summary)" style="display: flex;">
-                    <span style="font-weight: bold; width: 30%; margin-left: 15%; text-transform: capitalize;">{{
+                <div v-for="summaryPair in Object.entries(summary)" class="summary-container">
+                    <span style="font-weight: bold; margin-left: 5px; text-transform: capitalize;">{{
                         summaryPair[0] }}:</span>
-                    <div style="display: flex; justify-content: flex-end; width: 80%; margin-right: 5%;">
+                    <div class="summary-values">
                         <span class="summary summary-wide positive">
                             {{summaryPair[1].regressions.toString().padStart(3, "&nbsp;")}}
                             <svg style="width:18px;height:18px" viewBox="0 0 24 24">
