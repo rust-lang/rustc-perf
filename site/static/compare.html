@@ -108,11 +108,26 @@
 
         #states-list {
             display: flex;
-            justify-content: space-around;
-            align-items: center;
-            width: 80%;
+            flex-direction: column;
+            align-items: start;
             list-style: none;
             margin: 0;
+            padding: 0;
+        }
+        .section-scenarios {
+            flex-direction: column;
+        }
+
+        @media (min-width: 760px) {
+            #states-list {
+                justify-content: space-around;
+                flex-direction: row;
+                align-items: center;
+                width: 80%;
+            }
+            .section-scenarios {
+                flex-direction: row;
+            }
         }
 
         .tooltip {
@@ -303,7 +318,7 @@
                     <div class="section-heading">Filter</div>
                     <input id="filter" type="text" v-model="filter.name" />
                 </div>
-                <div class=" section">
+                <div class="section section-scenarios">
                     <div class="section-heading">
                         <div style="width: 160px;">
                             <span>Scenarios</span>
