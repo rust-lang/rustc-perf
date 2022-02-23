@@ -1,4 +1,4 @@
-use crate::{ArtifactId, ArtifactIdNumber};
+use crate::{ArtifactId, ArtifactIdNumber, BenchmarkData, Category};
 use crate::{CollectionId, Index, Profile, QueryDatum, QueuedCommit, Scenario, Step};
 use chrono::{DateTime, Utc};
 use hashbrown::HashMap;
@@ -15,6 +15,7 @@ pub trait Connection: Send + Sync {
     async fn transaction(&mut self) -> Box<dyn Transaction + '_>;
 
     async fn load_index(&mut self) -> Index;
+    async fn get_benchmarks(&self) -> Vec<BenchmarkData>;
 
     async fn artifact_by_name(&self, artifact: &str) -> Option<ArtifactId>;
 
@@ -26,7 +27,12 @@ pub trait Connection: Send + Sync {
     async fn artifact_id(&self, artifact: &ArtifactId) -> ArtifactIdNumber;
     /// None means that the caller doesn't know; it should be left alone if
     /// known or set to false if unknown.
-    async fn record_benchmark(&self, krate: &str, supports_stable: Option<bool>);
+    async fn record_benchmark(
+        &self,
+        krate: &str,
+        supports_stable: Option<bool>,
+        category: Category,
+    );
     async fn record_statistic(
         &self,
         collection: CollectionId,

@@ -1,5 +1,6 @@
 {
     "cargo_toml": "wrench/Cargo.toml",
     "runs": 1,
-    "touch_file": "wrench/src/main.rs"
+    "touch_file": "wrench/src/main.rs",
+    "category": "primary"
 }

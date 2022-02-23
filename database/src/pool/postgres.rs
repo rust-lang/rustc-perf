@@ -1,7 +1,7 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{
-    ArtifactId, ArtifactIdNumber, Benchmark, CollectionId, Commit, Date, Index, Profile,
-    QueuedCommit, Scenario,
+    ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkData, Category, CollectionId, Commit, Date,
+    Index, Profile, QueuedCommit, Scenario,
 };
 use anyhow::Context as _;
 use chrono::{DateTime, TimeZone, Utc};
@@ -9,6 +9,7 @@ use hashbrown::HashMap;
 use native_tls::{Certificate, TlsConnector};
 use postgres_native_tls::MakeTlsConnector;
 use std::convert::TryFrom;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio_postgres::GenericClient;
@@ -206,6 +207,7 @@ static MIGRATIONS: &[&str] = &[
     r#"
     create index if not exists collector_progress_start_time_step_idx on collector_progress (start_time, step) where start_time is not null and end_time is not null;
     "#,
+    r#"alter table benchmark add column category text not null"#,
 ];
 
 #[async_trait::async_trait]
@@ -282,6 +284,7 @@ pub struct CachedStatements {
     collection_id: Statement,
     record_duration: Statement,
     in_progress_steps: Statement,
+    get_benchmarks: Statement,
 }
 
 pub struct PostgresTransaction<'a> {
@@ -456,6 +459,10 @@ impl PostgresConnection {
                         ))::int4
                 from collector_progress where aid = $1 order by step
                 ").await.unwrap(),
+                get_benchmarks: conn.prepare("
+                    select name, category
+                    from benchmark
+                ").await.unwrap()
             }),
             conn,
         }
@@ -596,6 +603,24 @@ where
                 .collect(),
         }
     }
+    async fn get_benchmarks(&self) -> Vec<BenchmarkData> {
+        let rows = self
+            .conn()
+            .query(&self.statements().get_benchmarks, &[])
+            .await
+            .unwrap();
+        rows.into_iter()
+            .map(|r| {
+                let name: String = r.get(0);
+                let category: String = r.get(1);
+                BenchmarkData {
+                    name,
+                    category: Category::from_str(&category).unwrap(),
+                }
+            })
+            .collect()
+    }
+
     async fn get_pstats(
         &self,
         pstat_series_row_ids: &[u32],
@@ -966,35 +991,41 @@ where
             .await
             .unwrap();
     }
-    async fn record_benchmark(&self, benchmark: &str, supports_stable: Option<bool>) {
+    async fn record_benchmark(
+        &self,
+        benchmark: &str,
+        supports_stable: Option<bool>,
+        category: Category,
+    ) {
+        let category = category.to_string();
         if let Some(r) = self
             .conn()
             .query_opt(
-                "select stabilized from benchmark where name = $1",
+                "select stabilized, category from benchmark where name = $1",
                 &[&benchmark],
             )
             .await
             .unwrap()
         {
-            if Some(r.get::<_, bool>(0)) == supports_stable {
+            if Some(r.get::<_, bool>(0)) == supports_stable && r.get::<_, &str>(1) == category {
                 return;
             }
         }
         if let Some(stable) = supports_stable {
             self.conn()
                 .execute(
-                    "insert into benchmark (name, stabilized) VALUES ($1, $2)
-                ON CONFLICT (name) DO UPDATE SET stabilized = EXCLUDED.stabilized",
-                    &[&benchmark, &stable],
+                    "insert into benchmark (name, stabilized, category) VALUES ($1, $2, $3)
+                ON CONFLICT (name) DO UPDATE SET stabilized = EXCLUDED.stabilized, category = EXCLUDED.category",
+                    &[&benchmark, &stable, &category],
                 )
                 .await
                 .unwrap();
         } else {
             self.conn()
                 .execute(
-                    "insert into benchmark (name, stabilized) VALUES ($1, $2)
-                ON CONFLICT DO NOTHING",
-                    &[&benchmark, &false],
+                    "insert into benchmark (name, stabilized, category) VALUES ($1, $2, $3)
+                ON CONFLICT (name) DO UPDATE SET category = EXCLUDED.category",
+                    &[&benchmark, &false, &category],
                 )
                 .await
                 .unwrap();

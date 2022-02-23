@@ -109,6 +109,8 @@ pub async fn handle_compare(
     let prev = comparison.prev(&master_commits);
     let next = comparison.next(&master_commits);
     let is_contiguous = comparison.is_contiguous(&*conn, &master_commits).await;
+    let benchmark_map = conn.get_benchmarks().await;
+
     let comparisons = comparison
         .statistics
         .into_iter()
@@ -135,6 +137,10 @@ pub async fn handle_compare(
         new_errors,
         next,
         is_contiguous,
+        benchmark_data: benchmark_map
+            .into_iter()
+            .map(|bench| bench.into())
+            .collect(),
     })
 }
 

@@ -1,4 +1,5 @@
 {
     "cargo_opts": "--bin token-stream-stress-bin",
-    "touch_file": "src/main.rs"
+    "touch_file": "src/main.rs",
+    "category": "secondary"
 }

@@ -4,7 +4,7 @@ use crate::{Compiler, Profile, Scenario};
 use anyhow::{bail, Context};
 use collector::command_output;
 use collector::etw_parser;
-use database::{PatchName, QueryLabel};
+use database::{Category, PatchName, QueryLabel};
 use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt;
 use std::collections::HashMap;
@@ -130,6 +130,8 @@ struct BenchmarkConfig {
     /// directory that `Cargo.toml` is in.
     #[serde(default)]
     touch_file: Option<String>,
+
+    category: Category,
 }
 
 impl Default for BenchmarkConfig {
@@ -142,6 +144,7 @@ impl Default for BenchmarkConfig {
             runs: default_runs(),
             supports_stable: false,
             touch_file: None,
+            category: Category::Secondary,
         }
     }
 }
@@ -1237,6 +1240,10 @@ impl Benchmark {
 
     pub fn supports_stable(&self) -> bool {
         self.config.supports_stable
+    }
+
+    pub fn category(&self) -> &Category {
+        &self.config.category
     }
 
     #[cfg(windows)]

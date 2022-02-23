@@ -111,11 +111,11 @@ impl Table for Benchmark {
     }
 
     fn postgres_select_statement(&self, _since_weeks_ago: Option<u32>) -> String {
-        "select name, stabilized from ".to_string() + self.name()
+        "select name, stabilized, category from ".to_string() + self.name()
     }
 
     fn sqlite_insert_statement(&self) -> &'static str {
-        "insert into benchmark (name, stabilized) VALUES (?, ?)"
+        "insert into benchmark (name, stabilized, category) VALUES (?, ?, ?)"
     }
 
     fn sqlite_execute_insert(&self, statement: &mut rusqlite::Statement, row: tokio_postgres::Row) {
@@ -124,6 +124,7 @@ impl Table for Benchmark {
                 row.get::<_, &str>(0),
                 // This has a non-null constraint in SQLite schema, but not in Postgres.
                 row.get::<_, bool>(1) as u8,
+                row.get::<_, &str>(2),
             ])
             .unwrap();
     }

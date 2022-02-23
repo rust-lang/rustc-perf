@@ -1,5 +1,5 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
-use crate::{ArtifactId, Benchmark, CollectionId, Commit, Date, Profile};
+use crate::{ArtifactId, Benchmark, BenchmarkData, Category, CollectionId, Commit, Date, Profile};
 use crate::{ArtifactIdNumber, Index, QueryDatum, QueuedCommit};
 use chrono::{DateTime, TimeZone, Utc};
 use hashbrown::HashMap;
@@ -7,6 +7,7 @@ use rusqlite::params;
 use rusqlite::OptionalExtension;
 use std::convert::TryFrom;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Mutex;
 use std::sync::Once;
 use std::time::Duration;
@@ -317,6 +318,7 @@ static MIGRATIONS: &[Migration] = &[
         alter table benchmark_new rename to benchmark;
         "#,
     ),
+    Migration::new("alter table benchmark add column category text not null default ''"),
 ];
 
 #[async_trait::async_trait]
@@ -501,6 +503,26 @@ impl Connection for SqliteConnection {
                 .collect(),
             queries,
         }
+    }
+
+    async fn get_benchmarks(&self) -> Vec<BenchmarkData> {
+        let conn = self.raw_ref();
+        let mut query = conn
+            .prepare_cached("select name, category from benchmark")
+            .unwrap();
+        let rows = query
+            .query_map([], |row| {
+                Ok(BenchmarkData {
+                    name: row.get(0)?,
+                    category: Category::from_str(&row.get::<_, String>(1)?).unwrap(),
+                })
+            })
+            .unwrap();
+        let mut benchmarks = Vec::new();
+        for row in rows {
+            benchmarks.push(row.unwrap());
+        }
+        benchmarks
     }
 
     async fn get_pstats(
@@ -863,21 +885,27 @@ impl Connection for SqliteConnection {
             )
             .unwrap();
     }
-    async fn record_benchmark(&self, benchmark: &str, supports_stable: Option<bool>) {
+    async fn record_benchmark(
+        &self,
+        benchmark: &str,
+        supports_stable: Option<bool>,
+        category: Category,
+    ) {
+        let category = category.to_string();
         if let Some(stable) = supports_stable {
             self.raw_ref()
                 .execute(
-                    "insert into benchmark (name, stabilized) VALUES (?, ?)
-                ON CONFLICT (name) do update set stabilized = excluded.stabilized",
-                    params![benchmark, stable],
+                    "insert into benchmark (name, stabilized, category) VALUES (?, ?, ?)
+                ON CONFLICT (name) do update set stabilized = excluded.stabilized, category = excluded.category",
+                    params![benchmark, stable, category],
                 )
                 .unwrap();
         } else {
             self.raw_ref()
                 .execute(
-                    "insert into benchmark (name, stabilized) VALUES (?, ?)
-                ON CONFLICT DO NOTHING",
-                    params![benchmark, false],
+                    "insert into benchmark (name, stabilized, category) VALUES (?, ?, ?)
+                ON CONFLICT (name) do update set category = excluded.category",
+                    params![benchmark, false, category],
                 )
                 .unwrap();
         }
