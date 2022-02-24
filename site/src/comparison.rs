@@ -294,17 +294,25 @@ impl ComparisonSummary {
         }
     }
 
-    /// The average improvement as a percent
-    pub fn average_improvement(&self) -> f64 {
-        self.average(self.improvements())
+    /// Arithmetic mean of all improvements as a percent
+    pub fn arithmetic_mean_of_improvements(&self) -> f64 {
+        self.arithmetic_mean(self.improvements())
     }
 
-    /// The average regression as a percent
-    pub fn average_regression(&self) -> f64 {
-        self.average(self.regressions())
+    /// Arithmetic mean of all regressions as a percent
+    pub fn arithmetic_mean_of_regressions(&self) -> f64 {
+        self.arithmetic_mean(self.regressions())
     }
 
-    fn average<'a>(&'a self, changes: impl Iterator<Item = &'a TestResultComparison>) -> f64 {
+    /// Arithmetic mean of all changes as a percent
+    pub fn arithmetic_mean_of_changes(&self) -> f64 {
+        self.arithmetic_mean(self.comparisons.iter())
+    }
+
+    fn arithmetic_mean<'a>(
+        &'a self,
+        changes: impl Iterator<Item = &'a TestResultComparison>,
+    ) -> f64 {
         let mut count = 0;
         let mut sum = 0.0;
         for r in changes {
@@ -376,16 +384,24 @@ impl ComparisonSummary {
         if self.num_regressions > 1 {
             writeln!(
                 result,
-                "- Average relevant regression: {:.1}%",
-                self.average_regression()
+                "- Arithmetic mean of relevant regressions: {:.1}%",
+                self.arithmetic_mean_of_regressions()
             )
             .unwrap();
         }
         if self.num_improvements > 1 {
             writeln!(
                 result,
-                "- Average relevant improvement: {:.1}%",
-                self.average_improvement()
+                "- Arithmetic mean of relevant improvements: {:.1}%",
+                self.arithmetic_mean_of_improvements()
+            )
+            .unwrap();
+        }
+        if self.num_improvements > 0 && self.num_regressions > 0 {
+            writeln!(
+                result,
+                "- Arithmetic mean of all relevant changes: {:.1}%",
+                self.arithmetic_mean_of_changes()
             )
             .unwrap();
         }
