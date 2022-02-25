@@ -848,6 +848,31 @@ enum Commands {
 
     /// Installs the next commit for perf.rust-lang.org
     InstallNext,
+
+    /// Download a crate into collector/benchmarks.
+    Download(DownloadCommand),
+}
+
+#[derive(Debug, clap::Parser)]
+struct DownloadCommand {
+    /// Name of the benchmark created directory
+    #[clap(long, global = true)]
+    name: Option<String>,
+
+    /// Overwrite the benchmark directory if it already exists.
+    #[clap(long, short('f'), global = true)]
+    force: bool,
+
+    #[clap(subcommand)]
+    command: DownloadSubcommand,
+}
+
+#[derive(Debug, clap::Parser)]
+enum DownloadSubcommand {
+    /// Download a crate from a git repository.
+    Git { url: String },
+    /// Download a crate from crates.io.
+    Crate { krate: String, version: String },
 }
 
 fn main_result() -> anyhow::Result<i32> {
@@ -1141,7 +1166,103 @@ fn main_result() -> anyhow::Result<i32> {
 
             Ok(0)
         }
+        Commands::Download(cmd) => {
+            let target_dir = get_downloaded_crate_target(&benchmark_dir, &cmd);
+            check_target_dir(&target_dir, cmd.force)?;
+
+            match cmd.command {
+                DownloadSubcommand::Git { url } => download_from_git(&target_dir, &url)?,
+                DownloadSubcommand::Crate { krate, version } => {
+                    download_from_crates_io(&target_dir, &krate, &version)?
+                }
+            };
+            println!("Benchmark stored at {}", target_dir.display());
+            Ok(0)
+        }
     }
+}
+
+fn check_target_dir(target_dir: &Path, force: bool) -> anyhow::Result<()> {
+    if target_dir.exists() {
+        if force {
+            std::fs::remove_dir_all(&target_dir).expect(&format!(
+                "Cannot remove previous directory at {}",
+                target_dir.display()
+            ));
+        } else {
+            return Err(anyhow::anyhow!(
+                "Directory {} already exists",
+                target_dir.display()
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn get_downloaded_crate_target(benchmark_dir: &Path, cmd: &DownloadCommand) -> PathBuf {
+    let name = cmd.name.clone().unwrap_or_else(|| match &cmd.command {
+        // Git repository URLs sometimes end with .git, so we get rid of it.
+        // URLs in general can end with /, which we also want to remove to make sure that the
+        // last part of the URL is the repository name.
+        DownloadSubcommand::Git { url } => url
+            .trim_end_matches("/")
+            .trim_end_matches(".git")
+            .split("/")
+            .last()
+            .expect("Crate name could not be determined from git URL")
+            .to_string(),
+        DownloadSubcommand::Crate { krate, version } => format!("{krate}-{version}"),
+    });
+    PathBuf::from(benchmark_dir).join(name)
+}
+
+fn download_from_git(target: &Path, url: &str) -> anyhow::Result<()> {
+    let tmpdir = tempfile::TempDir::new().unwrap();
+    Command::new("git")
+        .arg("clone")
+        .arg(url)
+        .arg(tmpdir.path())
+        .status()
+        .expect("Git clone failed");
+    generate_lockfile(tmpdir.path());
+    execute::rename(&tmpdir, &target)?;
+    Ok(())
+}
+
+fn download_from_crates_io(target_dir: &Path, krate: &str, version: &str) -> anyhow::Result<()> {
+    let url = format!("https://crates.io/api/v1/crates/{krate}/{version}/download");
+    let response = reqwest::blocking::get(url)
+        .expect("Cannot download crate")
+        .error_for_status()?;
+
+    let data = flate2::read::GzDecoder::new(response);
+    let mut archive = tar::Archive::new(data);
+
+    let tmpdir = tempfile::TempDir::new().unwrap();
+    archive.unpack(&tmpdir)?;
+
+    // The content of the crate is not at the package root, it should be nested
+    // under <crate-name>-<version> directory.
+    let unpacked_dir = tmpdir.path().join(format!("{krate}-{version}"));
+    generate_lockfile(&unpacked_dir);
+    execute::rename(&unpacked_dir, &target_dir)?;
+
+    Ok(())
+}
+
+fn generate_lockfile(directory: &Path) {
+    let manifest_path = directory.join("Cargo.toml");
+
+    // Cargo metadata should do nothing if there is already a lockfile present.
+    // Otherwise it will generate a lockfile.
+    Command::new("cargo")
+        .arg("metadata")
+        .arg("--format-version")
+        .arg("1")
+        .current_dir(manifest_path.parent().unwrap())
+        .stdout(std::process::Stdio::null())
+        .status()
+        .expect("Cannot generate lock file");
 }
 
 pub fn get_commit_or_fake_it(sha: &str) -> anyhow::Result<Commit> {

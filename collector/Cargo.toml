@@ -31,6 +31,7 @@ crossbeam-utils = "0.8"
 snap = "1"
 filetime = "0.2.14"
 walkdir = "2"
+flate2 = { version = "1.0.22", features = ["rust_backend"] }
 
 [target.'cfg(windows)'.dependencies]
 miow = "0.3"
