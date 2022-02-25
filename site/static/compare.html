@@ -108,11 +108,26 @@
 
         #states-list {
             display: flex;
-            justify-content: space-around;
-            align-items: center;
-            width: 80%;
+            flex-direction: column;
+            align-items: start;
             list-style: none;
             margin: 0;
+            padding: 0;
+        }
+        .section-scenarios {
+            flex-direction: column;
+        }
+
+        @media (min-width: 760px) {
+            #states-list {
+                justify-content: space-around;
+                flex-direction: row;
+                align-items: center;
+                width: 80%;
+            }
+            .section-scenarios {
+                flex-direction: row;
+            }
         }
 
         .tooltip {
@@ -221,14 +236,41 @@
             border-radius: 6px;
         }
 
+        .summary-container {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 10px;
+        }
         .summary {
             display: flex;
-            justify-content: center;
-            align-items: center;
-            width: 20%;
         }
-        .summary-wide {
-            width: 35%;
+        .summary-values {
+            display: flex;
+            flex-direction: column;
+        }
+        @media (min-width: 650px) {
+            .summary-container {
+                flex-direction: row;
+                margin-bottom: 0;
+                align-items: center;
+            }
+            .summary-container > span {
+                text-align: right;
+                width: 20%;
+            }
+            .summary-values {
+                width: 100%;
+                flex-direction: row;
+                justify-content: flex-end;
+                align-items: center;
+            }
+            .summary {
+                width: 15%;
+                align-items: center;
+            }
+            .summary-wide {
+                width: 20%;
+            }
         }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
@@ -303,7 +345,7 @@
                     <div class="section-heading">Filter</div>
                     <input id="filter" type="text" v-model="filter.name" />
                 </div>
-                <div class=" section">
+                <div class="section section-scenarios">
                     <div class="section-heading">
                         <div style="width: 160px;">
                             <span>Scenarios</span>
@@ -406,10 +448,19 @@
         <p v-if="dataLoading && !data">Loading ...</p>
         <div v-if="data" id="content" style="margin-top: 15px">
             <div id="summary">
-                <div v-for="summaryPair in Object.entries(summary)" style="display: flex;">
-                    <span style="font-weight: bold; width: 30%; margin-left: 15%; text-transform: capitalize;">{{
+                <div style="display: flex; justify-content: end;">
+                    <span class="tooltip" style="margin-right: 1em;">?
+                        <span class="tooltiptext">
+                            The percents show arithmetic mean amongst regressions, amongst improvements
+                            and finally amongst all benchmarks in each category (all benchmarks or
+                            filtered benchmarks).
+                        </span>
+                    </span>
+                </div>
+                <div v-for="summaryPair in Object.entries(summary)" class="summary-container">
+                    <span style="font-weight: bold; margin-left: 5px; text-transform: capitalize;">{{
                         summaryPair[0] }}:</span>
-                    <div style="display: flex; justify-content: flex-end; width: 80%; margin-right: 5%;">
+                    <div class="summary-values">
                         <span class="summary summary-wide positive">
                             {{summaryPair[1].regressions.toString().padStart(3, "&nbsp;")}}
                             <svg style="width:18px;height:18px" viewBox="0 0 24 24">
@@ -435,7 +486,7 @@
                             &nbsp;({{(summaryPair[1].improvements_avg).toFixed(2)}}%)
                         </span>
                         <span class="summary" v-bind:class="percentClass(summaryPair[1].average)">
-                            &nbsp;{{ signIfNegative(summaryPair[1].average) }}{{ (summaryPair[1].average).toFixed(2) }}%
+                            &nbsp;{{ signIfPositive(summaryPair[1].average) }}{{ (summaryPair[1].average).toFixed(2) }}%
                         </span>
                     </div>
                 </div>
@@ -768,11 +819,11 @@
                 prLink(pr) {
                     return `https://github.com/rust-lang/rust/pull/${pr}`;
                 },
-                signIfNegative(pct) {
+                signIfPositive(pct) {
                     if (pct >= 0) {
-                        return "";
+                        return "+";
                     }
-                    return "-";
+                    return "";
                 },
                 percentClass(pct) {
                     let klass = "";
