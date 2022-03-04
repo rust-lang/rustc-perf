@@ -320,8 +320,6 @@ fn get_benchmarks(
         if path.ends_with(".git")
             || path.ends_with("scripts")
             || !entry.file_type()?.is_dir()
-            || path.ends_with("native-tls-0.1.5")
-            || path.ends_with("native-tls-0.2.3")
             || path.ends_with("rust-mozjs")
         {
             debug!("benchmark {} - ignored", name);
