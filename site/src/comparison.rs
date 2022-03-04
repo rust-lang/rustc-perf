@@ -364,7 +364,7 @@ impl ComparisonSummary {
         let mut result = if let Some(pr) = comparison.b.pr {
             let title = github::pr_title(pr).await;
             format!(
-                "{} [#{}](https://github.com/rust-lang/rust/issues/{})\n",
+                "{} [#{}](https://github.com/rust-lang/rust/pull/{})\n",
                 title, pr, pr
             )
         } else {
