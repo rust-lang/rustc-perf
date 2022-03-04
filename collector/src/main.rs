@@ -317,7 +317,7 @@ fn get_benchmarks(
             Err(e) => bail!("non-utf8 benchmark name: {:?}", e),
         };
 
-        if !entry.file_type()?.is_dir() || path.ends_with("rust-mozjs") {
+        if !entry.file_type()?.is_dir() {
             debug!("benchmark {} - ignored", name);
             continue;
         }
