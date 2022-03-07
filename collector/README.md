@@ -340,6 +340,15 @@ The mandatory `<PROFILER>` argument must be one of the following.
     run more slowly and increase the size of its data files.
   - **Output**. Raw output is written to files with a `dhout` prefix. Those
     files can be viewed with DHAT's viewer (`dh_view.html`).
+- `dhat-copy`: Profile with DHAT in "copy mode". Requires Valgrind 3.17 or later.
+  - **Purpose**. DHAT's copy mode is good for finding which parts of the code
+    are causing a lot of memory copies. This is relevant if another profiler
+    such as `perf-record` or Cachegrind tell you that functions like `memcpy`
+    or `memmove` are hot (as they often are).
+  - **Slowdown**. Roughly 5--20x.
+  - **Configuration**. Same as for DHAT.
+  - **Output**. Raw output is written to files with a `dhcopy` prefix. Those
+    files can be viewed with DHAT's viewer (`dh_view.html`).
 - `massif`: Profile with
   [Massif](http://valgrind.org/docs/manual/ms-manual.html), a heap profiler.
   - **Purpose**. Massif is designed to give insight into a program's peak
