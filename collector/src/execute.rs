@@ -25,7 +25,7 @@ use tokio::runtime::Runtime;
 mod rustc;
 
 #[cfg(windows)]
-fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> anyhow::Result<()> {
+pub fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> anyhow::Result<()> {
     let (from, to) = (from.as_ref(), to.as_ref());
 
     let ctx = format!("renaming file {:?} to {:?}", from, to);
@@ -38,7 +38,7 @@ fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> anyhow::Result<()> 
 }
 
 #[cfg(unix)]
-fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> anyhow::Result<()> {
+pub fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> anyhow::Result<()> {
     let (from, to) = (from.as_ref(), to.as_ref());
     if fs::rename(from, to).is_err() {
         // This is necessary if from and to are on different
