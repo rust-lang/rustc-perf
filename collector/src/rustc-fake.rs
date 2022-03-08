@@ -291,6 +291,21 @@ fn main() {
                 assert!(cmd.status().expect("failed to spawn").success());
             }
 
+            "DhatCopy" => {
+                let mut cmd = Command::new("valgrind");
+                determinism_env(&mut cmd);
+                let has_valgrind = cmd.output().is_ok();
+                assert!(has_valgrind);
+                cmd.arg("--tool=dhat")
+                    .arg("--mode=copy")
+                    .arg("--num-callers=4")
+                    .arg("--dhat-out-file=dhcopy")
+                    .arg(&tool)
+                    .args(&args);
+
+                assert!(cmd.status().expect("failed to spawn").success());
+            }
+
             "Massif" => {
                 let mut cmd = Command::new("valgrind");
                 determinism_env(&mut cmd);

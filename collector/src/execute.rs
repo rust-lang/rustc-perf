@@ -181,6 +181,7 @@ pub enum Profiler {
     Cachegrind,
     Callgrind,
     Dhat,
+    DhatCopy,
     Massif,
     Eprintln,
     LlvmLines,
@@ -221,6 +222,7 @@ impl PerfTool {
             | ProfileTool(Cachegrind)
             | ProfileTool(Callgrind)
             | ProfileTool(Dhat)
+            | ProfileTool(DhatCopy)
             | ProfileTool(Massif)
             | ProfileTool(Eprintln)
             | ProfileTool(DepGraph)
@@ -256,6 +258,7 @@ impl PerfTool {
             | ProfileTool(Cachegrind)
             | ProfileTool(Callgrind)
             | ProfileTool(Dhat)
+            | ProfileTool(DhatCopy)
             | ProfileTool(Massif)
             | ProfileTool(MonoItems)
             | ProfileTool(LlvmIr)
@@ -1085,6 +1088,16 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 let dhout_file = filepath(self.output_dir, &out_file("dhout"));
 
                 fs::copy(&tmp_dhout_file, &dhout_file)?;
+            }
+
+            // DHAT (in copy mode) produces (via rustc-fake) a data file called
+            // `dhcopy`. We copy it from the temp dir to the output dir, giving
+            // it a new name in the process.
+            Profiler::DhatCopy => {
+                let tmp_dhcopy_file = filepath(data.cwd.as_ref(), "dhcopy");
+                let dhcopy_file = filepath(self.output_dir, &out_file("dhcopy"));
+
+                fs::copy(&tmp_dhcopy_file, &dhcopy_file)?;
             }
 
             // Massif produces (via rustc-fake) a data file called `msout`. We
