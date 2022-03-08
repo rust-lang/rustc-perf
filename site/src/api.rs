@@ -128,7 +128,7 @@ pub mod bootstrap {
 
 pub mod comparison {
     use collector::Bound;
-    use database::Date;
+    use database::{BenchmarkData, Date};
     use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
 
@@ -137,6 +137,21 @@ pub mod comparison {
         pub start: Bound,
         pub end: Bound,
         pub stat: String,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct BenchmarkInfo {
+        pub name: String,
+        pub category: String,
+    }
+
+    impl From<BenchmarkData> for BenchmarkInfo {
+        fn from(data: BenchmarkData) -> Self {
+            Self {
+                name: data.name,
+                category: data.category.to_string(),
+            }
+        }
     }
 
     #[derive(Debug, Clone, Serialize)]
@@ -156,6 +171,7 @@ pub mod comparison {
         /// If `a` and `b` are adjacent artifacts (i.e., `a` is the parent of
         /// `b`).
         pub is_contiguous: bool,
+        pub benchmark_data: Vec<BenchmarkInfo>,
     }
 
     #[derive(Debug, Clone, Serialize)]

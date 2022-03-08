@@ -116,6 +116,7 @@ struct BenchmarkRow<'a> {
     name: &'a str,
     // This has a non-null constraint in SQLite schema, but not in Postgres.
     stabilized: Nullable<bool>,
+    category: &'a str,
 }
 
 impl Table for Benchmark {
@@ -124,7 +125,7 @@ impl Table for Benchmark {
     }
 
     fn sqlite_attributes() -> &'static str {
-        "name, stabilized"
+        "name, stabilized, category"
     }
 
     fn postgres_generated_id_attribute() -> Option<&'static str> {
@@ -136,6 +137,7 @@ impl Table for Benchmark {
             .serialize(BenchmarkRow {
                 name: row.get_ref(0).unwrap().as_str().unwrap(),
                 stabilized: row.get(1).unwrap(),
+                category: row.get_ref(2).unwrap().as_str().unwrap(),
             })
             .unwrap();
     }

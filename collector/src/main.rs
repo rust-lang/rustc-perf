@@ -2,10 +2,13 @@
 
 use anyhow::{bail, Context};
 use clap::Parser;
-use database::{ArtifactId, Commit};
+use database::{ArtifactId, Category, Commit};
 use log::debug;
 use std::collections::HashSet;
 use std::fs;
+use std::fs::File;
+use std::io::BufWriter;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::process::{Command, Stdio};
@@ -188,6 +191,7 @@ fn bench(
     let mut measure_and_record =
         |benchmark_name: &BenchmarkName,
          benchmark_supports_stable: bool,
+         benchmark_category: Category,
          print_intro: &dyn Fn(),
          measure: &dyn Fn(&mut BenchProcessor) -> anyhow::Result<()>| {
             let is_fresh =
@@ -198,10 +202,11 @@ fn bench(
                 return;
             }
             let mut tx = rt.block_on(conn.transaction());
-            rt.block_on(
-                tx.conn()
-                    .record_benchmark(&benchmark_name.0, Some(benchmark_supports_stable)),
-            );
+            rt.block_on(tx.conn().record_benchmark(
+                &benchmark_name.0,
+                Some(benchmark_supports_stable),
+                benchmark_category,
+            ));
             print_intro();
 
             let mut processor = BenchProcessor::new(
@@ -237,6 +242,7 @@ fn bench(
         measure_and_record(
             &benchmark.name,
             benchmark.supports_stable(),
+            benchmark.category().clone(),
             &|| {
                 eprintln!(
                     "{}",
@@ -252,6 +258,7 @@ fn bench(
         measure_and_record(
             &BenchmarkName("rustc".to_string()),
             /* supports_stable */ false,
+            Category::Primary,
             &|| eprintln!("Special benchmark commencing (due to `--bench-rustc`)"),
             &|processor| processor.measure_rustc(compiler).context("measure rustc"),
         );
@@ -857,6 +864,10 @@ struct DownloadCommand {
     #[clap(long, short('f'), global = true)]
     force: bool,
 
+    /// What category does the benchmark belong to (primary or secondary).
+    #[clap(long, short('c'), global = true, default_value = "secondary")]
+    category: Category,
+
     #[clap(subcommand)]
     command: DownloadSubcommand,
 }
@@ -1170,10 +1181,26 @@ fn main_result() -> anyhow::Result<i32> {
                     download_from_crates_io(&target_dir, &krate, &version)?
                 }
             };
+
+            add_perf_config(&target_dir, cmd.category);
+
             println!("Benchmark stored at {}", target_dir.display());
             Ok(0)
         }
     }
+}
+
+fn add_perf_config(directory: &PathBuf, category: Category) {
+    let data = serde_json::json!({
+        "category": category.to_string()
+    });
+
+    let mut file = BufWriter::new(
+        File::create(directory.join("perf-config.json"))
+            .expect("Could not create perf-config.json file"),
+    );
+    serde_json::to_writer_pretty(&mut file, &data).expect("Could not write perf-config.json file");
+    file.write_all(b"\n").unwrap();
 }
 
 fn check_target_dir(target_dir: &Path, force: bool) -> anyhow::Result<()> {

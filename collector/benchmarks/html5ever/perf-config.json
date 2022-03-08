@@ -1,4 +1,5 @@
 {
     "supports_stable": true,
-    "touch_file": "src/lib.rs"
+    "touch_file": "src/lib.rs",
+    "category": "primary"
 }

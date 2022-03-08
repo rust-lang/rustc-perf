@@ -9,6 +9,7 @@ The following is a glossary of domain specific terminology. Although benchmarks 
 * **scenario**: The scenario under which a user is compiling their code. Currently, this is the incremental cache state and an optional change in the source since last compilation (e.g., full incremental cache and a `println!` statement is added).  
 * **metric**: a name of a quantifiable metric being measured (e.g., instruction count)
 * **artifact**: a specific version of rustc (usually a commit sha or some sort of human readable "tag" like 1.51.0)
+* **category**: a high-level group of benchmarks. Currently, there are two categories, primary (mostly real-world crates) and secondary (mostly stress tests).
 
 ## Benchmarks
 

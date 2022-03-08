@@ -1,4 +1,5 @@
 {
     "cargo_toml": "diesel/Cargo.toml",	
-    "touch_file": "diesel/src/lib.rs"
+    "touch_file": "diesel/src/lib.rs",
+    "category": "primary"
 }

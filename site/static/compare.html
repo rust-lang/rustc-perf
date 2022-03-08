@@ -106,7 +106,7 @@
             font-weight: bold;
         }
 
-        #states-list {
+        .states-list {
             display: flex;
             flex-direction: column;
             align-items: start;
@@ -114,20 +114,23 @@
             margin: 0;
             padding: 0;
         }
-        .section-scenarios {
+        .section-list-wrapper {
             flex-direction: column;
         }
 
         @media (min-width: 760px) {
-            #states-list {
-                justify-content: space-around;
+            .states-list {
+                justify-content: start;
                 flex-direction: row;
                 align-items: center;
                 width: 80%;
             }
-            .section-scenarios {
+            .section-list-wrapper {
                 flex-direction: row;
             }
+        }
+        .states-list > li {
+            margin-right: 15px;
         }
 
         .tooltip {
@@ -189,11 +192,11 @@
             cursor: help;
         }
 
-        #benches {
+        .benches {
             font-size: medium;
         }
 
-        #benches tbody::before {
+        .benches tbody::before {
             content: '';
             display: block;
             height: 10px;
@@ -207,27 +210,31 @@
             text-align: center;
         }
 
-        #benches tbody:first-child th {
+        .benches tbody:first-child th {
             text-align: center;
         }
 
-        #benches tbody:not(:first-child) th {
+        .benches tbody:not(:first-child) th {
             border-right: dotted 1px;
         }
 
-        #benches th {
+        .benches th {
             text-align: left;
             word-break: break-word;
             width: 25%;
             min-width: 50px;
         }
 
-        #benches th+td {
+        .benches th+td {
             width: 25%;
         }
 
         .benchmark-name {
             text-align: center;
+        }
+
+        .bench-table {
+            margin-top: 10px;
         }
 
         #summary {
@@ -271,6 +278,12 @@
             .summary-wide {
                 width: 20%;
             }
+        }
+        .category-title {
+            font-weight: bold;
+            font-size: 1.2em;
+            margin: 10px;
+            text-align: center;
         }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
@@ -345,7 +358,7 @@
                     <div class="section-heading">Filter</div>
                     <input id="filter" type="text" v-model="filter.name" />
                 </div>
-                <div class="section section-scenarios">
+                <div class="section section-list-wrapper">
                     <div class="section-heading">
                         <div style="width: 160px;">
                             <span>Scenarios</span>
@@ -356,7 +369,7 @@
                             </span>
                         </div>
                     </div>
-                    <ul id="states-list">
+                    <ul class="states-list">
                         <li>
                             <label>
                                 <input type="checkbox" id="build-full" v-model="filter.scenario.full" />
@@ -403,6 +416,42 @@
                                     An incremental build starting with complete cache, and an altered source directory.
                                     The typical variant of this is "println" which represents the addition of a
                                     `println!` macro somewhere in the source code.
+                                </span>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+                <div class="section section-list-wrapper">
+                    <div class="section-heading">
+                        <div style="width: 160px;">
+                            <span>Categories</span>
+                            <span class="tooltip">?
+                                <span class="tooltiptext">
+                                    Select benchmarks based on their category (primary or secondary).
+                                </span>
+                            </span>
+                        </div>
+                    </div>
+                    <ul class="states-list">
+                        <li>
+                            <label>
+                                <input type="checkbox" v-model="filter.category.primary" />
+                                <span class="cache-label">primary</span>
+                            </label>
+                            <div class="tooltip">?
+                                <span class="tooltiptext">
+                                    Real-world benchmarks.
+                                </span>
+                            </div>
+                        </li>
+                        <li>
+                            <label>
+                                <input type="checkbox" v-model="filter.category.secondary" />
+                                <span class="cache-label">secondary</span>
+                            </label>
+                            <div class="tooltip">?
+                                <span class="tooltiptext">
+                                    Artificial benchmarks and stress-tests.
                                 </span>
                             </div>
                         </li>
@@ -499,62 +548,20 @@
                 </details>
                 <hr />
             </div>
-            <table id="benches" class="compare">
-                <thead>
-                    <tr>
-                        <th>Benchmark & Profile</th>
-                        <th>Scenario</th>
-                        <th>% Change</th>
-                        <th>
-                            Significance Factor
-                            <span class="tooltip">?
-                                <span class="tooltiptext">
-                                    How much a particular result is over the significance threshold. A factor of 2.50x
-                                    means
-                                    the result is 2.5 times over the significance threshold. You can see <a
-                                        href="https://github.com/rust-lang/rustc-perf/blob/master/docs/comparison-analysis.md#what-makes-a-test-result-significant">
-                                        here</a> how the significance threshold is calculated.
-                                </span>
-                            </span>
-                        </th>
-                        <th v-if="showRawData">{{before}}</th>
-                        <th v-if="showRawData">{{after}}</th>
-                    </tr>
-                </thead>
-                <tbody v-if="testCases.length === 0">
-                    <tr>
-                        <td colspan="6">No results</td>
-                    </tr>
-                </tbody>
-                <tbody v-else>
-                    <template v-for="testCase in testCases">
-                        <tr>
-                            <td>{{ testCase.benchmark }} {{ testCase.profile }}</td>
-                            <td>{{ testCase.scenario }}</td>
-                            <td>
-                                <a v-bind:href="percentLink(data.b.commit, data.a.commit, testCase)">
-                                    <span v-bind:class="percentClass(testCase.percent)">
-                                        {{ testCase.percent.toFixed(2) }}%{{testCase.isDodgy ? "?" : ""}}
-                                    </span>
-                                </a>
-                            </td>
-                            <td>
-                                {{ testCase.significanceFactor ? testCase.significanceFactor.toFixed(2) + "x" : "-" }}
-                            </td>
-                            <td v-if="showRawData">
-                                <a v-bind:href="detailedQueryLink(data.a.commit, testCase)">
-                                    <abbr :title="testCase.datumA">{{ testCase.datumA.toFixed(2) }}</abbr>
-                                </a>
-                            </td>
-                            <td v-if="showRawData">
-                                <a v-bind:href="detailedQueryLink(data.b.commit, testCase)">
-                                    <abbr :title="testCase.datumB">{{ testCase.datumB.toFixed(2) }}</abbr>
-                                </a>
-                            </td>
-                        </tr>
-                    </template>
-                </tbody>
-            </table>
+
+            <test-cases-table
+                title="Primary"
+                :cases="testCases.filter(c => c.category === 'primary')"
+                :show-raw-data="showRawData"
+                :commit-a="data.a.commit"
+                :commit-b="data.b.commit"></test-cases-table>
+            <hr />
+            <test-cases-table
+                title="Secondary"
+                :cases="testCases.filter(c => c.category === 'secondary')"
+                :show-raw-data="showRawData"
+                :commit-a="data.a.commit"
+                :commit-b="data.b.commit"></test-cases-table>
             <br />
             <table id="bootstrap" class="compare" style="margin: auto;"
                 v-if="data && Object.keys(data.a.bootstrap).length > 0">
@@ -601,6 +608,94 @@
                 return unescape(pair[1]);
             }
         }
+
+        Vue.mixin({
+            methods: {
+                percentClass(pct) {
+                    let klass = "";
+                    if (pct > 1) {
+                        klass = 'positive';
+                    } else if (pct > 0) {
+                        klass = 'slightly-positive';
+                    } else if (pct < -1) {
+                        klass = 'negative';
+                    } else if (pct < -0) {
+                        klass = 'slightly-negative';
+                    }
+                    return klass;
+                },
+            }
+        });
+        Vue.component('test-cases-table', {
+            props: ['cases', 'showRawData', 'commitA', 'commitB', 'title'],
+            methods: {
+                detailedQueryLink(commit, testCase) {
+                    return `/detailed-query.html?commit=${commit}&benchmark=${testCase.benchmark + "-" + testCase.profile}&scenario=${testCase.scenario}`;
+                },
+                percentLink(commit, baseCommit, testCase) {
+                    return `/detailed-query.html?commit=${commit}&base_commit=${baseCommit}&benchmark=${testCase.benchmark + "-" + testCase.profile}&scenario=${testCase.scenario}`;
+                },
+            },
+            template: `
+<div class="bench-table">
+<div class="category-title">{{ title }} benchmarks</div>
+<div v-if="cases.length === 0" style="text-align: center;">
+  No results
+</div>
+<table v-else class="benches compare">
+    <thead>
+        <tr>
+            <th>Benchmark & Profile</th>
+            <th>Scenario</th>
+            <th>% Change</th>
+            <th>
+                Significance Factor
+                <span class="tooltip">?
+                    <span class="tooltiptext">
+                        How much a particular result is over the significance threshold. A factor of 2.50x
+                        means
+                        the result is 2.5 times over the significance threshold. You can see <a
+                            href="https://github.com/rust-lang/rustc-perf/blob/master/docs/comparison-analysis.md#what-makes-a-test-result-significant">
+                            here</a> how the significance threshold is calculated.
+                    </span>
+                </span>
+            </th>
+            <th v-if="showRawData">{{before}}</th>
+            <th v-if="showRawData">{{after}}</th>
+        </tr>
+    </thead>
+    <tbody>
+        <template v-for="testCase in cases">
+            <tr>
+                <td>{{ testCase.benchmark }} {{ testCase.profile }}</td>
+                <td>{{ testCase.scenario }}</td>
+                <td>
+                    <a v-bind:href="percentLink(commitB, commitA, testCase)">
+                        <span v-bind:class="percentClass(testCase.percent)">
+                            {{ testCase.percent.toFixed(2) }}%{{testCase.isDodgy ? "?" : ""}}
+                        </span>
+                    </a>
+                </td>
+                <td>
+                    {{ testCase.significanceFactor ? testCase.significanceFactor.toFixed(2) + "x" : "-" }}
+                </td>
+                <td v-if="showRawData">
+                  <a v-bind:href="detailedQueryLink(commitA, testCase)">
+                    <abbr :title="testCase.datumA">{{ testCase.datumA.toFixed(2) }}</abbr>
+                  </a>
+                </td>
+                <td v-if="showRawData">
+                  <a v-bind:href="detailedQueryLink(commitB, testCase)">
+                    <abbr :title="testCase.datumB">{{ testCase.datumB.toFixed(2) }}</abbr>
+                  </a>
+                </td>
+            </tr>
+        </template>
+    </tbody>
+</table>
+</div>
+`});
+
         let app = new Vue({
             el: '#app',
             data: {
@@ -613,6 +708,10 @@
                         incrFull: true,
                         incrUnchanged: true,
                         incrPatched: true
+                    },
+                    category: {
+                        primary: true,
+                        secondary: true
                     }
                 },
                 showRawData: false,
@@ -635,6 +734,7 @@
                 testCases() {
                     let data = this.data;
                     const filter = this.filter;
+                    const benchmarkMap = this.benchmarkMap;
 
                     function scenarioFilter(scenario) {
                         if (scenario === "full") {
@@ -651,6 +751,12 @@
                         }
                     }
 
+                    function categoryFilter(category) {
+                        if (category === 'primary' && !filter.category.primary) return false;
+                        if (category === 'secondary' && !filter.category.secondary) return false;
+                        return true;
+                    }
+
                     function shouldShowTestCase(testCase) {
                         const name = `${testCase.benchmark} ${testCase.profile} ${testCase.scenario}`;
                         let nameFilter = filter.name && filter.name.trim();
@@ -660,7 +766,7 @@
 
                         const magnitudeFilter = filter.filterVerySmall ? testCase.magnitude != "very small" : true;
 
-                        return scenarioFilter(testCase.scenario) && significanceFilter && nameFilter && magnitudeFilter;
+                        return scenarioFilter(testCase.scenario) && categoryFilter(testCase.category) && significanceFilter && nameFilter && magnitudeFilter;
                     }
 
                     let testCases =
@@ -673,6 +779,7 @@
                                     benchmark: c.benchmark,
                                     profile: c.profile,
                                     scenario: c.scenario,
+                                    category: (benchmarkMap[c.benchmark] || {}).category || "secondary",
                                     magnitude: c.magnitude,
                                     isSignificant: c.is_significant,
                                     significanceFactor: c.significance_factor,
@@ -810,6 +917,17 @@
 
                     return result;
 
+                },
+                benchmarkMap() {
+                    if (!this.data) return {};
+
+                    const benchmarks = {};
+                    for (const benchmark of this.data.benchmark_data) {
+                        benchmarks[benchmark.name] = {
+                            "category": benchmark.category
+                        };
+                    }
+                    return benchmarks;
                 }
             },
             methods: {
@@ -825,19 +943,6 @@
                     }
                     return "";
                 },
-                percentClass(pct) {
-                    let klass = "";
-                    if (pct > 1) {
-                        klass = 'positive';
-                    } else if (pct > 0) {
-                        klass = 'slightly-positive';
-                    } else if (pct < -1) {
-                        klass = 'negative';
-                    } else if (pct < -0) {
-                        klass = 'slightly-negative';
-                    }
-                    return klass;
-                },
                 diffClass(diff) {
                     let klass = "";
                     if (diff > 1) {
@@ -847,12 +952,6 @@
                     }
                     return klass;
 
-                },
-                detailedQueryLink(commit, testCase) {
-                    return `/detailed-query.html?commit=${commit}&benchmark=${testCase.benchmark + "-" + testCase.profile}&scenario=${testCase.scenario}`;
-                },
-                percentLink(commit, baseCommit, testCase) {
-                    return `/detailed-query.html?commit=${commit}&base_commit=${baseCommit}&benchmark=${testCase.benchmark + "-" + testCase.profile}&scenario=${testCase.scenario}`;
                 },
                 commitLink(commit) {
                     return `https://github.com/rust-lang/rust/commit/${commit}`;
@@ -922,7 +1021,6 @@
                 app.dataLoading = false;
             });
         }
-
 
         function submitSettings() {
             let start = document.getElementById("start-bound").value;
