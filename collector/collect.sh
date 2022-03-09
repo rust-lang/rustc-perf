@@ -32,4 +32,7 @@ while : ; do
 
         target/release/collector bench_next $SITE_URL --self-profile --bench-rustc --db $DATABASE;
         echo finished run at `date`;
+
+        # Wait a little bit before the next run starts.
+        sleep 120
 done
