@@ -4,13 +4,14 @@ use std::fs;
 use std::ops::RangeInclusive;
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Instant;
 
 use anyhow::Context;
 use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::db;
-use collector::Bound;
+use collector::{Bound, MasterCommit};
 use database::Date;
 
 use crate::api::github;
@@ -100,6 +101,23 @@ pub struct Config {
     pub keys: Keys,
 }
 
+#[derive(Debug)]
+pub struct MasterCommitCache {
+    pub commits: Vec<MasterCommit>,
+    pub updated: Instant,
+}
+
+impl MasterCommitCache {
+    /// Download the master-branch Rust commit list
+    async fn download() -> anyhow::Result<Self> {
+        let commits = collector::master_commits().await?;
+        Ok(Self {
+            commits,
+            updated: Instant::now(),
+        })
+    }
+}
+
 /// Site context object that contains global data
 pub struct SiteCtxt {
     /// Site configuration
@@ -108,6 +126,8 @@ pub struct SiteCtxt {
     pub landing_page: ArcSwap<Option<Arc<crate::api::graphs::Response>>>,
     /// Index of various common queries
     pub index: ArcSwap<crate::db::Index>,
+    /// Cached master-branch Rust commits
+    pub master_commits: ArcSwap<MasterCommitCache>,
     /// Database connection pool
     pub pool: Pool,
 }
@@ -160,9 +180,12 @@ impl SiteCtxt {
             }
         };
 
+        let master_commits = MasterCommitCache::download().await?;
+
         Ok(Self {
             config,
             index: ArcSwap::new(Arc::new(index)),
+            master_commits: ArcSwap::new(Arc::new(master_commits)),
             pool,
             landing_page: ArcSwap::new(Arc::new(None)),
         })
@@ -198,6 +221,16 @@ impl SiteCtxt {
             in_progress_artifacts,
             all_commits,
         )
+    }
+
+    /// Download master-branch Rust commits if the cached value is older than one minute
+    pub async fn update_master_commits(&self) -> anyhow::Result<()> {
+        let commits = self.master_commits.load();
+        if commits.updated.elapsed() > std::time::Duration::from_secs(60) {
+            self.master_commits
+                .store(Arc::new(MasterCommitCache::download().await?))
+        }
+        Ok(())
     }
 }
 

@@ -265,8 +265,7 @@ pub struct MasterCommit {
 /// Note that this does not contain try commits today, so it should not be used
 /// to validate hashes or expand them generally speaking. This may also change
 /// in the future.
-pub async fn master_commits() -> Result<Vec<MasterCommit>, Box<dyn std::error::Error + Sync + Send>>
-{
+pub async fn master_commits() -> anyhow::Result<Vec<MasterCommit>> {
     let response = reqwest::get("https://triage.rust-lang.org/bors-commit-list").await?;
     Ok(response.json().await?)
 }
