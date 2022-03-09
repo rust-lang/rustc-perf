@@ -207,7 +207,11 @@ static MIGRATIONS: &[&str] = &[
     r#"
     create index if not exists collector_progress_start_time_step_idx on collector_progress (start_time, step) where start_time is not null and end_time is not null;
     "#,
-    r#"alter table benchmark add column category text not null"#,
+    // We default to secondary for all benchmarks, and then let the collector
+    // apply new values once it runs.
+    r#"
+    alter table benchmark add column category text not null DEFAULT 'secondary';
+    "#,
 ];
 
 #[async_trait::async_trait]
