@@ -13,6 +13,10 @@ while : ; do
         # Update and rebuild the collector.
         git pull
         git reset --hard @{upstream}
+
+        # Make sure we have a recent build, so that we can successfully build
+        # the collector.
+        rustup update
         cargo +nightly build --release -p collector
 
         # Install measureme tooling
