@@ -877,7 +877,11 @@ enum DownloadSubcommand {
     /// Download a crate from a git repository.
     Git { url: String },
     /// Download a crate from crates.io.
-    Crate { krate: String, version: String },
+    Crate {
+        #[clap(name = "CRATE")]
+        krate: String,
+        version: String,
+    },
 }
 
 fn main_result() -> anyhow::Result<i32> {
