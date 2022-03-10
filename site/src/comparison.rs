@@ -25,10 +25,7 @@ pub async fn handle_triage(
     log::info!("handle_triage({:?})", body);
     let start = body.start;
     let end = body.end;
-    ctxt.update_master_commits()
-        .await
-        .map_err(|e| format!("error retrieving master commit list: {}", e))?;
-    let master_commits = &ctxt.master_commits.load().commits;
+    let master_commits = &ctxt.get_master_commits().commits;
 
     let start_artifact = ctxt
         .artifact_id_for_bound(start.clone(), true)
@@ -96,10 +93,7 @@ pub async fn handle_compare(
     ctxt: &SiteCtxt,
 ) -> api::ServerResult<api::comparison::Response> {
     log::info!("handle_compare({:?})", body);
-    ctxt.update_master_commits()
-        .await
-        .map_err(|e| format!("error retrieving master commit list: {}", e))?;
-    let master_commits = &ctxt.master_commits.load().commits;
+    let master_commits = &ctxt.get_master_commits().commits;
 
     let end = body.end;
     let comparison =
@@ -458,10 +452,9 @@ pub async fn compare(
     stat: String,
     ctxt: &SiteCtxt,
 ) -> Result<Option<Comparison>, BoxedError> {
-    ctxt.update_master_commits().await?;
-    let master_commits = &ctxt.master_commits.load().commits;
+    let master_commits = &ctxt.get_master_commits().commits;
 
-    compare_given_commits(start, end, stat, ctxt, &master_commits).await
+    compare_given_commits(start, end, stat, ctxt, master_commits).await
 }
 
 /// Compare two bounds on a given stat

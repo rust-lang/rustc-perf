@@ -1,4 +1,4 @@
-use arc_swap::ArcSwap;
+use arc_swap::{ArcSwap, Guard};
 use std::collections::HashSet;
 use std::fs;
 use std::ops::RangeInclusive;
@@ -6,8 +6,8 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
-use anyhow::Context;
 use chrono::{Duration, Utc};
+use log::error;
 use serde::{Deserialize, Serialize};
 
 use crate::db;
@@ -109,12 +109,20 @@ pub struct MasterCommitCache {
 
 impl MasterCommitCache {
     /// Download the master-branch Rust commit list
-    async fn download() -> anyhow::Result<Self> {
+    pub async fn download() -> anyhow::Result<Self> {
         let commits = collector::master_commits().await?;
         Ok(Self {
             commits,
             updated: Instant::now(),
         })
+    }
+
+    /// Returns an empty cache that is marked as stale
+    pub fn empty() -> Self {
+        Self {
+            commits: Vec::new(),
+            updated: Instant::now() - std::time::Duration::from_secs(2 * 60),
+        }
     }
 }
 
@@ -127,7 +135,7 @@ pub struct SiteCtxt {
     /// Index of various common queries
     pub index: ArcSwap<crate::db::Index>,
     /// Cached master-branch Rust commits
-    pub master_commits: ArcSwap<MasterCommitCache>,
+    pub master_commits: Arc<ArcSwap<MasterCommitCache>>, // outer Arc enables mutation in background task
     /// Database connection pool
     pub pool: Pool,
 }
@@ -180,12 +188,14 @@ impl SiteCtxt {
             }
         };
 
-        let master_commits = MasterCommitCache::download().await?;
+        let master_commits = MasterCommitCache::download()
+            .await
+            .unwrap_or(MasterCommitCache::empty()); // still run the site if we can't get the commits right now
 
         Ok(Self {
             config,
             index: ArcSwap::new(Arc::new(index)),
-            master_commits: ArcSwap::new(Arc::new(master_commits)),
+            master_commits: Arc::new(ArcSwap::new(Arc::new(master_commits))),
             pool,
             landing_page: ArcSwap::new(Arc::new(None)),
         })
@@ -223,14 +233,27 @@ impl SiteCtxt {
         )
     }
 
-    /// Download master-branch Rust commits if the cached value is older than one minute
-    pub async fn update_master_commits(&self) -> anyhow::Result<()> {
+    /// Get cached master-branch Rust commits.
+    /// Returns cached results immediately, but if the cached value is older than one minute,
+    /// updates in a background task for next time.
+    pub fn get_master_commits(&self) -> Guard<Arc<MasterCommitCache>> {
         let commits = self.master_commits.load();
+
         if commits.updated.elapsed() > std::time::Duration::from_secs(60) {
-            self.master_commits
-                .store(Arc::new(MasterCommitCache::download().await?))
+            let master_commits = self.master_commits.clone();
+            tokio::task::spawn(async move {
+                // if another update happens before this one is done, we will download the data twice, but that's it
+                match MasterCommitCache::download().await {
+                    Ok(commits) => master_commits.store(Arc::new(commits)),
+                    Err(e) => {
+                        // couldn't get the data, keep serving cached results for now
+                        error!("error retrieving master commit list: {}", e)
+                    }
+                }
+            });
         }
-        Ok(())
+
+        commits
     }
 }
 
