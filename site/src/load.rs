@@ -208,15 +208,9 @@ impl SiteCtxt {
     /// Returns the not yet tested commits
     pub async fn missing_commits(&self) -> Vec<(Commit, MissingReason)> {
         let conn = self.conn().await;
-        let (master_commits, queued_pr_commits, in_progress_artifacts) = futures::join!(
-            collector::master_commits(),
-            conn.queued_commits(),
-            conn.in_progress_artifacts()
-        );
-        let master_commits = master_commits
-            .map_err(|e| anyhow::anyhow!("{:?}", e))
-            .context("getting master commit list")
-            .unwrap();
+        let (queued_pr_commits, in_progress_artifacts) =
+            futures::join!(conn.queued_commits(), conn.in_progress_artifacts());
+        let master_commits = &self.master_commits.load().commits;
 
         let index = self.index.load();
         let all_commits = index
@@ -226,14 +220,14 @@ impl SiteCtxt {
             .collect::<HashSet<_>>();
 
         calculate_missing(
-            master_commits,
+            master_commits.clone(),
             queued_pr_commits,
             in_progress_artifacts,
             all_commits,
         )
     }
 
-    /// Get cached master-branch Rust commits.
+    /// Get cached master-branch Rust commits.  
     /// Returns cached results immediately, but if the cached value is older than one minute,
     /// updates in a background task for next time.
     pub fn get_master_commits(&self) -> Guard<Arc<MasterCommitCache>> {
