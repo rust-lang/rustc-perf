@@ -116,14 +116,6 @@ impl MasterCommitCache {
             updated: Instant::now(),
         })
     }
-
-    /// Returns an empty cache that is marked as stale
-    pub fn empty() -> Self {
-        Self {
-            commits: Vec::new(),
-            updated: Instant::now() - std::time::Duration::from_secs(2 * 60),
-        }
-    }
 }
 
 /// Site context object that contains global data
@@ -188,9 +180,7 @@ impl SiteCtxt {
             }
         };
 
-        let master_commits = MasterCommitCache::download()
-            .await
-            .unwrap_or(MasterCommitCache::empty()); // still run the site if we can't get the commits right now
+        let master_commits = MasterCommitCache::download().await?;
 
         Ok(Self {
             config,
