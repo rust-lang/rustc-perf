@@ -210,7 +210,7 @@ impl SiteCtxt {
         let conn = self.conn().await;
         let (queued_pr_commits, in_progress_artifacts) =
             futures::join!(conn.queued_commits(), conn.in_progress_artifacts());
-        let master_commits = &self.master_commits.load().commits;
+        let master_commits = &self.get_master_commits().commits;
 
         let index = self.index.load();
         let all_commits = index
