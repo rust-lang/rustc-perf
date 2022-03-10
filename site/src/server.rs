@@ -277,8 +277,6 @@ impl Server {
         // Refresh the landing page
         ctxt.landing_page.store(Arc::new(None));
 
-        let _ = ctxt.get_master_commits();
-
         // Spawn off a task to post the results of any commit results that we
         // are now aware of.
         tokio::spawn(async move {
