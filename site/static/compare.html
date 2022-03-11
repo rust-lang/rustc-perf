@@ -563,34 +563,38 @@
                 :commit-a="data.a.commit"
                 :commit-b="data.b.commit"></test-cases-table>
             <br />
-            <table id="bootstrap" class="compare" style="margin: auto;"
-                v-if="data && Object.keys(data.a.bootstrap).length > 0">
-                <tr>
-                    <td colspan="4">bootstrap timings; variance is 1-3% on smaller benchmarks! Values in seconds.</td>
-                </tr>
-                <tr>
-                    <th>total</th>
-                    <th v-if="bootstrapTotals.a">A: {{bootstrapTotals.a.toFixed(3)}}</th>
-                    <th v-if="bootstrapTotals.b">B: {{bootstrapTotals.b.toFixed(3)}}</th>
-                    <th v-if="bootstrapTotals.a && bootstrapTotals.b">
-                        Total: {{(bootstrapTotals.b - bootstrapTotals.a).toFixed(1)}}
-                        <div v-bind:class="diffClass(bootstrapTotals.b - bootstrapTotals.a)">
-                            ({{((bootstrapTotals.b - bootstrapTotals.a ) / bootstrapTotals.a * 100).toFixed(3)}}%)
-                        </div>
-                    </th>
-                </tr>
-                <template v-for="bootstrap in bootstraps">
+            <hr />
+            <div>
+                <div class="category-title">Bootstrap timings</div>
+                <table id="bootstrap" class="compare" style="margin: auto;"
+                    v-if="data && Object.keys(data.a.bootstrap).length > 0">
                     <tr>
-                        <th style="text-align: right; width: 19em;">{{bootstrap.name}}</th>
-                        <td v-if="bootstrap.a">{{bootstrap.a}}</td>
-                        <td v-if="bootstrap.b">{{bootstrap.b}}</td>
-                        <td>
-                            <span v-if="bootstrap.percent"
-                                v-bind:class="percentClass(bootstrap.percent)">{{bootstrap.percent.toFixed(1)}}%</span>
-                        </td>
+                        <td colspan="4">Values in seconds. Variance is 1-3% on smaller crates!</td>
                     </tr>
-                </template>
-            </table>
+                    <tr>
+                        <th>total</th>
+                        <th v-if="bootstrapTotals.a">A: {{bootstrapTotals.a.toFixed(3)}}</th>
+                        <th v-if="bootstrapTotals.b">B: {{bootstrapTotals.b.toFixed(3)}}</th>
+                        <th v-if="bootstrapTotals.a && bootstrapTotals.b">
+                            Total: {{(bootstrapTotals.b - bootstrapTotals.a).toFixed(1)}}
+                            <div v-bind:class="diffClass(bootstrapTotals.b - bootstrapTotals.a)">
+                                ({{((bootstrapTotals.b - bootstrapTotals.a ) / bootstrapTotals.a * 100).toFixed(3)}}%)
+                            </div>
+                        </th>
+                    </tr>
+                    <template v-for="bootstrap in bootstraps">
+                        <tr>
+                            <th style="text-align: right; width: 19em;">{{bootstrap.name}}</th>
+                            <td v-if="bootstrap.a">{{bootstrap.a}}</td>
+                            <td v-if="bootstrap.b">{{bootstrap.b}}</td>
+                            <td>
+                                <span v-if="bootstrap.percent"
+                                    v-bind:class="percentClass(bootstrap.percent)">{{bootstrap.percent.toFixed(1)}}%</span>
+                            </td>
+                        </tr>
+                    </template>
+                </table>
+            </div>
         </div>
     </div>
     <br>
