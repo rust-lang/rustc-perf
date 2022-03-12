@@ -136,6 +136,7 @@ impl Server {
     async fn handle_fallible_get_async<F, R, S, E>(
         &self,
         req: &Request,
+        compression: &Option<BrotliEncoderParams>,
         handler: F,
     ) -> Result<Response, ServerError>
     where
@@ -154,7 +155,7 @@ impl Server {
                     .header_typed(ContentType::json())
                     .header_typed(CacheControl::new().with_no_cache().with_no_store());
                 let body = serde_json::to_vec(&result).unwrap();
-                response.body(hyper::Body::from(body)).unwrap()
+                maybe_compressed_response(response, body, compression)
             }
             Err(err) => http::Response::builder()
                 .status(StatusCode::INTERNAL_SERVER_ERROR)
@@ -368,13 +369,17 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
         "/perf/graph" => {
             let query = check!(parse_query_string(req.uri()));
             return server
-                .handle_fallible_get_async(&req, |c| request_handlers::handle_graph(query, c))
+                .handle_fallible_get_async(&req, &compression, |c| {
+                    request_handlers::handle_graph(query, c)
+                })
                 .await;
         }
         "/perf/graphs" => {
             let query = check!(parse_query_string(req.uri()));
             return server
-                .handle_fallible_get_async(&req, |c| request_handlers::handle_graphs(query, c))
+                .handle_fallible_get_async(&req, &compression, |c| {
+                    request_handlers::handle_graphs(query, c)
+                })
                 .await;
         }
         "/perf/metrics" => {
