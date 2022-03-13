@@ -25,9 +25,7 @@ pub async fn handle_triage(
     log::info!("handle_triage({:?})", body);
     let start = body.start;
     let end = body.end;
-    let master_commits = collector::master_commits()
-        .await
-        .map_err(|e| format!("error retrieving master commit list: {}", e))?;
+    let master_commits = &ctxt.get_master_commits().commits;
 
     let start_artifact = ctxt
         .artifact_id_for_bound(start.clone(), true)
@@ -95,20 +93,19 @@ pub async fn handle_compare(
     ctxt: &SiteCtxt,
 ) -> api::ServerResult<api::comparison::Response> {
     log::info!("handle_compare({:?})", body);
-    let master_commits = collector::master_commits()
-        .await
-        .map_err(|e| format!("error retrieving master commit list: {}", e))?;
+    let master_commits = &ctxt.get_master_commits().commits;
+
     let end = body.end;
     let comparison =
-        compare_given_commits(body.start, end.clone(), body.stat, ctxt, &master_commits)
+        compare_given_commits(body.start, end.clone(), body.stat, ctxt, master_commits)
             .await
             .map_err(|e| format!("error comparing commits: {}", e))?
             .ok_or_else(|| format!("could not find end commit for bound {:?}", end))?;
 
     let conn = ctxt.conn().await;
-    let prev = comparison.prev(&master_commits);
-    let next = comparison.next(&master_commits);
-    let is_contiguous = comparison.is_contiguous(&*conn, &master_commits).await;
+    let prev = comparison.prev(master_commits);
+    let next = comparison.next(master_commits);
+    let is_contiguous = comparison.is_contiguous(&*conn, master_commits).await;
     let benchmark_map = conn.get_benchmarks().await;
 
     let comparisons = comparison
@@ -455,8 +452,9 @@ pub async fn compare(
     stat: String,
     ctxt: &SiteCtxt,
 ) -> Result<Option<Comparison>, BoxedError> {
-    let master_commits = collector::master_commits().await?;
-    compare_given_commits(start, end, stat, ctxt, &master_commits).await
+    let master_commits = &ctxt.get_master_commits().commits;
+
+    compare_given_commits(start, end, stat, ctxt, master_commits).await
 }
 
 /// Compare two bounds on a given stat
