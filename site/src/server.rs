@@ -323,7 +323,12 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
 
     let compression = if allow_compression {
         let mut brotli = BrotliEncoderParams::default();
-        brotli.quality = 4;
+        // In tests on /perf/graphs and /perf/get, quality = 2 reduces size by 20-40% compared to 0,
+        // while quality = 4 takes 80% longer but reduces size by less than 5% compared to 2.
+        // Around 4-5 is sometimes said to be "smaller and faster than gzip".
+        // [Google's default is 6](https://github.com/google/ngx_brotli#brotli_comp_level),
+        // higher levels offer only small size savings but are much slower.
+        brotli.quality = 2;
         Some(brotli)
     } else {
         None
