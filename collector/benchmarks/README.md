@@ -39,8 +39,6 @@ They mostly consist of real-world crates.
 - **serde**: A serialization/deserialization crate. Used by many other
   Rust programs.
 - **stm32f4**: A crate that has many thousands of blanket impl blocks.
-- **style-servo**: Servo's `style` crate. A large crate, and one used by
-  Firefox.
 - **syn**: A library for parsing Rust code. An important part of the Rust
   ecosystem.
 - **tokio-webpush-simple**: A simple web server built with tokio. Uses futures
@@ -136,6 +134,7 @@ Rust code being written today.
 - **inflate**: See above.
 - **regex**: See above.
 - **piston-image**: See above.
-- **style-servo**: See above.
+- **style-servo**: An old version of Servo's `style` crate. A large crate, and
+  one used by old versions of Firefox.
 - **syn**: See above.
 - **tokio-webpush-simple**: See above.
