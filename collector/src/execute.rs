@@ -134,21 +134,6 @@ struct BenchmarkConfig {
     category: Category,
 }
 
-impl Default for BenchmarkConfig {
-    fn default() -> BenchmarkConfig {
-        BenchmarkConfig {
-            cargo_opts: None,
-            cargo_rustc_opts: None,
-            cargo_toml: None,
-            disabled: false,
-            runs: default_runs(),
-            supports_stable: false,
-            touch_file: None,
-            category: Category::Secondary,
-        }
-    }
-}
-
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Hash)]
 pub struct BenchmarkName(pub String);
 
@@ -1240,7 +1225,7 @@ impl Benchmark {
             )
             .with_context(|| format!("failed to parse {:?}", config_path))?
         } else {
-            BenchmarkConfig::default()
+            bail!("missing a perf-config.json file for `{}`", name);
         };
 
         Ok(Benchmark {
