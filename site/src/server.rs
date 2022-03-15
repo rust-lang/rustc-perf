@@ -1,3 +1,5 @@
+use brotli::enc::BrotliEncoderParams;
+use brotli::BrotliCompress;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::Path;
@@ -134,6 +136,7 @@ impl Server {
     async fn handle_fallible_get_async<F, R, S, E>(
         &self,
         req: &Request,
+        compression: &Option<BrotliEncoderParams>,
         handler: F,
     ) -> Result<Response, ServerError>
     where
@@ -152,7 +155,7 @@ impl Server {
                     .header_typed(ContentType::json())
                     .header_typed(CacheControl::new().with_no_cache().with_no_store());
                 let body = serde_json::to_vec(&result).unwrap();
-                response.body(hyper::Body::from(body)).unwrap()
+                maybe_compressed_response(response, body, compression)
             }
             Err(err) => http::Response::builder()
                 .status(StatusCode::INTERNAL_SERVER_ERROR)
@@ -313,6 +316,24 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
     let path = req.uri().path().to_owned();
     let path = path.as_str();
 
+    let allow_compression = req
+        .headers()
+        .get(hyper::header::ACCEPT_ENCODING)
+        .map_or(false, |e| e.to_str().unwrap().contains("br"));
+
+    let compression = if allow_compression {
+        let mut brotli = BrotliEncoderParams::default();
+        // In tests on /perf/graphs and /perf/get, quality = 2 reduces size by 20-40% compared to 0,
+        // while quality = 4 takes 80% longer but reduces size by less than 5% compared to 2.
+        // Around 4-5 is sometimes said to be "smaller and faster than gzip".
+        // [Google's default is 6](https://github.com/google/ngx_brotli#brotli_comp_level),
+        // higher levels offer only small size savings but are much slower.
+        brotli.quality = 2;
+        Some(brotli)
+    } else {
+        None
+    };
+
     if let Some(response) = handle_fs_path(path) {
         return Ok(response);
     }
@@ -353,13 +374,17 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
         "/perf/graph" => {
             let query = check!(parse_query_string(req.uri()));
             return server
-                .handle_fallible_get_async(&req, |c| request_handlers::handle_graph(query, c))
+                .handle_fallible_get_async(&req, &compression, |c| {
+                    request_handlers::handle_graph(query, c)
+                })
                 .await;
         }
         "/perf/graphs" => {
             let query = check!(parse_query_string(req.uri()));
             return server
-                .handle_fallible_get_async(&req, |c| request_handlers::handle_graphs(query, c))
+                .handle_fallible_get_async(&req, &compression, |c| {
+                    request_handlers::handle_graphs(query, c)
+                })
                 .await;
         }
         "/perf/metrics" => {
@@ -404,6 +429,7 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
             crate::comparison::handle_compare(check!(parse_body(&body)), &ctxt)
                 .await
                 .map_err(|e| e.to_string()),
+            &compression,
         )),
         "/perf/collected" => {
             if !server.check_auth(&req) {
@@ -412,7 +438,10 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
                     .body(hyper::Body::empty())
                     .unwrap());
             }
-            Ok(to_response(request_handlers::handle_collected().await))
+            Ok(to_response(
+                request_handlers::handle_collected().await,
+                &compression,
+            ))
         }
         "/perf/github-hook" => {
             if !verify_gh(&ctxt.config, &req, &body) {
@@ -435,6 +464,7 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
             match event.as_str() {
                 "issue_comment" => Ok(to_response(
                     request_handlers::handle_github(check!(parse_body(&body)), ctxt.clone()).await,
+                    &compression,
                 )),
                 _ => Ok(http::Response::builder()
                     .status(StatusCode::OK)
@@ -444,9 +474,11 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
         }
         "/perf/self-profile" => Ok(to_response(
             request_handlers::handle_self_profile(check!(parse_body(&body)), &ctxt).await,
+            &compression,
         )),
         "/perf/self-profile-raw" => Ok(to_response(
             request_handlers::handle_self_profile_raw(check!(parse_body(&body)), &ctxt).await,
+            &compression,
         )),
         "/perf/bootstrap" => Ok(
             match request_handlers::handle_bootstrap(check!(parse_body(&body)), &ctxt).await {
@@ -594,7 +626,7 @@ fn verify_gh_sig(cfg: &Config, header: &str, body: &[u8]) -> Option<bool> {
     Some(false)
 }
 
-fn to_response<S>(result: ServerResult<S>) -> Response
+fn to_response<S>(result: ServerResult<S>, compression: &Option<BrotliEncoderParams>) -> Response
 where
     S: Serialize,
 {
@@ -604,7 +636,7 @@ where
                 .header_typed(ContentType::octet_stream())
                 .header_typed(CacheControl::new().with_no_cache().with_no_store());
             let body = rmp_serde::to_vec_named(&result).unwrap();
-            response.body(hyper::Body::from(body)).unwrap()
+            maybe_compressed_response(response, body, compression)
         }
         Err(err) => http::Response::builder()
             .status(StatusCode::INTERNAL_SERVER_ERROR)
@@ -613,6 +645,30 @@ where
             .body(hyper::Body::from(err))
             .unwrap(),
     }
+}
+
+fn maybe_compressed_response(
+    response: http::response::Builder,
+    body: Vec<u8>,
+    compression: &Option<BrotliEncoderParams>,
+) -> Response {
+    match compression {
+        None => response.body(hyper::Body::from(body)).unwrap(),
+        Some(brotli_params) => {
+            let compressed = compress_bytes(&body, brotli_params);
+            let response = response.header(
+                hyper::header::CONTENT_ENCODING,
+                hyper::header::HeaderValue::from_static("br"),
+            );
+            response.body(hyper::Body::from(compressed)).unwrap()
+        }
+    }
+}
+
+fn compress_bytes(mut bytes: &[u8], brotli_params: &BrotliEncoderParams) -> Vec<u8> {
+    let mut compressed = Vec::with_capacity(bytes.len());
+    BrotliCompress(&mut bytes, &mut compressed, brotli_params).unwrap();
+    compressed
 }
 
 fn to_triage_response(result: ServerResult<api::triage::Response>) -> Response {
