@@ -71,9 +71,6 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
         versions
             .into_iter()
             .map(|v| ArtifactId::Tag(v.to_string()))
-            .chain(std::iter::once(
-                ctxt.index.load().commits().last().unwrap().clone().into(),
-            ))
             .collect::<Vec<_>>(),
     );
 
