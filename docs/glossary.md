@@ -13,7 +13,7 @@ The following is a glossary of domain specific terminology. Although benchmarks 
 
 ## Benchmarks
 
-* **stress test benchmark**: a benchmark that is specifically designed to stress a certain part of the compiler. For example, [deeply-nested-async](https://github.com/rust-lang/rustc-perf/tree/master/collector/benchmarks/deeply-nested-async) is meant to stress parts of the compiler used in async code.
+* **stress test benchmark**: a benchmark that is specifically designed to stress a certain part of the compiler. For example, [projection-caching](https://github.com/rust-lang/rustc-perf/tree/master/collector/benchmarks/projection-caching) stresses the compiler's projection caching mechanisms.
 * **real world benchmark**: a benchmark based on a real world crate. These are typically copied as-is from crates.io. For example, [serde](https://github.com/rust-lang/rustc-perf/tree/master/collector/benchmarks/serde) is a popular crate and the benchmark has not been altered from a release of serde on crates.io. 
 
 ## Artifacts

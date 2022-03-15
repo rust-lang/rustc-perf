@@ -73,6 +73,11 @@ compiler in interesting ways.
   behavior](https://github.com/rust-lang/rust/issues/75992) in the past.
 - **deeply-nested-closures**: A small program that caused [exponential
   behavior](https://github.com/rust-lang/rust/issues/72408) in the past.
+- **deeply-nested-multi**: A small program containing multiple examples 
+  ([one](https://github.com/rust-lang/rust/issues/38528),
+  [two](https://github.com/rust-lang/rust/issues/72408),
+  [three](https://github.com/rust-lang/rust/issues/75992))
+  of code that caused exponential behavior in the past.
 - **deep-vector**: A test containing a single large vector of zeroes, which
   caused [poor performance](https://github.com/rust-lang/rust/issues/20936) in
   the past.
