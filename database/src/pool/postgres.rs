@@ -1,7 +1,7 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{
-    ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkData, Category, CollectionId, Commit, Date,
-    Index, Profile, QueuedCommit, Scenario,
+    ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkData, CollectionId, Commit, Date, Index,
+    Profile, QueuedCommit, Scenario,
 };
 use anyhow::Context as _;
 use chrono::{DateTime, TimeZone, Utc};
@@ -9,7 +9,6 @@ use hashbrown::HashMap;
 use native_tls::{Certificate, TlsConnector};
 use postgres_native_tls::MakeTlsConnector;
 use std::convert::TryFrom;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio_postgres::GenericClient;
@@ -614,13 +613,9 @@ where
             .await
             .unwrap();
         rows.into_iter()
-            .map(|r| {
-                let name: String = r.get(0);
-                let category: String = r.get(1);
-                BenchmarkData {
-                    name,
-                    category: Category::from_str(&category).unwrap(),
-                }
+            .map(|r| BenchmarkData {
+                name: r.get(0),
+                category: r.get(1),
             })
             .collect()
     }
@@ -995,13 +990,13 @@ where
             .await
             .unwrap();
     }
+
     async fn record_benchmark(
         &self,
         benchmark: &str,
         supports_stable: Option<bool>,
-        category: Category,
+        category: String,
     ) {
-        let category = category.to_string();
         if let Some(r) = self
             .conn()
             .query_opt(
