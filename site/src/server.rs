@@ -3,14 +3,15 @@ use brotli::BrotliCompress;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::Path;
+use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::sync::Arc;
 use std::time::Instant;
 use std::{fmt, fs, str};
 
 use futures::{future::FutureExt, stream::StreamExt};
-use headers::CacheControl;
-use headers::{Authorization, ContentType, Header};
+use headers::{Authorization, CacheControl, ContentType, ETag, Header, HeaderMapExt, IfNoneMatch};
+use http::header::CACHE_CONTROL;
 use hyper::StatusCode;
 use log::{debug, error, info};
 use parking_lot::{Mutex, RwLock};
@@ -18,6 +19,7 @@ use ring::hmac;
 use rmp_serde;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use uuid::Uuid;
 
 pub use crate::api::{
     self, bootstrap, comparison, dashboard, github, graphs, info, self_profile, self_profile_raw,
@@ -334,7 +336,7 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
         None
     };
 
-    if let Some(response) = handle_fs_path(path) {
+    if let Some(response) = handle_fs_path(&req, path) {
         return Ok(response);
     }
 
@@ -561,8 +563,12 @@ where
     }
 }
 
+lazy_static::lazy_static! {
+    static ref VERSION_UUID: Uuid = Uuid::new_v4(); // random UUID used as ETag for cache revalidation
+}
+
 /// Handle the case where the path is to a static file
-fn handle_fs_path(path: &str) -> Option<http::Response<hyper::Body>> {
+fn handle_fs_path(req: &Request, path: &str) -> Option<http::Response<hyper::Body>> {
     let fs_path = format!(
         "site/static{}",
         match path {
@@ -579,8 +585,19 @@ fn handle_fs_path(path: &str) -> Option<http::Response<hyper::Body>> {
         return None;
     }
 
+    let etag = ETag::from_str(&*format!(r#""{}""#, *VERSION_UUID)).unwrap();
+    let mut response = http::Response::builder()
+        .header_typed(etag.clone())
+        .header(CACHE_CONTROL, "max-age=60, stale-while-revalidate=86400"); // tell client to use cached response for one day, but revalidate in background if older than one minute
+
+    let if_none_match = req.headers().typed_get::<IfNoneMatch>();
+    if let Some(if_none_match) = if_none_match {
+        if !if_none_match.precondition_passes(&etag) {
+            return Some(not_modified(response)); // tell client that the resource was not modified and to use cached response
+        }
+    }
+
     let source = fs::read(&fs_path).unwrap();
-    let mut response = http::Response::builder();
     let p = Path::new(&fs_path);
     match p.extension().and_then(|x| x.to_str()) {
         Some("html") => response = response.header_typed(ContentType::html()),
@@ -592,6 +609,13 @@ fn handle_fs_path(path: &str) -> Option<http::Response<hyper::Body>> {
         _ => (),
     }
     Some(response.body(hyper::Body::from(source)).unwrap())
+}
+
+fn not_modified(response: http::response::Builder) -> http::Response<hyper::Body> {
+    response
+        .status(StatusCode::NOT_MODIFIED)
+        .body(hyper::Body::empty())
+        .unwrap()
 }
 
 fn not_found() -> http::Response<hyper::Body> {
