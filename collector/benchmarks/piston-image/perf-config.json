@@ -1,5 +1,4 @@
 {
-    "supports_stable": true,
     "runs": 1,
-    "category": "primary"
+    "category": "primary-and-stable"
 }

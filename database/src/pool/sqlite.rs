@@ -1,5 +1,5 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
-use crate::{ArtifactId, Benchmark, BenchmarkData, Category, CollectionId, Commit, Date, Profile};
+use crate::{ArtifactId, Benchmark, BenchmarkData, CollectionId, Commit, Date, Profile};
 use crate::{ArtifactIdNumber, Index, QueryDatum, QueuedCommit};
 use chrono::{DateTime, TimeZone, Utc};
 use hashbrown::HashMap;
@@ -7,7 +7,6 @@ use rusqlite::params;
 use rusqlite::OptionalExtension;
 use std::convert::TryFrom;
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::sync::Mutex;
 use std::sync::Once;
 use std::time::Duration;
@@ -514,7 +513,7 @@ impl Connection for SqliteConnection {
             .query_map([], |row| {
                 Ok(BenchmarkData {
                     name: row.get(0)?,
-                    category: Category::from_str(&row.get::<_, String>(1)?).unwrap(),
+                    category: row.get::<_, String>(1)?,
                 })
             })
             .unwrap();
@@ -889,9 +888,8 @@ impl Connection for SqliteConnection {
         &self,
         benchmark: &str,
         supports_stable: Option<bool>,
-        category: Category,
+        category: String,
     ) {
-        let category = category.to_string();
         if let Some(stable) = supports_stable {
             self.raw_ref()
                 .execute(

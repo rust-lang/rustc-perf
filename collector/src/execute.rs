@@ -4,9 +4,10 @@ use crate::{Compiler, Profile, Scenario};
 use anyhow::{bail, Context};
 use collector::command_output;
 use collector::etw_parser;
-use database::{Category, PatchName, QueryLabel};
+use database::{PatchName, QueryLabel};
 use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
 use std::fmt;
@@ -106,6 +107,57 @@ fn touch_all(path: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, clap::ArgEnum)]
+#[serde(rename_all = "kebab-case")]
+pub enum Category {
+    Primary,
+    Secondary,
+    // FIXME: this should disappear after the 2022 benchmark overhaul is
+    // complete.
+    PrimaryAndStable,
+    Stable,
+}
+
+impl Category {
+    pub fn has_stable(&self) -> bool {
+        match self {
+            Category::Primary | Category::Secondary => false,
+            Category::PrimaryAndStable | Category::Stable => true,
+        }
+    }
+
+    pub fn is_primary_or_secondary(&self) -> bool {
+        match self {
+            Category::Primary | Category::Secondary | Category::PrimaryAndStable => true,
+            Category::Stable => false,
+        }
+    }
+
+    // Within the DB, `Category` is represented in two fields:
+    // - a `supports_stable` bool,
+    // - a `category` which is either "primary" or "secondary".
+    pub fn db_representation(&self) -> (bool, String) {
+        match self {
+            Category::Primary => (false, "primary".to_string()),
+            Category::Secondary => (false, "secondary".to_string()),
+            // These two have the same DB representation, even though they are
+            // treated differently when choosing which benchmarks to run.
+            Category::PrimaryAndStable | Category::Stable => (true, "primary".to_string()),
+        }
+    }
+}
+
+impl fmt::Display for Category {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Category::Primary => f.write_str("primary"),
+            Category::Secondary => f.write_str("secondary"),
+            Category::PrimaryAndStable => f.write_str("primary-and-stable"),
+            Category::Stable => f.write_str("stable"),
+        }
+    }
+}
+
 fn default_runs() -> usize {
     3
 }
@@ -121,8 +173,6 @@ struct BenchmarkConfig {
     disabled: bool,
     #[serde(default = "default_runs")]
     runs: usize,
-    #[serde(default)]
-    supports_stable: bool,
 
     /// The file that should be touched to ensure cargo re-checks the leaf crate
     /// we're interested in. Likely, something similar to `src/lib.rs`. The
@@ -132,21 +182,6 @@ struct BenchmarkConfig {
     touch_file: Option<String>,
 
     category: Category,
-}
-
-impl Default for BenchmarkConfig {
-    fn default() -> BenchmarkConfig {
-        BenchmarkConfig {
-            cargo_opts: None,
-            cargo_rustc_opts: None,
-            cargo_toml: None,
-            disabled: false,
-            runs: default_runs(),
-            supports_stable: false,
-            touch_file: None,
-            category: Category::Secondary,
-        }
-    }
 }
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Hash)]
@@ -1240,7 +1275,7 @@ impl Benchmark {
             )
             .with_context(|| format!("failed to parse {:?}", config_path))?
         } else {
-            BenchmarkConfig::default()
+            bail!("missing a perf-config.json file for `{}`", name);
         };
 
         Ok(Benchmark {
@@ -1251,12 +1286,8 @@ impl Benchmark {
         })
     }
 
-    pub fn supports_stable(&self) -> bool {
-        self.config.supports_stable
-    }
-
-    pub fn category(&self) -> &Category {
-        &self.config.category
+    pub fn category(&self) -> Category {
+        self.config.category
     }
 
     #[cfg(windows)]

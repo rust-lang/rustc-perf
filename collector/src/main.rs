@@ -2,7 +2,7 @@
 
 use anyhow::{bail, Context};
 use clap::Parser;
-use database::{ArtifactId, Category, Commit};
+use database::{ArtifactId, Commit};
 use log::debug;
 use std::collections::HashSet;
 use std::fs;
@@ -18,7 +18,7 @@ use tokio::runtime::Runtime;
 mod execute;
 mod sysroot;
 
-use execute::{BenchProcessor, Benchmark, BenchmarkName, ProfileProcessor, Profiler};
+use execute::{BenchProcessor, Benchmark, BenchmarkName, Category, ProfileProcessor, Profiler};
 use sysroot::Sysroot;
 
 #[derive(Debug, Copy, Clone)]
@@ -190,8 +190,7 @@ fn bench(
 
     let mut measure_and_record =
         |benchmark_name: &BenchmarkName,
-         benchmark_supports_stable: bool,
-         benchmark_category: Category,
+         category: Category,
          print_intro: &dyn Fn(),
          measure: &dyn Fn(&mut BenchProcessor) -> anyhow::Result<()>| {
             let is_fresh =
@@ -202,10 +201,11 @@ fn bench(
                 return;
             }
             let mut tx = rt.block_on(conn.transaction());
+            let (supports_stable, category) = category.db_representation();
             rt.block_on(tx.conn().record_benchmark(
                 &benchmark_name.0,
-                Some(benchmark_supports_stable),
-                benchmark_category,
+                Some(supports_stable),
+                category,
             ));
             print_intro();
 
@@ -241,8 +241,7 @@ fn bench(
     for (nth_benchmark, benchmark) in benchmarks.iter().enumerate() {
         measure_and_record(
             &benchmark.name,
-            benchmark.supports_stable(),
-            benchmark.category().clone(),
+            benchmark.category(),
             &|| {
                 eprintln!(
                     "{}",
@@ -257,7 +256,6 @@ fn bench(
     if bench_rustc {
         measure_and_record(
             &BenchmarkName("rustc".to_string()),
-            /* supports_stable */ false,
             Category::Primary,
             &|| eprintln!("Special benchmark commencing (due to `--bench-rustc`)"),
             &|processor| processor.measure_rustc(compiler).context("measure rustc"),
@@ -860,12 +858,12 @@ struct DownloadCommand {
     #[clap(long, global = true)]
     name: Option<String>,
 
-    /// Overwrite the benchmark directory if it already exists.
+    /// Overwrite the benchmark directory if it already exists
     #[clap(long, short('f'), global = true)]
     force: bool,
 
-    /// What category does the benchmark belong to (primary or secondary).
-    #[clap(long, short('c'), global = true, default_value = "secondary")]
+    /// What category does the benchmark belong to
+    #[clap(long, short('c'), arg_enum, global = true, default_value = "secondary")]
     category: Category,
 
     #[clap(subcommand)]
@@ -924,11 +922,12 @@ fn main_result() -> anyhow::Result<i32> {
                 "",
             )?;
 
-            let benchmarks = get_benchmarks(
+            let mut benchmarks = get_benchmarks(
                 &benchmark_dir,
                 local.include.as_deref(),
                 local.exclude.as_deref(),
             )?;
+            benchmarks.retain(|b| b.category().is_primary_or_secondary());
 
             let res = bench(
                 &mut rt,
@@ -978,11 +977,12 @@ fn main_result() -> anyhow::Result<i32> {
             let sysroot = Sysroot::install(commit.sha.to_string(), &target_triple)
                 .with_context(|| format!("failed to install sysroot for {:?}", commit))?;
 
-            let benchmarks = get_benchmarks(
+            let mut benchmarks = get_benchmarks(
                 &benchmark_dir,
                 next.include.as_deref(),
                 next.exclude.as_deref(),
             )?;
+            benchmarks.retain(|b| b.category().is_primary_or_secondary());
 
             let res = bench(
                 &mut rt,
@@ -1044,7 +1044,7 @@ fn main_result() -> anyhow::Result<i32> {
 
             // Exclude benchmarks that don't work with a stable compiler.
             let mut benchmarks = get_benchmarks(&benchmark_dir, None, None)?;
-            benchmarks.retain(|b| b.supports_stable());
+            benchmarks.retain(|b| b.category().has_stable());
 
             let res = bench(
                 &mut rt,
@@ -1077,11 +1077,13 @@ fn main_result() -> anyhow::Result<i32> {
             let profiles = Profile::expand_all(&local.profiles);
             let scenarios = Scenario::expand_all(&local.scenarios);
 
-            let benchmarks = get_benchmarks(
+            let mut benchmarks = get_benchmarks(
                 &benchmark_dir,
                 local.include.as_deref(),
                 local.exclude.as_deref(),
             )?;
+            benchmarks.retain(|b| b.category().is_primary_or_secondary());
+
             let mut errors = BenchmarkErrors::new();
 
             let mut get_toolchain_and_profile =

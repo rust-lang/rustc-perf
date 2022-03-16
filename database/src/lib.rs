@@ -767,38 +767,5 @@ impl fmt::Display for CollectionId {
 #[derive(Debug, Clone, Serialize)]
 pub struct BenchmarkData {
     pub name: String,
-    pub category: Category,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Category {
-    Primary,
-    Secondary,
-}
-
-impl Default for Category {
-    fn default() -> Self {
-        Self::Secondary
-    }
-}
-
-impl fmt::Display for Category {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Category::Primary => f.write_str("primary"),
-            Category::Secondary => f.write_str("secondary"),
-        }
-    }
-}
-impl std::str::FromStr for Category {
-    type Err = anyhow::Error;
-
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        match input {
-            "primary" => Ok(Category::Primary),
-            "secondary" => Ok(Category::Secondary),
-            _ => Err(anyhow::anyhow!("Invalid category {input}")),
-        }
-    }
+    pub category: String,
 }

@@ -7,7 +7,8 @@ The suite changes over time. Sometimes the code for a benchmark is updated, in
 which case a small suffix will be added (starting with "-2", then "-3", and so
 on.)
 
-There are two categories of benchmarks, **Primary** and **Secondary**.
+There are three categories of benchmarks, **Primary**, **Secondary**, and
+**Stable**.
 
 ## Primary
 
@@ -38,8 +39,6 @@ They mostly consist of real-world crates.
 - **serde**: A serialization/deserialization crate. Used by many other
   Rust programs.
 - **stm32f4**: A crate that has many thousands of blanket impl blocks.
-- **style-servo**: Servo's `style` crate. A large crate, and one used by
-  Firefox.
 - **syn**: A library for parsing Rust code. An important part of the Rust
   ecosystem.
 - **tokio-webpush-simple**: A simple web server built with tokio. Uses futures
@@ -125,3 +124,22 @@ compiler in interesting ways.
 - **wg-grammar**: A parser generator.
   [Stresses](https://github.com/rust-lang/rust/issues/58178) the borrow
   checker's implementation of NLL.
+
+**Stable**
+
+These are benchmarks used in the
+[dashboard](https://perf.rust-lang.org/dashboard.html). They provide the
+longest continuous data set for compiler performance. As a result, they are
+quite old (e.g. 2017 or earlier), and not necessarily reflective of typical
+Rust code being written today.
+
+- **encoding**: See above.
+- **futures**: See above.
+- **html5ever**: See above.
+- **inflate**: See above.
+- **regex**: See above.
+- **piston-image**: See above.
+- **style-servo**: An old version of Servo's `style` crate. A large crate, and
+  one used by old versions of Firefox.
+- **syn**: See above.
+- **tokio-webpush-simple**: See above.
