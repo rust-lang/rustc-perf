@@ -1,0 +1,5 @@
+[package]
+name = "match-stress"
+version = "0.1.0"
+
+[workspace]

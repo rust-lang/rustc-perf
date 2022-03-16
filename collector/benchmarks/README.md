@@ -80,8 +80,8 @@ compiler in interesting ways.
 - **deep-vector**: A test containing a single large vector of zeroes, which
   caused [poor performance](https://github.com/rust-lang/rust/issues/20936) in
   the past.
-- **derive**: A large amount of simple structs with a `#[derive]` attribute for common built-in traits such as Copy and Debug.
-- **externs**: A large amount of extern functions has caused [slowdowns in the past](https://github.com/rust-lang/rust/pull/78448).
+- **derive**: A large number of simple structs with a `#[derive]` attribute for common built-in traits such as Copy and Debug.
+- **externs**: A large number of extern functions has caused [slowdowns in the past](https://github.com/rust-lang/rust/pull/78448).
 - **issue-46449**: A small program that caused [poor
   performance](https://github.com/rust-lang/rust/issues/46449) in the past.
 - **issue-58319**: A small program that caused [poor
@@ -94,6 +94,11 @@ compiler in interesting ways.
 - **many-assoc-items**: Contains a struct with many associated items, which
   caused [quadratic behavior](https://github.com/rust-lang/rust/issues/68957)
   in the past.
+- **match-stress**: Contains examples 
+  (one involving [a huge enum](https://github.com/rust-lang/rust/issues/7462),
+  one involving
+  [`exhaustive_patterns`](https://github.com/rust-lang/rust/pull/79394)) of
+  `match` code that caused bad performance in the past.
 - **match-stress-enum**: Contains a match against a huge enum, which used to
   have [quadratic runtime](https://github.com/rust-lang/rust/issues/7462).
 - **match-stress-exhaustive_patterns**: Contains code extracted from the `syn`
