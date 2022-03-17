@@ -1,8 +1,0 @@
-[package]
-name = "deeply-nested-closures"
-version = "0.1.0"
-authors = ["Valerii Lashmanov <vflashm@gmail.com>"]
-
-[dependencies]
-
-[workspace]
