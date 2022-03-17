@@ -64,8 +64,8 @@ jobs:
     strategy:
       matrix:
         BENCH_INCLUDE_EXCLUDE_OPTS: [
-          "--exclude webrender-wrench,cargo",
-          "--include webrender-wrench,cargo",
+          "--exclude webrender-wrench,cargo,cargo-0.60.0",
+          "--include webrender-wrench,cargo,cargo-0.60.0",
         ]
         PROFILES: [
           "Check,Doc,Debug",
