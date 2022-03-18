@@ -1,0 +1,276 @@
+body {
+    max-width: 800px;
+    margin: 2% auto;
+}
+
+#app {
+    margin: 0 2%;
+}
+
+ul li {
+    margin: 0;
+}
+
+ul li input {
+    vertical-align: middle;
+    margin: 0 2px;
+
+}
+
+.section {
+    display: flex;
+    margin: 10px 0;
+}
+
+#commits {
+    border: none;
+    display: flex;
+    padding: 0px;
+}
+
+.commit-input {
+    width: 270px;
+    display: flex;
+    flex-direction: column;
+}
+
+.commit-input label {
+    font-size: 12px;
+    font-weight: bold;
+    margin-bottom: 6px;
+}
+
+#metric {
+    position: relative;
+    height: 40px;
+}
+
+#stats {
+    border-radius: 5px;
+    width: 200px;
+    font-size: 14px;
+    margin-left: 52px;
+}
+
+#filters-toggle {
+    cursor: pointer;
+}
+
+.section-heading {
+    font-size: 16px;
+}
+
+#filters-content .section-heading {
+    font-size: 16px;
+}
+
+#filters {
+    border: 1px black;
+    border-style: dotted;
+    margin: 12px 0px;
+    border-radius: 10px;
+}
+
+#filter {
+    margin-left: 52px;
+}
+
+input {
+    border-radius: 5px;
+    font-size: 12px;
+    height: 100%;
+}
+
+input[type="checkbox"] {
+    height: auto;
+}
+
+#settings input[type=submit] {
+    width: 100%;
+    font-weight: bold;
+    background: #ADD8E6;
+}
+
+.cache-label {
+    font-weight: bold;
+}
+
+.states-list {
+    display: flex;
+    flex-direction: column;
+    align-items: start;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.section-list-wrapper {
+    flex-direction: column;
+}
+
+@media (min-width: 760px) {
+    .states-list {
+        justify-content: start;
+        flex-direction: row;
+        align-items: center;
+        width: 80%;
+    }
+    .section-list-wrapper {
+        flex-direction: row;
+    }
+}
+.states-list > li {
+    margin-right: 15px;
+}
+
+.tooltip {
+    position: relative;
+    border-radius: 50%;
+    font-size: 12px;
+    margin: 0 -4px;
+    border: 1px solid #7d6969;
+    width: 16px;
+    text-align: center;
+    font-weight: bold;
+    background: #d6d3d3;
+    cursor: pointer;
+    display: inline-block;
+}
+
+.tooltip .tooltiptext {
+    width: 180px;
+    visibility: hidden;
+    color: white;
+    background-color: #524d4d;
+    text-align: center;
+    padding: 5px;
+    border-radius: 6px;
+
+    position: absolute;
+    bottom: 125%;
+    margin-left: -60px;
+
+    opacity: 0;
+    transition: opacity 0.3s, visibility 0.3s;
+}
+
+.tooltip:hover .tooltiptext {
+    visibility: visible;
+    opacity: 1;
+}
+
+.description-box {
+    border: 1px solid;
+    display: flex;
+}
+
+.description-arrow {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    background: #8dcc8d;
+    padding: 5px;
+}
+
+#not-continuous {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: center;
+    background: #cc3300;
+    border: 1px solid;
+    cursor: help;
+}
+
+.benches {
+    font-size: medium;
+}
+
+.benches tbody::before {
+    content: '';
+    display: block;
+    height: 10px;
+}
+
+#content td {
+    text-align: center;
+}
+
+#bootstrap th {
+    text-align: center;
+}
+
+.benches tbody:first-child th {
+    text-align: center;
+}
+
+.benches tbody:not(:first-child) th {
+    border-right: dotted 1px;
+}
+
+.benches th {
+    text-align: left;
+    word-break: break-word;
+    width: 25%;
+    min-width: 50px;
+}
+
+.benches th+td {
+    width: 25%;
+}
+
+.benchmark-name {
+    text-align: center;
+}
+
+.bench-table {
+    margin-top: 10px;
+}
+
+#summary {
+    border: 1px dashed;
+    padding: 4px;
+    border-radius: 6px;
+}
+
+.summary-container {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 10px;
+}
+.summary {
+    display: flex;
+}
+.summary-values {
+    display: flex;
+    flex-direction: column;
+}
+@media (min-width: 650px) {
+    .summary-container {
+        flex-direction: row;
+        margin-bottom: 0;
+        align-items: center;
+    }
+    .summary-container > span {
+        text-align: right;
+        width: 20%;
+    }
+    .summary-values {
+        width: 100%;
+        flex-direction: row;
+        justify-content: flex-end;
+        align-items: center;
+    }
+    .summary {
+        width: 15%;
+        align-items: center;
+    }
+    .summary-wide {
+        width: 20%;
+    }
+}
+.category-title {
+    font-weight: bold;
+    font-size: 1.2em;
+    margin: 10px;
+    text-align: center;
+}
