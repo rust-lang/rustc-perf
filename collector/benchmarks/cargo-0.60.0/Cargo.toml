@@ -232,3 +232,5 @@ features = [
     "wincon",
     "winnt",
 ]
+
+[workspace]
