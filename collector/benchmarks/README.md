@@ -17,6 +17,8 @@ They mostly consist of real-world crates.
 
 - **cargo-0.60.0**: The Rust package manager. A large program, and an important
   one in the Rust ecosystem.
+- **clap-3.1.6**: A command line argument parser. A crate used by many Rust
+  programs.
 - **clap-rs**: A command line argument parser. A crate used by many Rust
   programs.
 - **cranelift-codegen**: The largest crate from a code generator. Used by
