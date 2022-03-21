@@ -25,7 +25,6 @@ They mostly consist of real-world crates.
   ensure a lot of invariants. Stresses anything related to resolving
   trait bounds, by having a lot of trait impls for a large number of different
   types.
-- **futures**: A futures implementation. Used by many Rust programs.
 - **helloworld**: A trivial program. Gives a lower bound on compile time.
 - **html5ever**: An HTML parser. Stresses macro parsing code significantly.
 - **hyper-2**: A fairly large crate. Utilizes async/await, and used by
@@ -129,7 +128,11 @@ Rust code being written today.
 
 - **encoding**: An old crate providing character encoding support. Contains
   some large tables.
-- **futures**: See above.
+- **futures**: v0.1.0 of the popular `futures` crate, which was used by many
+  Rust programs. Newer versions of this crate (e.g. v0.3.21 from February 2021)
+  contain very little code, instead relying on sub-crates. This makes them less
+  interesting as benchmarks, because we only measure final crate compilation.
+  This is why there is no futures crate among the primary benchmarks.
 - **html5ever**: See above.
 - **inflate**: An old implementation of the DEFLATE algorithm. Contains
   a very large function containing many locals and basic blocks, similar to
