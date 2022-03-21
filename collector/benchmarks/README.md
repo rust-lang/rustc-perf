@@ -25,7 +25,6 @@ They mostly consist of real-world crates.
   ensure a lot of invariants. Stresses anything related to resolving
   trait bounds, by having a lot of trait impls for a large number of different
   types.
-- **encoding**: Character encoding support. Contains some large tables.
 - **futures**: A futures implementation. Used by many Rust programs.
 - **helloworld**: A trivial program. Gives a lower bound on compile time.
 - **html5ever**: An HTML parser. Stresses macro parsing code significantly.
@@ -132,7 +131,8 @@ longest continuous data set for compiler performance. As a result, they are
 quite old (e.g. 2017 or earlier), and not necessarily reflective of typical
 Rust code being written today.
 
-- **encoding**: See above.
+- **encoding**: An old crate providing character encoding support. Contains
+  some large tables.
 - **futures**: See above.
 - **html5ever**: See above.
 - **inflate**: See above.
