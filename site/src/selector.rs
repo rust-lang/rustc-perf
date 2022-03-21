@@ -473,9 +473,9 @@ impl StatisticSeries {
             .get_pstats(&sids, &aids)
             .await
             .into_iter()
-            .enumerate()
-            .map(|(idx, points)| {
-                let &&(benchmark, profile, scenario, metric) = &statistic_descriptions[idx];
+            .zip(&statistic_descriptions)
+            .filter(|(points, _)| points.iter().any(|value| value.is_some()))
+            .map(|(points, &&(benchmark, profile, scenario, metric))| {
                 SeriesResponse {
                     series: StatisticSeries {
                         artifact_ids: ArtifactIdIter::new(artifact_ids.clone()),
