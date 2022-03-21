@@ -326,26 +326,29 @@
                     let yAxis = "Value";
                     let yAxisUnit = null;
                     if (state.stat == "instructions:u") {
-                        yAxis = "Number of CPU instructions";
+                        yAxis = "CPU instructions";
+                        yAxisUnit = "count";
                     } else if (state.stat == "cycles:u") {
-                        yAxis = "Number of CPU cycles";
+                        yAxis = "CPU cycles";
+                        yAxisUnit = "count";
                     } else if (state.stat == "cpu-clock") {
-                        yAxis = "Wall time execution";
+                        yAxis = "CPU time";
                         yAxisUnit = "seconds";
                     } else if (state.stat == "wall-time") {
-                        yAxis = "Wall time execution";
+                        yAxis = "Wall time";
                         yAxisUnit = "seconds";
                     } else if (state.stat == "max-rss") {
                         yAxis = "Maximum resident set size";
-                        yAxisUnit = "kb";
+                        yAxisUnit = "kB";
                     } else if (state.stat == "faults") {
                         yAxis = "Faults";
+                        yAxisUnit = "count";
                     }
 
                     if (state.kind == "raw" && benchName == "Summary") {
                         yAxisUnit = "relative";
                     } else if (state.kind == "percentfromfirst") {
-                        yAxisUnit = "% change from baseline";
+                        yAxisUnit = "% change from first";
                     } else if (state.kind == "percentrelative") {
                         yAxisUnit = "% change from previous";
                     }
