@@ -1252,8 +1252,28 @@ fn download_from_git(target: &Path, url: &str) -> anyhow::Result<()> {
         .status()
         .expect("Git clone failed");
     generate_lockfile(tmpdir.path());
+
+    // Save downloaded commit SHA to keep information about downloaded revision
+    let git_sha = get_git_sha(tmpdir.path())?;
+    std::fs::write(tmpdir.path().join("git-commit.txt"), git_sha)?;
+
+    // Remove .git directory to avoid messing with nested git repositories
+    if let Err(error) = std::fs::remove_dir_all(tmpdir.path().join(".git")) {
+        log::error!("Could not delete .git directory: {error:?}");
+    }
+
     execute::rename(&tmpdir, &target)?;
     Ok(())
+}
+
+fn get_git_sha(directory: &Path) -> anyhow::Result<String> {
+    let stdout = Command::new("git")
+        .arg("rev-parse")
+        .arg("HEAD")
+        .current_dir(directory)
+        .output()?
+        .stdout;
+    Ok(String::from_utf8(stdout)?)
 }
 
 fn download_from_crates_io(target_dir: &Path, krate: &str, version: &str) -> anyhow::Result<()> {
