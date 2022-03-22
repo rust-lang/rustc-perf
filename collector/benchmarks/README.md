@@ -85,11 +85,6 @@ compiler in interesting ways.
   one involving
   [`exhaustive_patterns`](https://github.com/rust-lang/rust/pull/79394)) of
   `match` code that caused bad performance in the past.
-- **match-stress-enum**: Contains a match against a huge enum, which used to
-  have [quadratic runtime](https://github.com/rust-lang/rust/issues/7462).
-- **match-stress-exhaustive_patterns**: Contains code extracted from the `syn`
-  crate to amplify the perf degradation caused by the `exhaustive_patterns`, as
-  measured [here](https://github.com/rust-lang/rust/pull/79394).
 - **projection-caching**: A small program that causes extremely, deeply nested
   types which stress the trait system's projection cache. Removing that cache
   resulted in hours long compilations for some programs using futures,
