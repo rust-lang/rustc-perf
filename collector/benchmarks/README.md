@@ -30,8 +30,6 @@ They mostly consist of real-world crates.
 - **html5ever**: An HTML parser. Stresses macro parsing code significantly.
 - **hyper-2**: A fairly large crate. Utilizes async/await, and used by
   many Rust programs.
-- **inflate**: An old implementation of the DEFLATE algorithm. Stresses the
-  compiler in certain ways.
 - **piston-image**: A modular game engine. An interesting Rust program.
 - **regex**: A regular expression parser. Used by many Rust programs.
 - **ripgrep**: A line-oriented search tool. A widely-used utility.
@@ -77,8 +75,8 @@ compiler in interesting ways.
 - **issue-88862**: A MCVE of a program that had a
   [severe performance regression](https://github.com/rust-lang/rust/issues/88862)
   when trying to normalize large opaque types with late-bound regions.
-- **keccak**: A cryptography algorithm. Contains a very high number of locals
-  and basic blocks.
+- **keccak**: A cryptography algorithm. Contains a huge function with a very
+  high number of locals and basic blocks.
 - **many-assoc-items**: Contains a struct with many associated items, which
   caused [quadratic behavior](https://github.com/rust-lang/rust/issues/68957)
   in the past.
@@ -133,7 +131,9 @@ Rust code being written today.
   some large tables.
 - **futures**: See above.
 - **html5ever**: See above.
-- **inflate**: See above.
+- **inflate**: An old implementation of the DEFLATE algorithm. Contains
+  a very large function containing many locals and basic blocks, similar to
+  `keccak` but less extreme.
 - **regex**: See above.
 - **piston-image**: See above.
 - **style-servo**: An old version of Servo's `style` crate. A large crate, and
