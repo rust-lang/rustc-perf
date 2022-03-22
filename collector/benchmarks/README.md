@@ -25,7 +25,6 @@ They mostly consist of real-world crates.
   ensure a lot of invariants. Stresses anything related to resolving
   trait bounds, by having a lot of trait impls for a large number of different
   types.
-- **encoding**: Character encoding support. Contains some large tables.
 - **futures**: A futures implementation. Used by many Rust programs.
 - **helloworld**: A trivial program. Gives a lower bound on compile time.
 - **html5ever**: An HTML parser. Stresses macro parsing code significantly.
@@ -41,9 +40,6 @@ They mostly consist of real-world crates.
 - **stm32f4**: A crate that has many thousands of blanket impl blocks.
 - **syn**: A library for parsing Rust code. An important part of the Rust
   ecosystem.
-- **ucd**: A Unicode crate. Contains large statics that
-  [stress](https://github.com/rust-lang/rust/issues/53643) the borrow checker's
-  implementation of NLL.
 - **unicode_normalization**: Unicode character composition and decomposition
   utilities. Uses huge `match` statements that stress the compiler in unusual
   ways.
@@ -110,6 +106,9 @@ compiler in interesting ways.
   with grid coordinates](https://github.com/urschrei/ostn15_phf) that was
   causing rustc to [run out of
   memory](https://github.com/rust-lang/rust/issues/36799).
+- **ucd**: A Unicode crate. Contains large statics that
+  [stress](https://github.com/rust-lang/rust/issues/53643) the borrow checker's
+  implementation of NLL.
 - **unify-linearly**: Contains many variables that all have equality relations
   between them, which caused [exponential
   behavior](https://github.com/rust-lang/rust/pull/32062) in the past.
@@ -130,7 +129,8 @@ longest continuous data set for compiler performance. As a result, they are
 quite old (e.g. 2017 or earlier), and not necessarily reflective of typical
 Rust code being written today.
 
-- **encoding**: See above.
+- **encoding**: An old crate providing character encoding support. Contains
+  some large tables.
 - **futures**: See above.
 - **html5ever**: See above.
 - **inflate**: See above.
