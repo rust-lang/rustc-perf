@@ -40,8 +40,6 @@ They mostly consist of real-world crates.
 - **stm32f4**: A crate that has many thousands of blanket impl blocks.
 - **syn**: A library for parsing Rust code. An important part of the Rust
   ecosystem.
-- **tokio-webpush-simple**: A simple web server built with tokio. Uses futures
-  a lot.
 - **unicode_normalization**: Unicode character composition and decomposition
   utilities. Uses huge `match` statements that stress the compiler in unusual
   ways.
@@ -141,4 +139,5 @@ Rust code being written today.
 - **style-servo**: An old version of Servo's `style` crate. A large crate, and
   one used by old versions of Firefox.
 - **syn**: See above.
-- **tokio-webpush-simple**: See above.
+- **tokio-webpush-simple**: A simple web server built with a very old version
+  of tokio. Uses futures a lot, but doesn't use `async`/`await`.
