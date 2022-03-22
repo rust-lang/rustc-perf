@@ -18,6 +18,16 @@ fn determinism_env(cmd: &mut Command) {
     cmd.env("RUSTC_FORCE_RUSTC_VERSION", "rustc-perf");
 }
 
+fn run_with_determinism_env(mut cmd: Command) {
+    determinism_env(&mut cmd);
+    let status = cmd.status().expect("failed to spawn");
+    assert!(
+        status.success(),
+        "command did not complete successfully: {:?}",
+        cmd
+    );
+}
+
 fn main() {
     let mut args_os = env::args_os();
     let name = args_os.next().unwrap().into_string().unwrap();
@@ -64,7 +74,6 @@ fn main() {
         match wrapper {
             "PerfStat" | "PerfStatSelfProfile" => {
                 let mut cmd = Command::new("perf");
-                determinism_env(&mut cmd);
                 let has_perf = cmd.output().is_ok();
                 assert!(has_perf);
                 cmd.arg("stat")
@@ -94,9 +103,8 @@ fn main() {
                 }
 
                 let start = Instant::now();
-                let status = cmd.status().expect("failed to spawn");
+                run_with_determinism_env(cmd);
                 let dur = start.elapsed();
-                assert!(status.success());
                 print_memory();
                 print_time(dur);
                 if wrapper == "PerfStatSelfProfile" {
@@ -147,7 +155,6 @@ fn main() {
                 assert!(status.success(), "tracelog did not complete successfully");
 
                 let mut tool = Command::new(tool);
-                determinism_env(&mut tool);
                 tool.args(&args);
 
                 let prof_out_dir = std::env::current_dir().unwrap().join("self-profile-output");
@@ -161,18 +168,14 @@ fn main() {
                 }
 
                 let start = Instant::now();
-                let status = tool.status().expect("tool failed to start");
+                run_with_determinism_env(tool);
                 let dur = start.elapsed();
-                assert!(status.success(), "tool did not run successfully");
                 println!("!wall-time:{}.{:09}", dur.as_secs(), dur.subsec_nanos());
 
                 let xperf = |args: &[&str]| {
                     let mut cmd = Command::new(&xperf);
                     cmd.args(args);
-                    assert!(
-                        cmd.status().expect("failed to spawn xperf").success(),
-                        "xperf did not complete successfully"
-                    );
+                    assert!(cmd.status().expect("failed to spawn xperf").success());
                 };
 
                 xperf(&["-stop", "rustc-perf-counters"]);
@@ -189,27 +192,26 @@ fn main() {
 
             "SelfProfile" => {
                 let mut cmd = Command::new(&tool);
-                determinism_env(&mut cmd);
-                cmd.arg("-Zself-profile-events=all");
-                cmd.arg("-Zself-profile=Zsp").args(&args);
+                cmd.arg("-Zself-profile-events=all")
+                    .arg("-Zself-profile=Zsp")
+                    .args(&args);
 
-                assert!(cmd.status().expect("failed to spawn").success());
+                run_with_determinism_env(cmd);
             }
 
             "TimePasses" => {
-                args.insert(0, "-Ztime-passes".into());
-
                 let mut cmd = Command::new(&tool);
-                determinism_env(&mut cmd);
-                cmd.args(args).stderr(std::process::Stdio::from(
-                    std::fs::File::create("Ztp").unwrap(),
-                ));
-                assert!(cmd.status().expect("failed to spawn").success());
+                cmd.arg("-Ztime-passes")
+                    .args(args)
+                    .stderr(std::process::Stdio::from(
+                        std::fs::File::create("Ztp").unwrap(),
+                    ));
+
+                run_with_determinism_env(cmd);
             }
 
             "PerfRecord" => {
                 let mut cmd = Command::new("perf");
-                determinism_env(&mut cmd);
                 let has_perf = cmd.output().is_ok();
                 assert!(has_perf);
                 cmd.arg("record")
@@ -220,23 +222,21 @@ fn main() {
                     .arg(&tool)
                     .args(&args);
 
-                assert!(cmd.status().expect("failed to spawn").success());
+                run_with_determinism_env(cmd);
             }
 
             "Oprofile" => {
                 let mut cmd = Command::new("operf");
-                determinism_env(&mut cmd);
                 let has_oprofile = cmd.output().is_ok();
                 assert!(has_oprofile);
                 // Other possibly useful args: --callgraph, --separate-thread
                 cmd.arg("operf").arg(&tool).args(&args);
 
-                assert!(cmd.status().expect("failed to spawn").success());
+                run_with_determinism_env(cmd);
             }
 
             "Cachegrind" => {
                 let mut cmd = Command::new("valgrind");
-                determinism_env(&mut cmd);
                 let has_valgrind = cmd.output().is_ok();
                 assert!(has_valgrind);
 
@@ -256,12 +256,11 @@ fn main() {
                     .arg(&tool)
                     .args(&args);
 
-                assert!(cmd.status().expect("failed to spawn").success());
+                run_with_determinism_env(cmd);
             }
 
             "Callgrind" => {
                 let mut cmd = Command::new("valgrind");
-                determinism_env(&mut cmd);
                 let has_valgrind = cmd.output().is_ok();
                 assert!(has_valgrind);
 
@@ -274,12 +273,11 @@ fn main() {
                     .arg(&tool)
                     .args(&args);
 
-                assert!(cmd.status().expect("failed to spawn").success());
+                run_with_determinism_env(cmd);
             }
 
             "Dhat" => {
                 let mut cmd = Command::new("valgrind");
-                determinism_env(&mut cmd);
                 let has_valgrind = cmd.output().is_ok();
                 assert!(has_valgrind);
                 cmd.arg("--tool=dhat")
@@ -288,12 +286,11 @@ fn main() {
                     .arg(&tool)
                     .args(&args);
 
-                assert!(cmd.status().expect("failed to spawn").success());
+                run_with_determinism_env(cmd);
             }
 
             "DhatCopy" => {
                 let mut cmd = Command::new("valgrind");
-                determinism_env(&mut cmd);
                 let has_valgrind = cmd.output().is_ok();
                 assert!(has_valgrind);
                 cmd.arg("--tool=dhat")
@@ -303,12 +300,11 @@ fn main() {
                     .arg(&tool)
                     .args(&args);
 
-                assert!(cmd.status().expect("failed to spawn").success());
+                run_with_determinism_env(cmd);
             }
 
             "Massif" => {
                 let mut cmd = Command::new("valgrind");
-                determinism_env(&mut cmd);
                 let has_valgrind = cmd.output().is_ok();
                 assert!(has_valgrind);
                 cmd.arg("--tool=massif")
@@ -320,14 +316,16 @@ fn main() {
                     .arg(&tool)
                     .args(&args);
 
-                assert!(cmd.status().expect("failed to spawn").success());
+                run_with_determinism_env(cmd);
             }
 
             "Eprintln" => {
-                let mut cmd = bash_command(tool, args, "2> eprintln");
-                determinism_env(&mut cmd);
+                let mut cmd = Command::new(tool);
+                cmd.args(args).stderr(std::process::Stdio::from(
+                    std::fs::File::create("eprintln").unwrap(),
+                ));
 
-                assert!(cmd.status().expect("failed to spawn").success());
+                run_with_determinism_env(cmd);
             }
 
             "LlvmLines" => {
@@ -339,40 +337,41 @@ fn main() {
                 // `rustc` (which this file wraps) doesn't produce the output,
                 // this file can't redirect that output.
                 let mut cmd = Command::new(&tool);
-                determinism_env(&mut cmd);
                 cmd.args(&args);
 
-                assert!(cmd.status().expect("failed to spawn").success());
+                run_with_determinism_env(cmd);
             }
 
             "LlvmIr" => {
-                args.push("--emit=llvm-ir=./llvm-ir".into());
-                args.push("-Cno-prepopulate-passes".into());
-                args.push("-Cpasses=name-anon-globals".into());
                 let mut cmd = Command::new(tool);
-                cmd.args(args);
-                determinism_env(&mut cmd);
-                assert!(cmd.status().expect("failed to spawn").success());
+                cmd.arg("--emit=llvm-ir=./llvm-ir")
+                    .arg("-Cno-prepopulate-passes")
+                    .arg("-Cpasses=name-anon-globals")
+                    .args(args);
+
+                run_with_determinism_env(cmd);
             }
 
             "MonoItems" => {
                 // Lazy item collection is the default (i.e., without this
                 // option)
-                args.push("-Zprint-mono-items=lazy".into());
-                let mut cmd = bash_command(tool, args, "1> mono-items");
-                determinism_env(&mut cmd);
+                let mut cmd = Command::new(tool);
+                cmd.arg("-Zprint-mono-items=lazy")
+                    .args(args)
+                    .stdout(std::process::Stdio::from(
+                        std::fs::File::create("mono-items").unwrap(),
+                    ));
 
-                assert!(cmd.status().expect("failed to spawn").success());
+                run_with_determinism_env(cmd);
             }
 
             "DepGraph" => {
-                args.push("-Zdump-dep-graph".into());
-                args.push("-Zquery-dep-graph".into());
                 let mut cmd = Command::new(tool);
-                determinism_env(&mut cmd);
-                cmd.args(&args);
+                cmd.arg("-Zdump-dep-graph")
+                    .arg("-Zquery-dep-graph")
+                    .args(&args);
 
-                assert!(cmd.status().expect("failed to spawn").success());
+                run_with_determinism_env(cmd);
             }
 
             _ => {
@@ -457,24 +456,6 @@ fn process_self_profile_output(prof_out_dir: PathBuf, args: &[OsString]) {
         println!("!self-profile-prefix:{}", prefix);
         println!("!self-profile-output:{}", json);
     }
-}
-
-/// Run a command via bash, in order to redirect its output to a file.
-/// `redirect` should be something like "> out" or "2> out".
-fn bash_command(tool: OsString, args: Vec<OsString>, redirect: &str) -> Command {
-    let mut bash_cmd = String::new();
-    bash_cmd.push_str(&format!("{} ", tool.to_str().unwrap()));
-    for arg in args {
-        // Args with double quotes (e.g. `--cfg feature="foo"`)
-        // will be munged by bash if we don't protect them. So we
-        // wrap every arg in single quotes.
-        bash_cmd.push_str(&format!("'{}' ", arg.to_str().unwrap()));
-    }
-    bash_cmd.push_str(redirect);
-
-    let mut cmd = Command::new("bash");
-    cmd.args(&["-c", &bash_cmd]);
-    cmd
 }
 
 #[cfg(windows)]
