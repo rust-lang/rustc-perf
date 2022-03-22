@@ -1,0 +1,12 @@
+diff --git a/crates/core/search.rs b/crates/core/search.rs
+index 6dc51cfe..a8a569e2 100644
+--- a/crates/core/search.rs
++++ b/crates/core/search.rs
+@@ -477,6 +477,7 @@ fn search_path<M: Matcher, W: WriteColor>(
+     printer: &mut Printer<W>,
+     path: &Path,
+ ) -> io::Result<SearchResult> {
++    println!("testing");
+     match *printer {
+         Printer::Standard(ref mut p) => {
+             let mut sink = p.sink_with_path(&matcher, path);
