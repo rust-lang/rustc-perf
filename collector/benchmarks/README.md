@@ -42,9 +42,6 @@ They mostly consist of real-world crates.
   ecosystem.
 - **tokio-webpush-simple**: A simple web server built with tokio. Uses futures
   a lot.
-- **ucd**: A Unicode crate. Contains large statics that
-  [stress](https://github.com/rust-lang/rust/issues/53643) the borrow checker's
-  implementation of NLL.
 - **unicode_normalization**: Unicode character composition and decomposition
   utilities. Uses huge `match` statements that stress the compiler in unusual
   ways.
@@ -111,6 +108,9 @@ compiler in interesting ways.
   with grid coordinates](https://github.com/urschrei/ostn15_phf) that was
   causing rustc to [run out of
   memory](https://github.com/rust-lang/rust/issues/36799).
+- **ucd**: A Unicode crate. Contains large statics that
+  [stress](https://github.com/rust-lang/rust/issues/53643) the borrow checker's
+  implementation of NLL.
 - **unify-linearly**: Contains many variables that all have equality relations
   between them, which caused [exponential
   behavior](https://github.com/rust-lang/rust/pull/32062) in the past.
