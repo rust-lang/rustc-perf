@@ -324,8 +324,11 @@ fn main() {
             }
 
             "Eprintln" => {
-                let mut cmd = bash_command(tool, args, "2> eprintln");
+                let mut cmd = Command::new(tool);
                 determinism_env(&mut cmd);
+                cmd.args(args).stderr(std::process::Stdio::from(
+                    std::fs::File::create("eprintln").unwrap(),
+                ));
 
                 assert!(cmd.status().expect("failed to spawn").success());
             }
@@ -359,8 +362,11 @@ fn main() {
                 // Lazy item collection is the default (i.e., without this
                 // option)
                 args.push("-Zprint-mono-items=lazy".into());
-                let mut cmd = bash_command(tool, args, "1> mono-items");
+                let mut cmd = Command::new(tool);
                 determinism_env(&mut cmd);
+                cmd.args(args).stdout(std::process::Stdio::from(
+                    std::fs::File::create("mono-items").unwrap(),
+                ));
 
                 assert!(cmd.status().expect("failed to spawn").success());
             }
@@ -457,24 +463,6 @@ fn process_self_profile_output(prof_out_dir: PathBuf, args: &[OsString]) {
         println!("!self-profile-prefix:{}", prefix);
         println!("!self-profile-output:{}", json);
     }
-}
-
-/// Run a command via bash, in order to redirect its output to a file.
-/// `redirect` should be something like "> out" or "2> out".
-fn bash_command(tool: OsString, args: Vec<OsString>, redirect: &str) -> Command {
-    let mut bash_cmd = String::new();
-    bash_cmd.push_str(&format!("{} ", tool.to_str().unwrap()));
-    for arg in args {
-        // Args with double quotes (e.g. `--cfg feature="foo"`)
-        // will be munged by bash if we don't protect them. So we
-        // wrap every arg in single quotes.
-        bash_cmd.push_str(&format!("'{}' ", arg.to_str().unwrap()));
-    }
-    bash_cmd.push_str(redirect);
-
-    let mut cmd = Command::new("bash");
-    cmd.args(&["-c", &bash_cmd]);
-    cmd
 }
 
 #[cfg(windows)]
