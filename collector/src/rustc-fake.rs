@@ -190,20 +190,21 @@ fn main() {
             "SelfProfile" => {
                 let mut cmd = Command::new(&tool);
                 determinism_env(&mut cmd);
-                cmd.arg("-Zself-profile-events=all");
-                cmd.arg("-Zself-profile=Zsp").args(&args);
+                cmd.arg("-Zself-profile-events=all")
+                    .arg("-Zself-profile=Zsp")
+                    .args(&args);
 
                 assert!(cmd.status().expect("failed to spawn").success());
             }
 
             "TimePasses" => {
-                args.insert(0, "-Ztime-passes".into());
-
                 let mut cmd = Command::new(&tool);
                 determinism_env(&mut cmd);
-                cmd.args(args).stderr(std::process::Stdio::from(
-                    std::fs::File::create("Ztp").unwrap(),
-                ));
+                cmd.arg("-Ztime-passes")
+                    .args(args)
+                    .stderr(std::process::Stdio::from(
+                        std::fs::File::create("Ztp").unwrap(),
+                    ));
                 assert!(cmd.status().expect("failed to spawn").success());
             }
 
@@ -349,11 +350,11 @@ fn main() {
             }
 
             "LlvmIr" => {
-                args.push("--emit=llvm-ir=./llvm-ir".into());
-                args.push("-Cno-prepopulate-passes".into());
-                args.push("-Cpasses=name-anon-globals".into());
                 let mut cmd = Command::new(tool);
-                cmd.args(args);
+                cmd.arg("--emit=llvm-ir=./llvm-ir")
+                    .arg("-Cno-prepopulate-passes")
+                    .arg("-Cpasses=name-anon-globals")
+                    .args(args);
                 determinism_env(&mut cmd);
                 assert!(cmd.status().expect("failed to spawn").success());
             }
@@ -361,22 +362,23 @@ fn main() {
             "MonoItems" => {
                 // Lazy item collection is the default (i.e., without this
                 // option)
-                args.push("-Zprint-mono-items=lazy".into());
                 let mut cmd = Command::new(tool);
                 determinism_env(&mut cmd);
-                cmd.args(args).stdout(std::process::Stdio::from(
-                    std::fs::File::create("mono-items").unwrap(),
-                ));
+                cmd.arg("-Zprint-mono-items=lazy")
+                    .args(args)
+                    .stdout(std::process::Stdio::from(
+                        std::fs::File::create("mono-items").unwrap(),
+                    ));
 
                 assert!(cmd.status().expect("failed to spawn").success());
             }
 
             "DepGraph" => {
-                args.push("-Zdump-dep-graph".into());
-                args.push("-Zquery-dep-graph".into());
                 let mut cmd = Command::new(tool);
                 determinism_env(&mut cmd);
-                cmd.args(&args);
+                cmd.arg("-Zdump-dep-graph")
+                    .arg("-Zquery-dep-graph")
+                    .args(&args);
 
                 assert!(cmd.status().expect("failed to spawn").success());
             }
