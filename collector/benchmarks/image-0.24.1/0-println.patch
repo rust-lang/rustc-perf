@@ -1,0 +1,12 @@
+diff --git a/src/dynimage.rs b/src/dynimage.rs
+index d4f19ef..6743426 100644
+--- a/src/dynimage.rs
++++ b/src/dynimage.rs
+@@ -647,6 +647,7 @@ pub fn load_from_memory(buffer: &[u8]) -> ImageResult<DynamicImage> {
+ /// [`io::Reader`]: io/struct.Reader.html
+ #[inline(always)]
+ pub fn load_from_memory_with_format(buf: &[u8], format: ImageFormat) -> ImageResult<DynamicImage> {
++    println!("testing");
+     let b = io::Cursor::new(buf);
+     free_functions::load(b, format)
+ }
