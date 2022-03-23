@@ -1,0 +1,12 @@
+diff --git a/src/loop_analysis.rs b/src/loop_analysis.rs
+index 0e8715ae..4e44b2bd 100644
+--- a/src/loop_analysis.rs
++++ b/src/loop_analysis.rs
+@@ -163,6 +163,7 @@ impl LoopAnalysis {
+         domtree: &DominatorTree,
+         layout: &Layout,
+     ) {
++        println!("testing");
+         let mut stack: Vec<Block> = Vec::new();
+         // We handle each loop header in reverse order, corresponding to a pseudo postorder
+         // traversal of the graph.
