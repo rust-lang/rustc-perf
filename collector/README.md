@@ -189,14 +189,14 @@ Finally, while most of the options you can pass to the collector are supported, 
 the profilers used in the `profile_local` command are not. In Windows, the only currently supported
 profiler is the `self-profiler`.
 
-As a complete example, let's run just the `regex` benchmark in the `Debug`
+As a complete example, let's run just the `regex-1.5.5` benchmark in the `Debug`
 profile with self-profiling results available:
 
 ```pwsh
 $env:XPERF="C:\Program Files (x86)\Windows Kits\10\Windows Performance Toolkit\xperf.exe"
 $env:TRACELOG="C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x64\tracelog.exe"
-.\target\release\collector.exe bench_local $env:RUST_ORIGINAL --id Original --profiles Debug --include regex --self-profile
-.\target\release\collector.exe bench_local $env:RUST_MODIFIED --id Modified --profiles Debug --include regex --self-profile
+.\target\release\collector.exe bench_local $env:RUST_ORIGINAL --id Original --profiles Debug --include regex-1.5.5 --self-profile
+.\target\release\collector.exe bench_local $env:RUST_MODIFIED --id Modified --profiles Debug --include regex-1.5.5 --self-profile
 .\target\release\site.exe .\results.db
 ```
 

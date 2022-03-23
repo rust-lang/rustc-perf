@@ -37,7 +37,7 @@ They mostly consist of real-world crates.
 - **hyper-2**: A fairly large crate. Utilizes async/await, and used by
   many Rust programs.
 - **piston-image**: A modular game engine. An interesting Rust program.
-- **regex**: A regular expression parser. Used by many Rust programs.
+- **regex-1.5.5**: A regular expression parser. Used by many Rust programs.
 - **ripgrep**: A line-oriented search tool. A widely-used utility.
 - **ripgrep-13.0.0**: A line-oriented search tool. A widely-used utility.
 - **serde**: A serialization/deserialization crate. Used by many other
@@ -140,7 +140,7 @@ Rust code being written today.
 - **inflate**: An old implementation of the DEFLATE algorithm. Contains
   a very large function containing many locals and basic blocks, similar to
   `keccak` but less extreme.
-- **regex**: See above.
+- **regex**: See above. This is an older version of the crate.
 - **piston-image**: See above.
 - **style-servo**: An old version of Servo's `style` crate. A large crate, and
   one used by old versions of Firefox.
