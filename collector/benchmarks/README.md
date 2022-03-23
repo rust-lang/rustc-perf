@@ -19,35 +19,32 @@ They mostly consist of real-world crates.
   one in the Rust ecosystem.
 - **clap-3.1.6**: A command line argument parser. A crate used by many Rust
   programs.
+- **image-0.24.1**: Basic image processing functions and methods for 
+  converting to and from various image formats. Used often in graphics 
+  programming.
 - **clap-rs**: A command line argument parser. A crate used by many Rust
   programs.
 - **cranelift-codegen**: The largest crate from a code generator. Used by
   Firefox.
+- **cranelift-codegen-0.82.1**: The largest crate from a code generator. Used by
+  wasmtime.
 - **diesel**: A type safe SQL query builder. Utilizes the type system to
   ensure a lot of invariants. Stresses anything related to resolving
   trait bounds, by having a lot of trait impls for a large number of different
   types.
-- **encoding**: Character encoding support. Contains some large tables.
-- **futures**: A futures implementation. Used by many Rust programs.
 - **helloworld**: A trivial program. Gives a lower bound on compile time.
 - **html5ever**: An HTML parser. Stresses macro parsing code significantly.
 - **hyper-2**: A fairly large crate. Utilizes async/await, and used by
   many Rust programs.
-- **inflate**: An old implementation of the DEFLATE algorithm. Stresses the
-  compiler in certain ways.
 - **piston-image**: A modular game engine. An interesting Rust program.
 - **regex**: A regular expression parser. Used by many Rust programs.
 - **ripgrep**: A line-oriented search tool. A widely-used utility.
+- **ripgrep-13.0.0**: A line-oriented search tool. A widely-used utility.
 - **serde**: A serialization/deserialization crate. Used by many other
   Rust programs.
 - **stm32f4**: A crate that has many thousands of blanket impl blocks.
 - **syn**: A library for parsing Rust code. An important part of the Rust
   ecosystem.
-- **tokio-webpush-simple**: A simple web server built with tokio. Uses futures
-  a lot.
-- **ucd**: A Unicode crate. Contains large statics that
-  [stress](https://github.com/rust-lang/rust/issues/53643) the borrow checker's
-  implementation of NLL.
 - **unicode_normalization**: Unicode character composition and decomposition
   utilities. Uses huge `match` statements that stress the compiler in unusual
   ways.
@@ -85,8 +82,8 @@ compiler in interesting ways.
 - **issue-88862**: A MCVE of a program that had a
   [severe performance regression](https://github.com/rust-lang/rust/issues/88862)
   when trying to normalize large opaque types with late-bound regions.
-- **keccak**: A cryptography algorithm. Contains a very high number of locals
-  and basic blocks.
+- **keccak**: A cryptography algorithm. Contains a huge function with a very
+  high number of locals and basic blocks.
 - **many-assoc-items**: Contains a struct with many associated items, which
   caused [quadratic behavior](https://github.com/rust-lang/rust/issues/68957)
   in the past.
@@ -95,11 +92,6 @@ compiler in interesting ways.
   one involving
   [`exhaustive_patterns`](https://github.com/rust-lang/rust/pull/79394)) of
   `match` code that caused bad performance in the past.
-- **match-stress-enum**: Contains a match against a huge enum, which used to
-  have [quadratic runtime](https://github.com/rust-lang/rust/issues/7462).
-- **match-stress-exhaustive_patterns**: Contains code extracted from the `syn`
-  crate to amplify the perf degradation caused by the `exhaustive_patterns`, as
-  measured [here](https://github.com/rust-lang/rust/pull/79394).
 - **projection-caching**: A small program that causes extremely, deeply nested
   types which stress the trait system's projection cache. Removing that cache
   resulted in hours long compilations for some programs using futures,
@@ -114,6 +106,9 @@ compiler in interesting ways.
   with grid coordinates](https://github.com/urschrei/ostn15_phf) that was
   causing rustc to [run out of
   memory](https://github.com/rust-lang/rust/issues/36799).
+- **ucd**: A Unicode crate. Contains large statics that
+  [stress](https://github.com/rust-lang/rust/issues/53643) the borrow checker's
+  implementation of NLL.
 - **unify-linearly**: Contains many variables that all have equality relations
   between them, which caused [exponential
   behavior](https://github.com/rust-lang/rust/pull/32062) in the past.
@@ -134,13 +129,21 @@ longest continuous data set for compiler performance. As a result, they are
 quite old (e.g. 2017 or earlier), and not necessarily reflective of typical
 Rust code being written today.
 
-- **encoding**: See above.
-- **futures**: See above.
+- **encoding**: An old crate providing character encoding support. Contains
+  some large tables.
+- **futures**: v0.1.0 of the popular `futures` crate, which was used by many
+  Rust programs. Newer versions of this crate (e.g. v0.3.21 from February 2021)
+  contain very little code, instead relying on sub-crates. This makes them less
+  interesting as benchmarks, because we only measure final crate compilation.
+  This is why there is no futures crate among the primary benchmarks.
 - **html5ever**: See above.
-- **inflate**: See above.
+- **inflate**: An old implementation of the DEFLATE algorithm. Contains
+  a very large function containing many locals and basic blocks, similar to
+  `keccak` but less extreme.
 - **regex**: See above.
 - **piston-image**: See above.
 - **style-servo**: An old version of Servo's `style` crate. A large crate, and
   one used by old versions of Firefox.
 - **syn**: See above.
-- **tokio-webpush-simple**: See above.
+- **tokio-webpush-simple**: A simple web server built with a very old version
+  of tokio. Uses futures a lot, but doesn't use `async`/`await`.
