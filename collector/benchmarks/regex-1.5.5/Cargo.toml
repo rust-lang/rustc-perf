@@ -147,3 +147,5 @@ unicode-script = ["regex-syntax/unicode-script"]
 unicode-segment = ["regex-syntax/unicode-segment"]
 unstable = ["pattern"]
 use_std = ["std"]
+
+[workspace]

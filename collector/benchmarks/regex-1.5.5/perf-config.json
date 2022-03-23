@@ -1,3 +1,4 @@
 {
-  "category": "primary"
+    "touch_file": "src/lib.rs",
+    "category": "primary"
 }

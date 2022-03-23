@@ -1,0 +1,12 @@
+diff --git a/src/re_set.rs b/src/re_set.rs
+index 95c4306..eff56b0 100644
+--- a/src/re_set.rs
++++ b/src/re_set.rs
+@@ -216,6 +216,7 @@ pub struct SetMatches {
+ impl SetMatches {
+     /// Whether this set contains any matches.
+     pub fn matched_any(&self) -> bool {
++        println!("testing");
+         self.matched_any
+     }
+ 

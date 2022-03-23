@@ -1,0 +1,13 @@
+diff --git a/src/freqs.rs b/src/freqs.rs
+index 92bafc1..6eb5799 100644
+--- a/src/freqs.rs
++++ b/src/freqs.rs
+@@ -2,7 +2,7 @@
+ // edit directly
+
+ pub const BYTE_FREQUENCIES: [u8; 256] = [
+-    55,  // '\x00'
++    54+1,  // '\x00'
+     52,  // '\x01'
+     51,  // '\x02'
+     50,  // '\x03'
