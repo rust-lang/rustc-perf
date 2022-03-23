@@ -34,6 +34,7 @@ They mostly consist of real-world crates.
 - **piston-image**: A modular game engine. An interesting Rust program.
 - **regex**: A regular expression parser. Used by many Rust programs.
 - **ripgrep**: A line-oriented search tool. A widely-used utility.
+- **ripgrep-13.0.0**: A line-oriented search tool. A widely-used utility.
 - **serde**: A serialization/deserialization crate. Used by many other
   Rust programs.
 - **stm32f4**: A crate that has many thousands of blanket impl blocks.
