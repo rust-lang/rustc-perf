@@ -42,3 +42,5 @@ derive = ["serde_derive"]
 rc = []
 std = []
 unstable = []
+
+[workspace]
