@@ -17,6 +17,8 @@ They mostly consist of real-world crates.
 
 - **cargo-0.60.0**: The Rust package manager. A large program, and an important
   one in the Rust ecosystem.
+- **clap-3.1.6**: A command line argument parser. A crate used by many Rust
+  programs.
 - **image-0.24.1**: Basic image processing functions and methods for 
   converting to and from various image formats. Used often in graphics 
   programming.
