@@ -135,3 +135,5 @@ proc-macro = [
 test = ["syn-test-suite/all-features"]
 visit = []
 visit-mut = []
+
+[workspace]
