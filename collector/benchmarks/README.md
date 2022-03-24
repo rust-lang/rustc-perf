@@ -19,11 +19,6 @@ They mostly consist of real-world crates.
   one in the Rust ecosystem.
 - **clap-3.1.6**: A command line argument parser. A crate used by many Rust
   programs.
-- **image-0.24.1**: Basic image processing functions and methods for 
-  converting to and from various image formats. Used often in graphics 
-  programming.
-- **clap-rs**: A command line argument parser. A crate used by many Rust
-  programs.
 - **cranelift-codegen**: The largest crate from a code generator. Used by
   Firefox.
 - **cranelift-codegen-0.82.1**: The largest crate from a code generator. Used by
@@ -36,6 +31,9 @@ They mostly consist of real-world crates.
 - **html5ever**: An HTML parser. Stresses macro parsing code significantly.
 - **hyper-2**: A fairly large crate. Utilizes async/await, and used by
   many Rust programs.
+- **image-0.24.1**: Basic image processing functions and methods for 
+  converting to and from various image formats. Used often in graphics 
+  programming.
 - **piston-image**: A modular game engine. An interesting Rust program.
 - **regex-1.5.5**: A regular expression parser. Used by many Rust programs.
 - **ripgrep**: A line-oriented search tool. A widely-used utility.
