@@ -45,6 +45,9 @@ They mostly consist of real-world crates.
 - **unicode_normalization**: Unicode character composition and decomposition
   utilities. Uses huge `match` statements that stress the compiler in unusual
   ways.
+- **unicode-normalization-0.1.19**: Unicode character composition and decomposition
+  utilities. Uses huge `match` statements that stress the compiler in unusual
+  ways.
 - **webrender**: A web renderer. Used by Firefox and Servo.
 - **webrender-wrench**: WebRender's test bench. An executable pulling in large
   dependencies.

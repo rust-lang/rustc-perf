@@ -1,0 +1,12 @@
+diff --git a/src/lookups.rs b/src/lookups.rs
+index 0111d204..b3a8271f 100644
+--- a/src/lookups.rs
++++ b/src/lookups.rs
+@@ -43,6 +43,7 @@ pub(crate) fn composition_table(c1: char, c2: char) -> Option<char> {
+ }
+ 
+ pub(crate) fn canonical_fully_decomposed(c: char) -> Option<&'static [char]> {
++    println!("testing");
+     mph_lookup(
+         c.into(),
+         CANONICAL_DECOMPOSED_SALT,
