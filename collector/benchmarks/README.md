@@ -49,8 +49,6 @@ They mostly consist of real-world crates.
   utilities. Uses huge `match` statements that stress the compiler in unusual
   ways.
 - **webrender**: A web renderer. Used by Firefox and Servo.
-- **webrender-wrench**: WebRender's test bench. An executable pulling in large
-  dependencies.
 
 ## Secondary
 
