@@ -1,0 +1,12 @@
+diff --git a/webrender/src/scene.rs b/webrender/src/scene.rs
+index 864ed683..08ec78dc 100644
+--- a/webrender/src/scene.rs
++++ b/webrender/src/scene.rs
+@@ -34,6 +34,7 @@ pub struct SceneProperties {
+ 
+ impl SceneProperties {
+     pub fn new() -> Self {
++        println!("testing");
+         SceneProperties {
+             transform_properties: FastHashMap::default(),
+             float_properties: FastHashMap::default(),
