@@ -1,3 +1,4 @@
 {
+  "cargo_opts": "--features=stm32f405",
   "category": "primary"
 }

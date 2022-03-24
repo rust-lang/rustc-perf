@@ -51,3 +51,5 @@ stm32f427 = []
 stm32f429 = []
 stm32f446 = []
 stm32f469 = []
+
+[workspace]
