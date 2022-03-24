@@ -136,3 +136,5 @@ with-deprecated = []
 x128-column-tables = ["128-column-tables"]
 x32-column-tables = ["32-column-tables"]
 x64-column-tables = ["64-column-tables"]
+
+[workspace]
