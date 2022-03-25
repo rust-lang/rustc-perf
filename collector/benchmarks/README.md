@@ -40,6 +40,7 @@ They mostly consist of real-world crates.
 - **serde**: A serialization/deserialization crate. Used by many other
   Rust programs.
 - **stm32f4**: A crate that has many thousands of blanket impl blocks.
+- **stm32f4-0.14.0**: A crate that has many thousands of blanket impl blocks.
 - **syn**: A library for parsing Rust code. An important part of the Rust
   ecosystem.
 - **unicode_normalization**: Unicode character composition and decomposition
