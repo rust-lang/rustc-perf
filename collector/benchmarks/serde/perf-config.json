@@ -1,5 +1,0 @@
-{
-    "cargo_toml": "serde/Cargo.toml",
-    "touch_file": "serde/src/lib.rs",
-    "category": "primary"
-}
