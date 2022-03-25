@@ -44,7 +44,7 @@ They mostly consist of real-world crates.
   Rust programs.
 - **stm32f4**: A crate that has many thousands of blanket impl blocks.
 - **stm32f4-0.14.0**: A crate that has many thousands of blanket impl blocks.
-- **syn**: A library for parsing Rust code. An important part of the Rust
+- **syn-1.0.89**: A library for parsing Rust code. An important part of the Rust
   ecosystem.
 - **unicode_normalization**: Unicode character composition and decomposition
   utilities. Uses huge `match` statements that stress the compiler in unusual
@@ -146,6 +146,6 @@ Rust code being written today.
 - **piston-image**: See above. This is an older version of the `image` crate.
 - **style-servo**: An old version of Servo's `style` crate. A large crate, and
   one used by old versions of Firefox.
-- **syn**: See above.
+- **syn**: See above. This is an older version (0.11.11) of the crate.
 - **tokio-webpush-simple**: A simple web server built with a very old version
   of tokio. Uses futures a lot, but doesn't use `async`/`await`.

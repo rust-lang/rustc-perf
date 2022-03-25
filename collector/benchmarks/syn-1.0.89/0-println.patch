@@ -1,0 +1,12 @@
+diff --git a/src/lifetime.rs b/src/lifetime.rs
+index 5dc1753a..61f28dde 100644
+--- a/src/lifetime.rs
++++ b/src/lifetime.rs
+@@ -37,6 +37,7 @@ impl Lifetime {
+     /// # }
+     /// ```
+     pub fn new(symbol: &str, span: Span) -> Self {
++        println!("testing");
+         if !symbol.starts_with('\'') {
+             panic!(
+                 "lifetime name must start with apostrophe as in \"'a\", got {:?}",
