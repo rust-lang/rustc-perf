@@ -323,7 +323,7 @@
                     let cacheStateNames = Object.keys(cacheStates);
                     cacheStateNames.sort();
 
-                    let yAxis = "Value";
+                    let yAxis = state.stat;
                     let yAxisUnit = null;
                     if (state.stat == "instructions:u") {
                         yAxis = "CPU instructions";
@@ -332,7 +332,10 @@
                         yAxis = "CPU cycles";
                         yAxisUnit = "count";
                     } else if (state.stat == "cpu-clock") {
-                        yAxis = "CPU time";
+                        yAxis = "CPU clock";
+                        yAxisUnit = "seconds";
+                    } else if (state.stat == "task-clock") {
+                        yAxis = "Task clock";
                         yAxisUnit = "seconds";
                     } else if (state.stat == "wall-time") {
                         yAxis = "Wall time";
