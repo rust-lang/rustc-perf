@@ -1,4 +1,0 @@
-CREATE TABLE nullable_table (
-    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-    value INTEGER
-);
