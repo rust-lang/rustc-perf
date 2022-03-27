@@ -46,9 +46,6 @@ They mostly consist of real-world crates.
 - **stm32f4-0.14.0**: A crate that has many thousands of blanket impl blocks.
 - **syn-1.0.89**: A library for parsing Rust code. An important part of the Rust
   ecosystem.
-- **unicode_normalization**: Unicode character composition and decomposition
-  utilities. Uses huge `match` statements that stress the compiler in unusual
-  ways.
 - **unicode-normalization-0.1.19**: Unicode character composition and decomposition
   utilities. Uses huge `match` statements that stress the compiler in unusual
   ways.
