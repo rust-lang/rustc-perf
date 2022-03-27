@@ -23,10 +23,6 @@ They mostly consist of real-world crates.
   Firefox.
 - **cranelift-codegen-0.82.1**: The largest crate from a code generator. Used by
   wasmtime.
-- **diesel**: A type safe SQL query builder. Utilizes the type system to
-  ensure a lot of invariants. Stresses anything related to resolving
-  trait bounds, by having a lot of trait impls for a large number of different
-  types.
 - **diesel-1.4.8**: A type safe SQL query builder. Utilizes the type system to
   ensure a lot of invariants. Stresses anything related to resolving
   trait bounds, by having a lot of trait impls for a large number of different
