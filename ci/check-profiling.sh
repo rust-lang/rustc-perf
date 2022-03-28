@@ -1,7 +1,4 @@
 #!/bin/bash
-#
-# This script only tests some of the profilers at the moment. More coverage
-# would be nice.
 
 set -eE -x;
 
@@ -18,6 +15,12 @@ cargo build -p collector --bin rustc-fake
 #----------------------------------------------------------------------------
 # Test the profilers
 #----------------------------------------------------------------------------
+
+# These are basic smoke tests that run the profiler and check that the output
+# looks plausible, mostly done by grepping for a single line of output that has
+# a specific form.
+
+# TODO: self-profile.
 
 # time-passes.
 RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
@@ -145,6 +148,41 @@ grep -q "Lines.*Copies.*Function name" results/ll-Test-helloworld-Debug-Full
 test -f results/ll-Test-regex-1.5.5-Debug-Full
 grep -q "Lines.*Copies.*Function name" results/ll-Test-regex-1.5.5-Debug-Full
 
+# llvm-ir. `Debug` not `Check` because it works better that way.
+RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
+    cargo run -p collector --bin collector -- \
+    profile_local llvm-ir $bindir/rustc \
+        --id Test \
+        --profiles Debug \
+        --cargo $bindir/cargo \
+        --include helloworld \
+        --scenarios Full
+test -f results/llir-Test-helloworld-Debug-Full
+grep -q "; ModuleID" results/llir-Test-helloworld-Debug-Full
+
+# mono-items. `Debug` not `Check` because it works better that way.
+RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
+    cargo run -p collector --bin collector -- \
+    profile_local mono-items $bindir/rustc \
+        --id Test \
+        --profiles Debug \
+        --cargo $bindir/cargo \
+        --include helloworld \
+        --scenarios Full
+test -f results/mono-items-Test-helloworld-Debug-Full/raw
+grep -q "MONO_ITEM" results/mono-items-Test-helloworld-Debug-Full/raw
+
+# dep-graph. `IncrFull` not `Full` because it doesn't work with `Full`.
+RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
+    cargo run -p collector --bin collector -- \
+    profile_local dep-graph $bindir/rustc \
+        --id Test \
+        --profiles Check \
+        --cargo $bindir/cargo \
+        --include helloworld \
+        --scenarios IncrFull
+test -f results/dep-graph-Test-helloworld-Check-IncrFull.txt
+grep -q "hir_owner" results/dep-graph-Test-helloworld-Check-IncrFull.txt
 
 #----------------------------------------------------------------------------
 # Test option handling
