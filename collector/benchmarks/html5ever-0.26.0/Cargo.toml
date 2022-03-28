@@ -45,3 +45,5 @@ version = "1"
 features = ["extra-traits", "full", "fold"]
 [target."cfg(bench)".dev-dependencies.criterion]
 version = "0.3"
+
+[workspace]

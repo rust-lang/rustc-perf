@@ -1,0 +1,13 @@
+diff --git a/src/util/str.rs b/src/util/str.rs
+index 756a88d2..2801f859 100644
+--- a/src/util/str.rs
++++ b/src/util/str.rs
+@@ -10,6 +10,8 @@
+ use std::fmt;
+ 
+ pub fn to_escaped_string<T: fmt::Debug>(x: &T) -> String {
++    println!("testing");
++
+     // FIXME: don't allocate twice
+     let string = format!("{:?}", x);
+     string.chars().flat_map(|c| c.escape_default()).collect()
