@@ -1,0 +1,12 @@
+diff --git a/src/body/body.rs b/src/body/body.rs
+index 9dc1a034..6f2cb1cf 100644
+--- a/src/body/body.rs
++++ b/src/body/body.rs
+@@ -140,6 +140,7 @@ impl Body {
+     }
+ 
+     pub(crate) fn new_channel(content_length: DecodedLength, wanter: bool) -> (Sender, Body) {
++        println!("testing");
+         let (data_tx, data_rx) = mpsc::channel(0);
+         let (trailers_tx, trailers_rx) = oneshot::channel();
+ 
