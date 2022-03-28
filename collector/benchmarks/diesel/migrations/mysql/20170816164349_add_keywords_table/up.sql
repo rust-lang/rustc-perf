@@ -1,5 +1,0 @@
-CREATE TABLE with_keywords (
-    fn INTEGER NOT NULL PRIMARY KEY,
-    let INTEGER NOT NULL,
-    extern INTEGER NOT NULL
-);
