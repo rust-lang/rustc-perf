@@ -36,7 +36,6 @@ They mostly consist of real-world crates.
 - **ripgrep-13.0.0**: A line-oriented search tool. A widely-used utility.
 - **serde-1.0.136**: A serialization/deserialization crate. Used by many other
   Rust programs.
-- **stm32f4**: A crate that has many thousands of blanket impl blocks.
 - **stm32f4-0.14.0**: A crate that has many thousands of blanket impl blocks.
 - **syn-1.0.89**: A library for parsing Rust code. An important part of the Rust
   ecosystem.
