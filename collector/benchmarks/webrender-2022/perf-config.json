@@ -1,3 +1,6 @@
 {
-  "category": "primary"
+    "cargo_toml": "webrender/Cargo.toml",
+    "runs": 1,
+    "touch_file": "webrender/src/lib.rs",
+    "category": "primary"
 }
