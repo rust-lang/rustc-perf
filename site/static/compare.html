@@ -219,8 +219,7 @@
         }
 
         .benches th {
-            text-align: left;
-            word-break: break-word;
+            text-align: center;
             width: 25%;
             min-width: 50px;
         }
@@ -554,14 +553,18 @@
                 :cases="testCases.filter(c => c.category === 'primary')"
                 :show-raw-data="showRawData"
                 :commit-a="data.a.commit"
-                :commit-b="data.b.commit"></test-cases-table>
+                :commit-b="data.b.commit"
+                :before="before"
+                :after="after"></test-cases-table>
             <hr />
             <test-cases-table
                 title="Secondary"
                 :cases="testCases.filter(c => c.category === 'secondary')"
                 :show-raw-data="showRawData"
                 :commit-a="data.a.commit"
-                :commit-b="data.b.commit"></test-cases-table>
+                :commit-b="data.b.commit"
+                :before="before"
+                :after="after"></test-cases-table>
             <br />
             <hr />
             <div>
@@ -631,7 +634,7 @@
             }
         });
         Vue.component('test-cases-table', {
-            props: ['cases', 'showRawData', 'commitA', 'commitB', 'title'],
+            props: ['cases', 'showRawData', 'commitA', 'commitB', 'before', 'after', 'title'],
             methods: {
                 detailedQueryLink(commit, testCase) {
                     return `/detailed-query.html?commit=${commit}&benchmark=${testCase.benchmark + "-" + testCase.profile}&scenario=${testCase.scenario}`;
@@ -664,8 +667,8 @@
                     </span>
                 </span>
             </th>
-            <th v-if="showRawData">{{before}}</th>
-            <th v-if="showRawData">{{after}}</th>
+            <th v-if="showRawData">{{ before }}</th>
+            <th v-if="showRawData">{{ after }}</th>
         </tr>
     </thead>
     <tbody>
