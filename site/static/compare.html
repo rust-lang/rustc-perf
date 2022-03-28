@@ -285,7 +285,7 @@
             text-align: center;
         }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
 </head>
 
 <body>
@@ -616,114 +616,32 @@
             }
         }
 
-        Vue.mixin({
-            methods: {
-                percentClass(pct) {
-                    let klass = "";
-                    if (pct > 1) {
-                        klass = 'positive';
-                    } else if (pct > 0) {
-                        klass = 'slightly-positive';
-                    } else if (pct < -1) {
-                        klass = 'negative';
-                    } else if (pct < -0) {
-                        klass = 'slightly-negative';
-                    }
-                    return klass;
-                },
-            }
-        });
-        Vue.component('test-cases-table', {
-            props: ['cases', 'showRawData', 'commitA', 'commitB', 'before', 'after', 'title'],
-            methods: {
-                detailedQueryLink(commit, testCase) {
-                    return `/detailed-query.html?commit=${commit}&benchmark=${testCase.benchmark + "-" + testCase.profile}&scenario=${testCase.scenario}`;
-                },
-                percentLink(commit, baseCommit, testCase) {
-                    return `/detailed-query.html?commit=${commit}&base_commit=${baseCommit}&benchmark=${testCase.benchmark + "-" + testCase.profile}&scenario=${testCase.scenario}`;
-                },
+        const app = Vue.createApp({
+             mounted() {
+                const app = this;
+                loadState(state => makeData(state, app));
             },
-            template: `
-<div class="bench-table">
-<div class="category-title">{{ title }} benchmarks</div>
-<div v-if="cases.length === 0" style="text-align: center;">
-  No results
-</div>
-<table v-else class="benches compare">
-    <thead>
-        <tr>
-            <th>Benchmark & Profile</th>
-            <th>Scenario</th>
-            <th>% Change</th>
-            <th>
-                Significance Factor
-                <span class="tooltip">?
-                    <span class="tooltiptext">
-                        How much a particular result is over the significance threshold. A factor of 2.50x
-                        means
-                        the result is 2.5 times over the significance threshold. You can see <a
-                            href="https://github.com/rust-lang/rustc-perf/blob/master/docs/comparison-analysis.md#what-makes-a-test-result-significant">
-                            here</a> how the significance threshold is calculated.
-                    </span>
-                </span>
-            </th>
-            <th v-if="showRawData">{{ before }}</th>
-            <th v-if="showRawData">{{ after }}</th>
-        </tr>
-    </thead>
-    <tbody>
-        <template v-for="testCase in cases">
-            <tr>
-                <td>{{ testCase.benchmark }} {{ testCase.profile }}</td>
-                <td>{{ testCase.scenario }}</td>
-                <td>
-                    <a v-bind:href="percentLink(commitB, commitA, testCase)">
-                        <span v-bind:class="percentClass(testCase.percent)">
-                            {{ testCase.percent.toFixed(2) }}%{{testCase.isDodgy ? "?" : ""}}
-                        </span>
-                    </a>
-                </td>
-                <td>
-                    {{ testCase.significanceFactor ? testCase.significanceFactor.toFixed(2) + "x" : "-" }}
-                </td>
-                <td v-if="showRawData">
-                  <a v-bind:href="detailedQueryLink(commitA, testCase)">
-                    <abbr :title="testCase.datumA">{{ testCase.datumA.toFixed(2) }}</abbr>
-                  </a>
-                </td>
-                <td v-if="showRawData">
-                  <a v-bind:href="detailedQueryLink(commitB, testCase)">
-                    <abbr :title="testCase.datumB">{{ testCase.datumB.toFixed(2) }}</abbr>
-                  </a>
-                </td>
-            </tr>
-        </template>
-    </tbody>
-</table>
-</div>
-`});
-
-        let app = new Vue({
-            el: '#app',
-            data: {
-                filter: {
-                    name: null,
-                    showOnlySignificant: true,
-                    filterVerySmall: true,
-                    scenario: {
-                        full: true,
-                        incrFull: true,
-                        incrUnchanged: true,
-                        incrPatched: true
+            data() {
+                return {
+                    filter: {
+                        name: null,
+                        showOnlySignificant: true,
+                        filterVerySmall: true,
+                        scenario: {
+                            full: true,
+                            incrFull: true,
+                            incrUnchanged: true,
+                            incrPatched: true
+                        },
+                        category: {
+                            primary: true,
+                            secondary: true
+                        }
                     },
-                    category: {
-                        primary: true,
-                        secondary: true
-                    }
-                },
-                showRawData: false,
-                data: null,
-                dataLoading: false
+                    showRawData: false,
+                    data: null,
+                    dataLoading: false
+                }
             },
             computed: {
                 notContinuous() {
@@ -982,6 +900,94 @@
             },
         });
 
+        app.component('test-cases-table', {
+            props: ['cases', 'showRawData', 'commitA', 'commitB', 'before', 'after', 'title'],
+            methods: {
+                detailedQueryLink(commit, testCase) {
+                    return `/detailed-query.html?commit=${commit}&benchmark=${testCase.benchmark + "-" + testCase.profile}&scenario=${testCase.scenario}`;
+                },
+                percentLink(commit, baseCommit, testCase) {
+                    return `/detailed-query.html?commit=${commit}&base_commit=${baseCommit}&benchmark=${testCase.benchmark + "-" + testCase.profile}&scenario=${testCase.scenario}`;
+                },
+            },
+            template: `
+<div class="bench-table">
+<div class="category-title">{{ title }} benchmarks</div>
+<div v-if="cases.length === 0" style="text-align: center;">
+  No results
+</div>
+<table v-else class="benches compare">
+    <thead>
+        <tr>
+            <th>Benchmark & Profile</th>
+            <th>Scenario</th>
+            <th>% Change</th>
+            <th>
+                Significance Factor
+                <span class="tooltip">?
+                    <span class="tooltiptext">
+                        How much a particular result is over the significance threshold. A factor of 2.50x
+                        means
+                        the result is 2.5 times over the significance threshold. You can see <a
+                            href="https://github.com/rust-lang/rustc-perf/blob/master/docs/comparison-analysis.md#what-makes-a-test-result-significant">
+                            here</a> how the significance threshold is calculated.
+                    </span>
+                </span>
+            </th>
+            <th v-if="showRawData">{{ before }}</th>
+            <th v-if="showRawData">{{ after }}</th>
+        </tr>
+    </thead>
+    <tbody>
+        <template v-for="testCase in cases">
+            <tr>
+                <td>{{ testCase.benchmark }} {{ testCase.profile }}</td>
+                <td>{{ testCase.scenario }}</td>
+                <td>
+                    <a v-bind:href="percentLink(commitB, commitA, testCase)">
+                        <span v-bind:class="percentClass(testCase.percent)">
+                            {{ testCase.percent.toFixed(2) }}%{{testCase.isDodgy ? "?" : ""}}
+                        </span>
+                    </a>
+                </td>
+                <td>
+                    {{ testCase.significanceFactor ? testCase.significanceFactor.toFixed(2) + "x" : "-" }}
+                </td>
+                <td v-if="showRawData">
+                  <a v-bind:href="detailedQueryLink(commitA, testCase)">
+                    <abbr :title="testCase.datumA">{{ testCase.datumA.toFixed(2) }}</abbr>
+                  </a>
+                </td>
+                <td v-if="showRawData">
+                  <a v-bind:href="detailedQueryLink(commitB, testCase)">
+                    <abbr :title="testCase.datumB">{{ testCase.datumB.toFixed(2) }}</abbr>
+                  </a>
+                </td>
+            </tr>
+        </template>
+    </tbody>
+</table>
+</div>
+`});
+        app.mixin({
+            methods: {
+                percentClass(pct) {
+                    let klass = "";
+                    if (pct > 1) {
+                        klass = 'positive';
+                    } else if (pct > 0) {
+                        klass = 'slightly-positive';
+                    } else if (pct < -1) {
+                        klass = 'negative';
+                    } else if (pct < -0) {
+                        klass = 'slightly-negative';
+                    }
+                    return klass;
+                },
+            }
+        });
+
+
         function toggleFilters(id, toggle) {
             let styles = document.getElementById(id).style;
             let indicator = document.getElementById(toggle);
@@ -1015,7 +1021,7 @@
             return commit.substring(0, 8);
         }
 
-        function makeData(state) {
+        function makeData(state, app) {
             app.dataLoading = true;
             let values = Object.assign({}, {
                 start: "",
@@ -1040,7 +1046,7 @@
             window.location.search = params.toString();
         }
 
-        loadState(makeData);
+        app.mount('#app');
     </script>
 </body>
 
