@@ -1,9 +1,0 @@
-# At 6e206ce05379aa92ea39fbae55b66c5bbf010ea8
-[workspace]
-members = [
-    "serde",
-    "serde_derive",
-    "serde_derive_internals",
-    "serde_test",
-    "test_suite",
-]
