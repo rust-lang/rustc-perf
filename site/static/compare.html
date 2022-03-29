@@ -624,6 +624,13 @@
              mounted() {
                 const app = this;
                 loadState(state => makeData(state, app));
+
+                document.getElementById("filters-toggle").onclick = (e) => {
+                    toggleFilters("filters-content", "filters-toggle-indicator");
+                };
+                document.getElementById("search-toggle").onclick = (e) => {
+                    toggleFilters("search-content", "search-toggle-indicator");
+                };
             },
             data() {
                 return {
@@ -1043,13 +1050,6 @@
         }
 
         app.mount('#app');
-
-        document.getElementById("filters-toggle").onclick = (e) => {
-            toggleFilters("filters-content", "filters-toggle-indicator");
-        };
-        document.getElementById("search-toggle").onclick = (e) => {
-            toggleFilters("search-content", "search-toggle-indicator");
-        };
     </script>
 </body>
 
