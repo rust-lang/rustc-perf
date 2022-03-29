@@ -26,7 +26,6 @@ They mostly consist of real-world crates.
   trait bounds, by having a lot of trait impls for a large number of different
   types.
 - **helloworld**: A trivial program. Gives a lower bound on compile time.
-- **html5ever**: An HTML parser. Stresses macro parsing code significantly.
 - **html5ever-0.26.0**: An HTML parser. Stresses macro parsing code.
 - **hyper-2**: A fairly large crate. Utilizes async/await, and used by
   many Rust programs.
@@ -135,7 +134,7 @@ Rust code being written today.
   contain very little code, instead relying on sub-crates. This makes them less
   interesting as benchmarks, because we only measure final crate compilation.
   This is why there is no futures crate among the primary benchmarks.
-- **html5ever**: See above.
+- **html5ever**: See above. This is an older version (v0.5.4) of the crate.
 - **inflate**: An old implementation of the DEFLATE algorithm. Contains
   a very large function containing many locals and basic blocks, similar to
   `keccak` but less extreme.
