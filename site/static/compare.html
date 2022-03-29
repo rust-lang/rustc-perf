@@ -364,6 +364,67 @@
                 <div class="section section-list-wrapper">
                     <div class="section-heading">
                         <div style="width: 160px;">
+                            <span>Profiles</span>
+                            <span class="tooltip">?
+                                <span class="tooltiptext">
+                                    The different compilation profiles (check, debug, opt, doc).
+                                </span>
+                            </span>
+                        </div>
+                    </div>
+                    <ul class="states-list">
+                        <li>
+                            <label>
+                                <input type="checkbox" id="profile-check" v-model="filter.profile.check" />
+                                <span class="cache-label">check</span>
+                            </label>
+                            <div class="tooltip">?
+                                <span class="tooltiptext">
+                                    Check build that does not generate any code.
+                                </span>
+                            </div>
+                        </li>
+                        <li>
+                            <label>
+                                <input type="checkbox" id="profile-debug" v-model="filter.profile.debug" />
+                                <span class="cache-label">debug</span>
+                            </label>
+                            <div class="tooltip">?
+                                <span class="tooltiptext">
+                                    Debug build that produces unoptimized code.
+                                </span>
+                            </div>
+                        </li>
+                        <li>
+                            <label>
+                                <input type="checkbox" id="profile-opt"
+                                       v-model="filter.profile.opt" />
+                                <span class="cache-label">opt</span>
+                            </label>
+                            <div class="tooltip">?
+                                <span class="tooltiptext">
+                                    Release build that produces as optimized code as possible.
+                                </span>
+                            </div>
+                        </li>
+                        <li>
+                            <label>
+                                <input type="checkbox" id="profile-doc"
+                                       v-model="filter.profile.doc" />
+                                <span class="cache-label">doc</span>
+                            </label>
+                            <div class="tooltip">?
+                                <span class="tooltiptext">
+                                    Documentation build that produces HTML documentation site produced
+                                    by `rustdoc`.
+                                </span>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+                <div class="section section-list-wrapper">
+                    <div class="section-heading">
+                        <div style="width: 160px;">
                             <span>Scenarios</span>
                             <span class="tooltip">?
                                 <span class="tooltiptext">
@@ -638,6 +699,12 @@
                         name: null,
                         showOnlySignificant: true,
                         filterVerySmall: true,
+                        profile: {
+                            check: true,
+                            debug: true,
+                            opt: true,
+                            doc: true
+                        },
                         scenario: {
                             full: true,
                             incrFull: true,
@@ -672,6 +739,20 @@
                     const filter = this.filter;
                     const benchmarkMap = this.benchmarkMap;
 
+                    function profileFilter(profile) {
+                        if (profile === "check") {
+                            return filter.profile.check;
+                        } else if (profile === "debug") {
+                            return filter.profile.debug;
+                        } else if (profile === "opt") {
+                            return filter.profile.opt;
+                        } else if (profile === "doc") {
+                            return filter.profile.doc;
+                        } else {
+                            return true;
+                        }
+                    }
+
                     function scenarioFilter(scenario) {
                         if (scenario === "full") {
                             return filter.scenario.full;
@@ -702,7 +783,14 @@
 
                         const magnitudeFilter = filter.filterVerySmall ? testCase.magnitude != "very small" : true;
 
-                        return scenarioFilter(testCase.scenario) && categoryFilter(testCase.category) && significanceFilter && nameFilter && magnitudeFilter;
+                        return (
+                            profileFilter(testCase.profile) &&
+                            scenarioFilter(testCase.scenario) &&
+                            categoryFilter(testCase.category) &&
+                            significanceFilter &&
+                            nameFilter &&
+                            magnitudeFilter
+                        );
                     }
 
                     let testCases =
@@ -998,7 +1086,6 @@
                 },
             }
         });
-
 
         function toggleFilters(id, toggle) {
             let styles = document.getElementById(id).style;
