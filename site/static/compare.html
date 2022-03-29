@@ -28,6 +28,10 @@
 
         }
 
+        #search-toggle-indicator {
+            cursor: pointer;
+        }
+
         .section {
             display: flex;
             margin: 10px 0;
@@ -1005,13 +1009,6 @@
             return testCase.benchmark + "-" + testCase.profile + "-" + testCase.scenario;
         }
 
-        document.getElementById("filters-toggle").onclick = (e) => {
-            toggleFilters("filters-content", "filters-toggle-indicator");
-        };
-        document.getElementById("search-toggle").onclick = (e) => {
-            toggleFilters("search-content", "search-toggle-indicator");
-        };
-
         function unique(arr) {
             return arr.filter((value, idx) => arr.indexOf(value) == idx);
         }
@@ -1046,6 +1043,13 @@
         }
 
         app.mount('#app');
+
+        document.getElementById("filters-toggle").onclick = (e) => {
+            toggleFilters("filters-content", "filters-toggle-indicator");
+        };
+        document.getElementById("search-toggle").onclick = (e) => {
+            toggleFilters("search-content", "search-toggle-indicator");
+        };
     </script>
 </body>
 
