@@ -27,8 +27,6 @@ They mostly consist of real-world crates.
   types.
 - **helloworld**: A trivial program. Gives a lower bound on compile time.
 - **html5ever-0.26.0**: An HTML parser. Stresses macro parsing code.
-- **hyper-2**: A fairly large crate. Utilizes async/await, and used by
-  many Rust programs.
 - **hyper-0.14.18**: A fairly large crate. Utilizes async/await, and used by
   many Rust programs. The crate uses cargo features to enable large portions of its
   structure and is built with `--features client,http1,http2,server,stream`.
