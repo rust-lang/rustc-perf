@@ -1044,7 +1044,7 @@ fn main_result() -> anyhow::Result<i32> {
 
             // Exclude benchmarks that don't work with a stable compiler.
             let mut benchmarks = get_benchmarks(&benchmark_dir, None, None)?;
-            benchmarks.retain(|b| b.category().has_stable());
+            benchmarks.retain(|b| b.category().is_stable());
 
             let res = bench(
                 &mut rt,

@@ -107,42 +107,31 @@ fn touch_all(path: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, clap::ArgEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, clap::ArgEnum)]
 #[serde(rename_all = "kebab-case")]
 pub enum Category {
     Primary,
     Secondary,
-    // FIXME: this should disappear after the 2022 benchmark overhaul is
-    // complete.
-    PrimaryAndStable,
     Stable,
 }
 
 impl Category {
-    pub fn has_stable(&self) -> bool {
-        match self {
-            Category::Primary | Category::Secondary => false,
-            Category::PrimaryAndStable | Category::Stable => true,
-        }
+    pub fn is_stable(self) -> bool {
+        self == Category::Stable
     }
 
-    pub fn is_primary_or_secondary(&self) -> bool {
-        match self {
-            Category::Primary | Category::Secondary | Category::PrimaryAndStable => true,
-            Category::Stable => false,
-        }
+    pub fn is_primary_or_secondary(self) -> bool {
+        self == Category::Primary || self == Category::Secondary
     }
 
     // Within the DB, `Category` is represented in two fields:
     // - a `supports_stable` bool,
     // - a `category` which is either "primary" or "secondary".
-    pub fn db_representation(&self) -> (bool, String) {
+    pub fn db_representation(self) -> (bool, String) {
         match self {
             Category::Primary => (false, "primary".to_string()),
             Category::Secondary => (false, "secondary".to_string()),
-            // These two have the same DB representation, even though they are
-            // treated differently when choosing which benchmarks to run.
-            Category::PrimaryAndStable | Category::Stable => (true, "primary".to_string()),
+            Category::Stable => (true, "primary".to_string()),
         }
     }
 }
@@ -152,7 +141,6 @@ impl fmt::Display for Category {
         match self {
             Category::Primary => f.write_str("primary"),
             Category::Secondary => f.write_str("secondary"),
-            Category::PrimaryAndStable => f.write_str("primary-and-stable"),
             Category::Stable => f.write_str("stable"),
         }
     }
