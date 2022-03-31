@@ -38,6 +38,8 @@ They mostly consist of real-world crates.
 - **serde-1.0.136**: A serialization/deserialization crate. Used by many other
   Rust programs.
 - **stm32f4-0.14.0**: A crate that has many thousands of blanket impl blocks.
+  It uses cargo features to enable large portions of its structure and is
+  built with `--features stm32f410` to have faster benchmarking times.
 - **syn-1.0.89**: A library for parsing Rust code. An important part of the Rust
   ecosystem.
 - **unicode-normalization-0.1.19**: Unicode character composition and decomposition
