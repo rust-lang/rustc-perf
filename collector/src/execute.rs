@@ -2,12 +2,12 @@
 
 use crate::{Compiler, Profile, Scenario};
 use anyhow::{bail, Context};
+use collector::category::Category;
 use collector::command_output;
 use collector::etw_parser;
 use database::{PatchName, QueryLabel};
 use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
 use std::fmt;
@@ -105,45 +105,6 @@ fn touch_all(path: &Path) -> anyhow::Result<()> {
     }
 
     Ok(())
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, clap::ArgEnum)]
-#[serde(rename_all = "kebab-case")]
-pub enum Category {
-    Primary,
-    Secondary,
-    Stable,
-}
-
-impl Category {
-    pub fn is_stable(self) -> bool {
-        self == Category::Stable
-    }
-
-    pub fn is_primary_or_secondary(self) -> bool {
-        self == Category::Primary || self == Category::Secondary
-    }
-
-    // Within the DB, `Category` is represented in two fields:
-    // - a `supports_stable` bool,
-    // - a `category` which is either "primary" or "secondary".
-    pub fn db_representation(self) -> (bool, String) {
-        match self {
-            Category::Primary => (false, "primary".to_string()),
-            Category::Secondary => (false, "secondary".to_string()),
-            Category::Stable => (true, "primary".to_string()),
-        }
-    }
-}
-
-impl fmt::Display for Category {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Category::Primary => f.write_str("primary"),
-            Category::Secondary => f.write_str("secondary"),
-            Category::Stable => f.write_str("stable"),
-        }
-    }
 }
 
 fn default_runs() -> usize {

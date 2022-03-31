@@ -174,7 +174,7 @@ pub struct ComparisonSummary {
 }
 
 impl ComparisonSummary {
-    pub fn summarize_comparison(comparison: &Comparison) -> Option<ComparisonSummary> {
+    pub fn summarize_comparison(comparison: &Comparison) -> Option<Self> {
         let mut num_improvements = 0;
         let mut num_regressions = 0;
 
@@ -217,6 +217,15 @@ impl ComparisonSummary {
             num_regressions,
             errors_in,
         })
+    }
+
+    pub fn empty() -> Self {
+        ComparisonSummary {
+            comparisons: vec![],
+            num_improvements: 0,
+            num_regressions: 0,
+            errors_in: vec![],
+        }
     }
 
     /// The direction of the changes
@@ -309,6 +318,13 @@ impl ComparisonSummary {
     /// Arithmetic mean of all changes as a percent
     pub fn arithmetic_mean_of_changes(&self) -> f64 {
         self.arithmetic_mean(self.comparisons.iter())
+    }
+
+    pub fn num_significant_changes(&self) -> usize {
+        self.comparisons
+            .iter()
+            .filter(|c| c.is_significant())
+            .count()
     }
 
     fn arithmetic_mean<'a>(
@@ -421,6 +437,107 @@ impl ComparisonSummary {
             .unwrap();
         }
     }
+}
+
+/// Writes a Markdown table containing summary of relevant results.
+pub fn write_summary_table(
+    primary: &ComparisonSummary,
+    secondary: &ComparisonSummary,
+    result: &mut String,
+) {
+    use std::fmt::Write;
+
+    fn render_stat<F: FnOnce() -> Option<f64>>(count: usize, calculate: F) -> String {
+        let value = if count > 0 { calculate() } else { None };
+        value
+            .map(|value| format!("{value:.1}%"))
+            .unwrap_or_else(|| "N/A".to_string())
+    }
+
+    writeln!(
+        result,
+        r#"| | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
+|:---:|:---:|:---:|:---:|:---:|:---:|"#
+    )
+    .unwrap();
+    writeln!(
+        result,
+        "| count[^1] | {} | {} | {} | {} | {} |",
+        primary.num_regressions,
+        secondary.num_regressions,
+        primary.num_improvements,
+        secondary.num_improvements,
+        primary.num_regressions + primary.num_improvements
+    )
+    .unwrap();
+
+    writeln!(
+        result,
+        "| mean[^2] | {} | {} | {} | {} | {:.1}% |",
+        render_stat(primary.num_regressions, || Some(
+            primary.arithmetic_mean_of_regressions()
+        )),
+        render_stat(secondary.num_regressions, || Some(
+            secondary.arithmetic_mean_of_regressions()
+        )),
+        render_stat(primary.num_improvements, || Some(
+            primary.arithmetic_mean_of_improvements()
+        )),
+        render_stat(secondary.num_improvements, || Some(
+            secondary.arithmetic_mean_of_improvements()
+        )),
+        primary.arithmetic_mean_of_changes()
+    )
+    .unwrap();
+
+    let largest_change = primary
+        .most_relevant_changes()
+        .iter()
+        .fold(0.0, |accum: f64, item| {
+            let change = item.map(|v| v.relative_change() * 100.0).unwrap_or(0.0);
+            accum.max(change)
+        });
+
+    writeln!(
+        result,
+        "| max | {} | {} | {} | {} | {:.1}% |",
+        render_stat(primary.num_regressions, || primary
+            .largest_regression()
+            .map(|r| r.relative_change() * 100.0)),
+        render_stat(secondary.num_regressions, || secondary
+            .largest_regression()
+            .map(|r| r.relative_change() * 100.0)),
+        render_stat(primary.num_improvements, || primary
+            .largest_improvement()
+            .map(|r| r.relative_change() * 100.0)),
+        render_stat(secondary.num_improvements, || secondary
+            .largest_improvement()
+            .map(|r| r.relative_change() * 100.0)),
+        largest_change
+    )
+    .unwrap();
+
+    if !primary.errors_in.is_empty() {
+        write!(
+            result,
+            "\nThe following benchmark(s) failed to build:\n{}\n",
+            primary
+                .errors_in
+                .iter()
+                .map(|benchmark| format!("- {benchmark}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        )
+        .unwrap();
+    }
+
+    writeln!(
+        result,
+        r#"
+[^1]: *number of relevant changes*
+[^2]: *the arithmetic mean of the percent change*"#
+    )
+    .unwrap();
 }
 
 /// The amount of confidence we have that a comparison actually represents a real
@@ -940,6 +1057,10 @@ impl TestResultComparison {
     /// we cannot determine from historical data
     const SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD: f64 = 0.002;
 
+    pub fn benchmark(&self) -> Benchmark {
+        self.benchmark
+    }
+
     fn is_regression(&self) -> bool {
         let (a, b) = self.results;
         b > a
@@ -1232,4 +1353,157 @@ fn compare_link(start: &ArtifactId, end: &ArtifactId) -> String {
         "https://perf.rust-lang.org/compare.html?start={}&end={}&stat=instructions:u",
         start, end
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use database::{ArtifactId, Profile, Scenario};
+
+    use crate::comparison::{
+        write_summary_table, ArtifactDescription, Comparison, ComparisonSummary,
+        TestResultComparison,
+    };
+
+    #[test]
+    fn summary_table_only_improvements() {
+        check_table(
+            vec![
+                ("primary", 5.0, 10.0),
+                ("primary", 5.0, 12.0),
+                ("primary", 1.0, 3.0),
+            ],
+            r#"
+| | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| count[^1] | 3 | 0 | 0 | 0 | 3 |
+| mean[^2] | 146.7% | N/A | N/A | N/A | 146.7% |
+| max | 200.0% | N/A | N/A | N/A | 200.0% |
+
+[^1]: *number of relevant changes*
+[^2]: *the arithmetic mean of the percent change*
+"#
+            .trim_start(),
+        );
+    }
+
+    #[test]
+    fn summary_table_only_regressions() {
+        check_table(
+            vec![
+                ("primary", 5.0, 2.0),
+                ("primary", 5.0, 1.0),
+                ("primary", 4.0, 1.0),
+            ],
+            r#"
+| | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| count[^1] | 0 | 0 | 3 | 0 | 3 |
+| mean[^2] | N/A | N/A | -71.7% | N/A | -71.7% |
+| max | N/A | N/A | -80.0% | N/A | 0.0% |
+
+[^1]: *number of relevant changes*
+[^2]: *the arithmetic mean of the percent change*
+"#
+            .trim_start(),
+        );
+    }
+
+    #[test]
+    fn summary_table_mixed_primary() {
+        check_table(
+            vec![
+                ("primary", 10.0, 5.0),
+                ("primary", 5.0, 10.0),
+                ("primary", 1.0, 3.0),
+                ("primary", 4.0, 1.0),
+            ],
+            r#"
+| | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| count[^1] | 2 | 0 | 2 | 0 | 4 |
+| mean[^2] | 150.0% | N/A | -62.5% | N/A | 43.8% |
+| max | 200.0% | N/A | -75.0% | N/A | 200.0% |
+
+[^1]: *number of relevant changes*
+[^2]: *the arithmetic mean of the percent change*
+"#
+            .trim_start(),
+        );
+    }
+
+    #[test]
+    fn summary_table_mixed_primary_secondary() {
+        check_table(
+            vec![
+                ("primary", 10.0, 5.0),
+                ("primary", 5.0, 10.0),
+                ("secondary", 5.0, 10.0),
+                ("primary", 1.0, 3.0),
+                ("secondary", 3.0, 1.0),
+                ("primary", 4.0, 1.0),
+            ],
+            r#"
+| | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| count[^1] | 2 | 1 | 2 | 1 | 4 |
+| mean[^2] | 150.0% | 100.0% | -62.5% | -66.7% | 43.8% |
+| max | 200.0% | 100.0% | -75.0% | -66.7% | 200.0% |
+
+[^1]: *number of relevant changes*
+[^2]: *the arithmetic mean of the percent change*
+"#
+                .trim_start(),
+        );
+    }
+
+    // (category, before, after)
+    fn check_table(values: Vec<(&str, f64, f64)>, expected: &str) {
+        let mut primary_statistics = HashSet::new();
+        let mut secondary_statistics = HashSet::new();
+        for (index, (category, before, after)) in values.into_iter().enumerate() {
+            let target = if category == "primary" {
+                &mut primary_statistics
+            } else {
+                &mut secondary_statistics
+            };
+
+            target.insert(TestResultComparison {
+                benchmark: index.to_string().as_str().into(),
+                profile: Profile::Check,
+                scenario: Scenario::Empty,
+                variance: None,
+                results: (before, after),
+            });
+        }
+
+        let primary = create_summary(primary_statistics);
+        let secondary = create_summary(secondary_statistics);
+
+        let mut result = String::new();
+        write_summary_table(&primary, &secondary, &mut result);
+        assert_eq!(result, expected);
+    }
+
+    fn create_summary(statistics: HashSet<TestResultComparison>) -> ComparisonSummary {
+        let comparison = Comparison {
+            a: ArtifactDescription {
+                artifact: ArtifactId::Tag("a".to_string()),
+                pr: None,
+                bootstrap: Default::default(),
+                bootstrap_total: 0,
+            },
+            b: ArtifactDescription {
+                artifact: ArtifactId::Tag("b".to_string()),
+                pr: None,
+                bootstrap: Default::default(),
+                bootstrap_total: 0,
+            },
+            statistics,
+            new_errors: Default::default(),
+        };
+        ComparisonSummary::summarize_comparison(&comparison)
+            .unwrap_or_else(|| ComparisonSummary::empty())
+    }
 }
