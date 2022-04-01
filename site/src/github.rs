@@ -706,11 +706,12 @@ async fn categorize_benchmark(
         generate_short_summary(secondary.as_ref(), is_master_commit);
 
     let mut result = format!(
-        r#"Summary:
+        r#"
 - Primary benchmarks: {primary_short_summary}
 - Secondary benchmarks: {secondary_short_summary}
 "#
     );
+    write!(result, "\n\n").unwrap();
 
     let (primary, secondary) = (
         primary.unwrap_or_else(|| ComparisonSummary::empty()),
