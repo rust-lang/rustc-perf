@@ -206,8 +206,7 @@ pub mod status {
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct BenchmarkStatus {
         pub name: String,
-        pub success: bool,
-        pub error: Option<String>,
+        pub error: String,
     }
 
     #[derive(Serialize, Debug)]

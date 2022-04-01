@@ -104,8 +104,7 @@ pub trait Connection: Send + Sync {
         series: u32,
         artifact_row_id: ArtifactIdNumber,
     ) -> Option<QueryDatum>;
-    async fn get_error(&self, artifact_row_id: ArtifactIdNumber)
-        -> HashMap<String, Option<String>>;
+    async fn get_error(&self, artifact_row_id: ArtifactIdNumber) -> HashMap<String, String>;
 
     async fn queue_pr(
         &self,

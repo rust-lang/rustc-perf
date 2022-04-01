@@ -703,10 +703,7 @@ where
             })
             .collect()
     }
-    async fn get_error(
-        &self,
-        artifact_row_id: crate::ArtifactIdNumber,
-    ) -> HashMap<String, Option<String>> {
+    async fn get_error(&self, artifact_row_id: crate::ArtifactIdNumber) -> HashMap<String, String> {
         let rows = self
             .conn()
             .query(&self.statements().get_error, &[&(artifact_row_id.0 as i32)])

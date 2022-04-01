@@ -41,24 +41,13 @@ pub async fn handle_status_page(ctxt: Arc<SiteCtxt>) -> status::Response {
     } else {
         Default::default()
     };
-    let mut benchmark_state = errors
+    let benchmark_state = errors
         .into_iter()
         .map(|(name, error)| {
-            let msg = if let Some(error) = error {
-                Some(prettify_log(&error).unwrap_or(error))
-            } else {
-                None
-            };
-            status::BenchmarkStatus {
-                name,
-                success: msg.is_none(),
-                error: msg,
-            }
+            let error = prettify_log(&error).unwrap_or(error);
+            status::BenchmarkStatus { name, error }
         })
         .collect::<Vec<_>>();
-
-    benchmark_state.sort_by_key(|s| s.error.is_some());
-    benchmark_state.reverse();
 
     status::Response {
         last_commit,

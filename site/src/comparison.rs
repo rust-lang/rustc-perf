@@ -622,21 +622,17 @@ async fn compare_given_commits(
         })
         .collect();
 
-    let mut errors = conn.get_error(b.lookup(&idx).unwrap()).await;
-    for (name, error) in conn.get_error(a.lookup(&idx).unwrap()).await {
-        if error.is_some() {
-            errors.remove(&name);
-        }
+    let mut errors_in_b = conn.get_error(b.lookup(&idx).unwrap()).await;
+    let errors_in_a = conn.get_error(a.lookup(&idx).unwrap()).await;
+    for (name, _) in errors_in_a {
+        errors_in_b.remove(&name);
     }
 
     Ok(Some(Comparison {
         a: ArtifactDescription::for_artifact(&*conn, a.clone(), master_commits).await,
         b: ArtifactDescription::for_artifact(&*conn, b.clone(), master_commits).await,
         statistics,
-        new_errors: errors
-            .into_iter()
-            .filter_map(|(k, v)| v.map(|v| (k, v)))
-            .collect(),
+        new_errors: errors_in_b.into_iter().collect(),
     }))
 }
 

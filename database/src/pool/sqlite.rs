@@ -620,11 +620,11 @@ impl Connection for SqliteConnection {
             .collect::<Result<_, _>>()
             .unwrap()
     }
-    async fn get_error(&self, aid: crate::ArtifactIdNumber) -> HashMap<String, Option<String>> {
+    async fn get_error(&self, aid: crate::ArtifactIdNumber) -> HashMap<String, String> {
         self.raw_ref()
             .prepare_cached(
                 "select crate, error from error_series
-                    left join error on error.series = error_series.id and aid = ?",
+                    inner join error on error.series = error_series.id and aid = ?",
             )
             .unwrap()
             .query_map(params![&aid.0], |row| Ok((row.get(0)?, row.get(1)?)))
