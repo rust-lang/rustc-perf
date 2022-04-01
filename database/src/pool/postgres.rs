@@ -430,7 +430,7 @@ impl PostgresConnection {
                     .await
                     .unwrap(),
                 get_error: conn.prepare("select crate, error from error_series
-                    left join error on error.series = error_series.id and aid = $1").await.unwrap(),
+                    inner join error on error.series = error_series.id and aid = $1").await.unwrap(),
                 select_self_query_series: conn.prepare("select id from self_profile_query_series where crate = $1 and profile = $2 and cache = $3 and query = $4").await.unwrap(),
                 insert_self_query_series: conn.prepare("insert into self_profile_query_series (crate, profile, cache, query) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING RETURNING id").await.unwrap(),
                 insert_pstat_series: conn.prepare("insert into pstat_series (crate, profile, cache, statistic) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING RETURNING id").await.unwrap(),
