@@ -1,13 +1,16 @@
 use crate::api::github::Issue;
-use crate::comparison::{ComparisonConfidence, ComparisonSummary, Direction};
+use crate::comparison::{
+    write_summary_table, Comparison, ComparisonConfidence, ComparisonSummary, Direction,
+};
 use crate::load::{Config, SiteCtxt, TryCommit};
 
 use anyhow::Context as _;
-use database::{ArtifactId, QueuedCommit};
-use hashbrown::HashSet;
+use database::{ArtifactId, Benchmark, QueuedCommit};
 use reqwest::header::USER_AGENT;
 use serde::{Deserialize, Serialize};
 
+use collector::category::Category;
+use std::collections::{HashMap, HashSet};
 use std::{fmt::Write, sync::Arc, time::Duration};
 
 type BoxedError = Box<dyn std::error::Error + Send + Sync>;
@@ -648,20 +651,27 @@ compiler perf.{next_steps}
     )
 }
 
+pub type BenchmarkMap = HashMap<Benchmark, Category>;
+
+async fn get_benchmark_map(ctxt: &SiteCtxt) -> BenchmarkMap {
+    let benchmarks = ctxt.pool.connection().await.get_benchmarks().await;
+    benchmarks
+        .into_iter()
+        .map(|bench| {
+            (
+                bench.name.as_str().into(),
+                Category::from_db_representation(&bench.category).unwrap(),
+            )
+        })
+        .collect()
+}
+
 async fn categorize_benchmark(
     ctxt: &SiteCtxt,
     commit_sha: String,
     parent_sha: String,
     is_master_commit: bool,
 ) -> (String, Option<Direction>) {
-    // Add an "s" to a word unless there's only one.
-    fn ending(word: &'static str, count: usize) -> std::borrow::Cow<'static, str> {
-        if count == 1 {
-            return word.into();
-        }
-        format!("{}s", word).into()
-    }
-
     let comparison = match crate::comparison::compare(
         collector::Bound::Commit(parent_sha),
         collector::Bound::Commit(commit_sha),
@@ -673,69 +683,128 @@ async fn categorize_benchmark(
         Ok(Some(c)) => c,
         _ => return (String::from("ERROR categorizing benchmark run!"), None),
     };
+
+    let benchmark_map = get_benchmark_map(ctxt).await;
+    let (primary, secondary) = split_comparison(comparison, benchmark_map);
+
     const DISAGREEMENT: &str = "If you disagree with this performance assessment, \
     please file an issue in [rust-lang/rustc-perf](https://github.com/rust-lang/rustc-perf/issues/new).";
-    let (summary, direction) = match ComparisonSummary::summarize_comparison(&comparison) {
-        Some(s) if comparison_is_relevant(s.confidence(), is_master_commit) => {
-            let direction = s.direction().unwrap();
-            (s, direction)
-        }
-        Some(_) => {
-            let significant_count = comparison
-                .statistics
-                .iter()
-                .filter(|s| s.is_significant())
-                .count();
-            return (
-                format!(
-                    "This benchmark run did not return any relevant results. {} results were found to be statistically significant but too small to be relevant.\n\n{}",
-                    significant_count,
-                    DISAGREEMENT
-                ),
-                None,
-            );
-        }
-        None => {
-            return (
-                format!(
-                    "This benchmark run did not return any relevant results.\n\n{}",
-                    DISAGREEMENT
-                ),
-                None,
-            );
-        }
-    };
 
-    let num_improvements = summary.number_of_improvements();
-    let num_regressions = summary.number_of_regressions();
+    if primary.is_none() && secondary.is_none() {
+        return (
+            format!(
+                "This benchmark run did not return any relevant results.\n\n{}",
+                DISAGREEMENT
+            ),
+            None,
+        );
+    }
 
-    let description = match direction {
-        Direction::Improvement => format!(
-            "{} relevant {} 🎉",
-            num_improvements,
-            ending("improvement", num_improvements)
-        ),
-        Direction::Regression => format!(
-            "{} relevant {} 😿",
-            num_regressions,
-            ending("regression", num_regressions)
-        ),
-        Direction::Mixed => format!(
-            "{} relevant {} 🎉 but {} relevant {} 😿",
-            num_improvements,
-            ending("improvement", num_improvements),
-            num_regressions,
-            ending("regression", num_regressions)
-        ),
-    };
+    let (primary_short_summary, primary_direction) =
+        generate_short_summary(primary.as_ref(), is_master_commit);
+    let (secondary_short_summary, secondary_direction) =
+        generate_short_summary(secondary.as_ref(), is_master_commit);
+
     let mut result = format!(
-        "This benchmark run shows {} to instruction counts.\n",
-        description
+        r#"Summary:
+- Primary benchmarks: {primary_short_summary}
+- Secondary benchmarks: {secondary_short_summary}
+"#
     );
 
-    summary.write_summary_lines(&mut result, None);
+    let (primary, secondary) = (
+        primary.unwrap_or_else(|| ComparisonSummary::empty()),
+        secondary.unwrap_or_else(|| ComparisonSummary::empty()),
+    );
+    write_summary_table(&primary, &secondary, &mut result);
+
     write!(result, "\n{}", DISAGREEMENT).unwrap();
-    (result, Some(direction))
+
+    let direction = primary_direction.or(secondary_direction);
+    (result, direction)
+}
+
+fn generate_short_summary(
+    summary: Option<&ComparisonSummary>,
+    is_master_commit: bool,
+) -> (String, Option<Direction>) {
+    // Add an "s" to a word unless there's only one.
+    fn ending(word: &'static str, count: usize) -> std::borrow::Cow<'static, str> {
+        if count == 1 {
+            return word.into();
+        }
+        format!("{}s", word).into()
+    }
+
+    match summary {
+        Some(summary) => {
+            if comparison_is_relevant(summary.confidence(), is_master_commit) {
+                let direction = summary.direction().unwrap();
+                let num_improvements = summary.number_of_improvements();
+                let num_regressions = summary.number_of_regressions();
+
+                let text = match direction {
+                    Direction::Improvement => format!(
+                        "🎉 relevant {} found",
+                        ending("improvement", num_improvements)
+                    ),
+                    Direction::Regression => format!(
+                        "😿 relevant {} found",
+                        ending("regression", num_regressions)
+                    ),
+                    Direction::Mixed => "mixed results".to_string(),
+                };
+                (text, Some(direction))
+            } else {
+                (
+                    format!(
+                        "no relevant changes found. {} results were found to be statistically significant but too small to be relevant.",
+                        summary.num_significant_changes(),
+                    ),
+                    None
+                )
+            }
+        }
+        None => ("no relevant changes found".to_string(), None),
+    }
+}
+
+/// Splits comparison into primary and secondary summaries based on benchmark category
+fn split_comparison(
+    comparison: Comparison,
+    map: BenchmarkMap,
+) -> (Option<ComparisonSummary>, Option<ComparisonSummary>) {
+    let mut primary = HashSet::new();
+    let mut secondary = HashSet::new();
+
+    for statistic in comparison.statistics {
+        let category: Category = map
+            .get(&statistic.benchmark())
+            .copied()
+            .unwrap_or_else(|| Category::Secondary);
+        if let Category::Primary = category {
+            primary.insert(statistic);
+        } else {
+            secondary.insert(statistic);
+        }
+    }
+
+    let primary = Comparison {
+        a: comparison.a.clone(),
+        b: comparison.b.clone(),
+        statistics: primary,
+        new_errors: comparison.new_errors.clone(),
+    };
+    let secondary = Comparison {
+        a: comparison.a,
+        b: comparison.b,
+        statistics: secondary,
+        new_errors: comparison.new_errors,
+    };
+    (
+        ComparisonSummary::summarize_comparison(&primary),
+        ComparisonSummary::summarize_comparison(&secondary),
+    )
 }
 
 /// Whether a comparison is relevant enough to show

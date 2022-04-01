@@ -2,6 +2,7 @@
 
 use anyhow::{bail, Context};
 use clap::Parser;
+use collector::category::Category;
 use database::{ArtifactId, Commit};
 use log::debug;
 use std::collections::HashSet;
@@ -18,7 +19,7 @@ use tokio::runtime::Runtime;
 mod execute;
 mod sysroot;
 
-use execute::{BenchProcessor, Benchmark, BenchmarkName, Category, ProfileProcessor, Profiler};
+use execute::{BenchProcessor, Benchmark, BenchmarkName, ProfileProcessor, Profiler};
 use sysroot::Sysroot;
 
 #[derive(Debug, Copy, Clone)]
