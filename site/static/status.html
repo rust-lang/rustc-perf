@@ -27,7 +27,7 @@
     </div>
     <div id="data">
         <div id="data-insert-js"></div>
-        Benchmarks for last commit:
+        Benchmarking errors for last commit:
         <div id="benchmark-state"></div>
     </div>
     <div id="as-of"></div>
@@ -46,19 +46,11 @@
             }
             for (let benchmark of data.benchmarks) {
                 let element = document.createElement("div");
-                if (benchmark.error) {
-                    element.innerHTML = `<details open>
+                element.innerHTML = `<details open>
                     <summary>${benchmark.name} - error</summary>
                     <pre class="benchmark-error"></pre>
                 </details>`;
-                } else {
-                    element.innerHTML = `
-                    <p style="margin:0.1em;">${benchmark.name} - successful</p>
-                `;
-                }
-                if (benchmark.error) {
-                    element.querySelector(".benchmark-error").innerText = benchmark.error;
-                }
+                element.querySelector(".benchmark-error").innerText = benchmark.error;
                 state_div.appendChild(element);
             }
             let missing_div = document.querySelector("#data-insert-js");
@@ -175,8 +167,7 @@
                 return `${reason_to_string(reason.InProgress)} - in progress`;
             } else if (reason["Master"] != undefined && reason.Master.pr) {
                 return `<a href="https://github.com/rust-lang/rust/pull/${reason["Master"].pr}">
-                    #${reason["Master"].pr}</a>${
-                    reason.Master.is_try_parent ? " - Try commit parent" : ""
+                    #${reason["Master"].pr}</a>${reason.Master.is_try_parent ? " - Try commit parent" : ""
                     }`;
             } else if (reason["Master"] != undefined && reason.Master.pr == 0) {
                 return "Master";
