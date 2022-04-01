@@ -606,7 +606,8 @@ async fn compare_given_commits(
     let statistics_for_a = statistics_from_series(&mut responses);
     let statistics_for_b = statistics_from_series(&mut responses);
 
-    let variances = BenchmarkVariances::calculate(ctxt, a.clone(), master_commits, stat).await?;
+    let mut historical_data =
+        HistoricalDataMap::calculate(ctxt, a.clone(), master_commits, stat).await?;
     let statistics = statistics_for_a
         .into_iter()
         .filter_map(|(test_case, a)| {
@@ -616,7 +617,7 @@ async fn compare_given_commits(
                     benchmark: test_case.0,
                     profile: test_case.1,
                     scenario: test_case.2,
-                    variance: variances.data.get(&test_case).cloned(),
+                    historical_data: historical_data.data.remove(&test_case),
                     results: (a, b),
                 })
         })
@@ -815,14 +816,13 @@ impl Comparison {
     }
 }
 
-/// A description of the amount of variance a certain benchmark is historically
-/// experiencing at a given point in time.
-pub struct BenchmarkVariances {
-    /// Variance data on a per test case basis
-    pub data: HashMap<(Benchmark, Profile, Scenario), BenchmarkVariance>,
+/// The historical data for a certain benchmark
+pub struct HistoricalDataMap {
+    /// Historical data on a per test case basis
+    pub data: HashMap<(Benchmark, Profile, Scenario), HistoricalData>,
 }
 
-impl BenchmarkVariances {
+impl HistoricalDataMap {
     const NUM_PREVIOUS_COMMITS: usize = 100;
     const MIN_PREVIOUS_COMMITS: usize = 50;
 
@@ -832,7 +832,7 @@ impl BenchmarkVariances {
         master_commits: &[collector::MasterCommit],
         stat: String,
     ) -> Result<Self, BoxedError> {
-        let mut variance_data = HashMap::new();
+        let mut historical_data = HashMap::new();
 
         let previous_commits = Arc::new(previous_commits(
             from,
@@ -840,10 +840,10 @@ impl BenchmarkVariances {
             master_commits,
         ));
 
-        // Return early if we don't have enough data to calculate variance.
+        // Return early if we don't have enough data for historical analysis
         if previous_commits.len() < Self::MIN_PREVIOUS_COMMITS {
             return Ok(Self {
-                data: variance_data,
+                data: historical_data,
             });
         }
 
@@ -860,37 +860,25 @@ impl BenchmarkVariances {
 
         for _ in previous_commits.iter() {
             for (test_case, stat) in statistics_from_series(&mut previous_commit_series) {
-                variance_data.entry(test_case).or_default().push(stat);
+                historical_data.entry(test_case).or_default().push(stat);
             }
         }
 
         // Only retain test cases for which we have enough data to calculate variance.
-        variance_data.retain(|_, v| v.data.len() >= Self::MIN_PREVIOUS_COMMITS);
-
-        for ((bench, _, _), results) in variance_data.iter_mut() {
-            log::trace!("Calculating variance for: {}", bench);
-            results.calculate_description();
-        }
+        historical_data.retain(|_, v| v.data.len() >= Self::MIN_PREVIOUS_COMMITS);
 
         Ok(Self {
-            data: variance_data,
+            data: historical_data,
         })
     }
 }
 
 #[derive(Debug, Default, Clone, Serialize)]
-pub struct BenchmarkVariance {
+pub struct HistoricalData {
     data: Vec<f64>,
-    description: BenchmarkVarianceDescription,
 }
 
-impl BenchmarkVariance {
-    /// The ratio of change that we consider significant.
-    const SIGNFICANT_DELTA_THRESHOLD: f64 = 0.01;
-    /// The percentage of significant changes that we consider too high
-    const SIGNFICANT_CHANGE_THRESHOLD: f64 = 5.0;
-    /// The ratio of change that constitutes noisy data
-    const NOISE_THRESHOLD: f64 = 0.001;
+impl HistoricalData {
     /// The multiple of the IQR above Q3 that signifies significance
     const IQR_MULTIPLIER: f64 = 3.0;
 
@@ -954,36 +942,6 @@ impl BenchmarkVariance {
         (q1, q3)
     }
 
-    fn calculate_description(&mut self) {
-        self.description = BenchmarkVarianceDescription::Normal;
-
-        let percent_changes = self.percent_changes();
-        let non_significant = percent_changes
-            .iter()
-            .take_while(|&&c| c < Self::SIGNFICANT_DELTA_THRESHOLD)
-            .collect::<Vec<_>>();
-
-        let percent_significant_changes = ((percent_changes.len() - non_significant.len()) as f64
-            / percent_changes.len() as f64)
-            * 100.0;
-        log::trace!(
-            "Percent significant changes: {:.1}%",
-            percent_significant_changes
-        );
-
-        if percent_significant_changes > Self::SIGNFICANT_CHANGE_THRESHOLD {
-            self.description = BenchmarkVarianceDescription::HighlyVariable;
-            return;
-        }
-
-        let delta_mean =
-            non_significant.iter().cloned().sum::<f64>() / (non_significant.len() as f64);
-        log::trace!("Ratio change: {:.4}", delta_mean);
-        if delta_mean > Self::NOISE_THRESHOLD {
-            self.description = BenchmarkVarianceDescription::Noisy;
-        }
-    }
-
     // Absolute deltas between adjacent results
     fn deltas(&self) -> impl Iterator<Item = f64> + '_ {
         self.data
@@ -996,24 +954,6 @@ impl BenchmarkVariance {
         // If changes are judged significant only exceeding 0.2%, then the
         // benchmark as a whole is dodgy.
         self.significance_threshold() * 100.0 > 0.2
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize)]
-#[serde(tag = "type", content = "percent")]
-pub enum BenchmarkVarianceDescription {
-    Normal,
-    /// A highly variable benchmark that produces many significant changes.
-    /// This might indicate a benchmark which is very sensitive to compiler changes.
-    HighlyVariable,
-    /// A noisy benchmark which is likely to see changes in performance simply between
-    /// compiler runs.
-    Noisy,
-}
-
-impl Default for BenchmarkVarianceDescription {
-    fn default() -> Self {
-        Self::Normal
     }
 }
 
@@ -1048,14 +988,14 @@ pub struct TestResultComparison {
     benchmark: Benchmark,
     profile: Profile,
     scenario: Scenario,
-    variance: Option<BenchmarkVariance>,
+    historical_data: Option<HistoricalData>,
     results: (f64, f64),
 }
 
 impl TestResultComparison {
     /// The amount of relative change considered significant when
     /// we cannot determine from historical data
-    const SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD: f64 = 0.002;
+    const DEFAULT_SIGNIFICANCE_THRESHOLD: f64 = 0.002;
 
     pub fn benchmark(&self) -> Benchmark {
         self.benchmark
@@ -1077,10 +1017,10 @@ impl TestResultComparison {
 
     /// Magnitude of change considered significant
     fn significance_threshold(&self) -> f64 {
-        self.variance
+        self.historical_data
             .as_ref()
-            .map(|v| v.significance_threshold())
-            .unwrap_or(Self::SIGNIFICANT_RELATIVE_CHANGE_THRESHOLD)
+            .map(|d| d.significance_threshold())
+            .unwrap_or(Self::DEFAULT_SIGNIFICANCE_THRESHOLD)
     }
 
     /// This is a numeric magnitude of a particular change.
@@ -1139,7 +1079,7 @@ impl TestResultComparison {
     }
 
     fn is_dodgy(&self) -> bool {
-        self.variance
+        self.historical_data
             .as_ref()
             .map(|v| v.is_dodgy())
             .unwrap_or(false)
@@ -1473,7 +1413,7 @@ mod tests {
                 benchmark: index.to_string().as_str().into(),
                 profile: Profile::Check,
                 scenario: Scenario::Empty,
-                variance: None,
+                historical_data: None,
                 results: (before, after),
             });
         }
