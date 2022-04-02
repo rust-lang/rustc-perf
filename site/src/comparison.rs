@@ -327,6 +327,10 @@ impl ComparisonSummary {
             .count()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.comparisons.is_empty()
+    }
+
     fn arithmetic_mean<'a>(
         &'a self,
         changes: impl Iterator<Item = &'a TestResultComparison>,
@@ -473,7 +477,7 @@ pub fn write_summary_table(
 
     writeln!(
         result,
-        "| mean[^2] | {} | {} | {} | {} | {:.1}% |",
+        "| mean[^2] | {} | {} | {} | {} | {} |",
         render_stat(primary.num_regressions, || Some(
             primary.arithmetic_mean_of_regressions()
         )),
@@ -486,21 +490,30 @@ pub fn write_summary_table(
         render_stat(secondary.num_improvements, || Some(
             secondary.arithmetic_mean_of_improvements()
         )),
-        primary.arithmetic_mean_of_changes()
+        if primary.is_empty() {
+            "N/A".to_string()
+        } else {
+            format!("{:.1}%", primary.arithmetic_mean_of_changes())
+        }
     )
     .unwrap();
 
-    let largest_change = primary
-        .most_relevant_changes()
-        .iter()
-        .fold(0.0, |accum: f64, item| {
-            let change = item.map(|v| v.relative_change() * 100.0).unwrap_or(0.0);
-            accum.max(change)
-        });
+    let largest_change = if primary.is_empty() {
+        "N/A".to_string()
+    } else {
+        let change = primary
+            .most_relevant_changes()
+            .iter()
+            .fold(0.0, |accum: f64, item| {
+                let change = item.map(|v| v.relative_change() * 100.0).unwrap_or(0.0);
+                accum.max(change)
+            });
+        format!("{:.1}%", change)
+    };
 
     writeln!(
         result,
-        "| max | {} | {} | {} | {} | {:.1}% |",
+        "| max | {} | {} | {} | {} | {} |",
         render_stat(primary.num_regressions, || primary
             .largest_regression()
             .map(|r| r.relative_change() * 100.0)),
@@ -1353,6 +1366,7 @@ fn compare_link(start: &ArtifactId, end: &ArtifactId) -> String {
 
 #[cfg(test)]
 mod tests {
+    use collector::category::Category;
     use std::collections::HashSet;
 
     use database::{ArtifactId, Profile, Scenario};
@@ -1363,12 +1377,12 @@ mod tests {
     };
 
     #[test]
-    fn summary_table_only_improvements() {
+    fn summary_table_only_improvements_primary() {
         check_table(
             vec![
-                ("primary", 5.0, 10.0),
-                ("primary", 5.0, 12.0),
-                ("primary", 1.0, 3.0),
+                (Category::Primary, 5.0, 10.0),
+                (Category::Primary, 5.0, 12.0),
+                (Category::Primary, 1.0, 3.0),
             ],
             r#"
 | | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
@@ -1385,12 +1399,12 @@ mod tests {
     }
 
     #[test]
-    fn summary_table_only_regressions() {
+    fn summary_table_only_regressions_primary() {
         check_table(
             vec![
-                ("primary", 5.0, 2.0),
-                ("primary", 5.0, 1.0),
-                ("primary", 4.0, 1.0),
+                (Category::Primary, 5.0, 2.0),
+                (Category::Primary, 5.0, 1.0),
+                (Category::Primary, 4.0, 1.0),
             ],
             r#"
 | | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
@@ -1407,13 +1421,57 @@ mod tests {
     }
 
     #[test]
+    fn summary_table_only_improvements_secondary() {
+        check_table(
+            vec![
+                (Category::Secondary, 5.0, 2.0),
+                (Category::Secondary, 5.0, 1.0),
+                (Category::Secondary, 4.0, 1.0),
+            ],
+            r#"
+| | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| count[^1] | 0 | 0 | 0 | 3 | 0 |
+| mean[^2] | N/A | N/A | N/A | -71.7% | N/A |
+| max | N/A | N/A | N/A | -80.0% | N/A |
+
+[^1]: *number of relevant changes*
+[^2]: *the arithmetic mean of the percent change*
+"#
+                .trim_start(),
+        );
+    }
+
+    #[test]
+    fn summary_table_only_regressions_secondary() {
+        check_table(
+            vec![
+                (Category::Secondary, 5.0, 10.0),
+                (Category::Secondary, 5.0, 12.0),
+                (Category::Secondary, 1.0, 3.0),
+            ],
+            r#"
+| | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| count[^1] | 0 | 3 | 0 | 0 | 0 |
+| mean[^2] | N/A | 146.7% | N/A | N/A | N/A |
+| max | N/A | 200.0% | N/A | N/A | N/A |
+
+[^1]: *number of relevant changes*
+[^2]: *the arithmetic mean of the percent change*
+"#
+                .trim_start(),
+        );
+    }
+
+    #[test]
     fn summary_table_mixed_primary() {
         check_table(
             vec![
-                ("primary", 10.0, 5.0),
-                ("primary", 5.0, 10.0),
-                ("primary", 1.0, 3.0),
-                ("primary", 4.0, 1.0),
+                (Category::Primary, 10.0, 5.0),
+                (Category::Primary, 5.0, 10.0),
+                (Category::Primary, 1.0, 3.0),
+                (Category::Primary, 4.0, 1.0),
             ],
             r#"
 | | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
@@ -1433,12 +1491,12 @@ mod tests {
     fn summary_table_mixed_primary_secondary() {
         check_table(
             vec![
-                ("primary", 10.0, 5.0),
-                ("primary", 5.0, 10.0),
-                ("secondary", 5.0, 10.0),
-                ("primary", 1.0, 3.0),
-                ("secondary", 3.0, 1.0),
-                ("primary", 4.0, 1.0),
+                (Category::Primary, 10.0, 5.0),
+                (Category::Primary, 5.0, 10.0),
+                (Category::Secondary, 5.0, 10.0),
+                (Category::Primary, 1.0, 3.0),
+                (Category::Secondary, 3.0, 1.0),
+                (Category::Primary, 4.0, 1.0),
             ],
             r#"
 | | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
@@ -1455,11 +1513,11 @@ mod tests {
     }
 
     // (category, before, after)
-    fn check_table(values: Vec<(&str, f64, f64)>, expected: &str) {
+    fn check_table(values: Vec<(Category, f64, f64)>, expected: &str) {
         let mut primary_statistics = HashSet::new();
         let mut secondary_statistics = HashSet::new();
         for (index, (category, before, after)) in values.into_iter().enumerate() {
-            let target = if category == "primary" {
+            let target = if category == Category::Primary {
                 &mut primary_statistics
             } else {
                 &mut secondary_statistics
