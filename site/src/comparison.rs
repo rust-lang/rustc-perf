@@ -755,6 +755,7 @@ pub struct Comparison {
     pub b: ArtifactDescription,
     /// Statistics based on test case
     pub statistics: HashSet<TestResultComparison>,
+    /// A map from benchmark name to an error which occured when building `b` but `a`.
     pub new_errors: HashMap<String, String>,
 }
 
@@ -790,24 +791,29 @@ impl Comparison {
     /// Splits comparison into primary and secondary summaries based on benchmark category
     pub fn summarize_by_category(
         self,
-        map: HashMap<Benchmark, Category>,
+        category_map: HashMap<Benchmark, Category>,
     ) -> (Option<ComparisonSummary>, Option<ComparisonSummary>) {
         let (primary, secondary) = self
             .statistics
             .into_iter()
-            .partition(|s| map.get(&s.benchmark()) == Some(&Category::Primary));
+            .partition(|s| category_map.get(&s.benchmark()) == Some(&Category::Primary));
+
+        let (primary_errors, secondary_errors) = self
+            .new_errors
+            .into_iter()
+            .partition(|(b, _)| category_map.get(&b.as_str().into()) == Some(&Category::Primary));
 
         let primary = Comparison {
             a: self.a.clone(),
             b: self.b.clone(),
             statistics: primary,
-            new_errors: self.new_errors.clone(),
+            new_errors: primary_errors,
         };
         let secondary = Comparison {
             a: self.a,
             b: self.b,
             statistics: secondary,
-            new_errors: self.new_errors,
+            new_errors: secondary_errors,
         };
         (
             ComparisonSummary::summarize_comparison(&primary),
