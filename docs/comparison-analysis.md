@@ -33,11 +33,11 @@ How many _significant_ test results indicate performance changes and what is the
   * given 20 changes of different kinds all of low magnitude, the result is mixed unless only 2 or fewer of the changes are of one kind.
   * given 5 changes of different kinds all of low magnitude, the result is always mixed.
 
-Whether we actually _report_ an analysis or not depends on the context and how _confident_ we are in the summary of the results (see below for an explanation of how confidence is derived). For example, in pull request performance "try" runs, we report a performance change if we are at least confident that the results are "probably relevant", while for the triage report, we only report if the we are confident the results are "definitely relevant".
+Whether we actually _report_ an analysis or not depends on the context and how relevant we find the summary of the results over all (see below for an explanation of how summary relevant is determined). For example, in pull request performance "try" runs, we report a performance change if results are "somewhat relevant", while for the triage report, we only report if the we are confident the results are "definitely relevant".
 
 ### What makes a test result significant?
 
-A test result is significant if the relative change percentage is considered an outlier against historical data. Determining whether a value is an outlier is done through interquartile range "fencing" (i.e., whether a value exceeds a threshold equal to the third quartile plus 1.5 times the interquartile range):
+A test result is significant if the relative change percentage is considered an outlier against historical data. Determining whether a value is an outlier is done through interquartile range ["fencing"](https://www.statisticshowto.com/upper-and-lower-fences/#:~:text=Upper%20and%20lower%20fences%20cordon,%E2%80%93%20(1.5%20*%20IQR)) (i.e., whether a value exceeds a threshold equal to the third quartile plus 1.5 times the interquartile range):
 
 ```
 interquartile_range = Q3 - Q1
@@ -48,11 +48,11 @@ result > Q3 + (interquartile_range * 3)
 
 We ignore the lower fence, because result data is bounded by 0.
 
-This upper fence is often called the "significance threshold".
+This upper fence is called the "significance threshold".
 
-### How is confidence in whether a test analysis is "relevant" determined?
+### How is relevance of a test run summary determined?
 
-The confidence in whether a test analysis is relevant depends on the number of significant test results and their magnitude.
+The relevance test run summary is determined by the number of significant and relevant test results and their magnitude.
 
 #### Magnitude
 
@@ -62,12 +62,12 @@ Magnitude is a combination of two factors:
 
 If a large change only happens to go over the significance threshold by a small factor, then the over magnitude of the change is considered small.
 
-#### Confidence algorithm
+#### Relevance algorithm
 
-The actual algorithm for determining confidence may change, but in general the following rules apply:
-* Definitely relevant: any number of very large or large changes, a small amount of medium changes, or a large amount of small or very small changes.
-* Probably relevant: any number of very large or large changes, any medium change, or smaller but still substantial amount of small or very small changes.
-* Maybe relevant: if it doesn't fit into the above two categories, it ends in this category.
+The actual algorithm for determining relevance of a comparison summary may change, but in general the following rules apply:
+* High relevance: any number of very large or large changes, a small amount of medium changes, or a large amount of small or very small changes.
+* Medium relevance: any number of very large or large changes, any medium change, or smaller but still substantial amount of small or very small changes.
+* Small relevance: if it doesn't fit into the above two categories, it ends in this category.
 
 ### "Dodgy" Test Cases
 
