@@ -35,8 +35,8 @@ The following is a glossary of domain specific terminology. Although benchmarks 
 ## Analysis
 
 * **test result delta**: the difference between two test results for the same metric and test case.
-* **significance threshold**: the threshold at which a test result delta is considered "significant" (i.e., a real change in performance and not just noise). This is calculated using some statistical measure (see the code for how this is currently being done).
-* **significant test result delta**: a test result delta above the significance threshold.
+* **significance threshold**: the threshold at which a test result delta is considered "significant" (i.e., a real change in performance and not just noise). This is calculated using [the upper IQR fence](https://www.statisticshowto.com/upper-and-lower-fences/#:~:text=Upper%20and%20lower%20fences%20cordon,%E2%80%93%20(1.5%20*%20IQR)) as seen [here](https://github.com/rust-lang/rustc-perf/blob/8ba845644b4cfcffd96b909898d7225931b55557/site/src/comparison.rs#L935-L941).
+* **significant test result delta**: a test result delta above the significance threshold. Significant test result deltas can be thought of as "statistically significant".
 * **dodgy test case**: a test case for which the significance threshold is significantly large indicating a high amount of variability in the test and thus making it necessary to be somewhat skeptical of any results too close to the significance threshold.
 * **relevant test result delta**: a synonym for *significant test result delta* in situations where the term "significant" might be ambiguous and readers may potentially interpret *significant* as "large" or "statistically significant". For example, in try run results, we use the term relevant instead of significant.
 
