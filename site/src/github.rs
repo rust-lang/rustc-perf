@@ -713,11 +713,13 @@ async fn categorize_benchmark(
     );
     write!(result, "\n\n").unwrap();
 
-    let (primary, secondary) = (
-        primary.unwrap_or_else(|| ComparisonSummary::empty()),
-        secondary.unwrap_or_else(|| ComparisonSummary::empty()),
-    );
-    write_summary_table(&primary, &secondary, &mut result);
+    if primary_direction.is_some() || secondary_direction.is_some() {
+        let (primary, secondary) = (
+            primary.unwrap_or_else(|| ComparisonSummary::empty()),
+            secondary.unwrap_or_else(|| ComparisonSummary::empty()),
+        );
+        write_summary_table(&primary, &secondary, &mut result);
+    }
 
     write!(result, "\n{}", DISAGREEMENT).unwrap();
 
