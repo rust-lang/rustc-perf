@@ -1,21 +1,19 @@
-use arc_swap::{ArcSwap, Guard};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::ops::RangeInclusive;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
+use arc_swap::{ArcSwap, Guard};
 use chrono::{Duration, Utc};
 use log::error;
 use serde::{Deserialize, Serialize};
 
-use crate::db;
-use collector::{Bound, MasterCommit};
-use database::Date;
-
 use crate::api::github;
-use collector;
+use crate::db;
+use collector::{category::Category, Bound, MasterCommit};
+use database::Date;
 use database::Pool;
 pub use database::{ArtifactId, Benchmark, Commit};
 
@@ -215,6 +213,19 @@ impl SiteCtxt {
             in_progress_artifacts,
             all_commits,
         )
+    }
+
+    pub async fn get_benchmark_category_map(&self) -> HashMap<Benchmark, Category> {
+        let benchmarks = self.pool.connection().await.get_benchmarks().await;
+        benchmarks
+            .into_iter()
+            .map(|bench| {
+                (
+                    bench.name.as_str().into(),
+                    Category::from_db_representation(&bench.category).unwrap(),
+                )
+            })
+            .collect()
     }
 
     /// Get cached master-branch Rust commits.  
