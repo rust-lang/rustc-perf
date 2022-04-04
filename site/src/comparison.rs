@@ -155,7 +155,7 @@ async fn populate_report(
                     .entry(confidence.is_definitely_relevant().then(|| direction))
                     .or_default();
 
-                entry.push(write_summary(ctxt, comparison).await)
+                entry.push(write_triage_summary(ctxt, comparison).await)
             }
         }
     }
@@ -372,7 +372,7 @@ impl ComparisonSummary {
     }
 }
 
-async fn write_summary(ctxt: &SiteCtxt, comparison: &Comparison) -> String {
+async fn write_triage_summary(ctxt: &SiteCtxt, comparison: &Comparison) -> String {
     use std::fmt::Write;
     let mut result = if let Some(pr) = comparison.b.pr {
         let title = github::pr_title(pr).await;
@@ -393,7 +393,7 @@ async fn write_summary(ctxt: &SiteCtxt, comparison: &Comparison) -> String {
     let primary = primary.unwrap_or_else(ComparisonSummary::empty);
     let secondary = secondary.unwrap_or_else(ComparisonSummary::empty);
 
-    write_summary_table(&primary, &secondary, &mut result);
+    write_summary_table(&primary, &secondary, false, &mut result);
 
     result
 }
@@ -402,6 +402,7 @@ async fn write_summary(ctxt: &SiteCtxt, comparison: &Comparison) -> String {
 pub fn write_summary_table(
     primary: &ComparisonSummary,
     secondary: &ComparisonSummary,
+    with_footnotes: bool,
     result: &mut String,
 ) {
     use std::fmt::Write;
@@ -421,7 +422,8 @@ pub fn write_summary_table(
     .unwrap();
     writeln!(
         result,
-        "| count[^1] | {} | {} | {} | {} | {} |",
+        "| count{} | {} | {} | {} | {} | {} |",
+        if with_footnotes { "[^1]" } else { "" },
         primary.num_regressions,
         secondary.num_regressions,
         primary.num_improvements,
@@ -432,7 +434,8 @@ pub fn write_summary_table(
 
     writeln!(
         result,
-        "| mean[^2] | {} | {} | {} | {} | {} |",
+        "| mean{} | {} | {} | {} | {} | {} |",
+        if with_footnotes { "[^2]" } else { "" },
         render_stat(primary.num_regressions, || Some(
             primary.arithmetic_mean_of_regressions()
         )),
@@ -511,13 +514,15 @@ pub fn write_summary_table(
         .unwrap();
     }
 
-    writeln!(
-        result,
-        r#"
+    if with_footnotes {
+        writeln!(
+            result,
+            r#"
 [^1]: *number of relevant changes*
 [^2]: *the arithmetic mean of the percent change*"#
-    )
-    .unwrap();
+        )
+        .unwrap();
+    }
 }
 
 /// The amount of confidence we have that a comparison actually represents a real
@@ -1275,15 +1280,12 @@ fn compare_link(start: &ArtifactId, end: &ArtifactId) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     use collector::category::Category;
     use std::collections::HashSet;
 
     use database::{ArtifactId, Profile, Scenario};
-
-    use crate::comparison::{
-        write_summary_table, ArtifactDescription, Comparison, ComparisonSummary,
-        TestResultComparison,
-    };
 
     #[test]
     fn summary_table_only_regressions_primary() {
@@ -1487,7 +1489,7 @@ mod tests {
         let secondary = create_summary(secondary_statistics);
 
         let mut result = String::new();
-        write_summary_table(&primary, &secondary, &mut result);
+        write_summary_table(&primary, &secondary, true, &mut result);
         assert_eq!(result, expected);
     }
 

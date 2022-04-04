@@ -700,7 +700,7 @@ async fn categorize_benchmark(
             primary.unwrap_or_else(|| ComparisonSummary::empty()),
             secondary.unwrap_or_else(|| ComparisonSummary::empty()),
         );
-        write_summary_table(&primary, &secondary, &mut result);
+        write_summary_table(&primary, &secondary, true, &mut result);
     }
 
     write!(result, "\n{}", DISAGREEMENT).unwrap();
