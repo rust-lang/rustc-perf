@@ -761,7 +761,7 @@ fn generate_short_summary(
             } else {
                 (
                     format!(
-                        "no relevant changes found. {} results were found to be statistically significant but too small to be relevant.",
+                        "changes not relevant. {} results were found to be statistically significant but the changes were too small to be relevant.",
                         summary.num_significant_changes(),
                     ),
                     None
