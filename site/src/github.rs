@@ -1,16 +1,13 @@
 use crate::api::github::Issue;
-use crate::comparison::{
-    write_summary_table, Comparison, ComparisonConfidence, ComparisonSummary, Direction,
-};
+use crate::comparison::{write_summary_table, ComparisonConfidence, ComparisonSummary, Direction};
 use crate::load::{Config, SiteCtxt, TryCommit};
 
 use anyhow::Context as _;
-use database::{ArtifactId, Benchmark, QueuedCommit};
+use database::{ArtifactId, QueuedCommit};
 use reqwest::header::USER_AGENT;
 use serde::{Deserialize, Serialize};
 
-use collector::category::Category;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::{fmt::Write, sync::Arc, time::Duration};
 
 type BoxedError = Box<dyn std::error::Error + Send + Sync>;
@@ -651,21 +648,6 @@ compiler perf.{next_steps}
     )
 }
 
-pub type BenchmarkMap = HashMap<Benchmark, Category>;
-
-async fn get_benchmark_map(ctxt: &SiteCtxt) -> BenchmarkMap {
-    let benchmarks = ctxt.pool.connection().await.get_benchmarks().await;
-    benchmarks
-        .into_iter()
-        .map(|bench| {
-            (
-                bench.name.as_str().into(),
-                Category::from_db_representation(&bench.category).unwrap(),
-            )
-        })
-        .collect()
-}
-
 async fn categorize_benchmark(
     ctxt: &SiteCtxt,
     commit_sha: String,
@@ -684,8 +666,8 @@ async fn categorize_benchmark(
         _ => return (String::from("ERROR categorizing benchmark run!"), None),
     };
 
-    let benchmark_map = get_benchmark_map(ctxt).await;
-    let (primary, secondary) = split_comparison(comparison, benchmark_map);
+    let benchmark_map = ctxt.get_benchmark_category_map().await;
+    let (primary, secondary) = comparison.summarize_by_category(benchmark_map);
 
     const DISAGREEMENT: &str = "If you disagree with this performance assessment, \
     please file an issue in [rust-lang/rustc-perf](https://github.com/rust-lang/rustc-perf/issues/new).";
@@ -770,44 +752,6 @@ fn generate_short_summary(
         }
         None => ("no relevant changes found".to_string(), None),
     }
-}
-
-/// Splits comparison into primary and secondary summaries based on benchmark category
-fn split_comparison(
-    comparison: Comparison,
-    map: BenchmarkMap,
-) -> (Option<ComparisonSummary>, Option<ComparisonSummary>) {
-    let mut primary = HashSet::new();
-    let mut secondary = HashSet::new();
-
-    for statistic in comparison.statistics {
-        let category: Category = map
-            .get(&statistic.benchmark())
-            .copied()
-            .unwrap_or_else(|| Category::Secondary);
-        if let Category::Primary = category {
-            primary.insert(statistic);
-        } else {
-            secondary.insert(statistic);
-        }
-    }
-
-    let primary = Comparison {
-        a: comparison.a.clone(),
-        b: comparison.b.clone(),
-        statistics: primary,
-        new_errors: comparison.new_errors.clone(),
-    };
-    let secondary = Comparison {
-        a: comparison.a,
-        b: comparison.b,
-        statistics: secondary,
-        new_errors: comparison.new_errors,
-    };
-    (
-        ComparisonSummary::summarize_comparison(&primary),
-        ComparisonSummary::summarize_comparison(&secondary),
-    )
 }
 
 /// Whether a comparison is relevant enough to show

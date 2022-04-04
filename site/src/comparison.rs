@@ -7,11 +7,12 @@ use crate::db::{ArtifactId, Benchmark, Lookup, Profile, Scenario};
 use crate::github;
 use crate::load::SiteCtxt;
 use crate::selector::{self, Tag};
-use std::cmp::Ordering;
 
+use collector::category::Category;
 use collector::Bound;
 use serde::Serialize;
 
+use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::hash::Hash;
@@ -71,7 +72,7 @@ pub async fn handle_triage(
         );
 
         // handle results of comparison
-        populate_report(&comparison, &mut report).await;
+        populate_report(ctxt, &comparison, &mut report).await;
 
         // Check that there is a next commit and that the
         // after commit is not equal to `end`
@@ -142,6 +143,7 @@ pub async fn handle_compare(
 }
 
 async fn populate_report(
+    ctxt: &SiteCtxt,
     comparison: &Comparison,
     report: &mut HashMap<Option<Direction>, Vec<String>>,
 ) {
@@ -153,7 +155,7 @@ async fn populate_report(
                     .entry(confidence.is_definitely_relevant().then(|| direction))
                     .or_default();
 
-                entry.push(summary.write(comparison).await)
+                entry.push(write_summary(ctxt, comparison).await)
             }
         }
     }
@@ -206,11 +208,7 @@ impl ComparisonSummary {
         };
         comparisons.sort_by(cmp);
 
-        let errors_in = comparison
-            .new_errors
-            .keys()
-            .map(|k| k.as_str().to_owned())
-            .collect::<Vec<_>>();
+        let errors_in = comparison.new_errors.keys().cloned().collect::<Vec<_>>();
 
         Some(ComparisonSummary {
             comparisons,
@@ -296,16 +294,6 @@ impl ComparisonSummary {
         self.num_regressions
     }
 
-    /// The most relevant changes (based on size)
-    pub fn most_relevant_changes<'a>(&'a self) -> [Option<&TestResultComparison>; 2] {
-        match self.direction() {
-            Some(Direction::Improvement) => [self.largest_improvement(), None],
-            Some(Direction::Regression) => [self.largest_regression(), None],
-            Some(Direction::Mixed) => [self.largest_improvement(), self.largest_regression()],
-            None => [None, None],
-        }
-    }
-
     /// Arithmetic mean of all improvements as a percent
     pub fn arithmetic_mean_of_improvements(&self) -> f64 {
         self.arithmetic_mean(self.improvements())
@@ -382,66 +370,32 @@ impl ComparisonSummary {
             _ => ComparisonConfidence::MaybeRelevant,
         }
     }
+}
 
-    async fn write(&self, comparison: &Comparison) -> String {
-        let mut result = if let Some(pr) = comparison.b.pr {
-            let title = github::pr_title(pr).await;
-            format!(
-                "{} [#{}](https://github.com/rust-lang/rust/pull/{})\n",
-                title, pr, pr
-            )
-        } else {
-            String::from("<Unknown Change>\n")
-        };
-        let start = &comparison.a.artifact;
-        let end = &comparison.b.artifact;
-        let link = &compare_link(start, end);
+async fn write_summary(ctxt: &SiteCtxt, comparison: &Comparison) -> String {
+    use std::fmt::Write;
+    let mut result = if let Some(pr) = comparison.b.pr {
+        let title = github::pr_title(pr).await;
+        format!(
+            "{} [#{}](https://github.com/rust-lang/rust/pull/{})",
+            title, pr, pr
+        )
+    } else {
+        String::from("<Unknown Change>")
+    };
+    let start = &comparison.a.artifact;
+    let end = &comparison.b.artifact;
+    let link = &compare_link(start, end);
+    write!(&mut result, " [(Comparison Link)]({})\n", link).unwrap();
 
-        self.write_summary_lines(&mut result, Some(link));
+    let benchmark_map = ctxt.get_benchmark_category_map().await;
+    let (primary, secondary) = comparison.clone().summarize_by_category(benchmark_map);
+    let primary = primary.unwrap_or_else(ComparisonSummary::empty);
+    let secondary = secondary.unwrap_or_else(ComparisonSummary::empty);
 
-        result
-    }
+    write_summary_table(&primary, &secondary, &mut result);
 
-    pub fn write_summary_lines(&self, result: &mut String, link: Option<&str>) {
-        use std::fmt::Write;
-        if self.num_regressions > 1 {
-            writeln!(
-                result,
-                "- Arithmetic mean of relevant regressions: {:.1}%",
-                self.arithmetic_mean_of_regressions()
-            )
-            .unwrap();
-        }
-        if self.num_improvements > 1 {
-            writeln!(
-                result,
-                "- Arithmetic mean of relevant improvements: {:.1}%",
-                self.arithmetic_mean_of_improvements()
-            )
-            .unwrap();
-        }
-        if self.num_improvements > 0 && self.num_regressions > 0 {
-            writeln!(
-                result,
-                "- Arithmetic mean of all relevant changes: {:.1}%",
-                self.arithmetic_mean_of_changes()
-            )
-            .unwrap();
-        }
-        for change in self.most_relevant_changes().iter().filter_map(|s| *s) {
-            write!(result, "- ").unwrap();
-            change.summary_line(result, link)
-        }
-
-        if !self.errors_in.is_empty() {
-            write!(
-                result,
-                "- Benchmark(s) {} started failing to build",
-                self.errors_in.join(", ")
-            )
-            .unwrap();
-        }
-    }
+    result
 }
 
 /// Writes a Markdown table containing summary of relevant results.
@@ -800,6 +754,7 @@ impl From<ArtifactDescription> for api::comparison::ArtifactDescription {
 }
 
 // A comparison of two artifacts
+#[derive(Clone)]
 pub struct Comparison {
     pub a: ArtifactDescription,
     pub b: ArtifactDescription,
@@ -835,6 +790,34 @@ impl Comparison {
     /// Gets the sha of the next commit after `b`
     pub fn next(&self, master_commits: &[collector::MasterCommit]) -> Option<String> {
         next_commit(&self.b.artifact, master_commits).map(|c| c.sha.clone())
+    }
+
+    /// Splits comparison into primary and secondary summaries based on benchmark category
+    pub fn summarize_by_category(
+        self,
+        map: HashMap<Benchmark, Category>,
+    ) -> (Option<ComparisonSummary>, Option<ComparisonSummary>) {
+        let (primary, secondary) = self
+            .statistics
+            .into_iter()
+            .partition(|s| map.get(&s.benchmark()) == Some(&Category::Primary));
+
+        let primary = Comparison {
+            a: self.a.clone(),
+            b: self.b.clone(),
+            statistics: primary,
+            new_errors: self.new_errors.clone(),
+        };
+        let secondary = Comparison {
+            a: self.a,
+            b: self.b,
+            statistics: secondary,
+            new_errors: self.new_errors,
+        };
+        (
+            ComparisonSummary::summarize_comparison(&primary),
+            ComparisonSummary::summarize_comparison(&secondary),
+        )
     }
 }
 
@@ -1110,33 +1093,6 @@ impl TestResultComparison {
     fn relative_change(&self) -> f64 {
         let (a, b) = self.results;
         (b - a) / a
-    }
-
-    fn direction(&self) -> Direction {
-        if self.relative_change() > 0.0 {
-            Direction::Regression
-        } else {
-            Direction::Improvement
-        }
-    }
-
-    pub fn summary_line(&self, summary: &mut String, link: Option<&str>) {
-        use std::fmt::Write;
-        let percent = self.relative_change() * 100.0;
-        writeln!(
-            summary,
-            "Largest {} in {}: {:.1}% on `{}` builds of `{} {}`",
-            self.direction(),
-            match link {
-                Some(l) => format!("[instruction counts]({})", l),
-                None => "instruction counts".into(),
-            },
-            percent,
-            self.scenario,
-            self.benchmark,
-            self.profile
-        )
-        .unwrap();
     }
 }
 
