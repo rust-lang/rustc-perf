@@ -320,6 +320,10 @@ impl ComparisonSummary {
         self.comparisons.is_empty()
     }
 
+    pub fn errors_in(&self) -> &[String] {
+        &self.errors_in
+    }
+
     fn arithmetic_mean<'a>(
         &'a self,
         changes: impl Iterator<Item = &'a TestResultComparison>,
@@ -499,20 +503,6 @@ pub fn write_summary_table(
         largest_change
     )
     .unwrap();
-
-    if !primary.errors_in.is_empty() {
-        write!(
-            result,
-            "\nThe following benchmark(s) failed to build:\n{}\n",
-            primary
-                .errors_in
-                .iter()
-                .map(|benchmark| format!("- {benchmark}"))
-                .collect::<Vec<_>>()
-                .join("\n")
-        )
-        .unwrap();
-    }
 
     if with_footnotes {
         writeln!(
