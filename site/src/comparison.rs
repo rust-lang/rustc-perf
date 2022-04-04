@@ -7,6 +7,7 @@ use crate::db::{ArtifactId, Benchmark, Lookup, Profile, Scenario};
 use crate::github;
 use crate::load::SiteCtxt;
 use crate::selector::{self, Tag};
+use std::cmp::Ordering;
 
 use collector::Bound;
 use serde::Serialize;
@@ -501,14 +502,26 @@ pub fn write_summary_table(
     let largest_change = if primary.is_empty() {
         "N/A".to_string()
     } else {
-        let change = primary
-            .most_relevant_changes()
-            .iter()
-            .fold(0.0, |accum: f64, item| {
-                let change = item.map(|v| v.relative_change() * 100.0).unwrap_or(0.0);
-                accum.max(change)
-            });
-        format!("{:.1}%", change)
+        let largest_improvement = primary
+            .largest_improvement()
+            .map(|c| c.relative_change())
+            .unwrap_or(0.0);
+        let largest_regression = primary
+            .largest_regression()
+            .map(|c| c.relative_change())
+            .unwrap_or(0.0);
+        let change = if largest_improvement
+            .abs()
+            .partial_cmp(&largest_regression.abs())
+            .unwrap_or(Ordering::Equal)
+            != Ordering::Less
+        {
+            largest_improvement
+        } else {
+            largest_regression
+        };
+
+        format!("{:.1}%", change * 100.0)
     };
 
     writeln!(
@@ -1317,7 +1330,7 @@ mod tests {
     };
 
     #[test]
-    fn summary_table_only_improvements_primary() {
+    fn summary_table_only_regressions_primary() {
         check_table(
             vec![
                 (Category::Primary, 5.0, 10.0),
@@ -1339,7 +1352,7 @@ mod tests {
     }
 
     #[test]
-    fn summary_table_only_regressions_primary() {
+    fn summary_table_only_improvements_primary() {
         check_table(
             vec![
                 (Category::Primary, 5.0, 2.0),
@@ -1351,7 +1364,7 @@ mod tests {
 |:---:|:---:|:---:|:---:|:---:|:---:|
 | count[^1] | 0 | 0 | 3 | 0 | 3 |
 | mean[^2] | N/A | N/A | -71.7% | N/A | -71.7% |
-| max | N/A | N/A | -80.0% | N/A | 0.0% |
+| max | N/A | N/A | -80.0% | N/A | -80.0% |
 
 [^1]: *number of relevant changes*
 [^2]: *the arithmetic mean of the percent change*
@@ -1444,6 +1457,48 @@ mod tests {
 | count[^1] | 2 | 1 | 2 | 1 | 4 |
 | mean[^2] | 150.0% | 100.0% | -62.5% | -66.7% | 43.8% |
 | max | 200.0% | 100.0% | -75.0% | -66.7% | 200.0% |
+
+[^1]: *number of relevant changes*
+[^2]: *the arithmetic mean of the percent change*
+"#
+                .trim_start(),
+        );
+    }
+
+    #[test]
+    fn summary_table_mixed_largest_change_improvement() {
+        check_table(
+            vec![
+                (Category::Primary, 10.0, 5.0),
+                (Category::Primary, 5.0, 6.0),
+            ],
+            r#"
+| | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| count[^1] | 1 | 0 | 1 | 0 | 2 |
+| mean[^2] | 20.0% | N/A | -50.0% | N/A | -15.0% |
+| max | 20.0% | N/A | -50.0% | N/A | -50.0% |
+
+[^1]: *number of relevant changes*
+[^2]: *the arithmetic mean of the percent change*
+"#
+                .trim_start(),
+        );
+    }
+
+    #[test]
+    fn summary_table_mixed_largest_change_regression() {
+        check_table(
+            vec![
+                (Category::Primary, 5.0, 10.0),
+                (Category::Primary, 6.0, 5.0),
+            ],
+            r#"
+| | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| count[^1] | 1 | 0 | 1 | 0 | 2 |
+| mean[^2] | 100.0% | N/A | -16.7% | N/A | 41.7% |
+| max | 100.0% | N/A | -16.7% | N/A | 100.0% |
 
 [^1]: *number of relevant changes*
 [^2]: *the arithmetic mean of the percent change*
