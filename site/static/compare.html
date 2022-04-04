@@ -206,11 +206,11 @@
             height: 10px;
         }
 
-        #content td {
+        #bootstrap th {
             text-align: center;
         }
 
-        #bootstrap th {
+        #bootstrap td {
             text-align: center;
         }
 
@@ -227,9 +227,12 @@
             width: 25%;
             min-width: 50px;
         }
-
-        .benches th+td {
+        .benches td {
+            text-align: center;
             width: 25%;
+        }
+        .benches td.numeric {
+            text-align: right;
         }
 
         .benchmark-name {
@@ -1053,12 +1056,12 @@
                 <td>
                     {{ testCase.significanceFactor ? testCase.significanceFactor.toFixed(2) + "x" : "-" }}
                 </td>
-                <td v-if="showRawData">
+                <td v-if="showRawData" class="numeric">
                   <a v-bind:href="detailedQueryLink(commitA, testCase)">
                     <abbr :title="testCase.datumA">{{ testCase.datumA.toFixed(2) }}</abbr>
                   </a>
                 </td>
-                <td v-if="showRawData">
+                <td v-if="showRawData" class="numeric">
                   <a v-bind:href="detailedQueryLink(commitB, testCase)">
                     <abbr :title="testCase.datumB">{{ testCase.datumB.toFixed(2) }}</abbr>
                   </a>
