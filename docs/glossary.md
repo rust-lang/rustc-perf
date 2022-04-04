@@ -25,20 +25,20 @@ The following is a glossary of domain specific terminology. Although benchmarks 
 * **test case**: a combination of a benchmark, a profile, and a scenario.
 * **test**: the act of running an artifact under a test case. Each test result is composed of many iterations.
 * **test iteration**: a single iteration that makes up a test. Note: we currently normally run 2 test iterations for each test. 
-* **test result**: the result of the collection of all statistics from running a test. Currently the minimum of the statistics.
+* **test result**: the result of the collection of all statistics from running a test. Currently, the minimum value of a statistic from all the test iterations is used.
 * **statistic**: a single value of a metric in a test result
 * **statistic description**: the combination of a metric and a test case which describes a statistic.
 * **statistic series**: statistics for the same statistic description over time.
 * **run**: a collection of test results for all currently available test cases run on a given artifact. 
-* **test result delta**: the delta between two test results for the same test case but (optionally) different artifacts. The [comparison page](https://perf.rust-lang.org/compare.html) lists all the test result deltas as percentages comparing two runs.  
 
 ## Analysis
 
-* **test result delta**: the difference between two test results for the same metric and test case.
-* **significance threshold**: the threshold at which a test result delta is considered "significant" (i.e., a real change in performance and not just noise). This is calculated using [the upper IQR fence](https://www.statisticshowto.com/upper-and-lower-fences/#:~:text=Upper%20and%20lower%20fences%20cordon,%E2%80%93%20(1.5%20*%20IQR)) as seen [here](https://github.com/rust-lang/rustc-perf/blob/8ba845644b4cfcffd96b909898d7225931b55557/site/src/comparison.rs#L935-L941).
-* **significant test result delta**: a test result delta above the significance threshold. Significant test result deltas can be thought of as "statistically significant".
+* **test result comparison**: the delta between two test results for the same test case but (optionally) different artifacts. The [comparison page](https://perf.rust-lang.org/compare.html) lists all the test result comparisons as percentages between two runs.  
+* **significance threshold**: the threshold at which a test result comparison is considered "significant" (i.e., a real change in performance and not just noise). This is calculated using [the upper IQR fence](https://www.statisticshowto.com/upper-and-lower-fences/#:~:text=Upper%20and%20lower%20fences%20cordon,%E2%80%93%20(1.5%20*%20IQR)) as seen [here](https://github.com/rust-lang/rustc-perf/blob/8ba845644b4cfcffd96b909898d7225931b55557/site/src/comparison.rs#L935-L941).
+* **significant test result comparison**: a test result comparison above the significance threshold. Significant test result comparisons can be thought of as being "statistically significant".
+* **relevant test result comparison**: a test result comparison can be significant but still not be relevant (i.e., worth paying attention to). Relevance is a factor of the test result comparison's *magnitude*. Comparisons are considered relevant if they have a small magnitude or more. This term is often used to mean "significant *and* relevant" since relevant changes are necessarily also significant.
+* **test result comparison magnitude**: how "large" the delta is between the two test result's under comparison. This is determined by the average of two factors: the absolute size of the change (i.e., a change of 5% is larger than a change of 1%) and the amount above the significance threshold (i.e., a change that is 5x the significance threshold is larger than a change 1.5x the significance threshold).
 * **dodgy test case**: a test case for which the significance threshold is significantly large indicating a high amount of variability in the test and thus making it necessary to be somewhat skeptical of any results too close to the significance threshold.
-* **relevant test result delta**: a synonym for *significant test result delta* in situations where the term "significant" might be ambiguous and readers may potentially interpret *significant* as "large" or "statistically significant". For example, in try run results, we use the term relevant instead of significant.
 
 ## Other 
 

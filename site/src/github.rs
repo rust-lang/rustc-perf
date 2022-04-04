@@ -1,5 +1,5 @@
 use crate::api::github::Issue;
-use crate::comparison::{write_summary_table, ComparisonConfidence, ComparisonSummary, Direction};
+use crate::comparison::{write_summary_table, ComparisonSummary, Direction, RelevanceLevel};
 use crate::load::{Config, SiteCtxt, TryCommit};
 
 use anyhow::Context as _;
@@ -741,7 +741,7 @@ fn generate_short_summary(
 
     match summary {
         Some(summary) => {
-            if comparison_is_relevant(summary.confidence(), is_master_commit) {
+            if comparison_is_relevant(summary.relevance_level(), is_master_commit) {
                 let direction = summary.direction().unwrap();
                 let num_improvements = summary.number_of_improvements();
                 let num_regressions = summary.number_of_regressions();
@@ -773,12 +773,12 @@ fn generate_short_summary(
 }
 
 /// Whether a comparison is relevant enough to show
-fn comparison_is_relevant(confidence: ComparisonConfidence, is_master_commit: bool) -> bool {
+fn comparison_is_relevant(relevance: RelevanceLevel, is_master_commit: bool) -> bool {
     if is_master_commit {
-        confidence.is_definitely_relevant()
+        relevance.very_relevant()
     } else {
         // is try run
-        confidence.is_atleast_probably_relevant()
+        relevance.at_least_somewhat_relevant()
     }
 }
 

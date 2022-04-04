@@ -148,11 +148,11 @@ async fn populate_report(
     report: &mut HashMap<Option<Direction>, Vec<String>>,
 ) {
     if let Some(summary) = ComparisonSummary::summarize_comparison(comparison) {
-        let confidence = summary.confidence();
-        if confidence.is_atleast_probably_relevant() {
+        let relevance = summary.relevance_level();
+        if relevance.at_least_somewhat_relevant() {
             if let Some(direction) = summary.direction() {
                 let entry = report
-                    .entry(confidence.is_definitely_relevant().then(|| direction))
+                    .entry(relevance.very_relevant().then(|| direction))
                     .or_default();
 
                 entry.push(write_triage_summary(ctxt, comparison).await)
@@ -163,7 +163,7 @@ async fn populate_report(
 
 /// A summary of a given comparison
 ///
-/// This summary only includes changes that are significant and relevant (as determined by a changes magnitude).
+/// This summary only includes changes that are significant and relevant (as determined by a change's magnitude).
 pub struct ComparisonSummary {
     /// Significant comparisons of magnitude small and above
     /// and ordered by magnitude from largest to smallest
@@ -185,7 +185,7 @@ impl ComparisonSummary {
             .statistics
             .iter()
             .filter(|c| c.is_significant())
-            .filter(|c| c.magnitude().is_small_or_above())
+            .filter(|c| c.is_relevant())
             .inspect(|c| {
                 if c.is_improvement() {
                     num_improvements += 1;
@@ -354,24 +354,25 @@ impl ComparisonSummary {
         self.comparisons.iter().find(|s| s.is_regression())
     }
 
-    pub fn confidence(&self) -> ComparisonConfidence {
+    /// The relevance level of the entire comparison
+    pub fn relevance_level(&self) -> RelevanceLevel {
         let mut num_small_changes = 0;
         let mut num_medium_changes = 0;
         for c in self.comparisons.iter() {
             match c.magnitude() {
                 Magnitude::Small => num_small_changes += 1,
                 Magnitude::Medium => num_medium_changes += 1,
-                Magnitude::Large => return ComparisonConfidence::DefinitelyRelevant,
-                Magnitude::VeryLarge => return ComparisonConfidence::DefinitelyRelevant,
+                Magnitude::Large => return RelevanceLevel::High,
+                Magnitude::VeryLarge => return RelevanceLevel::High,
                 Magnitude::VerySmall => unreachable!(),
             }
         }
 
         match (num_small_changes, num_medium_changes) {
-            (_, m) if m > 1 => ComparisonConfidence::DefinitelyRelevant,
-            (_, 1) => ComparisonConfidence::ProbablyRelevant,
-            (s, 0) if s > 10 => ComparisonConfidence::ProbablyRelevant,
-            _ => ComparisonConfidence::MaybeRelevant,
+            (_, m) if m > 1 => RelevanceLevel::High,
+            (_, 1) => RelevanceLevel::Medium,
+            (s, 0) if s > 10 => RelevanceLevel::Medium,
+            _ => RelevanceLevel::Low,
         }
     }
 }
@@ -515,22 +516,21 @@ pub fn write_summary_table(
     }
 }
 
-/// The amount of confidence we have that a comparison actually represents a real
-/// change in the performance characteristics.
+/// How relevant a set of test result comparisons are.
 #[derive(Clone, Copy, Debug)]
-pub enum ComparisonConfidence {
-    MaybeRelevant,
-    ProbablyRelevant,
-    DefinitelyRelevant,
+pub enum RelevanceLevel {
+    Low,
+    Medium,
+    High,
 }
 
-impl ComparisonConfidence {
-    pub fn is_definitely_relevant(self) -> bool {
-        matches!(self, Self::DefinitelyRelevant)
+impl RelevanceLevel {
+    pub fn very_relevant(self) -> bool {
+        matches!(self, Self::High)
     }
 
-    pub fn is_atleast_probably_relevant(self) -> bool {
-        matches!(self, Self::DefinitelyRelevant | Self::ProbablyRelevant)
+    pub fn at_least_somewhat_relevant(self) -> bool {
+        matches!(self, Self::High | Self::Medium)
     }
 }
 
@@ -1037,6 +1037,15 @@ impl TestResultComparison {
         Some(change.abs() / threshold)
     }
 
+    /// Whether the comparison is relevant or not
+    fn is_relevant(&self) -> bool {
+        self.magnitude().is_small_or_above()
+    }
+
+    /// The magnitude of the change.
+    ///
+    /// This is the average of the absolute magnitude of the change
+    /// and the amount above the significance threshold.
     fn magnitude(&self) -> Magnitude {
         let change = self.relative_change().abs();
         let threshold = self.significance_threshold();
@@ -1051,7 +1060,7 @@ impl TestResultComparison {
         } else {
             Magnitude::VeryLarge
         };
-        let change_magnitude = if change < 0.002 {
+        let absolute_magnitude = if change < 0.002 {
             Magnitude::VerySmall
         } else if change < 0.01 {
             Magnitude::Small
@@ -1081,7 +1090,9 @@ impl TestResultComparison {
             }
         }
 
-        from_u8((as_u8(over_threshold) + as_u8(change_magnitude)) / 2)
+        // Take the average of the absolute magnitude and the magnitude
+        // above the significance threshold.
+        from_u8((as_u8(over_threshold) + as_u8(absolute_magnitude)) / 2)
     }
 
     fn is_dodgy(&self) -> bool {
