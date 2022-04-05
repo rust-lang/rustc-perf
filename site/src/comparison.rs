@@ -117,7 +117,6 @@ pub async fn handle_compare(
             benchmark: comparison.benchmark.to_string(),
             profile: comparison.profile.to_string(),
             scenario: comparison.scenario.to_string(),
-            is_dodgy: comparison.is_dodgy(),
             is_significant: comparison.is_significant(),
             significance_factor: comparison.significance_factor(),
             magnitude: comparison.magnitude().display().to_owned(),
@@ -953,13 +952,6 @@ impl HistoricalData {
             .windows(2)
             .map(|window| (window[0] - window[1]).abs())
     }
-
-    /// Whether we can trust this benchmark or not
-    fn is_dodgy(&self) -> bool {
-        // If changes are judged significant only exceeding 0.2%, then the
-        // benchmark as a whole is dodgy.
-        self.significance_threshold() * 100.0 > 0.2
-    }
 }
 
 /// Gets the previous commit
@@ -1094,13 +1086,6 @@ impl TestResultComparison {
         // Take the average of the absolute magnitude and the magnitude
         // above the significance threshold.
         from_u8((as_u8(over_threshold) + as_u8(absolute_magnitude)) / 2)
-    }
-
-    fn is_dodgy(&self) -> bool {
-        self.historical_data
-            .as_ref()
-            .map(|v| v.is_dodgy())
-            .unwrap_or(false)
     }
 
     fn relative_change(&self) -> f64 {

@@ -68,7 +68,3 @@ The actual algorithm for determining relevance of a comparison summary may chang
 * High relevance: any number of very large or large changes, a small amount of medium changes, or a large number of small or very small changes.
 * Medium relevance: any number of very large or large changes, any medium change, or smaller but still substantial number of small or very small changes.
 * Low relevance: if it doesn't fit into the above two categories, it ends in this category.
-
-### "Dodgy" Test Cases
-
-"Dodgy" test cases are test cases that tend to produce unreliable results (i.e., noise). A test case is considered "dodgy" if its significance threshold is sufficiently far enough away from 0.

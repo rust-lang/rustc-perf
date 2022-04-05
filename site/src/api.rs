@@ -191,7 +191,6 @@ pub mod comparison {
         pub scenario: String,
         pub is_significant: bool,
         pub significance_factor: Option<f64>,
-        pub is_dodgy: bool,
         pub magnitude: String,
         pub statistics: (f64, f64),
     }
