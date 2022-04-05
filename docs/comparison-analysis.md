@@ -33,7 +33,7 @@ How many _significant_ test results indicate performance changes and what is the
   * given 20 changes of different kinds all of low magnitude, the result is mixed unless only 2 or fewer of the changes are of one kind.
   * given 5 changes of different kinds all of low magnitude, the result is always mixed.
 
-Whether we actually _report_ an analysis or not depends on the context and how relevant we find the summary of the results over all (see below for an explanation of how summary relevant is determined). For example, in pull request performance "try" runs, we report a performance change if results are "somewhat relevant", while for the triage report, we only report if the we are confident the results are "definitely relevant".
+Whether we actually _report_ an analysis or not depends on the context and how relevant we find the summary of the results over all (see below for an explanation of how the relevance of a summary is determined). For example, in pull request performance "try" runs, we report a performance change if results are "somewhat relevant", while for the triage report, we only report if the we are confident the results are "definitely relevant".
 
 ### What makes a test result significant?
 
@@ -60,14 +60,14 @@ Magnitude is a combination of two factors:
 * how large a change is regardless of the direction of the change
 * how much that change went over the significance threshold
 
-If a large change only happens to go over the significance threshold by a small factor, then the over magnitude of the change is considered small.
+As an example, if a change that is large in absolute terms only exceeds the significance threshold by a small factor, then the overall magnitude of the change is considered small.
 
 #### Relevance algorithm
 
 The actual algorithm for determining relevance of a comparison summary may change, but in general the following rules apply:
-* High relevance: any number of very large or large changes, a small amount of medium changes, or a large amount of small or very small changes.
-* Medium relevance: any number of very large or large changes, any medium change, or smaller but still substantial amount of small or very small changes.
-* Small relevance: if it doesn't fit into the above two categories, it ends in this category.
+* High relevance: any number of very large or large changes, a small amount of medium changes, or a large number of small or very small changes.
+* Medium relevance: any number of very large or large changes, any medium change, or smaller but still substantial number of small or very small changes.
+* Low relevance: if it doesn't fit into the above two categories, it ends in this category.
 
 ### "Dodgy" Test Cases
 

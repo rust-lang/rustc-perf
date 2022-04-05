@@ -184,7 +184,6 @@ impl ComparisonSummary {
         let mut comparisons = comparison
             .statistics
             .iter()
-            .filter(|c| c.is_significant())
             .filter(|c| c.is_relevant())
             .inspect(|c| {
                 if c.is_improvement() {
@@ -1037,9 +1036,11 @@ impl TestResultComparison {
         Some(change.abs() / threshold)
     }
 
-    /// Whether the comparison is relevant or not
+    /// Whether the comparison is relevant or not.
+    ///
+    /// Relevance is a function of significance and magnitude.
     fn is_relevant(&self) -> bool {
-        self.magnitude().is_small_or_above()
+        self.is_significant() && self.magnitude().is_small_or_above()
     }
 
     /// The magnitude of the change.
