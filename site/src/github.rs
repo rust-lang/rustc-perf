@@ -700,7 +700,25 @@ async fn categorize_benchmark(
             primary.unwrap_or_else(|| ComparisonSummary::empty()),
             secondary.unwrap_or_else(|| ComparisonSummary::empty()),
         );
-        write_summary_table(&primary, &secondary, &mut result);
+        write_summary_table(&primary, &secondary, true, &mut result);
+
+        if !primary.errors_in().is_empty() || !secondary.errors_in().is_empty() {
+            let list_errored_benchmarks = |summary: ComparisonSummary| {
+                summary
+                    .errors_in()
+                    .iter()
+                    .map(|benchmark| format!("- {benchmark}"))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            };
+            write!(
+                result,
+                "\nThe following benchmark(s) failed to build:\n{}{}\n",
+                list_errored_benchmarks(primary),
+                list_errored_benchmarks(secondary)
+            )
+            .unwrap();
+        }
     }
 
     write!(result, "\n{}", DISAGREEMENT).unwrap();
@@ -743,7 +761,7 @@ fn generate_short_summary(
             } else {
                 (
                     format!(
-                        "no relevant changes found. {} results were found to be statistically significant but too small to be relevant.",
+                        "changes not relevant. {} results were found to be statistically significant but the changes were too small to be relevant.",
                         summary.num_significant_changes(),
                     ),
                     None
