@@ -810,7 +810,6 @@
                                     magnitude: c.magnitude,
                                     isSignificant: c.is_significant,
                                     significanceFactor: c.significance_factor,
-                                    isDodgy: c.is_dodgy,
                                     datumA,
                                     datumB,
                                     percent,
@@ -1049,7 +1048,7 @@
                 <td>
                     <a v-bind:href="percentLink(commitB, commitA, testCase)">
                         <span v-bind:class="percentClass(testCase.percent)">
-                            {{ testCase.percent.toFixed(2) }}%{{testCase.isDodgy ? "?" : ""}}
+                            {{ testCase.percent.toFixed(2) }}%
                         </span>
                     </a>
                 </td>

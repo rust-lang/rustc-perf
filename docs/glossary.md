@@ -38,7 +38,6 @@ The following is a glossary of domain specific terminology. Although benchmarks 
 * **significant test result comparison**: a test result comparison above the significance threshold. Significant test result comparisons can be thought of as being "statistically significant".
 * **relevant test result comparison**: a test result comparison can be significant but still not be relevant (i.e., worth paying attention to). Relevance is a factor of the test result comparison's significance and magnitude. Comparisons are considered relevant if they are significant and have at least a small magnitude .
 * **test result comparison magnitude**: how "large" the delta is between the two test result's under comparison. This is determined by the average of two factors: the absolute size of the change (i.e., a change of 5% is larger than a change of 1%) and the amount above the significance threshold (i.e., a change that is 5x the significance threshold is larger than a change 1.5x the significance threshold).
-* **dodgy test case**: a test case for which the significance threshold is significantly large indicating a high amount of variability in the test and thus making it necessary to be somewhat skeptical of any results too close to the significance threshold.
 
 ## Other 
 
