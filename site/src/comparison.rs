@@ -755,7 +755,7 @@ pub struct Comparison {
     pub b: ArtifactDescription,
     /// Statistics based on test case
     pub statistics: HashSet<TestResultComparison>,
-    /// A map from benchmark name to an error which occured when building `b` but `a`.
+    /// A map from benchmark name to an error which occured when building `b` but not `a`.
     pub new_errors: HashMap<String, String>,
 }
 
