@@ -525,29 +525,17 @@
                     </ul>
                 </div>
                 <div class="section">
-                    <div class="section-heading"><span>Show only significant changes</span>
+                    <div class="section-heading"><span>Show non-relevant results</span>
                         <span class="tooltip">?
                             <span class="tooltiptext">
-                                Whether to filter out all benchmarks that do not show significant changes. A significant
-                                change is any change greater than or equal to 0.2% for non-noisy benchmarks and above
-                                1.0% for noisy ones.
+                                Whether to show test case results that are not relevant (i.e., not significant or 
+                                have a large enough magnitude). You can see 
+                                <a href="https://github.com/rust-lang/rustc-perf/blob/master/docs/comparison-analysis.md#how-is-relevance-of-a-test-run-summary-determined">
+                                here</a> how relevance is calculated.
                             </span>
                         </span>
                     </div>
-                    <input type="checkbox" v-model="filter.showOnlySignificant" style="margin-left: 20px;" />
-                </div>
-                <div class="section">
-                    <div class="section-heading"><span>Filter out very small changes</span>
-                        <span class="tooltip">?
-                            <span class="tooltiptext">
-                                Whether to filter out test cases that have a very small magnitude. Magnitude is
-                                calculated both on the absolute magnitude (i.e., how large of a percentage change)
-                                as well as the magnitude of the significance (i.e., by how many time the change was
-                                over the significance threshold).
-                            </span>
-                        </span>
-                    </div>
-                    <input type="checkbox" v-model="filter.filterVerySmall" style="margin-left: 20px;" />
+                    <input type="checkbox" v-model="filter.showNonRelevant" style="margin-left: 20px;" />
                 </div>
                 <div class="section">
                     <div class="section-heading"><span>Display raw data</span>
@@ -700,8 +688,7 @@
                 return {
                     filter: {
                         name: null,
-                        showOnlySignificant: true,
-                        filterVerySmall: true,
+                        showNonRelevant: false,
                         profile: {
                             check: true,
                             debug: true,
@@ -782,17 +769,14 @@
                         let nameFilter = filter.name && filter.name.trim();
                         nameFilter = !nameFilter || name.includes(nameFilter);
 
-                        const significanceFilter = filter.showOnlySignificant ? testCase.isSignificant : true;
-
-                        const magnitudeFilter = filter.filterVerySmall ? testCase.magnitude != "very small" : true;
+                        const relevanceFilter = filter.showNonRelevant ? true : testCase.isRelevant;
 
                         return (
                             profileFilter(testCase.profile) &&
                             scenarioFilter(testCase.scenario) &&
                             categoryFilter(testCase.category) &&
-                            significanceFilter &&
-                            nameFilter &&
-                            magnitudeFilter
+                            relevanceFilter &&
+                            nameFilter 
                         );
                     }
 
@@ -807,8 +791,7 @@
                                     profile: c.profile,
                                     scenario: c.scenario,
                                     category: (benchmarkMap[c.benchmark] || {}).category || "secondary",
-                                    magnitude: c.magnitude,
-                                    isSignificant: c.is_significant,
+                                    isRelevant: c.is_relevant,
                                     significanceFactor: c.significance_factor,
                                     datumA,
                                     datumB,
@@ -909,10 +892,10 @@
                     };
 
                     const addDatum = (result, datum, percent) => {
-                        if (percent > 0 && datum.is_significant) {
+                        if (percent > 0 && datum.is_relevant) {
                             result.regressions += 1;
                             result.regressions_avg += percent;
-                        } else if (percent < 0 && datum.is_significant) {
+                        } else if (percent < 0 && datum.is_relevant) {
                             result.improvements += 1;
                             result.improvements_avg += percent;
                         } else {

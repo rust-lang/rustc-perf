@@ -117,9 +117,8 @@ pub async fn handle_compare(
             benchmark: comparison.benchmark.to_string(),
             profile: comparison.profile.to_string(),
             scenario: comparison.scenario.to_string(),
-            is_significant: comparison.is_significant(),
+            is_relevant: comparison.is_relevant(),
             significance_factor: comparison.significance_factor(),
-            magnitude: comparison.magnitude().display().to_owned(),
             statistics: comparison.results,
         })
         .collect();
@@ -1141,16 +1140,6 @@ impl Magnitude {
 
     fn is_medium_or_above(&self) -> bool {
         *self >= Self::Medium
-    }
-
-    pub fn display(&self) -> &'static str {
-        match self {
-            Self::VerySmall => "very small",
-            Self::Small => "small",
-            Self::Medium => "moderate",
-            Self::Large => "large",
-            Self::VeryLarge => "very large",
-        }
     }
 }
 
