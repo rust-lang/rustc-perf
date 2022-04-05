@@ -666,18 +666,28 @@ async fn categorize_benchmark(
         _ => return (String::from("ERROR categorizing benchmark run!"), None),
     };
 
+    let errors = if !comparison.newly_failed_benchmarks.is_empty() {
+        let benchmarks = comparison
+            .newly_failed_benchmarks
+            .iter()
+            .map(|(benchmark, _)| format!("- {benchmark}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        format!("\n**Warning ⚠**: The following benchmark(s) failed to build:\n{benchmarks}\n")
+    } else {
+        String::new()
+    };
+
     let benchmark_map = ctxt.get_benchmark_category_map().await;
     let (primary, secondary) = comparison.summarize_by_category(benchmark_map);
 
     const DISAGREEMENT: &str = "If you disagree with this performance assessment, \
     please file an issue in [rust-lang/rustc-perf](https://github.com/rust-lang/rustc-perf/issues/new).";
+    let footer = format!("{DISAGREEMENT}{errors}");
 
     if primary.is_none() && secondary.is_none() {
         return (
-            format!(
-                "This benchmark run did not return any relevant results.\n\n{}",
-                DISAGREEMENT
-            ),
+            format!("This benchmark run did not return any relevant results.\n\n{footer}"),
             None,
         );
     }
@@ -701,27 +711,9 @@ async fn categorize_benchmark(
             secondary.unwrap_or_else(|| ComparisonSummary::empty()),
         );
         write_summary_table(&primary, &secondary, true, &mut result);
-
-        if !primary.errors_in().is_empty() || !secondary.errors_in().is_empty() {
-            let list_errored_benchmarks = |summary: ComparisonSummary| {
-                summary
-                    .errors_in()
-                    .iter()
-                    .map(|benchmark| format!("- {benchmark}"))
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            };
-            write!(
-                result,
-                "\nThe following benchmark(s) failed to build:\n{}{}\n",
-                list_errored_benchmarks(primary),
-                list_errored_benchmarks(secondary)
-            )
-            .unwrap();
-        }
     }
 
-    write!(result, "\n{}", DISAGREEMENT).unwrap();
+    write!(result, "\n{footer}").unwrap();
 
     let direction = primary_direction.or(secondary_direction);
     (result, direction)

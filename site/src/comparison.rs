@@ -124,7 +124,10 @@ pub async fn handle_compare(
         })
         .collect();
 
-    let mut new_errors = comparison.new_errors.into_iter().collect::<Vec<_>>();
+    let mut new_errors = comparison
+        .newly_failed_benchmarks
+        .into_iter()
+        .collect::<Vec<_>>();
     new_errors.sort();
     Ok(api::comparison::Response {
         prev,
@@ -171,8 +174,6 @@ pub struct ComparisonSummary {
     num_improvements: usize,
     /// The cached number of comparisons that are regressions
     num_regressions: usize,
-    /// Which benchmarks had errors
-    errors_in: Vec<String>,
 }
 
 impl ComparisonSummary {
@@ -206,13 +207,10 @@ impl ComparisonSummary {
         };
         comparisons.sort_by(cmp);
 
-        let errors_in = comparison.new_errors.keys().cloned().collect::<Vec<_>>();
-
         Some(ComparisonSummary {
             comparisons,
             num_improvements,
             num_regressions,
-            errors_in,
         })
     }
 
@@ -221,7 +219,6 @@ impl ComparisonSummary {
             comparisons: vec![],
             num_improvements: 0,
             num_regressions: 0,
-            errors_in: vec![],
         }
     }
 
@@ -316,10 +313,6 @@ impl ComparisonSummary {
 
     pub fn is_empty(&self) -> bool {
         self.comparisons.is_empty()
-    }
-
-    pub fn errors_in(&self) -> &[String] {
-        &self.errors_in
     }
 
     fn arithmetic_mean<'a>(
@@ -606,7 +599,7 @@ async fn compare_given_commits(
         a: ArtifactDescription::for_artifact(&*conn, a.clone(), master_commits).await,
         b: ArtifactDescription::for_artifact(&*conn, b.clone(), master_commits).await,
         statistics,
-        new_errors: errors_in_b.into_iter().collect(),
+        newly_failed_benchmarks: errors_in_b.into_iter().collect(),
     }))
 }
 
@@ -754,7 +747,7 @@ pub struct Comparison {
     /// Statistics based on test case
     pub statistics: HashSet<TestResultComparison>,
     /// A map from benchmark name to an error which occured when building `b` but not `a`.
-    pub new_errors: HashMap<String, String>,
+    pub newly_failed_benchmarks: HashMap<String, String>,
 }
 
 impl Comparison {
@@ -797,7 +790,7 @@ impl Comparison {
             .partition(|s| category_map.get(&s.benchmark()) == Some(&Category::Primary));
 
         let (primary_errors, secondary_errors) = self
-            .new_errors
+            .newly_failed_benchmarks
             .into_iter()
             .partition(|(b, _)| category_map.get(&b.as_str().into()) == Some(&Category::Primary));
 
@@ -805,13 +798,13 @@ impl Comparison {
             a: self.a.clone(),
             b: self.b.clone(),
             statistics: primary,
-            new_errors: primary_errors,
+            newly_failed_benchmarks: primary_errors,
         };
         let secondary = Comparison {
             a: self.a,
             b: self.b,
             statistics: secondary,
-            new_errors: secondary_errors,
+            newly_failed_benchmarks: secondary_errors,
         };
         (
             ComparisonSummary::summarize_comparison(&primary),
@@ -1501,7 +1494,7 @@ mod tests {
                 bootstrap_total: 0,
             },
             statistics,
-            new_errors: Default::default(),
+            newly_failed_benchmarks: Default::default(),
         };
         ComparisonSummary::summarize_comparison(&comparison)
             .unwrap_or_else(|| ComparisonSummary::empty())
