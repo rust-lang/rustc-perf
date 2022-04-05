@@ -189,9 +189,8 @@ pub mod comparison {
         pub benchmark: String,
         pub profile: String,
         pub scenario: String,
-        pub is_significant: bool,
+        pub is_relevant: bool,
         pub significance_factor: Option<f64>,
-        pub magnitude: String,
         pub statistics: (f64, f64),
     }
 }
