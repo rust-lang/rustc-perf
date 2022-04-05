@@ -673,10 +673,7 @@ async fn categorize_benchmark(
             .map(|(benchmark, _)| format!("- {benchmark}"))
             .collect::<Vec<_>>()
             .join("\n");
-        format!(
-            "\n**Warning ⚠**: The following benchmark(s) failed to build:\n{}\n",
-            benchmarks,
-        )
+        format!("\n**Warning ⚠**: The following benchmark(s) failed to build:\n{benchmarks}\n")
     } else {
         String::new()
     };
@@ -686,13 +683,11 @@ async fn categorize_benchmark(
 
     const DISAGREEMENT: &str = "If you disagree with this performance assessment, \
     please file an issue in [rust-lang/rustc-perf](https://github.com/rust-lang/rustc-perf/issues/new).";
+    let footer = format!("{DISAGREEMENT}{errors}");
 
     if primary.is_none() && secondary.is_none() {
         return (
-            format!(
-                "This benchmark run did not return any relevant results.\n\n{}{}",
-                DISAGREEMENT, errors
-            ),
+            format!("This benchmark run did not return any relevant results.\n\n{footer}"),
             None,
         );
     }
@@ -718,7 +713,7 @@ async fn categorize_benchmark(
         write_summary_table(&primary, &secondary, true, &mut result);
     }
 
-    write!(result, "\n{} {}", DISAGREEMENT, errors).unwrap();
+    write!(result, "\n{footer}").unwrap();
 
     let direction = primary_direction.or(secondary_direction);
     (result, direction)
