@@ -109,15 +109,15 @@ The following options alter the behaviour of the `bench_local` subcommand.
   supports postgres as a backend and the URL can be specified (beginning with
   `postgres://`), but this is unlikely to be useful for local collection.
 - `--exclude <EXCLUDE>`: this is used to run a subset of the benchmarks. The
-  argument is a comma-separated list of benchmark names. When this option is
-  specified, a benchmark is excluded from the run if its name matches one or
-  more of the given names.
+  argument is a comma-separated list of benchmark prefixes. When this option is
+  specified, a benchmark is excluded from the run if its name matches one of
+  the given prefixes.
 - `--id <ID>` the identifier that will be used to identify the results in the
   database.
 - `--include <INCLUDE>`: the inverse of `--exclude`. The argument is a
-  comma-separated list of benchmark names. When this option is specified, a
-  benchmark is included in the run only if its name matches one or more of the
-  given names.
+  comma-separated list of benchmark prefixes. When this option is specified, a
+  benchmark is included in the run only if its name matches one of the given
+  prefixes.
 - `--profiles <PROFILES>`: the profiles to be benchmarked. The possible choices
   are one or more (comma-separated) of `Check`, `Debug`, `Doc`, `Opt`, and
   `All`. The default is `Check,Debug,Opt`.
