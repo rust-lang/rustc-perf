@@ -5,7 +5,7 @@ use clap::Parser;
 use collector::category::Category;
 use database::{ArtifactId, Commit};
 use log::debug;
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
 use std::io::BufWriter;
@@ -331,26 +331,37 @@ fn get_benchmarks(
         paths.push((path, name));
     }
 
-    let mut includes = include.map(|list| list.split(',').collect::<HashSet<&str>>());
-    let mut excludes = exclude.map(|list| list.split(',').collect::<HashSet<&str>>());
+    // For each --include/--exclude entry, we count how many times it's used,
+    // to enable `check_for_unused` below.
+    fn to_hashmap(xyz: Option<&str>) -> Option<HashMap<&str, usize>> {
+        xyz.map(|list| {
+            list.split(',')
+                .map(|x| (x, 0))
+                .collect::<HashMap<&str, usize>>()
+        })
+    }
+
+    let mut includes = to_hashmap(include);
+    let mut excludes = to_hashmap(exclude);
 
     for (path, name) in paths {
         let mut skip = false;
-        if let Some(includes) = includes.as_mut() {
-            if !includes.remove(name.as_str()) {
-                debug!(
-                    "benchmark {} - not named by --include argument, skipping",
-                    name
-                );
-                skip = true;
-            }
-        }
 
-        if let Some(excludes) = excludes.as_mut() {
-            if excludes.remove(name.as_str()) {
-                debug!("benchmark {} - named by --exclude argument, skipping", name);
-                skip = true;
+        let name_matches = |prefixes: &mut HashMap<&str, usize>| {
+            for (prefix, n) in prefixes.iter_mut() {
+                if name.as_str().starts_with(prefix) {
+                    *n += 1;
+                    return true;
+                }
             }
+            false
+        };
+
+        if let Some(includes) = includes.as_mut() {
+            skip |= !name_matches(includes);
+        }
+        if let Some(excludes) = excludes.as_mut() {
+            skip |= name_matches(excludes);
         }
         if skip {
             continue;
@@ -360,22 +371,26 @@ fn get_benchmarks(
         benchmarks.push(Benchmark::new(name, path)?);
     }
 
-    if let Some(includes) = includes {
-        if !includes.is_empty() {
-            bail!(
-                "Warning: one or more invalid --include entries: {:?}",
-                includes
-            );
+    // All prefixes must be used at least once. This is to catch typos.
+    let check_for_unused = |option, prefixes: Option<HashMap<&str, usize>>| {
+        if let Some(prefixes) = prefixes {
+            let unused: Vec<_> = prefixes
+                .into_iter()
+                .filter_map(|(i, n)| if n == 0 { Some(i) } else { None })
+                .collect();
+            if !unused.is_empty() {
+                bail!(
+                    "Warning: one or more unused --{} entries: {:?}",
+                    option,
+                    unused
+                );
+            }
         }
-    }
-    if let Some(excludes) = excludes {
-        if !excludes.is_empty() {
-            bail!(
-                "Warning: one or more invalid --exclude entries: {:?}",
-                excludes
-            );
-        }
-    }
+        Ok(())
+    };
+
+    check_for_unused("include", includes)?;
+    check_for_unused("exclude", excludes)?;
 
     benchmarks.sort_by_key(|benchmark| benchmark.name.clone());
 
@@ -729,11 +744,11 @@ struct LocalOptions {
     #[clap(long, parse(from_os_str))]
     cargo: Option<PathBuf>,
 
-    /// Exclude all benchmarks in this comma-separated list
+    /// Exclude all benchmarks matching a prefix in this comma-separated list
     #[clap(long)]
     exclude: Option<String>,
 
-    /// Include only benchmarks in this comma-separated list
+    /// Include only benchmarks matching a prefix in this comma-separated list
     #[clap(long)]
     include: Option<String>,
 
