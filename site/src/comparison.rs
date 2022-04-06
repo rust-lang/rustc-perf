@@ -146,29 +146,31 @@ pub async fn handle_compare(
 async fn populate_report(
     ctxt: &SiteCtxt,
     comparison: &Comparison,
-    report: &mut HashMap<Option<Direction>, Vec<String>>,
+    report: &mut HashMap<Direction, Vec<String>>,
 ) {
-    if let Some(summary) = ComparisonSummary::summarize_comparison(comparison) {
-        let relevance = summary.relevance_level();
-        if relevance.at_least_somewhat_relevant() {
-            if let Some(direction) = summary.direction() {
-                let entry = report
-                    .entry(relevance.very_relevant().then(|| direction))
-                    .or_default();
+    let benchmark_map = ctxt.get_benchmark_category_map().await;
+    let (primary, secondary) = comparison.clone().summarize_by_category(benchmark_map);
+    // Get the combined direction of the primary and secondary summaries
+    let direction = match (primary.direction(), secondary.direction()) {
+        (Some(d1), Some(d2)) if d1 != d2 => Direction::Mixed,
+        (Some(Direction::Improvement), Some(_) | None) => Direction::Improvement,
+        (Some(Direction::Regression), Some(_) | None) => Direction::Regression,
+        (Some(Direction::Mixed), Some(_) | None) => Direction::Mixed,
+        (None, Some(d)) => d,
+        (None, None) => return,
+    };
 
-                entry.push(write_triage_summary(ctxt, comparison).await)
-            }
-        }
-    }
+    let entry = report.entry(direction).or_default();
+
+    entry.push(write_triage_summary(comparison, &primary, &secondary).await)
 }
 
 /// A summary of a given comparison
 ///
 /// This summary only includes changes that are significant and relevant (as determined by a change's magnitude).
 pub struct ComparisonSummary {
-    /// Significant comparisons of magnitude small and above
-    /// and ordered by magnitude from largest to smallest
-    comparisons: Vec<TestResultComparison>,
+    /// Relevant comparisons ordered by magnitude from largest to smallest
+    relevant_comparisons: Vec<TestResultComparison>,
     /// The cached number of comparisons that are improvements
     num_improvements: usize,
     /// The cached number of comparisons that are regressions
@@ -176,7 +178,7 @@ pub struct ComparisonSummary {
 }
 
 impl ComparisonSummary {
-    pub fn summarize_comparison(comparison: &Comparison) -> Option<Self> {
+    pub fn summarize_comparison(comparison: &Comparison) -> Self {
         let mut num_improvements = 0;
         let mut num_regressions = 0;
 
@@ -193,10 +195,6 @@ impl ComparisonSummary {
             })
             .cloned()
             .collect::<Vec<_>>();
-        // Skip empty commits, sometimes happens if there's a compiler bug or so.
-        if comparisons.len() == 0 {
-            return None;
-        }
 
         let cmp = |b1: &TestResultComparison, b2: &TestResultComparison| {
             b2.relative_change()
@@ -206,29 +204,23 @@ impl ComparisonSummary {
         };
         comparisons.sort_by(cmp);
 
-        Some(ComparisonSummary {
-            comparisons,
+        ComparisonSummary {
+            relevant_comparisons: comparisons,
             num_improvements,
             num_regressions,
-        })
-    }
-
-    pub fn empty() -> Self {
-        ComparisonSummary {
-            comparisons: vec![],
-            num_improvements: 0,
-            num_regressions: 0,
         }
     }
 
     /// The direction of the changes
     pub fn direction(&self) -> Option<Direction> {
-        if self.comparisons.len() == 0 {
+        if self.relevant_comparisons.len() == 0 {
             return None;
         }
 
-        let (regressions, improvements): (Vec<&TestResultComparison>, _) =
-            self.comparisons.iter().partition(|c| c.is_regression());
+        let (regressions, improvements): (Vec<&TestResultComparison>, _) = self
+            .relevant_comparisons
+            .iter()
+            .partition(|c| c.is_regression());
 
         if regressions.len() == 0 {
             return Some(Direction::Improvement);
@@ -238,7 +230,7 @@ impl ComparisonSummary {
             return Some(Direction::Regression);
         }
 
-        let total_num = self.comparisons.len();
+        let total_num = self.relevant_comparisons.len();
         let regressions_ratio = regressions.len() as f64 / total_num as f64;
 
         let has_medium_and_above_regressions = regressions
@@ -300,18 +292,11 @@ impl ComparisonSummary {
 
     /// Arithmetic mean of all changes as a percent
     pub fn arithmetic_mean_of_changes(&self) -> f64 {
-        self.arithmetic_mean(self.comparisons.iter())
-    }
-
-    pub fn num_significant_changes(&self) -> usize {
-        self.comparisons
-            .iter()
-            .filter(|c| c.is_significant())
-            .count()
+        self.arithmetic_mean(self.relevant_comparisons.iter())
     }
 
     pub fn is_empty(&self) -> bool {
-        self.comparisons.is_empty()
+        self.relevant_comparisons.is_empty()
     }
 
     fn arithmetic_mean<'a>(
@@ -329,45 +314,38 @@ impl ComparisonSummary {
     }
 
     fn improvements(&self) -> impl Iterator<Item = &TestResultComparison> {
-        self.comparisons.iter().filter(|c| c.is_improvement())
+        self.relevant_comparisons
+            .iter()
+            .filter(|c| c.is_improvement())
     }
 
     fn regressions(&self) -> impl Iterator<Item = &TestResultComparison> {
-        self.comparisons.iter().filter(|c| c.is_regression())
+        self.relevant_comparisons
+            .iter()
+            .filter(|c| c.is_regression())
     }
 
     fn largest_improvement(&self) -> Option<&TestResultComparison> {
-        self.comparisons.iter().find(|s| s.is_improvement())
+        self.relevant_comparisons
+            .iter()
+            .find(|s| s.is_improvement())
     }
 
     fn largest_regression(&self) -> Option<&TestResultComparison> {
-        self.comparisons.iter().find(|s| s.is_regression())
+        self.relevant_comparisons.iter().find(|s| s.is_regression())
     }
 
     /// The relevance level of the entire comparison
-    pub fn relevance_level(&self) -> RelevanceLevel {
-        let mut num_small_changes = 0;
-        let mut num_medium_changes = 0;
-        for c in self.comparisons.iter() {
-            match c.magnitude() {
-                Magnitude::Small => num_small_changes += 1,
-                Magnitude::Medium => num_medium_changes += 1,
-                Magnitude::Large => return RelevanceLevel::High,
-                Magnitude::VeryLarge => return RelevanceLevel::High,
-                Magnitude::VerySmall => unreachable!(),
-            }
-        }
-
-        match (num_small_changes, num_medium_changes) {
-            (_, m) if m > 1 => RelevanceLevel::High,
-            (_, 1) => RelevanceLevel::Medium,
-            (s, 0) if s > 10 => RelevanceLevel::Medium,
-            _ => RelevanceLevel::Low,
-        }
+    pub fn is_relevant(&self) -> bool {
+        !self.is_empty()
     }
 }
 
-async fn write_triage_summary(ctxt: &SiteCtxt, comparison: &Comparison) -> String {
+async fn write_triage_summary(
+    comparison: &Comparison,
+    primary: &ComparisonSummary,
+    secondary: &ComparisonSummary,
+) -> String {
     use std::fmt::Write;
     let mut result = if let Some(pr) = comparison.b.pr {
         let title = github::pr_title(pr).await;
@@ -382,11 +360,6 @@ async fn write_triage_summary(ctxt: &SiteCtxt, comparison: &Comparison) -> Strin
     let end = &comparison.b.artifact;
     let link = &compare_link(start, end);
     write!(&mut result, " [(Comparison Link)]({})\n", link).unwrap();
-
-    let benchmark_map = ctxt.get_benchmark_category_map().await;
-    let (primary, secondary) = comparison.clone().summarize_by_category(benchmark_map);
-    let primary = primary.unwrap_or_else(ComparisonSummary::empty);
-    let secondary = secondary.unwrap_or_else(ComparisonSummary::empty);
 
     write_summary_table(&primary, &secondary, false, &mut result);
 
@@ -503,24 +476,6 @@ pub fn write_summary_table(
 [^2]: *the arithmetic mean of the percent change*"#
         )
         .unwrap();
-    }
-}
-
-/// How relevant a set of test result comparisons are.
-#[derive(Clone, Copy, Debug)]
-pub enum RelevanceLevel {
-    Low,
-    Medium,
-    High,
-}
-
-impl RelevanceLevel {
-    pub fn very_relevant(self) -> bool {
-        matches!(self, Self::High)
-    }
-
-    pub fn at_least_somewhat_relevant(self) -> bool {
-        matches!(self, Self::High | Self::Medium)
     }
 }
 
@@ -782,7 +737,7 @@ impl Comparison {
     pub fn summarize_by_category(
         self,
         category_map: HashMap<Benchmark, Category>,
-    ) -> (Option<ComparisonSummary>, Option<ComparisonSummary>) {
+    ) -> (ComparisonSummary, ComparisonSummary) {
         let (primary, secondary) = self
             .statistics
             .into_iter()
@@ -1146,7 +1101,7 @@ impl Magnitude {
 async fn generate_report(
     start: &Bound,
     end: &Bound,
-    mut report: HashMap<Option<Direction>, Vec<String>>,
+    mut report: HashMap<Direction, Vec<String>>,
     num_comparisons: usize,
 ) -> String {
     fn fmt_bound(bound: &Bound) -> String {
@@ -1158,14 +1113,9 @@ async fn generate_report(
     }
     let start = fmt_bound(start);
     let end = fmt_bound(end);
-    let regressions = report
-        .remove(&Some(Direction::Regression))
-        .unwrap_or_default();
-    let improvements = report
-        .remove(&Some(Direction::Improvement))
-        .unwrap_or_default();
-    let mixed = report.remove(&Some(Direction::Mixed)).unwrap_or_default();
-    let unlabeled = report.remove(&None).unwrap_or_default();
+    let regressions = report.remove(&Direction::Regression).unwrap_or_default();
+    let improvements = report.remove(&Direction::Improvement).unwrap_or_default();
+    let mixed = report.remove(&Direction::Mixed).unwrap_or_default();
     let untriaged = match github::untriaged_perf_regressions().await {
         Ok(u) => u
             .iter()
@@ -1205,15 +1155,6 @@ Revision range: [{first_commit}..{last_commit}](https://perf.rust-lang.org/?star
 
 {mixed}
 
-#### Probably changed
-
-The following is a list of comparisons which *probably* represent real performance changes,
-but we're not 100% sure. Please move things from this category into the categories
-above for changes you think *are* definitely relevant and file an issue for each so that
-we can consider how to change our heuristics.
-
-{unlabeled}
-
 #### Untriaged Pull Requests
 
 {untriaged}
@@ -1233,7 +1174,6 @@ TODO: Nags
         regressions = regressions.join("\n\n"),
         improvements = improvements.join("\n\n"),
         mixed = mixed.join("\n\n"),
-        unlabeled = unlabeled.join("\n\n"),
         untriaged = untriaged
     )
 }
@@ -1486,6 +1426,5 @@ mod tests {
             newly_failed_benchmarks: Default::default(),
         };
         ComparisonSummary::summarize_comparison(&comparison)
-            .unwrap_or_else(|| ComparisonSummary::empty())
     }
 }

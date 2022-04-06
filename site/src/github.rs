@@ -1,5 +1,5 @@
 use crate::api::github::Issue;
-use crate::comparison::{write_summary_table, ComparisonSummary, Direction, RelevanceLevel};
+use crate::comparison::{write_summary_table, ComparisonSummary, Direction};
 use crate::load::{Config, SiteCtxt, TryCommit};
 
 use anyhow::Context as _;
@@ -562,13 +562,8 @@ async fn post_comparison_comment(ctxt: &SiteCtxt, commit: QueuedCommit, is_maste
         "https://perf.rust-lang.org/compare.html?start={}&end={}",
         commit.parent_sha, commit.sha
     );
-    let (summary, direction) = categorize_benchmark(
-        ctxt,
-        commit.sha.clone(),
-        commit.parent_sha,
-        is_master_commit,
-    )
-    .await;
+    let (summary, direction) =
+        categorize_benchmark(ctxt, commit.sha.clone(), commit.parent_sha).await;
 
     let body = format!(
         "Finished benchmarking commit ({sha}): [comparison url]({url}).
@@ -652,7 +647,6 @@ async fn categorize_benchmark(
     ctxt: &SiteCtxt,
     commit_sha: String,
     parent_sha: String,
-    is_master_commit: bool,
 ) -> (String, Option<Direction>) {
     let comparison = match crate::comparison::compare(
         collector::Bound::Commit(parent_sha),
@@ -685,17 +679,15 @@ async fn categorize_benchmark(
     please file an issue in [rust-lang/rustc-perf](https://github.com/rust-lang/rustc-perf/issues/new).";
     let footer = format!("{DISAGREEMENT}{errors}");
 
-    if primary.is_none() && secondary.is_none() {
+    if !primary.is_relevant() && !secondary.is_relevant() {
         return (
             format!("This benchmark run did not return any relevant results.\n\n{footer}"),
             None,
         );
     }
 
-    let (primary_short_summary, primary_direction) =
-        generate_short_summary(primary.as_ref(), is_master_commit);
-    let (secondary_short_summary, secondary_direction) =
-        generate_short_summary(secondary.as_ref(), is_master_commit);
+    let (primary_short_summary, primary_direction) = generate_short_summary(&primary);
+    let (secondary_short_summary, secondary_direction) = generate_short_summary(&secondary);
 
     let mut result = format!(
         r#"
@@ -705,13 +697,7 @@ async fn categorize_benchmark(
     );
     write!(result, "\n\n").unwrap();
 
-    if primary_direction.is_some() || secondary_direction.is_some() {
-        let (primary, secondary) = (
-            primary.unwrap_or_else(|| ComparisonSummary::empty()),
-            secondary.unwrap_or_else(|| ComparisonSummary::empty()),
-        );
-        write_summary_table(&primary, &secondary, true, &mut result);
-    }
+    write_summary_table(&primary, &secondary, true, &mut result);
 
     write!(result, "\n{footer}").unwrap();
 
@@ -719,10 +705,7 @@ async fn categorize_benchmark(
     (result, direction)
 }
 
-fn generate_short_summary(
-    summary: Option<&ComparisonSummary>,
-    is_master_commit: bool,
-) -> (String, Option<Direction>) {
+fn generate_short_summary(summary: &ComparisonSummary) -> (String, Option<Direction>) {
     // Add an "s" to a word unless there's only one.
     fn ending(word: &'static str, count: usize) -> std::borrow::Cow<'static, str> {
         if count == 1 {
@@ -731,46 +714,25 @@ fn generate_short_summary(
         format!("{}s", word).into()
     }
 
-    match summary {
-        Some(summary) => {
-            if comparison_is_relevant(summary.relevance_level(), is_master_commit) {
-                let direction = summary.direction().unwrap();
-                let num_improvements = summary.number_of_improvements();
-                let num_regressions = summary.number_of_regressions();
+    if summary.is_relevant() {
+        let direction = summary.direction().unwrap();
+        let num_improvements = summary.number_of_improvements();
+        let num_regressions = summary.number_of_regressions();
 
-                let text = match direction {
-                    Direction::Improvement => format!(
-                        "🎉 relevant {} found",
-                        ending("improvement", num_improvements)
-                    ),
-                    Direction::Regression => format!(
-                        "😿 relevant {} found",
-                        ending("regression", num_regressions)
-                    ),
-                    Direction::Mixed => "mixed results".to_string(),
-                };
-                (text, Some(direction))
-            } else {
-                (
-                    format!(
-                        "changes not relevant. {} results were found to be statistically significant but the changes were too small to be relevant.",
-                        summary.num_significant_changes(),
-                    ),
-                    None
-                )
-            }
-        }
-        None => ("no relevant changes found".to_string(), None),
-    }
-}
-
-/// Whether a comparison is relevant enough to show
-fn comparison_is_relevant(relevance: RelevanceLevel, is_master_commit: bool) -> bool {
-    if is_master_commit {
-        relevance.very_relevant()
+        let text = match direction {
+            Direction::Improvement => format!(
+                "🎉 relevant {} found",
+                ending("improvement", num_improvements)
+            ),
+            Direction::Regression => format!(
+                "😿 relevant {} found",
+                ending("regression", num_regressions)
+            ),
+            Direction::Mixed => "mixed results".to_string(),
+        };
+        (text, Some(direction))
     } else {
-        // is try run
-        relevance.at_least_somewhat_relevant()
+        ("no relevant changes found".to_string(), None)
     }
 }
 
