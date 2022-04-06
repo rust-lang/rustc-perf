@@ -153,9 +153,7 @@ async fn populate_report(
     // Get the combined direction of the primary and secondary summaries
     let direction = match (primary.direction(), secondary.direction()) {
         (Some(d1), Some(d2)) if d1 != d2 => Direction::Mixed,
-        (Some(Direction::Improvement), Some(_) | None) => Direction::Improvement,
-        (Some(Direction::Regression), Some(_) | None) => Direction::Regression,
-        (Some(Direction::Mixed), Some(_) | None) => Direction::Mixed,
+        (Some(d), Some(_) | None) => d,
         (None, Some(d)) => d,
         (None, None) => return,
     };
