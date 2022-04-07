@@ -158,9 +158,20 @@ async fn populate_report(
         (None, None) => return,
     };
 
-    let entry = report.entry(direction).or_default();
+    let include_in_triage = match (primary.largest_change(), secondary.largest_change()) {
+        (Some(c), _) if c.magnitude() >= Magnitude::Medium => true,
+        (_, Some(c)) if c.magnitude() >= Magnitude::Medium => true,
+        _ => {
+            let primary_n = primary.num_changes();
+            let secondary_n = secondary.num_changes();
+            (primary_n * 2 + secondary_n) >= 6
+        }
+    };
 
-    entry.push(write_triage_summary(comparison, &primary, &secondary).await)
+    if include_in_triage {
+        let entry = report.entry(direction).or_default();
+        entry.push(write_triage_summary(comparison, &primary, &secondary).await);
+    }
 }
 
 /// A summary of a given comparison
@@ -321,6 +332,14 @@ impl ComparisonSummary {
         self.relevant_comparisons
             .iter()
             .filter(|c| c.is_regression())
+    }
+
+    fn num_changes(&self) -> usize {
+        self.relevant_comparisons.len()
+    }
+
+    fn largest_change(&self) -> Option<&TestResultComparison> {
+        self.relevant_comparisons.first()
     }
 
     fn largest_improvement(&self) -> Option<&TestResultComparison> {
@@ -1058,7 +1077,7 @@ impl std::hash::Hash for TestResultComparison {
 }
 
 // The direction of a performance change
-#[derive(PartialEq, Eq, Hash, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Direction {
     Improvement,
     Regression,
