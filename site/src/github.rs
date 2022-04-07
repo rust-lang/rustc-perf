@@ -604,8 +604,8 @@ async fn summarize_run(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: 
         return format!("This benchmark run did not return any relevant results.\n\n{footer}");
     }
 
-    let (primary_short_summary, primary_direction) = generate_short_summary(&primary);
-    let (secondary_short_summary, secondary_direction) = generate_short_summary(&secondary);
+    let primary_short_summary = generate_short_summary(&primary);
+    let secondary_short_summary = generate_short_summary(&secondary);
 
     let mut summary = format!(
         r#"
@@ -619,7 +619,7 @@ async fn summarize_run(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: 
 
     write!(summary, "\n{footer}").unwrap();
 
-    let direction = primary_direction.or(secondary_direction);
+    let direction = primary.direction().or(secondary.direction());
     let next_steps = next_steps(primary, secondary, direction, is_master_commit);
 
     format!(
@@ -705,7 +705,7 @@ compiler perf.{next_steps}
     )
 }
 
-fn generate_short_summary(summary: &ComparisonSummary) -> (String, Option<Direction>) {
+fn generate_short_summary(summary: &ComparisonSummary) -> String {
     // Add an "s" to a word unless there's only one.
     fn ending(word: &'static str, count: usize) -> std::borrow::Cow<'static, str> {
         if count == 1 {
@@ -714,25 +714,20 @@ fn generate_short_summary(summary: &ComparisonSummary) -> (String, Option<Direct
         format!("{}s", word).into()
     }
 
-    if summary.is_relevant() {
-        let direction = summary.direction().unwrap();
-        let num_improvements = summary.number_of_improvements();
-        let num_regressions = summary.number_of_regressions();
+    let num_improvements = summary.number_of_improvements();
+    let num_regressions = summary.number_of_regressions();
 
-        let text = match direction {
-            Direction::Improvement => format!(
-                "🎉 relevant {} found",
-                ending("improvement", num_improvements)
-            ),
-            Direction::Regression => format!(
-                "😿 relevant {} found",
-                ending("regression", num_regressions)
-            ),
-            Direction::Mixed => "mixed results".to_string(),
-        };
-        (text, Some(direction))
-    } else {
-        ("no relevant changes found".to_string(), None)
+    match summary.direction() {
+        Some(Direction::Improvement) => format!(
+            "🎉 relevant {} found",
+            ending("improvement", num_improvements)
+        ),
+        Some(Direction::Regression) => format!(
+            "😿 relevant {} found",
+            ending("regression", num_regressions)
+        ),
+        Some(Direction::Mixed) => "mixed results".to_string(),
+        None => "no relevant changes found".to_string(),
     }
 }
 
