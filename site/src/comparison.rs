@@ -1066,7 +1066,7 @@ impl std::hash::Hash for TestResultComparison {
 }
 
 // The direction of a performance change
-#[derive(PartialEq, Eq, Hash, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Direction {
     Improvement,
     Regression,

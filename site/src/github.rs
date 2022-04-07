@@ -564,58 +564,6 @@ async fn post_comparison_comment(ctxt: &SiteCtxt, commit: QueuedCommit, is_maste
     post_comment(&ctxt.config, pr, body).await;
 }
 
-fn master_run_body(label: &str, direction: Option<Direction>) -> String {
-    let next_steps = match direction {
-        Some(Direction::Regression | Direction::Mixed) => {
-            "\n\n**Next Steps**: If you can justify the \
-                regressions found in this perf run, please indicate this with \
-                `@rustbot label: +perf-regression-triaged` along with \
-                sufficient written justification. If you cannot justify the regressions \
-                please open an issue or create a new PR that fixes the regressions, \
-                add a comment linking to the newly created issue or PR, \
-                and then add the `perf-regression-triaged` label to this PR."
-        }
-        Some(Direction::Improvement) | None => "",
-    };
-
-    format!(
-        "
-{next_steps}
-
-@rustbot label: {label}",
-        next_steps = next_steps,
-        label = label
-    )
-}
-
-fn try_run_body(label: &str, direction: Option<Direction>) -> String {
-    let next_steps = match direction {
-        Some(Direction::Regression | Direction::Mixed) => {
-            "\n\n**Next Steps**: If you can justify the regressions found in \
-            this try perf run, please indicate this with \
-            `@rustbot label: +perf-regression-triaged` along with \
-            sufficient written justification. If you cannot justify the regressions \
-            please fix the regressions and do another perf run. If the next run \
-            shows neutral or positive results, the label will be automatically removed."
-        }
-        Some(Direction::Improvement) | None => "",
-    };
-
-    format!(
-        "
-Benchmarking this pull request likely means that it is \
-perf-sensitive, so we're automatically marking it as not fit \
-for rolling up. While you can manually mark this PR as fit \
-for rollup, we strongly recommend not doing so since this PR led to changes in \
-compiler perf.{next_steps}
-
-@bors rollup=never
-@rustbot label: +S-waiting-on-review -S-waiting-on-perf {label}",
-        next_steps = next_steps,
-        label = label
-    )
-}
-
 async fn summarize_run(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: bool) -> String {
     let comparison_url = format!(
         "https://perf.rust-lang.org/compare.html?start={}&end={}",
@@ -672,8 +620,25 @@ async fn summarize_run(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: 
     write!(summary, "\n{footer}").unwrap();
 
     let direction = primary_direction.or(secondary_direction);
-    // are we confident enough this is a real change
-    let confident_enough = match (primary.largest_change(), secondary.largest_change()) {
+    let next_steps = next_steps(primary, secondary, direction, is_master_commit);
+
+    format!(
+        "Finished benchmarking commit ({sha}): [comparison url]({comparison_url}).
+
+**Summary**: {summary}
+{next_steps}",
+        sha = commit.sha,
+    )
+}
+
+fn next_steps(
+    primary: ComparisonSummary,
+    secondary: ComparisonSummary,
+    direction: Option<Direction>,
+    is_master_commit: bool,
+) -> String {
+    // whether we are confident enough this is a real change and it deserves to be looked at
+    let deserves_attention = match (primary.largest_change(), secondary.largest_change()) {
         (Some(c), _) if c.magnitude() >= Magnitude::Medium => true,
         (_, Some(c)) if c.magnitude() >= Magnitude::Medium => true,
         _ => {
@@ -682,28 +647,62 @@ async fn summarize_run(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: 
             (primary_n * 2 + secondary_n) >= 6
         }
     };
-
-    let label = match (confident_enough, &direction) {
+    let label = match (deserves_attention, direction) {
         (true, Some(Direction::Regression | Direction::Mixed)) => "+perf-regression",
-        (true, Some(Direction::Improvement) | None) => "-perf-regression",
-        (false, _) => "-perf-regression",
+        _ => "-perf-regression",
     };
 
-    let body = format!(
-        "Finished benchmarking commit ({sha}): [comparison url]({url}).
+    if is_master_commit {
+        master_run_body(label)
+    } else {
+        try_run_body(label)
+    }
+}
 
-**Summary**: {summary}
-{rest}",
-        sha = commit.sha,
-        url = comparison_url,
-        summary = summary,
-        rest = if is_master_commit {
-            master_run_body(label, direction)
-        } else {
-            try_run_body(label, direction)
-        }
-    );
-    body
+fn master_run_body(label: &str) -> String {
+    let next_steps = if label.starts_with("+") {
+        "\n\n**Next Steps**: If you can justify the \
+                regressions found in this perf run, please indicate this with \
+                `@rustbot label: +perf-regression-triaged` along with \
+                sufficient written justification. If you cannot justify the regressions \
+                please open an issue or create a new PR that fixes the regressions, \
+                add a comment linking to the newly created issue or PR, \
+                and then add the `perf-regression-triaged` label to this PR."
+    } else {
+        ""
+    };
+
+    format!(
+        "
+{next_steps}
+
+@rustbot label: {label}",
+    )
+}
+
+fn try_run_body(label: &str) -> String {
+    let next_steps = if label.starts_with("+") {
+        "\n\n**Next Steps**: If you can justify the regressions found in \
+            this try perf run, please indicate this with \
+            `@rustbot label: +perf-regression-triaged` along with \
+            sufficient written justification. If you cannot justify the regressions \
+            please fix the regressions and do another perf run. If the next run \
+            shows neutral or positive results, the label will be automatically removed."
+    } else {
+        ""
+    };
+
+    format!(
+        "
+Benchmarking this pull request likely means that it is \
+perf-sensitive, so we're automatically marking it as not fit \
+for rolling up. While you can manually mark this PR as fit \
+for rollup, we strongly recommend not doing so since this PR may lead to changes in \
+compiler perf.{next_steps}
+
+@bors rollup=never
+@rustbot label: +S-waiting-on-review -S-waiting-on-perf {label}",
+    )
 }
 
 fn generate_short_summary(summary: &ComparisonSummary) -> (String, Option<Direction>) {
