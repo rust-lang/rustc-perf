@@ -337,6 +337,14 @@ impl ComparisonSummary {
     pub fn is_relevant(&self) -> bool {
         !self.is_empty()
     }
+
+    pub fn num_changes(&self) -> usize {
+        self.relevant_comparisons.len()
+    }
+
+    pub fn largest_change(&self) -> Option<&TestResultComparison> {
+        self.relevant_comparisons.first()
+    }
 }
 
 async fn write_triage_summary(
@@ -984,7 +992,7 @@ impl TestResultComparison {
     ///
     /// This is the average of the absolute magnitude of the change
     /// and the amount above the significance threshold.
-    fn magnitude(&self) -> Magnitude {
+    pub fn magnitude(&self) -> Magnitude {
         let change = self.relative_change().abs();
         let threshold = self.significance_threshold();
         let over_threshold = if change < threshold * 1.5 {

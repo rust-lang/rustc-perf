@@ -1,5 +1,5 @@
 use crate::api::github::Issue;
-use crate::comparison::{write_summary_table, ComparisonSummary, Direction};
+use crate::comparison::{write_summary_table, ComparisonSummary, Direction, Magnitude};
 use crate::load::{Config, SiteCtxt, TryCommit};
 
 use anyhow::Context as _;
@@ -558,36 +558,13 @@ pub async fn post_finished(ctxt: &SiteCtxt) {
 ///
 /// `is_master_commit` is used to differentiate messages for try runs and post-merge runs.
 async fn post_comparison_comment(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: bool) {
-    let comparison_url = format!(
-        "https://perf.rust-lang.org/compare.html?start={}&end={}",
-        commit.parent_sha, commit.sha
-    );
-    let (summary, direction) =
-        categorize_benchmark(ctxt, commit.sha.clone(), commit.parent_sha).await;
+    let pr = commit.pr;
+    let body = summarize_run(ctxt, commit, is_master_commit).await;
 
-    let body = format!(
-        "Finished benchmarking commit ({sha}): [comparison url]({url}).
-
-**Summary**: {summary}
-{rest}",
-        sha = commit.sha,
-        url = comparison_url,
-        summary = summary,
-        rest = if is_master_commit {
-            master_run_body(direction)
-        } else {
-            try_run_body(direction)
-        }
-    );
-
-    post_comment(&ctxt.config, commit.pr, body).await;
+    post_comment(&ctxt.config, pr, body).await;
 }
 
-fn master_run_body(direction: Option<Direction>) -> String {
-    let label = match direction {
-        Some(Direction::Regression | Direction::Mixed) => "+perf-regression",
-        Some(Direction::Improvement) | None => "-perf-regression",
-    };
+fn master_run_body(label: &str, direction: Option<Direction>) -> String {
     let next_steps = match direction {
         Some(Direction::Regression | Direction::Mixed) => {
             "\n\n**Next Steps**: If you can justify the \
@@ -611,11 +588,7 @@ fn master_run_body(direction: Option<Direction>) -> String {
     )
 }
 
-fn try_run_body(direction: Option<Direction>) -> String {
-    let label = match direction {
-        Some(Direction::Regression | Direction::Mixed) => "+perf-regression",
-        Some(Direction::Improvement) | None => "-perf-regression",
-    };
+fn try_run_body(label: &str, direction: Option<Direction>) -> String {
     let next_steps = match direction {
         Some(Direction::Regression | Direction::Mixed) => {
             "\n\n**Next Steps**: If you can justify the regressions found in \
@@ -643,21 +616,21 @@ compiler perf.{next_steps}
     )
 }
 
-async fn categorize_benchmark(
-    ctxt: &SiteCtxt,
-    commit_sha: String,
-    parent_sha: String,
-) -> (String, Option<Direction>) {
+async fn summarize_run(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: bool) -> String {
+    let comparison_url = format!(
+        "https://perf.rust-lang.org/compare.html?start={}&end={}",
+        commit.parent_sha, commit.sha
+    );
     let comparison = match crate::comparison::compare(
-        collector::Bound::Commit(parent_sha),
-        collector::Bound::Commit(commit_sha),
+        collector::Bound::Commit(commit.parent_sha),
+        collector::Bound::Commit(commit.sha.clone()),
         "instructions:u".to_owned(),
         ctxt,
     )
     .await
     {
         Ok(Some(c)) => c,
-        _ => return (String::from("ERROR categorizing benchmark run!"), None),
+        _ => return String::from("ERROR categorizing benchmark run!"),
     };
 
     let errors = if !comparison.newly_failed_benchmarks.is_empty() {
@@ -680,29 +653,57 @@ async fn categorize_benchmark(
     let footer = format!("{DISAGREEMENT}{errors}");
 
     if !primary.is_relevant() && !secondary.is_relevant() {
-        return (
-            format!("This benchmark run did not return any relevant results.\n\n{footer}"),
-            None,
-        );
+        return format!("This benchmark run did not return any relevant results.\n\n{footer}");
     }
 
     let (primary_short_summary, primary_direction) = generate_short_summary(&primary);
     let (secondary_short_summary, secondary_direction) = generate_short_summary(&secondary);
 
-    let mut result = format!(
+    let mut summary = format!(
         r#"
 - Primary benchmarks: {primary_short_summary}
 - Secondary benchmarks: {secondary_short_summary}
 "#
     );
-    write!(result, "\n\n").unwrap();
+    write!(summary, "\n\n").unwrap();
 
-    write_summary_table(&primary, &secondary, true, &mut result);
+    write_summary_table(&primary, &secondary, true, &mut summary);
 
-    write!(result, "\n{footer}").unwrap();
+    write!(summary, "\n{footer}").unwrap();
 
     let direction = primary_direction.or(secondary_direction);
-    (result, direction)
+    // are we confident enough this is a real change
+    let confident_enough = match (primary.largest_change(), secondary.largest_change()) {
+        (Some(c), _) if c.magnitude() >= Magnitude::Medium => true,
+        (_, Some(c)) if c.magnitude() >= Magnitude::Medium => true,
+        _ => {
+            let primary_n = primary.num_changes();
+            let secondary_n = secondary.num_changes();
+            (primary_n * 2 + secondary_n) >= 6
+        }
+    };
+
+    let label = match (confident_enough, &direction) {
+        (true, Some(Direction::Regression | Direction::Mixed)) => "+perf-regression",
+        (true, Some(Direction::Improvement) | None) => "-perf-regression",
+        (false, _) => "-perf-regression",
+    };
+
+    let body = format!(
+        "Finished benchmarking commit ({sha}): [comparison url]({url}).
+
+**Summary**: {summary}
+{rest}",
+        sha = commit.sha,
+        url = comparison_url,
+        summary = summary,
+        rest = if is_master_commit {
+            master_run_body(label, direction)
+        } else {
+            try_run_body(label, direction)
+        }
+    );
+    body
 }
 
 fn generate_short_summary(summary: &ComparisonSummary) -> (String, Option<Direction>) {
