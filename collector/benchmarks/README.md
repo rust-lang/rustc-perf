@@ -62,7 +62,6 @@ compiler in interesting ways.
 - **coercions**: Contains a static array with 65,536 string literals, which
   caused [poor performance](https://github.com/rust-lang/rust/issues/32278) in
   the past.
-- **ctfe-stress-4**: A stress test for compile-time function evaluation.
 - **ctfe-stress-5**: A stress test for compile-time function evaluation.
 - **deeply-nested-multi**: A small program containing multiple examples 
   ([one](https://github.com/rust-lang/rust/issues/38528),
