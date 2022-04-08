@@ -30,7 +30,7 @@ The following is a glossary of domain specific terminology. Although benchmarks 
 ## Analysis
 
 * **artifact comparisons**: the comparison of two artifacts. This is composed of many test result comparisons. The [comparison page](https://perf.rust-lang.org/compare.html) shows a single artifact comparison between two artifacts.
-* **test result comparison**: the delta between two test results for the same test case but (optionally) different artifacts. The [comparison page](https://perf.rust-lang.org/compare.html) lists all the test result comparisons as percentages between two runs.  
+* **test result comparison**: the delta between two test results for the same test case but different artifacts. The [comparison page](https://perf.rust-lang.org/compare.html) lists all the test result comparisons as percentages between two runs.  
 * **significance threshold**: the threshold at which a test result comparison is considered "significant" (i.e., a real change in performance and not just noise). You can see how this is calculated [here](https://github.com/rust-lang/rustc-perf/blob/master/docs/comparison-analysis.md#what-makes-a-test-result-significant).
 * **significant test result comparison**: a test result comparison above the significance threshold. Significant test result comparisons can be thought of as being "statistically significant".
 * **relevant test result comparison**: a test result comparison can be significant but still not be relevant (i.e., worth paying attention to). Relevance is a factor of the test result comparison's significance and magnitude. Comparisons are considered relevant if they are significant and have at least a small magnitude .
