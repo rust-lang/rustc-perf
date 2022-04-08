@@ -1,5 +1,5 @@
 use crate::api::github::Issue;
-use crate::comparison::{write_summary_table, ComparisonSummary, Direction};
+use crate::comparison::{write_summary_table, ComparisonSummary, Direction, Magnitude};
 use crate::load::{Config, SiteCtxt, TryCommit};
 
 use anyhow::Context as _;
@@ -558,106 +558,27 @@ pub async fn post_finished(ctxt: &SiteCtxt) {
 ///
 /// `is_master_commit` is used to differentiate messages for try runs and post-merge runs.
 async fn post_comparison_comment(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: bool) {
+    let pr = commit.pr;
+    let body = summarize_run(ctxt, commit, is_master_commit).await;
+
+    post_comment(&ctxt.config, pr, body).await;
+}
+
+async fn summarize_run(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: bool) -> String {
     let comparison_url = format!(
         "https://perf.rust-lang.org/compare.html?start={}&end={}",
         commit.parent_sha, commit.sha
     );
-    let (summary, direction) =
-        categorize_benchmark(ctxt, commit.sha.clone(), commit.parent_sha).await;
-
-    let body = format!(
-        "Finished benchmarking commit ({sha}): [comparison url]({url}).
-
-**Summary**: {summary}
-{rest}",
-        sha = commit.sha,
-        url = comparison_url,
-        summary = summary,
-        rest = if is_master_commit {
-            master_run_body(direction)
-        } else {
-            try_run_body(direction)
-        }
-    );
-
-    post_comment(&ctxt.config, commit.pr, body).await;
-}
-
-fn master_run_body(direction: Option<Direction>) -> String {
-    let label = match direction {
-        Some(Direction::Regression | Direction::Mixed) => "+perf-regression",
-        Some(Direction::Improvement) | None => "-perf-regression",
-    };
-    let next_steps = match direction {
-        Some(Direction::Regression | Direction::Mixed) => {
-            "\n\n**Next Steps**: If you can justify the \
-                regressions found in this perf run, please indicate this with \
-                `@rustbot label: +perf-regression-triaged` along with \
-                sufficient written justification. If you cannot justify the regressions \
-                please open an issue or create a new PR that fixes the regressions, \
-                add a comment linking to the newly created issue or PR, \
-                and then add the `perf-regression-triaged` label to this PR."
-        }
-        Some(Direction::Improvement) | None => "",
-    };
-
-    format!(
-        "
-{next_steps}
-
-@rustbot label: {label}",
-        next_steps = next_steps,
-        label = label
-    )
-}
-
-fn try_run_body(direction: Option<Direction>) -> String {
-    let label = match direction {
-        Some(Direction::Regression | Direction::Mixed) => "+perf-regression",
-        Some(Direction::Improvement) | None => "-perf-regression",
-    };
-    let next_steps = match direction {
-        Some(Direction::Regression | Direction::Mixed) => {
-            "\n\n**Next Steps**: If you can justify the regressions found in \
-            this try perf run, please indicate this with \
-            `@rustbot label: +perf-regression-triaged` along with \
-            sufficient written justification. If you cannot justify the regressions \
-            please fix the regressions and do another perf run. If the next run \
-            shows neutral or positive results, the label will be automatically removed."
-        }
-        Some(Direction::Improvement) | None => "",
-    };
-
-    format!(
-        "
-Benchmarking this pull request likely means that it is \
-perf-sensitive, so we're automatically marking it as not fit \
-for rolling up. While you can manually mark this PR as fit \
-for rollup, we strongly recommend not doing so since this PR led to changes in \
-compiler perf.{next_steps}
-
-@bors rollup=never
-@rustbot label: +S-waiting-on-review -S-waiting-on-perf {label}",
-        next_steps = next_steps,
-        label = label
-    )
-}
-
-async fn categorize_benchmark(
-    ctxt: &SiteCtxt,
-    commit_sha: String,
-    parent_sha: String,
-) -> (String, Option<Direction>) {
     let comparison = match crate::comparison::compare(
-        collector::Bound::Commit(parent_sha),
-        collector::Bound::Commit(commit_sha),
+        collector::Bound::Commit(commit.parent_sha),
+        collector::Bound::Commit(commit.sha.clone()),
         "instructions:u".to_owned(),
         ctxt,
     )
     .await
     {
         Ok(Some(c)) => c,
-        _ => return (String::from("ERROR categorizing benchmark run!"), None),
+        _ => return String::from("ERROR categorizing benchmark run!"),
     };
 
     let errors = if !comparison.newly_failed_benchmarks.is_empty() {
@@ -680,32 +601,111 @@ async fn categorize_benchmark(
     let footer = format!("{DISAGREEMENT}{errors}");
 
     if !primary.is_relevant() && !secondary.is_relevant() {
-        return (
-            format!("This benchmark run did not return any relevant results.\n\n{footer}"),
-            None,
-        );
+        return format!("This benchmark run did not return any relevant results.\n\n{footer}");
     }
 
-    let (primary_short_summary, primary_direction) = generate_short_summary(&primary);
-    let (secondary_short_summary, secondary_direction) = generate_short_summary(&secondary);
+    let primary_short_summary = generate_short_summary(&primary);
+    let secondary_short_summary = generate_short_summary(&secondary);
 
-    let mut result = format!(
+    let mut summary = format!(
         r#"
 - Primary benchmarks: {primary_short_summary}
 - Secondary benchmarks: {secondary_short_summary}
 "#
     );
-    write!(result, "\n\n").unwrap();
+    write!(summary, "\n\n").unwrap();
 
-    write_summary_table(&primary, &secondary, true, &mut result);
+    write_summary_table(&primary, &secondary, true, &mut summary);
 
-    write!(result, "\n{footer}").unwrap();
+    write!(summary, "\n{footer}").unwrap();
 
-    let direction = primary_direction.or(secondary_direction);
-    (result, direction)
+    let direction = primary.direction().or(secondary.direction());
+    let next_steps = next_steps(primary, secondary, direction, is_master_commit);
+
+    format!(
+        "Finished benchmarking commit ({sha}): [comparison url]({comparison_url}).
+
+**Summary**: {summary}
+{next_steps}",
+        sha = commit.sha,
+    )
 }
 
-fn generate_short_summary(summary: &ComparisonSummary) -> (String, Option<Direction>) {
+fn next_steps(
+    primary: ComparisonSummary,
+    secondary: ComparisonSummary,
+    direction: Option<Direction>,
+    is_master_commit: bool,
+) -> String {
+    // whether we are confident enough this is a real change and it deserves to be looked at
+    let deserves_attention = match (primary.largest_change(), secondary.largest_change()) {
+        (Some(c), _) if c.magnitude() >= Magnitude::Medium => true,
+        (_, Some(c)) if c.magnitude() >= Magnitude::Medium => true,
+        _ => {
+            let primary_n = primary.num_changes();
+            let secondary_n = secondary.num_changes();
+            (primary_n * 2 + secondary_n) >= 6
+        }
+    };
+    let label = match (deserves_attention, direction) {
+        (true, Some(Direction::Regression | Direction::Mixed)) => "+perf-regression",
+        _ => "-perf-regression",
+    };
+
+    if is_master_commit {
+        master_run_body(label)
+    } else {
+        try_run_body(label)
+    }
+}
+
+fn master_run_body(label: &str) -> String {
+    let next_steps = if label.starts_with("+") {
+        "\n\n**Next Steps**: If you can justify the \
+                regressions found in this perf run, please indicate this with \
+                `@rustbot label: +perf-regression-triaged` along with \
+                sufficient written justification. If you cannot justify the regressions \
+                please open an issue or create a new PR that fixes the regressions, \
+                add a comment linking to the newly created issue or PR, \
+                and then add the `perf-regression-triaged` label to this PR."
+    } else {
+        ""
+    };
+
+    format!(
+        "
+{next_steps}
+
+@rustbot label: {label}",
+    )
+}
+
+fn try_run_body(label: &str) -> String {
+    let next_steps = if label.starts_with("+") {
+        "\n\n**Next Steps**: If you can justify the regressions found in \
+            this try perf run, please indicate this with \
+            `@rustbot label: +perf-regression-triaged` along with \
+            sufficient written justification. If you cannot justify the regressions \
+            please fix the regressions and do another perf run. If the next run \
+            shows neutral or positive results, the label will be automatically removed."
+    } else {
+        ""
+    };
+
+    format!(
+        "
+Benchmarking this pull request likely means that it is \
+perf-sensitive, so we're automatically marking it as not fit \
+for rolling up. While you can manually mark this PR as fit \
+for rollup, we strongly recommend not doing so since this PR may lead to changes in \
+compiler perf.{next_steps}
+
+@bors rollup=never
+@rustbot label: +S-waiting-on-review -S-waiting-on-perf {label}",
+    )
+}
+
+fn generate_short_summary(summary: &ComparisonSummary) -> String {
     // Add an "s" to a word unless there's only one.
     fn ending(word: &'static str, count: usize) -> std::borrow::Cow<'static, str> {
         if count == 1 {
@@ -714,25 +714,20 @@ fn generate_short_summary(summary: &ComparisonSummary) -> (String, Option<Direct
         format!("{}s", word).into()
     }
 
-    if summary.is_relevant() {
-        let direction = summary.direction().unwrap();
-        let num_improvements = summary.number_of_improvements();
-        let num_regressions = summary.number_of_regressions();
+    let num_improvements = summary.number_of_improvements();
+    let num_regressions = summary.number_of_regressions();
 
-        let text = match direction {
-            Direction::Improvement => format!(
-                "🎉 relevant {} found",
-                ending("improvement", num_improvements)
-            ),
-            Direction::Regression => format!(
-                "😿 relevant {} found",
-                ending("regression", num_regressions)
-            ),
-            Direction::Mixed => "mixed results".to_string(),
-        };
-        (text, Some(direction))
-    } else {
-        ("no relevant changes found".to_string(), None)
+    match summary.direction() {
+        Some(Direction::Improvement) => format!(
+            "🎉 relevant {} found",
+            ending("improvement", num_improvements)
+        ),
+        Some(Direction::Regression) => format!(
+            "😿 relevant {} found",
+            ending("regression", num_regressions)
+        ),
+        Some(Direction::Mixed) => "mixed results".to_string(),
+        None => "no relevant changes found".to_string(),
     }
 }
 
