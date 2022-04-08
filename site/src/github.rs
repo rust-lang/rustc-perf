@@ -1,5 +1,5 @@
 use crate::api::github::Issue;
-use crate::comparison::{write_summary_table, ComparisonSummary, Direction, Magnitude};
+use crate::comparison::{write_summary_table, ArtifactComparisonSummary, Direction, Magnitude};
 use crate::load::{Config, SiteCtxt, TryCommit};
 
 use anyhow::Context as _;
@@ -632,8 +632,8 @@ async fn summarize_run(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: 
 }
 
 fn next_steps(
-    primary: ComparisonSummary,
-    secondary: ComparisonSummary,
+    primary: ArtifactComparisonSummary,
+    secondary: ArtifactComparisonSummary,
     direction: Option<Direction>,
     is_master_commit: bool,
 ) -> String {
@@ -705,7 +705,7 @@ compiler perf.{next_steps}
     )
 }
 
-fn generate_short_summary(summary: &ComparisonSummary) -> String {
+fn generate_short_summary(summary: &ArtifactComparisonSummary) -> String {
     // Add an "s" to a word unless there's only one.
     fn ending(word: &'static str, count: usize) -> std::borrow::Cow<'static, str> {
         if count == 1 {

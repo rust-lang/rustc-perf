@@ -111,7 +111,7 @@ pub async fn handle_compare(
     let benchmark_map = conn.get_benchmarks().await;
 
     let comparisons = comparison
-        .statistics
+        .comparisons
         .into_iter()
         .map(|comparison| api::comparison::Comparison {
             benchmark: comparison.benchmark.to_string(),
@@ -145,7 +145,7 @@ pub async fn handle_compare(
 
 async fn populate_report(
     ctxt: &SiteCtxt,
-    comparison: &Comparison,
+    comparison: &ArtifactComparison,
     report: &mut HashMap<Direction, Vec<String>>,
 ) {
     let benchmark_map = ctxt.get_benchmark_category_map().await;
@@ -177,7 +177,7 @@ async fn populate_report(
 /// A summary of a given comparison
 ///
 /// This summary only includes changes that are significant and relevant (as determined by a change's magnitude).
-pub struct ComparisonSummary {
+pub struct ArtifactComparisonSummary {
     /// Relevant comparisons ordered by magnitude from largest to smallest
     relevant_comparisons: Vec<TestResultComparison>,
     /// The cached number of comparisons that are improvements
@@ -186,13 +186,13 @@ pub struct ComparisonSummary {
     num_regressions: usize,
 }
 
-impl ComparisonSummary {
-    pub fn summarize_comparison(comparison: &Comparison) -> Self {
+impl ArtifactComparisonSummary {
+    pub fn summarize(comparison: &ArtifactComparison) -> Self {
         let mut num_improvements = 0;
         let mut num_regressions = 0;
 
         let mut comparisons = comparison
-            .statistics
+            .comparisons
             .iter()
             .filter(|c| c.is_relevant())
             .inspect(|c| {
@@ -213,7 +213,7 @@ impl ComparisonSummary {
         };
         comparisons.sort_by(cmp);
 
-        ComparisonSummary {
+        ArtifactComparisonSummary {
             relevant_comparisons: comparisons,
             num_improvements,
             num_regressions,
@@ -334,14 +334,6 @@ impl ComparisonSummary {
             .filter(|c| c.is_regression())
     }
 
-    fn num_changes(&self) -> usize {
-        self.relevant_comparisons.len()
-    }
-
-    fn largest_change(&self) -> Option<&TestResultComparison> {
-        self.relevant_comparisons.first()
-    }
-
     fn largest_improvement(&self) -> Option<&TestResultComparison> {
         self.relevant_comparisons
             .iter()
@@ -367,9 +359,9 @@ impl ComparisonSummary {
 }
 
 async fn write_triage_summary(
-    comparison: &Comparison,
-    primary: &ComparisonSummary,
-    secondary: &ComparisonSummary,
+    comparison: &ArtifactComparison,
+    primary: &ArtifactComparisonSummary,
+    secondary: &ArtifactComparisonSummary,
 ) -> String {
     use std::fmt::Write;
     let mut result = if let Some(pr) = comparison.b.pr {
@@ -393,8 +385,8 @@ async fn write_triage_summary(
 
 /// Writes a Markdown table containing summary of relevant results.
 pub fn write_summary_table(
-    primary: &ComparisonSummary,
-    secondary: &ComparisonSummary,
+    primary: &ArtifactComparisonSummary,
+    secondary: &ArtifactComparisonSummary,
     with_footnotes: bool,
     result: &mut String,
 ) {
@@ -512,7 +504,7 @@ pub async fn compare(
     end: Bound,
     stat: String,
     ctxt: &SiteCtxt,
-) -> Result<Option<Comparison>, BoxedError> {
+) -> Result<Option<ArtifactComparison>, BoxedError> {
     let master_commits = &ctxt.get_master_commits().commits;
 
     compare_given_commits(start, end, stat, ctxt, master_commits).await
@@ -525,7 +517,7 @@ async fn compare_given_commits(
     stat: String,
     ctxt: &SiteCtxt,
     master_commits: &[collector::MasterCommit],
-) -> Result<Option<Comparison>, BoxedError> {
+) -> Result<Option<ArtifactComparison>, BoxedError> {
     let idx = ctxt.index.load();
     let a = ctxt
         .artifact_id_for_bound(start.clone(), true)
@@ -553,7 +545,7 @@ async fn compare_given_commits(
 
     let mut historical_data =
         HistoricalDataMap::calculate(ctxt, a.clone(), master_commits, stat).await?;
-    let statistics = statistics_for_a
+    let comparisons = statistics_for_a
         .into_iter()
         .filter_map(|(test_case, a)| {
             statistics_for_b
@@ -574,10 +566,10 @@ async fn compare_given_commits(
         errors_in_b.remove(&name);
     }
 
-    Ok(Some(Comparison {
+    Ok(Some(ArtifactComparison {
         a: ArtifactDescription::for_artifact(&*conn, a.clone(), master_commits).await,
         b: ArtifactDescription::for_artifact(&*conn, b.clone(), master_commits).await,
-        statistics,
+        comparisons,
         newly_failed_benchmarks: errors_in_b.into_iter().collect(),
     }))
 }
@@ -720,16 +712,16 @@ impl From<ArtifactDescription> for api::comparison::ArtifactDescription {
 
 // A comparison of two artifacts
 #[derive(Clone)]
-pub struct Comparison {
+pub struct ArtifactComparison {
     pub a: ArtifactDescription,
     pub b: ArtifactDescription,
-    /// Statistics based on test case
-    pub statistics: HashSet<TestResultComparison>,
+    /// Test result comparisons between the two artifacts
+    pub comparisons: HashSet<TestResultComparison>,
     /// A map from benchmark name to an error which occured when building `b` but not `a`.
     pub newly_failed_benchmarks: HashMap<String, String>,
 }
 
-impl Comparison {
+impl ArtifactComparison {
     /// Gets the previous commit before `a`
     pub fn prev(&self, master_commits: &[collector::MasterCommit]) -> Option<String> {
         prev_commit(&self.a.artifact, master_commits).map(|c| c.sha.clone())
@@ -758,13 +750,13 @@ impl Comparison {
         next_commit(&self.b.artifact, master_commits).map(|c| c.sha.clone())
     }
 
-    /// Splits comparison into primary and secondary summaries based on benchmark category
+    /// Splits an artifact comparison into primary and secondary summaries based on benchmark category
     pub fn summarize_by_category(
         self,
         category_map: HashMap<Benchmark, Category>,
-    ) -> (ComparisonSummary, ComparisonSummary) {
+    ) -> (ArtifactComparisonSummary, ArtifactComparisonSummary) {
         let (primary, secondary) = self
-            .statistics
+            .comparisons
             .into_iter()
             .partition(|s| category_map.get(&s.benchmark()) == Some(&Category::Primary));
 
@@ -773,21 +765,21 @@ impl Comparison {
             .into_iter()
             .partition(|(b, _)| category_map.get(&b.as_str().into()) == Some(&Category::Primary));
 
-        let primary = Comparison {
+        let primary = ArtifactComparison {
             a: self.a.clone(),
             b: self.b.clone(),
-            statistics: primary,
+            comparisons: primary,
             newly_failed_benchmarks: primary_errors,
         };
-        let secondary = Comparison {
+        let secondary = ArtifactComparison {
             a: self.a,
             b: self.b,
-            statistics: secondary,
+            comparisons: secondary,
             newly_failed_benchmarks: secondary_errors,
         };
         (
-            ComparisonSummary::summarize_comparison(&primary),
-            ComparisonSummary::summarize_comparison(&secondary),
+            ArtifactComparisonSummary::summarize(&primary),
+            ArtifactComparisonSummary::summarize(&secondary),
         )
     }
 }
@@ -1166,7 +1158,7 @@ Triage done by **@???**.
 Revision range: [{first_commit}..{last_commit}](https://perf.rust-lang.org/?start={first_commit}&end={last_commit}&absolute=false&stat=instructions%3Au)
 
 {num_regressions} Regressions, {num_improvements} Improvements, {num_mixed} Mixed; ??? of them in rollups
-{num_comparisons} comparisons made in total
+{num_comparisons} artifact comparisons made in total
 
 #### Regressions
 
@@ -1407,13 +1399,13 @@ mod tests {
 
     // (category, before, after)
     fn check_table(values: Vec<(Category, f64, f64)>, expected: &str) {
-        let mut primary_statistics = HashSet::new();
-        let mut secondary_statistics = HashSet::new();
+        let mut primary_comparisons = HashSet::new();
+        let mut secondary_comparisons = HashSet::new();
         for (index, (category, before, after)) in values.into_iter().enumerate() {
             let target = if category == Category::Primary {
-                &mut primary_statistics
+                &mut primary_comparisons
             } else {
-                &mut secondary_statistics
+                &mut secondary_comparisons
             };
 
             target.insert(TestResultComparison {
@@ -1425,16 +1417,16 @@ mod tests {
             });
         }
 
-        let primary = create_summary(primary_statistics);
-        let secondary = create_summary(secondary_statistics);
+        let primary = create_summary(primary_comparisons);
+        let secondary = create_summary(secondary_comparisons);
 
         let mut result = String::new();
         write_summary_table(&primary, &secondary, true, &mut result);
         assert_eq!(result, expected);
     }
 
-    fn create_summary(statistics: HashSet<TestResultComparison>) -> ComparisonSummary {
-        let comparison = Comparison {
+    fn create_summary(comparisons: HashSet<TestResultComparison>) -> ArtifactComparisonSummary {
+        let comparison = ArtifactComparison {
             a: ArtifactDescription {
                 artifact: ArtifactId::Tag("a".to_string()),
                 pr: None,
@@ -1447,9 +1439,9 @@ mod tests {
                 bootstrap: Default::default(),
                 bootstrap_total: 0,
             },
-            statistics,
+            comparisons,
             newly_failed_benchmarks: Default::default(),
         };
-        ComparisonSummary::summarize_comparison(&comparison)
+        ArtifactComparisonSummary::summarize(&comparison)
     }
 }
