@@ -8,17 +8,13 @@ The following is a glossary of domain specific terminology. Although benchmarks 
 * **profile**: a [cargo profile](https://doc.rust-lang.org/cargo/reference/profiles.html). Note: the database uses "opt" whereas cargo uses "release". 
 * **scenario**: The scenario under which a user is compiling their code. Currently, this is the incremental cache state and an optional change in the source since last compilation (e.g., full incremental cache and a `println!` statement is added).  
 * **metric**: a name of a quantifiable metric being measured (e.g., instruction count)
-* **artifact**: a specific version of rustc (usually a commit sha or some sort of human readable "tag" like 1.51.0)
+* **artifact**: a specific rustc binary labeled by some identifier tag (usually a commit sha or some sort of human readable id like "1.51.0" or "test")
 * **category**: a high-level group of benchmarks. Currently, there are three categories, primary (mostly real-world crates), secondary (mostly stress tests), and stable (old real-world crates, only used for the dashboard).
 
 ## Benchmarks
 
 * **stress test benchmark**: a benchmark that is specifically designed to stress a certain part of the compiler. For example, [projection-caching](https://github.com/rust-lang/rustc-perf/tree/master/collector/benchmarks/projection-caching) stresses the compiler's projection caching mechanisms.
 * **real world benchmark**: a benchmark based on a real world crate. These are typically copied as-is from crates.io. For example, [serde](https://github.com/rust-lang/rustc-perf/tree/master/collector/benchmarks/serde-1.0.136) is a popular crate and the benchmark has not been altered from a release of serde on crates.io. 
-
-## Artifacts
-
-* **artifact tag**: an identifier for a particular artifact (e.g., the tag "1.51.0" would presumably point to the 1.51.0 release of rustc).
 
 ## Testing 
 
