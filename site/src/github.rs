@@ -1,5 +1,7 @@
 use crate::api::github::Issue;
-use crate::comparison::{write_summary_table, ArtifactComparisonSummary, Direction, Magnitude};
+use crate::comparison::{
+    deserves_attention, write_summary_table, ArtifactComparisonSummary, Direction,
+};
 use crate::load::{Config, SiteCtxt, TryCommit};
 
 use anyhow::Context as _;
@@ -637,16 +639,7 @@ fn next_steps(
     direction: Option<Direction>,
     is_master_commit: bool,
 ) -> String {
-    // whether we are confident enough this is a real change and it deserves to be looked at
-    let deserves_attention = match (primary.largest_change(), secondary.largest_change()) {
-        (Some(c), _) if c.magnitude() >= Magnitude::Medium => true,
-        (_, Some(c)) if c.magnitude() >= Magnitude::Medium => true,
-        _ => {
-            let primary_n = primary.num_changes();
-            let secondary_n = secondary.num_changes();
-            (primary_n * 2 + secondary_n) >= 6
-        }
-    };
+    let deserves_attention = deserves_attention(&primary, &secondary);
     let label = match (deserves_attention, direction) {
         (true, Some(Direction::Regression | Direction::Mixed)) => "+perf-regression",
         _ => "-perf-regression",
