@@ -158,15 +158,7 @@ async fn populate_report(
         (None, None) => return,
     };
 
-    let include_in_triage = match (primary.largest_change(), secondary.largest_change()) {
-        (Some(c), _) if c.magnitude() >= Magnitude::Medium => true,
-        (_, Some(c)) if c.magnitude() >= Magnitude::Medium => true,
-        _ => {
-            let primary_n = primary.num_changes();
-            let secondary_n = secondary.num_changes();
-            (primary_n * 2 + secondary_n) >= 6
-        }
-    };
+    let include_in_triage = deserves_attention(&primary, &secondary);
 
     if include_in_triage {
         let entry = report.entry(direction).or_default();
@@ -355,6 +347,27 @@ impl ArtifactComparisonSummary {
 
     pub fn largest_change(&self) -> Option<&TestResultComparison> {
         self.relevant_comparisons.first()
+    }
+}
+
+/// Whether we are confident enough that an artifact comparison represents a real change and thus deserves to be looked at.
+///
+/// For example, this can be used to determine if artifact comparisons with regressions should be labeled with the
+/// `perf-regression` GitHub label or should be shown in the perf triage report.
+pub(crate) fn deserves_attention(
+    primary: &ArtifactComparisonSummary,
+    secondary: &ArtifactComparisonSummary,
+) -> bool {
+    match (primary.largest_change(), secondary.largest_change()) {
+        (Some(c), _) if c.magnitude() >= Magnitude::Medium => true,
+        (_, Some(c)) if c.magnitude() >= Magnitude::Medium => true,
+        _ => {
+            // How we determine whether a group of small changes deserves attention is and always will be arbitrary,
+            // but this feels good enough for now. We may choose in the future to become more sophisticated about it.
+            let primary_n = primary.num_changes();
+            let secondary_n = secondary.num_changes();
+            (primary_n * 2 + secondary_n) >= 6
+        }
     }
 }
 
