@@ -5,7 +5,6 @@ usage.
 
 ## Roster
 
-- ecstatic-morse
 - Mark-Simulacrum
 - rylev
 - pnkfelix
@@ -67,13 +66,7 @@ Understanding the comparison page:
 *Warning*: max rss is much more variable than instruction count. Recheck the "Absolute
 data" checkbox otherwise the noise becomes unmanageable.
 
-- A change isn't significant unless one or more of the benchmarks changed by at
-  least 1%.
-
-#### Dealing with noise
-
-Some benchmarks are noisy. Those that are known to be noisy typically have their results 
-labeled as such with a `?`. These results can usually be dismissed if they are below 2.5% and are not accompanied by other regressions in other benchmarks. 
+For help understanding how to interpret results, consult the [comparison analysis documentation](../docs/comparison-analysis.md).
 
 ## Action
 
@@ -91,7 +84,7 @@ Difficult cases: the merge was a rollup of multiple PRs.
 - Look through the PRs and try to determine which was the cause. Often you
   can easily tell that one or more PRs could not have caused the change, e.g.
   because they made trivial changes, documentation-only changes, etc.
-- If there are still PRs left over, look at the 'detailed-query' page on perf.rlo: often, there is a single timing pass that improved significantly, and the name may give you a hint. You can find the page by expanding the dropdown for the build with the greatest change, then clicking on the percent change. Note that this does not work for `-doc` builds.
+- If there are still PRs left over, look at the 'detailed-query' page on perf.rlo: often, there is a single timing pass that improved significantly, and the name may give you a hint. You can find the page by expanding the dropdown for the build with the greatest change, then clicking on the percent change.
 - If you can't narrow it down to a single PR, in the rollup PR ask all the
   authors who might be responsible.
 - Once you have narrowed it down to a single PR, treat it like an easy case,
