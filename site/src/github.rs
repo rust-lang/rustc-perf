@@ -602,35 +602,41 @@ async fn summarize_run(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: 
     please file an issue in [rust-lang/rustc-perf](https://github.com/rust-lang/rustc-perf/issues/new).";
     let footer = format!("{DISAGREEMENT}{errors}");
 
-    if !primary.is_relevant() && !secondary.is_relevant() {
-        return format!("This benchmark run did not return any relevant results.\n\n{footer}");
-    }
-
-    let primary_short_summary = generate_short_summary(&primary);
-    let secondary_short_summary = generate_short_summary(&secondary);
-
-    let mut summary = format!(
-        r#"
-- Primary benchmarks: {primary_short_summary}
-- Secondary benchmarks: {secondary_short_summary}
-"#
-    );
-    write!(summary, "\n\n").unwrap();
-
-    write_summary_table(&primary, &secondary, true, &mut summary);
-
-    write!(summary, "\n{footer}").unwrap();
-
-    let direction = primary.direction().or(secondary.direction());
-    let next_steps = next_steps(primary, secondary, direction, is_master_commit);
-
-    format!(
+    let mut message = format!(
         "Finished benchmarking commit ({sha}): [comparison url]({comparison_url}).
 
-**Summary**: {summary}
-{next_steps}",
+**Summary**: ",
         sha = commit.sha,
-    )
+    );
+
+    if !primary.is_relevant() && !secondary.is_relevant() {
+        write!(
+            &mut message,
+            "This benchmark run did not return any relevant results.\n\n{footer}"
+        )
+        .unwrap();
+    } else {
+        let primary_short_summary = generate_short_summary(&primary);
+        let secondary_short_summary = generate_short_summary(&secondary);
+
+        write!(
+            &mut message,
+            r#"
+- Primary benchmarks: {primary_short_summary}
+- Secondary benchmarks: {secondary_short_summary}
+
+"#
+        )
+        .unwrap();
+
+        write_summary_table(&primary, &secondary, true, &mut message);
+
+        let direction = primary.direction().or(secondary.direction());
+        let next_steps = next_steps(primary, secondary, direction, is_master_commit);
+        write!(&mut message, "\n{footer}\n{next_steps}").unwrap();
+    }
+
+    message
 }
 
 fn next_steps(
