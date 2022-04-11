@@ -121,6 +121,10 @@ pub mod spanned;
 // this `tt-muncher` benchmark. It is quadratic in the length of the input and
 // stresses the macro expansion machinery. It is representative of TT munchers
 // in general, a macro type that is reasonably common.
+//
+// The original `quote` uses an advanced and unusual technique to avoid this
+// quadratic behaviour, which means it is not representative of TT munchers.
+// Hence this modification.
 #[macro_export]
 macro_rules! quote_tt {
     () => {
