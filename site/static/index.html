@@ -323,24 +323,40 @@
                     let cacheStateNames = Object.keys(cacheStates);
                     cacheStateNames.sort();
 
-                    let yAxis = "Value";
+                    let yAxis = state.stat;
+                    let yAxisUnit = null;
                     if (state.stat == "instructions:u") {
-                        yAxis = "Number of CPU instructions";
+                        yAxis = "CPU instructions";
+                        yAxisUnit = "count";
                     } else if (state.stat == "cycles:u") {
-                        yAxis = "Number of CPU cycles";
+                        yAxis = "CPU cycles";
+                        yAxisUnit = "count";
                     } else if (state.stat == "cpu-clock") {
-                        yAxis = "Wall time execution (seconds)";
+                        yAxis = "CPU clock";
+                        yAxisUnit = "seconds";
+                    } else if (state.stat == "task-clock") {
+                        yAxis = "Task clock";
+                        yAxisUnit = "seconds";
                     } else if (state.stat == "wall-time") {
-                        yAxis = "Wall time execution (seconds)";
+                        yAxis = "Wall time";
+                        yAxisUnit = "seconds";
                     } else if (state.stat == "max-rss") {
-                        yAxis = "Maximum resident set size (kb)";
+                        yAxis = "Maximum resident set size";
+                        yAxisUnit = "kB";
                     } else if (state.stat == "faults") {
                         yAxis = "Faults";
-                    }
-                    if (!state.absolute) {
-                        yAxis = "% change from baseline";
+                        yAxisUnit = "count";
                     }
 
+                    if (state.kind == "raw" && benchName == "Summary") {
+                        yAxisUnit = "relative";
+                    } else if (state.kind == "percentfromfirst") {
+                        yAxisUnit = "% change from first";
+                    } else if (state.kind == "percentrelative") {
+                        yAxisUnit = "% change from previous";
+                    }
+
+                    yAxis = yAxisUnit ? `${yAxis} (${yAxisUnit})` : yAxis;
                     let yAxisLabel = i == 0 ? yAxis : null;
 
                     let seriesOpts = [{}];

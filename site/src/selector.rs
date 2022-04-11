@@ -479,8 +479,8 @@ impl StatisticSeries {
                 SeriesResponse {
                     series: StatisticSeries {
                         artifact_ids: ArtifactIdIter::new(artifact_ids.clone()),
-                        points: if metric == *"cpu-clock" {
-                            // Convert to seconds -- perf reports this measurement in
+                        points: if metric == *"cpu-clock" || metric == *"task-clock" {
+                            // Convert to seconds -- perf reports these measurements in
                             // milliseconds
                             points
                                 .into_iter()
