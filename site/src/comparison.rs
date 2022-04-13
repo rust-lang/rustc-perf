@@ -179,13 +179,13 @@ pub struct ArtifactComparisonSummary {
 }
 
 impl ArtifactComparisonSummary {
-    pub fn summarize(comparison: &ArtifactComparison) -> Self {
+    /// Summarize a collection of `TestResultComparison`
+    pub fn summarize(comparisons: HashSet<TestResultComparison>) -> Self {
         let mut num_improvements = 0;
         let mut num_regressions = 0;
 
-        let mut comparisons = comparison
-            .comparisons
-            .iter()
+        let mut relevant_comparisons = comparisons
+            .into_iter()
             .filter(|c| c.is_relevant())
             .inspect(|c| {
                 if c.is_improvement() {
@@ -194,7 +194,6 @@ impl ArtifactComparisonSummary {
                     num_regressions += 1
                 }
             })
-            .cloned()
             .collect::<Vec<_>>();
 
         let cmp = |b1: &TestResultComparison, b2: &TestResultComparison| {
@@ -203,10 +202,10 @@ impl ArtifactComparisonSummary {
                 .partial_cmp(&b1.relative_change().abs())
                 .unwrap_or(std::cmp::Ordering::Equal)
         };
-        comparisons.sort_by(cmp);
+        relevant_comparisons.sort_by(cmp);
 
         ArtifactComparisonSummary {
-            relevant_comparisons: comparisons,
+            relevant_comparisons,
             num_improvements,
             num_regressions,
         }
@@ -772,27 +771,9 @@ impl ArtifactComparison {
             .comparisons
             .into_iter()
             .partition(|s| category_map.get(&s.benchmark()) == Some(&Category::Primary));
-
-        let (primary_errors, secondary_errors) = self
-            .newly_failed_benchmarks
-            .into_iter()
-            .partition(|(b, _)| category_map.get(&b.as_str().into()) == Some(&Category::Primary));
-
-        let primary = ArtifactComparison {
-            a: self.a.clone(),
-            b: self.b.clone(),
-            comparisons: primary,
-            newly_failed_benchmarks: primary_errors,
-        };
-        let secondary = ArtifactComparison {
-            a: self.a,
-            b: self.b,
-            comparisons: secondary,
-            newly_failed_benchmarks: secondary_errors,
-        };
         (
-            ArtifactComparisonSummary::summarize(&primary),
-            ArtifactComparisonSummary::summarize(&secondary),
+            ArtifactComparisonSummary::summarize(primary),
+            ArtifactComparisonSummary::summarize(secondary),
         )
     }
 }
@@ -1230,7 +1211,7 @@ mod tests {
     use collector::category::Category;
     use std::collections::HashSet;
 
-    use database::{ArtifactId, Profile, Scenario};
+    use database::{Profile, Scenario};
 
     #[test]
     fn summary_table_only_regressions_primary() {
@@ -1430,31 +1411,11 @@ mod tests {
             });
         }
 
-        let primary = create_summary(primary_comparisons);
-        let secondary = create_summary(secondary_comparisons);
+        let primary = ArtifactComparisonSummary::summarize(primary_comparisons);
+        let secondary = ArtifactComparisonSummary::summarize(secondary_comparisons);
 
         let mut result = String::new();
         write_summary_table(&primary, &secondary, true, &mut result);
         assert_eq!(result, expected);
-    }
-
-    fn create_summary(comparisons: HashSet<TestResultComparison>) -> ArtifactComparisonSummary {
-        let comparison = ArtifactComparison {
-            a: ArtifactDescription {
-                artifact: ArtifactId::Tag("a".to_string()),
-                pr: None,
-                bootstrap: Default::default(),
-                bootstrap_total: 0,
-            },
-            b: ArtifactDescription {
-                artifact: ArtifactId::Tag("b".to_string()),
-                pr: None,
-                bootstrap: Default::default(),
-                bootstrap_total: 0,
-            },
-            comparisons,
-            newly_failed_benchmarks: Default::default(),
-        };
-        ArtifactComparisonSummary::summarize(&comparison)
     }
 }
