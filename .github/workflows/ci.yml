@@ -63,12 +63,23 @@ jobs:
   test_benchmarks:
     strategy:
       matrix:
+        # We split `bench_local` testing into four jobs that run in parallel,
+        # by splitting the inputs into halves along two dimensions.
+        #
+        # - Dimension 1: In one half we run just the benchmarks listed here (a
+        #   few of the most expensive ones). In the other half we run
+        #   everything but the benchmarks listed here.
+        #
+        # - Dimension 2: In one half we run the Check, Debug, and Doc profiles.
+        #   In the other half we run the Opt profiles.
+        #
+        # We want the four parts to have similar runtimes.
         BENCH_INCLUDE_EXCLUDE_OPTS: [
-          "--exclude cargo-0.60.0",
-          "--include cargo-0.60.0",
+          "--include cargo-0.60.0,stm32f4-0.14.0,webrender-2022",
+          "--exclude cargo-0.60.0,stm32f4-0.14.0,webrender-2022",
         ]
         PROFILES: [
-          "Check,Doc,Debug",
+          "Check,Debug,Doc",
           "Opt",
         ]
     name: Test benchmarks
