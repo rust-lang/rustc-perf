@@ -147,3 +147,84 @@ Rust code being written today.
 - **syn**: See above. This is an older version (0.11.11) of the crate.
 - **tokio-webpush-simple**: A simple web server built with a very old version
   of tokio. Uses futures a lot, but doesn't use `async`/`await`.
+
+# How to update/add/remove benchmarks
+
+## Add a new benchmark
+
+- Decide on which category it belongs to.
+- If it's a third-party crate:
+  - If you are keen: talk with a maintainer of the crate to see if there is
+    anything we should be aware of when using this crate as a compile-time
+    benchmark.
+  - Look at [crates.io](https://crates.io) to find the latest (non-prerelease) version.
+  - Download it with `collector download -c $CATEGORY crate $NAME $VERSION`.
+    The `$CATEGORY` is probably `primary`.
+- It makes it easier for reviewers if you split things into two commits.
+- In the first commit, just add the new code.
+  - Do this by doing `git add` on the new directory.
+- In the second commit, do everything else.
+  - Add `[workspace]` to the very bottom of the benchmark's `Cargo.toml`, if
+    doesn't already have a `[workspace]` section. This means commands like
+    `cargo build` will work within the benchmark directory.
+  - Add any necessary stuff to the `perf-config.json` file.
+    - If the benchmark is a sub-crate within a top-level crate, you'll need a
+      `"cargo_toml"` entry.
+    - If you get a "non-wrapped rustc" error when running it, you'll need a
+      `"touch_file"` entry.
+  - Consider adding one or more `N-*.patch` files.
+    - If it's a primary benchmark, you should definitely do this.
+    - Creating the diff against what you've committed so far might be useful.
+      Use `git diff` from the repository root, or `git diff --relative` within
+      the benchmark directory. Copy the output into the `N-*.patch` file.
+    - Do a test run with an `IncrPatched` scenario to make sure the patch
+      applies correctly.
+  - `git grep` for occurrences of the old benchmark name (e.g. in
+    `.github/workflows/ci.yml` or `ci/check-*.sh`) and see if anything similar
+    needs doing for the new benchmark... usually not.
+  - Add the new entry to `collector/benchmarks/README.md`. Don't remove the
+    entry for the old benchmark yet.
+- Compare benchmarking time for the old and new versions of the benchmark.
+  (It's useful to know if the new one is a lot slower than the old one.)
+  - First, consider the entire compilation time with something like this, by
+    doing this within the benchmark directory is good:
+    ```
+    CARGO_INCREMENTAL=0 cargo check ; \rm -rf target
+    CARGO_INCREMENTAL=0 cargo build ; \rm -rf target
+    CARGO_INCREMENTAL=0 cargo build --release ; \rm -rf target
+    ```
+    Put this info in the commit message.
+  - Second, compare the final crate time with these commands:
+    ```
+    target/release/collector bench_local +nightly --id Test \
+      --profiles=Check,Debug,Opt --scenarios=Full --include=$OLD,$NEW,helloworld
+    target/release/site results.db
+    ```
+    Then switch to wall-times, compare `Test` against itself, and toggle the
+    "Show non-relevant results"/"Display raw data" check boxes to make sure it
+    hasn't changed drastically.
+    - E.g. `futures` was changed so it's just a facade for a bunch of
+      sub-crates, and the final crate time became very similar to `helloworld`,
+      which wasn't interesting.
+- File a PR.
+
+## Remove a benchmark
+
+- It makes it easier for reviewers if you split things into two commits.
+- In the first commit just remove the old code.
+  - Do this with `git rm -r` on the directory.
+- In the second commit do everything else.
+  - Remove the entry from `collector/benchmarks/README.md`.
+  - `git grep` for occurrences of the old benchmark name (e.g. in
+    `.github/workflows/ci.yml` or `ci/check-*.sh`) and see if anything needs
+    changing... usually not.
+- File a PR.
+
+## Update a benchmark
+
+- Do this in two steps. First add the new version of the benchmark. Once the PR
+  is merged, make sure it's running correctly. Second, remove the old version
+  of the benchmark. Doing it in two steps ensures we have continuity of
+  profiling coverage in the case where something goes wrong.
+- When adding the new version, for `perf-config.json` and the `N-*.patch`
+  files, use the corresponding files for the old version as a starting point.
