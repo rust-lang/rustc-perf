@@ -121,7 +121,7 @@ compiler in interesting ways.
   [Stresses](https://github.com/rust-lang/rust/issues/58178) the borrow
   checker's implementation of NLL.
 
-**Stable**
+## Stable
 
 These are benchmarks used in the
 [dashboard](https://perf.rust-lang.org/dashboard.html). They provide the
