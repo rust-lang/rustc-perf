@@ -291,6 +291,10 @@
             margin: 10px;
             text-align: center;
         }
+
+        .silent-link {
+            color: inherit;
+        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
 </head>
@@ -993,6 +997,9 @@
                 percentLink(commit, baseCommit, testCase) {
                     return `/detailed-query.html?commit=${commit}&base_commit=${baseCommit}&benchmark=${testCase.benchmark + "-" + testCase.profile}&scenario=${testCase.scenario}`;
                 },
+                benchmarkLink(benchmark) {
+                    return "https://github.com/rust-lang/rustc-perf/tree/master/collector/benchmarks/" + benchmark;
+                }
             },
             template: `
 <div class="bench-table">
@@ -1025,7 +1032,13 @@
     <tbody>
         <template v-for="testCase in cases">
             <tr>
-                <td>{{ testCase.benchmark }}</td>
+                <td>
+                  <a v-bind:href="benchmarkLink(testCase.benchmark)"
+                     class="silent-link"
+                     target="_blank">
+                     {{ testCase.benchmark }}
+                 </a>
+                </td>
                 <td>{{ testCase.profile }}</td>
                 <td>{{ testCase.scenario }}</td>
                 <td>
