@@ -152,7 +152,9 @@ Rust code being written today.
 
 ## Add a new benchmark
 
-- Decide on which category it belongs to.
+- Decide on which category it belongs to. Probably primary if it's a real-world
+  crate, and secondary if it's a stress test or intended to catch specific
+  regressions.
 - If it's a third-party crate:
   - If you are keen: talk with a maintainer of the crate to see if there is
     anything we should be aware of when using this crate as a compile-time
@@ -161,8 +163,10 @@ Rust code being written today.
   - Download it with `collector download -c $CATEGORY crate $NAME $VERSION`.
     The `$CATEGORY` is probably `primary`.
 - It makes it easier for reviewers if you split things into two commits.
-- In the first commit, just add the new code.
+- In the first commit, just add the code for the entire benchmark.
   - Do this by doing `git add` on the new directory.
+  - There is no need to remove seemingly unnecessary files such as
+    documentation or CI configuration.
 - In the second commit, do everything else.
   - Add `[workspace]` to the very bottom of the benchmark's `Cargo.toml`, if
     doesn't already have a `[workspace]` section. This means commands like
@@ -172,13 +176,18 @@ Rust code being written today.
       `"cargo_toml"` entry.
     - If you get a "non-wrapped rustc" error when running it, you'll need a
       `"touch_file"` entry.
-  - Consider adding one or more `N-*.patch` files.
+  - Consider adding one or more `N-*.patch` files for the `IncrPatched`
+    scenario.
     - If it's a primary benchmark, you should definitely do this.
-    - Creating the diff against what you've committed so far might be useful.
+    - These usually consist of a patch that adds a single
+      `println!("testing");` statement somewhere.
+    - Creating the patch against what you've committed so far might be useful.
       Use `git diff` from the repository root, or `git diff --relative` within
       the benchmark directory. Copy the output into the `N-*.patch` file.
     - Do a test run with an `IncrPatched` scenario to make sure the patch
-      applies correctly.
+      applies correctly, e.g. `target/release/collector bench_local +nightly
+      --id Test --profiles=Check --scenarios=IncrPatched
+      --include=$NEW_BENCHMARK`
   - `git grep` for occurrences of the old benchmark name (e.g. in
     `.github/workflows/ci.yml` or `ci/check-*.sh`) and see if anything similar
     needs doing for the new benchmark... usually not.
@@ -186,14 +195,13 @@ Rust code being written today.
     entry for the old benchmark yet.
 - Compare benchmarking time for the old and new versions of the benchmark.
   (It's useful to know if the new one is a lot slower than the old one.)
-  - First, consider the entire compilation time with something like this, by
+  - First, measure the entire compilation time with something like this, by
     doing this within the benchmark directory is good:
     ```
-    CARGO_INCREMENTAL=0 cargo check ; \rm -rf target
-    CARGO_INCREMENTAL=0 cargo build ; \rm -rf target
-    CARGO_INCREMENTAL=0 cargo build --release ; \rm -rf target
+    CARGO_INCREMENTAL=0 cargo check ; cargo clean
+    CARGO_INCREMENTAL=0 cargo build ; cargo clean
+    CARGO_INCREMENTAL=0 cargo build --release ; cargo clean
     ```
-    Put this info in the commit message.
   - Second, compare the final crate time with these commands:
     ```
     target/release/collector bench_local +nightly --id Test \
@@ -206,7 +214,7 @@ Rust code being written today.
     - E.g. `futures` was changed so it's just a facade for a bunch of
       sub-crates, and the final crate time became very similar to `helloworld`,
       which wasn't interesting.
-- File a PR.
+- File a PR, including the two sets of timing measurements in the description.
 
 ## Remove a benchmark
 
