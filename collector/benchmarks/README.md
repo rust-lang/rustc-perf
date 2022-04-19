@@ -29,7 +29,7 @@ They mostly consist of real-world crates.
 - **html5ever-0.26.0**: An HTML parser. Stresses macro parsing code.
 - **hyper-0.14.18**: A fairly large crate. Utilizes async/await, and used by
   many Rust programs. The crate uses cargo features to enable large portions of its
-  structure and is built with `--features client,http1,http2,server,stream`.
+  structure and is built with `--features=client,http1,http2,server,stream`.
 - **image-0.24.1**: Basic image processing functions and methods for 
   converting to and from various image formats. Used often in graphics 
   programming.
@@ -39,7 +39,7 @@ They mostly consist of real-world crates.
   Rust programs.
 - **stm32f4-0.14.0**: A crate that has many thousands of blanket impl blocks.
   It uses cargo features to enable large portions of its structure and is
-  built with `--features stm32f410` to have faster benchmarking times.
+  built with `--features=stm32f410` to have faster benchmarking times.
 - **syn-1.0.89**: A library for parsing Rust code. An important part of the Rust
   ecosystem.
 - **unicode-normalization-0.1.19**: Unicode character composition and decomposition
@@ -121,7 +121,7 @@ compiler in interesting ways.
   [Stresses](https://github.com/rust-lang/rust/issues/58178) the borrow
   checker's implementation of NLL.
 
-**Stable**
+## Stable
 
 These are benchmarks used in the
 [dashboard](https://perf.rust-lang.org/dashboard.html). They provide the
@@ -143,7 +143,96 @@ Rust code being written today.
 - **regex**: See above. This is an older version of the crate.
 - **piston-image**: See above. This is an older version of the `image` crate.
 - **style-servo**: An old version of Servo's `style` crate. A large crate, and
-  one used by old versions of Firefox.
+  one used by old versions of Firefox. Built with `--features=gecko`.
 - **syn**: See above. This is an older version (0.11.11) of the crate.
 - **tokio-webpush-simple**: A simple web server built with a very old version
   of tokio. Uses futures a lot, but doesn't use `async`/`await`.
+
+# How to update/add/remove benchmarks
+
+## Add a new benchmark
+
+- Decide on which category it belongs to. Probably primary if it's a real-world
+  crate, and secondary if it's a stress test or intended to catch specific
+  regressions.
+- If it's a third-party crate:
+  - If you are keen: talk with a maintainer of the crate to see if there is
+    anything we should be aware of when using this crate as a compile-time
+    benchmark.
+  - Look at [crates.io](https://crates.io) to find the latest (non-prerelease) version.
+  - Download it with `collector download -c $CATEGORY crate $NAME $VERSION`.
+    The `$CATEGORY` is probably `primary`.
+- It makes it easier for reviewers if you split things into two commits.
+- In the first commit, just add the code for the entire benchmark.
+  - Do this by doing `git add` on the new directory.
+  - There is no need to remove seemingly unnecessary files such as
+    documentation or CI configuration.
+- In the second commit, do everything else.
+  - Add `[workspace]` to the very bottom of the benchmark's `Cargo.toml`, if
+    doesn't already have a `[workspace]` section. This means commands like
+    `cargo build` will work within the benchmark directory.
+  - Add any necessary stuff to the `perf-config.json` file.
+    - If the benchmark is a sub-crate within a top-level crate, you'll need a
+      `"cargo_toml"` entry.
+    - If you get a "non-wrapped rustc" error when running it, you'll need a
+      `"touch_file"` entry.
+  - Consider adding one or more `N-*.patch` files for the `IncrPatched`
+    scenario.
+    - If it's a primary benchmark, you should definitely do this.
+    - These usually consist of a patch that adds a single
+      `println!("testing");` statement somewhere.
+    - Creating the patch against what you've committed so far might be useful.
+      Use `git diff` from the repository root, or `git diff --relative` within
+      the benchmark directory. Copy the output into the `N-*.patch` file.
+    - Do a test run with an `IncrPatched` scenario to make sure the patch
+      applies correctly, e.g. `target/release/collector bench_local +nightly
+      --id Test --profiles=Check --scenarios=IncrPatched
+      --include=$NEW_BENCHMARK`
+  - `git grep` for occurrences of the old benchmark name (e.g. in
+    `.github/workflows/ci.yml` or `ci/check-*.sh`) and see if anything similar
+    needs doing for the new benchmark... usually not.
+  - Add the new entry to `collector/benchmarks/README.md`. Don't remove the
+    entry for the old benchmark yet.
+- Compare benchmarking time for the old and new versions of the benchmark.
+  (It's useful to know if the new one is a lot slower than the old one.)
+  - First, measure the entire compilation time with something like this, by
+    doing this within the benchmark directory is good:
+    ```
+    CARGO_INCREMENTAL=0 cargo check ; cargo clean
+    CARGO_INCREMENTAL=0 cargo build ; cargo clean
+    CARGO_INCREMENTAL=0 cargo build --release ; cargo clean
+    ```
+  - Second, compare the final crate time with these commands:
+    ```
+    target/release/collector bench_local +nightly --id Test \
+      --profiles=Check,Debug,Opt --scenarios=Full --include=$OLD,$NEW,helloworld
+    target/release/site results.db
+    ```
+    Then switch to wall-times, compare `Test` against itself, and toggle the
+    "Show non-relevant results"/"Display raw data" check boxes to make sure it
+    hasn't changed drastically.
+    - E.g. `futures` was changed so it's just a facade for a bunch of
+      sub-crates, and the final crate time became very similar to `helloworld`,
+      which wasn't interesting.
+- File a PR, including the two sets of timing measurements in the description.
+
+## Remove a benchmark
+
+- It makes it easier for reviewers if you split things into two commits.
+- In the first commit just remove the old code.
+  - Do this with `git rm -r` on the directory.
+- In the second commit do everything else.
+  - Remove the entry from `collector/benchmarks/README.md`.
+  - `git grep` for occurrences of the old benchmark name (e.g. in
+    `.github/workflows/ci.yml` or `ci/check-*.sh`) and see if anything needs
+    changing... usually not.
+- File a PR.
+
+## Update a benchmark
+
+- Do this in two steps. First add the new version of the benchmark. Once the PR
+  is merged, make sure it's running correctly. Second, remove the old version
+  of the benchmark. Doing it in two steps ensures we have continuity of
+  profiling coverage in the case where something goes wrong.
+- When adding the new version, for `perf-config.json` and the `N-*.patch`
+  files, use the corresponding files for the old version as a starting point.

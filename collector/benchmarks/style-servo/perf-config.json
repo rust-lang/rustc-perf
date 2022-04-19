@@ -1,5 +1,5 @@
 {
-    "cargo_opts": "--features gecko",
+    "cargo_opts": "--features=gecko",
     "cargo_rustc_opts": "--cap-lints=warn",
     "cargo_toml": "components/style/Cargo.toml",
     "runs": 1,
