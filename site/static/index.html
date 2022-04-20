@@ -102,6 +102,7 @@
 
         const otherCacheStateColors = ["#8085e9", "#f15c80", "#e4d354", "#2b908f", "#f45b5b", "#91e8e1"];
         const interpolatedColor = "#fcb0f1";
+        const basicProfiles = ["Check", "Debug", "Opt"];
 
         function tooltipPlugin({ onclick, commits, isInterpolated, absoluteMode, shiftX = 10, shiftY = 10 }) {
             let tooltipLeftOffset = 0;
@@ -380,6 +381,8 @@
                         });
                     }
 
+                    let indices = cacheStates[Object.keys(cacheStates)[0]].interpolated_indices;
+
                     let plotOpts = genPlotOpts({
                         title: benchName + "-" + benchKind,
                         width: Math.floor(window.innerWidth / 3) - 16,
@@ -389,7 +392,7 @@
                         commits: data.commits,
                         stat: state.stat,
                         isInterpolated(dataIdx) {
-                            return cacheStates.full.interpolated_indices.has(dataIdx);
+                            return indices.has(dataIdx);
                         },
                         absoluteMode: state.kind == "raw",
                     });
@@ -414,19 +417,19 @@
             let benchmarks = {};
 
             function optInterpolated(profile) {
-                for (let cacheState in profile)
-                    profile[cacheState].interpolated_indices = new Set(profile[cacheState].interpolated_indices);
+                for (let scenario in profile)
+                    profile[scenario].interpolated_indices = new Set(profile[scenario].interpolated_indices);
 
                 return profile;
             }
 
             sortedBenchNames.forEach(name => {
-                const { Check, Debug, Opt } = data.benchmarks[name];
+                benchmarks[name] = {};
 
-                benchmarks[name] = {
-                    check: optInterpolated(Check),
-                    debug: optInterpolated(Debug),
-                    opt: optInterpolated(Opt),
+                for (let profile of basicProfiles) {
+                    if (data.benchmarks[name].hasOwnProperty(profile)) {
+                        benchmarks[name][profile.toLowerCase()] = optInterpolated(data.benchmarks[name][profile]);
+                    }
                 }
             });
 

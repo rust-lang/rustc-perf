@@ -612,8 +612,9 @@
                 title="Primary"
                 :cases="testCases.filter(c => c.category === 'primary')"
                 :show-raw-data="showRawData"
-                :commit-a="data.a.commit"
-                :commit-b="data.b.commit"
+                :commit-a="data.a"
+                :commit-b="data.b"
+                :stat="stat"
                 :before="before"
                 :after="after"></test-cases-table>
             <hr />
@@ -621,8 +622,9 @@
                 title="Secondary"
                 :cases="testCases.filter(c => c.category === 'secondary')"
                 :show-raw-data="showRawData"
-                :commit-a="data.a.commit"
-                :commit-b="data.b.commit"
+                :commit-a="data.a"
+                :commit-b="data.b"
+                :stat="stat"
                 :before="before"
                 :after="after"></test-cases-table>
             <br />
@@ -989,16 +991,28 @@
         });
 
         app.component('test-cases-table', {
-            props: ['cases', 'showRawData', 'commitA', 'commitB', 'before', 'after', 'title'],
+            props: ['cases', 'showRawData', 'commitA', 'commitB', 'before', 'after', 'title', 'stat'],
             methods: {
                 detailedQueryLink(commit, testCase) {
-                    return `/detailed-query.html?commit=${commit}&benchmark=${testCase.benchmark + "-" + testCase.profile}&scenario=${testCase.scenario}`;
+                    return `/detailed-query.html?commit=${commit.commit}&benchmark=${testCase.benchmark + "-" + testCase.profile}&scenario=${testCase.scenario}`;
                 },
                 percentLink(commit, baseCommit, testCase) {
-                    return `/detailed-query.html?commit=${commit}&base_commit=${baseCommit}&benchmark=${testCase.benchmark + "-" + testCase.profile}&scenario=${testCase.scenario}`;
+                    return `/detailed-query.html?commit=${commit.commit}&base_commit=${baseCommit.commit}&benchmark=${testCase.benchmark + "-" + testCase.profile}&scenario=${testCase.scenario}`;
                 },
                 benchmarkLink(benchmark) {
                     return "https://github.com/rust-lang/rustc-perf/tree/master/collector/benchmarks/" + benchmark;
+                },
+                graphLink(commit, stat, testCase) {
+                    let date = new Date(commit.date);
+                    // Move to `two weeks ago` to display history of the test case
+                    date.setUTCDate(date.getUTCDate() - 14);
+                    let year = date.getUTCFullYear();
+                    let month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+                    let day = date.getUTCDate().toString().padStart(2, '0');
+                    let start = `${year}-${month}-${day}`;
+
+                    let end = commit.commit;
+                    return `/index.html?start=${start}&end=${end}&benchmark=${testCase.benchmark}&profile=${testCase.profile}&scenario=${testCase.scenario}&stat=${stat}`;
                 }
             },
             template: `
@@ -1039,7 +1053,11 @@
                      {{ testCase.benchmark }}
                  </a>
                 </td>
-                <td>{{ testCase.profile }}</td>
+                <td>
+                  <a v-bind:href="graphLink(commitB, stat, testCase)" target="_blank" class="silent-link">
+                    {{ testCase.profile }}
+                  </a>
+                </td>
                 <td>{{ testCase.scenario }}</td>
                 <td>
                     <a v-bind:href="percentLink(commitB, commitA, testCase)">

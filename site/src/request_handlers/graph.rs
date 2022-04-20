@@ -30,6 +30,9 @@ pub async fn handle_graphs(
             end: Bound::None,
             stat: String::from("instructions:u"),
             kind: graphs::GraphKind::Raw,
+            benchmark: None,
+            scenario: None,
+            profile: None,
         };
 
     if is_default_query {
@@ -80,12 +83,23 @@ async fn create_graphs(
     let artifact_ids = Arc::new(artifact_ids_for_range(ctxt, request.start, request.end));
     let mut benchmarks = HashMap::new();
 
+    let create_selector = |filter: &Option<String>| -> Selector<String> {
+        filter
+            .as_ref()
+            .map(|value| Selector::One(value.clone()))
+            .unwrap_or(Selector::All)
+    };
+
+    let benchmark_selector = create_selector(&request.benchmark);
+    let profile_selector = create_selector(&request.profile);
+    let scenario_selector = create_selector(&request.scenario);
+
     let interpolated_responses: Vec<_> = ctxt
         .statistic_series(
             Query::new()
-                .set::<String>(Tag::Benchmark, Selector::All)
-                .set::<String>(Tag::Profile, Selector::All)
-                .set::<String>(Tag::Scenario, Selector::All)
+                .set::<String>(Tag::Benchmark, benchmark_selector)
+                .set::<String>(Tag::Profile, profile_selector)
+                .set::<String>(Tag::Scenario, scenario_selector)
                 .set::<String>(Tag::Metric, Selector::One(request.stat)),
             artifact_ids.clone(),
         )
@@ -94,9 +108,10 @@ async fn create_graphs(
         .map(|sr| sr.interpolate().map(|series| series.collect::<Vec<_>>()))
         .collect();
 
-    let summary_benchmark = create_summary(ctxt, &interpolated_responses, request.kind)?;
-
-    benchmarks.insert("Summary".to_string(), summary_benchmark);
+    if request.benchmark.is_none() {
+        let summary_benchmark = create_summary(ctxt, &interpolated_responses, request.kind)?;
+        benchmarks.insert("Summary".to_string(), summary_benchmark);
+    }
 
     for response in interpolated_responses {
         let benchmark = response.path.get::<Benchmark>()?.to_string();
