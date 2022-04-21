@@ -5,6 +5,7 @@ use clap::Parser;
 use collector::category::Category;
 use database::{ArtifactId, Commit};
 use log::debug;
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
@@ -132,6 +133,10 @@ impl BenchmarkErrors {
 
     fn incr(&mut self) {
         self.0 += 1;
+    }
+
+    fn add(&mut self, count: usize) {
+        self.0 += count;
     }
 
     fn fail_if_nonzero(self) -> anyhow::Result<()> {
@@ -684,18 +689,30 @@ fn profile(
     if let Profiler::SelfProfile = profiler {
         check_measureme_installed().unwrap();
     }
-    for (i, benchmark) in benchmarks.iter().enumerate() {
-        eprintln!("{}", n_normal_benchmarks_remaining(benchmarks.len() - i));
-        let mut processor = ProfileProcessor::new(profiler, out_dir, id);
-        let result = benchmark.measure(&mut processor, &profiles, &scenarios, compiler, Some(1));
-        if let Err(ref s) = result {
-            errors.incr();
-            eprintln!(
-                "collector error: Failed to profile '{}' with {:?}, recorded: {:?}",
-                benchmark.name, profiler, s
-            );
-        }
-    }
+
+    let error_count: usize = benchmarks
+        .par_iter()
+        .enumerate()
+        .map(|(i, benchmark)| {
+            let benchmark_id = format!("{} ({}/{})", benchmark.name, i + 1, benchmarks.len());
+            eprintln!("Executing benchmark {benchmark_id}");
+            let mut processor = ProfileProcessor::new(profiler, out_dir, id);
+            let result =
+                benchmark.measure(&mut processor, &profiles, &scenarios, compiler, Some(1));
+            eprintln!("Finished benchmark {benchmark_id}");
+
+            if let Err(ref s) = result {
+                eprintln!(
+                    "collector error: Failed to profile '{}' with {:?}, recorded: {:?}",
+                    benchmark.name, profiler, s
+                );
+                1
+            } else {
+                0
+            }
+        })
+        .sum();
+    errors.add(error_count);
 }
 
 fn main() {
@@ -859,6 +876,11 @@ enum Commands {
         // toolchain name, and `PathBuf` doesn't work well for the latter.
         #[clap(long)]
         rustc2: Option<String>,
+
+        /// How many benchmarks should be profiled in parallel.
+        /// This flag is only supported for certain profilers
+        #[clap(long, short = 'j', default_value = "1")]
+        jobs: u64,
     },
 
     /// Installs the next commit for perf.rust-lang.org
@@ -1089,7 +1111,16 @@ fn main_result() -> anyhow::Result<i32> {
             local,
             out_dir,
             rustc2,
+            jobs,
         } => {
+            let jobs = jobs.max(1);
+            if jobs > 1 && !profiler.supports_parallel_execution() {
+                anyhow::bail!(
+                    "Profiler {:?} does not support parallel execution.",
+                    profiler
+                );
+            }
+
             let profiles = Profile::expand_all(&local.profiles);
             let scenarios = Scenario::expand_all(&local.scenarios);
 
@@ -1101,6 +1132,12 @@ fn main_result() -> anyhow::Result<i32> {
             benchmarks.retain(|b| b.category().is_primary_or_secondary());
 
             let mut errors = BenchmarkErrors::new();
+
+            eprintln!("Running with {jobs} job(s)");
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(jobs as usize)
+                .build_global()
+                .unwrap();
 
             let mut get_toolchain_and_profile =
                 |rustc: &str, suffix: &str| -> anyhow::Result<String> {

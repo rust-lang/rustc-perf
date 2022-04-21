@@ -425,6 +425,8 @@ The following options alter the behaviour of the `profile_local` subcommand.
   diff files will also be produced.
 - `--rustdoc <RUSTDOC>` as for `bench_local`.
 - `--scenarios <SCENARIOS>`: as for `bench_local`.
+- `--jobs <JOB-COUNT>`: execute `<JOB-COUNT>` benchmarks in parallel. This is only allowed for certain
+profilers whose results are not affected by system noise (e.g. `callgrind` or `eprintln`).
 
 `RUST_LOG=debug` can be specified to enable verbose logging, which is useful
 for debugging `collector` itself.

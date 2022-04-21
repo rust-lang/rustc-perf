@@ -177,6 +177,25 @@ pub enum Profiler {
     LlvmIr,
 }
 
+impl Profiler {
+    /// Returns true if this profiler can be executed
+    /// in parallel without distorting the profile results.
+    pub fn supports_parallel_execution(&self) -> bool {
+        matches!(
+            self,
+            Profiler::Cachegrind
+                | Profiler::Callgrind
+                | Profiler::Dhat
+                | Profiler::DhatCopy
+                | Profiler::Eprintln
+                | Profiler::LlvmLines
+                | Profiler::LlvmIr
+                | Profiler::MonoItems
+                | Profiler::DepGraph
+        )
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum PerfTool {
     BenchTool(Bencher),
