@@ -74,6 +74,9 @@ pub mod graphs {
         pub end: Bound,
         pub stat: String,
         pub kind: GraphKind,
+        pub benchmark: Option<String>,
+        pub scenario: Option<String>,
+        pub profile: Option<String>,
     }
 
     #[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
