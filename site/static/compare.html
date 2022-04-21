@@ -1013,7 +1013,10 @@
 
                     let end = commit.commit;
                     return `/index.html?start=${start}&end=${end}&benchmark=${testCase.benchmark}&profile=${testCase.profile}&scenario=${testCase.scenario}&stat=${stat}`;
-                }
+                },
+                prettifyRawNumber(number) {
+                    return number.toLocaleString();
+                },
             },
             template: `
 <div class="bench-table">
@@ -1071,12 +1074,12 @@
                 </td>
                 <td v-if="showRawData" class="numeric">
                   <a v-bind:href="detailedQueryLink(commitA, testCase)">
-                    <abbr :title="testCase.datumA">{{ testCase.datumA.toFixed(2) }}</abbr>
+                    <abbr :title="testCase.datumA">{{ prettifyRawNumber(testCase.datumA) }}</abbr>
                   </a>
                 </td>
                 <td v-if="showRawData" class="numeric">
                   <a v-bind:href="detailedQueryLink(commitB, testCase)">
-                    <abbr :title="testCase.datumB">{{ testCase.datumB.toFixed(2) }}</abbr>
+                    <abbr :title="testCase.datumB">{{ prettifyRawNumber(testCase.datumB) }}</abbr>
                   </a>
                 </td>
             </tr>
