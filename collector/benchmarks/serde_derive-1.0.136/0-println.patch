@@ -1,0 +1,13 @@
+diff --git a/src/de.rs b/src/de.rs
+index ff7bc42f..d51d2954 100644
+--- a/src/de.rs
++++ b/src/de.rs
+@@ -17,6 +17,8 @@ use std::ptr;
+ pub fn expand_derive_deserialize(
+     input: &mut syn::DeriveInput,
+ ) -> Result<TokenStream, Vec<syn::Error>> {
++    println!("testing");
++
+     replace_receiver(input);
+ 
+     let ctxt = Ctxt::new();
