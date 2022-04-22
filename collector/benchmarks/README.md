@@ -37,6 +37,8 @@ They mostly consist of real-world crates.
 - **ripgrep-13.0.0**: A line-oriented search tool. A widely-used utility.
 - **serde-1.0.136**: A serialization/deserialization crate. Used by many other
   Rust programs.
+- **serde_derive-1.0.136**: A proc-macro sub-crate used by `serde`. Used by
+  many other Rust programs. Stresses declarative macro expansion somewhat.
 - **stm32f4-0.14.0**: A crate that has many thousands of blanket impl blocks.
   It uses cargo features to enable large portions of its structure and is
   built with `--features=stm32f410` to have faster benchmarking times.
@@ -96,8 +98,8 @@ compiler in interesting ways.
   actix-web and other libraries with similarly nested type combinators.
 - **regression-31157**: A small program that caused a [large performance
   regression](https://github.com/rust-lang/rust/issues/31157) from the past.
-- **token-stream-stress**: Constructs a long token stream much like the `quote`
-  crate does, which caused [quadratic
+- **token-stream-stress**: A proc-macro crate. Constructs a long token stream
+  much like the `quote` crate does, which caused [quadratic
   behavior](https://github.com/rust-lang/rust/issues/65080) in the past.
 - **tt-muncher**: Calls a quadratic TT muncher macro (based on `quote::quote!`)
   with a long input, which stresses macro expansion.
@@ -188,13 +190,8 @@ Rust code being written today.
       applies correctly, e.g. `target/release/collector bench_local +nightly
       --id Test --profiles=Check --scenarios=IncrPatched
       --include=$NEW_BENCHMARK`
-  - `git grep` for occurrences of the old benchmark name (e.g. in
-    `.github/workflows/ci.yml` or `ci/check-*.sh`) and see if anything similar
-    needs doing for the new benchmark... usually not.
-  - Add the new entry to `collector/benchmarks/README.md`. Don't remove the
-    entry for the old benchmark yet.
-- Compare benchmarking time for the old and new versions of the benchmark.
-  (It's useful to know if the new one is a lot slower than the old one.)
+  - Add the new entry to `collector/benchmarks/README.md`.
+- Consider the benchmarking time for the benchmark.
   - First, measure the entire compilation time with something like this, by
     doing this within the benchmark directory is good:
     ```
@@ -230,9 +227,13 @@ Rust code being written today.
 
 ## Update a benchmark
 
-- Do this in two steps. First add the new version of the benchmark. Once the PR
-  is merged, make sure it's running correctly. Second, remove the old version
-  of the benchmark. Doing it in two steps ensures we have continuity of
-  profiling coverage in the case where something goes wrong.
+- Do this in two steps.
+  - First add the new version of the benchmark. Compare the benchmarking time
+    of the two versions to make sure nothing outrageous has happened. Once the
+    PR is merged, make sure it's running correctly.
+  - Second, remove the old version of the benchmark.
+  Doing it in two steps ensures we have continuity of profiling coverage in the
+  case where something goes wrong.
+- Compare the benchmarking time of the two versions.
 - When adding the new version, for `perf-config.json` and the `N-*.patch`
   files, use the corresponding files for the old version as a starting point.
