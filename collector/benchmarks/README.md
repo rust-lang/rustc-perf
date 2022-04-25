@@ -207,7 +207,7 @@ Rust code being written today.
   - Second, compare the final crate time with these commands:
     ```
     target/release/collector bench_local +nightly --id Test \
-      --profiles=Check,Debug,Opt --scenarios=Full --include=$OLD,$NEW,helloworld
+      --profiles=Check,Debug,Opt --scenarios=Full --include=$NEW,helloworld
     target/release/site results.db
     ```
     Then switch to wall-times, compare `Test` against itself, and toggle the
