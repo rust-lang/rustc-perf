@@ -359,13 +359,13 @@ pub(crate) fn deserves_attention(
 ) -> bool {
     match (primary.largest_change(), secondary.largest_change()) {
         (Some(c), _) if c.magnitude() >= Magnitude::Medium => true,
-        (_, Some(c)) if c.magnitude() >= Magnitude::Medium => true,
+        (_, Some(c)) if c.magnitude() >= Magnitude::Large => true,
         _ => {
             // How we determine whether a group of small changes deserves attention is and always will be arbitrary,
             // but this feels good enough for now. We may choose in the future to become more sophisticated about it.
             let primary_n = primary.num_changes();
             let secondary_n = secondary.num_changes();
-            (primary_n * 2 + secondary_n) >= 6
+            (primary_n * 3 + secondary_n) >= 9
         }
     }
 }
