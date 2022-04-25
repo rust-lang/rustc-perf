@@ -612,7 +612,7 @@ async fn summarize_run(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: 
     if !primary.is_relevant() && !secondary.is_relevant() {
         write!(
             &mut message,
-            "This benchmark run did not return any relevant results.\n\n{footer}"
+            "This benchmark run did not return any relevant results.\n"
         )
         .unwrap();
     } else {
@@ -630,11 +630,11 @@ async fn summarize_run(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: 
         .unwrap();
 
         write_summary_table(&primary, &secondary, true, &mut message);
-
-        let direction = primary.direction().or(secondary.direction());
-        let next_steps = next_steps(primary, secondary, direction, is_master_commit);
-        write!(&mut message, "\n{footer}\n{next_steps}").unwrap();
     }
+
+    let direction = primary.direction().or(secondary.direction());
+    let next_steps = next_steps(primary, secondary, direction, is_master_commit);
+    write!(&mut message, "\n{footer}\n{next_steps}").unwrap();
 
     message
 }
