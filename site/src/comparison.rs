@@ -411,47 +411,70 @@ pub fn write_summary_table(
             .unwrap_or_else(|| "N/A".to_string())
     }
 
-    writeln!(
-        result,
-        r#"| | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
-|:---:|:---:|:---:|:---:|:---:|:---:|"#
-    )
-    .unwrap();
-    writeln!(
-        result,
-        "| count{} | {} | {} | {} | {} | {} |",
-        if with_footnotes { "[^1]" } else { "" },
-        primary.num_regressions,
-        secondary.num_regressions,
-        primary.num_improvements,
-        secondary.num_improvements,
-        primary.num_regressions + primary.num_improvements
-    )
-    .unwrap();
+    let columns = [
+        "          ", // we want at least 10 spaces to accommodate "count[^1]"
+        "Regressions 😿 <br />(primary)",
+        "Regressions 😿 <br />(secondary)",
+        "Improvements 🎉 <br />(primary)",
+        "Improvements 🎉 <br />(secondary)",
+        "All 😿 🎉 <br />(primary)",
+    ];
+    let counts: Vec<usize> = columns
+        .iter()
+        .map(|s| {
+            // Unicode emojis usually have width equal to ~2 chars (maybe? :) ).
+            let count = s.chars().count();
+            if s.chars().any(|c| !c.is_whitespace()) {
+                count + 1
+            } else {
+                count
+            }
+        })
+        .collect();
+    for column in &columns {
+        write!(result, "| {} ", column).unwrap();
+    }
+    result.push_str("|\n");
+    for &count in &counts {
+        write!(result, "|:{}:", "-".repeat(count)).unwrap();
+    }
+    result.push_str("|\n");
 
-    writeln!(
-        result,
-        "| mean{} | {} | {} | {} | {} | {} |",
-        if with_footnotes { "[^2]" } else { "" },
-        render_stat(primary.num_regressions, || Some(
-            primary.arithmetic_mean_of_regressions()
-        )),
-        render_stat(secondary.num_regressions, || Some(
-            secondary.arithmetic_mean_of_regressions()
-        )),
-        render_stat(primary.num_improvements, || Some(
-            primary.arithmetic_mean_of_improvements()
-        )),
-        render_stat(secondary.num_improvements, || Some(
-            secondary.arithmetic_mean_of_improvements()
-        )),
+    let mut render_row = |row: Vec<String>| {
+        debug_assert_eq!(row.len(), columns.len());
+        for (column, &count) in row.into_iter().zip(&counts) {
+            write!(result, "| {:<1$} ", column, count).unwrap();
+        }
+        result.push_str("|\n");
+    };
+    render_row(vec![
+        format!("count{}", if with_footnotes { "[^1]" } else { "" }),
+        primary.num_regressions.to_string(),
+        secondary.num_regressions.to_string(),
+        primary.num_improvements.to_string(),
+        secondary.num_improvements.to_string(),
+        (primary.num_regressions + primary.num_improvements).to_string(),
+    ]);
+    render_row(vec![
+        format!("mean{}", if with_footnotes { "[^2]" } else { "" }),
+        render_stat(primary.num_regressions, || {
+            Some(primary.arithmetic_mean_of_regressions())
+        }),
+        render_stat(secondary.num_regressions, || {
+            Some(secondary.arithmetic_mean_of_regressions())
+        }),
+        render_stat(primary.num_improvements, || {
+            Some(primary.arithmetic_mean_of_improvements())
+        }),
+        render_stat(secondary.num_improvements, || {
+            Some(secondary.arithmetic_mean_of_improvements())
+        }),
         if primary.is_empty() {
             "N/A".to_string()
         } else {
             format!("{:.1}%", primary.arithmetic_mean_of_changes())
-        }
-    )
-    .unwrap();
+        },
+    ]);
 
     let largest_change = if primary.is_empty() {
         "N/A".to_string()
@@ -478,24 +501,30 @@ pub fn write_summary_table(
         format!("{:.1}%", change * 100.0)
     };
 
-    writeln!(
-        result,
-        "| max | {} | {} | {} | {} | {} |",
-        render_stat(primary.num_regressions, || primary
-            .largest_regression()
-            .map(|r| r.relative_change() * 100.0)),
-        render_stat(secondary.num_regressions, || secondary
-            .largest_regression()
-            .map(|r| r.relative_change() * 100.0)),
-        render_stat(primary.num_improvements, || primary
-            .largest_improvement()
-            .map(|r| r.relative_change() * 100.0)),
-        render_stat(secondary.num_improvements, || secondary
-            .largest_improvement()
-            .map(|r| r.relative_change() * 100.0)),
-        largest_change
-    )
-    .unwrap();
+    render_row(vec![
+        "max".to_string(),
+        render_stat(primary.num_regressions, || {
+            primary
+                .largest_regression()
+                .map(|r| r.relative_change() * 100.0)
+        }),
+        render_stat(secondary.num_regressions, || {
+            secondary
+                .largest_regression()
+                .map(|r| r.relative_change() * 100.0)
+        }),
+        render_stat(primary.num_improvements, || {
+            primary
+                .largest_improvement()
+                .map(|r| r.relative_change() * 100.0)
+        }),
+        render_stat(secondary.num_improvements, || {
+            secondary
+                .largest_improvement()
+                .map(|r| r.relative_change() * 100.0)
+        }),
+        largest_change,
+    ]);
 
     if with_footnotes {
         writeln!(
@@ -1222,11 +1251,11 @@ mod tests {
                 (Category::Primary, 1.0, 3.0),
             ],
             r#"
-| | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
-|:---:|:---:|:---:|:---:|:---:|:---:|
-| count[^1] | 3 | 0 | 0 | 0 | 3 |
-| mean[^2] | 146.7% | N/A | N/A | N/A | 146.7% |
-| max | 200.0% | N/A | N/A | N/A | 200.0% |
+|            | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
+|:----------:|:------------------------------:|:--------------------------------:|:-------------------------------:|:---------------------------------:|:------------------------:|
+| count[^1]  | 3                              | 0                                | 0                               | 0                                 | 3                        |
+| mean[^2]   | 146.7%                         | N/A                              | N/A                             | N/A                               | 146.7%                   |
+| max        | 200.0%                         | N/A                              | N/A                             | N/A                               | 200.0%                   |
 
 [^1]: *number of relevant changes*
 [^2]: *the arithmetic mean of the percent change*
@@ -1244,11 +1273,11 @@ mod tests {
                 (Category::Primary, 4.0, 1.0),
             ],
             r#"
-| | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
-|:---:|:---:|:---:|:---:|:---:|:---:|
-| count[^1] | 0 | 0 | 3 | 0 | 3 |
-| mean[^2] | N/A | N/A | -71.7% | N/A | -71.7% |
-| max | N/A | N/A | -80.0% | N/A | -80.0% |
+|            | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
+|:----------:|:------------------------------:|:--------------------------------:|:-------------------------------:|:---------------------------------:|:------------------------:|
+| count[^1]  | 0                              | 0                                | 3                               | 0                                 | 3                        |
+| mean[^2]   | N/A                            | N/A                              | -71.7%                          | N/A                               | -71.7%                   |
+| max        | N/A                            | N/A                              | -80.0%                          | N/A                               | -80.0%                   |
 
 [^1]: *number of relevant changes*
 [^2]: *the arithmetic mean of the percent change*
@@ -1266,11 +1295,11 @@ mod tests {
                 (Category::Secondary, 4.0, 1.0),
             ],
             r#"
-| | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
-|:---:|:---:|:---:|:---:|:---:|:---:|
-| count[^1] | 0 | 0 | 0 | 3 | 0 |
-| mean[^2] | N/A | N/A | N/A | -71.7% | N/A |
-| max | N/A | N/A | N/A | -80.0% | N/A |
+|            | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
+|:----------:|:------------------------------:|:--------------------------------:|:-------------------------------:|:---------------------------------:|:------------------------:|
+| count[^1]  | 0                              | 0                                | 0                               | 3                                 | 0                        |
+| mean[^2]   | N/A                            | N/A                              | N/A                             | -71.7%                            | N/A                      |
+| max        | N/A                            | N/A                              | N/A                             | -80.0%                            | N/A                      |
 
 [^1]: *number of relevant changes*
 [^2]: *the arithmetic mean of the percent change*
@@ -1288,11 +1317,11 @@ mod tests {
                 (Category::Secondary, 1.0, 3.0),
             ],
             r#"
-| | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
-|:---:|:---:|:---:|:---:|:---:|:---:|
-| count[^1] | 0 | 3 | 0 | 0 | 0 |
-| mean[^2] | N/A | 146.7% | N/A | N/A | N/A |
-| max | N/A | 200.0% | N/A | N/A | N/A |
+|            | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
+|:----------:|:------------------------------:|:--------------------------------:|:-------------------------------:|:---------------------------------:|:------------------------:|
+| count[^1]  | 0                              | 3                                | 0                               | 0                                 | 0                        |
+| mean[^2]   | N/A                            | 146.7%                           | N/A                             | N/A                               | N/A                      |
+| max        | N/A                            | 200.0%                           | N/A                             | N/A                               | N/A                      |
 
 [^1]: *number of relevant changes*
 [^2]: *the arithmetic mean of the percent change*
@@ -1311,11 +1340,11 @@ mod tests {
                 (Category::Primary, 4.0, 1.0),
             ],
             r#"
-| | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
-|:---:|:---:|:---:|:---:|:---:|:---:|
-| count[^1] | 2 | 0 | 2 | 0 | 4 |
-| mean[^2] | 150.0% | N/A | -62.5% | N/A | 43.8% |
-| max | 200.0% | N/A | -75.0% | N/A | 200.0% |
+|            | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
+|:----------:|:------------------------------:|:--------------------------------:|:-------------------------------:|:---------------------------------:|:------------------------:|
+| count[^1]  | 2                              | 0                                | 2                               | 0                                 | 4                        |
+| mean[^2]   | 150.0%                         | N/A                              | -62.5%                          | N/A                               | 43.8%                    |
+| max        | 200.0%                         | N/A                              | -75.0%                          | N/A                               | 200.0%                   |
 
 [^1]: *number of relevant changes*
 [^2]: *the arithmetic mean of the percent change*
@@ -1336,11 +1365,11 @@ mod tests {
                 (Category::Primary, 4.0, 1.0),
             ],
             r#"
-| | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
-|:---:|:---:|:---:|:---:|:---:|:---:|
-| count[^1] | 2 | 1 | 2 | 1 | 4 |
-| mean[^2] | 150.0% | 100.0% | -62.5% | -66.7% | 43.8% |
-| max | 200.0% | 100.0% | -75.0% | -66.7% | 200.0% |
+|            | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
+|:----------:|:------------------------------:|:--------------------------------:|:-------------------------------:|:---------------------------------:|:------------------------:|
+| count[^1]  | 2                              | 1                                | 2                               | 1                                 | 4                        |
+| mean[^2]   | 150.0%                         | 100.0%                           | -62.5%                          | -66.7%                            | 43.8%                    |
+| max        | 200.0%                         | 100.0%                           | -75.0%                          | -66.7%                            | 200.0%                   |
 
 [^1]: *number of relevant changes*
 [^2]: *the arithmetic mean of the percent change*
@@ -1357,11 +1386,11 @@ mod tests {
                 (Category::Primary, 5.0, 6.0),
             ],
             r#"
-| | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
-|:---:|:---:|:---:|:---:|:---:|:---:|
-| count[^1] | 1 | 0 | 1 | 0 | 2 |
-| mean[^2] | 20.0% | N/A | -50.0% | N/A | -15.0% |
-| max | 20.0% | N/A | -50.0% | N/A | -50.0% |
+|            | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
+|:----------:|:------------------------------:|:--------------------------------:|:-------------------------------:|:---------------------------------:|:------------------------:|
+| count[^1]  | 1                              | 0                                | 1                               | 0                                 | 2                        |
+| mean[^2]   | 20.0%                          | N/A                              | -50.0%                          | N/A                               | -15.0%                   |
+| max        | 20.0%                          | N/A                              | -50.0%                          | N/A                               | -50.0%                   |
 
 [^1]: *number of relevant changes*
 [^2]: *the arithmetic mean of the percent change*
@@ -1378,11 +1407,11 @@ mod tests {
                 (Category::Primary, 6.0, 5.0),
             ],
             r#"
-| | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
-|:---:|:---:|:---:|:---:|:---:|:---:|
-| count[^1] | 1 | 0 | 1 | 0 | 2 |
-| mean[^2] | 100.0% | N/A | -16.7% | N/A | 41.7% |
-| max | 100.0% | N/A | -16.7% | N/A | 100.0% |
+|            | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
+|:----------:|:------------------------------:|:--------------------------------:|:-------------------------------:|:---------------------------------:|:------------------------:|
+| count[^1]  | 1                              | 0                                | 1                               | 0                                 | 2                        |
+| mean[^2]   | 100.0%                         | N/A                              | -16.7%                          | N/A                               | 41.7%                    |
+| max        | 100.0%                         | N/A                              | -16.7%                          | N/A                               | 100.0%                   |
 
 [^1]: *number of relevant changes*
 [^2]: *the arithmetic mean of the percent change*
