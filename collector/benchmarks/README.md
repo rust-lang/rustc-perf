@@ -33,6 +33,9 @@ They mostly consist of real-world crates.
 - **image-0.24.1**: Basic image processing functions and methods for 
   converting to and from various image formats. Used often in graphics 
   programming.
+- **libc-0.2.124**: An interface to `libc`. Contains many declarations of
+  types, constants, and functions, but relatively little normal code. Stresses
+  the parser. A very widely-used crate.
 - **regex-1.5.5**: A regular expression parser. Used by many Rust programs.
 - **ripgrep-13.0.0**: A line-oriented search tool. A widely-used utility.
 - **serde-1.0.136**: A serialization/deserialization crate. Used by many other
