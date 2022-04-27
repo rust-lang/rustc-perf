@@ -1,0 +1,13 @@
+diff --git a/src/macros.rs b/src/macros.rs
+index 9fb7f7a7..39cbf962 100644
+--- a/src/macros.rs
++++ b/src/macros.rs
+@@ -82,7 +82,7 @@ macro_rules! s {
+         impl ::Copy for $i {}
+         #[allow(deprecated)]
+         impl ::Clone for $i {
+-            fn clone(&self) -> $i { *self }
++            fn clone(&self) -> $i { let x = *self; x }
+         }
+     );
+ }
