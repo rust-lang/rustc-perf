@@ -340,7 +340,7 @@
                 <div class="description-box">
                     <div v-if="data.prev" class="description-arrow"><a v-bind:href="prevLink">&larr;</a></div>
                     <div style="padding: 10px;">
-                        <a v-if="data.a.pr" v-bind:href="prLink(data.a.pr)">#{{data.a.pr}}</a>
+                        <span><a v-if="data.a.pr" v-bind:href="prLink(data.a.pr)">#{{data.a.pr}}</a>&nbsp;</span>
                         <span v-if="data.a.date">{{formatDate(data.a.date)}}</span>
                         (<a v-bind:href="commitLink(data.a.commit)">{{short(data.a)}}</a>)
                     </div>
@@ -349,7 +349,7 @@
                 </div>
                 <div class="description-box">
                     <div style="padding: 10px;">
-                        <a v-if="data.b.pr" v-bind:href="prLink(data.b.pr)">#{{data.b.pr}}</a>
+                        <span><a v-if="data.b.pr" v-bind:href="prLink(data.b.pr)">#{{data.b.pr}}</a>&nbsp;</span>
                         <span v-if="data.b.date">{{formatDate(data.b.date)}}</span>
                         (<a v-bind:href="commitLink(data.b.commit)">{{short(data.b)}}</a>)
                     </div>
