@@ -197,6 +197,9 @@ Rust code being written today.
   - Add the new entry to `collector/benchmarks/README.md`.
   - `git add` the `Cargo.lock` file, if it's not already part of the
     benchmark's committed code.
+    - If the benchmark has a `.gitignore` file that contains `Cargo.lock`,
+      you'll need to comment out that line so that `Cargo.lock` gets uploaded
+      in the PR.
 - Consider the benchmarking time for the benchmark.
   - First, measure the entire compilation time with something like this, by
     doing this within the benchmark directory is good:
