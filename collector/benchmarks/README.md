@@ -15,6 +15,7 @@ There are three categories of benchmarks, **Primary**, **Secondary**, and
 These are real programs that are important in some way, and worth tracking.
 They mostly consist of real-world crates.
 
+- **bitmaps-3.1.0**: A bitmaps implementation. Stresses code handling traits.
 - **cargo-0.60.0**: The Rust package manager. A large program, and an important
   one in the Rust ecosystem.
 - **clap-3.1.6**: A command line argument parser. A crate used by many Rust
@@ -196,6 +197,9 @@ Rust code being written today.
   - Add the new entry to `collector/benchmarks/README.md`.
   - `git add` the `Cargo.lock` file, if it's not already part of the
     benchmark's committed code.
+    - If the benchmark has a `.gitignore` file that contains `Cargo.lock`,
+      you'll need to comment out that line so that `Cargo.lock` gets uploaded
+      in the PR.
 - Consider the benchmarking time for the benchmark.
   - First, measure the entire compilation time with something like this, by
     doing this within the benchmark directory is good:
@@ -207,7 +211,7 @@ Rust code being written today.
   - Second, compare the final crate time with these commands:
     ```
     target/release/collector bench_local +nightly --id Test \
-      --profiles=Check,Debug,Opt --scenarios=Full --include=$OLD,$NEW,helloworld
+      --profiles=Check,Debug,Opt --scenarios=Full --include=$NEW,helloworld
     target/release/site results.db
     ```
     Then switch to wall-times, compare `Test` against itself, and toggle the
