@@ -15,6 +15,7 @@ There are three categories of benchmarks, **Primary**, **Secondary**, and
 These are real programs that are important in some way, and worth tracking.
 They mostly consist of real-world crates.
 
+- **bitmaps-3.1.0**: A bitmaps implementation. Stresses code handling traits.
 - **cargo-0.60.0**: The Rust package manager. A large program, and an important
   one in the Rust ecosystem.
 - **clap-3.1.6**: A command line argument parser. A crate used by many Rust
