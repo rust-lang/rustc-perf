@@ -596,7 +596,7 @@ async fn summarize_run(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: 
     };
 
     let benchmark_map = ctxt.get_benchmark_category_map().await;
-    let (primary, secondary) = comparison.summarize_by_category(benchmark_map);
+    let (primary, secondary) = comparison.summarize_by_category(&benchmark_map);
 
     const DISAGREEMENT: &str = "If you disagree with this performance assessment, \
     please file an issue in [rust-lang/rustc-perf](https://github.com/rust-lang/rustc-perf/issues/new).";

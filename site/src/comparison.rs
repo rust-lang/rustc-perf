@@ -44,26 +44,23 @@ pub async fn handle_triage(
     let mut before = start.clone();
 
     let mut num_comparisons = 0;
+    let stat = "instructions:u".to_owned();
+    let benchmark_map = ctxt.get_benchmark_category_map().await;
     loop {
-        let comparison = match compare_given_commits(
-            before,
-            next.clone(),
-            "instructions:u".to_owned(),
-            ctxt,
-            &master_commits,
-        )
-        .await
-        .map_err(|e| format!("error comparing commits: {}", e))?
-        {
-            Some(c) => c,
-            None => {
-                log::info!(
-                    "No data found for end bound {:?}. Ending comparison...",
-                    next
-                );
-                break;
-            }
-        };
+        let comparison =
+            match compare_given_commits(before, next.clone(), stat.clone(), ctxt, &master_commits)
+                .await
+                .map_err(|e| format!("error comparing commits: {}", e))?
+            {
+                Some(c) => c,
+                None => {
+                    log::info!(
+                        "No data found for end bound {:?}. Ending comparison...",
+                        next
+                    );
+                    break;
+                }
+            };
         num_comparisons += 1;
         log::info!(
             "Comparing {} to {}",
@@ -72,7 +69,7 @@ pub async fn handle_triage(
         );
 
         // handle results of comparison
-        populate_report(ctxt, &comparison, &mut report).await;
+        populate_report(&comparison, &benchmark_map, &mut report).await;
 
         // Check that there is a next commit and that the
         // after commit is not equal to `end`
@@ -86,7 +83,24 @@ pub async fn handle_triage(
     }
     let end = end.unwrap_or(next);
 
-    let report = generate_report(&start, &end, report, num_comparisons).await;
+    // Summarize the entire triage from start commit to end commit
+    let summary =
+        match compare_given_commits(start.clone(), end.clone(), stat, ctxt, master_commits)
+            .await
+            .map_err(|e| format!("error comparing beginning and ending commits: {}", e))?
+        {
+            Some(summary_comparison) => {
+                let (primary, secondary) = summary_comparison
+                    .clone()
+                    .summarize_by_category(&benchmark_map);
+                let mut result = String::from("**Summary**:\n");
+                write_summary_table(&primary, &secondary, false, &mut result);
+                result
+            }
+            None => String::from("**ERROR**: no data found for end bound"),
+        };
+
+    let report = generate_report(&start, &end, summary, report, num_comparisons).await;
     Ok(api::triage::Response(report))
 }
 
@@ -144,12 +158,11 @@ pub async fn handle_compare(
 }
 
 async fn populate_report(
-    ctxt: &SiteCtxt,
     comparison: &ArtifactComparison,
+    benchmark_map: &HashMap<Benchmark, Category>,
     report: &mut HashMap<Direction, Vec<String>>,
 ) {
-    let benchmark_map = ctxt.get_benchmark_category_map().await;
-    let (primary, secondary) = comparison.clone().summarize_by_category(benchmark_map);
+    let (primary, secondary) = comparison.clone().summarize_by_category(&benchmark_map);
     // Get the combined direction of the primary and secondary summaries
     let direction = match (primary.direction(), secondary.direction()) {
         (Some(d1), Some(d2)) if d1 != d2 => Direction::Mixed,
@@ -794,7 +807,7 @@ impl ArtifactComparison {
     /// Splits an artifact comparison into primary and secondary summaries based on benchmark category
     pub fn summarize_by_category(
         self,
-        category_map: HashMap<Benchmark, Category>,
+        category_map: &HashMap<Benchmark, Category>,
     ) -> (ArtifactComparisonSummary, ArtifactComparisonSummary) {
         let (primary, secondary) = self
             .comparisons
@@ -1141,6 +1154,7 @@ impl Magnitude {
 async fn generate_report(
     start: &Bound,
     end: &Bound,
+    summary: String,
     mut report: HashMap<Direction, Vec<String>>,
     num_comparisons: usize,
 ) -> String {
@@ -1179,6 +1193,8 @@ TODO: Summary
 
 Triage done by **@???**.
 Revision range: [{first_commit}..{last_commit}](https://perf.rust-lang.org/?start={first_commit}&end={last_commit}&absolute=false&stat=instructions%3Au)
+
+{summary}
 
 {num_regressions} Regressions, {num_improvements} Improvements, {num_mixed} Mixed; ??? of them in rollups
 {num_comparisons} artifact comparisons made in total
