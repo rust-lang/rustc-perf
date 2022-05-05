@@ -249,6 +249,8 @@ Rust code being written today.
 
 # Benchmark update policy
 
+## Background
+
 rustc-perf is a "living benchmark suite" that is regularly changed. Some
 benchmarks in rustc-perf are verbatim copies of third-party crates. We
 periodically do a mass update of these benchmarks.
@@ -265,26 +267,19 @@ Costs of this approach:
     and they provide the greatest continuity.
 - If the code hasn't changed much, it won't have much effect.
 
-To balance these requires choosing a good refresh period. A period of three
-years is reasonable:
-- It's not too frequent (as 1 year would be, for example) while avoiding some
-  sub-optimal occurrences from the past (e.g. in 2022 numerous crates that were
-  more than five years old were updated).
-- It aligns with the Rust edition cycle.
+## Update policy
 
-Update policy
-- The third-party crates should be updated in the year following a new edition.
-  (Based on the current edition cadence, this is every three years. If the
-  edition cadence changes in the future, this period should be reconsidered.)
-  The update should occur roughly six months after the edition hits a stable
-  Rust release, to give crate authors a decent amount of time to update to the
-  new edition.
+- The third-party crates should be updated every three years. This is a
+  reasonable refresh period that is neither too short or too long. It happens
+  to match the Rust edition cycle, but this is just coincidence.
 - All third-party crates that have had at least one new release should be
   updated, even if not much code has changed. This avoids having to make
   decisions about whether a crate has changed enough.
 - When doing this mass update, there may be some benchmarks that are deemed no
-  longer interesting and removed. Likewise, there may be some new benchmarks
-  that are added.
+  longer interesting and removed. For example, in the 2022 update we found that
+  the `futures` crate was no longer interesting because all the functionality
+  had been split into sub-crates that rustc-perf doesn't measure. Likewise,
+  there may be some new benchmarks that are added.
 - New versions should be added before old versions are removed, to ensure
   continuity of profiling coverage.
 - The ad hoc addition and removal of individual benchmarks can continue
