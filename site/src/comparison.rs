@@ -93,7 +93,7 @@ pub async fn handle_triage(
                 let (primary, secondary) = summary_comparison
                     .clone()
                     .summarize_by_category(&benchmark_map);
-                let mut result = String::from("**Summary**:\n");
+                let mut result = String::from("**Summary**:\n\n");
                 write_summary_table(&primary, &secondary, false, &mut result);
                 result
             }
@@ -401,7 +401,7 @@ async fn write_triage_summary(
     let start = &comparison.a.artifact;
     let end = &comparison.b.artifact;
     let link = &compare_link(start, end);
-    write!(&mut result, " [(Comparison Link)]({})\n", link).unwrap();
+    write!(&mut result, " [(Comparison Link)]({})\n\n", link).unwrap();
 
     write_summary_table(&primary, &secondary, false, &mut result);
 
