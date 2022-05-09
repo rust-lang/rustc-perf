@@ -246,3 +246,46 @@ Rust code being written today.
 - Compare the benchmarking time of the two versions.
 - When adding the new version, for `perf-config.json` and the `N-*.patch`
   files, use the corresponding files for the old version as a starting point.
+
+# Benchmark update policy
+
+## Background
+
+rustc-perf is a "living benchmark suite" that is regularly changed. Some
+benchmarks in rustc-perf are verbatim copies of third-party crates. We
+periodically do a mass update of these benchmarks.
+
+Benefits of this approach:
+- We ensure we are measuring compilation of the crates most people are using.
+  This is most relevant for popular crates.
+- We get coverage of newer language features.
+
+Costs of this approach:
+- It takes time and effort.
+- We lose some data continuity.
+  - But the stable set of benchmarks used for the dashboard are not affected,
+    and they provide the greatest continuity.
+- If the code hasn't changed much, it won't have much effect.
+
+## Update policy
+
+- The third-party crates should be updated every three years. This is a
+  reasonable refresh period that is neither too short or too long. It happens
+  to match the Rust edition cycle, but this is just coincidence.
+- All third-party crates that have had at least one new release should be
+  updated, even if not much code has changed. This avoids having to make
+  decisions about whether a crate has changed enough.
+- When doing this mass update, there may be some benchmarks that are deemed no
+  longer interesting and removed. For example, in the 2022 update we found that
+  the `futures` crate was no longer interesting because all the functionality
+  had been split into sub-crates that rustc-perf doesn't measure. Likewise,
+  there may be some new benchmarks that are added.
+- New versions should be added before old versions are removed, to ensure
+  continuity of profiling coverage.
+- The ad hoc addition and removal of individual benchmarks can continue
+  independently of this update cycle, as per the judgment of the rustc-perf
+  maintainers.
+
+History:
+- The first mass update of third-party crates occurred in [March/April
+  2022](https://hackmd.io/d9uE7qgtTWKDLivy0uoVQw).
