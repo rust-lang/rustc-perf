@@ -1,15 +1,17 @@
 use crate::api::github::Issue;
 use crate::comparison::{
-    deserves_attention, write_summary_table, ArtifactComparisonSummary, Direction,
+    deserves_attention, write_summary_table, write_summary_table_footer, ArtifactComparisonSummary,
+    Direction, Magnitude,
 };
 use crate::load::{Config, SiteCtxt, TryCommit};
 
 use anyhow::Context as _;
-use database::{ArtifactId, QueuedCommit};
+use database::{ArtifactId, Benchmark, QueuedCommit};
 use reqwest::header::USER_AGENT;
 use serde::{Deserialize, Serialize};
 
-use std::collections::HashSet;
+use collector::category::Category;
+use std::collections::{HashMap, HashSet};
 use std::{fmt::Write, sync::Arc, time::Duration};
 
 type BoxedError = Box<dyn std::error::Error + Send + Sync>;
@@ -566,13 +568,21 @@ async fn post_comparison_comment(ctxt: &SiteCtxt, commit: QueuedCommit, is_maste
     post_comment(&ctxt.config, pr, body).await;
 }
 
-async fn summarize_run(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: bool) -> String {
-    let comparison_url = format!(
+fn make_comparison_url(commit: &QueuedCommit, stat: Option<&str>) -> String {
+    let mut url = format!(
         "https://perf.rust-lang.org/compare.html?start={}&end={}",
         commit.parent_sha, commit.sha
     );
+    if let Some(stat) = stat {
+        write!(&mut url, "&stat={stat}").unwrap();
+    }
+    url
+}
+
+async fn summarize_run(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: bool) -> String {
+    let inst_comparison_url = make_comparison_url(&commit, None);
     let comparison = match crate::comparison::compare(
-        collector::Bound::Commit(commit.parent_sha),
+        collector::Bound::Commit(commit.parent_sha.clone()),
         collector::Bound::Commit(commit.sha.clone()),
         "instructions:u".to_owned(),
         ctxt,
@@ -603,12 +613,19 @@ async fn summarize_run(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: 
     let footer = format!("{DISAGREEMENT}{errors}");
 
     let mut message = format!(
-        "Finished benchmarking commit ({sha}): [comparison url]({comparison_url}).
+        "Finished benchmarking commit ({sha}): [comparison url]({inst_comparison_url}).
 
 **Summary**: ",
         sha = commit.sha,
     );
 
+    let mut table_written = false;
+
+    write!(
+        &mut message,
+        "## [Instruction count]({inst_comparison_url})"
+    )
+    .unwrap();
     if !primary.is_relevant() && !secondary.is_relevant() {
         write!(
             &mut message,
@@ -630,6 +647,29 @@ async fn summarize_run(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: 
         .unwrap();
 
         write_summary_table(&primary, &secondary, true, &mut message);
+        table_written = true;
+    }
+
+    if let Some((primary, secondary)) = analyze_secondary_stat(
+        ctxt,
+        &commit,
+        "max-rss",
+        &benchmark_map,
+        is_max_rss_interesting,
+    )
+    .await
+    {
+        write!(
+            &mut message,
+            "\n## [Max RSS]({})",
+            make_comparison_url(&commit, Some("max-rss"))
+        )
+        .unwrap();
+        write_summary_table(&primary, &secondary, true, &mut message);
+        table_written = true;
+    }
+
+    if table_written {
         write_summary_table_footer(&mut message);
     }
 
@@ -638,6 +678,56 @@ async fn summarize_run(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: 
     write!(&mut message, "\n{footer}\n{next_steps}").unwrap();
 
     message
+}
+
+// TODO: determine how should this work
+// Should this be separate from `deserves_attention`?
+fn is_max_rss_interesting(
+    primary: &ArtifactComparisonSummary,
+    _secondary: &ArtifactComparisonSummary,
+) -> bool {
+    if primary
+        .largest_change()
+        .map(|c| c.magnitude() >= Magnitude::Large)
+        .unwrap_or(false)
+    {
+        return true;
+    }
+
+    primary.num_changes() >= 20
+}
+
+async fn analyze_secondary_stat<
+    F: FnOnce(&ArtifactComparisonSummary, &ArtifactComparisonSummary) -> bool,
+>(
+    ctxt: &SiteCtxt,
+    commit: &QueuedCommit,
+    stat: &str,
+    benchmark_map: &HashMap<Benchmark, Category>,
+    is_interesting: F,
+) -> Option<(ArtifactComparisonSummary, ArtifactComparisonSummary)> {
+    let comparison = match crate::comparison::compare(
+        collector::Bound::Commit(commit.parent_sha.clone()),
+        collector::Bound::Commit(commit.sha.clone()),
+        stat.to_string(),
+        ctxt,
+    )
+    .await
+    {
+        Ok(Some(c)) => c,
+        _ => return None,
+    };
+
+    let (primary, secondary) = comparison.summarize_by_category(benchmark_map);
+    if !primary.is_relevant() && !secondary.is_relevant() {
+        return None;
+    }
+
+    if is_interesting(&primary, &secondary) {
+        Some((primary, secondary))
+    } else {
+        None
+    }
 }
 
 fn next_steps(

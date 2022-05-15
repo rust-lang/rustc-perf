@@ -15,9 +15,9 @@ use serde::Serialize;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
+use std::fmt::Write;
 use std::hash::Hash;
 use std::sync::Arc;
-use std::fmt::Write;
 
 type BoxedError = Box<dyn Error + Send + Sync>;
 
@@ -545,7 +545,7 @@ pub fn write_summary_table_footer(result: &mut String) {
 [^1]: *number of relevant changes*
 [^2]: *the arithmetic mean of the percent change*"#
     )
-        .unwrap();
+    .unwrap();
 }
 
 /// Compare two bounds on a given stat
