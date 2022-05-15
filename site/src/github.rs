@@ -630,6 +630,7 @@ async fn summarize_run(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: 
         .unwrap();
 
         write_summary_table(&primary, &secondary, true, &mut message);
+        write_summary_table_footer(&mut message);
     }
 
     let direction = primary.direction().or(secondary.direction());

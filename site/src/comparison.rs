@@ -17,6 +17,7 @@ use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::hash::Hash;
 use std::sync::Arc;
+use std::fmt::Write;
 
 type BoxedError = Box<dyn Error + Send + Sync>;
 
@@ -388,7 +389,6 @@ async fn write_triage_summary(
     primary: &ArtifactComparisonSummary,
     secondary: &ArtifactComparisonSummary,
 ) -> String {
-    use std::fmt::Write;
     let mut result = if let Some(pr) = comparison.b.pr {
         let title = github::pr_title(pr).await;
         format!(
@@ -415,8 +415,6 @@ pub fn write_summary_table(
     with_footnotes: bool,
     result: &mut String,
 ) {
-    use std::fmt::Write;
-
     fn render_stat<F: FnOnce() -> Option<f64>>(count: usize, calculate: F) -> String {
         let value = if count > 0 { calculate() } else { None };
         value
@@ -538,16 +536,16 @@ pub fn write_summary_table(
         }),
         largest_change,
     ]);
+}
 
-    if with_footnotes {
-        writeln!(
-            result,
-            r#"
+pub fn write_summary_table_footer(result: &mut String) {
+    writeln!(
+        result,
+        r#"
 [^1]: *number of relevant changes*
 [^2]: *the arithmetic mean of the percent change*"#
-        )
+    )
         .unwrap();
-    }
 }
 
 /// Compare two bounds on a given stat
@@ -1272,9 +1270,6 @@ mod tests {
 | count[^1]  | 3                              | 0                                | 0                               | 0                                 | 3                        |
 | mean[^2]   | 146.7%                         | N/A                              | N/A                             | N/A                               | 146.7%                   |
 | max        | 200.0%                         | N/A                              | N/A                             | N/A                               | 200.0%                   |
-
-[^1]: *number of relevant changes*
-[^2]: *the arithmetic mean of the percent change*
 "#
             .trim_start(),
         );
@@ -1294,9 +1289,6 @@ mod tests {
 | count[^1]  | 0                              | 0                                | 3                               | 0                                 | 3                        |
 | mean[^2]   | N/A                            | N/A                              | -71.7%                          | N/A                               | -71.7%                   |
 | max        | N/A                            | N/A                              | -80.0%                          | N/A                               | -80.0%                   |
-
-[^1]: *number of relevant changes*
-[^2]: *the arithmetic mean of the percent change*
 "#
             .trim_start(),
         );
@@ -1316,9 +1308,6 @@ mod tests {
 | count[^1]  | 0                              | 0                                | 0                               | 3                                 | 0                        |
 | mean[^2]   | N/A                            | N/A                              | N/A                             | -71.7%                            | N/A                      |
 | max        | N/A                            | N/A                              | N/A                             | -80.0%                            | N/A                      |
-
-[^1]: *number of relevant changes*
-[^2]: *the arithmetic mean of the percent change*
 "#
                 .trim_start(),
         );
@@ -1338,9 +1327,6 @@ mod tests {
 | count[^1]  | 0                              | 3                                | 0                               | 0                                 | 0                        |
 | mean[^2]   | N/A                            | 146.7%                           | N/A                             | N/A                               | N/A                      |
 | max        | N/A                            | 200.0%                           | N/A                             | N/A                               | N/A                      |
-
-[^1]: *number of relevant changes*
-[^2]: *the arithmetic mean of the percent change*
 "#
                 .trim_start(),
         );
@@ -1361,9 +1347,6 @@ mod tests {
 | count[^1]  | 2                              | 0                                | 2                               | 0                                 | 4                        |
 | mean[^2]   | 150.0%                         | N/A                              | -62.5%                          | N/A                               | 43.8%                    |
 | max        | 200.0%                         | N/A                              | -75.0%                          | N/A                               | 200.0%                   |
-
-[^1]: *number of relevant changes*
-[^2]: *the arithmetic mean of the percent change*
 "#
             .trim_start(),
         );
@@ -1386,9 +1369,6 @@ mod tests {
 | count[^1]  | 2                              | 1                                | 2                               | 1                                 | 4                        |
 | mean[^2]   | 150.0%                         | 100.0%                           | -62.5%                          | -66.7%                            | 43.8%                    |
 | max        | 200.0%                         | 100.0%                           | -75.0%                          | -66.7%                            | 200.0%                   |
-
-[^1]: *number of relevant changes*
-[^2]: *the arithmetic mean of the percent change*
 "#
                 .trim_start(),
         );
@@ -1407,9 +1387,6 @@ mod tests {
 | count[^1]  | 1                              | 0                                | 1                               | 0                                 | 2                        |
 | mean[^2]   | 20.0%                          | N/A                              | -50.0%                          | N/A                               | -15.0%                   |
 | max        | 20.0%                          | N/A                              | -50.0%                          | N/A                               | -50.0%                   |
-
-[^1]: *number of relevant changes*
-[^2]: *the arithmetic mean of the percent change*
 "#
                 .trim_start(),
         );
@@ -1428,9 +1405,6 @@ mod tests {
 | count[^1]  | 1                              | 0                                | 1                               | 0                                 | 2                        |
 | mean[^2]   | 100.0%                         | N/A                              | -16.7%                          | N/A                               | 41.7%                    |
 | max        | 100.0%                         | N/A                              | -16.7%                          | N/A                               | 100.0%                   |
-
-[^1]: *number of relevant changes*
-[^2]: *the arithmetic mean of the percent change*
 "#
                 .trim_start(),
         );
