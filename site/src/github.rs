@@ -1,7 +1,7 @@
 use crate::api::github::Issue;
 use crate::comparison::{
-    deserves_attention, write_summary_table, write_summary_table_footer, ArtifactComparisonSummary,
-    Direction, Magnitude,
+    deserves_attention_icount, deserves_attention_maxrss, write_summary_table,
+    write_summary_table_footer, ArtifactComparisonSummary, Direction, Stat,
 };
 use crate::load::{Config, SiteCtxt, TryCommit};
 
@@ -568,23 +568,20 @@ async fn post_comparison_comment(ctxt: &SiteCtxt, commit: QueuedCommit, is_maste
     post_comment(&ctxt.config, pr, body).await;
 }
 
-fn make_comparison_url(commit: &QueuedCommit, stat: Option<&str>) -> String {
-    let mut url = format!(
-        "https://perf.rust-lang.org/compare.html?start={}&end={}",
-        commit.parent_sha, commit.sha
-    );
-    if let Some(stat) = stat {
-        write!(&mut url, "&stat={stat}").unwrap();
-    }
-    url
+fn make_comparison_url(commit: &QueuedCommit, stat: Stat) -> String {
+    format!(
+        "https://perf.rust-lang.org/compare.html?start={}&end={}&stat={}",
+        commit.parent_sha,
+        commit.sha,
+        stat.as_str()
+    )
 }
 
 async fn summarize_run(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: bool) -> String {
-    let inst_comparison_url = make_comparison_url(&commit, None);
     let comparison = match crate::comparison::compare(
         collector::Bound::Commit(commit.parent_sha.clone()),
         collector::Bound::Commit(commit.sha.clone()),
-        "instructions:u".to_owned(),
+        Stat::Instructions,
         ctxt,
     )
     .await
@@ -612,6 +609,7 @@ async fn summarize_run(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: 
     please file an issue in [rust-lang/rustc-perf](https://github.com/rust-lang/rustc-perf/issues/new).";
     let footer = format!("{DISAGREEMENT}{errors}");
 
+    let inst_comparison_url = make_comparison_url(&commit, Stat::Instructions);
     let mut message = format!(
         "Finished benchmarking commit ({sha}): [comparison url]({inst_comparison_url}).
 
@@ -653,16 +651,16 @@ async fn summarize_run(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: 
     if let Some((primary, secondary)) = analyze_secondary_stat(
         ctxt,
         &commit,
-        "max-rss",
+        Stat::MaxRSS,
         &benchmark_map,
-        is_max_rss_interesting,
+        deserves_attention_maxrss,
     )
     .await
     {
         write!(
             &mut message,
             "\n## [Max RSS]({})",
-            make_comparison_url(&commit, Some("max-rss"))
+            make_comparison_url(&commit, Stat::MaxRSS)
         )
         .unwrap();
         write_summary_table(&primary, &secondary, true, &mut message);
@@ -680,36 +678,20 @@ async fn summarize_run(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: 
     message
 }
 
-// TODO: determine how should this work
-// Should this be separate from `deserves_attention`?
-fn is_max_rss_interesting(
-    primary: &ArtifactComparisonSummary,
-    _secondary: &ArtifactComparisonSummary,
-) -> bool {
-    if primary
-        .largest_change()
-        .map(|c| c.magnitude() >= Magnitude::Large)
-        .unwrap_or(false)
-    {
-        return true;
-    }
-
-    primary.num_changes() >= 20
-}
-
-async fn analyze_secondary_stat<
-    F: FnOnce(&ArtifactComparisonSummary, &ArtifactComparisonSummary) -> bool,
->(
+async fn analyze_secondary_stat<F>(
     ctxt: &SiteCtxt,
     commit: &QueuedCommit,
-    stat: &str,
+    stat: Stat,
     benchmark_map: &HashMap<Benchmark, Category>,
     is_interesting: F,
-) -> Option<(ArtifactComparisonSummary, ArtifactComparisonSummary)> {
+) -> Option<(ArtifactComparisonSummary, ArtifactComparisonSummary)>
+where
+    F: FnOnce(&ArtifactComparisonSummary, &ArtifactComparisonSummary) -> bool,
+{
     let comparison = match crate::comparison::compare(
         collector::Bound::Commit(commit.parent_sha.clone()),
         collector::Bound::Commit(commit.sha.clone()),
-        stat.to_string(),
+        stat,
         ctxt,
     )
     .await
@@ -736,7 +718,7 @@ fn next_steps(
     direction: Option<Direction>,
     is_master_commit: bool,
 ) -> String {
-    let deserves_attention = deserves_attention(&primary, &secondary);
+    let deserves_attention = deserves_attention_icount(&primary, &secondary);
     let label = match (deserves_attention, direction) {
         (true, Some(Direction::Regression | Direction::Mixed)) => "+perf-regression",
         _ => "-perf-regression",

@@ -10,7 +10,7 @@ use crate::selector::{self, Tag};
 
 use collector::category::Category;
 use collector::Bound;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -45,11 +45,11 @@ pub async fn handle_triage(
     let mut before = start.clone();
 
     let mut num_comparisons = 0;
-    let stat = "instructions:u".to_owned();
+    let stat = Stat::Instructions;
     let benchmark_map = ctxt.get_benchmark_category_map().await;
     loop {
         let comparison =
-            match compare_given_commits(before, next.clone(), stat.clone(), ctxt, &master_commits)
+            match compare_given_commits(before, next.clone(), stat, ctxt, &master_commits)
                 .await
                 .map_err(|e| format!("error comparing commits: {}", e))?
             {
@@ -172,11 +172,43 @@ async fn populate_report(
         (None, None) => return,
     };
 
-    let include_in_triage = deserves_attention(&primary, &secondary);
+    let include_in_triage = deserves_attention_icount(&primary, &secondary);
 
     if include_in_triage {
         let entry = report.entry(direction).or_default();
         entry.push(write_triage_summary(comparison, &primary, &secondary).await);
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum Stat {
+    #[serde(rename = "instructions:u")]
+    Instructions,
+    #[serde(rename = "cycles:u")]
+    Cycles,
+    #[serde(rename = "faults")]
+    Faults,
+    #[serde(rename = "max-rss")]
+    MaxRSS,
+    #[serde(rename = "task-clock")]
+    TaskClock,
+    #[serde(rename = "wall-time")]
+    WallTime,
+    #[serde(rename = "cpu-clock")]
+    CpuClock,
+}
+
+impl Stat {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Instructions => "instructions:u",
+            Self::Cycles => "cycles:u",
+            Self::Faults => "faults",
+            Self::MaxRSS => "max-rss",
+            Self::TaskClock => "task-clock",
+            Self::WallTime => "wall-time",
+            Self::CpuClock => "cpu-clock",
+        }
     }
 }
 
@@ -367,7 +399,7 @@ impl ArtifactComparisonSummary {
 ///
 /// For example, this can be used to determine if artifact comparisons with regressions should be labeled with the
 /// `perf-regression` GitHub label or should be shown in the perf triage report.
-pub(crate) fn deserves_attention(
+pub(crate) fn deserves_attention_icount(
     primary: &ArtifactComparisonSummary,
     secondary: &ArtifactComparisonSummary,
 ) -> bool {
@@ -382,6 +414,21 @@ pub(crate) fn deserves_attention(
             (primary_n * 3 + secondary_n) >= 9
         }
     }
+}
+
+pub(crate) fn deserves_attention_maxrss(
+    primary: &ArtifactComparisonSummary,
+    secondary: &ArtifactComparisonSummary,
+) -> bool {
+    let primary_big_changes = primary
+        .improvements()
+        .filter(|comparison| comparison.magnitude() >= Magnitude::Large)
+        .count();
+    let secondary_big_changes = secondary
+        .improvements()
+        .filter(|comparison| comparison.magnitude() >= Magnitude::Large)
+        .count();
+    primary_big_changes >= 10 || secondary_big_changes >= 20
 }
 
 async fn write_triage_summary(
@@ -554,7 +601,7 @@ pub fn write_summary_table_footer(result: &mut String) {
 pub async fn compare(
     start: Bound,
     end: Bound,
-    stat: String,
+    stat: Stat,
     ctxt: &SiteCtxt,
 ) -> Result<Option<ArtifactComparison>, BoxedError> {
     let master_commits = &ctxt.get_master_commits().commits;
@@ -566,7 +613,7 @@ pub async fn compare(
 async fn compare_given_commits(
     start: Bound,
     end: Bound,
-    stat: String,
+    stat: Stat,
     ctxt: &SiteCtxt,
     master_commits: &[collector::MasterCommit],
 ) -> Result<Option<ArtifactComparison>, BoxedError> {
@@ -585,7 +632,7 @@ async fn compare_given_commits(
         .set::<String>(Tag::Benchmark, selector::Selector::All)
         .set::<String>(Tag::Scenario, selector::Selector::All)
         .set::<String>(Tag::Profile, selector::Selector::All)
-        .set(Tag::Metric, selector::Selector::One(stat.clone()));
+        .set(Tag::Metric, selector::Selector::One(stat.as_str()));
 
     // `responses` contains series iterators. The first element in the iterator is the data
     // for `a` and the second is the data for `b`
@@ -832,7 +879,7 @@ impl HistoricalDataMap {
         ctxt: &SiteCtxt,
         from: ArtifactId,
         master_commits: &[collector::MasterCommit],
-        stat: String,
+        stat: Stat,
     ) -> Result<Self, BoxedError> {
         let mut historical_data = HashMap::new();
 
@@ -854,7 +901,7 @@ impl HistoricalDataMap {
             .set::<String>(Tag::Benchmark, selector::Selector::All)
             .set::<String>(Tag::Scenario, selector::Selector::All)
             .set::<String>(Tag::Profile, selector::Selector::All)
-            .set(Tag::Metric, selector::Selector::One(stat));
+            .set(Tag::Metric, selector::Selector::One(stat.as_str()));
 
         let mut previous_commit_series = ctxt
             .statistic_series(query, previous_commits.clone())
