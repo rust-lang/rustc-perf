@@ -722,10 +722,10 @@
                     return !this.data.is_contiguous;
                 },
                 prevLink() {
-                    return `/compare.html?start=${this.data.prev}&end=${this.data.a.commit}`;
+                    return `/compare.html?start=${this.data.prev}&end=${this.data.a.commit}&stat=${this.stat}`;
                 },
                 nextLink() {
-                    return `/compare.html?start=${this.data.b.commit}&end=${this.data.next}`;
+                    return `/compare.html?start=${this.data.b.commit}&end=${this.data.next}&stat=${this.stat}`;
                 },
                 compareLink() {
                     return `https://github.com/rust-lang/rust/compare/${this.data.a.commit}...${this.data.b.commit}`;
