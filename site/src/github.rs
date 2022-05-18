@@ -1,18 +1,16 @@
 use crate::api::github::Issue;
 use crate::comparison::{
-    deserves_attention_icount, write_summary_table, write_summary_table_footer,
+    deserves_attention_icount, write_summary_table, write_summary_table_footer, ArtifactComparison,
     ArtifactComparisonSummary, Direction, Stat,
 };
 use crate::load::{Config, SiteCtxt, TryCommit};
 
 use anyhow::Context as _;
-use database::{ArtifactId, Benchmark, QueuedCommit};
+use database::{ArtifactId, QueuedCommit};
 use reqwest::header::USER_AGENT;
 use serde::{Deserialize, Serialize};
 
-use collector::category::Category;
-
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use std::{fmt::Write, sync::Arc, time::Duration};
 
@@ -565,7 +563,10 @@ pub async fn post_finished(ctxt: &SiteCtxt) {
 /// `is_master_commit` is used to differentiate messages for try runs and post-merge runs.
 async fn post_comparison_comment(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: bool) {
     let pr = commit.pr;
-    let body = summarize_run(ctxt, commit, is_master_commit).await;
+    let body = match summarize_run(ctxt, commit, is_master_commit).await {
+        Ok(message) => message,
+        Err(error) => error,
+    };
 
     post_comment(&ctxt.config, pr, body).await;
 }
@@ -579,54 +580,43 @@ fn make_comparison_url(commit: &QueuedCommit, stat: Stat) -> String {
     )
 }
 
-async fn summarize_run(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: bool) -> String {
+async fn calculate_stat_comparison(
+    ctxt: &SiteCtxt,
+    commit: &QueuedCommit,
+    stat: Stat,
+) -> Result<ArtifactComparison, String> {
+    match crate::comparison::compare(
+        collector::Bound::Commit(commit.parent_sha.clone()),
+        collector::Bound::Commit(commit.sha.clone()),
+        stat,
+        ctxt,
+    )
+    .await
+    {
+        Ok(Some(c)) => Ok(c),
+        _ => Err("ERROR categorizing benchmark run!".to_owned()),
+    }
+}
+
+async fn summarize_run(
+    ctxt: &SiteCtxt,
+    commit: QueuedCommit,
+    is_master_commit: bool,
+) -> Result<String, String> {
     let benchmark_map = ctxt.get_benchmark_category_map().await;
 
     let mut message = format!(
         "Finished benchmarking commit ({sha}): [comparison url]({comparison_url}).
 
-**Summary**: ",
+**Summary**:\n\n",
         sha = commit.sha,
         comparison_url = make_comparison_url(&commit, Stat::Instructions)
     );
 
-    let mut table_written = false;
-    let stats = vec![
-        ("Instruction count", Stat::Instructions, false),
-        ("Max RSS (memory usage)", Stat::MaxRSS, true),
-        ("Cycles", Stat::Cycles, true),
-    ];
+    let inst_comparison = calculate_stat_comparison(ctxt, &commit, Stat::Instructions).await?;
 
-    for (title, stat, hidden) in stats {
-        table_written |= write_stat_summary(
-            &benchmark_map,
-            &commit,
-            ctxt,
-            &title,
-            stat,
-            hidden,
-            &mut message,
-        )
-        .await;
-    }
-
-    if table_written {
-        write_summary_table_footer(&mut message);
-    }
-
-    let comparison = match crate::comparison::compare(
-        collector::Bound::Commit(commit.parent_sha.clone()),
-        collector::Bound::Commit(commit.sha.clone()),
-        Stat::Instructions,
-        ctxt,
-    )
-    .await
-    {
-        Ok(Some(c)) => c,
-        _ => return String::from("ERROR categorizing benchmark run!"),
-    };
-    let errors = if !comparison.newly_failed_benchmarks.is_empty() {
-        let benchmarks = comparison
+    let errors = if !inst_comparison.newly_failed_benchmarks.is_empty() {
+        let benchmarks = inst_comparison
             .newly_failed_benchmarks
             .iter()
             .map(|(benchmark, _)| format!("- {benchmark}"))
@@ -636,46 +626,65 @@ async fn summarize_run(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: 
     } else {
         String::new()
     };
-    let (primary, secondary) = comparison.summarize_by_category(&benchmark_map);
+    let (inst_primary, inst_secondary) = inst_comparison
+        .clone()
+        .summarize_by_category(&benchmark_map);
+
+    let mut table_written = false;
+    let stats = vec![
+        (
+            "Instruction count",
+            Stat::Instructions,
+            false,
+            inst_comparison,
+        ),
+        (
+            "Max RSS (memory usage)",
+            Stat::MaxRSS,
+            true,
+            calculate_stat_comparison(ctxt, &commit, Stat::MaxRSS).await?,
+        ),
+        (
+            "Cycles",
+            Stat::Cycles,
+            true,
+            calculate_stat_comparison(ctxt, &commit, Stat::Cycles).await?,
+        ),
+    ];
+
+    for (title, stat, hidden, comparison) in stats {
+        message.push_str(&format!(
+            "## [{title}]({})\n",
+            make_comparison_url(&commit, stat)
+        ));
+
+        let (primary, secondary) = comparison.summarize_by_category(&benchmark_map);
+        table_written |= write_stat_summary(primary, secondary, hidden, &mut message).await;
+    }
+
+    if table_written {
+        write_summary_table_footer(&mut message);
+    }
 
     const DISAGREEMENT: &str = "If you disagree with this performance assessment, \
     please file an issue in [rust-lang/rustc-perf](https://github.com/rust-lang/rustc-perf/issues/new).";
     let footer = format!("{DISAGREEMENT}{errors}");
 
-    let direction = primary.direction().or(secondary.direction());
-    let next_steps = next_steps(primary, secondary, direction, is_master_commit);
+    let direction = inst_primary.direction().or(inst_secondary.direction());
+    let next_steps = next_steps(inst_primary, inst_secondary, direction, is_master_commit);
+
     write!(&mut message, "\n{footer}\n{next_steps}").unwrap();
 
-    message
+    Ok(message)
 }
 
+/// Returns true if a summary table was written to `message`.
 async fn write_stat_summary(
-    benchmark_map: &HashMap<Benchmark, Category>,
-    commit: &QueuedCommit,
-    ctxt: &SiteCtxt,
-    title: &str,
-    stat: Stat,
+    primary: ArtifactComparisonSummary,
+    secondary: ArtifactComparisonSummary,
     hidden: bool,
     message: &mut String,
 ) -> bool {
-    let comparison = match crate::comparison::compare(
-        collector::Bound::Commit(commit.parent_sha.clone()),
-        collector::Bound::Commit(commit.sha.clone()),
-        stat,
-        ctxt,
-    )
-    .await
-    {
-        Ok(Some(c)) => c,
-        _ => panic!(), //return Err("ERROR categorizing benchmark run!".to_owned()),
-    };
-
-    message.push_str(&format!(
-        "## [{title}]({})\n",
-        make_comparison_url(commit, stat)
-    ));
-
-    let (primary, secondary) = comparison.summarize_by_category(benchmark_map);
     if !primary.is_relevant() && !secondary.is_relevant() {
         message
             .push_str("This benchmark run did not return any relevant results for this metric.\n");
