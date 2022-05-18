@@ -416,21 +416,6 @@ pub(crate) fn deserves_attention_icount(
     }
 }
 
-pub(crate) fn deserves_attention_maxrss(
-    primary: &ArtifactComparisonSummary,
-    secondary: &ArtifactComparisonSummary,
-) -> bool {
-    let primary_big_changes = primary
-        .improvements()
-        .filter(|comparison| comparison.magnitude() >= Magnitude::Large)
-        .count();
-    let secondary_big_changes = secondary
-        .improvements()
-        .filter(|comparison| comparison.magnitude() >= Magnitude::Large)
-        .count();
-    primary_big_changes >= 10 || secondary_big_changes >= 20
-}
-
 async fn write_triage_summary(
     comparison: &ArtifactComparison,
     primary: &ArtifactComparisonSummary,

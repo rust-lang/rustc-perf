@@ -1,7 +1,7 @@
 use crate::api::github::Issue;
 use crate::comparison::{
-    deserves_attention_icount, deserves_attention_maxrss, write_summary_table,
-    write_summary_table_footer, ArtifactComparisonSummary, Direction, Stat,
+    deserves_attention_icount, write_summary_table, write_summary_table_footer,
+    ArtifactComparisonSummary, Direction, Stat,
 };
 use crate::load::{Config, SiteCtxt, TryCommit};
 
@@ -11,7 +11,9 @@ use reqwest::header::USER_AGENT;
 use serde::{Deserialize, Serialize};
 
 use collector::category::Category;
+
 use std::collections::{HashMap, HashSet};
+
 use std::{fmt::Write, sync::Arc, time::Duration};
 
 type BoxedError = Box<dyn std::error::Error + Send + Sync>;
@@ -578,6 +580,40 @@ fn make_comparison_url(commit: &QueuedCommit, stat: Stat) -> String {
 }
 
 async fn summarize_run(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: bool) -> String {
+    let benchmark_map = ctxt.get_benchmark_category_map().await;
+
+    let mut message = format!(
+        "Finished benchmarking commit ({sha}): [comparison url]({comparison_url}).
+
+**Summary**: ",
+        sha = commit.sha,
+        comparison_url = make_comparison_url(&commit, Stat::Instructions)
+    );
+
+    let mut table_written = false;
+    let stats = vec![
+        ("Instruction count", Stat::Instructions, false),
+        ("Max RSS (memory usage)", Stat::MaxRSS, true),
+        ("Cycles", Stat::Cycles, true),
+    ];
+
+    for (title, stat, hidden) in stats {
+        table_written |= write_stat_summary(
+            &benchmark_map,
+            &commit,
+            ctxt,
+            &title,
+            stat,
+            hidden,
+            &mut message,
+        )
+        .await;
+    }
+
+    if table_written {
+        write_summary_table_footer(&mut message);
+    }
+
     let comparison = match crate::comparison::compare(
         collector::Bound::Commit(commit.parent_sha.clone()),
         collector::Bound::Commit(commit.sha.clone()),
@@ -589,7 +625,6 @@ async fn summarize_run(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: 
         Ok(Some(c)) => c,
         _ => return String::from("ERROR categorizing benchmark run!"),
     };
-
     let errors = if !comparison.newly_failed_benchmarks.is_empty() {
         let benchmarks = comparison
             .newly_failed_benchmarks
@@ -601,75 +636,11 @@ async fn summarize_run(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: 
     } else {
         String::new()
     };
-
-    let benchmark_map = ctxt.get_benchmark_category_map().await;
     let (primary, secondary) = comparison.summarize_by_category(&benchmark_map);
 
     const DISAGREEMENT: &str = "If you disagree with this performance assessment, \
     please file an issue in [rust-lang/rustc-perf](https://github.com/rust-lang/rustc-perf/issues/new).";
     let footer = format!("{DISAGREEMENT}{errors}");
-
-    let inst_comparison_url = make_comparison_url(&commit, Stat::Instructions);
-    let mut message = format!(
-        "Finished benchmarking commit ({sha}): [comparison url]({inst_comparison_url}).
-
-**Summary**: ",
-        sha = commit.sha,
-    );
-
-    let mut table_written = false;
-
-    write!(
-        &mut message,
-        "## [Instruction count]({inst_comparison_url})"
-    )
-    .unwrap();
-    if !primary.is_relevant() && !secondary.is_relevant() {
-        write!(
-            &mut message,
-            "This benchmark run did not return any relevant results.\n"
-        )
-        .unwrap();
-    } else {
-        let primary_short_summary = generate_short_summary(&primary);
-        let secondary_short_summary = generate_short_summary(&secondary);
-
-        write!(
-            &mut message,
-            r#"
-- Primary benchmarks: {primary_short_summary}
-- Secondary benchmarks: {secondary_short_summary}
-
-"#
-        )
-        .unwrap();
-
-        write_summary_table(&primary, &secondary, true, &mut message);
-        table_written = true;
-    }
-
-    if let Some((primary, secondary)) = analyze_secondary_stat(
-        ctxt,
-        &commit,
-        Stat::MaxRSS,
-        &benchmark_map,
-        deserves_attention_maxrss,
-    )
-    .await
-    {
-        write!(
-            &mut message,
-            "\n## [Max RSS]({})",
-            make_comparison_url(&commit, Stat::MaxRSS)
-        )
-        .unwrap();
-        write_summary_table(&primary, &secondary, true, &mut message);
-        table_written = true;
-    }
-
-    if table_written {
-        write_summary_table_footer(&mut message);
-    }
 
     let direction = primary.direction().or(secondary.direction());
     let next_steps = next_steps(primary, secondary, direction, is_master_commit);
@@ -678,16 +649,15 @@ async fn summarize_run(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: 
     message
 }
 
-async fn analyze_secondary_stat<F>(
-    ctxt: &SiteCtxt,
-    commit: &QueuedCommit,
-    stat: Stat,
+async fn write_stat_summary(
     benchmark_map: &HashMap<Benchmark, Category>,
-    is_interesting: F,
-) -> Option<(ArtifactComparisonSummary, ArtifactComparisonSummary)>
-where
-    F: FnOnce(&ArtifactComparisonSummary, &ArtifactComparisonSummary) -> bool,
-{
+    commit: &QueuedCommit,
+    ctxt: &SiteCtxt,
+    title: &str,
+    stat: Stat,
+    hidden: bool,
+    message: &mut String,
+) -> bool {
     let comparison = match crate::comparison::compare(
         collector::Bound::Commit(commit.parent_sha.clone()),
         collector::Bound::Commit(commit.sha.clone()),
@@ -697,18 +667,44 @@ where
     .await
     {
         Ok(Some(c)) => c,
-        _ => return None,
+        _ => panic!(), //return Err("ERROR categorizing benchmark run!".to_owned()),
     };
+
+    message.push_str(&format!(
+        "## [{title}]({})\n",
+        make_comparison_url(commit, stat)
+    ));
 
     let (primary, secondary) = comparison.summarize_by_category(benchmark_map);
     if !primary.is_relevant() && !secondary.is_relevant() {
-        return None;
-    }
-
-    if is_interesting(&primary, &secondary) {
-        Some((primary, secondary))
+        message
+            .push_str("This benchmark run did not return any relevant results for this metric.\n");
+        false
     } else {
-        None
+        let primary_short_summary = generate_short_summary(&primary);
+        let secondary_short_summary = generate_short_summary(&secondary);
+
+        if hidden {
+            message.push_str("<details>\n<summary>Results</summary>\n\n");
+        }
+
+        write!(
+            message,
+            r#"
+- Primary benchmarks: {primary_short_summary}
+- Secondary benchmarks: {secondary_short_summary}
+
+"#
+        )
+        .unwrap();
+
+        write_summary_table(&primary, &secondary, true, message);
+
+        if hidden {
+            message.push_str("</details>\n");
+        }
+
+        true
     }
 }
 
