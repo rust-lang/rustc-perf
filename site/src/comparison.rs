@@ -663,7 +663,7 @@ async fn compare_given_commits(
                     benchmark: test_case.0,
                     profile: test_case.1,
                     scenario: test_case.2,
-                    stat,
+                    metric,
                     historical_data: historical_data.data.remove(&test_case),
                     results: (a, b),
                 })
@@ -1041,7 +1041,7 @@ pub struct TestResultComparison {
     benchmark: Benchmark,
     profile: Profile,
     scenario: Scenario,
-    stat: Stat,
+    metric: Metric,
     historical_data: Option<HistoricalData>,
     results: (f64, f64),
 }
@@ -1110,7 +1110,7 @@ impl TestResultComparison {
         } else {
             Magnitude::VeryLarge
         };
-        let absolute_magnitude = self.stat.relative_change_magnitude(change * 100.0);
+        let absolute_magnitude = self.metric.relative_change_magnitude(change * 100.0);
         fn as_u8(m: Magnitude) -> u8 {
             match m {
                 Magnitude::VerySmall => 1,
@@ -1474,7 +1474,7 @@ mod tests {
                 benchmark: index.to_string().as_str().into(),
                 profile: Profile::Check,
                 scenario: Scenario::Empty,
-                stat: Stat::Instructions,
+                metric: Metric::Instructions,
                 historical_data: None,
                 results: (before, after),
             });
