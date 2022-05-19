@@ -606,9 +606,7 @@ async fn summarize_run(
     let benchmark_map = ctxt.get_benchmark_category_map().await;
 
     let mut message = format!(
-        "Finished benchmarking commit ({sha}): [comparison url]({comparison_url}).
-
-**Summary**:\n\n",
+        "Finished benchmarking commit ({sha}): [comparison url]({comparison_url}).\n\n",
         sha = commit.sha,
         comparison_url = make_comparison_url(&commit, Stat::Instructions)
     );
@@ -654,7 +652,7 @@ async fn summarize_run(
 
     for (title, stat, hidden, comparison) in stats {
         message.push_str(&format!(
-            "## [{title}]({})\n",
+            "\n### [{title}]({})\n",
             make_comparison_url(&commit, stat)
         ));
 
