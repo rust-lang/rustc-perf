@@ -45,11 +45,11 @@ pub async fn handle_triage(
     let mut before = start.clone();
 
     let mut num_comparisons = 0;
-    let stat = Stat::Instructions;
+    let metric = Metric::Instructions;
     let benchmark_map = ctxt.get_benchmark_category_map().await;
     loop {
         let comparison =
-            match compare_given_commits(before, next.clone(), stat, ctxt, &master_commits)
+            match compare_given_commits(before, next.clone(), metric, ctxt, &master_commits)
                 .await
                 .map_err(|e| format!("error comparing commits: {}", e))?
             {
@@ -86,7 +86,7 @@ pub async fn handle_triage(
 
     // Summarize the entire triage from start commit to end commit
     let summary =
-        match compare_given_commits(start.clone(), end.clone(), stat, ctxt, master_commits)
+        match compare_given_commits(start.clone(), end.clone(), metric, ctxt, master_commits)
             .await
             .map_err(|e| format!("error comparing beginning and ending commits: {}", e))?
         {
@@ -181,7 +181,7 @@ async fn populate_report(
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub enum Stat {
+pub enum Metric {
     #[serde(rename = "instructions:u")]
     Instructions,
     #[serde(rename = "cycles:u")]
@@ -198,7 +198,7 @@ pub enum Stat {
     CpuClock,
 }
 
-impl Stat {
+impl Metric {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Instructions => "instructions:u",
@@ -586,19 +586,19 @@ pub fn write_summary_table_footer(result: &mut String) {
 pub async fn compare(
     start: Bound,
     end: Bound,
-    stat: Stat,
+    metric: Metric,
     ctxt: &SiteCtxt,
 ) -> Result<Option<ArtifactComparison>, BoxedError> {
     let master_commits = &ctxt.get_master_commits().commits;
 
-    compare_given_commits(start, end, stat, ctxt, master_commits).await
+    compare_given_commits(start, end, metric, ctxt, master_commits).await
 }
 
-/// Compare two bounds on a given stat
+/// Compare two bounds on a given metric
 async fn compare_given_commits(
     start: Bound,
     end: Bound,
-    stat: Stat,
+    metric: Metric,
     ctxt: &SiteCtxt,
     master_commits: &[collector::MasterCommit],
 ) -> Result<Option<ArtifactComparison>, BoxedError> {
@@ -612,12 +612,12 @@ async fn compare_given_commits(
     };
     let aids = Arc::new(vec![a.clone(), b.clone()]);
 
-    // get all crates, cache, and profile combinations for the given stat
+    // get all crates, cache, and profile combinations for the given metric
     let query = selector::Query::new()
         .set::<String>(Tag::Benchmark, selector::Selector::All)
         .set::<String>(Tag::Scenario, selector::Selector::All)
         .set::<String>(Tag::Profile, selector::Selector::All)
-        .set(Tag::Metric, selector::Selector::One(stat.as_str()));
+        .set(Tag::Metric, selector::Selector::One(metric.as_str()));
 
     // `responses` contains series iterators. The first element in the iterator is the data
     // for `a` and the second is the data for `b`
@@ -628,7 +628,7 @@ async fn compare_given_commits(
     let statistics_for_b = statistics_from_series(&mut responses);
 
     let mut historical_data =
-        HistoricalDataMap::calculate(ctxt, a.clone(), master_commits, stat).await?;
+        HistoricalDataMap::calculate(ctxt, a.clone(), master_commits, metric).await?;
     let comparisons = statistics_for_a
         .into_iter()
         .filter_map(|(test_case, a)| {
@@ -864,7 +864,7 @@ impl HistoricalDataMap {
         ctxt: &SiteCtxt,
         from: ArtifactId,
         master_commits: &[collector::MasterCommit],
-        stat: Stat,
+        metric: Metric,
     ) -> Result<Self, BoxedError> {
         let mut historical_data = HashMap::new();
 
@@ -881,12 +881,12 @@ impl HistoricalDataMap {
             });
         }
 
-        // get all crates, cache, and profile combinations for the given stat
+        // get all crates, cache, and profile combinations for the given metric
         let query = selector::Query::new()
             .set::<String>(Tag::Benchmark, selector::Selector::All)
             .set::<String>(Tag::Scenario, selector::Selector::All)
             .set::<String>(Tag::Profile, selector::Selector::All)
-            .set(Tag::Metric, selector::Selector::One(stat.as_str()));
+            .set(Tag::Metric, selector::Selector::One(metric.as_str()));
 
         let mut previous_commit_series = ctxt
             .statistic_series(query, previous_commits.clone())

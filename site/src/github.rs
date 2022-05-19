@@ -1,7 +1,7 @@
 use crate::api::github::Issue;
 use crate::comparison::{
     deserves_attention_icount, write_summary_table, write_summary_table_footer, ArtifactComparison,
-    ArtifactComparisonSummary, Direction, Stat,
+    ArtifactComparisonSummary, Direction, Metric,
 };
 use crate::load::{Config, SiteCtxt, TryCommit};
 
@@ -571,7 +571,7 @@ async fn post_comparison_comment(ctxt: &SiteCtxt, commit: QueuedCommit, is_maste
     post_comment(&ctxt.config, pr, body).await;
 }
 
-fn make_comparison_url(commit: &QueuedCommit, stat: Stat) -> String {
+fn make_comparison_url(commit: &QueuedCommit, stat: Metric) -> String {
     format!(
         "https://perf.rust-lang.org/compare.html?start={}&end={}&stat={}",
         commit.parent_sha,
@@ -583,7 +583,7 @@ fn make_comparison_url(commit: &QueuedCommit, stat: Stat) -> String {
 async fn calculate_stat_comparison(
     ctxt: &SiteCtxt,
     commit: &QueuedCommit,
-    stat: Stat,
+    stat: Metric,
 ) -> Result<ArtifactComparison, String> {
     match crate::comparison::compare(
         collector::Bound::Commit(commit.parent_sha.clone()),
@@ -608,10 +608,10 @@ async fn summarize_run(
     let mut message = format!(
         "Finished benchmarking commit ({sha}): [comparison url]({comparison_url}).\n\n",
         sha = commit.sha,
-        comparison_url = make_comparison_url(&commit, Stat::Instructions)
+        comparison_url = make_comparison_url(&commit, Metric::Instructions)
     );
 
-    let inst_comparison = calculate_stat_comparison(ctxt, &commit, Stat::Instructions).await?;
+    let inst_comparison = calculate_stat_comparison(ctxt, &commit, Metric::Instructions).await?;
 
     let errors = if !inst_comparison.newly_failed_benchmarks.is_empty() {
         let benchmarks = inst_comparison
@@ -632,21 +632,21 @@ async fn summarize_run(
     let stats = vec![
         (
             "Instruction count",
-            Stat::Instructions,
+            Metric::Instructions,
             false,
             inst_comparison,
         ),
         (
             "Max RSS (memory usage)",
-            Stat::MaxRSS,
+            Metric::MaxRSS,
             true,
-            calculate_stat_comparison(ctxt, &commit, Stat::MaxRSS).await?,
+            calculate_stat_comparison(ctxt, &commit, Metric::MaxRSS).await?,
         ),
         (
             "Cycles",
-            Stat::Cycles,
+            Metric::Cycles,
             true,
-            calculate_stat_comparison(ctxt, &commit, Stat::Cycles).await?,
+            calculate_stat_comparison(ctxt, &commit, Metric::Cycles).await?,
         ),
     ];
 
