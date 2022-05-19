@@ -580,15 +580,15 @@ fn make_comparison_url(commit: &QueuedCommit, stat: Metric) -> String {
     )
 }
 
-async fn calculate_stat_comparison(
+async fn calculate_metric_comparison(
     ctxt: &SiteCtxt,
     commit: &QueuedCommit,
-    stat: Metric,
+    metric: Metric,
 ) -> Result<ArtifactComparison, String> {
     match crate::comparison::compare(
         collector::Bound::Commit(commit.parent_sha.clone()),
         collector::Bound::Commit(commit.sha.clone()),
-        stat,
+        metric,
         ctxt,
     )
     .await
@@ -611,7 +611,7 @@ async fn summarize_run(
         comparison_url = make_comparison_url(&commit, Metric::Instructions)
     );
 
-    let inst_comparison = calculate_stat_comparison(ctxt, &commit, Metric::Instructions).await?;
+    let inst_comparison = calculate_metric_comparison(ctxt, &commit, Metric::Instructions).await?;
 
     let errors = if !inst_comparison.newly_failed_benchmarks.is_empty() {
         let benchmarks = inst_comparison
@@ -629,7 +629,7 @@ async fn summarize_run(
         .summarize_by_category(&benchmark_map);
 
     let mut table_written = false;
-    let stats = vec![
+    let metrics = vec![
         (
             "Instruction count",
             Metric::Instructions,
@@ -640,24 +640,24 @@ async fn summarize_run(
             "Max RSS (memory usage)",
             Metric::MaxRSS,
             true,
-            calculate_stat_comparison(ctxt, &commit, Metric::MaxRSS).await?,
+            calculate_metric_comparison(ctxt, &commit, Metric::MaxRSS).await?,
         ),
         (
             "Cycles",
             Metric::Cycles,
             true,
-            calculate_stat_comparison(ctxt, &commit, Metric::Cycles).await?,
+            calculate_metric_comparison(ctxt, &commit, Metric::Cycles).await?,
         ),
     ];
 
-    for (title, stat, hidden, comparison) in stats {
+    for (title, metric, hidden, comparison) in metrics {
         message.push_str(&format!(
             "\n### [{title}]({})\n",
-            make_comparison_url(&commit, stat)
+            make_comparison_url(&commit, metric)
         ));
 
         let (primary, secondary) = comparison.summarize_by_category(&benchmark_map);
-        table_written |= write_stat_summary(primary, secondary, hidden, &mut message).await;
+        table_written |= write_metric_summary(primary, secondary, hidden, &mut message).await;
     }
 
     if table_written {
@@ -677,7 +677,7 @@ async fn summarize_run(
 }
 
 /// Returns true if a summary table was written to `message`.
-async fn write_stat_summary(
+async fn write_metric_summary(
     primary: ArtifactComparisonSummary,
     secondary: ArtifactComparisonSummary,
     hidden: bool,
