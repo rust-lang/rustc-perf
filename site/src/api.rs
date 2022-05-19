@@ -130,6 +130,7 @@ pub mod bootstrap {
 }
 
 pub mod comparison {
+    use crate::comparison::Stat;
     use collector::Bound;
     use database::{BenchmarkData, Date};
     use serde::{Deserialize, Serialize};
@@ -139,7 +140,7 @@ pub mod comparison {
     pub struct Request {
         pub start: Bound,
         pub end: Bound,
-        pub stat: String,
+        pub stat: Stat,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
