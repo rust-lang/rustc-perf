@@ -211,12 +211,12 @@ impl Metric {
         }
     }
 
-    /// Determines the magntiude of a relative change in percentage terms
+    /// Determines the magnitude of a percent relative change for a given metric.
     ///
     /// Takes into account how noisy the stat is. For example, instruction
     /// count which is normally not very noisy has smaller thresholds than
     /// max-rss which can be noisy.
-    fn absolute_magnitude(&self, change: f64) -> Magnitude {
+    fn relative_change_magnitude(&self, change: f64) -> Magnitude {
         let noise_factor = if self.is_typically_noisy() { 2.0 } else { 1.0 };
         let change = change / noise_factor;
         if change < 0.2 {
@@ -1110,7 +1110,7 @@ impl TestResultComparison {
         } else {
             Magnitude::VeryLarge
         };
-        let absolute_magnitude = self.stat.absolute_magnitude(change * 100.0);
+        let absolute_magnitude = self.stat.relative_change_magnitude(change * 100.0);
         fn as_u8(m: Magnitude) -> u8 {
             match m {
                 Magnitude::VerySmall => 1,
