@@ -58,6 +58,7 @@ The relevance test run summary is determined by the number of significant and re
 
 Magnitude is a combination of two factors:
 * how large a change is regardless of the direction of the change
+  * The point at which a change is considered in a different magnitude category depends on the metric being analyzed.
 * how much that change went over the significance threshold
 
 As an example, if a change that is large in absolute terms only exceeds the significance threshold by a small factor, then the overall magnitude of the change is considered small.
