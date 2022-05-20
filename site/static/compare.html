@@ -118,6 +118,7 @@
             margin: 0;
             padding: 0;
         }
+
         .section-list-wrapper {
             flex-direction: column;
         }
@@ -129,11 +130,13 @@
                 align-items: center;
                 width: 80%;
             }
+
             .section-list-wrapper {
                 flex-direction: row;
             }
         }
-        .states-list > li {
+
+        .states-list>li {
             margin-right: 15px;
         }
 
@@ -227,10 +230,12 @@
             width: 25%;
             min-width: 50px;
         }
+
         .benches td {
             text-align: center;
             width: 25%;
         }
+
         .benches td.numeric {
             text-align: right;
         }
@@ -254,37 +259,45 @@
             flex-direction: column;
             margin-bottom: 10px;
         }
+
         .summary {
             display: flex;
         }
+
         .summary-values {
             display: flex;
             flex-direction: column;
         }
+
         @media (min-width: 650px) {
             .summary-container {
                 flex-direction: row;
                 margin-bottom: 0;
                 align-items: center;
             }
-            .summary-container > span {
+
+            .summary-container>span {
                 text-align: right;
                 width: 20%;
             }
+
             .summary-values {
                 width: 100%;
                 flex-direction: row;
                 justify-content: flex-end;
                 align-items: center;
             }
+
             .summary {
                 width: 15%;
                 align-items: center;
             }
+
             .summary-wide {
                 width: 20%;
             }
         }
+
         .category-title {
             font-weight: bold;
             font-size: 1.2em;
@@ -296,7 +309,7 @@
             color: inherit;
         }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://unpkg.com/vue@3"></script>
 </head>
 
 <body>
@@ -404,8 +417,7 @@
                         </li>
                         <li>
                             <label>
-                                <input type="checkbox" id="profile-opt"
-                                       v-model="filter.profile.opt" />
+                                <input type="checkbox" id="profile-opt" v-model="filter.profile.opt" />
                                 <span class="cache-label">opt</span>
                             </label>
                             <div class="tooltip">?
@@ -416,8 +428,7 @@
                         </li>
                         <li>
                             <label>
-                                <input type="checkbox" id="profile-doc"
-                                       v-model="filter.profile.doc" />
+                                <input type="checkbox" id="profile-doc" v-model="filter.profile.doc" />
                                 <span class="cache-label">doc</span>
                             </label>
                             <div class="tooltip">?
@@ -532,10 +543,11 @@
                     <div class="section-heading"><span>Show non-relevant results</span>
                         <span class="tooltip">?
                             <span class="tooltiptext">
-                                Whether to show test case results that are not relevant (i.e., not significant or 
-                                have a large enough magnitude). You can see 
-                                <a href="https://github.com/rust-lang/rustc-perf/blob/master/docs/comparison-analysis.md#how-is-relevance-of-a-test-run-summary-determined">
-                                here</a> how relevance is calculated.
+                                Whether to show test case results that are not relevant (i.e., not significant or
+                                have a large enough magnitude). You can see
+                                <a
+                                    href="https://github.com/rust-lang/rustc-perf/blob/master/docs/comparison-analysis.md#how-is-relevance-of-a-test-run-summary-determined">
+                                    here</a> how relevance is calculated.
                             </span>
                         </span>
                     </div>
@@ -565,7 +577,41 @@
                         </span>
                     </span>
                 </div>
-                <div v-for="summaryPair in Object.entries(summary)" class="summary-container">
+                <table>
+                    <tr>
+                        <th></th>
+                        <th>Regressions (primary)</th>
+                        <th>Regressions (secondary)</th>
+                        <th>Improvements (primary)</th>
+                        <th>Improvements (secondary)</th>
+                        <th>All (primary)</th>
+                    </tr>
+                    <tr>
+                        <td>count</td>
+                        <td>{{ summary.all.primary.regressions.count }}</td>
+                        <td>{{ summary.all.secondary.regressions.count }}</td>
+                        <td>{{ summary.all.primary.improvements.count }}</td>
+                        <td>{{ summary.all.secondary.improvements.count }}</td>
+                        <td>{{ summary.all.primary.all.count }}</td>
+                    </tr>
+                    <tr>
+                        <td>mean</td>
+                        <td>{{ formatSummaryFigure(summary.all.primary.regressions.mean) }}</td>
+                        <td>{{ formatSummaryFigure(summary.all.secondary.regressions.mean) }}</td>
+                        <td>{{ formatSummaryFigure(summary.all.primary.improvements.mean) }}</td>
+                        <td>{{ formatSummaryFigure(summary.all.secondary.improvements.mean) }}</td>
+                        <td>{{ formatSummaryFigure(summary.all.primary.all.mean) }}</td>
+                    </tr>
+                    <tr>
+                        <td>max</td>
+                        <td>{{ formatSummaryFigure(summary.all.primary.regressions.max) }}</td>
+                        <td>{{ formatSummaryFigure(summary.all.secondary.regressions.max) }}</td>
+                        <td>{{ formatSummaryFigure(summary.all.primary.improvements.max) }}</td>
+                        <td>{{ formatSummaryFigure(summary.all.secondary.improvements.max) }}</td>
+                        <td>{{ formatSummaryFigure(summary.all.primary.all.max) }}</td>
+                    </tr>
+                </table>
+                <!-- <div v-for="summaryPair in Object.entries(summary)" class="summary-container">
                     <span style="font-weight: bold; margin-left: 5px; text-transform: capitalize;">{{
                         summaryPair[0] }}:</span>
                     <div class="summary-values">
@@ -597,7 +643,7 @@
                             &nbsp;{{ signIfPositive(summaryPair[1].average) }}{{ (summaryPair[1].average).toFixed(2) }}%
                         </span>
                     </div>
-                </div>
+                </div> -->
             </div>
             <div v-if="data.new_errors.length">
                 <p><b>Newly broken benchmarks</b>:</p>
@@ -608,24 +654,12 @@
                 <hr />
             </div>
 
-            <test-cases-table
-                title="Primary"
-                :cases="testCases.filter(c => c.category === 'primary')"
-                :show-raw-data="showRawData"
-                :commit-a="data.a"
-                :commit-b="data.b"
-                :stat="stat"
-                :before="before"
+            <test-cases-table title="Primary" :cases="testCases.filter(c => c.category === 'primary')"
+                :show-raw-data="showRawData" :commit-a="data.a" :commit-b="data.b" :stat="stat" :before="before"
                 :after="after"></test-cases-table>
             <hr />
-            <test-cases-table
-                title="Secondary"
-                :cases="testCases.filter(c => c.category === 'secondary')"
-                :show-raw-data="showRawData"
-                :commit-a="data.a"
-                :commit-b="data.b"
-                :stat="stat"
-                :before="before"
+            <test-cases-table title="Secondary" :cases="testCases.filter(c => c.category === 'secondary')"
+                :show-raw-data="showRawData" :commit-a="data.a" :commit-b="data.b" :stat="stat" :before="before"
                 :after="after"></test-cases-table>
             <br />
             <hr />
@@ -679,7 +713,7 @@
         }
 
         const app = Vue.createApp({
-             mounted() {
+            mounted() {
                 const app = this;
                 loadState(state => makeData(state, app));
 
@@ -782,7 +816,7 @@
                             scenarioFilter(testCase.scenario) &&
                             categoryFilter(testCase.category) &&
                             relevanceFilter &&
-                            nameFilter 
+                            nameFilter
                         );
                     }
 
@@ -888,29 +922,72 @@
                         sum[testCaseString(next)] = true;
                         return sum;
                     }, {});
-                    const newCount = {
-                        regressions: 0,
-                        regressions_avg: 0,
-                        improvements: 0,
-                        improvements_avg: 0,
-                        unchanged: 0,
-                        average: 0
-                    };
+                    const benchmarks = {};
+                    for (const benchmark of this.data.benchmark_data) {
+                        benchmarks[benchmark.name] = benchmark.category;
+                    }
 
                     const addDatum = (result, datum, percent) => {
-                        if (percent > 0 && datum.is_relevant) {
-                            result.regressions += 1;
-                            result.regressions_avg += percent;
-                        } else if (percent < 0 && datum.is_relevant) {
-                            result.improvements += 1;
-                            result.improvements_avg += percent;
-                        } else {
-                            result.unchanged += 1;
+                        const originalResult = result;
+                        if (!datum.is_relevant) {
+                            return;
                         }
-                        result.average += percent;
+                        let category = benchmarks[datum.benchmark];
+                        if (category === "primary") {
+                            result = result.primary;
+                        } else {
+                            result = result.secondary;
+                        }
+                        if (percent > 0) {
+                            result = result.regressions;
+                        } else if (percent < 0) {
+                            result = result.improvements;
+                        }
+
+                        let compute = (result) => {
+                            result.count += 1;
+                            // Incremental average: https://math.stackexchange.com/questions/106700/incremental-averaging
+                            result.mean += (percent - result.mean) / result.count;
+                            result.max = Math.max(result.max, percent);
+                        }
+                        compute(result)
+                        if (category == "primary") {
+                            compute(originalResult.primary.all)
+                        }
                     };
 
-                    let result = { all: { ...newCount }, filtered: { ...newCount } }
+                    const newCount = {
+                        primary: {
+                            regressions: {
+                                count: 0,
+                                mean: 0,
+                                max: 0,
+                            },
+                            improvements: {
+                                count: 0,
+                                mean: 0,
+                                max: 0,
+                            },
+                            all: {
+                                count: 0,
+                                mean: 0,
+                                max: 0,
+                            }
+                        },
+                        secondary: {
+                            regressions: {
+                                count: 0,
+                                mean: 0,
+                                max: 0,
+                            },
+                            improvements: {
+                                count: 0,
+                                mean: 0,
+                                max: 0,
+                            },
+                        }
+                    };
+                    let result = { all: { ...JSON.parse(JSON.stringify(newCount)) }, filtered: { ...newCount } }
                     for (let d of this.data.comparisons) {
                         const testCase = testCaseString(d)
                         const datumA = d.statistics[0];
@@ -921,14 +998,6 @@
                             addDatum(result.filtered, d, percent);
                         }
                     }
-
-                    const computeAvg = (result) => {
-                        result.improvements_avg /= Math.max(result.improvements, 1);
-                        result.regressions_avg /= Math.max(result.regressions, 1);
-                        result.average /= Math.max(result.regressions + result.improvements + result.unchanged, 1);
-                    };
-                    computeAvg(result.all);
-                    computeAvg(result.filtered);
 
                     return result;
 
@@ -987,6 +1056,12 @@
                     }
                     return result;
                 },
+                formatSummaryFigure(figure) {
+                    if (!figure) {
+                        return "N/A";
+                    }
+                    return figure.toFixed(2) + "%";
+                }
             },
         });
 

@@ -222,7 +222,7 @@ impl SiteCtxt {
             .map(|bench| {
                 (
                     bench.name.as_str().into(),
-                    Category::from_db_representation(&bench.category).unwrap(),
+                    Category::from_db_representation(&bench.category).unwrap_or(Category::Primary),
                 )
             })
             .collect()
