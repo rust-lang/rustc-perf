@@ -309,7 +309,7 @@
             color: inherit;
         }
     </style>
-    <script src="https://unpkg.com/vue@3"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
 </head>
 
 <body>
@@ -577,73 +577,10 @@
                         </span>
                     </span>
                 </div>
-                <table>
-                    <tr>
-                        <th></th>
-                        <th>Regressions (primary)</th>
-                        <th>Regressions (secondary)</th>
-                        <th>Improvements (primary)</th>
-                        <th>Improvements (secondary)</th>
-                        <th>All (primary)</th>
-                    </tr>
-                    <tr>
-                        <td>count</td>
-                        <td>{{ summary.all.primary.regressions.count }}</td>
-                        <td>{{ summary.all.secondary.regressions.count }}</td>
-                        <td>{{ summary.all.primary.improvements.count }}</td>
-                        <td>{{ summary.all.secondary.improvements.count }}</td>
-                        <td>{{ summary.all.primary.all.count }}</td>
-                    </tr>
-                    <tr>
-                        <td>mean</td>
-                        <td>{{ formatSummaryFigure(summary.all.primary.regressions.mean) }}</td>
-                        <td>{{ formatSummaryFigure(summary.all.secondary.regressions.mean) }}</td>
-                        <td>{{ formatSummaryFigure(summary.all.primary.improvements.mean) }}</td>
-                        <td>{{ formatSummaryFigure(summary.all.secondary.improvements.mean) }}</td>
-                        <td>{{ formatSummaryFigure(summary.all.primary.all.mean) }}</td>
-                    </tr>
-                    <tr>
-                        <td>max</td>
-                        <td>{{ formatSummaryFigure(summary.all.primary.regressions.max) }}</td>
-                        <td>{{ formatSummaryFigure(summary.all.secondary.regressions.max) }}</td>
-                        <td>{{ formatSummaryFigure(summary.all.primary.improvements.max) }}</td>
-                        <td>{{ formatSummaryFigure(summary.all.secondary.improvements.max) }}</td>
-                        <td>{{ formatSummaryFigure(summary.all.primary.all.max) }}</td>
-                    </tr>
-                </table>
-                <!-- <div v-for="summaryPair in Object.entries(summary)" class="summary-container">
-                    <span style="font-weight: bold; margin-left: 5px; text-transform: capitalize;">{{
-                        summaryPair[0] }}:</span>
-                    <div class="summary-values">
-                        <span class="summary summary-wide positive">
-                            {{summaryPair[1].regressions.toString().padStart(3, "&nbsp;")}}
-                            <svg style="width:18px;height:18px" viewBox="0 0 24 24">
-                                <path
-                                    d="M16,6L18.29,8.29L13.41,13.17L9.41,9.17L2,16.59L3.41,18L9.41,12L13.41,16L19.71,9.71L22,12V6H16Z">
-                                </path>
-                            </svg>
-                            &nbsp;(+{{(summaryPair[1].regressions_avg).toFixed(2)}}%)
-                        </span>
-                        <span class="summary">
-                            {{summaryPair[1].unchanged.toString().padStart(3, "&nbsp;")}}
-                            <svg style="width:18px;height:18px" viewBox="0 0 24 24">
-                                <path d="M22,12L18,8V11H3V13H18V16L22,12Z"></path>
-                            </svg>
-                        </span>
-                        <span class="summary summary-wide negative">
-                            {{summaryPair[1].improvements.toString().padStart(3, "&nbsp;")}}
-                            <svg style="width:18px;height:18px" viewBox="0 0 24 24">
-                                <path
-                                    d="M16,18L18.29,15.71L13.41,10.83L9.41,14.83L2,7.41L3.41,6L9.41,12L13.41,8L19.71,14.29L22,12V18H16Z">
-                                </path>
-                            </svg>
-                            &nbsp;({{(summaryPair[1].improvements_avg).toFixed(2)}}%)
-                        </span>
-                        <span class="summary" v-bind:class="percentClass(summaryPair[1].average)">
-                            &nbsp;{{ signIfPositive(summaryPair[1].average) }}{{ (summaryPair[1].average).toFixed(2) }}%
-                        </span>
-                    </div>
-                </div> -->
+                <p>All:</p>
+                <summary-table :summary="summary.all"></summary-table>
+                <p>Filtered:</p>
+                <summary-table :summary="summary.filtered"></summary-table>
             </div>
             <div v-if="data.new_errors.length">
                 <p><b>Newly broken benchmarks</b>:</p>
@@ -1056,12 +993,6 @@
                     }
                     return result;
                 },
-                formatSummaryFigure(figure) {
-                    if (!figure) {
-                        return "N/A";
-                    }
-                    return figure.toFixed(2) + "%";
-                }
             },
         });
 
@@ -1162,7 +1093,57 @@
     </tbody>
 </table>
 </div>
-`});
+`
+        });
+
+        app.component('summary-table', {
+            props: ['summary'],
+            methods: {
+                formatSummaryFigure(figure) {
+                    if (!figure) {
+                        return "N/A";
+                    }
+                    return figure.toFixed(2) + "%";
+                }
+            },
+            template: `
+                <table>
+                    <tr>
+                        <th></th>
+                        <th>Regressions (primary)</th>
+                        <th>Regressions (secondary)</th>
+                        <th>Improvements (primary)</th>
+                        <th>Improvements (secondary)</th>
+                        <th>All (primary)</th>
+                    </tr>
+                    <tr>
+                        <td>count</td>
+                        <td>{{ summary.primary.regressions.count }}</td>
+                        <td>{{ summary.secondary.regressions.count }}</td>
+                        <td>{{ summary.primary.improvements.count }}</td>
+                        <td>{{ summary.secondary.improvements.count }}</td>
+                        <td>{{ summary.primary.all.count }}</td>
+                    </tr>
+                    <tr>
+                        <td>mean</td>
+                        <td>{{ formatSummaryFigure(summary.primary.regressions.mean) }}</td>
+                        <td>{{ formatSummaryFigure(summary.secondary.regressions.mean) }}</td>
+                        <td>{{ formatSummaryFigure(summary.primary.improvements.mean) }}</td>
+                        <td>{{ formatSummaryFigure(summary.secondary.improvements.mean) }}</td>
+                        <td>{{ formatSummaryFigure(summary.primary.all.mean) }}</td>
+                    </tr>
+                    <tr>
+                        <td>max</td>
+                        <td>{{ formatSummaryFigure(summary.primary.regressions.max) }}</td>
+                        <td>{{ formatSummaryFigure(summary.secondary.regressions.max) }}</td>
+                        <td>{{ formatSummaryFigure(summary.primary.improvements.max) }}</td>
+                        <td>{{ formatSummaryFigure(summary.secondary.improvements.max) }}</td>
+                        <td>{{ formatSummaryFigure(summary.primary.all.max) }}</td>
+                    </tr>
+                </table>
+`
+        });
+
         app.mixin({
             methods: {
                 percentClass(pct) {
