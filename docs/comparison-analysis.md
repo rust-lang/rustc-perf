@@ -56,11 +56,13 @@ The relevance test run summary is determined by the number of significant and re
 
 #### Magnitude
 
-Magnitude is a combination of two factors:
-* how large a change is regardless of the direction of the change
-* how much that change went over the significance threshold
+Magnitude is a small set of discrete buckets describing how "big" a change is from "very small" to "very large". It is a combination of two factors:
+* how much that change went over the significance threshold.
+  * this criteria is the same regardless of which metric is being measured.
+* how large percentage wise a change is regardless of the direction of the change.
+  * which bucket a change falls into is metric dependent (i.e., changes of the same percent might fall into different buckets depending on the metric in question)
 
-As an example, if a change that is large in absolute terms only exceeds the significance threshold by a small factor, then the overall magnitude of the change is considered small.
+As an example, if a change that is large in absolute terms only exceeds the significance threshold by a small factor, then the overall magnitude of the change is considered small. On the other hand, if a change is small in absolute terms but exceeds the significance threshold by a very large amount, then the overall magnitude of the change is considered large.
 
 #### Relevance algorithm
 

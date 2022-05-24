@@ -210,6 +210,31 @@ impl Metric {
             Self::CpuClock => "cpu-clock",
         }
     }
+
+    /// Determines the magnitude of a percent relative change for a given metric.
+    ///
+    /// Takes into account how noisy the stat is. For example, instruction
+    /// count which is normally not very noisy has smaller thresholds than
+    /// max-rss which can be noisy.
+    fn relative_change_magnitude(&self, change: f64) -> Magnitude {
+        let noise_factor = if self.is_typically_noisy() { 2.0 } else { 1.0 };
+        let change = change / noise_factor;
+        if change < 0.2 {
+            Magnitude::VerySmall
+        } else if change < 1.0 {
+            Magnitude::Small
+        } else if change < 2.0 {
+            Magnitude::Medium
+        } else if change < 5.0 {
+            Magnitude::Large
+        } else {
+            Magnitude::VeryLarge
+        }
+    }
+
+    fn is_typically_noisy(&self) -> bool {
+        !matches!(self, Self::Instructions)
+    }
 }
 
 /// A summary of a given comparison
@@ -638,6 +663,7 @@ async fn compare_given_commits(
                     benchmark: test_case.0,
                     profile: test_case.1,
                     scenario: test_case.2,
+                    metric,
                     historical_data: historical_data.data.remove(&test_case),
                     results: (a, b),
                 })
@@ -1015,6 +1041,7 @@ pub struct TestResultComparison {
     benchmark: Benchmark,
     profile: Profile,
     scenario: Scenario,
+    metric: Metric,
     historical_data: Option<HistoricalData>,
     results: (f64, f64),
 }
@@ -1083,17 +1110,7 @@ impl TestResultComparison {
         } else {
             Magnitude::VeryLarge
         };
-        let absolute_magnitude = if change < 0.002 {
-            Magnitude::VerySmall
-        } else if change < 0.01 {
-            Magnitude::Small
-        } else if change < 0.02 {
-            Magnitude::Medium
-        } else if change < 0.05 {
-            Magnitude::Large
-        } else {
-            Magnitude::VeryLarge
-        };
+        let absolute_magnitude = self.metric.relative_change_magnitude(change * 100.0);
         fn as_u8(m: Magnitude) -> u8 {
             match m {
                 Magnitude::VerySmall => 1,
@@ -1457,6 +1474,7 @@ mod tests {
                 benchmark: index.to_string().as_str().into(),
                 profile: Profile::Check,
                 scenario: Scenario::Empty,
+                metric: Metric::Instructions,
                 historical_data: None,
                 results: (before, after),
             });
