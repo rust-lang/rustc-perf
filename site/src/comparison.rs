@@ -479,52 +479,20 @@ pub fn write_summary_table(
             .unwrap_or_else(|| "N/A".to_string())
     }
 
-    let columns = [
-        "          ", // we want at least 10 spaces to accommodate "count[^1]"
-        "Regressions 😿 <br />(primary)",
-        "Regressions 😿 <br />(secondary)",
-        "Improvements 🎉 <br />(primary)",
-        "Improvements 🎉 <br />(secondary)",
-        "All 😿 🎉 <br />(primary)",
-    ];
-    let counts: Vec<usize> = columns
-        .iter()
-        .map(|s| {
-            // Unicode emojis usually have width equal to ~2 chars (maybe? :) ).
-            let count = s.chars().count();
-            if s.chars().any(|c| !c.is_whitespace()) {
-                count + 1
-            } else {
-                count
-            }
-        })
-        .collect();
-    for column in &columns {
-        write!(result, "| {} ", column).unwrap();
-    }
-    result.push_str("|\n");
-    for &count in &counts {
-        write!(result, "|:{}:", "-".repeat(count)).unwrap();
-    }
-    result.push_str("|\n");
+    // (label, mean, max, count)
+    let mut column_data = vec![];
 
-    let mut render_row = |row: Vec<String>| {
-        debug_assert_eq!(row.len(), columns.len());
-        for (column, &count) in row.into_iter().zip(&counts) {
-            write!(result, "| {:<1$} ", column, count).unwrap();
-        }
-        result.push_str("|\n");
-    };
-    render_row(vec![
-        format!("count{}", if with_footnotes { "[^1]" } else { "" }),
-        primary.num_regressions.to_string(),
-        secondary.num_regressions.to_string(),
-        primary.num_improvements.to_string(),
-        secondary.num_improvements.to_string(),
-        (primary.num_regressions + primary.num_improvements).to_string(),
+    // label
+    column_data.push(vec![
+        "Regressions 😿 <br /> (primary)".to_string(),
+        "Regressions 😿 <br /> (secondary)".to_string(),
+        "Improvements 🎉 <br /> (primary)".to_string(),
+        "Improvements 🎉 <br /> (secondary)".to_string(),
+        "All 😿🎉 (primary)".to_string(),
     ]);
-    render_row(vec![
-        format!("mean{}", if with_footnotes { "[^2]" } else { "" }),
+
+    // mean
+    column_data.push(vec![
         render_stat(primary.num_regressions, || {
             Some(primary.arithmetic_mean_of_regressions())
         }),
@@ -569,8 +537,8 @@ pub fn write_summary_table(
         format!("{:.1}%", change * 100.0)
     };
 
-    render_row(vec![
-        "max".to_string(),
+    // max
+    column_data.push(vec![
         render_stat(primary.num_regressions, || {
             primary
                 .largest_regression()
@@ -593,14 +561,55 @@ pub fn write_summary_table(
         }),
         largest_change,
     ]);
+
+    // count
+    column_data.push(vec![
+        primary.num_regressions.to_string(),
+        secondary.num_regressions.to_string(),
+        primary.num_improvements.to_string(),
+        secondary.num_improvements.to_string(),
+        (primary.num_regressions + primary.num_improvements).to_string(),
+    ]);
+
+    let column_labels = [
+        "          ".to_string(), // we want at least 10 spaces to accommodate "count[^2]"
+        format!("mean{}", if with_footnotes { "[^1]" } else { "" }),
+        "max".to_string(),
+        format!("count{}", if with_footnotes { "[^2]" } else { "" }),
+    ];
+    let counts: Vec<usize> = column_labels.iter().map(|s| s.chars().count()).collect();
+    for column in &column_labels {
+        write!(result, "| {} ", column).unwrap();
+    }
+    result.push_str("|\n");
+    for &count in &counts {
+        write!(result, "|:{}:", "-".repeat(count)).unwrap();
+    }
+    result.push_str("|\n");
+
+    let mut render_row = |row: Vec<String>| {
+        debug_assert_eq!(row.len(), column_labels.len());
+        for (column, &count) in row.into_iter().zip(&counts) {
+            write!(result, "| {:<1$} ", column, count).unwrap();
+        }
+        result.push_str("|\n");
+    };
+
+    for row in 0..5 {
+        let row_data = column_data
+            .iter()
+            .map(|rows| rows[row].clone())
+            .collect::<Vec<_>>();
+        render_row(row_data);
+    }
 }
 
 pub fn write_summary_table_footer(result: &mut String) {
     writeln!(
         result,
         r#"
-[^1]: *number of relevant changes*
-[^2]: *the arithmetic mean of the percent change*"#
+[^1]: *the arithmetic mean of the percent change*
+[^2]: *number of relevant changes*"#
     )
     .unwrap();
 }
@@ -1314,11 +1323,13 @@ mod tests {
                 (Category::Primary, 1.0, 3.0),
             ],
             r#"
-|            | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
-|:----------:|:------------------------------:|:--------------------------------:|:-------------------------------:|:---------------------------------:|:------------------------:|
-| count[^1]  | 3                              | 0                                | 0                               | 0                                 | 3                        |
-| mean[^2]   | 146.7%                         | N/A                              | N/A                             | N/A                               | 146.7%                   |
-| max        | 200.0%                         | N/A                              | N/A                             | N/A                               | 200.0%                   |
+|            | mean[^1] | max | count[^2] |
+|:----------:|:--------:|:---:|:---------:|
+| Regressions 😿 <br /> (primary) | 146.7%   | 200.0% | 3         |
+| Regressions 😿 <br /> (secondary) | N/A      | N/A | 0         |
+| Improvements 🎉 <br /> (primary) | N/A      | N/A | 0         |
+| Improvements 🎉 <br /> (secondary) | N/A      | N/A | 0         |
+| All 😿🎉 (primary) | 146.7%   | 200.0% | 3         |
 "#
             .trim_start(),
         );
@@ -1333,11 +1344,13 @@ mod tests {
                 (Category::Primary, 4.0, 1.0),
             ],
             r#"
-|            | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
-|:----------:|:------------------------------:|:--------------------------------:|:-------------------------------:|:---------------------------------:|:------------------------:|
-| count[^1]  | 0                              | 0                                | 3                               | 0                                 | 3                        |
-| mean[^2]   | N/A                            | N/A                              | -71.7%                          | N/A                               | -71.7%                   |
-| max        | N/A                            | N/A                              | -80.0%                          | N/A                               | -80.0%                   |
+|            | mean[^1] | max | count[^2] |
+|:----------:|:--------:|:---:|:---------:|
+| Regressions 😿 <br /> (primary) | N/A      | N/A | 0         |
+| Regressions 😿 <br /> (secondary) | N/A      | N/A | 0         |
+| Improvements 🎉 <br /> (primary) | -71.7%   | -80.0% | 3         |
+| Improvements 🎉 <br /> (secondary) | N/A      | N/A | 0         |
+| All 😿🎉 (primary) | -71.7%   | -80.0% | 3         |
 "#
             .trim_start(),
         );
@@ -1352,13 +1365,15 @@ mod tests {
                 (Category::Secondary, 4.0, 1.0),
             ],
             r#"
-|            | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
-|:----------:|:------------------------------:|:--------------------------------:|:-------------------------------:|:---------------------------------:|:------------------------:|
-| count[^1]  | 0                              | 0                                | 0                               | 3                                 | 0                        |
-| mean[^2]   | N/A                            | N/A                              | N/A                             | -71.7%                            | N/A                      |
-| max        | N/A                            | N/A                              | N/A                             | -80.0%                            | N/A                      |
+|            | mean[^1] | max | count[^2] |
+|:----------:|:--------:|:---:|:---------:|
+| Regressions 😿 <br /> (primary) | N/A      | N/A | 0         |
+| Regressions 😿 <br /> (secondary) | N/A      | N/A | 0         |
+| Improvements 🎉 <br /> (primary) | N/A      | N/A | 0         |
+| Improvements 🎉 <br /> (secondary) | -71.7%   | -80.0% | 3         |
+| All 😿🎉 (primary) | N/A      | N/A | 0         |
 "#
-                .trim_start(),
+            .trim_start(),
         );
     }
 
@@ -1371,13 +1386,15 @@ mod tests {
                 (Category::Secondary, 1.0, 3.0),
             ],
             r#"
-|            | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
-|:----------:|:------------------------------:|:--------------------------------:|:-------------------------------:|:---------------------------------:|:------------------------:|
-| count[^1]  | 0                              | 3                                | 0                               | 0                                 | 0                        |
-| mean[^2]   | N/A                            | 146.7%                           | N/A                             | N/A                               | N/A                      |
-| max        | N/A                            | 200.0%                           | N/A                             | N/A                               | N/A                      |
+|            | mean[^1] | max | count[^2] |
+|:----------:|:--------:|:---:|:---------:|
+| Regressions 😿 <br /> (primary) | N/A      | N/A | 0         |
+| Regressions 😿 <br /> (secondary) | 146.7%   | 200.0% | 3         |
+| Improvements 🎉 <br /> (primary) | N/A      | N/A | 0         |
+| Improvements 🎉 <br /> (secondary) | N/A      | N/A | 0         |
+| All 😿🎉 (primary) | N/A      | N/A | 0         |
 "#
-                .trim_start(),
+            .trim_start(),
         );
     }
 
@@ -1391,11 +1408,13 @@ mod tests {
                 (Category::Primary, 4.0, 1.0),
             ],
             r#"
-|            | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
-|:----------:|:------------------------------:|:--------------------------------:|:-------------------------------:|:---------------------------------:|:------------------------:|
-| count[^1]  | 2                              | 0                                | 2                               | 0                                 | 4                        |
-| mean[^2]   | 150.0%                         | N/A                              | -62.5%                          | N/A                               | 43.8%                    |
-| max        | 200.0%                         | N/A                              | -75.0%                          | N/A                               | 200.0%                   |
+|            | mean[^1] | max | count[^2] |
+|:----------:|:--------:|:---:|:---------:|
+| Regressions 😿 <br /> (primary) | 150.0%   | 200.0% | 2         |
+| Regressions 😿 <br /> (secondary) | N/A      | N/A | 0         |
+| Improvements 🎉 <br /> (primary) | -62.5%   | -75.0% | 2         |
+| Improvements 🎉 <br /> (secondary) | N/A      | N/A | 0         |
+| All 😿🎉 (primary) | 43.8%    | 200.0% | 4         |
 "#
             .trim_start(),
         );
@@ -1413,13 +1432,15 @@ mod tests {
                 (Category::Primary, 4.0, 1.0),
             ],
             r#"
-|            | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
-|:----------:|:------------------------------:|:--------------------------------:|:-------------------------------:|:---------------------------------:|:------------------------:|
-| count[^1]  | 2                              | 1                                | 2                               | 1                                 | 4                        |
-| mean[^2]   | 150.0%                         | 100.0%                           | -62.5%                          | -66.7%                            | 43.8%                    |
-| max        | 200.0%                         | 100.0%                           | -75.0%                          | -66.7%                            | 200.0%                   |
+|            | mean[^1] | max | count[^2] |
+|:----------:|:--------:|:---:|:---------:|
+| Regressions 😿 <br /> (primary) | 150.0%   | 200.0% | 2         |
+| Regressions 😿 <br /> (secondary) | 100.0%   | 100.0% | 1         |
+| Improvements 🎉 <br /> (primary) | -62.5%   | -75.0% | 2         |
+| Improvements 🎉 <br /> (secondary) | -66.7%   | -66.7% | 1         |
+| All 😿🎉 (primary) | 43.8%    | 200.0% | 4         |
 "#
-                .trim_start(),
+            .trim_start(),
         );
     }
 
@@ -1431,13 +1452,15 @@ mod tests {
                 (Category::Primary, 5.0, 6.0),
             ],
             r#"
-|            | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
-|:----------:|:------------------------------:|:--------------------------------:|:-------------------------------:|:---------------------------------:|:------------------------:|
-| count[^1]  | 1                              | 0                                | 1                               | 0                                 | 2                        |
-| mean[^2]   | 20.0%                          | N/A                              | -50.0%                          | N/A                               | -15.0%                   |
-| max        | 20.0%                          | N/A                              | -50.0%                          | N/A                               | -50.0%                   |
+|            | mean[^1] | max | count[^2] |
+|:----------:|:--------:|:---:|:---------:|
+| Regressions 😿 <br /> (primary) | 20.0%    | 20.0% | 1         |
+| Regressions 😿 <br /> (secondary) | N/A      | N/A | 0         |
+| Improvements 🎉 <br /> (primary) | -50.0%   | -50.0% | 1         |
+| Improvements 🎉 <br /> (secondary) | N/A      | N/A | 0         |
+| All 😿🎉 (primary) | -15.0%   | -50.0% | 2         |
 "#
-                .trim_start(),
+            .trim_start(),
         );
     }
 
@@ -1449,13 +1472,15 @@ mod tests {
                 (Category::Primary, 6.0, 5.0),
             ],
             r#"
-|            | Regressions 😿 <br />(primary) | Regressions 😿 <br />(secondary) | Improvements 🎉 <br />(primary) | Improvements 🎉 <br />(secondary) | All 😿 🎉 <br />(primary) |
-|:----------:|:------------------------------:|:--------------------------------:|:-------------------------------:|:---------------------------------:|:------------------------:|
-| count[^1]  | 1                              | 0                                | 1                               | 0                                 | 2                        |
-| mean[^2]   | 100.0%                         | N/A                              | -16.7%                          | N/A                               | 41.7%                    |
-| max        | 100.0%                         | N/A                              | -16.7%                          | N/A                               | 100.0%                   |
+|            | mean[^1] | max | count[^2] |
+|:----------:|:--------:|:---:|:---------:|
+| Regressions 😿 <br /> (primary) | 100.0%   | 100.0% | 1         |
+| Regressions 😿 <br /> (secondary) | N/A      | N/A | 0         |
+| Improvements 🎉 <br /> (primary) | -16.7%   | -16.7% | 1         |
+| Improvements 🎉 <br /> (secondary) | N/A      | N/A | 0         |
+| All 😿🎉 (primary) | 41.7%    | 100.0% | 2         |
 "#
-                .trim_start(),
+            .trim_start(),
         );
     }
 
