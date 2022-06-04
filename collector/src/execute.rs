@@ -319,6 +319,10 @@ impl<'a> CargoProcess<'a> {
             // and any in-tree dependencies, and we don't want that; it wastes
             // time.
             .env("CARGO_INCREMENTAL", "0")
+            // We need to use -Z flags (for example, to force enable ICH
+            // verification) so unconditionally enable unstable features, even
+            // on stable compilers.
+            .env("RUSTC_BOOTSTRAP", "1")
             .current_dir(cwd)
             .arg(subcommand)
             .arg("--manifest-path")
