@@ -150,6 +150,12 @@ fn main() {
                     "CSWITCH+PROC_THREAD+LOADER",
                     "-PMC",
                     "InstructionRetired,TotalCycles:CSWITCH",
+                    "-b",
+                    "1024",
+                    "-min",
+                    "512",
+                    "-max",
+                    "2048",
                 ]);
                 let status = cmd.status().expect("failed to spawn tracelog");
                 assert!(status.success(), "tracelog did not complete successfully");
