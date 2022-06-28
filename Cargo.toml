@@ -1,6 +1,6 @@
 [workspace]
 members = ["collector", "site", "database", "intern"]
-exclude = ["collector/benchmarks"]
+exclude = ["collector/benchmarks", "rust/src"]
 
 [profile.release.package.site]
 debug = 1
