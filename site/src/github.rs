@@ -608,10 +608,11 @@ async fn summarize_run(
     let mut message = format!(
         "Finished benchmarking commit ({sha}): [comparison url]({comparison_url}).\n\n",
         sha = commit.sha,
-        comparison_url = make_comparison_url(&commit, Metric::Instructions)
+        comparison_url = make_comparison_url(&commit, Metric::InstructionsUser)
     );
 
-    let inst_comparison = calculate_metric_comparison(ctxt, &commit, Metric::Instructions).await?;
+    let inst_comparison =
+        calculate_metric_comparison(ctxt, &commit, Metric::InstructionsUser).await?;
 
     let errors = if !inst_comparison.newly_failed_benchmarks.is_empty() {
         let benchmarks = inst_comparison
@@ -632,7 +633,7 @@ async fn summarize_run(
     let metrics = vec![
         (
             "Instruction count",
-            Metric::Instructions,
+            Metric::InstructionsUser,
             false,
             inst_comparison,
         ),
@@ -644,9 +645,9 @@ async fn summarize_run(
         ),
         (
             "Cycles",
-            Metric::Cycles,
+            Metric::CyclesUser,
             true,
-            calculate_metric_comparison(ctxt, &commit, Metric::Cycles).await?,
+            calculate_metric_comparison(ctxt, &commit, Metric::CyclesUser).await?,
         ),
     ];
 

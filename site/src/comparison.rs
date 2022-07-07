@@ -45,7 +45,7 @@ pub async fn handle_triage(
     let mut before = start.clone();
 
     let mut num_comparisons = 0;
-    let metric = Metric::Instructions;
+    let metric = Metric::InstructionsUser;
     let benchmark_map = ctxt.get_benchmark_category_map().await;
     loop {
         let comparison =
@@ -180,34 +180,48 @@ async fn populate_report(
     }
 }
 
+/// This enum contains all "known" metrics coming from rustc or profiling tools that we know
+/// (and care) about.
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Metric {
-    #[serde(rename = "instructions:u")]
-    Instructions,
+    #[serde(rename = "context-switches")]
+    ContextSwitches,
+    #[serde(rename = "cpu-clock")]
+    CpuClock,
+    #[serde(rename = "cpu-clock:u")]
+    CpuClockUser,
     #[serde(rename = "cycles:u")]
-    Cycles,
+    CyclesUser,
     #[serde(rename = "faults")]
     Faults,
+    #[serde(rename = "faults:u")]
+    FaultsUser,
+    #[serde(rename = "instructions:u")]
+    InstructionsUser,
     #[serde(rename = "max-rss")]
     MaxRSS,
     #[serde(rename = "task-clock")]
     TaskClock,
+    #[serde(rename = "task-clock:u")]
+    TaskClockUser,
     #[serde(rename = "wall-time")]
     WallTime,
-    #[serde(rename = "cpu-clock")]
-    CpuClock,
 }
 
 impl Metric {
-    pub fn as_str(&self) -> &'static str {
+    pub fn as_str(&self) -> &str {
         match self {
-            Self::Instructions => "instructions:u",
-            Self::Cycles => "cycles:u",
-            Self::Faults => "faults",
-            Self::MaxRSS => "max-rss",
-            Self::TaskClock => "task-clock",
-            Self::WallTime => "wall-time",
-            Self::CpuClock => "cpu-clock",
+            Metric::ContextSwitches => "context-switches",
+            Metric::CpuClock => "cpu-clock",
+            Metric::CpuClockUser => "cpu-clock:u",
+            Metric::CyclesUser => "cycles:u",
+            Metric::Faults => "faults",
+            Metric::FaultsUser => "faults:u",
+            Metric::InstructionsUser => "instructions:u",
+            Metric::MaxRSS => "max-rss",
+            Metric::TaskClock => "task-clock",
+            Metric::TaskClockUser => "task-clock:u",
+            Metric::WallTime => "wall-time",
         }
     }
 
@@ -232,8 +246,9 @@ impl Metric {
         }
     }
 
+    /// Currently, we conservatively consider everything except instructions to be noisy.
     fn is_typically_noisy(&self) -> bool {
-        !matches!(self, Self::Instructions)
+        !matches!(self, Self::InstructionsUser)
     }
 }
 
@@ -1484,6 +1499,24 @@ mod tests {
         );
     }
 
+    #[test]
+    fn parse_metric_instructions() {
+        let metric: Metric = serde_json::from_str(r#""instructions:u""#).unwrap();
+        assert!(matches!(metric, Metric::InstructionsUser));
+    }
+
+    #[test]
+    fn parse_metric_cycles() {
+        let metric: Metric = serde_json::from_str(r#""cycles:u""#).unwrap();
+        assert!(matches!(metric, Metric::CyclesUser));
+    }
+
+    #[test]
+    fn parse_metric_max_rss() {
+        let metric: Metric = serde_json::from_str(r#""max-rss""#).unwrap();
+        assert!(matches!(metric, Metric::MaxRSS));
+    }
+
     // (category, before, after)
     fn check_table(values: Vec<(Category, f64, f64)>, expected: &str) {
         let mut primary_comparisons = HashSet::new();
@@ -1499,7 +1532,7 @@ mod tests {
                 benchmark: index.to_string().as_str().into(),
                 profile: Profile::Check,
                 scenario: Scenario::Empty,
-                metric: Metric::Instructions,
+                metric: Metric::InstructionsUser,
                 historical_data: None,
                 results: (before, after),
             });
