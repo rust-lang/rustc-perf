@@ -1,5 +1,7 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
-use crate::{ArtifactId, Benchmark, BenchmarkData, CollectionId, Commit, Date, Profile};
+use crate::{
+    ArtifactId, Benchmark, BenchmarkData, CollectionId, Commit, CommitType, Date, Profile,
+};
 use crate::{ArtifactIdNumber, Index, QueryDatum, QueuedCommit};
 use chrono::{DateTime, TimeZone, Utc};
 use hashbrown::HashMap;
@@ -7,6 +9,7 @@ use rusqlite::params;
 use rusqlite::OptionalExtension;
 use std::convert::TryFrom;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Mutex;
 use std::sync::Once;
 use std::time::Duration;
@@ -402,7 +405,9 @@ impl Connection for SqliteConnection {
     async fn load_index(&mut self) -> Index {
         let commits = self
             .raw()
-            .prepare("select id, name, date from artifact where type = 'master' or type = 'try'")
+            .prepare(
+                "select id, name, date, type from artifact where type = 'master' or type = 'try'",
+            )
             .unwrap()
             .query_map(params![], |row| {
                 Ok((
@@ -416,6 +421,7 @@ impl Connection for SqliteConnection {
                                 None => Date(Utc.ymd(2001, 01, 01).and_hms(0, 0, 0)),
                             }
                         },
+                        r#type: CommitType::from_str(&row.get::<_, String>(3)?).unwrap(),
                     },
                 ))
             })
@@ -696,11 +702,7 @@ impl Connection for SqliteConnection {
         let (name, date, ty) = match artifact {
             crate::ArtifactId::Commit(commit) => (
                 commit.sha.to_string(),
-                if commit.is_try() {
-                    None
-                } else {
-                    Some(commit.date.0)
-                },
+                Some(commit.date.0),
                 if commit.is_try() { "try" } else { "master" },
             ),
             crate::ArtifactId::Tag(a) => (a.clone(), None, "release"),
@@ -894,6 +896,7 @@ impl Connection for SqliteConnection {
                         .map(|d| Utc.timestamp(d, 0))
                         .map(Date)
                         .unwrap_or_else(|| Date::ymd_hms(2001, 01, 01, 0, 0, 0)),
+                    r#type: CommitType::from_str(&ty).unwrap(),
                 }),
                 "release" => ArtifactId::Tag(name),
                 _ => {
@@ -1091,10 +1094,14 @@ impl Connection for SqliteConnection {
             "master" => Some(ArtifactId::Commit(Commit {
                 sha: artifact.to_owned(),
                 date: Date(Utc.timestamp(date.expect("master has date"), 0)),
+                r#type: CommitType::Master,
             })),
             "try" => Some(ArtifactId::Commit(Commit {
                 sha: artifact.to_owned(),
-                date: Date::ymd_hms(2000, 1, 1, 0, 0, 0),
+                date: date
+                    .map(|d| Date(Utc.timestamp(d, 0)))
+                    .unwrap_or_else(|| Date::ymd_hms(2000, 1, 1, 0, 0, 0)),
+                r#type: CommitType::Try,
             })),
             "release" => Some(ArtifactId::Tag(artifact.to_owned())),
             _ => panic!("unknown artifact type: {:?}", ty),

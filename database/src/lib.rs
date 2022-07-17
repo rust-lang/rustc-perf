@@ -1,5 +1,5 @@
 use chrono::offset::TimeZone;
-use chrono::{DateTime, Datelike, NaiveDate, Utc};
+use chrono::{DateTime, Datelike, Utc};
 use hashbrown::HashMap;
 use intern::intern;
 use serde::{Deserialize, Serialize};
@@ -149,15 +149,33 @@ impl<'de> Deserialize<'de> for Date {
 }
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+pub enum CommitType {
+    Try,
+    Master,
+}
+
+impl FromStr for CommitType {
+    type Err = String;
+
+    fn from_str(ty: &str) -> Result<Self, Self::Err> {
+        match ty {
+            "try" => Ok(CommitType::Try),
+            "master" => Ok(CommitType::Master),
+            _ => Err(format!("Wrong commit type {}", ty)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct Commit {
     pub sha: String,
     pub date: Date,
+    pub r#type: CommitType,
 }
 
 impl Commit {
     pub fn is_try(&self) -> bool {
-        self.date.0.naive_utc().date() == NaiveDate::from_ymd(2000, 1, 1)
-            || self.date.0.naive_utc().date() == NaiveDate::from_ymd(2001, 1, 1)
+        matches!(self.r#type, CommitType::Try)
     }
 }
 
@@ -298,6 +316,7 @@ impl Scenario {
 }
 
 use std::cmp::Ordering;
+use std::str::FromStr;
 
 // We sort println before all other patches.
 impl Ord for Scenario {

@@ -3,7 +3,7 @@
 use anyhow::{bail, Context};
 use clap::Parser;
 use collector::category::Category;
-use database::{ArtifactId, Commit};
+use database::{ArtifactId, Commit, CommitType};
 use log::debug;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::collections::HashMap;
@@ -1376,12 +1376,14 @@ pub fn get_commit_or_fake_it(sha: &str) -> anyhow::Result<Commit> {
         .map(|c| Commit {
             sha: c.sha.as_str().into(),
             date: c.time.into(),
+            r#type: CommitType::Master,
         })
         .unwrap_or_else(|| {
             log::warn!("utilizing fake commit!");
             Commit {
                 sha: sha.into(),
                 date: database::Date::ymd_hms(2000, 01, 01, 0, 0, 0),
+                r#type: CommitType::Master,
             }
         }))
 }
