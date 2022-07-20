@@ -853,7 +853,8 @@
                 before() {
                     if (!this.data) {
                         const start = findQueryParam("start");
-                        return start ? start.substring(0, 7) : "???";
+                        // 0,10 extracts "YYYY-MM-DD".
+                        return start ? start.substring(0, 10) : "???";
                     }
                     if (this.data.a.pr) {
                         return `#${this.data.a.pr}`;
@@ -862,12 +863,15 @@
                         return this.formatDate(this.data.a.date);
                     }
 
+                    // 0,7 extracts 7 chars from the git commit id/tag, which is probably
+                    // enough to distinguish it. (It is only for display purposes.)
                     return this.data.a.commit.substring(0, 7);
                 },
                 after() {
                     if (!this.data) {
                         const end = findQueryParam("end");
-                        return end ? end.substring(0, 7) : "???";
+                        // 0,10 extracts "YYYY-MM-DD".
+                        return end ? end.substring(0, 10) : "???";
                     }
 
                     if (this.data.b.pr) {
@@ -877,6 +881,8 @@
                         return this.formatDate(this.data.b.date);
                     }
 
+                    // 0,7 extracts 7 chars from the git commit id/tag, which is probably
+                    // enough to distinguish it. (It is only for display purposes.)
                     return this.data.b.commit.substring(0, 7);
                 },
                 stat() {
