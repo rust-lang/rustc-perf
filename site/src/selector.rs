@@ -48,7 +48,7 @@ pub fn artifact_id_for_bound(data: &Index, bound: Bound, is_left: bool) -> Optio
     } else {
         commits
             .iter()
-            .rfind(|commit| bound.left_match(commit))
+            .rfind(|commit| bound.right_match(commit))
             .cloned()
     };
     commit.map(|c| ArtifactId::Commit(c)).or_else(|| {
