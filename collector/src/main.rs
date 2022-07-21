@@ -430,7 +430,7 @@ fn get_local_toolchain(
             .context("failed to run `rustup which rustc`")?;
 
         // Looks like a commit hash? Try to install it...
-        if output.status.code() == Some(101) && toolchain.len() == 40 {
+        if !output.status.success() && toolchain.len() == 40 {
             // No such toolchain exists, so let's try to install it with
             // rustup-toolchain-install-master.
 
