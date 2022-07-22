@@ -526,16 +526,16 @@ fn get_local_toolchain(
         let output = Command::new("rustup")
             .args(&["which", "cargo", "--toolchain=nightly"])
             .output()
-            .context("failed to run `rustup which cargo`")?;
+            .context("failed to run `rustup which cargo --toolchain=nightly`")?;
         if !output.status.success() {
             anyhow::bail!(
-                "`rustup which cargo` exited with status {}\nstderr={}",
+                "`rustup which cargo --toolchain=nightly` exited with status {}\nstderr={}",
                 output.status,
                 String::from_utf8_lossy(&output.stderr)
             )
         }
         let s = String::from_utf8(output.stdout)
-            .context("failed to convert `rustup which cargo` output to utf8")?;
+            .context("failed to convert `rustup which cargo --toolchain=nightly` output to utf8")?;
 
         let cargo = PathBuf::from(s.trim());
         debug!("found cargo: {:?}", &cargo);
