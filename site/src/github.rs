@@ -1,7 +1,7 @@
 use crate::api::github::Issue;
 use crate::comparison::{
-    deserves_attention_icount, write_summary_table, write_summary_table_footer, ArtifactComparison,
-    ArtifactComparisonSummary, Direction, Metric,
+    deserves_attention_icount, write_summary_table, ArtifactComparison, ArtifactComparisonSummary,
+    Direction, Metric,
 };
 use crate::load::{Config, SiteCtxt, TryCommit};
 
@@ -606,7 +606,7 @@ async fn summarize_run(
     let benchmark_map = ctxt.get_benchmark_category_map().await;
 
     let mut message = format!(
-        "Finished benchmarking commit ({sha}): [comparison url]({comparison_url}).\n\n",
+        "Finished benchmarking commit ({sha}): [comparison URL]({comparison_url}).\n\n",
         sha = commit.sha,
         comparison_url = make_comparison_url(&commit, Metric::InstructionsUser)
     );
@@ -629,7 +629,31 @@ async fn summarize_run(
         .clone()
         .summarize_by_category(&benchmark_map);
 
-    let mut table_written = false;
+    // Evaluate the results.
+    let direction = Direction::join(inst_primary.direction(), inst_secondary.direction());
+    let deserves_attention = deserves_attention_icount(&inst_primary, &inst_secondary);
+    let is_regression = match (deserves_attention, direction) {
+        (true, Some(Direction::Regression | Direction::Mixed)) => true,
+        _ => false,
+    };
+
+    writeln!(
+        &mut message,
+        "### Overall result: {}{}\n",
+        Direction::msg(direction),
+        if is_regression { " - ACTION NEEDED" } else { "" },
+    )
+    .unwrap();
+
+    let next_steps = next_steps(is_regression, is_master_commit);
+    writeln!(&mut message, "{next_steps}").unwrap();
+
+    const DISAGREEMENT: &str = "If you disagree with this performance assessment, \
+    please file an issue in [rust-lang/rustc-perf](https://github.com/rust-lang/rustc-perf/issues/new).";
+    let footer = format!("{DISAGREEMENT}{errors}");
+
+    writeln!(&mut message, "\n{footer}").unwrap();
+
     let metrics = vec![
         (
             "Instruction count",
@@ -658,153 +682,92 @@ async fn summarize_run(
         ));
 
         let (primary, secondary) = comparison.summarize_by_category(&benchmark_map);
-        table_written |= write_metric_summary(primary, secondary, hidden, &mut message).await;
+        write_metric_summary(primary, secondary, hidden, &mut message);
     }
-
-    if table_written {
-        write_summary_table_footer(&mut message);
-    }
-
-    const DISAGREEMENT: &str = "If you disagree with this performance assessment, \
-    please file an issue in [rust-lang/rustc-perf](https://github.com/rust-lang/rustc-perf/issues/new).";
-    let footer = format!("{DISAGREEMENT}{errors}");
-
-    let direction = inst_primary.direction().or(inst_secondary.direction());
-    let next_steps = next_steps(inst_primary, inst_secondary, direction, is_master_commit);
-
-    write!(&mut message, "\n{footer}\n{next_steps}").unwrap();
 
     Ok(message)
 }
 
 /// Returns true if a summary table was written to `message`.
-async fn write_metric_summary(
+fn write_metric_summary(
     primary: ArtifactComparisonSummary,
     secondary: ArtifactComparisonSummary,
     hidden: bool,
     message: &mut String,
-) -> bool {
+) {
     if !primary.is_relevant() && !secondary.is_relevant() {
-        message
-            .push_str("This benchmark run did not return any relevant results for this metric.\n");
-        false
+        message.push_str("No relevant results for this metric.\n");
     } else {
-        let primary_short_summary = generate_short_summary(&primary);
-        let secondary_short_summary = generate_short_summary(&secondary);
-
-        if hidden {
+        if !hidden {
+            message.push_str(
+                "This is a highly reliable metric that was used to determine the \
+                overall result at the top of this comment.\n\n",
+            );
+            write_summary_table(&primary, &secondary, message);
+        } else {
             message.push_str("<details>\n<summary>Results</summary>\n\n");
+            message.push_str(
+                "This is a less reliable metric that may be of interest but was not \
+                used to determine the overall result at the top of this comment.\n\n",
+            );
+            write_summary_table(&primary, &secondary, message);
+            message.push_str("</details>\n\n");
         }
-
-        write!(
-            message,
-            r#"
-- Primary benchmarks: {primary_short_summary}
-- Secondary benchmarks: {secondary_short_summary}
-
-"#
-        )
-        .unwrap();
-
-        write_summary_table(&primary, &secondary, true, message);
-
-        if hidden {
-            message.push_str("</details>\n");
-        }
-
-        true
     }
 }
 
-fn next_steps(
-    primary: ArtifactComparisonSummary,
-    secondary: ArtifactComparisonSummary,
-    direction: Option<Direction>,
-    is_master_commit: bool,
-) -> String {
-    let deserves_attention = deserves_attention_icount(&primary, &secondary);
-    let label = match (deserves_attention, direction) {
-        (true, Some(Direction::Regression | Direction::Mixed)) => "+perf-regression",
-        _ => "-perf-regression",
+fn next_steps(is_regression: bool, is_master_commit: bool) -> String {
+    let label = match is_regression {
+        true => "+perf-regression",
+        false => "-perf-regression",
     };
+
+    let mut s = "See [these docs](njn: todo) for more information on how \
+                to understand and verify the accuracy of this finding.\n\n\
+                **Next steps:**"
+        .to_string();
 
     if is_master_commit {
-        master_run_body(label)
+        // Master commit.
+        if is_regression {
+            s.push_str(
+                "\
+If you can justify the regressions found in this perf run, please put `@rustbot \
+label: +perf-regression-triaged` in a comment along with sufficient written \
+justification. Otherwise, please open an issue or create a new PR that fixes \
+the regressions, and then put `@rustbot label: +perf-regression-triaged` in a \
+comment along with a link to the newly created issue or PR.\n\n",
+            );
+        } else {
+            s.push_str("You don't need to do anyting more.\n\n");
+        }
+        s.push_str(&format!("@rustbot label: {label}\n\n"));
+
+        // njn: mark also with @rust-lang/wg-compiler-performance
     } else {
-        try_run_body(label)
-    }
-}
-
-fn master_run_body(label: &str) -> String {
-    let next_steps = if label.starts_with("+") {
-        "\n\n**Next Steps**: If you can justify the \
-                regressions found in this perf run, please indicate this with \
-                `@rustbot label: +perf-regression-triaged` along with \
-                sufficient written justification. If you cannot justify the regressions \
-                please open an issue or create a new PR that fixes the regressions, \
-                add a comment linking to the newly created issue or PR, \
-                and then add the `perf-regression-triaged` label to this PR."
-    } else {
-        ""
-    };
-
-    format!(
-        "
-{next_steps}
-
-@rustbot label: {label}",
-    )
-}
-
-fn try_run_body(label: &str) -> String {
-    let next_steps = if label.starts_with("+") {
-        "\n\n**Next Steps**: If you can justify the regressions found in \
-            this try perf run, please indicate this with \
-            `@rustbot label: +perf-regression-triaged` along with \
-            sufficient written justification. If you cannot justify the regressions \
-            please fix the regressions and do another perf run. If the next run \
-            shows neutral or positive results, the label will be automatically removed."
-    } else {
-        ""
-    };
-
-    format!(
-        "
-Benchmarking this pull request likely means that it is \
-perf-sensitive, so we're automatically marking it as not fit \
-for rolling up. While you can manually mark this PR as fit \
-for rollup, we strongly recommend not doing so since this PR may lead to changes in \
-compiler perf.{next_steps}
+        // Try commit.
+        if is_regression {
+            s.push_str(
+                "\
+If you can justify the regressions found in this try perf run, please put \
+`@rustbot label: +perf-regression-triaged` in a comment along with sufficient \
+written justification. Otherwise, please fix the regressions and do another \
+perf run. If the next run shows neutral or positive results, the label will be \
+automatically removed.\n\n",
+            );
+        } else {
+            s.push_str("You don't need to do anyting more.\n\n");
+        }
+        s.push_str(&format!(
+            "\
+We have automatically marked this PR as not suitable for rolling up, \
+because it might lead to changes in compiler performance.
 
 @bors rollup=never
-@rustbot label: +S-waiting-on-review -S-waiting-on-perf {label}",
-    )
-}
-
-fn generate_short_summary(summary: &ArtifactComparisonSummary) -> String {
-    // Add an "s" to a word unless there's only one.
-    fn ending(word: &'static str, count: usize) -> std::borrow::Cow<'static, str> {
-        if count == 1 {
-            return word.into();
-        }
-        format!("{}s", word).into()
+@rustbot label: +S-waiting-on-review -S-waiting-on-perf {label}\n\n"
+        ))
     }
-
-    let num_improvements = summary.number_of_improvements();
-    let num_regressions = summary.number_of_regressions();
-
-    match summary.direction() {
-        Some(Direction::Improvement) => format!(
-            "🎉 relevant {} found",
-            ending("improvement", num_improvements)
-        ),
-        Some(Direction::Regression) => format!(
-            "😿 relevant {} found",
-            ending("regression", num_regressions)
-        ),
-        Some(Direction::Mixed) => "mixed results".to_string(),
-        None => "no relevant changes found".to_string(),
-    }
+    s
 }
 
 pub(crate) struct PullRequest {

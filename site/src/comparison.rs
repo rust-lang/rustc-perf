@@ -12,7 +12,6 @@ use collector::category::Category;
 use collector::Bound;
 use serde::{Deserialize, Serialize};
 
-use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt::Write;
@@ -95,7 +94,7 @@ pub async fn handle_triage(
                     .clone()
                     .summarize_by_category(&benchmark_map);
                 let mut result = String::from("**Summary**:\n\n");
-                write_summary_table(&primary, &secondary, false, &mut result);
+                write_summary_table(&primary, &secondary, &mut result);
                 result
             }
             None => String::from("**ERROR**: no data found for end bound"),
@@ -252,36 +251,48 @@ impl Metric {
     }
 }
 
+/// njn: could make "regression" mean "relevant negative change"
 /// A summary of a given comparison
 ///
 /// This summary only includes changes that are significant and relevant (as determined by a change's magnitude).
 pub struct ArtifactComparisonSummary {
-    /// Relevant comparisons ordered by magnitude from largest to smallest
+    /// All comparisons ordered most negative (good) to most positive (bad).
+    all_comparisons: Vec<TestResultComparison>,
+    /// Relevant comparisons ordered by magnitude from largest to smallest.
     relevant_comparisons: Vec<TestResultComparison>,
-    /// The cached number of comparisons that are improvements
-    num_improvements: usize,
-    /// The cached number of comparisons that are regressions
-    num_regressions: usize,
+    /// The cached number of comparisons that are relevant improvements.
+    num_relevant_improvements: usize,
+    /// The cached number of comparisons that are relevant regressions.
+    num_relevant_regressions: usize,
 }
 
 impl ArtifactComparisonSummary {
     /// Summarize a collection of `TestResultComparison`
     pub fn summarize(comparisons: HashSet<TestResultComparison>) -> Self {
-        let mut num_improvements = 0;
-        let mut num_regressions = 0;
+        let mut num_relevant_improvements = 0;
+        let mut num_relevant_regressions = 0;
 
+        let mut all_comparisons = comparisons.iter().cloned().collect::<Vec<_>>();
+        // njn: why is this opposite to the cmp below?
+        let cmp = |b1: &TestResultComparison, b2: &TestResultComparison| {
+            b1.relative_change()
+                .partial_cmp(&b2.relative_change())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        };
+        all_comparisons.sort_by(cmp);
+
+        // njn: sort in obvious order?
         let mut relevant_comparisons = comparisons
             .into_iter()
             .filter(|c| c.is_relevant())
             .inspect(|c| {
                 if c.is_improvement() {
-                    num_improvements += 1;
+                    num_relevant_improvements += 1;
                 } else {
-                    num_regressions += 1
+                    num_relevant_regressions += 1
                 }
             })
             .collect::<Vec<_>>();
-
         let cmp = |b1: &TestResultComparison, b2: &TestResultComparison| {
             b2.relative_change()
                 .abs()
@@ -291,9 +302,10 @@ impl ArtifactComparisonSummary {
         relevant_comparisons.sort_by(cmp);
 
         ArtifactComparisonSummary {
+            all_comparisons,
             relevant_comparisons,
-            num_improvements,
-            num_regressions,
+            num_relevant_improvements,
+            num_relevant_regressions,
         }
     }
 
@@ -356,29 +368,27 @@ impl ArtifactComparisonSummary {
         }
     }
 
-    /// The number of improvements that were found to be significant and relevant
-    pub fn number_of_improvements(&self) -> usize {
-        self.num_improvements
-    }
-
-    /// The number of regressions that were found to be significant and relevant
-    pub fn number_of_regressions(&self) -> usize {
-        self.num_regressions
-    }
-
     /// Arithmetic mean of all improvements as a percent
-    pub fn arithmetic_mean_of_improvements(&self) -> f64 {
-        self.arithmetic_mean(self.improvements())
+    pub fn arithmetic_mean_of_relevant_improvements(&self) -> f64 {
+        let relevant_improvements = self
+            .relevant_comparisons
+            .iter()
+            .filter(|c| c.is_improvement());
+        self.arithmetic_mean(relevant_improvements)
     }
 
-    /// Arithmetic mean of all regressions as a percent
-    pub fn arithmetic_mean_of_regressions(&self) -> f64 {
-        self.arithmetic_mean(self.regressions())
+    /// Arithmetic mean of all relevant regressions as a percent.
+    pub fn arithmetic_mean_of_relevant_regressions(&self) -> f64 {
+        let relevant_regressions = self
+            .relevant_comparisons
+            .iter()
+            .filter(|c| c.is_regression());
+        self.arithmetic_mean(relevant_regressions)
     }
 
-    /// Arithmetic mean of all changes as a percent
-    pub fn arithmetic_mean_of_changes(&self) -> f64 {
-        self.arithmetic_mean(self.relevant_comparisons.iter())
+    /// Arithmetic mean of all changes as a percent.
+    pub fn arithmetic_mean_of_all_changes(&self) -> f64 {
+        self.arithmetic_mean(self.all_comparisons.iter())
     }
 
     pub fn is_empty(&self) -> bool {
@@ -399,26 +409,35 @@ impl ArtifactComparisonSummary {
         (sum / count as f64) * 100.0
     }
 
-    fn improvements(&self) -> impl Iterator<Item = &TestResultComparison> {
-        self.relevant_comparisons
-            .iter()
-            .filter(|c| c.is_improvement())
-    }
-
-    fn regressions(&self) -> impl Iterator<Item = &TestResultComparison> {
-        self.relevant_comparisons
-            .iter()
-            .filter(|c| c.is_regression())
-    }
-
-    fn largest_improvement(&self) -> Option<&TestResultComparison> {
+    fn largest_relevant_improvement(&self) -> Option<&TestResultComparison> {
         self.relevant_comparisons
             .iter()
             .find(|s| s.is_improvement())
     }
 
-    fn largest_regression(&self) -> Option<&TestResultComparison> {
+    fn smallest_relevant_improvement(&self) -> Option<&TestResultComparison> {
+        self.relevant_comparisons
+            .iter()
+            .rfind(|s| s.is_improvement())
+    }
+
+    fn largest_relevant_regression(&self) -> Option<&TestResultComparison> {
         self.relevant_comparisons.iter().find(|s| s.is_regression())
+    }
+
+    fn smallest_relevant_regression(&self) -> Option<&TestResultComparison> {
+        self.relevant_comparisons
+            .iter()
+            .rfind(|s| s.is_regression())
+    }
+
+    // njn: "largest_change"?
+    fn largest_all_improvement(&self) -> Option<&TestResultComparison> {
+        self.all_comparisons.first()
+    }
+
+    fn largest_all_regression(&self) -> Option<&TestResultComparison> {
+        self.all_comparisons.last()
     }
 
     /// The relevance level of the entire comparison
@@ -426,31 +445,38 @@ impl ArtifactComparisonSummary {
         !self.is_empty()
     }
 
-    pub fn num_changes(&self) -> usize {
+    pub fn num_relevant_changes(&self) -> usize {
         self.relevant_comparisons.len()
     }
 
-    pub fn largest_change(&self) -> Option<&TestResultComparison> {
+    pub fn largest_relevant_change_magnitude(&self) -> Option<&TestResultComparison> {
         self.relevant_comparisons.first()
     }
 }
 
-/// Whether we are confident enough that an artifact comparison represents a real change and thus deserves to be looked at.
+/// Whether we are confident enough that an artifact comparison represents a
+/// real change and thus deserves to be looked at.
 ///
-/// For example, this can be used to determine if artifact comparisons with regressions should be labeled with the
-/// `perf-regression` GitHub label or should be shown in the perf triage report.
+/// For example, this can be used to determine if artifact comparisons with
+/// regressions should be labeled with the `perf-regression` GitHub label or
+/// should be shown in the perf triage report.
 pub(crate) fn deserves_attention_icount(
     primary: &ArtifactComparisonSummary,
     secondary: &ArtifactComparisonSummary,
 ) -> bool {
-    match (primary.largest_change(), secondary.largest_change()) {
+    match (
+        primary.largest_relevant_change_magnitude(),
+        secondary.largest_relevant_change_magnitude(),
+    ) {
         (Some(c), _) if c.magnitude() >= Magnitude::Medium => true,
         (_, Some(c)) if c.magnitude() >= Magnitude::Large => true,
         _ => {
-            // How we determine whether a group of small changes deserves attention is and always will be arbitrary,
-            // but this feels good enough for now. We may choose in the future to become more sophisticated about it.
-            let primary_n = primary.num_changes();
-            let secondary_n = secondary.num_changes();
+            // How we determine whether a group of small changes deserves
+            // attention is and always will be arbitrary, but this feels good
+            // enough for now. We may choose in the future to become more
+            // sophisticated about it.
+            let primary_n = primary.num_relevant_changes();
+            let secondary_n = secondary.num_relevant_changes();
             (primary_n * 3 + secondary_n) >= 9
         }
     }
@@ -475,159 +501,93 @@ async fn write_triage_summary(
     let link = &compare_link(start, end);
     write!(&mut result, " [(Comparison Link)]({})\n\n", link).unwrap();
 
-    write_summary_table(&primary, &secondary, false, &mut result);
+    write_summary_table(&primary, &secondary, &mut result);
 
     result
 }
 
 /// Writes a Markdown table containing summary of relevant results.
+// njn: update comment, rewrite this function
 pub fn write_summary_table(
     primary: &ArtifactComparisonSummary,
     secondary: &ArtifactComparisonSummary,
-    with_footnotes: bool,
     result: &mut String,
 ) {
-    fn render_stat<F: FnOnce() -> Option<f64>>(count: usize, calculate: F) -> String {
-        let value = if count > 0 { calculate() } else { None };
-        value
-            .map(|value| format!("{value:.1}%"))
-            .unwrap_or_else(|| "N/A".to_string())
-    }
-
-    // (label, mean, max, count)
-    let mut column_data = vec![];
-
-    // label
-    column_data.push(vec![
-        "Regressions 😿 <br /> (primary)".to_string(),
-        "Regressions 😿 <br /> (secondary)".to_string(),
-        "Improvements 🎉 <br /> (primary)".to_string(),
-        "Improvements 🎉 <br /> (secondary)".to_string(),
-        "All 😿🎉 (primary)".to_string(),
-    ]);
-
-    // mean
-    column_data.push(vec![
-        render_stat(primary.num_regressions, || {
-            Some(primary.arithmetic_mean_of_regressions())
-        }),
-        render_stat(secondary.num_regressions, || {
-            Some(secondary.arithmetic_mean_of_regressions())
-        }),
-        render_stat(primary.num_improvements, || {
-            Some(primary.arithmetic_mean_of_improvements())
-        }),
-        render_stat(secondary.num_improvements, || {
-            Some(secondary.arithmetic_mean_of_improvements())
-        }),
-        if primary.is_empty() {
-            "N/A".to_string()
-        } else {
-            format!("{:.1}%", primary.arithmetic_mean_of_changes())
-        },
-    ]);
-
-    let largest_change = if primary.is_empty() {
-        "N/A".to_string()
-    } else {
-        let largest_improvement = primary
-            .largest_improvement()
-            .map(|c| c.relative_change())
-            .unwrap_or(0.0);
-        let largest_regression = primary
-            .largest_regression()
-            .map(|c| c.relative_change())
-            .unwrap_or(0.0);
-        let change = if largest_improvement
-            .abs()
-            .partial_cmp(&largest_regression.abs())
-            .unwrap_or(Ordering::Equal)
-            != Ordering::Less
-        {
-            largest_improvement
-        } else {
-            largest_regression
-        };
-
-        format!("{:.1}%", change * 100.0)
-    };
-
-    // max
-    column_data.push(vec![
-        render_stat(primary.num_regressions, || {
-            primary
-                .largest_regression()
-                .map(|r| r.relative_change() * 100.0)
-        }),
-        render_stat(secondary.num_regressions, || {
-            secondary
-                .largest_regression()
-                .map(|r| r.relative_change() * 100.0)
-        }),
-        render_stat(primary.num_improvements, || {
-            primary
-                .largest_improvement()
-                .map(|r| r.relative_change() * 100.0)
-        }),
-        render_stat(secondary.num_improvements, || {
-            secondary
-                .largest_improvement()
-                .map(|r| r.relative_change() * 100.0)
-        }),
-        largest_change,
-    ]);
-
-    // count
-    column_data.push(vec![
-        primary.num_regressions.to_string(),
-        secondary.num_regressions.to_string(),
-        primary.num_improvements.to_string(),
-        secondary.num_improvements.to_string(),
-        (primary.num_regressions + primary.num_improvements).to_string(),
-    ]);
-
-    let column_labels = [
-        "          ".to_string(), // we want at least 10 spaces to accommodate "count[^2]"
-        format!("mean{}", if with_footnotes { "[^1]" } else { "" }),
-        "max".to_string(),
-        format!("count{}", if with_footnotes { "[^2]" } else { "" }),
-    ];
-    let counts: Vec<usize> = column_labels.iter().map(|s| s.chars().count()).collect();
-    for column in &column_labels {
-        write!(result, "| {} ", column).unwrap();
-    }
-    result.push_str("|\n");
-    for &count in &counts {
-        write!(result, "|:{}:", "-".repeat(count)).unwrap();
-    }
-    result.push_str("|\n");
-
-    let mut render_row = |row: Vec<String>| {
-        debug_assert_eq!(row.len(), column_labels.len());
-        for (column, &count) in row.into_iter().zip(&counts) {
-            write!(result, "| {:<1$} ", column, count).unwrap();
+    fn render_line(
+        label: &str,
+        count: usize,
+        rest: Option<(
+            Option<&TestResultComparison>,
+            Option<&TestResultComparison>,
+            f64,
+        )>,
+    ) -> String {
+        match rest {
+            Some((lo, hi, mean)) if count > 0 => {
+                format!(
+                    "- {}: **{}** results, range **{:.1}%** to **{:.1}%**, mean **{:.1}%**\n",
+                    label,
+                    count,
+                    lo.unwrap().relative_change() * 100.0,
+                    hi.unwrap().relative_change() * 100.0,
+                    mean,
+                )
+            }
+            _ => {
+                format!("- {}: **{}** results\n", label, count)
+            }
         }
-        result.push_str("|\n");
-    };
-
-    for row in 0..5 {
-        let row_data = column_data
-            .iter()
-            .map(|rows| rows[row].clone())
-            .collect::<Vec<_>>();
-        render_row(row_data);
     }
+
+    // Note: the words "Overall", "Worse", "Better", and "Same" are all fairly
+    // similar length, which gives more vertical alignment than a mix of long
+    // and short labels.
+    fn render_category(label: &str, summary: &ArtifactComparisonSummary, result: &mut String) {
+        let extra = Direction::msg(summary.direction());
+        result.push_str(&format!("#### {} benchmarks: {}\n", label, extra));
+        result.push_str(&render_line(
+            "Overall",
+            summary.all_comparisons.len(),
+            Some((
+                summary.largest_all_improvement(),
+                summary.largest_all_regression(),
+                summary.arithmetic_mean_of_all_changes(),
+            )),
+        ));
+        result.push_str(&render_line(
+            "Worse",
+            summary.num_relevant_regressions,
+            Some((
+                summary.smallest_relevant_regression(),
+                summary.largest_relevant_regression(),
+                summary.arithmetic_mean_of_relevant_regressions(),
+            )),
+        ));
+        result.push_str(&render_line(
+            "Better",
+            summary.num_relevant_improvements,
+            Some((
+                summary.largest_relevant_improvement(),
+                summary.smallest_relevant_improvement(),
+                summary.arithmetic_mean_of_relevant_improvements(),
+            )),
+        ));
+        result.push_str(&render_line(
+            "Same",
+            summary.all_comparisons.len()
+                - summary.num_relevant_regressions
+                - summary.num_relevant_improvements,
+            None,
+        ));
+        result.push_str("\n");
+    }
+
+    render_category("Primary", primary, result);
+    render_category("Secondary", secondary, result);
 }
 
-pub fn write_summary_table_footer(result: &mut String) {
-    writeln!(
-        result,
-        r#"
-[^1]: *the arithmetic mean of the percent change*
-[^2]: *number of relevant changes*"#
-    )
-    .unwrap();
-}
+// njn: need separate docs page explaining all, including what "mean" means
+// njn: and a link to that
 
 /// Compare two bounds on a given stat
 ///
@@ -884,7 +844,8 @@ impl ArtifactComparison {
         next_commit(&self.b.artifact, master_commits).map(|c| c.sha.clone())
     }
 
-    /// Splits an artifact comparison into primary and secondary summaries based on benchmark category
+    /// Splits an artifact comparison into primary and secondary summaries based on benchmark
+    /// category.
     pub fn summarize_by_category(
         self,
         category_map: &HashMap<Benchmark, Category>,
@@ -1183,12 +1144,46 @@ impl std::hash::Hash for TestResultComparison {
     }
 }
 
-// The direction of a performance change
+// The direction of a performance change. Forms a lattice:
+//
+//               Some(Mixed)
+//                 /    \
+//  Some(Improvement)  Some(Regression)
+//                 \    /
+//                  None
+//
+// njn: add None directly to this type?
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Direction {
     Improvement,
     Regression,
     Mixed,
+}
+
+impl Direction {
+    // Also known as the "least upper bound".
+    pub fn join(a: Option<Self>, b: Option<Self>) -> Option<Self> {
+        match (a, b) {
+            (None, b) => b,
+            (a, None) => a,
+            (Some(Self::Improvement), Some(Self::Improvement)) => Some(Self::Improvement),
+            (Some(Self::Regression), Some(Self::Regression)) => Some(Self::Regression),
+            _ => Some(Self::Mixed),
+        }
+    }
+
+    // njn: make non-static?
+    pub fn msg(direction: Option<Direction>) -> &'static str {
+        // Note: we use emoji chars rather than GitHub emoji names (e.g. `:x:`,
+        // `:heavy_check_mark:`) because these results are also often pasted
+        // into Zulip, where the GitHub emoji names don't work.
+        match direction {
+            Some(Direction::Improvement) => "✅ (improvements found)",
+            Some(Direction::Regression) => "❌ (regressions found)",
+            Some(Direction::Mixed) => "❌ ✅ (regressions and improvements found)",
+            None => "no notable results",
+        }
+    }
 }
 
 impl std::fmt::Display for Direction {
@@ -1338,13 +1333,18 @@ mod tests {
                 (Category::Primary, 1.0, 3.0),
             ],
             r#"
-|            | mean[^1] | max | count[^2] |
-|:----------:|:--------:|:---:|:---------:|
-| Regressions 😿 <br /> (primary) | 146.7%   | 200.0% | 3         |
-| Regressions 😿 <br /> (secondary) | N/A      | N/A | 0         |
-| Improvements 🎉 <br /> (primary) | N/A      | N/A | 0         |
-| Improvements 🎉 <br /> (secondary) | N/A      | N/A | 0         |
-| All 😿🎉 (primary) | 146.7%   | 200.0% | 3         |
+#### Primary benchmarks: ❌ (regressions found)
+- Overall: **3** results, range **100.0%** to **200.0%**, mean **146.7%**
+- Worse: **3** results, range **100.0%** to **200.0%**, mean **146.7%**
+- Better: **0** results
+- Same: **0** results
+
+#### Secondary benchmarks: no notable results
+- Overall: **0** results
+- Worse: **0** results
+- Better: **0** results
+- Same: **0** results
+
 "#
             .trim_start(),
         );
@@ -1359,13 +1359,18 @@ mod tests {
                 (Category::Primary, 4.0, 1.0),
             ],
             r#"
-|            | mean[^1] | max | count[^2] |
-|:----------:|:--------:|:---:|:---------:|
-| Regressions 😿 <br /> (primary) | N/A      | N/A | 0         |
-| Regressions 😿 <br /> (secondary) | N/A      | N/A | 0         |
-| Improvements 🎉 <br /> (primary) | -71.7%   | -80.0% | 3         |
-| Improvements 🎉 <br /> (secondary) | N/A      | N/A | 0         |
-| All 😿🎉 (primary) | -71.7%   | -80.0% | 3         |
+#### Primary benchmarks: ✅ (improvements found)
+- Overall: **3** results, range **-80.0%** to **-60.0%**, mean **-71.7%**
+- Worse: **0** results
+- Better: **3** results, range **-80.0%** to **-60.0%**, mean **-71.7%**
+- Same: **0** results
+
+#### Secondary benchmarks: no notable results
+- Overall: **0** results
+- Worse: **0** results
+- Better: **0** results
+- Same: **0** results
+
 "#
             .trim_start(),
         );
@@ -1380,13 +1385,18 @@ mod tests {
                 (Category::Secondary, 4.0, 1.0),
             ],
             r#"
-|            | mean[^1] | max | count[^2] |
-|:----------:|:--------:|:---:|:---------:|
-| Regressions 😿 <br /> (primary) | N/A      | N/A | 0         |
-| Regressions 😿 <br /> (secondary) | N/A      | N/A | 0         |
-| Improvements 🎉 <br /> (primary) | N/A      | N/A | 0         |
-| Improvements 🎉 <br /> (secondary) | -71.7%   | -80.0% | 3         |
-| All 😿🎉 (primary) | N/A      | N/A | 0         |
+#### Primary benchmarks: no notable results
+- Overall: **0** results
+- Worse: **0** results
+- Better: **0** results
+- Same: **0** results
+
+#### Secondary benchmarks: ✅ (improvements found)
+- Overall: **3** results, range **-80.0%** to **-60.0%**, mean **-71.7%**
+- Worse: **0** results
+- Better: **3** results, range **-80.0%** to **-60.0%**, mean **-71.7%**
+- Same: **0** results
+
 "#
             .trim_start(),
         );
@@ -1401,13 +1411,18 @@ mod tests {
                 (Category::Secondary, 1.0, 3.0),
             ],
             r#"
-|            | mean[^1] | max | count[^2] |
-|:----------:|:--------:|:---:|:---------:|
-| Regressions 😿 <br /> (primary) | N/A      | N/A | 0         |
-| Regressions 😿 <br /> (secondary) | 146.7%   | 200.0% | 3         |
-| Improvements 🎉 <br /> (primary) | N/A      | N/A | 0         |
-| Improvements 🎉 <br /> (secondary) | N/A      | N/A | 0         |
-| All 😿🎉 (primary) | N/A      | N/A | 0         |
+#### Primary benchmarks: no notable results
+- Overall: **0** results
+- Worse: **0** results
+- Better: **0** results
+- Same: **0** results
+
+#### Secondary benchmarks: ❌ (regressions found)
+- Overall: **3** results, range **100.0%** to **200.0%**, mean **146.7%**
+- Worse: **3** results, range **100.0%** to **200.0%**, mean **146.7%**
+- Better: **0** results
+- Same: **0** results
+
 "#
             .trim_start(),
         );
@@ -1423,13 +1438,18 @@ mod tests {
                 (Category::Primary, 4.0, 1.0),
             ],
             r#"
-|            | mean[^1] | max | count[^2] |
-|:----------:|:--------:|:---:|:---------:|
-| Regressions 😿 <br /> (primary) | 150.0%   | 200.0% | 2         |
-| Regressions 😿 <br /> (secondary) | N/A      | N/A | 0         |
-| Improvements 🎉 <br /> (primary) | -62.5%   | -75.0% | 2         |
-| Improvements 🎉 <br /> (secondary) | N/A      | N/A | 0         |
-| All 😿🎉 (primary) | 43.8%    | 200.0% | 4         |
+#### Primary benchmarks: ❌ ✅ (regressions and improvements found)
+- Overall: **4** results, range **-75.0%** to **200.0%**, mean **43.8%**
+- Worse: **2** results, range **100.0%** to **200.0%**, mean **150.0%**
+- Better: **2** results, range **-75.0%** to **-50.0%**, mean **-62.5%**
+- Same: **0** results
+
+#### Secondary benchmarks: no notable results
+- Overall: **0** results
+- Worse: **0** results
+- Better: **0** results
+- Same: **0** results
+
 "#
             .trim_start(),
         );
@@ -1447,13 +1467,18 @@ mod tests {
                 (Category::Primary, 4.0, 1.0),
             ],
             r#"
-|            | mean[^1] | max | count[^2] |
-|:----------:|:--------:|:---:|:---------:|
-| Regressions 😿 <br /> (primary) | 150.0%   | 200.0% | 2         |
-| Regressions 😿 <br /> (secondary) | 100.0%   | 100.0% | 1         |
-| Improvements 🎉 <br /> (primary) | -62.5%   | -75.0% | 2         |
-| Improvements 🎉 <br /> (secondary) | -66.7%   | -66.7% | 1         |
-| All 😿🎉 (primary) | 43.8%    | 200.0% | 4         |
+#### Primary benchmarks: ❌ ✅ (regressions and improvements found)
+- Overall: **4** results, range **-75.0%** to **200.0%**, mean **43.8%**
+- Worse: **2** results, range **100.0%** to **200.0%**, mean **150.0%**
+- Better: **2** results, range **-75.0%** to **-50.0%**, mean **-62.5%**
+- Same: **0** results
+
+#### Secondary benchmarks: ❌ ✅ (regressions and improvements found)
+- Overall: **2** results, range **-66.7%** to **100.0%**, mean **16.7%**
+- Worse: **1** results, range **100.0%** to **100.0%**, mean **100.0%**
+- Better: **1** results, range **-66.7%** to **-66.7%**, mean **-66.7%**
+- Same: **0** results
+
 "#
             .trim_start(),
         );
@@ -1467,13 +1492,18 @@ mod tests {
                 (Category::Primary, 5.0, 6.0),
             ],
             r#"
-|            | mean[^1] | max | count[^2] |
-|:----------:|:--------:|:---:|:---------:|
-| Regressions 😿 <br /> (primary) | 20.0%    | 20.0% | 1         |
-| Regressions 😿 <br /> (secondary) | N/A      | N/A | 0         |
-| Improvements 🎉 <br /> (primary) | -50.0%   | -50.0% | 1         |
-| Improvements 🎉 <br /> (secondary) | N/A      | N/A | 0         |
-| All 😿🎉 (primary) | -15.0%   | -50.0% | 2         |
+#### Primary benchmarks: ❌ ✅ (regressions and improvements found)
+- Overall: **2** results, range **-50.0%** to **20.0%**, mean **-15.0%**
+- Worse: **1** results, range **20.0%** to **20.0%**, mean **20.0%**
+- Better: **1** results, range **-50.0%** to **-50.0%**, mean **-50.0%**
+- Same: **0** results
+
+#### Secondary benchmarks: no notable results
+- Overall: **0** results
+- Worse: **0** results
+- Better: **0** results
+- Same: **0** results
+
 "#
             .trim_start(),
         );
@@ -1487,13 +1517,18 @@ mod tests {
                 (Category::Primary, 6.0, 5.0),
             ],
             r#"
-|            | mean[^1] | max | count[^2] |
-|:----------:|:--------:|:---:|:---------:|
-| Regressions 😿 <br /> (primary) | 100.0%   | 100.0% | 1         |
-| Regressions 😿 <br /> (secondary) | N/A      | N/A | 0         |
-| Improvements 🎉 <br /> (primary) | -16.7%   | -16.7% | 1         |
-| Improvements 🎉 <br /> (secondary) | N/A      | N/A | 0         |
-| All 😿🎉 (primary) | 41.7%    | 100.0% | 2         |
+#### Primary benchmarks: ❌ ✅ (regressions and improvements found)
+- Overall: **2** results, range **-16.7%** to **100.0%**, mean **41.7%**
+- Worse: **1** results, range **100.0%** to **100.0%**, mean **100.0%**
+- Better: **1** results, range **-16.7%** to **-16.7%**, mean **-16.7%**
+- Same: **0** results
+
+#### Secondary benchmarks: no notable results
+- Overall: **0** results
+- Worse: **0** results
+- Better: **0** results
+- Same: **0** results
+
 "#
             .trim_start(),
         );
@@ -1542,7 +1577,7 @@ mod tests {
         let secondary = ArtifactComparisonSummary::summarize(secondary_comparisons);
 
         let mut result = String::new();
-        write_summary_table(&primary, &secondary, true, &mut result);
-        assert_eq!(result, expected);
+        write_summary_table(&primary, &secondary, &mut result);
+        assert_eq!(expected, result);
     }
 }
