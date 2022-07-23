@@ -468,8 +468,7 @@ fn process_self_profile_output(prof_out_dir: PathBuf, args: &[OsString]) {
 fn exec(cmd: &mut Command) {
     let cmd_d = format!("{:?}", cmd);
     match cmd.status() {
-        Ok(status) if !status.success() => std::process::exit(1),
-        Ok(_) => {},
+        Ok(status) => std::process::exit(status.code().unwrap_or(1)),
         Err(e) => panic!("failed to execute `{}`: {}", cmd_d, e),
     }
 }
