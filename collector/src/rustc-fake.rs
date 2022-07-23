@@ -469,7 +469,7 @@ fn exec(cmd: &mut Command) {
     let cmd_d = format!("{:?}", cmd);
     match cmd.status() {
         Ok(status) => std::process::exit(status.code().unwrap_or(1)),
-        Err(e) => panic!("failed to execute `{}`: {}", cmd_d, e),
+        Err(e) => panic!("failed to spawn `{}`: {}", cmd_d, e),
     }
 }
 
