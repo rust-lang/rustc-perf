@@ -276,8 +276,6 @@ pub struct CachedStatements {
     get_rustc_compilation_by_crate: Statement,
     insert_pstat: Statement,
     insert_rustc: Statement,
-    get_self_profile_query: Statement,
-    get_self_profile: Statement,
     insert_self_profile_query: Statement,
     select_self_query_series: Statement,
     insert_self_query_series: Statement,
@@ -393,27 +391,6 @@ impl PostgresConnection {
                     .prepare("insert into rustc_compilation (aid, cid, crate, duration) VALUES ($1, $2, $3, $4)")
                     .await
                     .unwrap(),
-                get_self_profile_query: conn
-                    .prepare(
-                        "select
-                        self_time, blocked_time, incremental_load_time, number_of_cache_hits, invocation_count
-                        from self_profile_query
-                        where series = $1 and aid = $2 order by self_time asc;
-                        ",
-                    )
-                    .await
-                    .unwrap(),
-                get_self_profile: conn.prepare("
-                    select
-                        query, self_time, blocked_time, incremental_load_time, number_of_cache_hits, invocation_count
-                    from self_profile_query_series
-                    join self_profile_query on self_profile_query_series.id = self_profile_query.series
-                    where
-                        crate = $1
-                        and profile = $2
-                        and cache = $3
-                        and aid = $4
-                ").await.unwrap(),
                 insert_self_profile_query: conn
                     .prepare(
                         "insert into self_profile_query(
@@ -577,33 +554,6 @@ where
                     )
                 })
                 .collect(),
-            queries: self
-                .conn()
-                .query(
-                    "select id, crate, profile, cache, query from self_profile_query_series;",
-                    &[],
-                )
-                .await
-                .unwrap()
-                .into_iter()
-                .map(|row| {
-                    (
-                        row.get::<_, i32>(0) as u32,
-                        (
-                            Benchmark::from(row.get::<_, String>(1).as_str()),
-                            match row.get::<_, String>(2).as_str() {
-                                "check" => Profile::Check,
-                                "opt" => Profile::Opt,
-                                "debug" => Profile::Debug,
-                                "doc" => Profile::Doc,
-                                o => unreachable!("{}: not a profile", o),
-                            },
-                            row.get::<_, String>(3).as_str().parse().unwrap(),
-                            row.get::<_, String>(4).as_str().into(),
-                        ),
-                    )
-                })
-                .collect(),
         }
     }
     async fn get_benchmarks(&self) -> Vec<BenchmarkData> {
@@ -643,64 +593,6 @@ where
             .unwrap();
         rows.into_iter()
             .map(|row| row.get::<_, Vec<Option<f64>>>(0))
-            .collect()
-    }
-    async fn get_self_profile_query(
-        &self,
-        pstat_series_row_id: u32,
-        artifact_row_id: crate::ArtifactIdNumber,
-    ) -> Option<crate::QueryDatum> {
-        let row = self
-            .conn()
-            .query_opt(
-                &self.statements().get_self_profile_query,
-                &[&(pstat_series_row_id as i32), &(artifact_row_id.0 as i32)],
-            )
-            .await
-            .unwrap()?;
-        let self_time: i64 = row.get(0);
-        let blocked_time: i64 = row.get(1);
-        let incremental_load_time: i64 = row.get(2);
-        Some(crate::QueryDatum {
-            self_time: Duration::from_nanos(self_time as u64),
-            blocked_time: Duration::from_nanos(blocked_time as u64),
-            incremental_load_time: Duration::from_nanos(incremental_load_time as u64),
-            number_of_cache_hits: row.get::<_, i32>(3) as u32,
-            invocation_count: row.get::<_, i32>(4) as u32,
-        })
-    }
-    async fn get_self_profile(
-        &self,
-        artifact_row_id: ArtifactIdNumber,
-        crate_: &str,
-        profile: &str,
-        scenario: &str,
-    ) -> HashMap<crate::QueryLabel, crate::QueryDatum> {
-        let rows = self
-            .conn()
-            .query(
-                &self.statements().get_self_profile,
-                &[&crate_, &profile, &scenario, &(artifact_row_id.0 as i32)],
-            )
-            .await
-            .unwrap();
-
-        rows.into_iter()
-            .map(|r| {
-                let self_time: i64 = r.get(1);
-                let blocked_time: i64 = r.get(2);
-                let incremental_load_time: i64 = r.get(3);
-                (
-                    r.get::<_, &str>(0).into(),
-                    crate::QueryDatum {
-                        self_time: Duration::from_nanos(self_time as u64),
-                        blocked_time: Duration::from_nanos(blocked_time as u64),
-                        incremental_load_time: Duration::from_nanos(incremental_load_time as u64),
-                        number_of_cache_hits: r.get::<_, i32>(4) as u32,
-                        invocation_count: r.get::<_, i32>(5) as u32,
-                    },
-                )
-            })
             .collect()
     }
     async fn get_error(&self, artifact_row_id: crate::ArtifactIdNumber) -> HashMap<String, String> {

@@ -1,5 +1,5 @@
 use crate::{ArtifactId, ArtifactIdNumber, BenchmarkData};
-use crate::{CollectionId, Index, Profile, QueryDatum, QueuedCommit, Scenario, Step};
+use crate::{CollectionId, Index, Profile, QueuedCommit, Scenario, Step};
 use chrono::{DateTime, Utc};
 use hashbrown::HashMap;
 use std::sync::{Arc, Mutex};
@@ -58,7 +58,7 @@ pub trait Connection: Send + Sync {
         profile: Profile,
         scenario: Scenario,
         query: &str,
-        qd: QueryDatum,
+        qd: crate::QueryDatum,
     );
     async fn record_error(&self, artifact: ArtifactIdNumber, krate: &str, error: &str);
     async fn record_rustc_crate(
@@ -92,18 +92,6 @@ pub trait Connection: Send + Sync {
         pstat_series_row_ids: &[u32],
         artifact_row_id: &[Option<ArtifactIdNumber>],
     ) -> Vec<Vec<Option<f64>>>;
-    async fn get_self_profile(
-        &self,
-        artifact_row_id: ArtifactIdNumber,
-        crate_: &str,
-        profile: &str,
-        cache: &str,
-    ) -> HashMap<crate::QueryLabel, QueryDatum>;
-    async fn get_self_profile_query(
-        &self,
-        series: u32,
-        artifact_row_id: ArtifactIdNumber,
-    ) -> Option<QueryDatum>;
     async fn get_error(&self, artifact_row_id: ArtifactIdNumber) -> HashMap<String, String>;
 
     async fn queue_pr(

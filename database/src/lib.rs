@@ -448,16 +448,6 @@ pub struct QueryDatum {
     pub invocation_count: u32,
 }
 
-#[async_trait::async_trait]
-impl SeriesType for QueryDatum {
-    async fn get(
-        conn: &dyn pool::Connection,
-        series: u32,
-        artifact_row_id: ArtifactIdNumber,
-    ) -> Option<Self> {
-        conn.get_self_profile_query(series, artifact_row_id).await
-    }
-}
 #[derive(Hash, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct LabelId(pub u8, pub u32);
 
@@ -481,8 +471,6 @@ pub struct Index {
     /// Id lookup of stat description ids
     /// For legacy reasons called `pstat_series` in the database, and so the name is kept here.
     pstat_series: Indexed<(Benchmark, Profile, Scenario, Metric)>,
-    /// Id lookup of a given process query label
-    queries: Indexed<(Benchmark, Profile, Scenario, QueryLabel)>,
 }
 
 /// An index lookup
@@ -605,12 +593,6 @@ pub enum DbLabel {
         scenario: Scenario,
         metric: Metric,
     },
-    SelfProfileQuery {
-        benchmark: Benchmark,
-        profile: Profile,
-        scenario: Scenario,
-        query: QueryLabel,
-    },
 }
 
 pub trait Lookup {
@@ -631,14 +613,6 @@ impl Lookup for DbLabel {
             } => index
                 .pstat_series
                 .get(&(*benchmark, *profile, *scenario, *metric)),
-            DbLabel::SelfProfileQuery {
-                benchmark,
-                profile,
-                scenario,
-                query,
-            } => index
-                .queries
-                .get(&(*benchmark, *profile, *scenario, *query)),
         }
     }
 }
@@ -715,34 +689,6 @@ impl Index {
         &self,
     ) -> impl Iterator<Item = &'_ (Benchmark, Profile, Scenario, Metric)> + '_ {
         self.pstat_series.map.keys()
-    }
-
-    // FIXME: in theory this won't scale indefinitely as there's potentially
-    // millions of queries and labels and iterating all of them is eventually
-    // going to be impractical. But for now it performs quite well, so we'll go
-    // for it as keeping indices around would be annoying.
-    pub fn all_query_series(
-        &self,
-    ) -> impl Iterator<Item = &'_ (Benchmark, Profile, Scenario, QueryLabel)> + '_ {
-        self.queries.map.keys()
-    }
-
-    // FIXME: in theory this won't scale indefinitely as there's potentially
-    // millions of queries and labels and iterating all of them is eventually
-    // going to be impractical. But for now it performs quite well, so we'll go
-    // for it as keeping indices around would be annoying.
-    pub fn filtered_queries(
-        &self,
-        benchmark: Benchmark,
-        profile: Profile,
-        scenario: Scenario,
-    ) -> impl Iterator<Item = QueryLabel> + '_ {
-        self.queries
-            .map
-            .keys()
-            .filter(move |&&(b, p, s, _)| b == benchmark && p == profile && s == scenario)
-            .map(|&(_, _, _, q)| q)
-            .filter(|q| !q.as_str().starts_with("codegen passes ["))
     }
 }
 
