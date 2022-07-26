@@ -595,17 +595,8 @@ pub async fn handle_self_profile(
     // Helper for finding an `ArtifactId` based on a commit sha
     let find_aid = |commit: &str| {
         index
-            .commits()
-            .into_iter()
-            .find(|c| c.sha == *commit)
-            .map(|c| ArtifactId::Commit(c))
-            .or_else(|| {
-                index
-                    .artifacts()
-                    .find(|a| *a == commit)
-                    .map(|a| ArtifactId::Tag(a.to_owned()))
-            })
-            .ok_or(format!("could not find artifact {}", body.commit))
+            .artifact_id_for_commit(commit)
+            .ok_or(format!("could not find artifact {}", commit))
     };
 
     let mut commits = vec![find_aid(&body.commit)?];

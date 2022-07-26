@@ -690,6 +690,18 @@ impl Index {
     ) -> impl Iterator<Item = &'_ (Benchmark, Profile, Scenario, Metric)> + '_ {
         self.pstat_series.map.keys()
     }
+
+    pub fn artifact_id_for_commit(&self, commit: &str) -> Option<ArtifactId> {
+        self.commits()
+            .into_iter()
+            .find(|c| c.sha == *commit)
+            .map(|c| ArtifactId::Commit(c))
+            .or_else(|| {
+                self.artifacts()
+                    .find(|a| *a == commit)
+                    .map(|a| ArtifactId::Tag(a.to_owned()))
+            })
+    }
 }
 
 #[derive(Debug)]
