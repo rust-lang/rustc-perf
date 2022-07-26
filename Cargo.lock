@@ -69,17 +69,15 @@ dependencies = [
 
 [[package]]
 name = "analyzeme"
-version = "10.0.0"
-source = "git+https://github.com/rust-lang/measureme?branch=stable#6129647e1727be1f9855f0158be4a0a538298514"
+version = "10.1.0"
+source = "git+https://github.com/rust-lang/measureme?branch=analysis-in-analyzeme#5ee583bd9e2db6da161c0698fb569f3e30212aed"
 dependencies = [
  "analyzeme 9.2.0",
- "byteorder",
  "decodeme",
- "measureme 10.0.0",
+ "measureme 10.1.0",
  "memchr",
  "rustc-hash",
  "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -459,10 +457,10 @@ dependencies = [
 
 [[package]]
 name = "decodeme"
-version = "10.0.0"
-source = "git+https://github.com/rust-lang/measureme?branch=stable#6129647e1727be1f9855f0158be4a0a538298514"
+version = "10.1.0"
+source = "git+https://github.com/rust-lang/measureme?branch=analysis-in-analyzeme#5ee583bd9e2db6da161c0698fb569f3e30212aed"
 dependencies = [
- "measureme 10.0.0",
+ "measureme 10.1.0",
  "memchr",
  "rustc-hash",
  "serde",
@@ -1095,20 +1093,20 @@ dependencies = [
  "log",
  "memmap2",
  "parking_lot",
- "perf-event-open-sys",
+ "perf-event-open-sys 1.0.1",
  "rustc-hash",
  "smallvec",
 ]
 
 [[package]]
 name = "measureme"
-version = "10.0.0"
-source = "git+https://github.com/rust-lang/measureme?branch=stable#6129647e1727be1f9855f0158be4a0a538298514"
+version = "10.1.0"
+source = "git+https://github.com/rust-lang/measureme?branch=analysis-in-analyzeme#5ee583bd9e2db6da161c0698fb569f3e30212aed"
 dependencies = [
  "log",
  "memmap2",
  "parking_lot",
- "perf-event-open-sys",
+ "perf-event-open-sys 3.0.0",
  "rustc-hash",
  "smallvec",
 ]
@@ -1377,6 +1375,15 @@ name = "perf-event-open-sys"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce9bedf5da2c234fdf2391ede2b90fabf585355f33100689bc364a3ea558561a"
+dependencies = [
+ "libc",
+]
+
+[[package]]
+name = "perf-event-open-sys"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b29be2ba35c12c6939f6bc73187f728bba82c3c062ecdc5fa90ea739282a1f58"
 dependencies = [
  "libc",
 ]
@@ -1918,7 +1925,7 @@ checksum = "cbce6d4507c7e4a3962091436e56e95290cb71fa302d0d270e32130b75fbff27"
 name = "site"
 version = "0.1.0"
 dependencies = [
- "analyzeme 10.0.0",
+ "analyzeme 10.1.0",
  "anyhow",
  "arc-swap",
  "async-trait",

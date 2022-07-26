@@ -2,7 +2,8 @@
 //! generation from the raw artifacts on demand.
 
 use anyhow::Context;
-use std::collections::HashMap;
+use bytes::Buf;
+use std::{collections::HashMap, io::Read, time::Instant};
 
 mod codegen_schedule;
 pub mod crox;
@@ -58,4 +59,69 @@ pub fn generate(
             })
         }
     }
+}
+
+/// Extract self profile data from raw buffer
+pub(crate) fn extract_profiling_data(data: Vec<u8>) -> anyhow::Result<analyzeme::ProfilingData> {
+    analyzeme::ProfilingData::from_paged_buffer(data, None)
+        .map_err(|_| anyhow::Error::msg("could not parse profiling data"))
+}
+
+/// Fetches the raw self profile data for the given test case
+pub(crate) async fn fetch_raw_self_profile_data(
+    aid: database::ArtifactIdNumber,
+    benchmark: &str,
+    profile: &str,
+    scenario: database::Scenario,
+    cid: i32,
+) -> anyhow::Result<Vec<u8>> {
+    let url =
+        format!(
+        "https://perf-data.rust-lang.org/self-profile/{}/{}/{}/{}/self-profile-{}.mm_profdata.sz",
+        aid.0, benchmark, profile, scenario.to_id(), cid,
+    );
+
+    get_self_profile_raw_data(&url).await
+}
+
+/// Fetch self profile data at the given URL
+pub(crate) async fn get_self_profile_raw_data(url: &str) -> anyhow::Result<Vec<u8>> {
+    log::trace!("downloading {}", url);
+
+    let start = Instant::now();
+    let resp = match reqwest::get(url).await {
+        Ok(r) => r,
+        Err(e) => anyhow::bail!("{:?}", e),
+    };
+
+    if !resp.status().is_success() {
+        anyhow::bail!(
+            "upstream status {:?} is not successful.\nurl={url}",
+            resp.status(),
+        )
+    }
+
+    let compressed = match resp.bytes().await {
+        Ok(b) => b,
+        Err(e) => {
+            anyhow::bail!("could not download from upstream: {:?}", e);
+        }
+    };
+
+    log::trace!(
+        "downloaded {} bytes in {:?}",
+        compressed.len(),
+        start.elapsed()
+    );
+
+    extract(&compressed)
+}
+
+fn extract(compressed: &[u8]) -> anyhow::Result<Vec<u8>> {
+    let mut data = Vec::new();
+    match snap::read::FrameDecoder::new(compressed.reader()).read_to_end(&mut data) {
+        Ok(v) => v,
+        Err(e) => anyhow::bail!("could not decode: {:?}", e),
+    };
+    Ok(data)
 }
