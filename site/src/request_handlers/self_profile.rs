@@ -1,19 +1,20 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::HashSet;
 use std::io::Read;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use analyzeme::ProfilingData;
 use bytes::Buf;
-use database::{ArtifactIdNumber, Scenario};
 use headers::{ContentType, Header};
 use hyper::StatusCode;
 
-use crate::api::self_profile::ArtifactSizeDelta;
+use crate::api::self_profile::{ArtifactSize, ArtifactSizeDelta};
 use crate::api::{self_profile, self_profile_processed, self_profile_raw, ServerResult};
 use crate::db::ArtifactId;
 use crate::load::SiteCtxt;
 use crate::selector::{self, Tag};
+use crate::self_profile::{
+    extract_profiling_data, fetch_raw_self_profile_data, get_self_profile_raw_data,
+};
 use crate::server::{Response, ResponseHeaders};
 
 pub async fn handle_self_profile_processed_download(
@@ -65,7 +66,11 @@ pub async fn handle_self_profile_processed_download(
         {
             Ok(v) => match get_self_profile_raw_data(&v.url).await {
                 Ok(v) => Some(v),
-                Err(e) => return e,
+                Err(e) => {
+                    let mut resp = Response::new(e.to_string().into());
+                    *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+                    return resp;
+                }
             },
             Err(e) => {
                 let mut resp = Response::new(e.into());
@@ -90,7 +95,12 @@ pub async fn handle_self_profile_processed_download(
     {
         Ok(v) => match get_self_profile_raw_data(&v.url).await {
             Ok(v) => v,
-            Err(e) => return e,
+
+            Err(e) => {
+                let mut resp = Response::new(e.to_string().into());
+                *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+                return resp;
+            }
         },
         Err(e) => {
             let mut resp = Response::new(e.into());
@@ -144,14 +154,26 @@ pub async fn handle_self_profile_processed_download(
 
 fn get_self_profile_data(
     cpu_clock: Option<f64>,
-    self_profile: Option<crate::selector::SelfProfileData>,
-    profiling_data: &ProfilingData,
+    profile: &analyzeme::AnalysisResults,
 ) -> ServerResult<self_profile::SelfProfile> {
-    let profile = self_profile
-        .as_ref()
-        .ok_or(format!("No self profile results for this commit"))?
-        .clone();
-    let total_time: Duration = profile.query_data.iter().map(|qd| qd.self_time()).sum();
+    let total_time: Duration = profile.query_data.iter().map(|qd| qd.self_time).sum();
+
+    let query_data = profile
+        .query_data
+        .iter()
+        .map(|qd| self_profile::QueryData {
+            label: qd.label.as_str().into(),
+            self_time: qd.self_time.as_nanos() as u64,
+            percent_total_time: ((qd.self_time.as_secs_f64() / total_time.as_secs_f64()) * 100.0)
+                as f32,
+            number_of_cache_misses: qd.number_of_cache_misses as u32,
+            number_of_cache_hits: qd.number_of_cache_hits as u32,
+            invocation_count: qd.invocation_count as u32,
+            blocked_time: qd.blocked_time.as_nanos() as u64,
+            incremental_load_time: qd.incremental_load_time.as_nanos() as u64,
+        })
+        .collect();
+
     let totals = self_profile::QueryData {
         label: "Totals".into(),
         self_time: total_time.as_nanos() as u64,
@@ -163,47 +185,44 @@ fn get_self_profile_data(
         number_of_cache_misses: profile
             .query_data
             .iter()
-            .map(|qd| qd.number_of_cache_misses())
+            .map(|qd| qd.number_of_cache_misses as u32)
             .sum(),
         number_of_cache_hits: profile
             .query_data
             .iter()
-            .map(|qd| qd.number_of_cache_hits)
+            .map(|qd| qd.number_of_cache_hits as u32)
             .sum(),
         invocation_count: profile
             .query_data
             .iter()
-            .map(|qd| qd.invocation_count)
+            .map(|qd| qd.invocation_count as u32)
             .sum(),
-        blocked_time: profile.query_data.iter().map(|qd| qd.blocked_time).sum(),
+        blocked_time: profile
+            .query_data
+            .iter()
+            .map(|qd| qd.blocked_time.as_nanos() as u64)
+            .sum(),
         incremental_load_time: profile
             .query_data
             .iter()
-            .map(|qd| qd.incremental_load_time)
+            .map(|qd| qd.incremental_load_time.as_nanos() as u64)
             .sum(),
     };
-    let artifact_sizes = raw_mmprof_data_to_artifact_sizes(profiling_data).ok();
-    let profile = self_profile::SelfProfile {
-        query_data: profile
-            .query_data
-            .iter()
-            .map(|qd| self_profile::QueryData {
-                label: qd.label,
-                self_time: qd.self_time,
-                percent_total_time: ((qd.self_time().as_secs_f64() / total_time.as_secs_f64())
-                    * 100.0) as f32,
-                number_of_cache_misses: qd.number_of_cache_misses(),
-                number_of_cache_hits: qd.number_of_cache_hits,
-                invocation_count: qd.invocation_count,
-                blocked_time: qd.blocked_time,
-                incremental_load_time: qd.incremental_load_time,
-            })
-            .collect(),
-        totals,
-        artifact_sizes,
-    };
 
-    Ok(profile)
+    let artifact_sizes = profile
+        .artifact_sizes
+        .iter()
+        .map(|a| ArtifactSize {
+            label: a.label.as_str().into(),
+            bytes: a.value,
+        })
+        .collect();
+
+    Ok(self_profile::SelfProfile {
+        query_data,
+        totals,
+        artifact_sizes: Some(artifact_sizes),
+    })
 }
 
 // Add query data entries to `profile` for any queries in `base_profile` which are not present in
@@ -245,11 +264,10 @@ fn add_uninvoked_base_profile_queries(
 fn get_self_profile_delta(
     profile: &self_profile::SelfProfile,
     base_profile: &Option<self_profile::SelfProfile>,
-    profiling_data: &ProfilingData,
-    base_profiling_data: Option<&ProfilingData>,
+    profiling_data: &analyzeme::AnalysisResults,
+    base_profiling_data: Option<&analyzeme::AnalysisResults>,
 ) -> Option<self_profile::SelfProfileDelta> {
     let base_profile = base_profile.as_ref()?;
-    let base_raw_data = base_profiling_data?;
 
     let totals = self_profile::QueryDataDelta {
         self_time: profile.totals.self_time as i64 - base_profile.totals.self_time as i64,
@@ -289,13 +307,15 @@ fn get_self_profile_delta(
         }
     }
 
-    let first = raw_mmprof_data_to_artifact_sizes(profiling_data).unwrap_or_else(|_| Vec::new());
-    let base = raw_mmprof_data_to_artifact_sizes(base_raw_data).unwrap_or_else(|_| Vec::new());
+    let first = &profiling_data.artifact_sizes[..];
+    let base = base_profiling_data
+        .map(|s| &s.artifact_sizes[..])
+        .unwrap_or_default();
     let artifact_sizes = first
-        .into_iter()
-        .zip(base.into_iter())
+        .iter()
+        .zip(base.iter())
         .map(|(a1, a2)| ArtifactSizeDelta {
-            bytes: a1.bytes as i64 - a2.bytes as i64,
+            bytes: a1.value as i64 - a2.value as i64,
         })
         .collect();
 
@@ -364,62 +384,6 @@ fn sort_self_profile(
             indices.iter().map(|&i| deltas[i].clone()).collect()
         };
     }
-}
-
-async fn get_self_profile_raw_data(url: &str) -> Result<Vec<u8>, Response> {
-    log::trace!("downloading {}", url);
-
-    let start = Instant::now();
-    let resp = match reqwest::get(url).await {
-        Ok(r) => r,
-        Err(e) => {
-            let mut resp = Response::new(format!("{:?}", e).into());
-            *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-            return Err(resp);
-        }
-    };
-
-    if !resp.status().is_success() {
-        let mut resp = Response::new(
-            format!(
-                "upstream status {:?} is not successful.\nurl={}",
-                resp.status(),
-                url
-            )
-            .into(),
-        );
-        *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-        return Err(resp);
-    }
-
-    let compressed = match resp.bytes().await {
-        Ok(b) => b,
-        Err(e) => {
-            let mut resp =
-                Response::new(format!("could not download from upstream: {:?}", e).into());
-            *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-            return Err(resp);
-        }
-    };
-
-    log::trace!(
-        "downloaded {} bytes in {:?}",
-        compressed.len(),
-        start.elapsed()
-    );
-
-    let mut data = Vec::new();
-
-    match snap::read::FrameDecoder::new(compressed.reader()).read_to_end(&mut data) {
-        Ok(v) => v,
-        Err(e) => {
-            let mut resp = Response::new(format!("could not decode: {:?}", e).into());
-            *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-            return Err(resp);
-        }
-    };
-
-    Ok(data)
 }
 
 pub async fn handle_self_profile_raw_download(
@@ -596,22 +560,6 @@ pub async fn handle_self_profile_raw(
     }
 }
 
-pub async fn fetch_raw_self_profile_data(
-    aid: ArtifactIdNumber,
-    benchmark: &str,
-    profile: &str,
-    scenario: Scenario,
-    cid: i32,
-) -> Result<Vec<u8>, Response> {
-    let url =
-        format!(
-        "https://perf-data.rust-lang.org/self-profile/{}/{}/{}/{}/self-profile-{}.mm_profdata.sz",
-        aid.0, benchmark, profile, scenario.to_id(), cid,
-    );
-
-    get_self_profile_raw_data(&url).await
-}
-
 pub async fn handle_self_profile(
     body: self_profile::Request,
     ctxt: &SiteCtxt,
@@ -638,67 +586,38 @@ pub async fn handle_self_profile(
         .set(
             Tag::Scenario,
             selector::Selector::One(body.scenario.clone()),
-        );
-
-    let mut commits = vec![index
-        .commits()
-        .into_iter()
-        .find(|c| c.sha == *body.commit.as_str())
-        .map(|c| ArtifactId::Commit(c))
-        .or_else(|| {
-            index
-                .artifacts()
-                .find(|a| **a == body.commit)
-                .map(|a| ArtifactId::Tag(a.to_owned()))
-        })
-        .ok_or(format!("could not find artifact {}", body.commit))?];
-
-    if let Some(bc) = &body.base_commit {
-        commits.push(
-            index
-                .commits()
-                .into_iter()
-                .find(|c| c.sha == *bc.as_str())
-                .map(|c| ArtifactId::Commit(c))
-                .or_else(|| {
-                    index
-                        .artifacts()
-                        .find(|a| **a == *bc.as_str())
-                        .map(|a| ArtifactId::Tag(a.to_owned()))
-                })
-                .ok_or(format!("could not find artifact {}", bc))?,
-        );
-    }
-
-    let commits = Arc::new(commits);
-    let mut sp_responses = ctxt.self_profile(query.clone(), commits.clone()).await?;
-
-    if sp_responses.is_empty() {
-        return Err(format!("no results found for {:?} in {:?}", query, commits));
-    }
-
-    assert_eq!(
-        sp_responses.len(),
-        1,
-        "all selectors are exact, paths: {:?}",
-        sp_responses
-            .iter()
-            .map(|v| format!("{:?}", v.path))
-            .collect::<Vec<_>>()
-    );
-    let mut sp_response = sp_responses.remove(0).series;
-
-    let mut cpu_responses = ctxt
-        .statistic_series(
-            query.clone().set(
-                Tag::Metric,
-                selector::Selector::One("cpu-clock".to_string()),
-            ),
-            commits.clone(),
         )
-        .await?;
+        .set(
+            Tag::Metric,
+            selector::Selector::One("cpu-clock".to_string()),
+        );
+
+    // Helper for finding an `ArtifactId` based on a commit sha
+    let find_aid = |commit: &str| {
+        index
+            .commits()
+            .into_iter()
+            .find(|c| c.sha == *commit)
+            .map(|c| ArtifactId::Commit(c))
+            .or_else(|| {
+                index
+                    .artifacts()
+                    .find(|a| *a == commit)
+                    .map(|a| ArtifactId::Tag(a.to_owned()))
+            })
+            .ok_or(format!("could not find artifact {}", body.commit))
+    };
+
+    let mut commits = vec![find_aid(&body.commit)?];
+    if let Some(bc) = &body.base_commit {
+        commits.push(find_aid(bc)?);
+    }
+    let commits = Arc::new(commits);
+
+    let mut cpu_responses = ctxt.statistic_series(query, commits.clone()).await?;
     assert_eq!(cpu_responses.len(), 1, "all selectors are exact");
     let mut cpu_response = cpu_responses.remove(0).series;
+
     let mut self_profile_data = Vec::new();
     let conn = ctxt.conn().await;
     for commit in commits.iter() {
@@ -711,68 +630,33 @@ pub async fn handle_self_profile(
                     extract_profiling_data(d)
                         .map_err(|e| format!("error extracting self profiling data: {}", e))?,
                 ),
-                Err(e) => return Err(format!("could not fetch raw profile data: {:?}", e.body())),
+                Err(e) => return Err(format!("could not fetch raw profile data: {e:?}")),
             };
         }
     }
-    let profiling_data = self_profile_data.get(0).unwrap();
-    let mut profile = get_self_profile_data(
-        cpu_response.next().unwrap().1,
-        sp_response.next().unwrap().1,
-        profiling_data,
-    )
-    .map_err(|e| format!("{}: {}", body.commit, e))?;
+    let profiling_data = self_profile_data.remove(0).perform_analysis();
+    let mut profile = get_self_profile_data(cpu_response.next().unwrap().1, &profiling_data)
+        .map_err(|e| format!("{}: {}", body.commit, e))?;
     let (base_profile, base_raw_data) = if body.base_commit.is_some() {
-        let base_profiling_data = self_profile_data.get(1).unwrap();
-        let profile = get_self_profile_data(
-            cpu_response.next().unwrap().1,
-            sp_response.next().unwrap().1,
-            base_profiling_data,
-        )
-        .map_err(|e| format!("{}: {}", body.base_commit.as_ref().unwrap(), e))?;
+        let base_profiling_data = self_profile_data.remove(0).perform_analysis();
+        let profile = get_self_profile_data(cpu_response.next().unwrap().1, &base_profiling_data)
+            .map_err(|e| format!("{}: {}", body.base_commit.as_ref().unwrap(), e))?;
         (Some(profile), Some(base_profiling_data))
     } else {
         (None, None)
     };
 
     add_uninvoked_base_profile_queries(&mut profile, &base_profile);
-    let mut base_profile_delta =
-        get_self_profile_delta(&profile, &base_profile, profiling_data, base_raw_data);
+    let mut base_profile_delta = get_self_profile_delta(
+        &profile,
+        &base_profile,
+        &profiling_data,
+        base_raw_data.as_ref(),
+    );
     sort_self_profile(&mut profile, &mut base_profile_delta, sort_idx);
 
     Ok(self_profile::Response {
         base_profile_delta,
         profile,
     })
-}
-
-fn raw_mmprof_data_to_artifact_sizes(
-    profiling_data: &ProfilingData,
-) -> anyhow::Result<Vec<self_profile::ArtifactSize>> {
-    let mut artifact_sizes: BTreeMap<_, u64> = Default::default();
-
-    for event in profiling_data.iter_full() {
-        // TODO: Use constant from measureme::rustc
-        if event.event_kind == "ArtifactSize" {
-            if !event.payload.is_integer() {
-                anyhow::bail!("Found ArtifactSize payload that is not an integer")
-            }
-
-            let bytes = event.payload.integer().unwrap();
-            *artifact_sizes.entry(event.label).or_default() += bytes;
-        }
-    }
-
-    Ok(artifact_sizes
-        .iter()
-        .map(|(k, v)| self_profile::ArtifactSize {
-            label: k[..].into(),
-            bytes: *v,
-        })
-        .collect())
-}
-
-fn extract_profiling_data(data: Vec<u8>) -> Result<analyzeme::ProfilingData, anyhow::Error> {
-    analyzeme::ProfilingData::from_paged_buffer(data, None)
-        .map_err(|_| anyhow::Error::msg("could not parse profiling data"))
 }
