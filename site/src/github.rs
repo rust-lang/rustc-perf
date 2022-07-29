@@ -64,6 +64,7 @@ pub async fn pr_and_try_for_rollup(
 r? @ghost",
             origin_url, branch.rolled_up_pr_number
         ),
+        true,
     )
     .await
     .context("Created PR")?;
@@ -247,6 +248,7 @@ struct CreatePrRequest<'a> {
     base: &'a str,
     #[serde(rename = "body")]
     description: &'a str,
+    draft: bool,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -264,6 +266,7 @@ pub async fn create_pr(
     head: &str,
     base: &str,
     description: &str,
+    draft: bool,
 ) -> anyhow::Result<CreatePrResponse> {
     let timer_token = ctxt
         .config
@@ -279,6 +282,7 @@ pub async fn create_pr(
             head,
             base,
             description,
+            draft,
         })
         .header(USER_AGENT, "perf-rust-lang-org-server")
         .basic_auth("rust-timer", Some(timer_token))
