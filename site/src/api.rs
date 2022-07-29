@@ -397,9 +397,9 @@ pub mod github {
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct Request {
-        pub issue: Issue,
-        pub comment: Comment,
+    #[serde(untagged)]
+    pub enum Request {
+        Issue { issue: Issue, comment: Comment },
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]

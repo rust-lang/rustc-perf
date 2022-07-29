@@ -25,43 +25,58 @@ pub async fn handle_github(
     ctxt: Arc<SiteCtxt>,
 ) -> ServerResult<github::Response> {
     log::info!("handle_github({:?})", request);
-    if request.comment.body.contains(" homu: ") {
-        if let Some(sha) = parse_homu_comment(&request.comment.body).await {
-            enqueue_sha(request.issue, &ctxt, sha).await?;
+    match request {
+        github::Request::Issue { issue, comment } => handle_issue(ctxt, issue, comment).await,
+    }
+}
+
+async fn handle_issue(
+    ctxt: Arc<SiteCtxt>,
+    issue: github::Issue,
+    comment: github::Comment,
+) -> ServerResult<github::Response> {
+    if comment.body.contains(" homu: ") {
+        if let Some(sha) = parse_homu_comment(&comment.body).await {
+            enqueue_sha(issue, &ctxt, sha).await?;
             return Ok(github::Response);
         }
     }
 
-    if !request.comment.body.contains("@rust-timer ") {
-        return Ok(github::Response);
+    if comment.body.contains("@rust-timer ") {
+        return handle_rust_timer(ctxt, comment, issue).await;
     }
 
-    if request.comment.author_association != github::Association::Owner
-        && !get_authorized_users()
-            .await?
-            .contains(&request.comment.user.id)
+    Ok(github::Response)
+}
+
+async fn handle_rust_timer(
+    ctxt: Arc<SiteCtxt>,
+    comment: github::Comment,
+    issue: github::Issue,
+) -> ServerResult<github::Response> {
+    if comment.author_association != github::Association::Owner
+        && !get_authorized_users().await?.contains(&comment.user.id)
     {
         post_comment(
             &ctxt.config,
-            request.issue.number,
+            issue.number,
             "Insufficient permissions to issue commands to rust-timer.",
         )
         .await;
         return Ok(github::Response);
     }
 
-    if let Some(captures) = BODY_QUEUE.captures(&request.comment.body) {
+    if let Some(captures) = BODY_QUEUE.captures(&comment.body) {
         let include = captures.get(1).map(|v| v.as_str());
         let exclude = captures.get(2).map(|v| v.as_str());
         let runs = captures.get(3).and_then(|v| v.as_str().parse::<i32>().ok());
         {
             let conn = ctxt.conn().await;
-            conn.queue_pr(request.issue.number, include, exclude, runs)
-                .await;
+            conn.queue_pr(issue.number, include, exclude, runs).await;
         }
         post_comment(
             &ctxt.config,
-            request.issue.number,
+            issue.number,
             "Awaiting bors try build completion.
 
 @rustbot label: +S-waiting-on-perf",
@@ -69,8 +84,7 @@ pub async fn handle_github(
         .await;
         return Ok(github::Response);
     }
-
-    if let Some(captures) = BODY_TRY_COMMIT.captures(&request.comment.body) {
+    if let Some(captures) = BODY_TRY_COMMIT.captures(&comment.body) {
         if let Some(commit) = captures.get(1).map(|c| c.as_str().to_owned()) {
             let include = captures.get(2).map(|v| v.as_str());
             let exclude = captures.get(3).map(|v| v.as_str());
@@ -78,43 +92,39 @@ pub async fn handle_github(
             let commit = commit.trim_start_matches("https://github.com/rust-lang/rust/commit/");
             {
                 let conn = ctxt.conn().await;
-                conn.queue_pr(request.issue.number, include, exclude, runs)
-                    .await;
+                conn.queue_pr(issue.number, include, exclude, runs).await;
             }
-            enqueue_sha(request.issue, &ctxt, commit.to_owned()).await?;
+            enqueue_sha(issue, &ctxt, commit.to_owned()).await?;
             return Ok(github::Response);
         }
     }
-
-    for rollup_merge in extract_make_pr_for(&request.comment.body) {
+    for rollup_merge in extract_make_pr_for(&comment.body) {
         let client = reqwest::Client::new();
         pr_and_try_for_rollup(
             &client,
             ctxt.clone(),
-            &request.issue.repository_url,
+            &issue.repository_url,
             &rollup_merge,
-            &request.comment.html_url,
+            &comment.html_url,
         )
         .await
         .map_err(|e| format!("{:?}", e))?;
     }
-
-    for rollup_merge in extract_update_pr_for(&request.comment.body) {
+    for rollup_merge in extract_update_pr_for(&comment.body) {
         // This just creates or updates the branch for this merge commit.
         // Intended for resolving the race condition of master merging in
         // between us updating the commit and merging things.
         let client = reqwest::Client::new();
-        let branch = branch_for_rollup(&client, &ctxt, &request.issue.repository_url, rollup_merge)
+        let branch = branch_for_rollup(&client, &ctxt, &issue.repository_url, rollup_merge)
             .await
             .map_err(|e| e.to_string())?;
         post_comment(
             &ctxt.config,
-            request.issue.number,
+            issue.number,
             &format!("Master base SHA: {}", branch.master_base_sha),
         )
         .await;
     }
-
     Ok(github::Response)
 }
 
