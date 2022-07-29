@@ -727,37 +727,38 @@ fn next_steps(
     is_master_commit: bool,
 ) -> String {
     let deserves_attention = deserves_attention_icount(&primary, &secondary);
-    let label = match (deserves_attention, direction) {
-        (true, Some(Direction::Regression | Direction::Mixed)) => "+perf-regression",
-        _ => "-perf-regression",
+    let (is_regression, label) = match (deserves_attention, direction) {
+        (true, Some(Direction::Regression | Direction::Mixed)) => (true, "+perf-regression"),
+        _ => (false, "-perf-regression"),
     };
 
     if is_master_commit {
-        master_run_body(label)
+        master_run_body(is_regression)
     } else {
         try_run_body(label)
     }
 }
 
-fn master_run_body(label: &str) -> String {
-    let next_steps = if label.starts_with("+") {
-        "\n\n**Next Steps**: If you can justify the \
-                regressions found in this perf run, please indicate this with \
-                `@rustbot label: +perf-regression-triaged` along with \
-                sufficient written justification. If you cannot justify the regressions \
-                please open an issue or create a new PR that fixes the regressions, \
-                add a comment linking to the newly created issue or PR, \
-                and then add the `perf-regression-triaged` label to this PR."
-    } else {
-        ""
-    };
-
-    format!(
+fn master_run_body(is_regression: bool) -> String {
+    if is_regression {
         "
-{next_steps}
+**Next Steps**: If you can justify the \
+regressions found in this perf run, please indicate this with \
+`@rustbot label: +perf-regression-triaged` along with \
+sufficient written justification. If you cannot justify the regressions \
+please open an issue or create a new PR that fixes the regressions, \
+add a comment linking to the newly created issue or PR, \
+and then add the `perf-regression-triaged` label to this PR.
 
-@rustbot label: {label}",
-    )
+@rustbot label: +perf-regression
+cc @rust-lang/wg-compiler-performance
+"
+    } else {
+        "
+@rustbot label: -perf-regression
+"
+    }
+    .to_string()
 }
 
 fn try_run_body(label: &str) -> String {
