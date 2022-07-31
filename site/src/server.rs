@@ -464,7 +464,7 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
                 }
             };
             match event.as_str() {
-                "issue_comment" => Ok(to_response(
+                "issue_comment" | "pushes" => Ok(to_response(
                     request_handlers::handle_github(check!(parse_body(&body)), ctxt.clone()).await,
                     &compression,
                 )),

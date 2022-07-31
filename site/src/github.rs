@@ -297,6 +297,86 @@ pub async fn create_pr(
 }
 
 #[derive(serde::Serialize)]
+struct UpdateBranchRequest<'a> {
+    sha: &'a str,
+    force: bool,
+}
+
+pub async fn update_branch(
+    client: &reqwest::Client,
+    ctxt: &SiteCtxt,
+    repository_url: &str,
+    branch: &str,
+    sha: &str,
+) -> anyhow::Result<()> {
+    let timer_token = ctxt
+        .config
+        .keys
+        .github_api_token
+        .clone()
+        .expect("needs github API token");
+    let url = format!("{}/git/refs/{}", repository_url, branch);
+    let commit_response = client
+        .patch(&url)
+        .json(&UpdateBranchRequest { sha, force: true })
+        .header(USER_AGENT, "perf-rust-lang-org-server")
+        .basic_auth("rust-timer", Some(timer_token))
+        .send()
+        .await
+        .context("PATCH git/refs failed")?;
+    if commit_response.status() != reqwest::StatusCode::OK {
+        anyhow::bail!("{:?} != 200 OK", commit_response.status());
+    }
+
+    Ok(())
+}
+
+#[derive(serde::Serialize)]
+struct MergeBranchRequest<'a> {
+    base: &'a str,
+    head: &'a str,
+    commit_message: &'a str,
+}
+#[derive(serde::Deserialize)]
+struct MergeBranchResponse {
+    sha: String,
+}
+
+pub async fn merge_branch(
+    client: &reqwest::Client,
+    ctxt: &SiteCtxt,
+    repository_url: &str,
+    branch: &str,
+    sha: &str,
+    commit_message: &str,
+) -> anyhow::Result<String> {
+    let timer_token = ctxt
+        .config
+        .keys
+        .github_api_token
+        .clone()
+        .expect("needs github API token");
+    let url = format!("{}/merges", repository_url);
+    let response = client
+        .patch(&url)
+        .json(&MergeBranchRequest {
+            base: branch,
+            head: sha,
+            commit_message,
+        })
+        .header(USER_AGENT, "perf-rust-lang-org-server")
+        .basic_auth("rust-timer", Some(timer_token))
+        .send()
+        .await
+        .context("POST git/commits failed")?;
+    if !response.status().is_success() {
+        anyhow::bail!("{:?} != 201 CREATED", response.status());
+    }
+
+    Ok(response.json::<MergeBranchResponse>().await?.sha)
+}
+
+#[derive(serde::Serialize)]
 struct CreateCommitRequest<'a> {
     message: &'a str,
     tree: &'a str,
@@ -344,6 +424,30 @@ pub async fn create_commit(
         .await
         .context("deserializing failed")?
         .sha)
+}
+
+pub async fn get_issue(
+    client: &reqwest::Client,
+    ctxt: &SiteCtxt,
+    repository_url: &str,
+    number: u64,
+) -> anyhow::Result<Issue> {
+    let timer_token = ctxt
+        .config
+        .keys
+        .github_api_token
+        .clone()
+        .expect("needs github API token");
+    let url = format!("{}/issues/{}", repository_url, number);
+    let response = client
+        .get(&url)
+        .header(USER_AGENT, "perf-rust-lang-org-server")
+        .basic_auth("rust-timer", Some(timer_token))
+        .send()
+        .await
+        .context("cannot get commit")?;
+
+    Ok(response.json().await?)
 }
 
 pub async fn get_commit(

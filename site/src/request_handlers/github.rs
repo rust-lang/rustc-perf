@@ -1,7 +1,7 @@
 use crate::api::{github, ServerResult};
 use crate::github::{
-    branch_for_rollup, enqueue_sha, get_authorized_users, parse_homu_comment, post_comment,
-    pr_and_try_for_rollup,
+    branch_for_rollup, enqueue_sha, get_authorized_users, get_commit, get_issue, merge_branch,
+    parse_homu_comment, post_comment, pr_and_try_for_rollup, update_branch,
 };
 use crate::load::SiteCtxt;
 
@@ -10,6 +10,8 @@ use std::sync::Arc;
 use regex::{Captures, Regex};
 
 lazy_static::lazy_static! {
+    static ref ROLLUP_PR_NUMBER: Regex =
+        Regex::new(r#"^Auto merge of #(\d+)"#).unwrap();
     static ref BODY_TRY_COMMIT: Regex =
         Regex::new(r#"(?:\W|^)@rust-timer\s+build\s+(\w+)(?:\W|$)(?:include=(\S+))?\s*(?:exclude=(\S+))?\s*(?:runs=(\d+))?"#).unwrap();
     static ref BODY_QUEUE: Regex =
@@ -27,7 +29,98 @@ pub async fn handle_github(
     log::info!("handle_github({:?})", request);
     match request {
         github::Request::Issue { issue, comment } => handle_issue(ctxt, issue, comment).await,
+        github::Request::Push(p) => handle_push(ctxt, p).await,
     }
+}
+
+async fn handle_push(ctxt: Arc<SiteCtxt>, push: github::Push) -> ServerResult<github::Response> {
+    let client = reqwest::Client::new();
+    let repository_url = "https://github.com/rust-lang-ci/rust";
+    if push.r#ref != "refs/heads/master"
+        || !is_rollup(&client, &ctxt, repository_url, &push).await?
+    {
+        return Ok(github::Response);
+    }
+
+    let previous_master = &push.before;
+    let rollup_merges = push
+        .commits
+        .iter()
+        .rev()
+        .skip(1) // skip the head commit
+        .take_while(|c| c.message.starts_with("Rollup merge of "))
+        .map(|c| &c.sha);
+
+    for rollup_merge in rollup_merges {
+        // Fetch the rollup merge commit which should have two parents.
+        // The first parent is in the chain of rollup merge commits all the way back to `previous_master`.
+        // The second parent is the head of the PR that was rolled up. We want the second parent.
+        let commit = get_commit(&client, &ctxt, repository_url, &rollup_merge)
+            .await
+            .map_err(|e| format!("Error getting rollup merge commit: {e:?}"))?;
+        assert!(
+            commit.parents.len() == 2,
+            "What we thought was a merge commit was not a merge commit"
+        );
+        let rolled_up_head = &commit.parents[1].sha;
+
+        // Reset perf-tmp to the previous master
+        update_branch(&client, &ctxt, repository_url, "perf-tmp", previous_master)
+            .await
+            .map_err(|e| format!("Error updating perf-tmp with previous master: {e:?}"))?;
+
+        // Merge in the rolled up PR's head commit into the previous master
+        let sha = merge_branch(
+            &client,
+            &ctxt,
+            repository_url,
+            "perf-tmp",
+            rolled_up_head,
+            "merge",
+        )
+        .await
+        .map_err(|e| format!("Error merging commit into perf-tmp: {e:?}"))?;
+
+        // Force the `try-perf` branch to point to what the perf-tmp branch points to
+        update_branch(&client, &ctxt, repository_url, "try-perf", &sha)
+            .await
+            .map_err(|e| format!("Error updating the try-perf branch: {e:?}"))?;
+
+        // Wait to ensure there's enough time for GitHub to checkout these changes before they are overwritten
+        tokio::time::sleep(std::time::Duration::from_secs(15)).await
+    }
+    Ok(github::Response)
+}
+
+async fn is_rollup(
+    client: &reqwest::Client,
+    ctxt: &SiteCtxt,
+    repository_url: &str,
+    push: &github::Push,
+) -> ServerResult<bool> {
+    macro_rules! get {
+        ($x:expr) => {
+            match $x {
+                Some(x) => x,
+                None => return Ok(false),
+            }
+        };
+    }
+    let is_bors = push.sender.login == "bors"
+        && push.committer.username == "bors"
+        && push.head_commit.message.starts_with("Auto merge of");
+
+    if !is_bors {
+        return Ok(false);
+    }
+    let captures = get!(ROLLUP_PR_NUMBER.captures(&push.head_commit.message));
+    let number = get!(get!(captures.get(0)).as_str().parse::<u64>().ok());
+
+    let issue = get_issue(client, ctxt, repository_url, number)
+        .await
+        .map_err(|e| format!("Error fetching PR #{number} {e:?}"))?;
+
+    Ok(issue.labels.iter().any(|l| l.name == "rollup"))
 }
 
 async fn handle_issue(
@@ -142,7 +235,6 @@ fn extract_update_pr_for(body: &str) -> impl Iterator<Item = &str> + '_ {
 
 fn extract_rollup_merge(capture: Captures) -> Option<&str> {
     capture.get(1).map(|c| {
-        println!("{}", c.as_str());
         c.as_str()
             .trim_start_matches("https://github.com/rust-lang/rust/commit/")
     })
