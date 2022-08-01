@@ -206,7 +206,7 @@ jobs:
             sudo apt-get update
             sudo apt-get install -y wget python3-snappy sqlite3
 
-            wget -q 'http://perf-data.rust-lang.org/export.db.sz'
+            timeout 60s wget -q 'http://perf-data.rust-lang.org/export.db.sz'
             python3 -m snappy -d export.db.sz > before.db
 
             ./target/debug/sqlite-to-postgres before.db 'postgresql://postgres:postgres@localhost:5432/postgres'
