@@ -6,7 +6,6 @@ use crate::comparison::{
     ArtifactComparisonSummary, Direction, Metric,
 };
 use crate::load::{SiteCtxt, TryCommit};
-use client::*;
 
 use anyhow::Context as _;
 use database::{ArtifactId, QueuedCommit};
@@ -36,40 +35,38 @@ pub async fn get_authorized_users() -> Result<Vec<usize>, String> {
 
 // Returns the PR number
 pub async fn pr_and_try_for_rollup(
-    client: &reqwest::Client,
     ctxt: Arc<SiteCtxt>,
     repository_url: &str,
     rollup_merge_sha: &str,
     origin_url: &str,
 ) -> anyhow::Result<u32> {
+    let client = client::Client::from_ctxt(&ctxt, repository_url.to_owned());
     log::trace!(
         "creating PR for {:?} {:?}",
         repository_url,
         rollup_merge_sha
     );
-    let branch = branch_for_rollup(client, &ctxt, repository_url, rollup_merge_sha).await?;
+    let branch = branch_for_rollup(&ctxt, repository_url, rollup_merge_sha).await?;
 
-    let pr = create_pr(
-        client,
-        &ctxt,
-        repository_url,
-        &format!(
-            "[DO NOT MERGE] perf-test for #{}",
-            branch.rolled_up_pr_number
-        ),
-        &format!("rust-timer:{}", branch.name),
-        "master",
-        &format!(
-            "This is an automatically generated pull request (from [here]({})) to \
+    let pr = client
+        .create_pr(
+            &format!(
+                "[DO NOT MERGE] perf-test for #{}",
+                branch.rolled_up_pr_number
+            ),
+            &format!("rust-timer:{}", branch.name),
+            "master",
+            &format!(
+                "This is an automatically generated pull request (from [here]({})) to \
             run perf tests for #{} which merged in a rollup.
 
 r? @ghost",
-            origin_url, branch.rolled_up_pr_number
-        ),
-        true,
-    )
-    .await
-    .context("Created PR")?;
+                origin_url, branch.rolled_up_pr_number
+            ),
+            true,
+        )
+        .await
+        .context("Created PR")?;
 
     let pr_number = pr.number;
     let rollup_merge_sha = rollup_merge_sha.to_owned();
@@ -84,11 +81,11 @@ r? @ghost",
         // Eventually we'll want to handle this automatically, but that's a ways
         // off: we'd need to store the state in the database and handle the try
         // build starting and generally that's a lot of work for not too much gain.
-        post_comment(
-            &ctxt.config,
-            pr.number,
-            &format!(
-                "@bors try @rust-timer queue
+        client
+            .post_comment(
+                pr.number,
+                &format!(
+                    "@bors try @rust-timer queue
 
 The try commit's (master) parent should be {master}. If it isn't, \
 then please:
@@ -99,11 +96,11 @@ then please:
 
 You do not need to reinvoke the queue command as long as the perf \
 build hasn't yet started.",
-                master = branch.master_base_sha,
-                merge = rollup_merge_sha,
-            ),
-        )
-        .await;
+                    master = branch.master_base_sha,
+                    merge = rollup_merge_sha,
+                ),
+            )
+            .await;
     });
 
     Ok(pr_number)
@@ -116,12 +113,15 @@ pub struct RollupBranch {
 }
 
 pub async fn branch_for_rollup(
-    client: &reqwest::Client,
     ctxt: &SiteCtxt,
     repository_url: &str,
     rollup_merge_sha: &str,
 ) -> anyhow::Result<RollupBranch> {
-    let rollup_merge = get_commit(&client, &ctxt, repository_url, rollup_merge_sha)
+    let client = client::Client::from_ctxt(ctxt, repository_url.to_owned());
+    let timer = "https://api.github.com/repos/rust-timer/rust";
+    let timer_client = client::Client::from_ctxt(ctxt, timer.to_owned());
+    let rollup_merge = client
+        .get_commit(rollup_merge_sha)
         .await
         .context("got rollup merge")?;
 
@@ -132,40 +132,38 @@ pub async fn branch_for_rollup(
             break;
         }
         assert_eq!(current.parents.len(), 2);
-        current = get_commit(&client, &ctxt, repository_url, &current.parents[0].sha)
+        current = client
+            .get_commit(&current.parents[0].sha)
             .await
             .context("success master get")?;
     }
     let old_master_commit = current;
 
-    let current_master_commit = get_commit(&client, &ctxt, repository_url, "master")
+    let current_master_commit = client
+        .get_commit("master")
         .await
         .context("success master get")?;
 
-    let revert_sha = create_commit(
-        &client,
-        &ctxt,
-        "https://api.github.com/repos/rust-timer/rust",
-        &format!("Revert to {}", old_master_commit.sha),
-        &old_master_commit.commit.tree.sha,
-        &[&current_master_commit.sha],
-    )
-    .await
-    .context("create revert")?;
+    let revert_sha = timer_client
+        .create_commit(
+            &format!("Revert to {}", old_master_commit.sha),
+            &old_master_commit.commit.tree.sha,
+            &[&current_master_commit.sha],
+        )
+        .await
+        .context("create revert")?;
 
-    let merge_sha = create_commit(
-        &client,
-        &ctxt,
-        "https://api.github.com/repos/rust-timer/rust",
-        &format!(
-            "rust-timer simulated merge of {}\n\nOriginal message:\n{}",
-            rollup_merge.sha, rollup_merge.commit.message
-        ),
-        &rollup_merge.commit.tree.sha,
-        &[&revert_sha],
-    )
-    .await
-    .context("create merge commit")?;
+    let merge_sha = timer_client
+        .create_commit(
+            &format!(
+                "rust-timer simulated merge of {}\n\nOriginal message:\n{}",
+                rollup_merge.sha, rollup_merge.commit.message
+            ),
+            &rollup_merge.commit.tree.sha,
+            &[&revert_sha],
+        )
+        .await
+        .context("create merge commit")?;
 
     let rolled_up_pr_number = if let Some(stripped) = rollup_merge
         .commit
@@ -186,15 +184,10 @@ pub async fn branch_for_rollup(
     };
 
     let branch = format!("try-for-{}", rolled_up_pr_number);
-    create_ref(
-        &client,
-        &ctxt,
-        "https://api.github.com/repos/rust-timer/rust",
-        &format!("refs/heads/{}", branch),
-        &merge_sha,
-    )
-    .await
-    .context("created branch")?;
+    timer_client
+        .create_ref(&format!("refs/heads/{}", branch), &merge_sha)
+        .await
+        .context("created branch")?;
 
     Ok(RollupBranch {
         rolled_up_pr_number,
@@ -204,8 +197,9 @@ pub async fn branch_for_rollup(
 }
 
 pub async fn enqueue_sha(issue: Issue, ctxt: &SiteCtxt, commit: String) -> Result<(), String> {
-    let client = reqwest::Client::new();
-    let commit_response = get_commit(&client, ctxt, &issue.repository_url, &commit)
+    let client = client::Client::from_ctxt(ctxt, issue.repository_url.clone());
+    let commit_response = client
+        .get_commit(&commit)
         .await
         .map_err(|e| e.to_string())?;
     if commit_response.parents.len() != 2 {
@@ -237,7 +231,7 @@ pub async fn enqueue_sha(issue: Issue, ctxt: &SiteCtxt, commit: String) -> Resul
             commit_response.parents[0].sha,
             try_commit.comparison_url(),
         );
-        post_comment(&ctxt.config, issue.number, msg).await;
+        client.post_comment(issue.number, msg).await;
     }
     Ok(())
 }
@@ -331,13 +325,14 @@ pub async fn post_finished(ctxt: &SiteCtxt) {
 ///
 /// `is_master_commit` is used to differentiate messages for try runs and post-merge runs.
 async fn post_comparison_comment(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: bool) {
+    let client = client::Client::from_ctxt(ctxt, "https://github.com/rust-lang/rust".to_owned());
     let pr = commit.pr;
     let body = match summarize_run(ctxt, commit, is_master_commit).await {
         Ok(message) => message,
         Err(error) => error,
     };
 
-    post_comment(&ctxt.config, pr, body).await;
+    client.post_comment(pr, body).await;
 }
 
 fn make_comparison_url(commit: &QueuedCommit, stat: Metric) -> String {

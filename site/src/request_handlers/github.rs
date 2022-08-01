@@ -36,12 +36,14 @@ pub async fn handle_github(
 }
 
 async fn handle_push(ctxt: Arc<SiteCtxt>, push: github::Push) -> ServerResult<github::Response> {
-    let client = reqwest::Client::new();
-    let repository_url = "https://github.com/rust-lang-ci/rust";
+    let ci_client =
+        client::Client::from_ctxt(&ctxt, "https://github.com/rust-lang-ci/rust".to_owned());
+    let main_repo_client =
+        client::Client::from_ctxt(&ctxt, "https://github.com/rust-lang/rust".to_owned());
     if push.r#ref != "refs/heads/master" {
         return Ok(github::Response);
     }
-    let pr = rollup_pr(&client, &ctxt, repository_url, &push).await?;
+    let pr = rollup_pr(&ci_client, &push).await?;
     let pr = match pr {
         Some(pr) => pr,
         None => return Ok(github::Response),
@@ -70,14 +72,12 @@ async fn handle_push(ctxt: Arc<SiteCtxt>, push: github::Push) -> ServerResult<gi
         // Fetch the rollup merge commit which should have two parents.
         // The first parent is in the chain of rollup merge commits all the way back to `previous_master`.
         // The second parent is the head of the PR that was rolled up. We want the second parent.
-        let commit = client::get_commit(&client, &ctxt, repository_url, &rollup_merge.sha)
-            .await
-            .map_err(|e| {
-                format!(
-                    "Error getting rollup merge commit '{}': {e:?}",
-                    rollup_merge.sha
-                )
-            })?;
+        let commit = ci_client.get_commit(&rollup_merge.sha).await.map_err(|e| {
+            format!(
+                "Error getting rollup merge commit '{}': {e:?}",
+                rollup_merge.sha
+            )
+        })?;
         assert!(
             commit.parents.len() == 2,
             "What we thought was a merge commit was not a merge commit. sha: {}",
@@ -86,24 +86,20 @@ async fn handle_push(ctxt: Arc<SiteCtxt>, push: github::Push) -> ServerResult<gi
         let rolled_up_head = &commit.parents[1].sha;
 
         // Reset perf-tmp to the previous master
-        client::update_branch(&client, &ctxt, repository_url, "perf-tmp", previous_master)
+        ci_client
+            .update_branch("perf-tmp", previous_master)
             .await
             .map_err(|e| format!("Error updating perf-tmp with previous master: {e:?}"))?;
 
         // Merge in the rolled up PR's head commit into the previous master
-        let sha = client::merge_branch(
-            &client,
-            &ctxt,
-            repository_url,
-            "perf-tmp",
-            rolled_up_head,
-            "merge",
-        )
-        .await
-        .map_err(|e| format!("Error merging commit into perf-tmp: {e:?}"))?;
+        let sha = ci_client
+            .merge_branch("perf-tmp", rolled_up_head, "merge")
+            .await
+            .map_err(|e| format!("Error merging commit into perf-tmp: {e:?}"))?;
 
         // Force the `try-perf` branch to point to what the perf-tmp branch points to
-        client::update_branch(&client, &ctxt, repository_url, "try-perf", &sha)
+        ci_client
+            .update_branch("try-perf", &sha)
             .await
             .map_err(|e| format!("Error updating the try-perf branch: {e:?}"))?;
 
@@ -122,17 +118,12 @@ async fn handle_push(ctxt: Arc<SiteCtxt>, push: github::Push) -> ServerResult<gi
         });
     let msg =
         format!("Try perf builds for each individual rolled up PR have been enqueued:\n{mapping}");
-    client::post_comment(&ctxt.config, pr, msg).await;
+    main_repo_client.post_comment(pr, msg).await;
     Ok(github::Response)
 }
 
 // Gets the pr number for the associated rollup PR. Returns None if this is not a rollup PR
-async fn rollup_pr(
-    client: &reqwest::Client,
-    ctxt: &SiteCtxt,
-    repository_url: &str,
-    push: &github::Push,
-) -> ServerResult<Option<u32>> {
+async fn rollup_pr(client: &client::Client, push: &github::Push) -> ServerResult<Option<u32>> {
     macro_rules! get {
         ($x:expr) => {
             match $x {
@@ -150,7 +141,8 @@ async fn rollup_pr(
     let captures = get!(ROLLUP_PR_NUMBER.captures(&push.head_commit.message));
     let number = get!(get!(captures.get(0)).as_str().parse::<u64>().ok());
 
-    let issue = client::get_issue(client, ctxt, repository_url, number)
+    let issue = client
+        .get_issue(number)
         .await
         .map_err(|e| format!("Error fetching PR #{number} {e:?}"))?;
 
@@ -185,15 +177,17 @@ async fn handle_rust_timer(
     comment: github::Comment,
     issue: github::Issue,
 ) -> ServerResult<github::Response> {
+    let main_repo_client =
+        client::Client::from_ctxt(&ctxt, "https://github.com/rust-lang/rust".to_owned());
     if comment.author_association != github::Association::Owner
         && !get_authorized_users().await?.contains(&comment.user.id)
     {
-        client::post_comment(
-            &ctxt.config,
-            issue.number,
-            "Insufficient permissions to issue commands to rust-timer.",
-        )
-        .await;
+        main_repo_client
+            .post_comment(
+                issue.number,
+                "Insufficient permissions to issue commands to rust-timer.",
+            )
+            .await;
         return Ok(github::Response);
     }
 
@@ -205,14 +199,14 @@ async fn handle_rust_timer(
             let conn = ctxt.conn().await;
             conn.queue_pr(issue.number, include, exclude, runs).await;
         }
-        client::post_comment(
-            &ctxt.config,
-            issue.number,
-            "Awaiting bors try build completion.
+        main_repo_client
+            .post_comment(
+                issue.number,
+                "Awaiting bors try build completion.
 
 @rustbot label: +S-waiting-on-perf",
-        )
-        .await;
+            )
+            .await;
         return Ok(github::Response);
     }
     if let Some(captures) = BODY_TRY_COMMIT.captures(&comment.body) {
@@ -230,9 +224,7 @@ async fn handle_rust_timer(
         }
     }
     for rollup_merge in extract_make_pr_for(&comment.body) {
-        let client = reqwest::Client::new();
         pr_and_try_for_rollup(
-            &client,
             ctxt.clone(),
             &issue.repository_url,
             &rollup_merge,
@@ -245,16 +237,15 @@ async fn handle_rust_timer(
         // This just creates or updates the branch for this merge commit.
         // Intended for resolving the race condition of master merging in
         // between us updating the commit and merging things.
-        let client = reqwest::Client::new();
-        let branch = branch_for_rollup(&client, &ctxt, &issue.repository_url, rollup_merge)
+        let branch = branch_for_rollup(&ctxt, &issue.repository_url, rollup_merge)
             .await
             .map_err(|e| e.to_string())?;
-        client::post_comment(
-            &ctxt.config,
-            issue.number,
-            &format!("Master base SHA: {}", branch.master_base_sha),
-        )
-        .await;
+        main_repo_client
+            .post_comment(
+                issue.number,
+                &format!("Master base SHA: {}", branch.master_base_sha),
+            )
+            .await;
     }
     Ok(github::Response)
 }
