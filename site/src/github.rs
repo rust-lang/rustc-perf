@@ -1,7 +1,7 @@
 pub mod client;
 pub mod comparison_summary;
 
-use crate::api::github::{Commit, Issue};
+use crate::api::github::Commit;
 use crate::load::{SiteCtxt, TryCommit};
 
 use serde::Deserialize;
@@ -101,9 +101,14 @@ pub async fn rollup_pr_number(
         .then(|| issue.number))
 }
 
-pub async fn enqueue_sha(issue: Issue, ctxt: &SiteCtxt, commit: String) -> Result<(), String> {
-    let client = client::Client::from_ctxt(ctxt, issue.repository_url.clone());
-    let commit_response = client
+pub async fn enqueue_sha(
+    ctxt: &SiteCtxt,
+    main_client: &client::Client,
+    ci_client: &client::Client,
+    pr_number: u32,
+    commit: String,
+) -> Result<(), String> {
+    let commit_response = ci_client
         .get_commit(&commit)
         .await
         .map_err(|e| e.to_string())?;
@@ -118,25 +123,20 @@ pub async fn enqueue_sha(issue: Issue, ctxt: &SiteCtxt, commit: String) -> Resul
     let try_commit = TryCommit {
         sha: commit_response.sha.clone(),
         parent_sha: commit_response.parents[0].sha.clone(),
-        issue: issue.clone(),
     };
     let queued = {
         let conn = ctxt.conn().await;
-        conn.pr_attach_commit(
-            issue.number,
-            &commit_response.sha,
-            &commit_response.parents[0].sha,
-        )
-        .await
+        conn.pr_attach_commit(pr_number, &try_commit.sha, &try_commit.parent_sha)
+            .await
     };
     if queued {
         let msg = format!(
             "Queued {} with parent {}, future [comparison URL]({}).",
-            commit_response.sha,
-            commit_response.parents[0].sha,
+            try_commit.sha,
+            try_commit.parent_sha,
             try_commit.comparison_url(),
         );
-        client.post_comment(issue.number, msg).await;
+        main_client.post_comment(pr_number, msg).await;
     }
     Ok(())
 }

@@ -10,7 +10,6 @@ use chrono::{Duration, Utc};
 use log::error;
 use serde::{Deserialize, Serialize};
 
-use crate::api::github;
 use crate::db;
 use collector::{category::Category, Bound, MasterCommit};
 use database::Date;
@@ -60,11 +59,10 @@ impl MissingReason {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TryCommit {
     pub sha: String,
     pub parent_sha: String,
-    pub issue: github::Issue,
 }
 
 impl TryCommit {
