@@ -7,34 +7,18 @@ use crate::comparison::{
 };
 use crate::load::{SiteCtxt, TryCommit};
 
-use anyhow::Context as _;
 use database::{ArtifactId, QueuedCommit};
 use serde::Deserialize;
 
 use std::collections::HashSet;
-
-use std::{fmt::Write, sync::Arc, time::Duration};
+use std::fmt::Write;
 
 type BoxedError = Box<dyn std::error::Error + Send + Sync>;
 
-pub async fn get_authorized_users() -> Result<Vec<usize>, String> {
-    let url = format!("{}/permissions/perf.json", ::rust_team_data::v1::BASE_URL);
-    let client = reqwest::Client::new();
-    client
-        .get(&url)
-        .send()
-        .await
-        .map_err(|err| format!("failed to fetch authorized users: {}", err))?
-        .error_for_status()
-        .map_err(|err| format!("failed to fetch authorized users: {}", err))?
-        .json::<rust_team_data::v1::Permission>()
-        .await
-        .map_err(|err| format!("failed to fetch authorized users: {}", err))
-        .map(|perms| perms.github_ids)
-}
-
 /// Enqueues try builds on the try-perf branch for every rollup merge in `rollup_merges`.
 /// Returns a mapping between the rollup merge commit and the try build sha.
+///
+/// `rollup_merges` must only include actual rollup merge commits.
 pub async fn enqueue_unrolled_try_builds<'a>(
     client: client::Client,
     rollup_merges: impl Iterator<Item = &'a Commit>,
@@ -90,7 +74,10 @@ lazy_static::lazy_static! {
 }
 
 // Gets the pr number for the associated rollup PR message. Returns None if this is not a rollup PR
-pub async fn rollup_pr(client: &client::Client, message: &str) -> Result<Option<u32>, String> {
+pub async fn rollup_pr_number(
+    client: &client::Client,
+    message: &str,
+) -> Result<Option<u32>, String> {
     if !message.starts_with("Auto merge of") {
         return Ok(None);
     }
@@ -117,169 +104,6 @@ pub async fn rollup_pr(client: &client::Client, message: &str) -> Result<Option<
         .iter()
         .any(|l| l.name == "rollup")
         .then(|| issue.number))
-}
-
-// Returns the PR number
-pub async fn pr_and_try_for_rollup(
-    ctxt: Arc<SiteCtxt>,
-    repository_url: &str,
-    rollup_merge_sha: &str,
-    origin_url: &str,
-) -> anyhow::Result<u32> {
-    let client = client::Client::from_ctxt(&ctxt, repository_url.to_owned());
-    log::trace!(
-        "creating PR for {:?} {:?}",
-        repository_url,
-        rollup_merge_sha
-    );
-    let branch = branch_for_rollup(&ctxt, repository_url, rollup_merge_sha).await?;
-
-    let pr = client
-        .create_pr(
-            &format!(
-                "[DO NOT MERGE] perf-test for #{}",
-                branch.rolled_up_pr_number
-            ),
-            &format!("rust-timer:{}", branch.name),
-            "master",
-            &format!(
-                "This is an automatically generated pull request (from [here]({})) to \
-            run perf tests for #{} which merged in a rollup.
-
-r? @ghost",
-                origin_url, branch.rolled_up_pr_number
-            ),
-            true,
-        )
-        .await
-        .context("Created PR")?;
-
-    let pr_number = pr.number;
-    let rollup_merge_sha = rollup_merge_sha.to_owned();
-    tokio::task::spawn(async move {
-        // Give github time to create the merge commit reference
-        tokio::time::sleep(Duration::from_secs(30)).await;
-        // This provides the master SHA so that we can check that we only queue
-        // an appropriate try build. If there's ever a race condition, i.e.,
-        // master was pushed while this command was running, the user will have to
-        // take manual action to detect it.
-        //
-        // Eventually we'll want to handle this automatically, but that's a ways
-        // off: we'd need to store the state in the database and handle the try
-        // build starting and generally that's a lot of work for not too much gain.
-        client
-            .post_comment(
-                pr.number,
-                &format!(
-                    "@bors try @rust-timer queue
-
-The try commit's (master) parent should be {master}. If it isn't, \
-then please:
-
- * Stop this try build (`try-`).
- * Run `@rust-timer update-pr-for {merge}`.
- * Rerun `bors try`.
-
-You do not need to reinvoke the queue command as long as the perf \
-build hasn't yet started.",
-                    master = branch.master_base_sha,
-                    merge = rollup_merge_sha,
-                ),
-            )
-            .await;
-    });
-
-    Ok(pr_number)
-}
-
-pub struct RollupBranch {
-    pub master_base_sha: String,
-    pub rolled_up_pr_number: u32,
-    pub name: String,
-}
-
-pub async fn branch_for_rollup(
-    ctxt: &SiteCtxt,
-    repository_url: &str,
-    rollup_merge_sha: &str,
-) -> anyhow::Result<RollupBranch> {
-    let client = client::Client::from_ctxt(ctxt, repository_url.to_owned());
-    let timer = "https://api.github.com/repos/rust-timer/rust";
-    let timer_client = client::Client::from_ctxt(ctxt, timer.to_owned());
-    let rollup_merge = client
-        .get_commit(rollup_merge_sha)
-        .await
-        .context("got rollup merge")?;
-
-    let mut current = rollup_merge.clone();
-    loop {
-        log::trace!("searching for auto branch, at {:?}", current.sha);
-        if current.commit.message.starts_with("Auto merge") {
-            break;
-        }
-        assert_eq!(current.parents.len(), 2);
-        current = client
-            .get_commit(&current.parents[0].sha)
-            .await
-            .context("success master get")?;
-    }
-    let old_master_commit = current;
-
-    let current_master_commit = client
-        .get_commit("master")
-        .await
-        .context("success master get")?;
-
-    let revert_sha = timer_client
-        .create_commit(
-            &format!("Revert to {}", old_master_commit.sha),
-            &old_master_commit.commit.tree.sha,
-            &[&current_master_commit.sha],
-        )
-        .await
-        .context("create revert")?;
-
-    let merge_sha = timer_client
-        .create_commit(
-            &format!(
-                "rust-timer simulated merge of {}\n\nOriginal message:\n{}",
-                rollup_merge.sha, rollup_merge.commit.message
-            ),
-            &rollup_merge.commit.tree.sha,
-            &[&revert_sha],
-        )
-        .await
-        .context("create merge commit")?;
-
-    let rolled_up_pr_number = if let Some(stripped) = rollup_merge
-        .commit
-        .message
-        .strip_prefix("Rollup merge of #")
-    {
-        stripped
-            .split_whitespace()
-            .next()
-            .unwrap()
-            .parse::<u32>()
-            .unwrap()
-    } else {
-        anyhow::bail!(
-            "not a rollup merge commit: {:?}",
-            rollup_merge.commit.message
-        )
-    };
-
-    let branch = format!("try-for-{}", rolled_up_pr_number);
-    timer_client
-        .create_ref(&format!("refs/heads/{}", branch), &merge_sha)
-        .await
-        .context("created branch")?;
-
-    Ok(RollupBranch {
-        rolled_up_pr_number,
-        master_base_sha: current_master_commit.sha,
-        name: branch,
-    })
 }
 
 pub async fn enqueue_sha(issue: Issue, ctxt: &SiteCtxt, commit: String) -> Result<(), String> {

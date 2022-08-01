@@ -187,7 +187,7 @@ impl Client {
             .map_err(|e| anyhow::anyhow!("cannot deserialize commit: {:?}", e))
     }
 
-    pub async fn post_comment<B>(&self, pr: u32, body: B)
+    pub async fn post_comment<B>(&self, pr_number: u32, body: B)
     where
         B: Into<String>,
     {
@@ -198,7 +198,10 @@ impl Client {
         let body = body.into();
         let req = self
             .inner
-            .post(&format!("{}/issues/{}/comments", self.repository_url, pr))
+            .post(&format!(
+                "{}/issues/{}/comments",
+                self.repository_url, pr_number
+            ))
             .json(&PostComment {
                 body: body.to_owned(),
             });
