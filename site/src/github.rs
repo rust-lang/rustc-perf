@@ -84,6 +84,44 @@ pub async fn enqueue_unrolled_try_builds<'a>(
     Ok(mapping)
 }
 
+lazy_static::lazy_static! {
+    static ref ROLLUP_PR_NUMBER: regex::Regex =
+        regex::Regex::new(r#"^Auto merge of #(\d+)"#).unwrap();
+}
+
+// Gets the pr number for the associated rollup PR message. Returns None if this is not a rollup PR
+pub async fn rollup_pr(client: &client::Client, message: &str) -> Result<Option<u32>, String> {
+    if !message.starts_with("Auto merge of") {
+        return Ok(None);
+    }
+
+    let number = ROLLUP_PR_NUMBER
+        .captures(&message)
+        .and_then(|c| c.get(1))
+        .map(|m| {
+            println!("{}", m.as_str());
+            m.as_str().parse::<u64>()
+        })
+        .transpose()
+        .map_err(|e| format!("Error parsing PR number from '{message}': {e:?}"))?;
+
+    let number = match number {
+        Some(n) => n,
+        None => return Ok(None),
+    };
+
+    let issue = client
+        .get_issue(number)
+        .await
+        .map_err(|e| format!("Error fetching PR #{number} {e:?}"))?;
+
+    Ok(issue
+        .labels
+        .iter()
+        .any(|l| l.name == "rollup")
+        .then(|| issue.number))
+}
+
 // Returns the PR number
 pub async fn pr_and_try_for_rollup(
     ctxt: Arc<SiteCtxt>,

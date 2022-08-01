@@ -1,7 +1,7 @@
 use crate::api::{github, ServerResult};
 use crate::github::{
     branch_for_rollup, client, enqueue_sha, enqueue_unrolled_try_builds, get_authorized_users,
-    parse_homu_comment, pr_and_try_for_rollup,
+    parse_homu_comment, pr_and_try_for_rollup, rollup_pr,
 };
 use crate::load::SiteCtxt;
 
@@ -44,10 +44,10 @@ async fn handle_push(ctxt: Arc<SiteCtxt>, push: github::Push) -> ServerResult<gi
         &ctxt,
         "https://api.github.com/repos/rust-lang/rust".to_owned(),
     );
-    if push.r#ref != "refs/heads/master" {
+    if push.r#ref != "refs/heads/master" || push.sender.login != "bors" {
         return Ok(github::Response);
     }
-    let rollup_pr = rollup_pr(&main_repo_client, &push).await?;
+    let rollup_pr = rollup_pr(&main_repo_client, &push.head_commit.message).await?;
     let rollup_pr = match rollup_pr {
         Some(pr) => pr,
         None => return Ok(github::Response),
@@ -68,7 +68,7 @@ async fn handle_push(ctxt: Arc<SiteCtxt>, push: github::Push) -> ServerResult<gi
         .map(|(rollup_merge, sha)| {
             ROLLUPED_PR_NUMBER
                 .captures(&rollup_merge.message)
-                .and_then(|c| c.get(0))
+                .and_then(|c| c.get(1))
                 .map(|m| (m.as_str(), sha))
                 .ok_or_else(|| {
                     format!(
@@ -88,37 +88,6 @@ async fn handle_push(ctxt: Arc<SiteCtxt>, push: github::Push) -> ServerResult<gi
         format!("Try perf builds for each individual rolled up PR have been enqueued:\n{mapping}");
     main_repo_client.post_comment(rollup_pr, msg).await;
     Ok(github::Response)
-}
-
-// Gets the pr number for the associated rollup PR. Returns None if this is not a rollup PR
-async fn rollup_pr(client: &client::Client, push: &github::Push) -> ServerResult<Option<u32>> {
-    macro_rules! get {
-        ($x:expr) => {
-            match $x {
-                Some(x) => x,
-                None => return Ok(None),
-            }
-        };
-    }
-    let is_bors =
-        push.sender.login == "bors" && push.head_commit.message.starts_with("Auto merge of");
-
-    if !is_bors {
-        return Ok(None);
-    }
-    let captures = get!(ROLLUP_PR_NUMBER.captures(&push.head_commit.message));
-    let number = get!(get!(captures.get(0)).as_str().parse::<u64>().ok());
-
-    let issue = client
-        .get_issue(number)
-        .await
-        .map_err(|e| format!("Error fetching PR #{number} {e:?}"))?;
-
-    Ok(issue
-        .labels
-        .iter()
-        .any(|l| l.name == "rollup")
-        .then(|| issue.number))
 }
 
 async fn handle_issue(
