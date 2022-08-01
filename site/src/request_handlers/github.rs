@@ -120,15 +120,23 @@ async fn handle_issue(
     issue: github::Issue,
     comment: github::Comment,
 ) -> ServerResult<github::Response> {
+    let main_client = client::Client::from_ctxt(
+        &ctxt,
+        "https://api.github.com/repos/rust-lang/rust".to_owned(),
+    );
+    let ci_client = client::Client::from_ctxt(
+        &ctxt,
+        "https://api.github.com/repos/rust-lang-ci/rust".to_owned(),
+    );
     if comment.body.contains(" homu: ") {
         if let Some(sha) = parse_homu_comment(&comment.body).await {
-            enqueue_sha(issue, &ctxt, sha).await?;
+            enqueue_sha(&ctxt, &main_client, &ci_client, issue.number, sha).await?;
             return Ok(github::Response);
         }
     }
 
     if comment.body.contains("@rust-timer ") {
-        return handle_rust_timer(ctxt, comment, issue).await;
+        return handle_rust_timer(ctxt, &main_client, &ci_client, comment, issue).await;
     }
 
     Ok(github::Response)
@@ -136,17 +144,15 @@ async fn handle_issue(
 
 async fn handle_rust_timer(
     ctxt: Arc<SiteCtxt>,
+    main_client: &client::Client,
+    ci_client: &client::Client,
     comment: github::Comment,
     issue: github::Issue,
 ) -> ServerResult<github::Response> {
-    let main_repo_client = client::Client::from_ctxt(
-        &ctxt,
-        "https://api.github.com/repos/rust-lang/rust".to_owned(),
-    );
     if comment.author_association != github::Association::Owner
         && !get_authorized_users().await?.contains(&comment.user.id)
     {
-        main_repo_client
+        main_client
             .post_comment(
                 issue.number,
                 "Insufficient permissions to issue commands to rust-timer.",
@@ -163,7 +169,7 @@ async fn handle_rust_timer(
             let conn = ctxt.conn().await;
             conn.queue_pr(issue.number, include, exclude, runs).await;
         }
-        main_repo_client
+        main_client
             .post_comment(
                 issue.number,
                 "Awaiting bors try build completion.
@@ -183,7 +189,14 @@ async fn handle_rust_timer(
                 let conn = ctxt.conn().await;
                 conn.queue_pr(issue.number, include, exclude, runs).await;
             }
-            enqueue_sha(issue, &ctxt, commit.to_owned()).await?;
+            enqueue_sha(
+                &ctxt,
+                &main_client,
+                &ci_client,
+                issue.number,
+                commit.to_owned(),
+            )
+            .await?;
             return Ok(github::Response);
         }
     }
