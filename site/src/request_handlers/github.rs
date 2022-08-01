@@ -1,7 +1,7 @@
 use crate::api::{github, ServerResult};
 use crate::github::{
-    branch_for_rollup, client, enqueue_sha, get_authorized_users, parse_homu_comment,
-    pr_and_try_for_rollup,
+    branch_for_rollup, client, enqueue_sha, enqueue_unrolled_try_builds, get_authorized_users,
+    parse_homu_comment, pr_and_try_for_rollup,
 };
 use crate::load::SiteCtxt;
 
@@ -43,8 +43,8 @@ async fn handle_push(ctxt: Arc<SiteCtxt>, push: github::Push) -> ServerResult<gi
     if push.r#ref != "refs/heads/master" {
         return Ok(github::Response);
     }
-    let pr = rollup_pr(&ci_client, &push).await?;
-    let pr = match pr {
+    let rollup_pr = rollup_pr(&main_repo_client, &push).await?;
+    let rollup_pr = match rollup_pr {
         Some(pr) => pr,
         None => return Ok(github::Response),
     };
@@ -57,68 +57,32 @@ async fn handle_push(ctxt: Arc<SiteCtxt>, push: github::Push) -> ServerResult<gi
         .skip(1) // skip the head commit
         .take_while(|c| c.message.starts_with("Rollup merge of "));
 
-    let mut prs = Vec::new();
-    for rollup_merge in rollup_merges {
-        let pr_num = ROLLUPED_PR_NUMBER
-            .captures(&rollup_merge.message)
-            .and_then(|c| c.get(0))
-            .map(|m| m.as_str())
-            .ok_or_else(|| {
-                format!(
-                    "Could not get PR number from message: '{}'",
-                    rollup_merge.message
-                )
-            })?;
-        // Fetch the rollup merge commit which should have two parents.
-        // The first parent is in the chain of rollup merge commits all the way back to `previous_master`.
-        // The second parent is the head of the PR that was rolled up. We want the second parent.
-        let commit = ci_client.get_commit(&rollup_merge.sha).await.map_err(|e| {
-            format!(
-                "Error getting rollup merge commit '{}': {e:?}",
-                rollup_merge.sha
-            )
-        })?;
-        assert!(
-            commit.parents.len() == 2,
-            "What we thought was a merge commit was not a merge commit. sha: {}",
-            rollup_merge.sha
-        );
-        let rolled_up_head = &commit.parents[1].sha;
+    let mapping = enqueue_unrolled_try_builds(ci_client, rollup_merges, previous_master).await?;
 
-        // Reset perf-tmp to the previous master
-        ci_client
-            .update_branch("perf-tmp", previous_master)
-            .await
-            .map_err(|e| format!("Error updating perf-tmp with previous master: {e:?}"))?;
-
-        // Merge in the rolled up PR's head commit into the previous master
-        let sha = ci_client
-            .merge_branch("perf-tmp", rolled_up_head, "merge")
-            .await
-            .map_err(|e| format!("Error merging commit into perf-tmp: {e:?}"))?;
-
-        // Force the `try-perf` branch to point to what the perf-tmp branch points to
-        ci_client
-            .update_branch("try-perf", &sha)
-            .await
-            .map_err(|e| format!("Error updating the try-perf branch: {e:?}"))?;
-
-        prs.push((pr_num, sha));
-        // Wait to ensure there's enough time for GitHub to checkout these changes before they are overwritten
-        tokio::time::sleep(std::time::Duration::from_secs(15)).await
-    }
-
-    // Post comment to the rollup PR with the mapping between individual PRs and the new try commits
-    let mapping = prs
+    let mapping = mapping
         .into_iter()
-        .fold(String::new(), |mut string, (pr, commit)| {
+        .map(|(rollup_merge, sha)| {
+            ROLLUPED_PR_NUMBER
+                .captures(&rollup_merge.message)
+                .and_then(|c| c.get(0))
+                .map(|m| (m.as_str(), sha))
+                .ok_or_else(|| {
+                    format!(
+                        "Could not get PR number from message: '{}'",
+                        rollup_merge.message
+                    )
+                })
+        })
+        .fold(ServerResult::Ok(String::new()), |string, n| {
             use std::fmt::Write;
+            let (pr, commit) = n?;
+            let mut string = string?;
             write!(&mut string, "#{pr}: {commit}\n").unwrap();
-            string
-        });
+            Ok(string)
+        })?;
     let msg =
         format!("Try perf builds for each individual rolled up PR have been enqueued:\n{mapping}");
-    main_repo_client.post_comment(pr, msg).await;
+    main_repo_client.post_comment(rollup_pr, msg).await;
     Ok(github::Response)
 }
 

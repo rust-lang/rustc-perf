@@ -1,6 +1,6 @@
 pub mod client;
 
-use crate::api::github::Issue;
+use crate::api::github::{Commit, Issue};
 use crate::comparison::{
     deserves_attention_icount, write_summary_table, write_summary_table_footer, ArtifactComparison,
     ArtifactComparisonSummary, Direction, Metric,
@@ -31,6 +31,57 @@ pub async fn get_authorized_users() -> Result<Vec<usize>, String> {
         .await
         .map_err(|err| format!("failed to fetch authorized users: {}", err))
         .map(|perms| perms.github_ids)
+}
+
+/// Enqueues try builds on the try-perf branch for every rollup merge in `rollup_merges`.
+/// Returns a mapping between the rollup merge commit and the try build sha.
+pub async fn enqueue_unrolled_try_builds<'a>(
+    client: client::Client,
+    rollup_merges: impl Iterator<Item = &'a Commit>,
+    previous_master: &str,
+) -> Result<Vec<(&'a Commit, String)>, String> {
+    let mut mapping = Vec::new();
+    for rollup_merge in rollup_merges {
+        // Fetch the rollup merge commit which should have two parents.
+        // The first parent is in the chain of rollup merge commits all the way back to `previous_master`.
+        // The second parent is the head of the PR that was rolled up. We want the second parent.
+        let commit = client.get_commit(&rollup_merge.sha).await.map_err(|e| {
+            format!(
+                "Error getting rollup merge commit '{}': {e:?}",
+                rollup_merge.sha
+            )
+        })?;
+        assert!(
+            commit.parents.len() == 2,
+            "What we thought was a merge commit was not a merge commit. sha: {}",
+            rollup_merge.sha
+        );
+        let rolled_up_head = &commit.parents[1].sha;
+
+        // Reset perf-tmp to the previous master
+        client
+            .update_branch("perf-tmp", previous_master)
+            .await
+            .map_err(|e| format!("Error updating perf-tmp with previous master: {e:?}"))?;
+
+        // Merge in the rolled up PR's head commit into the previous master
+        let sha = client
+            .merge_branch("perf-tmp", rolled_up_head, "merge")
+            .await
+            .map_err(|e| format!("Error merging commit into perf-tmp: {e:?}"))?;
+
+        // Force the `try-perf` branch to point to what the perf-tmp branch points to
+        client
+            .update_branch("try-perf", &sha)
+            .await
+            .map_err(|e| format!("Error updating the try-perf branch: {e:?}"))?;
+
+        mapping.push((rollup_merge, sha));
+        // Wait to ensure there's enough time for GitHub to checkout these changes before they are overwritten
+        tokio::time::sleep(std::time::Duration::from_secs(15)).await
+    }
+
+    Ok(mapping)
 }
 
 // Returns the PR number
