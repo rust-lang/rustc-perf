@@ -200,21 +200,3 @@ jobs:
 
       - name: Export empty SQLite DB to Postgres
         run: ./target/debug/sqlite-to-postgres "$(mktemp)" 'postgresql://postgres:postgres@localhost:5432/postgres'
-
-      - name: Roundtrip export
-        run: |
-            sudo apt-get update
-            sudo apt-get install -y wget python3-snappy sqlite3
-
-            wget -q 'http://perf-data.rust-lang.org/export.db.sz'
-            python3 -m snappy -d export.db.sz > before.db
-
-            ./target/debug/sqlite-to-postgres before.db 'postgresql://postgres:postgres@localhost:5432/postgres'
-            sqlite3 before.db .dump > before.dump
-
-            rm before.db
-
-            ./target/debug/postgres-to-sqlite 'postgresql://postgres:postgres@localhost:5432/postgres' after.db
-            sqlite3 after.db .dump > after.dump
-
-            diff -w before.dump after.dump
