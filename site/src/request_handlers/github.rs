@@ -48,17 +48,22 @@ async fn handle_push(ctxt: Arc<SiteCtxt>, push: github::Push) -> ServerResult<gi
             None => return Ok(github::Response),
         };
 
-    let previous_master = &push.before;
+    let previous_master = push.before;
     let commits = push.commits;
 
-    handle_rollup_merge(
-        ci_client,
-        main_repo_client,
-        commits,
-        previous_master,
-        rollup_pr_number,
-    )
-    .await?;
+    // GitHub webhooks have a timeout of 10 seconds, so we process this
+    // in the background.
+    tokio::spawn(async move {
+        let result = handle_rollup_merge(
+            ci_client,
+            main_repo_client,
+            commits,
+            &previous_master,
+            rollup_pr_number,
+        )
+        .await;
+        log::info!("Processing of rollup merge finished: {:#?}", result);
+    });
     Ok(github::Response)
 }
 
