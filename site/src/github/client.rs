@@ -41,15 +41,8 @@ impl Client {
             sha: &'a str,
         }
         let url = format!("{}/git/refs", self.repository_url);
-        let response = self
-            .inner
-            .post(&url)
-            .json(&CreateRefRequest { ref_, sha })
-            .header(USER_AGENT, "perf-rust-lang-org-server")
-            .basic_auth("rust-timer", Some(&self.token))
-            .send()
-            .await
-            .context("POST git/refs failed")?;
+        let req = self.inner.post(&url).json(&CreateRefRequest { ref_, sha });
+        let response = self.send(req).await.context("POST git/refs failed")?;
         if response.status() != reqwest::StatusCode::CREATED {
             anyhow::bail!("{:?} != 201 CREATED", response.status());
         }
@@ -78,21 +71,14 @@ impl Client {
         }
 
         let url = format!("{}/pulls", self.repository_url);
-        let response = self
-            .inner
-            .post(&url)
-            .json(&CreatePrRequest {
-                title,
-                head,
-                base,
-                description,
-                draft,
-            })
-            .header(USER_AGENT, "perf-rust-lang-org-server")
-            .basic_auth("rust-timer", Some(&self.token))
-            .send()
-            .await
-            .context("POST pulls failed")?;
+        let req = self.inner.post(&url).json(&CreatePrRequest {
+            title,
+            head,
+            base,
+            description,
+            draft,
+        });
+        let response = self.send(req).await.context("POST pulls failed")?;
         if response.status() != reqwest::StatusCode::CREATED {
             anyhow::bail!("{:?} != 201 CREATED", response.status());
         }
@@ -107,17 +93,14 @@ impl Client {
             force: bool,
         }
         let url = format!("{}/git/refs/{}", self.repository_url, branch);
-        let commit_response = self
+        let req = self
             .inner
             .patch(&url)
-            .json(&UpdateBranchRequest { sha, force: true })
-            .header(USER_AGENT, "perf-rust-lang-org-server")
-            .basic_auth("rust-timer", Some(&self.token))
-            .send()
-            .await
-            .context("PATCH git/refs failed")?;
-        if commit_response.status() != reqwest::StatusCode::OK {
-            anyhow::bail!("{:?} != 200 OK", commit_response.status());
+            .json(&UpdateBranchRequest { sha, force: true });
+
+        let response = self.send(req).await.context("PATCH git/refs failed")?;
+        if response.status() != reqwest::StatusCode::OK {
+            anyhow::bail!("{:?} != 200 OK", response.status());
         }
 
         Ok(())
@@ -136,19 +119,12 @@ impl Client {
             commit_message: &'a str,
         }
         let url = format!("{}/merges", self.repository_url);
-        let response = self
-            .inner
-            .patch(&url)
-            .json(&MergeBranchRequest {
-                base: branch,
-                head: sha,
-                commit_message,
-            })
-            .header(USER_AGENT, "perf-rust-lang-org-server")
-            .basic_auth("rust-timer", Some(&self.token))
-            .send()
-            .await
-            .context("PATCH /merges failed")?;
+        let req = self.inner.patch(&url).json(&MergeBranchRequest {
+            base: branch,
+            head: sha,
+            commit_message,
+        });
+        let response = self.send(req).await.context("PATCH /merges failed")?;
         if !response.status().is_success() {
             anyhow::bail!("{:?} != 201 CREATED", response.status());
         }
@@ -169,24 +145,18 @@ impl Client {
             parents: &'a [&'a str],
         }
         let url = format!("{}/git/commits", self.repository_url);
-        let commit_response = self
-            .inner
-            .post(&url)
-            .json(&CreateCommitRequest {
-                message,
-                tree,
-                parents,
-            })
-            .header(USER_AGENT, "perf-rust-lang-org-server")
-            .basic_auth("rust-timer", Some(&self.token))
-            .send()
-            .await
-            .context("POST git/commits failed")?;
-        if commit_response.status() != reqwest::StatusCode::CREATED {
-            anyhow::bail!("{:?} != 201 CREATED", commit_response.status());
+        let req = self.inner.post(&url).json(&CreateCommitRequest {
+            message,
+            tree,
+            parents,
+        });
+
+        let response = self.send(req).await.context("POST git/commits failed")?;
+        if response.status() != reqwest::StatusCode::CREATED {
+            anyhow::bail!("{:?} != 201 CREATED", response.status());
         }
 
-        Ok(commit_response
+        Ok(response
             .json::<CreateCommitResponse>()
             .await
             .context("deserializing failed")?
@@ -195,14 +165,8 @@ impl Client {
 
     pub async fn get_issue(&self, number: u64) -> anyhow::Result<Issue> {
         let url = format!("{}/issues/{}", self.repository_url, number);
-        let response = self
-            .inner
-            .get(&url)
-            .header(USER_AGENT, "perf-rust-lang-org-server")
-            .basic_auth("rust-timer", Some(&self.token))
-            .send()
-            .await
-            .context("cannot get issue")?;
+        let req = self.inner.get(&url);
+        let response = self.send(req).await.context("cannot get issue")?;
         if !response.status().is_success() {
             anyhow::bail!("{:?} != 200 OK", response.status());
         }
@@ -212,15 +176,9 @@ impl Client {
 
     pub async fn get_commit(&self, sha: &str) -> anyhow::Result<Commit> {
         let url = format!("{}/commits/{}", self.repository_url, sha);
-        let commit_response = self
-            .inner
-            .get(&url)
-            .header(USER_AGENT, "perf-rust-lang-org-server")
-            .basic_auth("rust-timer", Some(&self.token))
-            .send()
-            .await
-            .context("cannot get commit")?;
-        commit_response
+        let req = self.inner.get(&url);
+        let response = self.send(req).await.context("cannot get commit")?;
+        response
             .json()
             .await
             .map_err(|e| anyhow::anyhow!("cannot deserialize commit: {:?}", e))
@@ -235,18 +193,28 @@ impl Client {
             pub body: String,
         }
         let body = body.into();
-        let client = reqwest::Client::new();
-        let req = client
+        let req = self
+            .inner
             .post(&format!("{}/issues/{}/comments", self.repository_url, pr))
             .json(&PostComment {
                 body: body.to_owned(),
-            })
-            .header(USER_AGENT, "perf-rust-lang-org-server")
-            .basic_auth("rust-timer", Some(&self.token));
+            });
+        let resp = self.send(req).await;
 
-        if let Err(e) = req.send().await {
+        if let Err(e) = resp {
             eprintln!("failed to post comment: {:?}", e);
         }
+    }
+
+    async fn send(
+        &self,
+        request: reqwest::RequestBuilder,
+    ) -> Result<reqwest::Response, reqwest::Error> {
+        request
+            .header(USER_AGENT, "perf-rust-lang-org-server")
+            .basic_auth("rust-timer", Some(&self.token))
+            .send()
+            .await
     }
 }
 
