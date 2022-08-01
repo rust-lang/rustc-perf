@@ -1,7 +1,7 @@
 use crate::api::{github, ServerResult};
 use crate::github::{
-    branch_for_rollup, enqueue_sha, get_authorized_users, parse_homu_comment, post_comment,
-    pr_and_try_for_rollup,
+    branch_for_rollup, client, enqueue_sha, enqueue_unrolled_try_builds, get_authorized_users,
+    parse_homu_comment, pr_and_try_for_rollup, rollup_pr,
 };
 use crate::load::SiteCtxt;
 
@@ -10,6 +10,10 @@ use std::sync::Arc;
 use regex::{Captures, Regex};
 
 lazy_static::lazy_static! {
+    static ref ROLLUP_PR_NUMBER: Regex =
+        Regex::new(r#"^Auto merge of #(\d+)"#).unwrap();
+    static ref ROLLUPED_PR_NUMBER: Regex =
+        Regex::new(r#"^Rollup merge of #(\d+)"#).unwrap();
     static ref BODY_TRY_COMMIT: Regex =
         Regex::new(r#"(?:\W|^)@rust-timer\s+build\s+(\w+)(?:\W|$)(?:include=(\S+))?\s*(?:exclude=(\S+))?\s*(?:runs=(\d+))?"#).unwrap();
     static ref BODY_QUEUE: Regex =
@@ -25,52 +29,126 @@ pub async fn handle_github(
     ctxt: Arc<SiteCtxt>,
 ) -> ServerResult<github::Response> {
     log::info!("handle_github({:?})", request);
-    if request.comment.body.contains(" homu: ") {
-        if let Some(sha) = parse_homu_comment(&request.comment.body).await {
-            enqueue_sha(request.issue, &ctxt, sha).await?;
+    match request {
+        github::Request::Issue { issue, comment } => handle_issue(ctxt, issue, comment).await,
+        github::Request::Push(p) => handle_push(ctxt, p).await,
+    }
+}
+
+async fn handle_push(ctxt: Arc<SiteCtxt>, push: github::Push) -> ServerResult<github::Response> {
+    let ci_client = client::Client::from_ctxt(
+        &ctxt,
+        "https://api.github.com/repos/rust-lang-ci/rust".to_owned(),
+    );
+    let main_repo_client = client::Client::from_ctxt(
+        &ctxt,
+        "https://api.github.com/repos/rust-lang/rust".to_owned(),
+    );
+    if push.r#ref != "refs/heads/master" || push.sender.login != "bors" {
+        return Ok(github::Response);
+    }
+    let rollup_pr = rollup_pr(&main_repo_client, &push.head_commit.message).await?;
+    let rollup_pr = match rollup_pr {
+        Some(pr) => pr,
+        None => return Ok(github::Response),
+    };
+
+    let previous_master = &push.before;
+    let rollup_merges = push
+        .commits
+        .iter()
+        .rev()
+        .skip(1) // skip the head commit
+        .take_while(|c| c.message.starts_with("Rollup merge of "));
+
+    let mapping = enqueue_unrolled_try_builds(ci_client, rollup_merges, previous_master).await?;
+
+    let mapping = mapping
+        .into_iter()
+        .map(|(rollup_merge, sha)| {
+            ROLLUPED_PR_NUMBER
+                .captures(&rollup_merge.message)
+                .and_then(|c| c.get(1))
+                .map(|m| (m.as_str(), sha))
+                .ok_or_else(|| {
+                    format!(
+                        "Could not get PR number from message: '{}'",
+                        rollup_merge.message
+                    )
+                })
+        })
+        .fold(ServerResult::Ok(String::new()), |string, n| {
+            use std::fmt::Write;
+            let (pr, commit) = n?;
+            let mut string = string?;
+            write!(&mut string, "#{pr}: {commit}\n").unwrap();
+            Ok(string)
+        })?;
+    let msg =
+        format!("Try perf builds for each individual rolled up PR have been enqueued:\n{mapping}");
+    main_repo_client.post_comment(rollup_pr, msg).await;
+    Ok(github::Response)
+}
+
+async fn handle_issue(
+    ctxt: Arc<SiteCtxt>,
+    issue: github::Issue,
+    comment: github::Comment,
+) -> ServerResult<github::Response> {
+    if comment.body.contains(" homu: ") {
+        if let Some(sha) = parse_homu_comment(&comment.body).await {
+            enqueue_sha(issue, &ctxt, sha).await?;
             return Ok(github::Response);
         }
     }
 
-    if !request.comment.body.contains("@rust-timer ") {
-        return Ok(github::Response);
+    if comment.body.contains("@rust-timer ") {
+        return handle_rust_timer(ctxt, comment, issue).await;
     }
 
-    if request.comment.author_association != github::Association::Owner
-        && !get_authorized_users()
-            .await?
-            .contains(&request.comment.user.id)
+    Ok(github::Response)
+}
+
+async fn handle_rust_timer(
+    ctxt: Arc<SiteCtxt>,
+    comment: github::Comment,
+    issue: github::Issue,
+) -> ServerResult<github::Response> {
+    let main_repo_client = client::Client::from_ctxt(
+        &ctxt,
+        "https://api.github.com/repos/rust-lang/rust".to_owned(),
+    );
+    if comment.author_association != github::Association::Owner
+        && !get_authorized_users().await?.contains(&comment.user.id)
     {
-        post_comment(
-            &ctxt.config,
-            request.issue.number,
-            "Insufficient permissions to issue commands to rust-timer.",
-        )
-        .await;
+        main_repo_client
+            .post_comment(
+                issue.number,
+                "Insufficient permissions to issue commands to rust-timer.",
+            )
+            .await;
         return Ok(github::Response);
     }
 
-    if let Some(captures) = BODY_QUEUE.captures(&request.comment.body) {
+    if let Some(captures) = BODY_QUEUE.captures(&comment.body) {
         let include = captures.get(1).map(|v| v.as_str());
         let exclude = captures.get(2).map(|v| v.as_str());
         let runs = captures.get(3).and_then(|v| v.as_str().parse::<i32>().ok());
         {
             let conn = ctxt.conn().await;
-            conn.queue_pr(request.issue.number, include, exclude, runs)
-                .await;
+            conn.queue_pr(issue.number, include, exclude, runs).await;
         }
-        post_comment(
-            &ctxt.config,
-            request.issue.number,
-            "Awaiting bors try build completion.
+        main_repo_client
+            .post_comment(
+                issue.number,
+                "Awaiting bors try build completion.
 
 @rustbot label: +S-waiting-on-perf",
-        )
-        .await;
+            )
+            .await;
         return Ok(github::Response);
     }
-
-    if let Some(captures) = BODY_TRY_COMMIT.captures(&request.comment.body) {
+    if let Some(captures) = BODY_TRY_COMMIT.captures(&comment.body) {
         if let Some(commit) = captures.get(1).map(|c| c.as_str().to_owned()) {
             let include = captures.get(2).map(|v| v.as_str());
             let exclude = captures.get(3).map(|v| v.as_str());
@@ -78,43 +156,36 @@ pub async fn handle_github(
             let commit = commit.trim_start_matches("https://github.com/rust-lang/rust/commit/");
             {
                 let conn = ctxt.conn().await;
-                conn.queue_pr(request.issue.number, include, exclude, runs)
-                    .await;
+                conn.queue_pr(issue.number, include, exclude, runs).await;
             }
-            enqueue_sha(request.issue, &ctxt, commit.to_owned()).await?;
+            enqueue_sha(issue, &ctxt, commit.to_owned()).await?;
             return Ok(github::Response);
         }
     }
-
-    for rollup_merge in extract_make_pr_for(&request.comment.body) {
-        let client = reqwest::Client::new();
+    for rollup_merge in extract_make_pr_for(&comment.body) {
         pr_and_try_for_rollup(
-            &client,
             ctxt.clone(),
-            &request.issue.repository_url,
+            &issue.repository_url,
             &rollup_merge,
-            &request.comment.html_url,
+            &comment.html_url,
         )
         .await
         .map_err(|e| format!("{:?}", e))?;
     }
-
-    for rollup_merge in extract_update_pr_for(&request.comment.body) {
+    for rollup_merge in extract_update_pr_for(&comment.body) {
         // This just creates or updates the branch for this merge commit.
         // Intended for resolving the race condition of master merging in
         // between us updating the commit and merging things.
-        let client = reqwest::Client::new();
-        let branch = branch_for_rollup(&client, &ctxt, &request.issue.repository_url, rollup_merge)
+        let branch = branch_for_rollup(&ctxt, &issue.repository_url, rollup_merge)
             .await
             .map_err(|e| e.to_string())?;
-        post_comment(
-            &ctxt.config,
-            request.issue.number,
-            &format!("Master base SHA: {}", branch.master_base_sha),
-        )
-        .await;
+        main_repo_client
+            .post_comment(
+                issue.number,
+                &format!("Master base SHA: {}", branch.master_base_sha),
+            )
+            .await;
     }
-
     Ok(github::Response)
 }
 
@@ -132,7 +203,6 @@ fn extract_update_pr_for(body: &str) -> impl Iterator<Item = &str> + '_ {
 
 fn extract_rollup_merge(capture: Captures) -> Option<&str> {
     capture.get(1).map(|c| {
-        println!("{}", c.as_str());
         c.as_str()
             .trim_start_matches("https://github.com/rust-lang/rust/commit/")
     })

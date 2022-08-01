@@ -394,12 +394,45 @@ pub mod github {
         pub number: u32,
         pub comments_url: String,
         pub repository_url: String,
+        pub labels: Vec<Label>,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+    pub struct Label {
+        pub name: String,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct Request {
-        pub issue: Issue,
-        pub comment: Comment,
+    #[serde(untagged)]
+    pub enum Request {
+        Issue { issue: Issue, comment: Comment },
+        Push(Push),
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct Push {
+        pub r#ref: String,
+        pub sender: Sender,
+        pub head_commit: HeadCommit,
+        pub before: String,
+        pub commits: Vec<Commit>,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct Commit {
+        #[serde(rename = "id")]
+        pub sha: String,
+        pub message: String,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct HeadCommit {
+        pub message: String,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct Sender {
+        pub login: String,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
