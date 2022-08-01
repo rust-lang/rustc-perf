@@ -98,10 +98,7 @@ pub async fn rollup_pr(client: &client::Client, message: &str) -> Result<Option<
     let number = ROLLUP_PR_NUMBER
         .captures(&message)
         .and_then(|c| c.get(1))
-        .map(|m| {
-            println!("{}", m.as_str());
-            m.as_str().parse::<u64>()
-        })
+        .map(|m| m.as_str().parse::<u64>())
         .transpose()
         .map_err(|e| format!("Error parsing PR number from '{message}': {e:?}"))?;
 
