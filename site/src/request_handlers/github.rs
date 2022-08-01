@@ -36,10 +36,14 @@ pub async fn handle_github(
 }
 
 async fn handle_push(ctxt: Arc<SiteCtxt>, push: github::Push) -> ServerResult<github::Response> {
-    let ci_client =
-        client::Client::from_ctxt(&ctxt, "https://github.com/rust-lang-ci/rust".to_owned());
-    let main_repo_client =
-        client::Client::from_ctxt(&ctxt, "https://github.com/rust-lang/rust".to_owned());
+    let ci_client = client::Client::from_ctxt(
+        &ctxt,
+        "https://api.github.com/repos/rust-lang-ci/rust".to_owned(),
+    );
+    let main_repo_client = client::Client::from_ctxt(
+        &ctxt,
+        "https://api.github.com/repos/rust-lang/rust".to_owned(),
+    );
     if push.r#ref != "refs/heads/master" {
         return Ok(github::Response);
     }

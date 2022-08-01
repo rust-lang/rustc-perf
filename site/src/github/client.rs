@@ -92,7 +92,7 @@ impl Client {
             sha: &'a str,
             force: bool,
         }
-        let url = format!("{}/git/refs/{}", self.repository_url, branch);
+        let url = format!("{}/git/refs/heads/{}", self.repository_url, branch);
         let req = self
             .inner
             .patch(&url)
@@ -119,7 +119,7 @@ impl Client {
             commit_message: &'a str,
         }
         let url = format!("{}/merges", self.repository_url);
-        let req = self.inner.patch(&url).json(&MergeBranchRequest {
+        let req = self.inner.post(&url).json(&MergeBranchRequest {
             base: branch,
             head: sha,
             commit_message,
@@ -178,6 +178,9 @@ impl Client {
         let url = format!("{}/commits/{}", self.repository_url, sha);
         let req = self.inner.get(&url);
         let response = self.send(req).await.context("cannot get commit")?;
+        if !response.status().is_success() {
+            anyhow::bail!("{:?} != 200 OK", response.status());
+        }
         response
             .json()
             .await
