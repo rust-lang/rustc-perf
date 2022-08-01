@@ -145,8 +145,10 @@ async fn handle_rust_timer(
     comment: github::Comment,
     issue: github::Issue,
 ) -> ServerResult<github::Response> {
-    let main_repo_client =
-        client::Client::from_ctxt(&ctxt, "https://github.com/rust-lang/rust".to_owned());
+    let main_repo_client = client::Client::from_ctxt(
+        &ctxt,
+        "https://api.github.com/repos/rust-lang/rust".to_owned(),
+    );
     if comment.author_association != github::Association::Owner
         && !get_authorized_users().await?.contains(&comment.user.id)
     {
