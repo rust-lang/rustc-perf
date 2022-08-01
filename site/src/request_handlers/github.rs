@@ -1,7 +1,7 @@
 use crate::api::{github, ServerResult};
 use crate::github::{
-    branch_for_rollup, enqueue_sha, get_authorized_users, get_commit, get_issue, merge_branch,
-    parse_homu_comment, post_comment, pr_and_try_for_rollup, update_branch,
+    branch_for_rollup, client, enqueue_sha, get_authorized_users, parse_homu_comment,
+    pr_and_try_for_rollup,
 };
 use crate::load::SiteCtxt;
 
@@ -70,7 +70,7 @@ async fn handle_push(ctxt: Arc<SiteCtxt>, push: github::Push) -> ServerResult<gi
         // Fetch the rollup merge commit which should have two parents.
         // The first parent is in the chain of rollup merge commits all the way back to `previous_master`.
         // The second parent is the head of the PR that was rolled up. We want the second parent.
-        let commit = get_commit(&client, &ctxt, repository_url, &rollup_merge.sha)
+        let commit = client::get_commit(&client, &ctxt, repository_url, &rollup_merge.sha)
             .await
             .map_err(|e| {
                 format!(
@@ -86,12 +86,12 @@ async fn handle_push(ctxt: Arc<SiteCtxt>, push: github::Push) -> ServerResult<gi
         let rolled_up_head = &commit.parents[1].sha;
 
         // Reset perf-tmp to the previous master
-        update_branch(&client, &ctxt, repository_url, "perf-tmp", previous_master)
+        client::update_branch(&client, &ctxt, repository_url, "perf-tmp", previous_master)
             .await
             .map_err(|e| format!("Error updating perf-tmp with previous master: {e:?}"))?;
 
         // Merge in the rolled up PR's head commit into the previous master
-        let sha = merge_branch(
+        let sha = client::merge_branch(
             &client,
             &ctxt,
             repository_url,
@@ -103,7 +103,7 @@ async fn handle_push(ctxt: Arc<SiteCtxt>, push: github::Push) -> ServerResult<gi
         .map_err(|e| format!("Error merging commit into perf-tmp: {e:?}"))?;
 
         // Force the `try-perf` branch to point to what the perf-tmp branch points to
-        update_branch(&client, &ctxt, repository_url, "try-perf", &sha)
+        client::update_branch(&client, &ctxt, repository_url, "try-perf", &sha)
             .await
             .map_err(|e| format!("Error updating the try-perf branch: {e:?}"))?;
 
@@ -122,7 +122,7 @@ async fn handle_push(ctxt: Arc<SiteCtxt>, push: github::Push) -> ServerResult<gi
         });
     let msg =
         format!("Try perf builds for each individual rolled up PR have been enqueued:\n{mapping}");
-    post_comment(&ctxt.config, pr, msg).await;
+    client::post_comment(&ctxt.config, pr, msg).await;
     Ok(github::Response)
 }
 
@@ -150,7 +150,7 @@ async fn rollup_pr(
     let captures = get!(ROLLUP_PR_NUMBER.captures(&push.head_commit.message));
     let number = get!(get!(captures.get(0)).as_str().parse::<u64>().ok());
 
-    let issue = get_issue(client, ctxt, repository_url, number)
+    let issue = client::get_issue(client, ctxt, repository_url, number)
         .await
         .map_err(|e| format!("Error fetching PR #{number} {e:?}"))?;
 
@@ -188,7 +188,7 @@ async fn handle_rust_timer(
     if comment.author_association != github::Association::Owner
         && !get_authorized_users().await?.contains(&comment.user.id)
     {
-        post_comment(
+        client::post_comment(
             &ctxt.config,
             issue.number,
             "Insufficient permissions to issue commands to rust-timer.",
@@ -205,7 +205,7 @@ async fn handle_rust_timer(
             let conn = ctxt.conn().await;
             conn.queue_pr(issue.number, include, exclude, runs).await;
         }
-        post_comment(
+        client::post_comment(
             &ctxt.config,
             issue.number,
             "Awaiting bors try build completion.
@@ -249,7 +249,7 @@ async fn handle_rust_timer(
         let branch = branch_for_rollup(&client, &ctxt, &issue.repository_url, rollup_merge)
             .await
             .map_err(|e| e.to_string())?;
-        post_comment(
+        client::post_comment(
             &ctxt.config,
             issue.number,
             &format!("Master base SHA: {}", branch.master_base_sha),
