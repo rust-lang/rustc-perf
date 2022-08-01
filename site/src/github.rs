@@ -368,7 +368,7 @@ pub async fn merge_branch(
         .basic_auth("rust-timer", Some(timer_token))
         .send()
         .await
-        .context("POST git/commits failed")?;
+        .context("PATCH /merges failed")?;
     if !response.status().is_success() {
         anyhow::bail!("{:?} != 201 CREATED", response.status());
     }
@@ -445,7 +445,10 @@ pub async fn get_issue(
         .basic_auth("rust-timer", Some(timer_token))
         .send()
         .await
-        .context("cannot get commit")?;
+        .context("cannot get issue")?;
+    if !response.status().is_success() {
+        anyhow::bail!("{:?} != 200 OK", response.status());
+    }
 
     Ok(response.json().await?)
 }

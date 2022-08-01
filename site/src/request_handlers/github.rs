@@ -57,10 +57,11 @@ async fn handle_push(ctxt: Arc<SiteCtxt>, push: github::Push) -> ServerResult<gi
         // The second parent is the head of the PR that was rolled up. We want the second parent.
         let commit = get_commit(&client, &ctxt, repository_url, &rollup_merge)
             .await
-            .map_err(|e| format!("Error getting rollup merge commit: {e:?}"))?;
+            .map_err(|e| format!("Error getting rollup merge commit '{rollup_merge}': {e:?}"))?;
         assert!(
             commit.parents.len() == 2,
-            "What we thought was a merge commit was not a merge commit"
+            "What we thought was a merge commit was not a merge commit. sha: {}",
+            rollup_merge
         );
         let rolled_up_head = &commit.parents[1].sha;
 
@@ -106,9 +107,8 @@ async fn is_rollup(
             }
         };
     }
-    let is_bors = push.sender.login == "bors"
-        && push.committer.username == "bors"
-        && push.head_commit.message.starts_with("Auto merge of");
+    let is_bors =
+        push.sender.login == "bors" && push.head_commit.message.starts_with("Auto merge of");
 
     if !is_bors {
         return Ok(false);
