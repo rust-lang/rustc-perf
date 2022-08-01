@@ -411,7 +411,10 @@ pub async fn post_finished(ctxt: &SiteCtxt) {
 ///
 /// `is_master_commit` is used to differentiate messages for try runs and post-merge runs.
 async fn post_comparison_comment(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: bool) {
-    let client = client::Client::from_ctxt(ctxt, "https://github.com/rust-lang/rust".to_owned());
+    let client = client::Client::from_ctxt(
+        ctxt,
+        "https://api.github.com/repos/rust-lang/rust".to_owned(),
+    );
     let pr = commit.pr;
     let body = match summarize_run(ctxt, commit, is_master_commit).await {
         Ok(message) => message,
