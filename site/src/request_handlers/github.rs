@@ -94,11 +94,18 @@ async fn handle_rollup_merge(
             use std::fmt::Write;
             let (pr, commit) = n?;
             let mut string = string?;
-            write!(&mut string, "#{pr}: {commit}\n").unwrap();
+            write!(
+                &mut string,
+                "|#{pr}|[{commit}](https://github.com/rust-lang-ci/rust/commit/{commit})|\n"
+            )
+            .unwrap();
             Ok(string)
         })?;
     let msg =
-        format!("Try perf builds for each individual rolled up PR have been enqueued:\n{mapping}");
+        format!("📌 Perf builds for each rolled up PR:\n\n\
+        |PR# | Perf Build Sha|\n|----|-----|\n\
+        {mapping}\nIn the case of a perf regression, \
+        run the following command for each PR you suspect might be the cause: `@rust-timer build $SHA`");
     main_repo_client.post_comment(rollup_pr_number, msg).await;
     Ok(())
 }
