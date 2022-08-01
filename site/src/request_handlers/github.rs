@@ -1,27 +1,22 @@
 use crate::api::{github, ServerResult};
 use crate::github::{
-    branch_for_rollup, client, enqueue_sha, enqueue_unrolled_try_builds, get_authorized_users,
-    parse_homu_comment, pr_and_try_for_rollup, rollup_pr,
+    client, enqueue_sha, enqueue_unrolled_try_builds, parse_homu_comment, rollup_pr_number,
 };
 use crate::load::SiteCtxt;
 
 use std::sync::Arc;
 
-use regex::{Captures, Regex};
+use regex::Regex;
 
 lazy_static::lazy_static! {
     static ref ROLLUP_PR_NUMBER: Regex =
         Regex::new(r#"^Auto merge of #(\d+)"#).unwrap();
-    static ref ROLLUPED_PR_NUMBER: Regex =
+    static ref ROLLEDUP_PR_NUMBER: Regex =
         Regex::new(r#"^Rollup merge of #(\d+)"#).unwrap();
     static ref BODY_TRY_COMMIT: Regex =
         Regex::new(r#"(?:\W|^)@rust-timer\s+build\s+(\w+)(?:\W|$)(?:include=(\S+))?\s*(?:exclude=(\S+))?\s*(?:runs=(\d+))?"#).unwrap();
     static ref BODY_QUEUE: Regex =
         Regex::new(r#"(?:\W|^)@rust-timer\s+queue(?:\W|$)(?:include=(\S+))?\s*(?:exclude=(\S+))?\s*(?:runs=(\d+))?"#).unwrap();
-    static ref BODY_MAKE_PR_FOR: Regex =
-        Regex::new(r#"(?:\W|^)@rust-timer\s+make-pr-for\s+([\w:/\.\-]+)(?:\W|$)"#).unwrap();
-    static ref BODY_UDPATE_PR_FOR: Regex =
-        Regex::new(r#"(?:\W|^)@rust-timer\s+update-branch-for\s+([\w:/\.\-]+)(?:\W|$)"#).unwrap();
 }
 
 pub async fn handle_github(
@@ -47,26 +42,44 @@ async fn handle_push(ctxt: Arc<SiteCtxt>, push: github::Push) -> ServerResult<gi
     if push.r#ref != "refs/heads/master" || push.sender.login != "bors" {
         return Ok(github::Response);
     }
-    let rollup_pr = rollup_pr(&main_repo_client, &push.head_commit.message).await?;
-    let rollup_pr = match rollup_pr {
-        Some(pr) => pr,
-        None => return Ok(github::Response),
-    };
+    let rollup_pr_number =
+        match rollup_pr_number(&main_repo_client, &push.head_commit.message).await? {
+            Some(pr) => pr,
+            None => return Ok(github::Response),
+        };
 
     let previous_master = &push.before;
-    let rollup_merges = push
-        .commits
+    let commits = push.commits;
+
+    handle_rollup_merge(
+        ci_client,
+        main_repo_client,
+        commits,
+        previous_master,
+        rollup_pr_number,
+    )
+    .await?;
+    Ok(github::Response)
+}
+
+/// Handler for when a rollup has been merged
+async fn handle_rollup_merge(
+    ci_client: client::Client,
+    main_repo_client: client::Client,
+    commits: Vec<github::Commit>,
+    previous_master: &str,
+    rollup_pr_number: u32,
+) -> Result<(), String> {
+    let rollup_merges = commits
         .iter()
         .rev()
         .skip(1) // skip the head commit
         .take_while(|c| c.message.starts_with("Rollup merge of "));
-
     let mapping = enqueue_unrolled_try_builds(ci_client, rollup_merges, previous_master).await?;
-
     let mapping = mapping
         .into_iter()
         .map(|(rollup_merge, sha)| {
-            ROLLUPED_PR_NUMBER
+            ROLLEDUP_PR_NUMBER
                 .captures(&rollup_merge.message)
                 .and_then(|c| c.get(1))
                 .map(|m| (m.as_str(), sha))
@@ -86,8 +99,8 @@ async fn handle_push(ctxt: Arc<SiteCtxt>, push: github::Push) -> ServerResult<gi
         })?;
     let msg =
         format!("Try perf builds for each individual rolled up PR have been enqueued:\n{mapping}");
-    main_repo_client.post_comment(rollup_pr, msg).await;
-    Ok(github::Response)
+    main_repo_client.post_comment(rollup_pr_number, msg).await;
+    Ok(())
 }
 
 async fn handle_issue(
@@ -162,87 +175,21 @@ async fn handle_rust_timer(
             return Ok(github::Response);
         }
     }
-    for rollup_merge in extract_make_pr_for(&comment.body) {
-        pr_and_try_for_rollup(
-            ctxt.clone(),
-            &issue.repository_url,
-            &rollup_merge,
-            &comment.html_url,
-        )
-        .await
-        .map_err(|e| format!("{:?}", e))?;
-    }
-    for rollup_merge in extract_update_pr_for(&comment.body) {
-        // This just creates or updates the branch for this merge commit.
-        // Intended for resolving the race condition of master merging in
-        // between us updating the commit and merging things.
-        let branch = branch_for_rollup(&ctxt, &issue.repository_url, rollup_merge)
-            .await
-            .map_err(|e| e.to_string())?;
-        main_repo_client
-            .post_comment(
-                issue.number,
-                &format!("Master base SHA: {}", branch.master_base_sha),
-            )
-            .await;
-    }
     Ok(github::Response)
 }
 
-fn extract_make_pr_for(body: &str) -> impl Iterator<Item = &str> + '_ {
-    BODY_MAKE_PR_FOR
-        .captures_iter(body)
-        .filter_map(|c| extract_rollup_merge(c))
-}
-
-fn extract_update_pr_for(body: &str) -> impl Iterator<Item = &str> + '_ {
-    BODY_UDPATE_PR_FOR
-        .captures_iter(body)
-        .filter_map(|c| extract_rollup_merge(c))
-}
-
-fn extract_rollup_merge(capture: Captures) -> Option<&str> {
-    capture.get(1).map(|c| {
-        c.as_str()
-            .trim_start_matches("https://github.com/rust-lang/rust/commit/")
-    })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn captures_the_right_sha() {
-        let message = r#"This is a message.
-
-        @rust-timer make-pr-for https://github.com/rust-lang/rust/commit/857afc75e6ca69cc7dcae36a6fac8c093ee6fa31
-        @rust-timer make-pr-for https://github.com/rust-lang/rust/commit/857afc75e6ca69cc7dcae36a6fac8c093ee6fa31
-        "#;
-
-        let mut iter = extract_make_pr_for(message);
-        assert_eq!(
-            iter.next().unwrap(),
-            "857afc75e6ca69cc7dcae36a6fac8c093ee6fa31",
-            "sha did not match"
-        );
-        assert_eq!(
-            iter.next().unwrap(),
-            "857afc75e6ca69cc7dcae36a6fac8c093ee6fa31",
-            "sha did not match"
-        );
-        assert!(iter.next().is_none(), "there were more rollup merges");
-        let message = r#"This is a message.
-
-        @rust-timer update-branch-for https://github.com/rust-lang/rust/commit/857afc75e6ca69cc7dcae36a6fac8c093ee6fa31"#;
-
-        let mut iter = extract_update_pr_for(message);
-        let sha = iter.next().unwrap();
-        println!("{sha}");
-        assert_eq!(
-            sha, "857afc75e6ca69cc7dcae36a6fac8c093ee6fa31",
-            "sha did not match"
-        );
-        assert!(iter.next().is_none(), "there were more rollup merges");
-    }
+pub async fn get_authorized_users() -> Result<Vec<usize>, String> {
+    let url = format!("{}/permissions/perf.json", ::rust_team_data::v1::BASE_URL);
+    let client = reqwest::Client::new();
+    client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|err| format!("failed to fetch authorized users: {}", err))?
+        .error_for_status()
+        .map_err(|err| format!("failed to fetch authorized users: {}", err))?
+        .json::<rust_team_data::v1::Permission>()
+        .await
+        .map_err(|err| format!("failed to fetch authorized users: {}", err))
+        .map(|perms| perms.github_ids)
 }
