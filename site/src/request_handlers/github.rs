@@ -9,10 +9,6 @@ use std::sync::Arc;
 use regex::Regex;
 
 lazy_static::lazy_static! {
-    static ref ROLLUP_PR_NUMBER: Regex =
-        Regex::new(r#"^Auto merge of #(\d+)"#).unwrap();
-    static ref ROLLEDUP_PR_NUMBER: Regex =
-        Regex::new(r#"^Rollup merge of #(\d+)"#).unwrap();
     static ref BODY_TRY_COMMIT: Regex =
         Regex::new(r#"(?:\W|^)@rust-timer\s+build\s+(\w+)(?:\W|$)(?:include=(\S+))?\s*(?:exclude=(\S+))?\s*(?:runs=(\d+))?"#).unwrap();
     static ref BODY_QUEUE: Regex =
@@ -80,32 +76,20 @@ async fn handle_rollup_merge(
         .rev()
         .skip(1) // skip the head commit
         .take_while(|c| c.message.starts_with("Rollup merge of "));
-    let mapping = enqueue_unrolled_try_builds(ci_client, rollup_merges, previous_master).await?;
-    let mapping = mapping
+    let mapping = enqueue_unrolled_try_builds(ci_client, rollup_merges, previous_master)
+        .await?
         .into_iter()
-        .map(|(rollup_merge, sha)| {
-            ROLLEDUP_PR_NUMBER
-                .captures(&rollup_merge.message)
-                .and_then(|c| c.get(1))
-                .map(|m| (m.as_str(), sha))
-                .ok_or_else(|| {
-                    format!(
-                        "Could not get PR number from message: '{}'",
-                        rollup_merge.message
-                    )
-                })
-        })
-        .fold(ServerResult::Ok(String::new()), |string, n| {
+        .fold(String::new(), |mut string, c| {
             use std::fmt::Write;
-            let (pr, commit) = n?;
-            let mut string = string?;
             write!(
                 &mut string,
-                "|#{pr}|[{commit}](https://github.com/rust-lang-ci/rust/commit/{commit})|\n"
+                "|#{pr}|[{commit}](https://github.com/rust-lang-ci/rust/commit/{commit})|\n",
+                pr = c.original_pr_number,
+                commit = c.sha
             )
             .unwrap();
-            Ok(string)
-        })?;
+            string
+        });
     let msg =
         format!("📌 Perf builds for each rolled up PR:\n\n\
         |PR# | Perf Build Sha|\n|----|-----|\n\

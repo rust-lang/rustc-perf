@@ -18,9 +18,21 @@ pub async fn enqueue_unrolled_try_builds<'a>(
     client: client::Client,
     rollup_merges: impl Iterator<Item = &'a Commit>,
     previous_master: &str,
-) -> Result<Vec<(&'a Commit, String)>, String> {
+) -> Result<Vec<UnrolledCommit<'a>>, String> {
     let mut mapping = Vec::new();
     for rollup_merge in rollup_merges {
+        // Grab the number of the rolled up PR from its commit message
+        let original_pr_number = ROLLEDUP_PR_NUMBER
+            .captures(&rollup_merge.message)
+            .and_then(|c| c.get(1))
+            .map(|m| m.as_str())
+            .ok_or_else(|| {
+                format!(
+                    "Could not get PR number from message: '{}'",
+                    rollup_merge.message
+                )
+            })?;
+
         // Fetch the rollup merge commit which should have two parents.
         // The first parent is in the chain of rollup merge commits all the way back to `previous_master`.
         // The second parent is the head of the PR that was rolled up. We want the second parent.
@@ -45,7 +57,11 @@ pub async fn enqueue_unrolled_try_builds<'a>(
 
         // Merge in the rolled up PR's head commit into the previous master
         let sha = client
-            .merge_branch("perf-tmp", rolled_up_head, "merge")
+            .merge_branch(
+                "perf-tmp",
+                rolled_up_head,
+                &format!("Unrolled build for #{}", original_pr_number),
+            )
             .await
             .map_err(|e| format!("Error merging commit into perf-tmp: {e:?}"))?;
 
@@ -55,7 +71,11 @@ pub async fn enqueue_unrolled_try_builds<'a>(
             .await
             .map_err(|e| format!("Error updating the try-perf branch: {e:?}"))?;
 
-        mapping.push((rollup_merge, sha));
+        mapping.push(UnrolledCommit {
+            original_pr_number,
+            rollup_merge,
+            sha,
+        });
         // Wait to ensure there's enough time for GitHub to checkout these changes before they are overwritten
         tokio::time::sleep(std::time::Duration::from_secs(15)).await
     }
@@ -63,9 +83,21 @@ pub async fn enqueue_unrolled_try_builds<'a>(
     Ok(mapping)
 }
 
+/// A commit representing a rolled up PR as if it had been merged into master directly
+pub struct UnrolledCommit<'a> {
+    /// The PR number that was rolled up
+    pub original_pr_number: &'a str,
+    /// The original rollup merge commit
+    pub rollup_merge: &'a Commit,
+    /// The sha of the new unrolled merge commit
+    pub sha: String,
+}
+
 lazy_static::lazy_static! {
     static ref ROLLUP_PR_NUMBER: regex::Regex =
         regex::Regex::new(r#"^Auto merge of #(\d+)"#).unwrap();
+    static ref ROLLEDUP_PR_NUMBER: regex::Regex =
+        regex::Regex::new(r#"^Rollup merge of #(\d+)"#).unwrap();
 }
 
 // Gets the pr number for the associated rollup PR message. Returns None if this is not a rollup PR
