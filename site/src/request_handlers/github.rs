@@ -1,7 +1,5 @@
 use crate::api::{github, ServerResult};
-use crate::github::{
-    client, enqueue_sha, enqueue_unrolled_try_builds, parse_homu_comment, rollup_pr_number,
-};
+use crate::github::{client, enqueue_sha, parse_homu_comment, rollup_pr_number, unroll_rollup};
 use crate::load::SiteCtxt;
 
 use std::sync::Arc;
@@ -50,10 +48,15 @@ async fn handle_push(ctxt: Arc<SiteCtxt>, push: github::Push) -> ServerResult<gi
     // GitHub webhooks have a timeout of 10 seconds, so we process this
     // in the background.
     tokio::spawn(async move {
-        let result = handle_rollup_merge(
+        let rollup_merges = commits
+            .iter()
+            .rev()
+            .skip(1) // skip the head commit
+            .take_while(|c| c.message.starts_with("Rollup merge of "));
+        let result = unroll_rollup(
             ci_client,
             main_repo_client,
-            commits,
+            rollup_merges,
             &previous_master,
             rollup_pr_number,
         )
@@ -61,42 +64,6 @@ async fn handle_push(ctxt: Arc<SiteCtxt>, push: github::Push) -> ServerResult<gi
         log::info!("Processing of rollup merge finished: {:#?}", result);
     });
     Ok(github::Response)
-}
-
-/// Handler for when a rollup has been merged
-async fn handle_rollup_merge(
-    ci_client: client::Client,
-    main_repo_client: client::Client,
-    commits: Vec<github::Commit>,
-    previous_master: &str,
-    rollup_pr_number: u32,
-) -> Result<(), String> {
-    let rollup_merges = commits
-        .iter()
-        .rev()
-        .skip(1) // skip the head commit
-        .take_while(|c| c.message.starts_with("Rollup merge of "));
-    let mapping = enqueue_unrolled_try_builds(ci_client, rollup_merges, previous_master)
-        .await?
-        .into_iter()
-        .fold(String::new(), |mut string, c| {
-            use std::fmt::Write;
-            write!(
-                &mut string,
-                "|#{pr}|[{commit}](https://github.com/rust-lang-ci/rust/commit/{commit})|\n",
-                pr = c.original_pr_number,
-                commit = c.sha
-            )
-            .unwrap();
-            string
-        });
-    let msg =
-        format!("📌 Perf builds for each rolled up PR:\n\n\
-        |PR# | Perf Build Sha|\n|----|-----|\n\
-        {mapping}\nIn the case of a perf regression, \
-        run the following command for each PR you suspect might be the cause: `@rust-timer build $SHA`");
-    main_repo_client.post_comment(rollup_pr_number, msg).await;
-    Ok(())
 }
 
 async fn handle_issue(

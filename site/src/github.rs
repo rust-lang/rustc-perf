@@ -10,11 +10,40 @@ type BoxedError = Box<dyn std::error::Error + Send + Sync>;
 
 pub use comparison_summary::post_finished;
 
+/// Enqueues try build artifacts and posts a message about them on the original rollup PR
+pub async fn unroll_rollup(
+    ci_client: client::Client,
+    main_repo_client: client::Client,
+    rollup_merges: impl Iterator<Item = &Commit>,
+    previous_master: &str,
+    rollup_pr_number: u32,
+) -> Result<(), String> {
+    let mapping = enqueue_unrolled_try_builds(ci_client, rollup_merges, previous_master)
+        .await?
+        .into_iter()
+        .fold(String::new(), |mut string, c| {
+            use std::fmt::Write;
+            write!(
+                &mut string,
+                "|#{pr}|[{commit}](https://github.com/rust-lang-ci/rust/commit/{commit})|\n",
+                pr = c.original_pr_number,
+                commit = c.sha
+            )
+            .unwrap();
+            string
+        });
+    let msg =
+        format!("📌 Perf builds for each rolled up PR:\n\n\
+        |PR# | Perf Build Sha|\n|----|-----|\n\
+        {mapping}\nIn the case of a perf regression, \
+        run the following command for each PR you suspect might be the cause: `@rust-timer build $SHA`");
+    main_repo_client.post_comment(rollup_pr_number, msg).await;
+    Ok(())
+}
+
 /// Enqueues try builds on the try-perf branch for every rollup merge in `rollup_merges`.
 /// Returns a mapping between the rollup merge commit and the try build sha.
-///
-/// `rollup_merges` must only include actual rollup merge commits.
-pub async fn enqueue_unrolled_try_builds<'a>(
+async fn enqueue_unrolled_try_builds<'a>(
     client: client::Client,
     rollup_merges: impl Iterator<Item = &'a Commit>,
     previous_master: &str,
