@@ -465,7 +465,7 @@ fn process_self_profile_output(prof_out_dir: PathBuf, args: &[OsString]) {
 }
 
 #[cfg(windows)]
-fn exec(cmd: &mut Command) {
+fn exec(cmd: &mut Command) -> ! {
     let cmd_d = format!("{:?}", cmd);
     match cmd.status() {
         Ok(status) => std::process::exit(status.code().unwrap_or(1)),
