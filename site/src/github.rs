@@ -10,17 +10,58 @@ type BoxedError = Box<dyn std::error::Error + Send + Sync>;
 
 pub use comparison_summary::post_finished;
 
+/// Enqueues try build artifacts and posts a message about them on the original rollup PR
+pub async fn unroll_rollup(
+    ci_client: client::Client,
+    main_repo_client: client::Client,
+    rollup_merges: impl Iterator<Item = &Commit>,
+    previous_master: &str,
+    rollup_pr_number: u32,
+) -> Result<(), String> {
+    let mapping = enqueue_unrolled_try_builds(ci_client, rollup_merges, previous_master)
+        .await?
+        .into_iter()
+        .fold(String::new(), |mut string, c| {
+            use std::fmt::Write;
+            write!(
+                &mut string,
+                "|#{pr}|[{commit}](https://github.com/rust-lang-ci/rust/commit/{commit})|\n",
+                pr = c.original_pr_number,
+                commit = c.sha
+            )
+            .unwrap();
+            string
+        });
+    let msg =
+        format!("📌 Perf builds for each rolled up PR:\n\n\
+        |PR# | Perf Build Sha|\n|----|-----|\n\
+        {mapping}\nIn the case of a perf regression, \
+        run the following command for each PR you suspect might be the cause: `@rust-timer build $SHA`");
+    main_repo_client.post_comment(rollup_pr_number, msg).await;
+    Ok(())
+}
+
 /// Enqueues try builds on the try-perf branch for every rollup merge in `rollup_merges`.
 /// Returns a mapping between the rollup merge commit and the try build sha.
-///
-/// `rollup_merges` must only include actual rollup merge commits.
-pub async fn enqueue_unrolled_try_builds<'a>(
+async fn enqueue_unrolled_try_builds<'a>(
     client: client::Client,
     rollup_merges: impl Iterator<Item = &'a Commit>,
     previous_master: &str,
-) -> Result<Vec<(&'a Commit, String)>, String> {
+) -> Result<Vec<UnrolledCommit<'a>>, String> {
     let mut mapping = Vec::new();
     for rollup_merge in rollup_merges {
+        // Grab the number of the rolled up PR from its commit message
+        let original_pr_number = ROLLEDUP_PR_NUMBER
+            .captures(&rollup_merge.message)
+            .and_then(|c| c.get(1))
+            .map(|m| m.as_str())
+            .ok_or_else(|| {
+                format!(
+                    "Could not get PR number from message: '{}'",
+                    rollup_merge.message
+                )
+            })?;
+
         // Fetch the rollup merge commit which should have two parents.
         // The first parent is in the chain of rollup merge commits all the way back to `previous_master`.
         // The second parent is the head of the PR that was rolled up. We want the second parent.
@@ -45,7 +86,11 @@ pub async fn enqueue_unrolled_try_builds<'a>(
 
         // Merge in the rolled up PR's head commit into the previous master
         let sha = client
-            .merge_branch("perf-tmp", rolled_up_head, "merge")
+            .merge_branch(
+                "perf-tmp",
+                rolled_up_head,
+                &format!("Unrolled build for #{}", original_pr_number),
+            )
             .await
             .map_err(|e| format!("Error merging commit into perf-tmp: {e:?}"))?;
 
@@ -55,7 +100,11 @@ pub async fn enqueue_unrolled_try_builds<'a>(
             .await
             .map_err(|e| format!("Error updating the try-perf branch: {e:?}"))?;
 
-        mapping.push((rollup_merge, sha));
+        mapping.push(UnrolledCommit {
+            original_pr_number,
+            rollup_merge,
+            sha,
+        });
         // Wait to ensure there's enough time for GitHub to checkout these changes before they are overwritten
         tokio::time::sleep(std::time::Duration::from_secs(15)).await
     }
@@ -63,9 +112,21 @@ pub async fn enqueue_unrolled_try_builds<'a>(
     Ok(mapping)
 }
 
+/// A commit representing a rolled up PR as if it had been merged into master directly
+pub struct UnrolledCommit<'a> {
+    /// The PR number that was rolled up
+    pub original_pr_number: &'a str,
+    /// The original rollup merge commit
+    pub rollup_merge: &'a Commit,
+    /// The sha of the new unrolled merge commit
+    pub sha: String,
+}
+
 lazy_static::lazy_static! {
     static ref ROLLUP_PR_NUMBER: regex::Regex =
         regex::Regex::new(r#"^Auto merge of #(\d+)"#).unwrap();
+    static ref ROLLEDUP_PR_NUMBER: regex::Regex =
+        regex::Regex::new(r#"^Rollup merge of #(\d+)"#).unwrap();
 }
 
 // Gets the pr number for the associated rollup PR message. Returns None if this is not a rollup PR
@@ -101,43 +162,49 @@ pub async fn rollup_pr_number(
         .then(|| issue.number))
 }
 
-pub async fn enqueue_sha(
+pub async fn enqueue_shas(
     ctxt: &SiteCtxt,
     main_client: &client::Client,
     ci_client: &client::Client,
     pr_number: u32,
-    commit: String,
+    commits: impl Iterator<Item = &str>,
 ) -> Result<(), String> {
-    let commit_response = ci_client
-        .get_commit(&commit)
-        .await
-        .map_err(|e| e.to_string())?;
-    if commit_response.parents.len() != 2 {
-        log::error!(
-            "Bors try commit {} unexpectedly has {} parents.",
-            commit_response.sha,
-            commit_response.parents.len()
-        );
-        return Ok(());
-    }
-    let try_commit = TryCommit {
-        sha: commit_response.sha.clone(),
-        parent_sha: commit_response.parents[0].sha.clone(),
-    };
-    let queued = {
-        let conn = ctxt.conn().await;
-        conn.pr_attach_commit(pr_number, &try_commit.sha, &try_commit.parent_sha)
+    let mut msg = String::new();
+    for commit in commits {
+        let mut commit_response = ci_client
+            .get_commit(&commit)
             .await
-    };
-    if queued {
-        let msg = format!(
-            "Queued {} with parent {}, future [comparison URL]({}).",
-            try_commit.sha,
-            try_commit.parent_sha,
-            try_commit.comparison_url(),
-        );
-        main_client.post_comment(pr_number, msg).await;
+            .map_err(|e| e.to_string())?;
+        if commit_response.parents.len() != 2 {
+            log::error!(
+                "Bors try commit {} unexpectedly has {} parents.",
+                commit_response.sha,
+                commit_response.parents.len()
+            );
+            return Ok(());
+        }
+        let try_commit = TryCommit {
+            sha: commit_response.sha,
+            parent_sha: commit_response.parents.remove(0).sha,
+        };
+        let queued = {
+            let conn = ctxt.conn().await;
+            conn.pr_attach_commit(pr_number, &try_commit.sha, &try_commit.parent_sha)
+                .await
+        };
+        if queued {
+            if !msg.is_empty() {
+                msg.push('\n');
+            }
+            msg.push_str(&format!(
+                "Queued {} with parent {}, future [comparison URL]({}).",
+                try_commit.sha,
+                try_commit.parent_sha,
+                try_commit.comparison_url(),
+            ));
+        }
     }
+    main_client.post_comment(pr_number, msg).await;
     Ok(())
 }
 
