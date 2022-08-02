@@ -162,43 +162,49 @@ pub async fn rollup_pr_number(
         .then(|| issue.number))
 }
 
-pub async fn enqueue_sha(
+pub async fn enqueue_shas(
     ctxt: &SiteCtxt,
     main_client: &client::Client,
     ci_client: &client::Client,
     pr_number: u32,
-    commit: String,
+    commits: impl Iterator<Item = &str>,
 ) -> Result<(), String> {
-    let commit_response = ci_client
-        .get_commit(&commit)
-        .await
-        .map_err(|e| e.to_string())?;
-    if commit_response.parents.len() != 2 {
-        log::error!(
-            "Bors try commit {} unexpectedly has {} parents.",
-            commit_response.sha,
-            commit_response.parents.len()
-        );
-        return Ok(());
-    }
-    let try_commit = TryCommit {
-        sha: commit_response.sha.clone(),
-        parent_sha: commit_response.parents[0].sha.clone(),
-    };
-    let queued = {
-        let conn = ctxt.conn().await;
-        conn.pr_attach_commit(pr_number, &try_commit.sha, &try_commit.parent_sha)
+    let mut msg = String::new();
+    for commit in commits {
+        let mut commit_response = ci_client
+            .get_commit(&commit)
             .await
-    };
-    if queued {
-        let msg = format!(
-            "Queued {} with parent {}, future [comparison URL]({}).",
-            try_commit.sha,
-            try_commit.parent_sha,
-            try_commit.comparison_url(),
-        );
-        main_client.post_comment(pr_number, msg).await;
+            .map_err(|e| e.to_string())?;
+        if commit_response.parents.len() != 2 {
+            log::error!(
+                "Bors try commit {} unexpectedly has {} parents.",
+                commit_response.sha,
+                commit_response.parents.len()
+            );
+            return Ok(());
+        }
+        let try_commit = TryCommit {
+            sha: commit_response.sha,
+            parent_sha: commit_response.parents.remove(0).sha,
+        };
+        let queued = {
+            let conn = ctxt.conn().await;
+            conn.pr_attach_commit(pr_number, &try_commit.sha, &try_commit.parent_sha)
+                .await
+        };
+        if queued {
+            if !msg.is_empty() {
+                msg.push('\n');
+            }
+            msg.push_str(&format!(
+                "Queued {} with parent {}, future [comparison URL]({}).",
+                try_commit.sha,
+                try_commit.parent_sha,
+                try_commit.comparison_url(),
+            ));
+        }
     }
+    main_client.post_comment(pr_number, msg).await;
     Ok(())
 }
 

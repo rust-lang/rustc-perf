@@ -1,5 +1,5 @@
 use crate::api::{github, ServerResult};
-use crate::github::{client, enqueue_sha, parse_homu_comment, rollup_pr_number, unroll_rollup};
+use crate::github::{client, enqueue_shas, parse_homu_comment, rollup_pr_number, unroll_rollup};
 use crate::load::SiteCtxt;
 
 use std::sync::Arc;
@@ -7,9 +7,9 @@ use std::sync::Arc;
 use regex::Regex;
 
 lazy_static::lazy_static! {
-    static ref BODY_TRY_COMMIT: Regex =
+    static ref BODY_TIMER_BUILD: Regex =
         Regex::new(r#"(?:\W|^)@rust-timer\s+build\s+(\w+)(?:\W|$)(?:include=(\S+))?\s*(?:exclude=(\S+))?\s*(?:runs=(\d+))?"#).unwrap();
-    static ref BODY_QUEUE: Regex =
+    static ref BODY_TIMER_QUEUE: Regex =
         Regex::new(r#"(?:\W|^)@rust-timer\s+queue(?:\W|$)(?:include=(\S+))?\s*(?:exclude=(\S+))?\s*(?:runs=(\d+))?"#).unwrap();
 }
 
@@ -81,7 +81,14 @@ async fn handle_issue(
     );
     if comment.body.contains(" homu: ") {
         if let Some(sha) = parse_homu_comment(&comment.body).await {
-            enqueue_sha(&ctxt, &main_client, &ci_client, issue.number, sha).await?;
+            enqueue_shas(
+                &ctxt,
+                &main_client,
+                &ci_client,
+                issue.number,
+                std::iter::once(sha.as_str()),
+            )
+            .await?;
             return Ok(github::Response);
         }
     }
@@ -112,7 +119,7 @@ async fn handle_rust_timer(
         return Ok(github::Response);
     }
 
-    if let Some(captures) = BODY_QUEUE.captures(&comment.body) {
+    if let Some(captures) = BODY_TIMER_QUEUE.captures(&comment.body) {
         let include = captures.get(1).map(|v| v.as_str());
         let exclude = captures.get(2).map(|v| v.as_str());
         let runs = captures.get(3).and_then(|v| v.as_str().parse::<i32>().ok());
@@ -130,28 +137,41 @@ async fn handle_rust_timer(
             .await;
         return Ok(github::Response);
     }
-    if let Some(captures) = BODY_TRY_COMMIT.captures(&comment.body) {
-        if let Some(commit) = captures.get(1).map(|c| c.as_str().to_owned()) {
-            let include = captures.get(2).map(|v| v.as_str());
-            let exclude = captures.get(3).map(|v| v.as_str());
-            let runs = captures.get(4).and_then(|v| v.as_str().parse::<i32>().ok());
-            let commit = commit.trim_start_matches("https://github.com/rust-lang/rust/commit/");
-            {
-                let conn = ctxt.conn().await;
-                conn.queue_pr(issue.number, include, exclude, runs).await;
-            }
-            enqueue_sha(
-                &ctxt,
-                &main_client,
-                &ci_client,
-                issue.number,
-                commit.to_owned(),
-            )
-            .await?;
-            return Ok(github::Response);
+
+    for captures in build_captures(&comment).map(|(_, captures)| captures) {
+        let include = captures.get(2).map(|v| v.as_str());
+        let exclude = captures.get(3).map(|v| v.as_str());
+        let runs = captures.get(4).and_then(|v| v.as_str().parse::<i32>().ok());
+        {
+            let conn = ctxt.conn().await;
+            conn.queue_pr(issue.number, include, exclude, runs).await;
         }
     }
+
+    enqueue_shas(
+        &ctxt,
+        &main_client,
+        &ci_client,
+        issue.number,
+        build_captures(&comment).map(|(commit, _)| commit),
+    )
+    .await?;
+
     Ok(github::Response)
+}
+
+/// Run the `@rust-timer build` regex over the comment message extracting the commit and the other captures
+fn build_captures(comment: &github::Comment) -> impl Iterator<Item = (&str, regex::Captures)> {
+    BODY_TIMER_BUILD
+        .captures_iter(&comment.body)
+        .filter_map(|captures| {
+            captures.get(1).map(|m| {
+                let commit = m
+                    .as_str()
+                    .trim_start_matches("https://github.com/rust-lang/rust/commit/");
+                (commit, captures)
+            })
+        })
 }
 
 pub async fn get_authorized_users() -> Result<Vec<usize>, String> {
