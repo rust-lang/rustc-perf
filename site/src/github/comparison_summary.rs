@@ -304,11 +304,11 @@ fn generate_short_summary(summary: &ArtifactComparisonSummary) -> String {
 
     match summary.direction() {
         Some(Direction::Improvement) => format!(
-            "🎉 relevant {} found",
+            "✅ relevant {} found",
             ending("improvement", num_improvements)
         ),
         Some(Direction::Regression) => format!(
-            "😿 relevant {} found",
+            "❌ relevant {} found",
             ending("regression", num_regressions)
         ),
         Some(Direction::Mixed) => "mixed results".to_string(),
