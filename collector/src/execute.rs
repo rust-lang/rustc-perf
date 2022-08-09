@@ -839,7 +839,11 @@ impl<'a> Processor for BenchProcessor<'a> {
         output: process::Output,
     ) -> anyhow::Result<Retry> {
         match process_stat_output(output) {
-            Ok(res) => {
+            Ok(mut res) => {
+                if let Some(ref profile) = res.1 {
+                    store_artifact_sizes_into_stats(&mut res.0, profile);
+                }
+
                 match data.scenario {
                     Scenario::Full => {
                         self.insert_stats(database::Scenario::Empty, data.profile, res);
@@ -882,6 +886,14 @@ impl<'a> Processor for BenchProcessor<'a> {
                 panic!("process_perf_stat_output failed: {:?}", e);
             }
         }
+    }
+}
+
+fn store_artifact_sizes_into_stats(stats: &mut Stats, profile: &SelfProfile) {
+    for artifact in profile.artifact_sizes.iter() {
+        stats
+            .stats
+            .insert(format!("size:{}", artifact.label), artifact.size as f64);
     }
 }
 
@@ -1713,6 +1725,14 @@ impl Patch {
 #[derive(serde::Deserialize, Clone)]
 pub struct SelfProfile {
     pub query_data: Vec<QueryData>,
+    pub artifact_sizes: Vec<ArtifactSize>,
+}
+
+#[derive(serde::Deserialize, Clone)]
+pub struct ArtifactSize {
+    pub label: QueryLabel,
+    #[serde(rename = "value")]
+    pub size: u64,
 }
 
 #[derive(serde::Deserialize, Clone)]

@@ -206,6 +206,18 @@ pub enum Metric {
     TaskClockUser,
     #[serde(rename = "wall-time")]
     WallTime,
+    #[serde(rename = "size:codegen_unit_size_estimate")]
+    CodegenUnitSize,
+    #[serde(rename = "size:dep_graph")]
+    DepGraphSize,
+    #[serde(rename = "size:linked_artifact")]
+    LinkedArtifactSize,
+    #[serde(rename = "size:object_file")]
+    ObjectFileSize,
+    #[serde(rename = "size:query_cache")]
+    QueryCacheSize,
+    #[serde(rename = "size:work_product_index")]
+    WorkProductIndexSize,
 }
 
 impl Metric {
@@ -222,6 +234,12 @@ impl Metric {
             Metric::TaskClock => "task-clock",
             Metric::TaskClockUser => "task-clock:u",
             Metric::WallTime => "wall-time",
+            Metric::CodegenUnitSize => "size:codegen_unit_size_estimate",
+            Metric::DepGraphSize => "size:dep_graph",
+            Metric::LinkedArtifactSize => "size:linked_artifact",
+            Metric::ObjectFileSize => "size:object_file",
+            Metric::QueryCacheSize => "size:query_cache",
+            Metric::WorkProductIndexSize => "size:work_product_index",
         }
     }
 
