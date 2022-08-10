@@ -602,20 +602,13 @@ pub fn write_summary_table(
     }
     result.push_str("|\n");
 
-    let mut render_row = |row: Vec<String>| {
-        debug_assert_eq!(row.len(), column_labels.len());
-        for (column, &count) in row.into_iter().zip(&counts) {
+    for row in 0..5 {
+        let row_data = column_data.iter().map(|rows| rows[row].clone());
+        debug_assert_eq!(row_data.len(), column_labels.len());
+        for (column, &count) in row_data.zip(&counts) {
             write!(result, "| {:<1$} ", column, count).unwrap();
         }
         result.push_str("|\n");
-    };
-
-    for row in 0..5 {
-        let row_data = column_data
-            .iter()
-            .map(|rows| rows[row].clone())
-            .collect::<Vec<_>>();
-        render_row(row_data);
     }
 }
 
