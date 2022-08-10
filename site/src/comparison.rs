@@ -218,6 +218,16 @@ pub enum Metric {
     QueryCacheSize,
     #[serde(rename = "size:work_product_index")]
     WorkProductIndexSize,
+    #[serde(rename = "size:crate_metadata")]
+    CrateMetadataSize,
+    #[serde(rename = "size:dwo_file")]
+    DwoFileSize,
+    #[serde(rename = "size:assembly_file")]
+    AssemblyFileSize,
+    #[serde(rename = "size:llvm_bitcode")]
+    LlvmBitcodeSize,
+    #[serde(rename = "size:llvm_ir")]
+    LlvmIrSize,
 }
 
 impl Metric {
@@ -240,6 +250,11 @@ impl Metric {
             Metric::ObjectFileSize => "size:object_file",
             Metric::QueryCacheSize => "size:query_cache",
             Metric::WorkProductIndexSize => "size:work_product_index",
+            Metric::CrateMetadataSize => "size:crate_metadata",
+            Metric::DwoFileSize => "size:dwo_file",
+            Metric::AssemblyFileSize => "size:assembly_file",
+            Metric::LlvmBitcodeSize => "size:llvm_bitcode",
+            Metric::LlvmIrSize => "size:llvm_ir",
         }
     }
 
