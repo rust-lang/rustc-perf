@@ -586,6 +586,8 @@ pub fn write_summary_table(
         (primary.num_regressions + primary.num_improvements).to_string(),
     ]);
 
+    // This code attempts to space the table cells evenly so that the data is
+    // easy to read for anyone who is viewing the Markdown source.
     let column_labels = [
         "          ".to_string(), // we want at least 10 spaces to accommodate "count[^2]"
         format!("mean{}", if with_footnotes { "[^1]" } else { "" }),
