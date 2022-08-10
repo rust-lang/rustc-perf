@@ -12,6 +12,7 @@ use collector::category::Category;
 use collector::Bound;
 use serde::{Deserialize, Serialize};
 
+use database::CommitType;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
@@ -753,6 +754,7 @@ fn previous_commits(
                 let new = ArtifactId::Commit(database::Commit {
                     sha: c.sha.clone(),
                     date: database::Date(c.time),
+                    r#type: CommitType::Master,
                 });
                 from = new.clone();
                 prevs.push(new);

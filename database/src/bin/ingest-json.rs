@@ -880,11 +880,7 @@ async fn ingest<T: Ingesting>(conn: &T, caches: &mut IdCache, path: &Path) {
     let (name, date, ty, benchmarks) = match res {
         Res::Commit(cd) => (
             cd.commit.sha.to_string(),
-            if cd.commit.is_try() {
-                None
-            } else {
-                Some(cd.commit.date.0)
-            },
+            Some(cd.commit.date.0),
             if cd.commit.is_try() { "try" } else { "master" },
             cd.benchmarks,
         ),

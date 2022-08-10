@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use bytes::Buf;
+use database::CommitType;
 use headers::{ContentType, Header};
 use hyper::StatusCode;
 
@@ -494,6 +495,7 @@ pub async fn handle_self_profile_raw(
             ArtifactId::Commit(database::Commit {
                 sha: body.commit.clone(),
                 date: database::Date::empty(),
+                r#type: CommitType::Master,
             }),
             bench_name,
             profile,

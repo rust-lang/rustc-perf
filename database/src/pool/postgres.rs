@@ -1,7 +1,7 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{
-    ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkData, CollectionId, Commit, Date, Index,
-    Profile, QueuedCommit, Scenario,
+    ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkData, CollectionId, Commit, CommitType, Date,
+    Index, Profile, QueuedCommit, Scenario,
 };
 use anyhow::Context as _;
 use chrono::{DateTime, TimeZone, Utc};
@@ -9,6 +9,7 @@ use hashbrown::HashMap;
 use native_tls::{Certificate, TlsConnector};
 use postgres_native_tls::MakeTlsConnector;
 use std::convert::TryFrom;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio_postgres::GenericClient;
@@ -479,7 +480,7 @@ where
             commits: self
                 .conn()
                 .query(
-                    "select id, name, date from artifact where type = 'master' or type = 'try'",
+                    "select id, name, date, type from artifact where type = 'master' or type = 'try'",
                     &[],
                 )
                 .await
@@ -497,6 +498,7 @@ where
                                     None => Date(Utc.ymd(2001, 01, 01).and_hms(0, 0, 0)),
                                 }
                             },
+                            r#type: CommitType::from_str(&row.get::<_, String>(3)).unwrap()
                         },
                     )
                 })
@@ -1009,6 +1011,7 @@ where
                         .get::<_, Option<_>>(1)
                         .map(Date)
                         .unwrap_or_else(|| Date::ymd_hms(2001, 01, 01, 0, 0, 0)),
+                    r#type: CommitType::from_str(&ty).unwrap(),
                 }),
                 "release" => ArtifactId::Tag(row.get(0)),
                 _ => {
@@ -1198,10 +1201,14 @@ where
             "master" => Some(ArtifactId::Commit(Commit {
                 sha: artifact.to_owned(),
                 date: Date(date.expect("date present for master commits")),
+                r#type: CommitType::Master,
             })),
             "try" => Some(ArtifactId::Commit(Commit {
                 sha: artifact.to_owned(),
-                date: Date::ymd_hms(2000, 1, 1, 0, 0, 0),
+                date: date
+                    .map(Date)
+                    .unwrap_or_else(|| Date::ymd_hms(2000, 1, 1, 0, 0, 0)),
+                r#type: CommitType::Try,
             })),
             "release" => Some(ArtifactId::Tag(artifact.to_owned())),
             _ => panic!("unknown artifact type: {:?}", ty),
