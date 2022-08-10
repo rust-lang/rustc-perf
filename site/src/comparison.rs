@@ -491,7 +491,7 @@ pub fn write_summary_table(
         let value = if count > 0 { calculate() } else { None };
         value
             .map(|value| format!("{value:.1}%"))
-            .unwrap_or_else(|| "N/A".to_string())
+            .unwrap_or_else(|| "-".to_string())
     }
 
     // (label, mean, max, count)
@@ -521,14 +521,14 @@ pub fn write_summary_table(
             Some(secondary.arithmetic_mean_of_improvements())
         }),
         if primary.is_empty() {
-            "N/A".to_string()
+            "-".to_string()
         } else {
             format!("{:.1}%", primary.arithmetic_mean_of_changes())
         },
     ]);
 
     let largest_change = if primary.is_empty() {
-        "N/A".to_string()
+        "-".to_string()
     } else {
         let largest_improvement = primary
             .largest_improvement()
@@ -1341,9 +1341,9 @@ mod tests {
 |            | mean[^1] | max | count[^2] |
 |:----------:|:--------:|:---:|:---------:|
 | Regressions ❌ <br /> (primary) | 146.7%   | 200.0% | 3         |
-| Regressions ❌ <br /> (secondary) | N/A      | N/A | 0         |
-| Improvements ✅ <br /> (primary) | N/A      | N/A | 0         |
-| Improvements ✅ <br /> (secondary) | N/A      | N/A | 0         |
+| Regressions ❌ <br /> (secondary) | -        | -   | 0         |
+| Improvements ✅ <br /> (primary) | -        | -   | 0         |
+| Improvements ✅ <br /> (secondary) | -        | -   | 0         |
 | All ❌✅ (primary) | 146.7%   | 200.0% | 3         |
 "#
             .trim_start(),
@@ -1361,10 +1361,10 @@ mod tests {
             r#"
 |            | mean[^1] | max | count[^2] |
 |:----------:|:--------:|:---:|:---------:|
-| Regressions ❌ <br /> (primary) | N/A      | N/A | 0         |
-| Regressions ❌ <br /> (secondary) | N/A      | N/A | 0         |
+| Regressions ❌ <br /> (primary) | -        | -   | 0         |
+| Regressions ❌ <br /> (secondary) | -        | -   | 0         |
 | Improvements ✅ <br /> (primary) | -71.7%   | -80.0% | 3         |
-| Improvements ✅ <br /> (secondary) | N/A      | N/A | 0         |
+| Improvements ✅ <br /> (secondary) | -        | -   | 0         |
 | All ❌✅ (primary) | -71.7%   | -80.0% | 3         |
 "#
             .trim_start(),
@@ -1382,11 +1382,11 @@ mod tests {
             r#"
 |            | mean[^1] | max | count[^2] |
 |:----------:|:--------:|:---:|:---------:|
-| Regressions ❌ <br /> (primary) | N/A      | N/A | 0         |
-| Regressions ❌ <br /> (secondary) | N/A      | N/A | 0         |
-| Improvements ✅ <br /> (primary) | N/A      | N/A | 0         |
+| Regressions ❌ <br /> (primary) | -        | -   | 0         |
+| Regressions ❌ <br /> (secondary) | -        | -   | 0         |
+| Improvements ✅ <br /> (primary) | -        | -   | 0         |
 | Improvements ✅ <br /> (secondary) | -71.7%   | -80.0% | 3         |
-| All ❌✅ (primary) | N/A      | N/A | 0         |
+| All ❌✅ (primary) | -        | -   | 0         |
 "#
             .trim_start(),
         );
@@ -1403,11 +1403,11 @@ mod tests {
             r#"
 |            | mean[^1] | max | count[^2] |
 |:----------:|:--------:|:---:|:---------:|
-| Regressions ❌ <br /> (primary) | N/A      | N/A | 0         |
+| Regressions ❌ <br /> (primary) | -        | -   | 0         |
 | Regressions ❌ <br /> (secondary) | 146.7%   | 200.0% | 3         |
-| Improvements ✅ <br /> (primary) | N/A      | N/A | 0         |
-| Improvements ✅ <br /> (secondary) | N/A      | N/A | 0         |
-| All ❌✅ (primary) | N/A      | N/A | 0         |
+| Improvements ✅ <br /> (primary) | -        | -   | 0         |
+| Improvements ✅ <br /> (secondary) | -        | -   | 0         |
+| All ❌✅ (primary) | -        | -   | 0         |
 "#
             .trim_start(),
         );
@@ -1426,9 +1426,9 @@ mod tests {
 |            | mean[^1] | max | count[^2] |
 |:----------:|:--------:|:---:|:---------:|
 | Regressions ❌ <br /> (primary) | 150.0%   | 200.0% | 2         |
-| Regressions ❌ <br /> (secondary) | N/A      | N/A | 0         |
+| Regressions ❌ <br /> (secondary) | -        | -   | 0         |
 | Improvements ✅ <br /> (primary) | -62.5%   | -75.0% | 2         |
-| Improvements ✅ <br /> (secondary) | N/A      | N/A | 0         |
+| Improvements ✅ <br /> (secondary) | -        | -   | 0         |
 | All ❌✅ (primary) | 43.8%    | 200.0% | 4         |
 "#
             .trim_start(),
@@ -1470,9 +1470,9 @@ mod tests {
 |            | mean[^1] | max | count[^2] |
 |:----------:|:--------:|:---:|:---------:|
 | Regressions ❌ <br /> (primary) | 20.0%    | 20.0% | 1         |
-| Regressions ❌ <br /> (secondary) | N/A      | N/A | 0         |
+| Regressions ❌ <br /> (secondary) | -        | -   | 0         |
 | Improvements ✅ <br /> (primary) | -50.0%   | -50.0% | 1         |
-| Improvements ✅ <br /> (secondary) | N/A      | N/A | 0         |
+| Improvements ✅ <br /> (secondary) | -        | -   | 0         |
 | All ❌✅ (primary) | -15.0%   | -50.0% | 2         |
 "#
             .trim_start(),
@@ -1490,9 +1490,9 @@ mod tests {
 |            | mean[^1] | max | count[^2] |
 |:----------:|:--------:|:---:|:---------:|
 | Regressions ❌ <br /> (primary) | 100.0%   | 100.0% | 1         |
-| Regressions ❌ <br /> (secondary) | N/A      | N/A | 0         |
+| Regressions ❌ <br /> (secondary) | -        | -   | 0         |
 | Improvements ✅ <br /> (primary) | -16.7%   | -16.7% | 1         |
-| Improvements ✅ <br /> (secondary) | N/A      | N/A | 0         |
+| Improvements ✅ <br /> (secondary) | -        | -   | 0         |
 | All ❌✅ (primary) | 41.7%    | 100.0% | 2         |
 "#
             .trim_start(),
