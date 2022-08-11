@@ -83,7 +83,7 @@ fn main() {
                     .env("LC_NUMERIC", "C")
                     .arg("-x;")
                     .arg("-e")
-                    .arg("instructions:u,cycles:u,task-clock,cpu-clock,faults,context-switches")
+                    .arg("instructions:u,cycles:u,task-clock,cpu-clock,faults,context-switches,branch-misses,cache-misses")
                     .arg("--log-fd")
                     .arg("1")
                     .arg("setarch")

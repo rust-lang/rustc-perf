@@ -207,6 +207,10 @@ pub enum Metric {
     TaskClockUser,
     #[serde(rename = "wall-time")]
     WallTime,
+    #[serde(rename = "branch-misses")]
+    BranchMisses,
+    #[serde(rename = "cache-misses")]
+    CacheMisses,
     #[serde(rename = "size:codegen_unit_size_estimate")]
     CodegenUnitSize,
     #[serde(rename = "size:dep_graph")]
@@ -245,6 +249,8 @@ impl Metric {
             Metric::TaskClock => "task-clock",
             Metric::TaskClockUser => "task-clock:u",
             Metric::WallTime => "wall-time",
+            Metric::BranchMisses => "branch-misses",
+            Metric::CacheMisses => "cache-misses",
             Metric::CodegenUnitSize => "size:codegen_unit_size_estimate",
             Metric::DepGraphSize => "size:dep_graph",
             Metric::LinkedArtifactSize => "size:linked_artifact",
