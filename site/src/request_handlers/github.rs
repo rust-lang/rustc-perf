@@ -51,8 +51,7 @@ async fn handle_push(ctxt: Arc<SiteCtxt>, push: github::Push) -> ServerResult<gi
         let rollup_merges = commits
             .iter()
             .rev()
-            .skip(1) // skip the head commit
-            .take_while(|c| c.message.starts_with("Rollup merge of "));
+            .filter(|c| c.message.starts_with("Rollup merge of #"));
         let result = unroll_rollup(
             ci_client,
             main_repo_client,
