@@ -1,4 +1,5 @@
 use collector::Bound;
+use database::CommitType;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -140,9 +141,19 @@ async fn create_graphs(
     }))
 }
 
+/// Returns artifact IDs for the given range.
+/// Inside of the range (not at the start/end), only master commits are kept.
 fn artifact_ids_for_range(ctxt: &SiteCtxt, start: Bound, end: Bound) -> Vec<ArtifactId> {
     let range = ctxt.data_range(start..=end);
-    range.into_iter().map(|c| c.into()).collect()
+    let count = range.len();
+    range
+        .into_iter()
+        .enumerate()
+        .filter(|(index, commit)| {
+            *index == 0 || *index == count - 1 || matches!(commit.r#type, CommitType::Master)
+        })
+        .map(|c| c.1.into())
+        .collect()
 }
 
 /// Creates a summary "benchmark" that averages the results of all other

@@ -760,11 +760,7 @@ where
         let (name, date, ty) = match artifact {
             ArtifactId::Commit(commit) => (
                 commit.sha.to_string(),
-                if commit.is_try() {
-                    None
-                } else {
-                    Some(commit.date.0)
-                },
+                Some(commit.date.0),
                 if commit.is_try() { "try" } else { "master" },
             ),
             ArtifactId::Tag(a) => (a.clone(), None, "release"),
