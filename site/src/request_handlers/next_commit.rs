@@ -49,8 +49,8 @@ pub async fn handle_next_commit(ctxt: Arc<SiteCtxt>) -> next_commit::Response {
             commit.sha,
             missing_reason_dbg
         );
-        Some(next_commit::Commit {
-            sha: commit.sha,
+        Some(next_commit::NextCommit {
+            commit,
             include,
             exclude,
             runs,

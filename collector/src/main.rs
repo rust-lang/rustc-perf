@@ -1008,12 +1008,11 @@ fn main_result() -> anyhow::Result<i32> {
                 // no missing commits
                 return Ok(0);
             };
-            let commit = get_commit_or_fake_it(&next.sha)?;
 
             let pool = database::Pool::open(&db.db);
 
-            let sysroot = Sysroot::install(commit.sha.to_string(), &target_triple)
-                .with_context(|| format!("failed to install sysroot for {:?}", commit))?;
+            let sysroot = Sysroot::install(next.commit.sha.to_string(), &target_triple)
+                .with_context(|| format!("failed to install sysroot for {:?}", next.commit))?;
 
             let mut benchmarks = get_benchmarks(
                 &benchmark_dir,
@@ -1025,7 +1024,7 @@ fn main_result() -> anyhow::Result<i32> {
             let res = bench(
                 &mut rt,
                 pool,
-                &ArtifactId::Commit(commit),
+                &ArtifactId::Commit(next.commit),
                 &Profile::all(),
                 &Scenario::all(),
                 bench_rustc.bench_rustc,
