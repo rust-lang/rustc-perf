@@ -96,7 +96,7 @@ pub async fn handle_triage(
                     .clone()
                     .summarize_by_category(&benchmark_map);
                 let mut result = String::from("**Summary**:\n\n");
-                write_summary_table(&primary, &secondary, false, &mut result);
+                write_summary_table(&primary, &secondary, false, true, &mut result);
                 result
             }
             None => String::from("**ERROR**: no data found for end bound"),
@@ -513,7 +513,7 @@ async fn write_triage_summary(
     let link = &compare_link(start, end);
     write!(&mut result, " [(Comparison Link)]({})\n\n", link).unwrap();
 
-    write_summary_table(&primary, &secondary, false, &mut result);
+    write_summary_table(&primary, &secondary, false, true, &mut result);
 
     result
 }
@@ -523,17 +523,20 @@ pub fn write_summary_table(
     primary: &ArtifactComparisonSummary,
     secondary: &ArtifactComparisonSummary,
     with_footnotes: bool,
+    include_metric: bool,
     result: &mut String,
 ) {
-    let metric = match primary
-        .relevant_comparisons
-        .first()
-        .or(secondary.relevant_comparisons.first())
-        .map(|m| m.metric.as_str())
-    {
-        Some(m) => m,
-        None => return,
-    };
+    let metric = include_metric
+        .then(|| {
+            primary
+                .relevant_comparisons
+                .first()
+                .or(secondary.relevant_comparisons.first())
+                .map(|m| m.metric.as_str())
+        })
+        .flatten()
+        // we want at least 10 spaces to accommodate "count[^2]"
+        .unwrap_or("          ");
 
     fn render_stat<F: FnOnce() -> Option<f64>>(count: usize, calculate: F) -> String {
         let value = if count > 0 { calculate() } else { None };
@@ -637,7 +640,7 @@ pub fn write_summary_table(
     // This code attempts to space the table cells evenly so that the data is
     // easy to read for anyone who is viewing the Markdown source.
     let column_labels = [
-        format!("({metric})",),
+        format!("({metric})"),
         format!("mean{}", if with_footnotes { "[^1]" } else { "" }),
         "max".to_string(),
         format!("count{}", if with_footnotes { "[^2]" } else { "" }),
@@ -1581,7 +1584,7 @@ mod tests {
         let secondary = ArtifactComparisonSummary::summarize(secondary_comparisons);
 
         let mut result = String::new();
-        write_summary_table(&primary, &secondary, true, &mut result);
+        write_summary_table(&primary, &secondary, true, true, &mut result);
         let header = "| (instructions:u) | mean[^1] | max | count[^2] |\n|:----------------:|:--------:|:---:|:---------:|\n";
         assert_eq!(result, format!("{header}{expected}"));
     }

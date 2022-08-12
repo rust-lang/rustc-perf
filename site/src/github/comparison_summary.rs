@@ -214,7 +214,7 @@ fn write_metric_summary(
         )
         .unwrap();
 
-        write_summary_table(&primary, &secondary, true, message);
+        write_summary_table(&primary, &secondary, true, false, message);
 
         if hidden {
             message.push_str("</details>\n");
