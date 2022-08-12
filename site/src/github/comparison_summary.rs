@@ -166,7 +166,7 @@ async fn summarize_run(
         ));
 
         let (primary, secondary) = comparison.summarize_by_category(&benchmark_map);
-        table_written |= write_metric_summary(primary, secondary, hidden, &mut message).await;
+        table_written |= write_metric_summary(primary, secondary, hidden, &mut message);
     }
 
     if table_written {
@@ -186,7 +186,7 @@ async fn summarize_run(
 }
 
 /// Returns true if a summary table was written to `message`.
-async fn write_metric_summary(
+fn write_metric_summary(
     primary: ArtifactComparisonSummary,
     secondary: ArtifactComparisonSummary,
     hidden: bool,
