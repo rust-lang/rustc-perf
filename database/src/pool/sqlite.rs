@@ -3,7 +3,7 @@ use crate::{
     ArtifactId, Benchmark, BenchmarkData, CollectionId, Commit, CommitType, Date, Profile,
 };
 use crate::{ArtifactIdNumber, Index, QueryDatum, QueuedCommit};
-use chrono::{DateTime, TimeZone, Utc};
+use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use hashbrown::HashMap;
 use rusqlite::params;
 use rusqlite::OptionalExtension;
@@ -321,6 +321,7 @@ static MIGRATIONS: &[Migration] = &[
         "#,
     ),
     Migration::new("alter table benchmark add column category text not null default ''"),
+    Migration::new("alter table pull_request_build add column commit_date timestamp"),
 ];
 
 #[async_trait::async_trait]
@@ -564,21 +565,28 @@ impl Connection for SqliteConnection {
             .execute(params![pr, include, exclude, &runs])
             .unwrap();
     }
-    async fn pr_attach_commit(&self, pr: u32, sha: &str, parent_sha: &str) -> bool {
+    async fn pr_attach_commit(
+        &self,
+        pr: u32,
+        sha: &str,
+        parent_sha: &str,
+        commit_date: Option<DateTime<Utc>>,
+    ) -> bool {
+        let timestamp = commit_date.map(|d| d.timestamp());
         self.raw_ref()
             .prepare_cached(
-                "update pull_request_build SET bors_sha = ?, parent_sha = ?
+                "update pull_request_build SET bors_sha = ?, parent_sha = ?, commit_date = ?
                 where pr = ? and bors_sha is null",
             )
             .unwrap()
-            .execute(params![sha, parent_sha, pr])
+            .execute(params![sha, parent_sha, timestamp, pr])
             .unwrap()
             > 0
     }
     async fn queued_commits(&self) -> Vec<QueuedCommit> {
         self.raw_ref()
             .prepare_cached(
-                "select pr, bors_sha, parent_sha, include, exclude, runs from pull_request_build
+                "select pr, bors_sha, parent_sha, include, exclude, runs, commit_date from pull_request_build
                 where complete is false and bors_sha is not null
                 order by requested asc",
             )
@@ -593,6 +601,7 @@ impl Connection for SqliteConnection {
                     include: row.get(3).unwrap(),
                     exclude: row.get(4).unwrap(),
                     runs: row.get(5).unwrap(),
+                    commit_date: row.get::<_, Option<i64>>(6).unwrap().map(|timestamp| Date(DateTime::from_utc(NaiveDateTime::from_timestamp(timestamp, 0), Utc)))
                 })
             })
             .collect::<Result<Vec<_>, _>>()
@@ -612,7 +621,7 @@ impl Connection for SqliteConnection {
         assert_eq!(count, 1, "sha is unique column");
         self.raw_ref()
             .query_row(
-                "select pr, sha, parent_sha, include, exclude, runs from pull_request_build
+                "select pr, sha, parent_sha, include, exclude, runs, commit_date from pull_request_build
             where sha = ?",
                 params![sha],
                 |row| {
@@ -623,6 +632,7 @@ impl Connection for SqliteConnection {
                         include: row.get(3).unwrap(),
                         exclude: row.get(4).unwrap(),
                         runs: row.get(5).unwrap(),
+                        commit_date: row.get::<_, Option<i64>>(6).unwrap().map(|timestamp| Date(DateTime::from_utc(NaiveDateTime::from_timestamp(timestamp, 0), Utc)))
                     })
                 },
             )

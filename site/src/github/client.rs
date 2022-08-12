@@ -1,4 +1,5 @@
 use anyhow::Context;
+use chrono::{DateTime, Utc};
 use http::header::USER_AGENT;
 
 use crate::{api::github::Issue, load::SiteCtxt};
@@ -253,6 +254,12 @@ pub struct InnerCommit {
     #[serde(default)]
     pub message: String,
     pub tree: CommitTree,
+    pub committer: Committer,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct Committer {
+    pub date: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]

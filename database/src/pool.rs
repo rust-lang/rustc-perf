@@ -102,7 +102,13 @@ pub trait Connection: Send + Sync {
         runs: Option<i32>,
     );
     /// Returns true if this PR was queued waiting for a commit
-    async fn pr_attach_commit(&self, pr: u32, sha: &str, parent_sha: &str) -> bool;
+    async fn pr_attach_commit(
+        &self,
+        pr: u32,
+        sha: &str,
+        parent_sha: &str,
+        commit_date: Option<DateTime<Utc>>,
+    ) -> bool;
     async fn queued_commits(&self) -> Vec<QueuedCommit>;
     async fn mark_complete(&self, sha: &str) -> Option<QueuedCommit>;
 

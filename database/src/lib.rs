@@ -23,6 +23,7 @@ pub struct QueuedCommit {
     pub include: Option<String>,
     pub exclude: Option<String>,
     pub runs: Option<i32>,
+    pub commit_date: Option<Date>,
 }
 
 #[derive(Debug, Hash, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]

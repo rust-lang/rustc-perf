@@ -306,6 +306,7 @@ fn calculate_missing_from(
         include,
         exclude,
         runs,
+        commit_date,
     } in queued_pr_commits
         .into_iter()
         // filter out any queued PR master commits (leaving only try commits)
@@ -322,7 +323,7 @@ fn calculate_missing_from(
         queue.push((
             Commit {
                 sha: sha.to_string(),
-                date: Date::ymd_hms(2001, 01, 01, 0, 0, 0),
+                date: commit_date.unwrap_or(Date::empty()),
                 r#type: CommitType::Try,
             },
             MissingReason::Try {
@@ -499,6 +500,7 @@ mod tests {
                 include: None,
                 exclude: None,
                 runs: None,
+                commit_date: None,
             },
             QueuedCommit {
                 sha: "b".into(),
@@ -507,6 +509,7 @@ mod tests {
                 include: None,
                 exclude: None,
                 runs: None,
+                commit_date: None,
             },
             QueuedCommit {
                 sha: "a".into(),
@@ -515,6 +518,7 @@ mod tests {
                 include: None,
                 exclude: None,
                 runs: None,
+                commit_date: None,
             },
         ];
         let in_progress_artifacts = vec![];
@@ -606,6 +610,7 @@ mod tests {
                 include: None,
                 exclude: None,
                 runs: None,
+                commit_date: None,
             },
             // A try run
             QueuedCommit {
@@ -615,6 +620,7 @@ mod tests {
                 include: None,
                 exclude: None,
                 runs: None,
+                commit_date: None,
             },
         ];
         let in_progress_artifacts = vec![];
