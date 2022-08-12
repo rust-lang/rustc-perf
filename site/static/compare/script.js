@@ -494,9 +494,15 @@ function makeData(state, app) {
 
 function createSearchParamsForMetric(stat, start, end) {
     let params = new URLSearchParams();
-    params.append("start", start);
-    params.append("end", end);
-    params.append("stat", stat);
+    if (start !== undefined) {
+        params.append("start", start);
+    }
+    if (end !== undefined) {
+        params.append("end", end);
+    }
+    if (stat !== undefined) {
+        params.append("stat", stat);
+    }
     return params.toString();
 }
 
