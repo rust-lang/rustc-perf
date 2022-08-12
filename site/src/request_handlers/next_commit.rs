@@ -18,7 +18,10 @@ pub async fn handle_next_commit(ctxt: Arc<SiteCtxt>) -> next_commit::Response {
             // TODO: add capability of doing the following in one step
             // to avoid possibile illegal inbetween states.
             conn.queue_pr(pr, None, None, None).await;
-            if !conn.pr_attach_commit(pr, &commit.sha, parent_sha).await {
+            if !conn
+                .pr_attach_commit(pr, &commit.sha, parent_sha, None)
+                .await
+            {
                 log::error!("failed to attach commit {} to PR queue", commit.sha);
             }
         }

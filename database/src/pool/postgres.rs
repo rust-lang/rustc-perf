@@ -212,6 +212,9 @@ static MIGRATIONS: &[&str] = &[
     r#"
     alter table benchmark add column category text not null DEFAULT 'secondary';
     "#,
+    r#"
+    alter table pull_request_build add column commit_date timestamptz;
+    "#,
 ];
 
 #[async_trait::async_trait]
@@ -623,12 +626,18 @@ where
                 log::error!("failed to queue_pr({}, {:?}, {:?}, {:?}): {:?}", pr, include, exclude, runs, e);
         }
     }
-    async fn pr_attach_commit(&self, pr: u32, sha: &str, parent_sha: &str) -> bool {
+    async fn pr_attach_commit(
+        &self,
+        pr: u32,
+        sha: &str,
+        parent_sha: &str,
+        commit_date: Option<DateTime<Utc>>,
+    ) -> bool {
         self.conn()
             .execute(
-                "update pull_request_build SET bors_sha = $1, parent_sha = $2
+                "update pull_request_build SET bors_sha = $1, parent_sha = $2, commit_date = $4
                 where pr = $3 and bors_sha is null",
-                &[&sha, &parent_sha, &(pr as i32)],
+                &[&sha, &parent_sha, &(pr as i32), &commit_date],
             )
             .await
             .unwrap()
@@ -638,7 +647,7 @@ where
         let rows = self
             .conn()
             .query(
-                "select pr, bors_sha, parent_sha, include, exclude, runs from pull_request_build
+                "select pr, bors_sha, parent_sha, include, exclude, runs, commit_date from pull_request_build
                 where complete is false and bors_sha is not null
                 order by requested asc",
                 &[],
@@ -653,6 +662,7 @@ where
                 include: row.get(3),
                 exclude: row.get(4),
                 runs: row.get(5),
+                commit_date: row.get::<_, Option<_>>(6).map(Date),
             })
             .collect()
     }
@@ -662,7 +672,7 @@ where
             .query_opt(
                 "update pull_request_build SET complete = true
                 where bors_sha = $1
-                returning pr, bors_sha, parent_sha, include, exclude, runs",
+                returning pr, bors_sha, parent_sha, include, exclude, runs, commit_date",
                 &[&sha],
             )
             .await
@@ -674,6 +684,7 @@ where
             include: row.get(3),
             exclude: row.get(4),
             runs: row.get(5),
+            commit_date: row.get::<_, Option<_>>(6).map(Date),
         })
     }
     async fn collection_id(&self, version: &str) -> CollectionId {

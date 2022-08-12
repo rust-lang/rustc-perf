@@ -189,8 +189,13 @@ pub async fn enqueue_shas(
         };
         let queued = {
             let conn = ctxt.conn().await;
-            conn.pr_attach_commit(pr_number, &try_commit.sha, &try_commit.parent_sha)
-                .await
+            conn.pr_attach_commit(
+                pr_number,
+                &try_commit.sha,
+                &try_commit.parent_sha,
+                Some(commit_response.commit.committer.date),
+            )
+            .await
         };
         if queued {
             if !msg.is_empty() {
