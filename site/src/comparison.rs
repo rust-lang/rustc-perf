@@ -166,12 +166,10 @@ async fn populate_report(
 ) {
     let (primary, secondary) = comparison.clone().summarize_by_category(&benchmark_map);
     // Get the combined direction of the primary and secondary summaries
-    let direction = match (primary.direction(), secondary.direction()) {
-        (Some(d1), Some(d2)) if d1 != d2 => Direction::Mixed,
-        (Some(d), Some(_) | None) => d,
-        (None, Some(d)) => d,
-        (None, None) => return,
-    };
+    let direction = Direction::join(primary.direction(), secondary.direction());
+    if direction == Direction::None {
+        return;
+    }
 
     let include_in_triage = deserves_attention_icount(&primary, &secondary);
 
@@ -338,9 +336,9 @@ impl ArtifactComparisonSummary {
     }
 
     /// The direction of the changes
-    pub fn direction(&self) -> Option<Direction> {
+    pub fn direction(&self) -> Direction {
         if self.relevant_comparisons.len() == 0 {
-            return None;
+            return Direction::None;
         }
 
         let (regressions, improvements): (Vec<&TestResultComparison>, _) = self
@@ -349,11 +347,11 @@ impl ArtifactComparisonSummary {
             .partition(|c| c.is_regression());
 
         if regressions.len() == 0 {
-            return Some(Direction::Improvement);
+            return Direction::Improvement;
         }
 
         if improvements.len() == 0 {
-            return Some(Direction::Regression);
+            return Direction::Regression;
         }
 
         let total_num = self.relevant_comparisons.len();
@@ -369,28 +367,28 @@ impl ArtifactComparisonSummary {
             has_medium_and_above_improvements,
             has_medium_and_above_regressions,
         ) {
-            (true, true) => return Some(Direction::Mixed),
+            (true, true) => return Direction::Mixed,
             (true, false) => {
                 if regressions_ratio >= 0.15 {
-                    Some(Direction::Mixed)
+                    Direction::Mixed
                 } else {
-                    Some(Direction::Improvement)
+                    Direction::Improvement
                 }
             }
             (false, true) => {
                 if regressions_ratio < 0.85 {
-                    Some(Direction::Mixed)
+                    Direction::Mixed
                 } else {
-                    Some(Direction::Regression)
+                    Direction::Regression
                 }
             }
             (false, false) => {
                 if regressions_ratio >= 0.1 && regressions_ratio <= 0.9 {
-                    Some(Direction::Mixed)
+                    Direction::Mixed
                 } else if regressions_ratio <= 0.1 {
-                    Some(Direction::Improvement)
+                    Direction::Improvement
                 } else {
-                    Some(Direction::Regression)
+                    Direction::Regression
                 }
             }
         }
@@ -1222,19 +1220,30 @@ impl std::hash::Hash for TestResultComparison {
 // The direction of a performance change
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Direction {
+    None,
     Improvement,
     Regression,
     Mixed,
 }
 
-impl std::fmt::Display for Direction {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let description = match self {
-            Direction::Improvement => "improvement",
-            Direction::Regression => "regression",
-            Direction::Mixed => "mixed",
-        };
-        write!(f, "{}", description)
+// The direction of a performance change. Forms a lattice:
+//
+//          Mixed
+//          /    \
+// Improvement  Regression
+//          \    /
+//           None
+//
+impl Direction {
+    // Also known as the "least upper bound".
+    pub fn join(a: Self, b: Self) -> Self {
+        match (a, b) {
+            (Self::None, b) => b,
+            (a, Self::None) => a,
+            (Self::Improvement, Self::Improvement) => Self::Improvement,
+            (Self::Regression, Self::Regression) => Self::Regression,
+            _ => Self::Mixed,
+        }
     }
 }
 

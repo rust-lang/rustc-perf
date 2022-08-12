@@ -166,7 +166,7 @@ async fn summarize_run(
         ));
 
         let (primary, secondary) = comparison.summarize_by_category(&benchmark_map);
-        table_written |= write_metric_summary(primary, secondary, hidden, &mut message).await;
+        table_written |= write_metric_summary(primary, secondary, hidden, &mut message);
     }
 
     if table_written {
@@ -177,7 +177,7 @@ async fn summarize_run(
     please file an issue in [rust-lang/rustc-perf](https://github.com/rust-lang/rustc-perf/issues/new).";
     let footer = format!("{DISAGREEMENT}{errors}");
 
-    let direction = inst_primary.direction().or(inst_secondary.direction());
+    let direction = Direction::join(inst_primary.direction(), inst_secondary.direction());
     let next_steps = next_steps(inst_primary, inst_secondary, direction, is_master_commit);
 
     write!(&mut message, "\n{footer}\n{next_steps}").unwrap();
@@ -186,7 +186,7 @@ async fn summarize_run(
 }
 
 /// Returns true if a summary table was written to `message`.
-async fn write_metric_summary(
+fn write_metric_summary(
     primary: ArtifactComparisonSummary,
     secondary: ArtifactComparisonSummary,
     hidden: bool,
@@ -227,12 +227,12 @@ async fn write_metric_summary(
 fn next_steps(
     primary: ArtifactComparisonSummary,
     secondary: ArtifactComparisonSummary,
-    direction: Option<Direction>,
+    direction: Direction,
     is_master_commit: bool,
 ) -> String {
     let deserves_attention = deserves_attention_icount(&primary, &secondary);
     let (is_regression, label) = match (deserves_attention, direction) {
-        (true, Some(Direction::Regression | Direction::Mixed)) => (true, "+perf-regression"),
+        (true, Direction::Regression | Direction::Mixed) => (true, "+perf-regression"),
         _ => (false, "-perf-regression"),
     };
 
@@ -303,15 +303,15 @@ fn generate_short_summary(summary: &ArtifactComparisonSummary) -> String {
     let num_regressions = summary.number_of_regressions();
 
     match summary.direction() {
-        Some(Direction::Improvement) => format!(
+        Direction::Improvement => format!(
             "✅ relevant {} found",
             ending("improvement", num_improvements)
         ),
-        Some(Direction::Regression) => format!(
+        Direction::Regression => format!(
             "❌ relevant {} found",
             ending("regression", num_regressions)
         ),
-        Some(Direction::Mixed) => "mixed results".to_string(),
-        None => "no relevant changes found".to_string(),
+        Direction::Mixed => "mixed results".to_string(),
+        Direction::None => "no relevant changes found".to_string(),
     }
 }
