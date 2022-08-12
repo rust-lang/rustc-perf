@@ -137,7 +137,7 @@ async fn handle_rust_timer(
         return Ok(github::Response);
     }
 
-    for captures in build_captures(&comment).map(|(_, captures)| captures) {
+    for captures in build_captures(&comment.body).map(|(_, captures)| captures) {
         let include = captures.get(2).map(|v| v.as_str());
         let exclude = captures.get(3).map(|v| v.as_str());
         let runs = captures.get(4).and_then(|v| v.as_str().parse::<i32>().ok());
@@ -152,7 +152,7 @@ async fn handle_rust_timer(
         &main_client,
         &ci_client,
         issue.number,
-        build_captures(&comment).map(|(commit, _)| commit),
+        build_captures(&comment.body).map(|(commit, _)| commit),
     )
     .await?;
 
@@ -160,9 +160,9 @@ async fn handle_rust_timer(
 }
 
 /// Run the `@rust-timer build` regex over the comment message extracting the commit and the other captures
-fn build_captures(comment: &github::Comment) -> impl Iterator<Item = (&str, regex::Captures)> {
+fn build_captures(comment_body: &str) -> impl Iterator<Item = (&str, regex::Captures)> {
     BODY_TIMER_BUILD
-        .captures_iter(&comment.body)
+        .captures_iter(&comment_body)
         .filter_map(|captures| {
             captures.get(1).map(|m| {
                 let commit = m
@@ -187,4 +187,28 @@ pub async fn get_authorized_users() -> Result<Vec<usize>, String> {
         .await
         .map_err(|err| format!("failed to fetch authorized users: {}", err))
         .map(|perms| perms.github_ids)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn captures_all_shas() {
+        let comment_body = r#"
+Going to do perf runs for a few of these:
+
+@rust-timer build 5832462aa1d9373b24ace96ad2c50b7a18af9952 (https://github.com/rust-lang/rust/pull/100307)
+@rust-timer build 23936af287657fa4148aeab40cc2a780810fae52 (https://github.com/rust-lang/rust/pull/100392)
+        "#;
+        let shas = build_captures(comment_body)
+            .map(|(c, _)| c)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            shas,
+            &[
+                "5832462aa1d9373b24ace96ad2c50b7a18af9952",
+                "23936af287657fa4148aeab40cc2a780810fae52"
+            ]
+        );
+    }
 }
