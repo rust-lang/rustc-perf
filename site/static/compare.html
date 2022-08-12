@@ -45,6 +45,16 @@
                 <input id="submit" type="submit" value="Submit" onclick="submitSettings(); return false;">
             </div>
         </fieldset>
+        <div class="quick-links">
+            <div>Quick links:</div>
+            <div v-for="metric in [
+                ['Instructions', 'instructions:u'],
+                ['Cycles', 'cycles:u'],
+                ['Max RSS', 'max-rss']
+            ]" :class="{ active: stat === metric[1] }">
+                <a :href="createUrlForMetric(metric[1])">{{ metric[0] }}</a>
+            </div>
+        </div>
         <h2>Comparing <span id="stat-header">{{stat}}</span> between <span id="before">{{before}}</span> and
             <span id="after">{{after}}</span>
         </h2>

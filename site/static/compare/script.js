@@ -325,6 +325,12 @@ const app = Vue.createApp({
             }
             return result;
         },
+        createUrlForMetric(metric) {
+            let start = findQueryParam("start");
+            let end = findQueryParam("end");
+
+            return createUrlFromParams(createSearchParamsForMetric(metric, start, end));
+        },
     },
 });
 
@@ -486,14 +492,23 @@ function makeData(state, app) {
     });
 }
 
-function submitSettings() {
-    let start = document.getElementById("start-bound").value;
-    let end = document.getElementById("end-bound").value;
-    let stat = getSelected("stats");
+function createSearchParamsForMetric(stat, start, end) {
     let params = new URLSearchParams();
     params.append("start", start);
     params.append("end", end);
     params.append("stat", stat);
+    return params.toString();
+}
+
+function createUrlFromParams(params) {
+    return window.location.protocol + "//" + window.location.host + window.location.pathname + "?" + params;
+}
+
+function submitSettings() {
+    let stat = getSelected("stats");
+    let start = document.getElementById("start-bound").value;
+    let end = document.getElementById("end-bound").value;
+    let params = createSearchParamsForMetric(stat, start, end);
     window.location.search = params.toString();
 }
 
