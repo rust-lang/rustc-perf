@@ -339,7 +339,11 @@
                 :commit-b="data.b"
                 :stat="stat"
                 :before="before"
-                :after="after"></test-cases-table>
+                :after="after"
+                id="primary-benchmarks"
+                section-link="secondary"
+                :section-link-up="false"
+            ></test-cases-table>
             <hr />
             <test-cases-table
                 title="Secondary"
@@ -349,7 +353,11 @@
                 :commit-b="data.b"
                 :stat="stat"
                 :before="before"
-                :after="after"></test-cases-table>
+                :after="after"
+                id="secondary-benchmarks"
+                section-link="primary"
+                :section-link-up="true"
+            ></test-cases-table>
             <br />
             <hr />
             <div>

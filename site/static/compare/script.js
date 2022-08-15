@@ -335,7 +335,19 @@ const app = Vue.createApp({
 });
 
 app.component('test-cases-table', {
-    props: ['cases', 'showRawData', 'commitA', 'commitB', 'before', 'after', 'title', 'stat'],
+    props: {
+        cases: Array,
+        showRawData: Boolean,
+        commitA: Object,
+        commitB: Object,
+        before: Date,
+        after: Date,
+        title: String,
+        stat: String,
+        id: String,
+        sectionLink: String,
+        sectionLinkUp: Boolean
+    },
     methods: {
         detailedQueryLink(commit, testCase) {
             return `/detailed-query.html?commit=${commit.commit}&benchmark=${testCase.benchmark + "-" + testCase.profile}&scenario=${testCase.scenario}`;
@@ -363,8 +375,16 @@ app.component('test-cases-table', {
         },
     },
     template: `
-<div class="bench-table">
-<div class="category-title">{{ title }} benchmarks</div>
+<div class="bench-table" :id="id">
+<div class="category-title">
+  {{ title }} benchmarks
+  <span :title="'To ' + sectionLink + ' benchmarks'">
+    <a :href="'#' + sectionLink + '-benchmarks'">
+      <template v-if="sectionLinkUp">⮭</template>
+      <template v-else>⮯</template>
+    </a>
+  </span>
+</div>
 <div v-if="cases.length === 0" style="text-align: center;">
   No results
 </div>
