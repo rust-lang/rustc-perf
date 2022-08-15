@@ -274,6 +274,7 @@
                     </div>
                     <input type="checkbox" v-model="showRawData" style="margin-left: 20px;" />
                 </div>
+                <button @click="resetFilter">Reset filters</button>
             </div>
         </fieldset>
         <p v-if="dataLoading && !data">Loading ...</p>

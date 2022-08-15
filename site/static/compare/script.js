@@ -282,6 +282,9 @@ const app = Vue.createApp({
 
             return createUrlFromParams(createSearchParamsForMetric(metric, start, end));
         },
+        resetFilter() {
+            this.filter = createDefaultFilter();
+        }
     },
 });
 
