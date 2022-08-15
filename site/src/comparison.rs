@@ -96,7 +96,7 @@ pub async fn handle_triage(
                     .clone()
                     .summarize_by_category(&benchmark_map);
                 let mut result = String::from("**Summary**:\n\n");
-                write_summary_table(&primary, &secondary, false, &mut result);
+                write_summary_table(&primary, &secondary, false, true, &mut result);
                 result
             }
             None => String::from("**ERROR**: no data found for end bound"),
@@ -513,7 +513,7 @@ async fn write_triage_summary(
     let link = &compare_link(start, end);
     write!(&mut result, " [(Comparison Link)]({})\n\n", link).unwrap();
 
-    write_summary_table(&primary, &secondary, false, &mut result);
+    write_summary_table(&primary, &secondary, false, true, &mut result);
 
     result
 }
@@ -523,8 +523,21 @@ pub fn write_summary_table(
     primary: &ArtifactComparisonSummary,
     secondary: &ArtifactComparisonSummary,
     with_footnotes: bool,
+    include_metric: bool,
     result: &mut String,
 ) {
+    let metric = include_metric
+        .then(|| {
+            primary
+                .relevant_comparisons
+                .first()
+                .or(secondary.relevant_comparisons.first())
+                .map(|m| m.metric.as_str())
+        })
+        .flatten()
+        // we want at least 10 spaces to accommodate "count[^2]"
+        .unwrap_or("          ");
+
     fn render_stat<F: FnOnce() -> Option<f64>>(count: usize, calculate: F) -> String {
         let value = if count > 0 { calculate() } else { None };
         value
@@ -627,7 +640,7 @@ pub fn write_summary_table(
     // This code attempts to space the table cells evenly so that the data is
     // easy to read for anyone who is viewing the Markdown source.
     let column_labels = [
-        "          ".to_string(), // we want at least 10 spaces to accommodate "count[^2]"
+        format!("({metric})"),
         format!("mean{}", if with_footnotes { "[^1]" } else { "" }),
         "max".to_string(),
         format!("count{}", if with_footnotes { "[^2]" } else { "" }),
@@ -1383,8 +1396,6 @@ mod tests {
                 (Category::Primary, 1.0, 3.0),
             ],
             r#"
-|            | mean[^1] | max | count[^2] |
-|:----------:|:--------:|:---:|:---------:|
 | Regressions ❌ <br /> (primary) | 146.7%   | 200.0% | 3         |
 | Regressions ❌ <br /> (secondary) | -        | -   | 0         |
 | Improvements ✅ <br /> (primary) | -        | -   | 0         |
@@ -1404,8 +1415,6 @@ mod tests {
                 (Category::Primary, 4.0, 1.0),
             ],
             r#"
-|            | mean[^1] | max | count[^2] |
-|:----------:|:--------:|:---:|:---------:|
 | Regressions ❌ <br /> (primary) | -        | -   | 0         |
 | Regressions ❌ <br /> (secondary) | -        | -   | 0         |
 | Improvements ✅ <br /> (primary) | -71.7%   | -80.0% | 3         |
@@ -1425,8 +1434,6 @@ mod tests {
                 (Category::Secondary, 4.0, 1.0),
             ],
             r#"
-|            | mean[^1] | max | count[^2] |
-|:----------:|:--------:|:---:|:---------:|
 | Regressions ❌ <br /> (primary) | -        | -   | 0         |
 | Regressions ❌ <br /> (secondary) | -        | -   | 0         |
 | Improvements ✅ <br /> (primary) | -        | -   | 0         |
@@ -1446,8 +1453,6 @@ mod tests {
                 (Category::Secondary, 1.0, 3.0),
             ],
             r#"
-|            | mean[^1] | max | count[^2] |
-|:----------:|:--------:|:---:|:---------:|
 | Regressions ❌ <br /> (primary) | -        | -   | 0         |
 | Regressions ❌ <br /> (secondary) | 146.7%   | 200.0% | 3         |
 | Improvements ✅ <br /> (primary) | -        | -   | 0         |
@@ -1468,8 +1473,6 @@ mod tests {
                 (Category::Primary, 4.0, 1.0),
             ],
             r#"
-|            | mean[^1] | max | count[^2] |
-|:----------:|:--------:|:---:|:---------:|
 | Regressions ❌ <br /> (primary) | 150.0%   | 200.0% | 2         |
 | Regressions ❌ <br /> (secondary) | -        | -   | 0         |
 | Improvements ✅ <br /> (primary) | -62.5%   | -75.0% | 2         |
@@ -1492,8 +1495,6 @@ mod tests {
                 (Category::Primary, 4.0, 1.0),
             ],
             r#"
-|            | mean[^1] | max | count[^2] |
-|:----------:|:--------:|:---:|:---------:|
 | Regressions ❌ <br /> (primary) | 150.0%   | 200.0% | 2         |
 | Regressions ❌ <br /> (secondary) | 100.0%   | 100.0% | 1         |
 | Improvements ✅ <br /> (primary) | -62.5%   | -75.0% | 2         |
@@ -1512,8 +1513,6 @@ mod tests {
                 (Category::Primary, 5.0, 6.0),
             ],
             r#"
-|            | mean[^1] | max | count[^2] |
-|:----------:|:--------:|:---:|:---------:|
 | Regressions ❌ <br /> (primary) | 20.0%    | 20.0% | 1         |
 | Regressions ❌ <br /> (secondary) | -        | -   | 0         |
 | Improvements ✅ <br /> (primary) | -50.0%   | -50.0% | 1         |
@@ -1532,8 +1531,6 @@ mod tests {
                 (Category::Primary, 6.0, 5.0),
             ],
             r#"
-|            | mean[^1] | max | count[^2] |
-|:----------:|:--------:|:---:|:---------:|
 | Regressions ❌ <br /> (primary) | 100.0%   | 100.0% | 1         |
 | Regressions ❌ <br /> (secondary) | -        | -   | 0         |
 | Improvements ✅ <br /> (primary) | -16.7%   | -16.7% | 1         |
@@ -1587,7 +1584,8 @@ mod tests {
         let secondary = ArtifactComparisonSummary::summarize(secondary_comparisons);
 
         let mut result = String::new();
-        write_summary_table(&primary, &secondary, true, &mut result);
-        assert_eq!(result, expected);
+        write_summary_table(&primary, &secondary, true, true, &mut result);
+        let header = "| (instructions:u) | mean[^1] | max | count[^2] |\n|:----------------:|:--------:|:---:|:---------:|\n";
+        assert_eq!(result, format!("{header}{expected}"));
     }
 }
