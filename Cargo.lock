@@ -70,7 +70,7 @@ dependencies = [
 [[package]]
 name = "analyzeme"
 version = "10.1.0"
-source = "git+https://github.com/rust-lang/measureme?branch=analysis-in-analyzeme#5ee583bd9e2db6da161c0698fb569f3e30212aed"
+source = "git+https://github.com/rust-lang/measureme?branch=master#86799597696dc7b7f2d1fa3d39ef10c8fa7dc955"
 dependencies = [
  "analyzeme 9.2.0",
  "decodeme",
@@ -458,7 +458,7 @@ dependencies = [
 [[package]]
 name = "decodeme"
 version = "10.1.0"
-source = "git+https://github.com/rust-lang/measureme?branch=analysis-in-analyzeme#5ee583bd9e2db6da161c0698fb569f3e30212aed"
+source = "git+https://github.com/rust-lang/measureme?branch=master#86799597696dc7b7f2d1fa3d39ef10c8fa7dc955"
 dependencies = [
  "measureme 10.1.0",
  "memchr",
@@ -1101,7 +1101,7 @@ dependencies = [
 [[package]]
 name = "measureme"
 version = "10.1.0"
-source = "git+https://github.com/rust-lang/measureme?branch=analysis-in-analyzeme#5ee583bd9e2db6da161c0698fb569f3e30212aed"
+source = "git+https://github.com/rust-lang/measureme?branch=master#86799597696dc7b7f2d1fa3d39ef10c8fa7dc955"
 dependencies = [
  "log",
  "memmap2",

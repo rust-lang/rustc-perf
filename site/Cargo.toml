@@ -39,7 +39,7 @@ async-trait = "0.1"
 database = { path = "../database" }
 bytes = "1.0"
 url = "2"
-analyzeme = { git = "https://github.com/rust-lang/measureme", branch = "analysis-in-analyzeme" }
+analyzeme = { git = "https://github.com/rust-lang/measureme", branch = "master" }
 tar = "0.4"
 inferno = { version="0.10", default-features = false }
 mime = "0.3"
