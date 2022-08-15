@@ -262,7 +262,7 @@
                             </span>
                         </span>
                     </div>
-                    <input type="checkbox" v-model="filter.showNonRelevant" style="margin-left: 20px;" />
+                    <input type="checkbox" v-model="filter.nonRelevant" style="margin-left: 20px;" />
                 </div>
                 <div class="section">
                     <div class="section-heading"><span>Display raw data</span>
@@ -278,48 +278,16 @@
         </fieldset>
         <p v-if="dataLoading && !data">Loading ...</p>
         <div v-if="data" id="content" style="margin-top: 15px">
-            <div id="summary">
-                <div style="display: flex; justify-content: end;">
+            <div id="main-summary">
+                <summary-table :cases="filteredSummary"></summary-table>
+                <div style="position: absolute; right: 5px; top: 5px;">
                     <span class="tooltip" style="margin-right: 1em;">?
                         <span class="tooltiptext">
-                            The percents show arithmetic mean amongst regressions, amongst improvements
-                            and finally amongst all benchmarks in each category (all benchmarks or
-                            filtered benchmarks).
+                            The table shows summaries of regressions, improvements and all changes
+                            calculated from data that is currently visible (data that passes the
+                            active filters).
                         </span>
                     </span>
-                </div>
-                <div v-for="summaryPair in Object.entries(summary)" class="summary-container">
-                    <span style="font-weight: bold; margin-left: 5px; text-transform: capitalize;">{{
-                        summaryPair[0] }}:</span>
-                    <div class="summary-values">
-                        <span class="summary summary-wide positive">
-                            {{summaryPair[1].regressions.toString().padStart(3, "&nbsp;")}}
-                            <svg style="width:18px;height:18px" viewBox="0 0 24 24">
-                                <path
-                                    d="M16,6L18.29,8.29L13.41,13.17L9.41,9.17L2,16.59L3.41,18L9.41,12L13.41,16L19.71,9.71L22,12V6H16Z">
-                                </path>
-                            </svg>
-                            &nbsp;(+{{(summaryPair[1].regressions_avg).toFixed(2)}}%)
-                        </span>
-                        <span class="summary">
-                            {{summaryPair[1].unchanged.toString().padStart(3, "&nbsp;")}}
-                            <svg style="width:18px;height:18px" viewBox="0 0 24 24">
-                                <path d="M22,12L18,8V11H3V13H18V16L22,12Z"></path>
-                            </svg>
-                        </span>
-                        <span class="summary summary-wide negative">
-                            {{summaryPair[1].improvements.toString().padStart(3, "&nbsp;")}}
-                            <svg style="width:18px;height:18px" viewBox="0 0 24 24">
-                                <path
-                                    d="M16,18L18.29,15.71L13.41,10.83L9.41,14.83L2,7.41L3.41,6L9.41,12L13.41,8L19.71,14.29L22,12V18H16Z">
-                                </path>
-                            </svg>
-                            &nbsp;({{(summaryPair[1].improvements_avg).toFixed(2)}}%)
-                        </span>
-                        <span class="summary" v-bind:class="percentClass(summaryPair[1].average)">
-                            &nbsp;{{ signIfPositive(summaryPair[1].average) }}{{ (summaryPair[1].average).toFixed(2) }}%
-                        </span>
-                    </div>
                 </div>
             </div>
             <div v-if="data.new_errors.length">
