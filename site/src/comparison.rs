@@ -532,11 +532,10 @@ pub fn write_summary_table(
                 .relevant_comparisons
                 .first()
                 .or(secondary.relevant_comparisons.first())
-                .map(|m| m.metric.as_str())
+                .map(|m| format!("({})", m.metric.as_str()))
         })
         .flatten()
-        // we want at least 10 spaces to accommodate "count[^2]"
-        .unwrap_or("          ");
+        .unwrap_or_else(|| String::from("          "));
 
     fn render_stat<F: FnOnce() -> Option<f64>>(count: usize, calculate: F) -> String {
         let value = if count > 0 { calculate() } else { None };
@@ -640,7 +639,7 @@ pub fn write_summary_table(
     // This code attempts to space the table cells evenly so that the data is
     // easy to read for anyone who is viewing the Markdown source.
     let column_labels = [
-        format!("({metric})"),
+        format!("{metric}"),
         format!("mean{}", if with_footnotes { "[^1]" } else { "" }),
         "max".to_string(),
         format!("count{}", if with_footnotes { "[^2]" } else { "" }),
