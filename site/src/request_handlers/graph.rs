@@ -1,5 +1,4 @@
 use collector::Bound;
-use database::CommitType;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -149,9 +148,7 @@ fn artifact_ids_for_range(ctxt: &SiteCtxt, start: Bound, end: Bound) -> Vec<Arti
     range
         .into_iter()
         .enumerate()
-        .filter(|(index, commit)| {
-            *index == 0 || *index == count - 1 || matches!(commit.r#type, CommitType::Master)
-        })
+        .filter(|(index, commit)| *index == 0 || *index == count - 1 || commit.is_master())
         .map(|c| c.1.into())
         .collect()
 }
