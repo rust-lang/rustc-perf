@@ -639,7 +639,7 @@ pub fn write_summary_table(
     // This code attempts to space the table cells evenly so that the data is
     // easy to read for anyone who is viewing the Markdown source.
     let column_labels = [
-        format!("{metric}"),
+        metric,
         format!("mean{}", if with_footnotes { "[^1]" } else { "" }),
         "max".to_string(),
         format!("count{}", if with_footnotes { "[^2]" } else { "" }),
