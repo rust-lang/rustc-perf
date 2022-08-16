@@ -12,7 +12,11 @@ pub async fn handle_bootstrap(
 ) -> ServerResult<bootstrap::Response> {
     log::info!("handle_bootstrap({:?})", body);
     let range = ctxt.data_range(body.start.clone()..=body.end.clone());
-    let commits: Vec<ArtifactId> = range.iter().map(|c| c.clone().into()).collect();
+    let commits: Vec<ArtifactId> = range
+        .into_iter()
+        .filter(|c| c.is_master())
+        .map(|c| c.into())
+        .collect();
 
     let conn = ctxt.conn().await;
     let ids = commits

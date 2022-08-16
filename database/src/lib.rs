@@ -178,6 +178,9 @@ impl Commit {
     pub fn is_try(&self) -> bool {
         matches!(self.r#type, CommitType::Try)
     }
+    pub fn is_master(&self) -> bool {
+        matches!(self.r#type, CommitType::Master)
+    }
 }
 
 impl hash::Hash for Commit {
