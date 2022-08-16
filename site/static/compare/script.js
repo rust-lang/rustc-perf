@@ -35,10 +35,13 @@ const app = Vue.createApp({
         loadState(state => makeData(state, app));
 
         document.getElementById("filters-toggle").onclick = (e) => {
-            toggleFilters("filters-content", "filters-toggle-indicator");
+            toggleSection("filters-content", "filters-toggle-indicator");
         };
         document.getElementById("search-toggle").onclick = (e) => {
-            toggleFilters("search-content", "search-toggle-indicator");
+            toggleSection("search-content", "search-toggle-indicator");
+        };
+        document.getElementById("aggregations-toggle").onclick = (e) => {
+            toggleSection("aggregations-content", "aggregations-toggle-indicator");
         };
     },
     data() {
@@ -420,7 +423,7 @@ const SummaryRange = {
 <div v-if="range.length > 0">
   [<SummaryPercentValue :value="range[0]" :padWidth="6" />, <SummaryPercentValue :value="range[1]" :padWidth="6" />]
 </div>
-<div v-else>-</div>
+<div v-else style="text-align: center;">-</div>
 `, components: {SummaryPercentValue}
 };
 const SummaryCount = {
@@ -434,10 +437,16 @@ const SummaryCount = {
 };
 
 app.component('summary-table', {
-    props: ['cases'],
+    props: {
+        summary: Object,
+        withLegend: {
+            type: Boolean,
+            default: true
+        }
+    },
     template: `
 <table class="summary-table">
-    <thead>
+    <thead v-if="withLegend">
       <th><!-- icon --></th>
       <th>Range</th>
       <th>Mean</th>
@@ -445,28 +454,77 @@ app.component('summary-table', {
     </thead>
     <tbody>
         <tr class="positive">
-            <td title="Regresions">❌</td>
-            <td><SummaryRange :range="cases.regressions.range" /></td>
-            <td><SummaryPercentValue :value="cases.regressions.average" /></td>
-            <td><SummaryCount :cases="cases.regressions.count" :benchmarks="cases.regressions.benchmarks" /></td>
+            <td title="Regresions" v-if="withLegend">❌</td>
+            <td><SummaryRange :range="summary.regressions.range" /></td>
+            <td><SummaryPercentValue :value="summary.regressions.average" /></td>
+            <td><SummaryCount :cases="summary.regressions.count" :benchmarks="summary.regressions.benchmarks" /></td>
         </tr>
         <tr class="negative">
-            <td title="Improvements">✅</td>
-            <td><SummaryRange :range="cases.improvements.range" /></td>
-            <td><SummaryPercentValue :value="cases.improvements.average" /></td>
-            <td><SummaryCount :cases="cases.improvements.count" :benchmarks="cases.improvements.benchmarks" /></td>
+            <td title="Improvements" v-if="withLegend">✅</td>
+            <td><SummaryRange :range="summary.improvements.range" /></td>
+            <td><SummaryPercentValue :value="summary.improvements.average" /></td>
+            <td><SummaryCount :cases="summary.improvements.count" :benchmarks="summary.improvements.benchmarks" /></td>
         </tr>
         <tr>
-            <td title="All changes">❌,✅</td>
-            <td><SummaryRange :range="cases.all.range" /></td>
-            <td><SummaryPercentValue :value="cases.all.average" /></td>
-            <td><SummaryCount :cases="cases.all.count" :benchmarks="cases.all.benchmarks" /></td>
+            <td title="All changes" v-if="withLegend">❌,✅</td>
+            <td><SummaryRange :range="summary.all.range" /></td>
+            <td><SummaryPercentValue :value="summary.all.average" /></td>
+            <td><SummaryCount :cases="summary.all.count" :benchmarks="summary.all.benchmarks" /></td>
         </tr>
     </tbody>
 </table>
 `,
     components: {SummaryRange, SummaryPercentValue, SummaryCount}
 });
+
+app.component("aggregations", {
+    props: {
+        cases: Array
+    },
+    template: `
+<div>
+  <div class="aggregation-section">
+    <div class="header">Profile</div>
+    <div class="groups">
+      <div class="group" v-for="profile in ['check', 'debug', 'opt', 'doc']">
+        <div class="group-header">{{ profile }}</div>
+        <summary-table :summary="calculateSummary('profile', profile)" :withLegend="false"></summary-table>
+      </div>
+    </div>
+  </div>
+  <div class="aggregation-section">
+    <div class="header">Scenario</div>
+    <div class="groups">
+      <div class="group" v-for="scenario in ['full', 'incr-full', 'incr-unchanged', 'incr-patched']">
+        <div class="group-header">{{ scenario }}</div>
+        <summary-table :summary="calculateSummary('scenario', scenario)" :withLegend="false"></summary-table>
+      </div>
+    </div>
+  </div>
+  <div class="aggregation-section">
+    <div class="header">Category</div>
+    <div class="groups">
+      <div class="group" v-for="category in ['primary', 'secondary']">
+        <div class="group-header">{{ category }}</div>
+        <summary-table :summary="calculateSummary('category', category)" :withLegend="false"></summary-table>
+      </div>
+    </div>
+  </div>
+</div>
+`,
+    methods: {
+        calculateSummary(keyAttribute, keyValue) {
+            const benchmarks = [];
+            for (const benchmark of this.cases) {
+                if (benchmark[keyAttribute] === keyValue) {
+                    benchmarks.push(benchmark);
+                }
+            }
+            return computeSummary(benchmarks);
+        }
+    }
+});
+
 app.mixin({
     methods: {
         percentClass(pct) {
@@ -491,7 +549,7 @@ app.mixin({
     }
 });
 
-function toggleFilters(id, toggle) {
+function toggleSection(id, toggle) {
     let styles = document.getElementById(id).style;
     let indicator = document.getElementById(toggle);
     if (styles.display != "none") {
@@ -503,12 +561,9 @@ function toggleFilters(id, toggle) {
     }
 }
 
-toggleFilters("filters-content", "filters-toggle-indicator");
-toggleFilters("search-content", "search-toggle-indicator");
-
-function testCaseString(testCase) {
-    return testCase.benchmark + "-" + testCase.profile + "-" + testCase.scenario;
-}
+toggleSection("filters-content", "filters-toggle-indicator");
+toggleSection("search-content", "search-toggle-indicator");
+toggleSection("aggregations-content", "aggregations-toggle-indicator");
 
 /**
  * Computes summaries of improvements, regressions and all changes from the given `comparisons`.
