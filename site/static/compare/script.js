@@ -454,7 +454,7 @@ app.component('summary-table', {
     </thead>
     <tbody>
         <tr class="positive">
-            <td title="Regresions" v-if="withLegend">❌</td>
+            <td title="Regressions" v-if="withLegend">❌</td>
             <td><SummaryRange :range="summary.regressions.range" /></td>
             <td><SummaryPercentValue :value="summary.regressions.average" /></td>
             <td><SummaryCount :cases="summary.regressions.count" :benchmarks="summary.regressions.benchmarks" /></td>
