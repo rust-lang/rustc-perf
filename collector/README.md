@@ -230,7 +230,7 @@ might be optimized.
 ### Preparation
 
 If you are going to use any of the profilers that rely on line numbers
-(OProfile, Cachegrind, Callgrind, DHAT, or Massif) use the following
+(OProfile, Cachegrind, Callgrind, DHAT, Massif or Bytehound) use the following
 `config.toml` file for your local build.
 ```
 [llvm]
@@ -363,6 +363,14 @@ The mandatory `<PROFILER>` argument must be one of the following.
     [`massif-visualizer`](https://github.com/KDE/massif-visualizer); the latter
     is recommended, though it sometimes fails to read output files that
     `ms_print` can handle.
+- `bytehound`: Profile with
+  [Bytehound](https://github.com/koute/bytehound), a memory profiler. You must add the
+  directory containing `libbytehound.so` to the `LD_LIBRARY_PATH` environment variable
+  when you use this profiler.
+  - **Purpose**. Bytehound is designed to give insight into a program's memory usage.
+  - **Slowdown**. Roughly 2--4x.
+  - **Output**. Raw output is written to files with a `bytehound` prefix. Those
+    files can be viewed with the `bytehound server <filename>` command.
 - `eprintln`: Profile with `eprintln!` statements.
   - **Purpose**. Sometimes it is useful to do ad hoc profiling by inserting
     `eprintln!` statements into rustc, e.g. to count how often particular paths

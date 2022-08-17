@@ -170,6 +170,7 @@ pub enum Profiler {
     Dhat,
     DhatCopy,
     Massif,
+    Bytehound,
     Eprintln,
     LlvmLines,
     MonoItems,
@@ -187,6 +188,8 @@ impl Profiler {
                 | Profiler::Callgrind
                 | Profiler::Dhat
                 | Profiler::DhatCopy
+                | Profiler::Massif
+                | Profiler::Bytehound
                 | Profiler::Eprintln
                 | Profiler::LlvmLines
                 | Profiler::LlvmIr
@@ -230,6 +233,7 @@ impl PerfTool {
             | ProfileTool(Dhat)
             | ProfileTool(DhatCopy)
             | ProfileTool(Massif)
+            | ProfileTool(Bytehound)
             | ProfileTool(Eprintln)
             | ProfileTool(DepGraph)
             | ProfileTool(MonoItems)
@@ -266,6 +270,7 @@ impl PerfTool {
             | ProfileTool(Dhat)
             | ProfileTool(DhatCopy)
             | ProfileTool(Massif)
+            | ProfileTool(Bytehound)
             | ProfileTool(MonoItems)
             | ProfileTool(LlvmIr)
             | ProfileTool(Eprintln) => true,
@@ -1130,6 +1135,15 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 let msout_file = filepath(self.output_dir, &out_file("msout"));
 
                 fs::copy(&tmp_msout_file, &msout_file)?;
+            }
+
+            // Bytehound produces (via rustc-fake) a data file called
+            // `bytehound.dat`. We copy it from the temp dir to the output dir, giving
+            // it a new name in the process.
+            Profiler::Bytehound => {
+                let tmp_bytehound_file = filepath(data.cwd.as_ref(), "bytehound.dat");
+                let target_file = filepath(self.output_dir, &out_file("bhout"));
+                fs::copy(tmp_bytehound_file, target_file)?;
             }
 
             // `eprintln!` statements are redirected (via rustc-fake) to a file
