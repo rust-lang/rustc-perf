@@ -6,6 +6,29 @@ function findQueryParam(name) {
     }
 }
 
+function createDefaultFilter() {
+    return {
+        name: null,
+        nonRelevant: false,
+        profile: {
+            check: true,
+            debug: true,
+            opt: true,
+            doc: true
+        },
+        scenario: {
+            full: true,
+            incrFull: true,
+            incrUnchanged: true,
+            incrPatched: true
+        },
+        category: {
+            primary: true,
+            secondary: true
+        }
+    };
+}
+
 const app = Vue.createApp({
     mounted() {
         const app = this;
@@ -20,26 +43,7 @@ const app = Vue.createApp({
     },
     data() {
         return {
-            filter: {
-                name: null,
-                showNonRelevant: false,
-                profile: {
-                    check: true,
-                    debug: true,
-                    opt: true,
-                    doc: true
-                },
-                scenario: {
-                    full: true,
-                    incrFull: true,
-                    incrUnchanged: true,
-                    incrPatched: true
-                },
-                category: {
-                    primary: true,
-                    secondary: true
-                }
-            },
+            filter: createDefaultFilter(),
             showRawData: false,
             data: null,
             dataLoading: false
@@ -103,7 +107,7 @@ const app = Vue.createApp({
                 let nameFilter = filter.name && filter.name.trim();
                 nameFilter = !nameFilter || name.includes(nameFilter);
 
-                const relevanceFilter = filter.showNonRelevant ? true : testCase.isRelevant;
+                const relevanceFilter = filter.nonRelevant ? true : testCase.isRelevant;
 
                 return (
                     profileFilter(testCase.profile) &&
@@ -219,56 +223,9 @@ const app = Vue.createApp({
         stat() {
             return findQueryParam("stat") || "instructions:u";
         },
-        summary() {
-            // Create object with each test case that is not filtered out as a key
-            const filtered = this.testCases.reduce((sum, next) => {
-                sum[testCaseString(next)] = true;
-                return sum;
-            }, {});
-            const newCount = {
-                regressions: 0,
-                regressions_avg: 0,
-                improvements: 0,
-                improvements_avg: 0,
-                unchanged: 0,
-                average: 0
-            };
-
-            const addDatum = (result, datum, percent) => {
-                if (percent > 0 && datum.is_relevant) {
-                    result.regressions += 1;
-                    result.regressions_avg += percent;
-                } else if (percent < 0 && datum.is_relevant) {
-                    result.improvements += 1;
-                    result.improvements_avg += percent;
-                } else {
-                    result.unchanged += 1;
-                }
-                result.average += percent;
-            };
-
-            let result = {all: {...newCount}, filtered: {...newCount}}
-            for (let d of this.data.comparisons) {
-                const testCase = testCaseString(d)
-                const datumA = d.statistics[0];
-                const datumB = d.statistics[1];
-                let percent = 100 * ((datumB - datumA) / datumA);
-                addDatum(result.all, d, percent);
-                if (filtered[testCase]) {
-                    addDatum(result.filtered, d, percent);
-                }
-            }
-
-            const computeAvg = (result) => {
-                result.improvements_avg /= Math.max(result.improvements, 1);
-                result.regressions_avg /= Math.max(result.regressions, 1);
-                result.average /= Math.max(result.regressions + result.improvements + result.unchanged, 1);
-            };
-            computeAvg(result.all);
-            computeAvg(result.filtered);
-
-            return result;
-
+        // Returns summary of currently filtered data
+        filteredSummary() {
+            return computeSummary(this.testCases);
         },
         benchmarkMap() {
             if (!this.data) return {};
@@ -288,12 +245,6 @@ const app = Vue.createApp({
         },
         prLink(pr) {
             return `https://github.com/rust-lang/rust/pull/${pr}`;
-        },
-        signIfPositive(pct) {
-            if (pct >= 0) {
-                return "+";
-            }
-            return "";
         },
         diffClass(diff) {
             let klass = "";
@@ -331,6 +282,9 @@ const app = Vue.createApp({
 
             return createUrlFromParams(createSearchParamsForMetric(metric, start, end));
         },
+        resetFilter() {
+            this.filter = createDefaultFilter();
+        }
     },
 });
 
@@ -433,6 +387,86 @@ app.component('test-cases-table', {
 </div>
 `
 });
+
+const SummaryPercentValue = {
+    props: {
+        value: Number,
+        padWidth: {
+            type: Number,
+            default: null
+        }
+    },
+    template: `
+<span><span v-html="padSpaces" />{{ formattedValue }}%</span>
+`,
+    computed: {
+        formattedValue() {
+            return `${this.signIfPositive(this.value)}${this.value.toFixed(2)}`;
+        },
+        padSpaces() {
+            let value = this.formattedValue;
+            if (value.length < this.padWidth) {
+                return "&nbsp;".repeat(this.padWidth - value.length);
+            }
+            return "";
+        }
+    }
+};
+const SummaryRange = {
+    props: {
+        range: Array,
+    },
+    template: `
+<div v-if="range.length > 0">
+  [<SummaryPercentValue :value="range[0]" :padWidth="6" />, <SummaryPercentValue :value="range[1]" :padWidth="6" />]
+</div>
+<div v-else>-</div>
+`, components: {SummaryPercentValue}
+};
+const SummaryCount = {
+    props: {
+        cases: Number,
+        benchmarks: Number
+    },
+    template: `
+<span :title="cases + ' test case(s), ' + benchmarks + ' unique benchmark(s)'">{{ cases }} ({{ benchmarks }})</span>
+`
+};
+
+app.component('summary-table', {
+    props: ['cases'],
+    template: `
+<table class="summary-table">
+    <thead>
+      <th><!-- icon --></th>
+      <th>Range</th>
+      <th>Mean</th>
+      <th>Count</th>
+    </thead>
+    <tbody>
+        <tr class="positive">
+            <td title="Regresions">❌</td>
+            <td><SummaryRange :range="cases.regressions.range" /></td>
+            <td><SummaryPercentValue :value="cases.regressions.average" /></td>
+            <td><SummaryCount :cases="cases.regressions.count" :benchmarks="cases.regressions.benchmarks" /></td>
+        </tr>
+        <tr class="negative">
+            <td title="Improvements">✅</td>
+            <td><SummaryRange :range="cases.improvements.range" /></td>
+            <td><SummaryPercentValue :value="cases.improvements.average" /></td>
+            <td><SummaryCount :cases="cases.improvements.count" :benchmarks="cases.improvements.benchmarks" /></td>
+        </tr>
+        <tr>
+            <td title="All changes">❌,✅</td>
+            <td><SummaryRange :range="cases.all.range" /></td>
+            <td><SummaryPercentValue :value="cases.all.average" /></td>
+            <td><SummaryCount :cases="cases.all.count" :benchmarks="cases.all.benchmarks" /></td>
+        </tr>
+    </tbody>
+</table>
+`,
+    components: {SummaryRange, SummaryPercentValue, SummaryCount}
+});
 app.mixin({
     methods: {
         percentClass(pct) {
@@ -447,6 +481,12 @@ app.mixin({
                 klass = 'slightly-negative';
             }
             return klass;
+        },
+        signIfPositive(pct) {
+            if (pct >= 0) {
+                return "+";
+            }
+            return "";
         },
     }
 });
@@ -468,6 +508,69 @@ toggleFilters("search-content", "search-toggle-indicator");
 
 function testCaseString(testCase) {
     return testCase.benchmark + "-" + testCase.profile + "-" + testCase.scenario;
+}
+
+/**
+ * Computes summaries of improvements, regressions and all changes from the given `comparisons`.
+ * Returns a dictionary {improvements, regressions, all}.
+ */
+function computeSummary(testCases) {
+    const regressions = {
+        values: [],
+        benchmarks: new Set(),
+    };
+    const improvements = {
+        values: [],
+        benchmarks: new Set(),
+    };
+    const all = {
+        values: [],
+        benchmarks: new Set(),
+    };
+
+    const handleTestCase = (items, testCase) => {
+        items.benchmarks.add(testCase.benchmark);
+        items.values.push(testCase.percent);
+    };
+
+    for (const testCase of testCases) {
+        if (testCase.percent > 0) {
+            handleTestCase(regressions, testCase);
+        } else if (testCase.percent < 0) {
+            handleTestCase(improvements, testCase);
+        }
+        handleTestCase(all, testCase);
+    }
+
+    const computeSummary = (data) => {
+        const values = data.values;
+        const benchmarks = data.benchmarks;
+
+        const count = values.length;
+        let range = [];
+        if (count > 0) {
+            range = [
+                Math.min.apply(null, values),
+                Math.max.apply(null, values),
+            ];
+        }
+
+        const sum = values.reduce((acc, item) => acc + item, 0);
+        const average = sum / Math.max(count, 1);
+
+        return {
+            count,
+            benchmarks: benchmarks.size,
+            average,
+            range,
+        }
+    };
+
+    return {
+        improvements: computeSummary(improvements),
+        regressions: computeSummary(regressions),
+        all: computeSummary(all)
+    };
 }
 
 function unique(arr) {
