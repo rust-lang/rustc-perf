@@ -445,7 +445,10 @@ app.component('summary-table', {
         }
     },
     template: `
-<table class="summary-table">
+<div v-if="summary.all.count === 0" style="flex-grow: 1; display: flex; flex-direction: column; justify-content: center;">
+  <span>No results</span>
+</div>
+<table v-else class="summary-table">
     <thead v-if="withLegend">
       <th><!-- icon --></th>
       <th>Range</th>
@@ -455,15 +458,25 @@ app.component('summary-table', {
     <tbody>
         <tr class="positive">
             <td title="Regressions" v-if="withLegend">❌</td>
-            <td><SummaryRange :range="summary.regressions.range" /></td>
-            <td><SummaryPercentValue :value="summary.regressions.average" /></td>
-            <td><SummaryCount :cases="summary.regressions.count" :benchmarks="summary.regressions.benchmarks" /></td>
+            <template v-if="summary.regressions.count !== 0">
+                <td><SummaryRange :range="summary.regressions.range" /></td>
+                <td><SummaryPercentValue :value="summary.regressions.average" /></td>
+                <td><SummaryCount :cases="summary.regressions.count" :benchmarks="summary.regressions.benchmarks" /></td>
+            </template>
+            <template v-else>
+              <td colspan="3" style="text-align: center;">No regressions</td>
+            </template>
         </tr>
         <tr class="negative">
             <td title="Improvements" v-if="withLegend">✅</td>
-            <td><SummaryRange :range="summary.improvements.range" /></td>
-            <td><SummaryPercentValue :value="summary.improvements.average" /></td>
-            <td><SummaryCount :cases="summary.improvements.count" :benchmarks="summary.improvements.benchmarks" /></td>
+            <template v-if="summary.improvements.count !== 0">
+                <td><SummaryRange :range="summary.improvements.range" /></td>
+                <td><SummaryPercentValue :value="summary.improvements.average" /></td>
+                <td><SummaryCount :cases="summary.improvements.count" :benchmarks="summary.improvements.benchmarks" /></td>
+            </template>
+            <template v-else>
+              <td colspan="3" style="text-align: center;">No improvements</td>
+            </template>
         </tr>
         <tr>
             <td title="All changes" v-if="withLegend">❌,✅</td>
