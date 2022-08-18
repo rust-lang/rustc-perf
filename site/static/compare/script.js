@@ -529,7 +529,7 @@ app.component("aggregations", {
         calculateSummary(keyAttribute, keyValue) {
             const benchmarks = [];
             for (const benchmark of this.cases) {
-                if (benchmark[keyAttribute] === keyValue) {
+                if (benchmark[keyAttribute].startsWith(keyValue)) {
                     benchmarks.push(benchmark);
                 }
             }
