@@ -277,18 +277,10 @@
                 <button @click="resetFilter">Reset filters</button>
             </div>
         </fieldset>
-        <fieldset id="aggregations" class="collapsible-section">
-            <legend id="aggregations-toggle" class="section-heading">Aggregations<span class="toggle-indicator" id="aggregations-toggle-indicator"></span>
-            </legend>
-            <div id="aggregations-content" v-if="data">
-                <aggregations :cases="testCases"></aggregations>
-            </div>
-        </fieldset>
         <p v-if="dataLoading && !data">Loading ...</p>
-        <div v-if="data" id="content" style="margin-top: 15px">
-            <div id="main-summary">
-                <summary-table :summary="filteredSummary"></summary-table>
-                <div style="position: absolute; right: 5px; top: 5px;">
+        <div v-if="data" id="main-summary">
+            <summary-table :summary="filteredSummary"></summary-table>
+            <div style="position: absolute; right: 5px; top: 5px;">
                     <span class="tooltip" style="margin-right: 1em;">?
                         <span class="tooltiptext">
                             The table shows summaries of regressions, improvements and all changes
@@ -296,8 +288,16 @@
                             active filters).
                         </span>
                     </span>
-                </div>
             </div>
+        </div>
+        <fieldset id="aggregations" class="collapsible-section">
+            <legend id="aggregations-toggle" class="section-heading">Aggregations<span class="toggle-indicator" id="aggregations-toggle-indicator"></span>
+            </legend>
+            <div id="aggregations-content" v-if="data">
+                <aggregations :cases="testCases"></aggregations>
+            </div>
+        </fieldset>
+        <div v-if="data" id="content" style="margin-top: 15px">
             <div v-if="data.new_errors.length">
                 <p><b>Newly broken benchmarks</b>:</p>
                 <details v-for="[crate, error] in data.new_errors">
@@ -306,7 +306,6 @@
                 </details>
                 <hr />
             </div>
-
             <test-cases-table
                 title="Primary"
                 :cases="testCases.filter(c => c.category === 'primary')"
