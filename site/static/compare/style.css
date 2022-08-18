@@ -17,7 +17,7 @@ ul li input {
 
 }
 
-#search-toggle-indicator {
+.toggle-indicator {
     cursor: pointer;
 }
 
@@ -56,10 +56,6 @@ ul li input {
     margin-left: 52px;
 }
 
-#filters-toggle {
-    cursor: pointer;
-}
-
 .section-heading {
     font-size: 16px;
 }
@@ -68,7 +64,7 @@ ul li input {
     font-size: 16px;
 }
 
-#filters {
+.collapsible-section {
     border: 1px black;
     border-style: dotted;
     margin: 12px 0px;
@@ -307,4 +303,28 @@ input[type="checkbox"] {
 .summary-table td, .summary-table th {
     padding: 2px 5px;
     vertical-align: middle;
+}
+
+.aggregation-section > .header {
+    margin-top: 5px;
+    font-size: 16px;
+    text-align: center;
+}
+.aggregation-section > .groups {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+.aggregation-section .group {
+    min-width: 45%;
+    border: 1px dotted black;
+    padding: 5px;
+    margin: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+.aggregation-section .group-header {
+    margin-bottom: 5px;
+    font-weight: bold;
 }
