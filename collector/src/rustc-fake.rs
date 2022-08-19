@@ -325,6 +325,15 @@ fn main() {
                 run_with_determinism_env(cmd);
             }
 
+            "Bytehound" => {
+                let mut cmd = Command::new(tool);
+                cmd.args(args);
+                cmd.env("MEMORY_PROFILER_OUTPUT", "bytehound.dat");
+                cmd.env("LD_PRELOAD", "libbytehound.so");
+
+                run_with_determinism_env(cmd);
+            }
+
             "Eprintln" => {
                 let mut cmd = Command::new(tool);
                 cmd.args(args).stderr(std::process::Stdio::from(

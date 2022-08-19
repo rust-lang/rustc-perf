@@ -137,6 +137,13 @@ jobs:
           sudo apt-get install -y valgrind
           cargo install --version 0.4.12 cargo-llvm-lines
 
+      - name: Install Bytehound
+        run: |
+          git clone https://github.com/koute/bytehound
+          cd bytehound
+          cargo build --release -p bytehound-preload
+          echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${PWD}/target/release" >> $GITHUB_ENV
+
       - name: Configure environment
         run: |
           sudo apt-get install -y linux-tools-common linux-tools-generic linux-tools-`uname -r`
