@@ -848,6 +848,12 @@ impl<'a> Processor for BenchProcessor<'a> {
                 if let Some(ref profile) = res.1 {
                     store_artifact_sizes_into_stats(&mut res.0, profile);
                 }
+                if let Profile::Doc = data.profile {
+                    let doc_dir = data.cwd.join("target/doc");
+                    if doc_dir.is_dir() {
+                        store_documentation_size_into_stats(&mut res.0, &doc_dir);
+                    }
+                }
 
                 match data.scenario {
                     Scenario::Full => {
@@ -892,6 +898,44 @@ impl<'a> Processor for BenchProcessor<'a> {
             }
         }
     }
+}
+
+fn store_documentation_size_into_stats(stats: &mut Stats, doc_dir: &Path) {
+    match get_file_count_and_size(doc_dir) {
+        Ok((count, size)) => {
+            stats.insert("size:doc_files_count".to_string(), count as f64);
+            stats.insert("size:doc_bytes".to_string(), size as f64);
+        }
+        Err(error) => log::error!(
+            "Cannot get size of documentation directory {}: {:?}",
+            doc_dir.display(),
+            error
+        ),
+    }
+}
+
+/// Counts the number of files and the total size of all files within the given `path`.
+/// File size is counted as the actual size in bytes, i.e. the size returned by
+/// [std::path::Path::metadata].
+///
+/// Returns (file_count, size).
+pub fn get_file_count_and_size(path: &Path) -> std::io::Result<(u64, u64)> {
+    let (count, size) = if path.is_dir() {
+        let mut file_count = 0;
+        let mut total_size = 0;
+        for entry in fs::read_dir(&path)? {
+            let path = entry?.path();
+            let (count, size) = get_file_count_and_size(&path)?;
+            file_count += count;
+            total_size += size;
+        }
+        (file_count, total_size)
+    } else if path.is_file() {
+        (1, path.metadata()?.len())
+    } else {
+        (0, 0)
+    };
+    Ok((count, size))
 }
 
 fn store_artifact_sizes_into_stats(stats: &mut Stats, profile: &SelfProfile) {
@@ -1757,4 +1801,32 @@ pub struct QueryData {
     pub invocation_count: u32,
     pub blocked_time: Duration,
     pub incremental_load_time: Duration,
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::execute::get_file_count_and_size;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_get_file_count_and_size() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let root = dir.path();
+
+        let write = |path: PathBuf, size: usize| {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, vec![0u8; size].as_slice()).unwrap();
+        };
+
+        write(root.join("a/b/c.rs"), 1024);
+        write(root.join("a/b/d.rs"), 16);
+        write(root.join("a/x.rs"), 32);
+        write(root.join("b/x.rs"), 64);
+        write(root.join("b/x2.rs"), 64);
+        write(root.join("x.rs"), 128);
+
+        let (files, size) = get_file_count_and_size(root).unwrap();
+        assert_eq!(files, 6);
+        assert_eq!(size, 1024 + 16 + 32 + 64 + 64 + 128);
+    }
 }
