@@ -139,18 +139,23 @@ async fn summarize_run(
         .summarize_by_category(&benchmark_map);
 
     let direction = inst_primary.direction().join(inst_secondary.direction());
-    let deserves_attention = deserves_attention_icount(&inst_primary, &inst_secondary);
-    let is_regression =
-        deserves_attention && matches!(direction, Direction::Regression | Direction::Mixed);
+    let overall_result = match direction {
+        Direction::Improvement => "✅ improvements",
+        Direction::Regression => "❌ regressions",
+        Direction::Mixed => "❌✅ regressions and improvements",
+        Direction::None => "no relevant changes",
+    };
+    let is_regression = deserves_attention_icount(&inst_primary, &inst_secondary)
+        && matches!(direction, Direction::Regression | Direction::Mixed);
 
     writeln!(
         &mut message,
         "### Overall result: {}{}\n",
-        direction.overall_result(),
+        overall_result,
         if is_regression {
             " - ACTION NEEDED"
         } else {
-            ""
+            " - no action needed"
         },
     )
     .unwrap();
@@ -162,41 +167,40 @@ async fn summarize_run(
     };
     writeln!(&mut message, "{next_steps}\n").unwrap();
 
-    const DISAGREEMENT: &str =
-        "If you disagree with this performance assessment, please file an issue in \
-        [rust-lang/rustc-perf](https://github.com/rust-lang/rustc-perf/issues/new).";
-    writeln!(&mut message, "\n{DISAGREEMENT}{errors}").unwrap();
+    if !errors.is_empty() {
+        writeln!(&mut message, "\n{errors}").unwrap();
+    }
 
     let mut table_written = false;
     let metrics = vec![
         (
             "Instruction count",
             Metric::InstructionsUser,
-            false,
+            true, // highly reliable
             inst_comparison,
         ),
         (
             "Max RSS (memory usage)",
             Metric::MaxRSS,
-            true,
+            false, // not highly reliable
             calculate_metric_comparison(ctxt, &commit, Metric::MaxRSS).await?,
         ),
         (
             "Cycles",
             Metric::CyclesUser,
-            true,
+            false, // not highly reliable
             calculate_metric_comparison(ctxt, &commit, Metric::CyclesUser).await?,
         ),
     ];
 
-    for (title, metric, hidden, comparison) in metrics {
+    for (title, metric, highly_reliable, comparison) in metrics {
         message.push_str(&format!(
             "\n### [{title}]({})\n",
             make_comparison_url(&commit, metric)
         ));
 
         let (primary, secondary) = comparison.summarize_by_category(&benchmark_map);
-        table_written |= write_metric_summary(primary, secondary, hidden, &mut message);
+        table_written |= write_metric_summary(primary, secondary, highly_reliable, &mut message);
     }
 
     if table_written {
@@ -210,7 +214,7 @@ async fn summarize_run(
 fn write_metric_summary(
     primary: ArtifactComparisonSummary,
     secondary: ArtifactComparisonSummary,
-    hidden: bool,
+    highly_reliable: bool,
     message: &mut String,
 ) -> bool {
     if !primary.is_relevant() && !secondary.is_relevant() {
@@ -218,13 +222,14 @@ fn write_metric_summary(
             .push_str("This benchmark run did not return any relevant results for this metric.\n");
         false
     } else {
-        if !hidden {
+        if highly_reliable {
             message.push_str(
                 "This is a highly reliable metric that was used to determine the \
                 overall result at the top of this comment.\n\n",
             );
             write_summary_table(&primary, &secondary, true, false, message);
         } else {
+            // `<details>` means it is hidden, requiring a click to reveal.
             message.push_str("<details>\n<summary>Results</summary>\n\n");
             message.push_str(
                 "This is a less reliable metric that may be of interest but was not \

@@ -1247,15 +1247,6 @@ impl Direction {
             _ => Self::Mixed,
         }
     }
-
-    pub fn overall_result(&self) -> &'static str {
-        match self {
-            Direction::Improvement => "✅ improvements",
-            Direction::Regression => "❌ regressions",
-            Direction::Mixed => "❌✅ regressions and improvements",
-            Direction::None => "no relevant changes",
-        }
-    }
 }
 
 /// The relative size of a performance change
