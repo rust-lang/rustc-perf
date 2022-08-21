@@ -95,16 +95,16 @@ grep -q "dhatFileVersion" results/dhout-Test-helloworld-Check-Full
 # DHAT (copy mode).
 # FIXME: CI currently runs Ubuntu 20.04 LTS, which has a Valgrind that is too
 # old to run with `--mode=copy`. When CI is upgraded to 22.04, uncomment this.
-#RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
-#    cargo run -p collector --bin collector -- \
-#    profile_local dhat-copy $bindir/rustc \
-#        --id Test \
-#        --profiles Check \
-#        --cargo $bindir/cargo \
-#        --include helloworld \
-#        --scenarios Full
-#test -f results/dhcopy-Test-helloworld-Check-Full
-#grep -q "dhatFileVersion" results/dhcopy-Test-helloworld-Check-Full
+RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
+    cargo run -p collector --bin collector -- \
+    profile_local dhat-copy $bindir/rustc \
+        --id Test \
+        --profiles Check \
+        --cargo $bindir/cargo \
+        --include helloworld \
+        --scenarios Full
+test -f results/dhcopy-Test-helloworld-Check-Full
+grep -q "dhatFileVersion" results/dhcopy-Test-helloworld-Check-Full
 
 # Massif.
 RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \

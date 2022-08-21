@@ -118,7 +118,7 @@ jobs:
 
   test_profiling:
     name: Test profiling
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout the source code
         uses: actions/checkout@v2
@@ -131,11 +131,22 @@ jobs:
           toolchain: beta
           override: true
 
-      - name: Install profilers
+      # We build a specific version of Valgrind because the one from the Ubuntu 22.04 repositories
+      # has problems with Rust debuginfo.
+      - name: Install Valgrind
         run: |
-          sudo apt-get update
-          sudo apt-get install -y valgrind
-          cargo install --version 0.4.12 cargo-llvm-lines
+          git clone git://sourceware.org/git/valgrind.git
+          cd valgrind
+          # Version from May 2022
+          git checkout 74e180e3c4d9e6bb4b2a9cd22eca7703412c5d42
+          ./autogen.sh
+          ./configure --prefix=${PWD}/build
+          make -j2
+          make install
+          echo "${PWD}/build/bin" >> $GITHUB_PATH
+
+      - name: Install profilers
+        run: cargo install --version 0.4.12 cargo-llvm-lines
 
       - name: Install Bytehound
         run: |
