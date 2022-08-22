@@ -13,7 +13,6 @@ use collector::Bound;
 use serde::{Deserialize, Serialize};
 
 use database::CommitType;
-use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt::Write;
@@ -294,7 +293,7 @@ impl Metric {
 ///
 /// This summary only includes changes that are significant and relevant (as determined by a change's magnitude).
 pub struct ArtifactComparisonSummary {
-    /// Relevant comparisons ordered by magnitude from largest to smallest
+    /// Relevant comparisons ordered from most negative to most positive
     relevant_comparisons: Vec<TestResultComparison>,
     /// The cached number of comparisons that are improvements
     num_improvements: usize,
@@ -321,9 +320,8 @@ impl ArtifactComparisonSummary {
             .collect::<Vec<_>>();
 
         let cmp = |b1: &TestResultComparison, b2: &TestResultComparison| {
-            b2.relative_change()
-                .abs()
-                .partial_cmp(&b1.relative_change().abs())
+            b1.relative_change()
+                .partial_cmp(&b2.relative_change())
                 .unwrap_or(std::cmp::Ordering::Equal)
         };
         relevant_comparisons.sort_by(cmp);
@@ -439,14 +437,40 @@ impl ArtifactComparisonSummary {
             .filter(|c| c.is_regression())
     }
 
+    // This is the most negative result.
     fn largest_improvement(&self) -> Option<&TestResultComparison> {
         self.relevant_comparisons
             .iter()
             .find(|s| s.is_improvement())
     }
 
+    // This is the least negative result.
+    fn smallest_improvement(&self) -> Option<&TestResultComparison> {
+        self.relevant_comparisons
+            .iter()
+            .rfind(|s| s.is_improvement())
+    }
+
+    // This is the most positive result.
     fn largest_regression(&self) -> Option<&TestResultComparison> {
+        self.relevant_comparisons
+            .iter()
+            .rfind(|s| s.is_regression())
+    }
+
+    // This is the least positive result.
+    fn smallest_regression(&self) -> Option<&TestResultComparison> {
         self.relevant_comparisons.iter().find(|s| s.is_regression())
+    }
+
+    // This may be an improvement or a regression.
+    fn most_positive_change(&self) -> Option<&TestResultComparison> {
+        self.relevant_comparisons.last()
+    }
+
+    // This may be an improvement or a regression.
+    fn most_negative_change(&self) -> Option<&TestResultComparison> {
+        self.relevant_comparisons.first()
     }
 
     /// The relevance level of the entire comparison
@@ -459,7 +483,19 @@ impl ArtifactComparisonSummary {
     }
 
     pub fn largest_change(&self) -> Option<&TestResultComparison> {
-        self.relevant_comparisons.first()
+        if self.num_changes() == 0 {
+            None
+        } else {
+            let most_pos = self.most_positive_change().unwrap();
+            let most_neg = self.most_negative_change().unwrap();
+            let most_pos_abs = most_pos.relative_change().abs();
+            let most_neg_abs = most_neg.relative_change().abs();
+            if most_neg_abs.partial_cmp(&most_pos_abs) == Some(std::cmp::Ordering::Greater) {
+                Some(most_neg)
+            } else {
+                Some(most_pos)
+            }
+        }
     }
 }
 
@@ -534,6 +570,15 @@ pub fn write_summary_table(
             .unwrap_or_else(|| "-".to_string())
     }
 
+    fn render_range<F: FnOnce() -> (f64, f64)>(count: usize, calculate: F) -> String {
+        if count > 0 {
+            let (a, b) = calculate();
+            format!("[{a:.1}%, {b:.1}%]")
+        } else {
+            "-".to_string()
+        }
+    }
+
     // (label, mean, max, count)
     let mut column_data = vec![];
 
@@ -567,54 +612,39 @@ pub fn write_summary_table(
         },
     ]);
 
-    let largest_change = if primary.is_empty() {
-        "-".to_string()
-    } else {
-        let largest_improvement = primary
-            .largest_improvement()
-            .map(|c| c.relative_change())
-            .unwrap_or(0.0);
-        let largest_regression = primary
-            .largest_regression()
-            .map(|c| c.relative_change())
-            .unwrap_or(0.0);
-        let change = if largest_improvement
-            .abs()
-            .partial_cmp(&largest_regression.abs())
-            .unwrap_or(Ordering::Equal)
-            != Ordering::Less
-        {
-            largest_improvement
-        } else {
-            largest_regression
-        };
-
-        format!("{:.1}%", change * 100.0)
-    };
-
-    // max
+    // range
+    let rel_change = |r: Option<&TestResultComparison>| r.unwrap().relative_change() * 100.0;
     column_data.push(vec![
-        render_stat(primary.num_regressions, || {
-            primary
-                .largest_regression()
-                .map(|r| r.relative_change() * 100.0)
+        render_range(primary.num_regressions, || {
+            (
+                rel_change(primary.smallest_regression()),
+                rel_change(primary.largest_regression()),
+            )
         }),
-        render_stat(secondary.num_regressions, || {
-            secondary
-                .largest_regression()
-                .map(|r| r.relative_change() * 100.0)
+        render_range(secondary.num_regressions, || {
+            (
+                rel_change(secondary.smallest_regression()),
+                rel_change(secondary.largest_regression()),
+            )
         }),
-        render_stat(primary.num_improvements, || {
-            primary
-                .largest_improvement()
-                .map(|r| r.relative_change() * 100.0)
+        render_range(primary.num_improvements, || {
+            (
+                rel_change(primary.largest_improvement()),
+                rel_change(primary.smallest_improvement()),
+            )
         }),
-        render_stat(secondary.num_improvements, || {
-            secondary
-                .largest_improvement()
-                .map(|r| r.relative_change() * 100.0)
+        render_range(secondary.num_improvements, || {
+            (
+                rel_change(secondary.largest_improvement()),
+                rel_change(secondary.smallest_improvement()),
+            )
         }),
-        largest_change,
+        render_range(primary.num_regressions + primary.num_improvements, || {
+            (
+                rel_change(primary.most_negative_change()),
+                rel_change(primary.most_positive_change()),
+            )
+        }),
     ]);
 
     // count
@@ -631,7 +661,7 @@ pub fn write_summary_table(
     let column_labels = [
         metric,
         format!("mean{}", if with_footnotes { "[^1]" } else { "" }),
-        "max".to_string(),
+        "range".to_string(),
         format!("count{}", if with_footnotes { "[^2]" } else { "" }),
     ];
     let counts: Vec<usize> = column_labels.iter().map(|s| s.chars().count()).collect();
@@ -1385,11 +1415,11 @@ mod tests {
                 (Category::Primary, 1.0, 3.0),
             ],
             r#"
-| Regressions ❌ <br /> (primary) | 146.7%   | 200.0% | 3         |
-| Regressions ❌ <br /> (secondary) | -        | -   | 0         |
-| Improvements ✅ <br /> (primary) | -        | -   | 0         |
-| Improvements ✅ <br /> (secondary) | -        | -   | 0         |
-| All ❌✅ (primary) | 146.7%   | 200.0% | 3         |
+| Regressions ❌ <br /> (primary) | 146.7%   | [100.0%, 200.0%] | 3         |
+| Regressions ❌ <br /> (secondary) | -        | -     | 0         |
+| Improvements ✅ <br /> (primary) | -        | -     | 0         |
+| Improvements ✅ <br /> (secondary) | -        | -     | 0         |
+| All ❌✅ (primary) | 146.7%   | [100.0%, 200.0%] | 3         |
 "#
             .trim_start(),
         );
@@ -1404,11 +1434,11 @@ mod tests {
                 (Category::Primary, 4.0, 1.0),
             ],
             r#"
-| Regressions ❌ <br /> (primary) | -        | -   | 0         |
-| Regressions ❌ <br /> (secondary) | -        | -   | 0         |
-| Improvements ✅ <br /> (primary) | -71.7%   | -80.0% | 3         |
-| Improvements ✅ <br /> (secondary) | -        | -   | 0         |
-| All ❌✅ (primary) | -71.7%   | -80.0% | 3         |
+| Regressions ❌ <br /> (primary) | -        | -     | 0         |
+| Regressions ❌ <br /> (secondary) | -        | -     | 0         |
+| Improvements ✅ <br /> (primary) | -71.7%   | [-80.0%, -60.0%] | 3         |
+| Improvements ✅ <br /> (secondary) | -        | -     | 0         |
+| All ❌✅ (primary) | -71.7%   | [-80.0%, -60.0%] | 3         |
 "#
             .trim_start(),
         );
@@ -1423,11 +1453,11 @@ mod tests {
                 (Category::Secondary, 4.0, 1.0),
             ],
             r#"
-| Regressions ❌ <br /> (primary) | -        | -   | 0         |
-| Regressions ❌ <br /> (secondary) | -        | -   | 0         |
-| Improvements ✅ <br /> (primary) | -        | -   | 0         |
-| Improvements ✅ <br /> (secondary) | -71.7%   | -80.0% | 3         |
-| All ❌✅ (primary) | -        | -   | 0         |
+| Regressions ❌ <br /> (primary) | -        | -     | 0         |
+| Regressions ❌ <br /> (secondary) | -        | -     | 0         |
+| Improvements ✅ <br /> (primary) | -        | -     | 0         |
+| Improvements ✅ <br /> (secondary) | -71.7%   | [-80.0%, -60.0%] | 3         |
+| All ❌✅ (primary) | -        | -     | 0         |
 "#
             .trim_start(),
         );
@@ -1442,11 +1472,11 @@ mod tests {
                 (Category::Secondary, 1.0, 3.0),
             ],
             r#"
-| Regressions ❌ <br /> (primary) | -        | -   | 0         |
-| Regressions ❌ <br /> (secondary) | 146.7%   | 200.0% | 3         |
-| Improvements ✅ <br /> (primary) | -        | -   | 0         |
-| Improvements ✅ <br /> (secondary) | -        | -   | 0         |
-| All ❌✅ (primary) | -        | -   | 0         |
+| Regressions ❌ <br /> (primary) | -        | -     | 0         |
+| Regressions ❌ <br /> (secondary) | 146.7%   | [100.0%, 200.0%] | 3         |
+| Improvements ✅ <br /> (primary) | -        | -     | 0         |
+| Improvements ✅ <br /> (secondary) | -        | -     | 0         |
+| All ❌✅ (primary) | -        | -     | 0         |
 "#
             .trim_start(),
         );
@@ -1462,11 +1492,11 @@ mod tests {
                 (Category::Primary, 4.0, 1.0),
             ],
             r#"
-| Regressions ❌ <br /> (primary) | 150.0%   | 200.0% | 2         |
-| Regressions ❌ <br /> (secondary) | -        | -   | 0         |
-| Improvements ✅ <br /> (primary) | -62.5%   | -75.0% | 2         |
-| Improvements ✅ <br /> (secondary) | -        | -   | 0         |
-| All ❌✅ (primary) | 43.8%    | 200.0% | 4         |
+| Regressions ❌ <br /> (primary) | 150.0%   | [100.0%, 200.0%] | 2         |
+| Regressions ❌ <br /> (secondary) | -        | -     | 0         |
+| Improvements ✅ <br /> (primary) | -62.5%   | [-75.0%, -50.0%] | 2         |
+| Improvements ✅ <br /> (secondary) | -        | -     | 0         |
+| All ❌✅ (primary) | 43.8%    | [-75.0%, 200.0%] | 4         |
 "#
             .trim_start(),
         );
@@ -1484,11 +1514,11 @@ mod tests {
                 (Category::Primary, 4.0, 1.0),
             ],
             r#"
-| Regressions ❌ <br /> (primary) | 150.0%   | 200.0% | 2         |
-| Regressions ❌ <br /> (secondary) | 100.0%   | 100.0% | 1         |
-| Improvements ✅ <br /> (primary) | -62.5%   | -75.0% | 2         |
-| Improvements ✅ <br /> (secondary) | -66.7%   | -66.7% | 1         |
-| All ❌✅ (primary) | 43.8%    | 200.0% | 4         |
+| Regressions ❌ <br /> (primary) | 150.0%   | [100.0%, 200.0%] | 2         |
+| Regressions ❌ <br /> (secondary) | 100.0%   | [100.0%, 100.0%] | 1         |
+| Improvements ✅ <br /> (primary) | -62.5%   | [-75.0%, -50.0%] | 2         |
+| Improvements ✅ <br /> (secondary) | -66.7%   | [-66.7%, -66.7%] | 1         |
+| All ❌✅ (primary) | 43.8%    | [-75.0%, 200.0%] | 4         |
 "#
             .trim_start(),
         );
@@ -1502,11 +1532,11 @@ mod tests {
                 (Category::Primary, 5.0, 6.0),
             ],
             r#"
-| Regressions ❌ <br /> (primary) | 20.0%    | 20.0% | 1         |
-| Regressions ❌ <br /> (secondary) | -        | -   | 0         |
-| Improvements ✅ <br /> (primary) | -50.0%   | -50.0% | 1         |
-| Improvements ✅ <br /> (secondary) | -        | -   | 0         |
-| All ❌✅ (primary) | -15.0%   | -50.0% | 2         |
+| Regressions ❌ <br /> (primary) | 20.0%    | [20.0%, 20.0%] | 1         |
+| Regressions ❌ <br /> (secondary) | -        | -     | 0         |
+| Improvements ✅ <br /> (primary) | -50.0%   | [-50.0%, -50.0%] | 1         |
+| Improvements ✅ <br /> (secondary) | -        | -     | 0         |
+| All ❌✅ (primary) | -15.0%   | [-50.0%, 20.0%] | 2         |
 "#
             .trim_start(),
         );
@@ -1520,11 +1550,11 @@ mod tests {
                 (Category::Primary, 6.0, 5.0),
             ],
             r#"
-| Regressions ❌ <br /> (primary) | 100.0%   | 100.0% | 1         |
-| Regressions ❌ <br /> (secondary) | -        | -   | 0         |
-| Improvements ✅ <br /> (primary) | -16.7%   | -16.7% | 1         |
-| Improvements ✅ <br /> (secondary) | -        | -   | 0         |
-| All ❌✅ (primary) | 41.7%    | 100.0% | 2         |
+| Regressions ❌ <br /> (primary) | 100.0%   | [100.0%, 100.0%] | 1         |
+| Regressions ❌ <br /> (secondary) | -        | -     | 0         |
+| Improvements ✅ <br /> (primary) | -16.7%   | [-16.7%, -16.7%] | 1         |
+| Improvements ✅ <br /> (secondary) | -        | -     | 0         |
+| All ❌✅ (primary) | 41.7%    | [-16.7%, 100.0%] | 2         |
 "#
             .trim_start(),
         );
@@ -1574,7 +1604,7 @@ mod tests {
 
         let mut result = String::new();
         write_summary_table(&primary, &secondary, true, true, &mut result);
-        let header = "| (instructions:u) | mean[^1] | max | count[^2] |\n|:----------------:|:--------:|:---:|:---------:|\n";
+        let header = "| (instructions:u) | mean[^1] | range | count[^2] |\n|:----------------:|:--------:|:-----:|:---------:|\n";
         assert_eq!(result, format!("{header}{expected}"));
     }
 }
