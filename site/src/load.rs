@@ -244,13 +244,16 @@ impl SiteCtxt {
         let mut artifacts: Vec<String> = vec![];
 
         // Ignore too old artifacts
-        for line in artifact_list.lines().rev().take(50) {
-            if let Some(artifact) = parse_published_artifact_tag(&line) {
-                if !tested_artifacts.contains(artifact.as_str())
-                    && !in_progress_artifacts.contains(&artifact)
-                {
-                    artifacts.push(artifact);
-                }
+        for artifact in artifact_list
+            .lines()
+            .rev()
+            .filter_map(parse_published_artifact_tag)
+            .take(20)
+        {
+            if !tested_artifacts.contains(artifact.as_str())
+                && !in_progress_artifacts.contains(&artifact)
+            {
+                artifacts.push(artifact);
             }
         }
 
