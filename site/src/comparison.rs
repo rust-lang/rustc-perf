@@ -447,32 +447,38 @@ impl ArtifactComparisonSummary {
             .filter(|c| c.is_regression())
     }
 
-    fn most_negative_improvement(&self) -> Option<&TestResultComparison> {
+    // This is the most negative result.
+    fn largest_improvement(&self) -> Option<&TestResultComparison> {
         self.relevant_comparisons
             .iter()
             .find(|s| s.is_improvement())
     }
 
-    fn least_negative_improvement(&self) -> Option<&TestResultComparison> {
+    // This is the least negative result.
+    fn smallest_improvement(&self) -> Option<&TestResultComparison> {
         self.relevant_comparisons
             .iter()
             .rfind(|s| s.is_improvement())
     }
 
-    fn most_positive_regression(&self) -> Option<&TestResultComparison> {
+    // This is the most positive result.
+    fn largest_regression(&self) -> Option<&TestResultComparison> {
         self.relevant_comparisons
             .iter()
             .rfind(|s| s.is_regression())
     }
 
-    fn least_positive_regression(&self) -> Option<&TestResultComparison> {
+    // This is the least positive result.
+    fn smallest_regression(&self) -> Option<&TestResultComparison> {
         self.relevant_comparisons.iter().find(|s| s.is_regression())
     }
 
+    // This may be an improvement or a regression.
     fn most_positive_change(&self) -> Option<&TestResultComparison> {
         self.relevant_comparisons.last()
     }
 
+    // This may be an improvement or a regression.
     fn most_negative_change(&self) -> Option<&TestResultComparison> {
         self.relevant_comparisons.first()
     }
@@ -487,7 +493,19 @@ impl ArtifactComparisonSummary {
     }
 
     pub fn largest_change(&self) -> Option<&TestResultComparison> {
-        self.relevant_comparisons.first()
+        if self.num_changes() == 0 {
+            None
+        } else {
+            let most_pos = self.most_positive_change().unwrap();
+            let most_neg = self.most_negative_change().unwrap();
+            let most_pos_abs = most_pos.relative_change().abs();
+            let most_neg_abs = most_neg.relative_change().abs();
+            if most_neg_abs.partial_cmp(&most_pos_abs) == Some(std::cmp::Ordering::Greater) {
+                Some(most_neg)
+            } else {
+                Some(most_pos)
+            }
+        }
     }
 }
 
@@ -605,36 +623,36 @@ pub fn write_summary_table(
     ]);
 
     // range
-    let f = |r: Option<&TestResultComparison>| r.unwrap().relative_change() * 100.0;
+    let rel_change = |r: Option<&TestResultComparison>| r.unwrap().relative_change() * 100.0;
     column_data.push(vec![
         render_range(primary.num_regressions, || {
             (
-                f(primary.least_positive_regression()),
-                f(primary.most_positive_regression()),
+                rel_change(primary.smallest_regression()),
+                rel_change(primary.largest_regression()),
             )
         }),
         render_range(secondary.num_regressions, || {
             (
-                f(secondary.least_positive_regression()),
-                f(secondary.most_positive_regression()),
+                rel_change(secondary.smallest_regression()),
+                rel_change(secondary.largest_regression()),
             )
         }),
         render_range(primary.num_improvements, || {
             (
-                f(primary.most_negative_improvement()),
-                f(primary.least_negative_improvement()),
+                rel_change(primary.largest_improvement()),
+                rel_change(primary.smallest_improvement()),
             )
         }),
         render_range(secondary.num_improvements, || {
             (
-                f(secondary.most_negative_improvement()),
-                f(secondary.least_negative_improvement()),
+                rel_change(secondary.largest_improvement()),
+                rel_change(secondary.smallest_improvement()),
             )
         }),
         render_range(primary.num_regressions + primary.num_improvements, || {
             (
-                f(primary.most_negative_change()),
-                f(primary.most_positive_change()),
+                rel_change(primary.most_negative_change()),
+                rel_change(primary.most_positive_change()),
             )
         }),
     ]);
