@@ -1012,42 +1012,43 @@ fn main_result() -> anyhow::Result<i32> {
 
             let pool = database::Pool::open(&db.db);
 
-            if let NextArtifact {
-                artifact: ArtifactId::Tag(tag),
-                ..
-            } = next
-            {
-                bench_published_artifact(tag, pool, &mut rt, &target_triple, &benchmark_dir)?;
-            } else if let NextArtifact {
-                artifact: ArtifactId::Commit(commit),
-                exclude,
-                include,
-                runs,
-            } = next
-            {
-                let sysroot = Sysroot::install(commit.sha.to_string(), &target_triple)
-                    .with_context(|| format!("failed to install sysroot for {:?}", commit))?;
+            match next {
+                NextArtifact {
+                    artifact: ArtifactId::Tag(tag),
+                    ..
+                } => {
+                    bench_published_artifact(tag, pool, &mut rt, &target_triple, &benchmark_dir)?;
+                }
+                NextArtifact {
+                    artifact: ArtifactId::Commit(commit),
+                    include,
+                    exclude,
+                    runs,
+                } => {
+                    let sysroot = Sysroot::install(commit.sha.to_string(), &target_triple)
+                        .with_context(|| format!("failed to install sysroot for {:?}", commit))?;
 
-                let mut benchmarks =
-                    get_benchmarks(&benchmark_dir, include.as_deref(), exclude.as_deref())?;
-                benchmarks.retain(|b| b.category().is_primary_or_secondary());
+                    let mut benchmarks =
+                        get_benchmarks(&benchmark_dir, include.as_deref(), exclude.as_deref())?;
+                    benchmarks.retain(|b| b.category().is_primary_or_secondary());
 
-                let res = bench(
-                    &mut rt,
-                    pool,
-                    &ArtifactId::Commit(commit),
-                    &Profile::all(),
-                    &Scenario::all(),
-                    bench_rustc.bench_rustc,
-                    Compiler::from_sysroot(&sysroot),
-                    &benchmarks,
-                    runs.map(|v| v as usize),
-                    self_profile.self_profile,
-                );
+                    let res = bench(
+                        &mut rt,
+                        pool,
+                        &ArtifactId::Commit(commit),
+                        &Profile::all(),
+                        &Scenario::all(),
+                        bench_rustc.bench_rustc,
+                        Compiler::from_sysroot(&sysroot),
+                        &benchmarks,
+                        runs.map(|v| v as usize),
+                        self_profile.self_profile,
+                    );
 
-                client.post(&format!("{}/perf/onpush", site_url)).send()?;
+                    client.post(&format!("{}/perf/onpush", site_url)).send()?;
 
-                res.fail_if_nonzero()?;
+                    res.fail_if_nonzero()?;
+                }
             }
 
             Ok(0)
