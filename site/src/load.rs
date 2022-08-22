@@ -215,7 +215,7 @@ impl SiteCtxt {
         )
     }
 
-    /// Returns the not yet tested published artifacts, sorted from oldest to newest.
+    /// Returns the not yet tested published artifacts, sorted from newest to oldest.
     pub async fn missing_artifacts(&self) -> anyhow::Result<Vec<String>> {
         let artifact_list: String = reqwest::get("https://static.rust-lang.org/manifests.txt")
             .await?
@@ -242,7 +242,7 @@ impl SiteCtxt {
 
         // Gather published artifacts that are not yet tested and are not in progress
         let mut artifacts: Vec<String> = vec![];
-        for line in artifact_list.lines() {
+        for line in artifact_list.lines().rev() {
             if let Some(artifact) = parse_published_artifact_tag(&line) {
                 if !tested_artifacts.contains(artifact.as_str())
                     && !in_progress_artifacts.contains(&artifact)
@@ -250,7 +250,12 @@ impl SiteCtxt {
                     artifacts.push(artifact);
                 }
             }
+            // Ignore too old artifacts
+            if artifacts.len() == 10 {
+                break;
+            }
         }
+
         Ok(artifacts)
     }
 
