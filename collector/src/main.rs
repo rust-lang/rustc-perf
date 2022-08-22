@@ -1013,14 +1013,11 @@ fn main_result() -> anyhow::Result<i32> {
             let pool = database::Pool::open(&db.db);
 
             match next {
-                NextArtifact {
-                    artifact: ArtifactId::Tag(tag),
-                    ..
-                } => {
+                NextArtifact::Release(tag) => {
                     bench_published_artifact(tag, pool, &mut rt, &target_triple, &benchmark_dir)?;
                 }
-                NextArtifact {
-                    artifact: ArtifactId::Commit(commit),
+                NextArtifact::Commit {
+                    commit,
                     include,
                     exclude,
                     runs,

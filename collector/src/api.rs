@@ -1,12 +1,15 @@
 pub mod next_artifact {
-    use database::ArtifactId;
+    use database::Commit;
 
     #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-    pub struct NextArtifact {
-        pub artifact: ArtifactId,
-        pub include: Option<String>,
-        pub exclude: Option<String>,
-        pub runs: Option<i32>,
+    pub enum NextArtifact {
+        Release(String),
+        Commit {
+            commit: Commit,
+            include: Option<String>,
+            exclude: Option<String>,
+            runs: Option<i32>,
+        },
     }
 
     #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

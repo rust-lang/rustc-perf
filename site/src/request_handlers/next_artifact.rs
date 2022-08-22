@@ -1,7 +1,6 @@
 use crate::load::{MissingReason, SiteCtxt};
 use collector::api::next_artifact;
 
-use database::ArtifactId;
 use std::sync::Arc;
 
 pub async fn handle_next_artifact(ctxt: Arc<SiteCtxt>) -> next_artifact::Response {
@@ -11,12 +10,7 @@ pub async fn handle_next_artifact(ctxt: Arc<SiteCtxt>) -> next_artifact::Respons
             if let Some(next_artifact) = next_artifact.into_iter().next() {
                 log::debug!("next_artifact: {next_artifact}");
                 return next_artifact::Response {
-                    artifact: Some(next_artifact::NextArtifact {
-                        artifact: ArtifactId::Tag(next_artifact),
-                        exclude: None,
-                        include: None,
-                        runs: None,
-                    }),
+                    artifact: Some(next_artifact::NextArtifact::Release(next_artifact)),
                 };
             }
         }
@@ -71,8 +65,8 @@ pub async fn handle_next_artifact(ctxt: Arc<SiteCtxt>) -> next_artifact::Respons
             commit.sha,
             missing_reason_dbg
         );
-        Some(next_artifact::NextArtifact {
-            artifact: ArtifactId::Commit(commit),
+        Some(next_artifact::NextArtifact::Commit {
+            commit,
             include,
             exclude,
             runs,
