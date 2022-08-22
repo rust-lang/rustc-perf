@@ -1,9 +1,9 @@
-pub mod next_commit {
-    use database::Commit;
+pub mod next_artifact {
+    use database::ArtifactId;
 
     #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-    pub struct NextCommit {
-        pub commit: Commit,
+    pub struct NextArtifact {
+        pub artifact: ArtifactId,
         pub include: Option<String>,
         pub exclude: Option<String>,
         pub runs: Option<i32>,
@@ -11,6 +11,6 @@ pub mod next_commit {
 
     #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
     pub struct Response {
-        pub commit: Option<NextCommit>,
+        pub artifact: Option<NextArtifact>,
     }
 }

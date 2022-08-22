@@ -487,7 +487,7 @@ pub struct ArtifactIdNumber(pub u32);
 pub struct Index {
     /// Id look for a commit
     commits: Indexed<Commit>,
-    /// Id lookup of the errors for a crate
+    /// Id lookup of published release artifacts
     artifacts: Indexed<Box<str>>,
     /// Id lookup of the errors for a crate
     errors: Indexed<Benchmark>,

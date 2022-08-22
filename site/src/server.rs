@@ -361,9 +361,9 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
                 .handle_get_async(&req, |c| request_handlers::handle_status_page(c))
                 .await;
         }
-        "/perf/next_commit" => {
+        "/perf/next_artifact" => {
             return server
-                .handle_get_async(&req, |c| request_handlers::handle_next_commit(c))
+                .handle_get_async(&req, |c| request_handlers::handle_next_artifact(c))
                 .await;
         }
         "/perf/triage" if *req.method() == http::Method::GET => {
