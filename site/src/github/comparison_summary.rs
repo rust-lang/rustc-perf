@@ -114,7 +114,7 @@ async fn summarize_run(
     let benchmark_map = ctxt.get_benchmark_category_map().await;
 
     let mut message = format!(
-        "Finished benchmarking commit ({sha}): [comparison url]({comparison_url}).\n\n",
+        "Finished benchmarking commit ({sha}): [comparison URL]({comparison_url}).\n\n",
         sha = commit.sha,
         comparison_url = make_comparison_url(&commit, Metric::InstructionsUser)
     );
@@ -133,54 +133,79 @@ async fn summarize_run(
     } else {
         String::new()
     };
+
     let (inst_primary, inst_secondary) = inst_comparison
         .clone()
         .summarize_by_category(&benchmark_map);
+
+    let direction = inst_primary.direction().join(inst_secondary.direction());
+    let overall_result = match direction {
+        Direction::Improvement => "✅ improvements",
+        Direction::Regression => "❌ regressions",
+        Direction::Mixed => "❌✅ regressions and improvements",
+        Direction::None => "no relevant changes",
+    };
+    let is_regression = deserves_attention_icount(&inst_primary, &inst_secondary)
+        && matches!(direction, Direction::Regression | Direction::Mixed);
+
+    writeln!(
+        &mut message,
+        "### Overall result: {}{}\n",
+        overall_result,
+        if is_regression {
+            " - ACTION NEEDED"
+        } else {
+            " - no action needed"
+        },
+    )
+    .unwrap();
+
+    let next_steps = if is_master_commit {
+        master_run_body(is_regression)
+    } else {
+        try_run_body(is_regression)
+    };
+    writeln!(&mut message, "{next_steps}\n").unwrap();
+
+    if !errors.is_empty() {
+        writeln!(&mut message, "\n{errors}").unwrap();
+    }
 
     let mut table_written = false;
     let metrics = vec![
         (
             "Instruction count",
             Metric::InstructionsUser,
-            false,
+            true, // highly reliable
             inst_comparison,
         ),
         (
             "Max RSS (memory usage)",
             Metric::MaxRSS,
-            true,
+            false, // not highly reliable
             calculate_metric_comparison(ctxt, &commit, Metric::MaxRSS).await?,
         ),
         (
             "Cycles",
             Metric::CyclesUser,
-            true,
+            false, // not highly reliable
             calculate_metric_comparison(ctxt, &commit, Metric::CyclesUser).await?,
         ),
     ];
 
-    for (title, metric, hidden, comparison) in metrics {
+    for (title, metric, highly_reliable, comparison) in metrics {
         message.push_str(&format!(
             "\n### [{title}]({})\n",
             make_comparison_url(&commit, metric)
         ));
 
         let (primary, secondary) = comparison.summarize_by_category(&benchmark_map);
-        table_written |= write_metric_summary(primary, secondary, hidden, &mut message);
+        table_written |= write_metric_summary(primary, secondary, highly_reliable, &mut message);
     }
 
     if table_written {
         write_summary_table_footer(&mut message);
     }
-
-    const DISAGREEMENT: &str = "If you disagree with this performance assessment, \
-    please file an issue in [rust-lang/rustc-perf](https://github.com/rust-lang/rustc-perf/issues/new).";
-    let footer = format!("{DISAGREEMENT}{errors}");
-
-    let direction = Direction::join(inst_primary.direction(), inst_secondary.direction());
-    let next_steps = next_steps(inst_primary, inst_secondary, direction, is_master_commit);
-
-    write!(&mut message, "\n{footer}\n{next_steps}").unwrap();
 
     Ok(message)
 }
@@ -189,7 +214,7 @@ async fn summarize_run(
 fn write_metric_summary(
     primary: ArtifactComparisonSummary,
     secondary: ArtifactComparisonSummary,
-    hidden: bool,
+    highly_reliable: bool,
     message: &mut String,
 ) -> bool {
     if !primary.is_relevant() && !secondary.is_relevant() {
@@ -197,49 +222,23 @@ fn write_metric_summary(
             .push_str("This benchmark run did not return any relevant results for this metric.\n");
         false
     } else {
-        let primary_short_summary = generate_short_summary(&primary);
-        let secondary_short_summary = generate_short_summary(&secondary);
-
-        if hidden {
+        if highly_reliable {
+            message.push_str(
+                "This is a highly reliable metric that was used to determine the \
+                overall result at the top of this comment.\n\n",
+            );
+            write_summary_table(&primary, &secondary, true, false, message);
+        } else {
+            // `<details>` means it is hidden, requiring a click to reveal.
             message.push_str("<details>\n<summary>Results</summary>\n\n");
-        }
-
-        write!(
-            message,
-            r#"
-- Primary benchmarks: {primary_short_summary}
-- Secondary benchmarks: {secondary_short_summary}
-
-"#
-        )
-        .unwrap();
-
-        write_summary_table(&primary, &secondary, true, false, message);
-
-        if hidden {
+            message.push_str(
+                "This is a less reliable metric that may be of interest but was not \
+                used to determine the overall result at the top of this comment.\n\n",
+            );
+            write_summary_table(&primary, &secondary, true, false, message);
             message.push_str("</details>\n");
         }
-
         true
-    }
-}
-
-fn next_steps(
-    primary: ArtifactComparisonSummary,
-    secondary: ArtifactComparisonSummary,
-    direction: Direction,
-    is_master_commit: bool,
-) -> String {
-    let deserves_attention = deserves_attention_icount(&primary, &secondary);
-    let (is_regression, label) = match (deserves_attention, direction) {
-        (true, Direction::Regression | Direction::Mixed) => (true, "+perf-regression"),
-        _ => (false, "-perf-regression"),
-    };
-
-    if is_master_commit {
-        master_run_body(is_regression)
-    } else {
-        try_run_body(label)
     }
 }
 
@@ -265,8 +264,8 @@ cc @rust-lang/wg-compiler-performance
     .to_string()
 }
 
-fn try_run_body(label: &str) -> String {
-    let next_steps = if label.starts_with("+") {
+fn try_run_body(is_regression: bool) -> String {
+    let next_steps = if is_regression {
         "\n\n**Next Steps**: If you can justify the regressions found in \
             this try perf run, please indicate this with \
             `@rustbot label: +perf-regression-triaged` along with \
@@ -277,6 +276,7 @@ fn try_run_body(label: &str) -> String {
         ""
     };
 
+    let sign = if is_regression { "+" } else { "-" };
     format!(
         "
 Benchmarking this pull request likely means that it is \
@@ -286,32 +286,6 @@ for rollup, we strongly recommend not doing so since this PR may lead to changes
 compiler perf.{next_steps}
 
 @bors rollup=never
-@rustbot label: +S-waiting-on-review -S-waiting-on-perf {label}",
+@rustbot label: +S-waiting-on-review -S-waiting-on-perf {sign}perf-regression",
     )
-}
-
-fn generate_short_summary(summary: &ArtifactComparisonSummary) -> String {
-    // Add an "s" to a word unless there's only one.
-    fn ending(word: &'static str, count: usize) -> std::borrow::Cow<'static, str> {
-        if count == 1 {
-            return word.into();
-        }
-        format!("{}s", word).into()
-    }
-
-    let num_improvements = summary.number_of_improvements();
-    let num_regressions = summary.number_of_regressions();
-
-    match summary.direction() {
-        Direction::Improvement => format!(
-            "✅ relevant {} found",
-            ending("improvement", num_improvements)
-        ),
-        Direction::Regression => format!(
-            "❌ relevant {} found",
-            ending("regression", num_regressions)
-        ),
-        Direction::Mixed => "mixed results".to_string(),
-        Direction::None => "no relevant changes found".to_string(),
-    }
 }

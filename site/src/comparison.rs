@@ -394,16 +394,6 @@ impl ArtifactComparisonSummary {
         }
     }
 
-    /// The number of improvements that were found to be significant and relevant
-    pub fn number_of_improvements(&self) -> usize {
-        self.num_improvements
-    }
-
-    /// The number of regressions that were found to be significant and relevant
-    pub fn number_of_regressions(&self) -> usize {
-        self.num_regressions
-    }
-
     /// Arithmetic mean of all improvements as a percent
     pub fn arithmetic_mean_of_improvements(&self) -> f64 {
         self.arithmetic_mean(self.improvements())
@@ -1248,8 +1238,8 @@ pub enum Direction {
 //
 impl Direction {
     // Also known as the "least upper bound".
-    pub fn join(a: Self, b: Self) -> Self {
-        match (a, b) {
+    pub fn join(self, other: Self) -> Self {
+        match (self, other) {
             (Self::None, b) => b,
             (a, Self::None) => a,
             (Self::Improvement, Self::Improvement) => Self::Improvement,
