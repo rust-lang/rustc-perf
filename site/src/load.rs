@@ -216,7 +216,7 @@ impl SiteCtxt {
     }
 
     /// Returns the not yet tested published artifacts, sorted from newest to oldest.
-    pub async fn missing_artifacts(&self) -> anyhow::Result<Vec<String>> {
+    pub async fn missing_published_artifacts(&self) -> anyhow::Result<Vec<String>> {
         let artifact_list: String = reqwest::get("https://static.rust-lang.org/manifests.txt")
             .await?
             .text()
@@ -230,7 +230,7 @@ impl SiteCtxt {
 
         let index = self.index.load();
         let tested_artifacts: HashSet<_> = index.artifacts().collect();
-        let in_progress_artifacts: HashSet<_> = conn
+        let in_progress_tagged_artifacts: HashSet<_> = conn
             .in_progress_artifacts()
             .await
             .into_iter()
@@ -240,22 +240,18 @@ impl SiteCtxt {
             })
             .collect();
 
-        // Gather published artifacts that are not yet tested and are not in progress
-        let mut artifacts: Vec<String> = vec![];
-
-        // Ignore too old artifacts
-        for artifact in artifact_list
+        // Gather at most last 20 published artifacts that are not yet tested and
+        // are not in progress.
+        let artifacts: Vec<_> = artifact_list
             .lines()
             .rev()
             .filter_map(parse_published_artifact_tag)
             .take(20)
-        {
-            if !tested_artifacts.contains(artifact.as_str())
-                && !in_progress_artifacts.contains(&artifact)
-            {
-                artifacts.push(artifact);
-            }
-        }
+            .filter(|artifact| {
+                !tested_artifacts.contains(artifact.as_str())
+                    && !in_progress_tagged_artifacts.contains(artifact.as_str())
+            })
+            .collect();
 
         Ok(artifacts)
     }
@@ -753,6 +749,26 @@ mod tests {
                 all_commits,
                 time
             )
+        );
+    }
+
+    #[test]
+    fn parse_published_beta_artifact() {
+        assert_eq!(
+            parse_published_artifact_tag(
+                "static.rust-lang.org/dist/2022-08-15/channel-rust-beta.toml"
+            ),
+            Some("beta-2022-08-15".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_published_stable_artifact() {
+        assert_eq!(
+            parse_published_artifact_tag(
+                "static.rust-lang.org/dist/2022-08-15/channel-rust-1.63.0.toml"
+            ),
+            Some("1.63.0".to_string())
         );
     }
 }

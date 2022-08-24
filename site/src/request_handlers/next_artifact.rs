@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 pub async fn handle_next_artifact(ctxt: Arc<SiteCtxt>) -> next_artifact::Response {
     // Prefer benchmarking released artifacts first
-    match ctxt.missing_artifacts().await {
+    match ctxt.missing_published_artifacts().await {
         Ok(next_artifact) => {
             if let Some(next_artifact) = next_artifact.into_iter().next() {
                 log::debug!("next_artifact: {next_artifact}");
