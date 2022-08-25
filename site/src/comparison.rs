@@ -1154,7 +1154,7 @@ impl TestResultComparison {
         !self.is_regression()
     }
 
-    /// Whther the comparison yielded a statistically significant result
+    /// Whether the comparison yielded a statistically significant result
     pub fn is_significant(&self) -> bool {
         self.relative_change().abs() >= self.significance_threshold()
     }
@@ -1168,11 +1168,17 @@ impl TestResultComparison {
     }
 
     /// This is a numeric magnitude of a particular change.
-    fn significance_factor(&self) -> Option<f64> {
+    fn significance_factor(&self) -> f64 {
         let change = self.relative_change();
         let threshold = self.significance_threshold();
-        // How many times the treshold this change is.
-        Some(change.abs() / threshold)
+
+        // How many times the threshold this change is.
+        let factor = change.abs() / threshold;
+        if factor.is_finite() {
+            factor
+        } else {
+            0.0
+        }
     }
 
     /// Whether the comparison is relevant or not.
@@ -1188,6 +1194,14 @@ impl TestResultComparison {
     /// and the amount above the significance threshold.
     pub fn magnitude(&self) -> Magnitude {
         let change = self.relative_change().abs();
+
+        // When the significance threshold is very small, magnitude can become VeryLarge even though
+        // the change itself if incredibly small. So we deliberately return a VerySmall magnitude
+        // here to avoid marking such small result as being relevant.
+        if change < 0.0001 {
+            return Magnitude::VerySmall;
+        }
+
         let threshold = self.significance_threshold();
         let over_threshold = if change < threshold * 1.5 {
             Magnitude::VerySmall
