@@ -18,24 +18,27 @@ pub async fn unroll_rollup(
     previous_master: &str,
     rollup_pr_number: u32,
 ) -> Result<(), String> {
+    let format_commit = |s: &str| {
+        let (short, _) = s.split_at(8);
+        format!("[{short}](https://github.com/rust-lang-ci/rust/commit/{s})")
+    };
     let mapping = enqueue_unrolled_try_builds(ci_client, rollup_merges, previous_master)
         .await?
         .into_iter()
         .fold(String::new(), |mut string, c| {
             use std::fmt::Write;
-            write!(
-                &mut string,
-                "|#{pr}|[{commit}](https://github.com/rust-lang-ci/rust/commit/{commit})|\n",
-                pr = c.original_pr_number,
-                commit = c.sha
-            )
-            .unwrap();
+            let commit = c.sha.as_deref().map(format_commit).unwrap_or_else(|| {
+                let head = format_commit(&c.rolled_up_head);
+                format!("❌ conflicts merging '{head}' into previous master ❌")
+            });
+            write!(&mut string, "|#{pr}|{commit}|\n", pr = c.original_pr_number).unwrap();
             string
         });
+    let previous_master = format_commit(previous_master);
     let msg =
         format!("📌 Perf builds for each rolled up PR:\n\n\
-        |PR# | Perf Build Sha|\n|----|-----|\n\
-        {mapping}\nIn the case of a perf regression, \
+        |PR# | Perf Build Sha|\n|----|:-----:|\n\
+        {mapping}\n\n*previous master*: {previous_master}\n\nIn the case of a perf regression, \
         run the following command for each PR you suspect might be the cause: `@rust-timer build $SHA`");
     main_repo_client.post_comment(rollup_pr_number, msg).await;
     Ok(())
@@ -76,7 +79,7 @@ async fn enqueue_unrolled_try_builds<'a>(
             "What we thought was a merge commit was not a merge commit. sha: {}",
             rollup_merge.sha
         );
-        let rolled_up_head = &commit.parents[1].sha;
+        let rolled_up_head = commit.parents[1].sha.clone();
 
         // Reset perf-tmp to the previous master
         client
@@ -84,27 +87,41 @@ async fn enqueue_unrolled_try_builds<'a>(
             .await
             .map_err(|e| format!("Error updating perf-tmp with previous master: {e:?}"))?;
 
-        // Merge in the rolled up PR's head commit into the previous master
+        // Try to merge in the rolled up PR's head commit into the previous master
         let sha = client
             .merge_branch(
                 "perf-tmp",
-                rolled_up_head,
-                &format!("Unrolled build for #{}", original_pr_number),
+                &rolled_up_head,
+                &format!("Unrolled build for #{original_pr_number}"),
             )
             .await
             .map_err(|e| {
                 format!("Error merging #{original_pr_number}'s commit '{rolled_up_head}' into perf-tmp: {e:?}")
             })?;
 
-        // Force the `try-perf` branch to point to what the perf-tmp branch points to
-        client
-            .update_branch("try-perf", &sha)
-            .await
-            .map_err(|e| format!("Error updating the try-perf branch: {e:?}"))?;
+        // Handle success and merge conflicts
+        match &sha {
+            Some(s) => {
+                // Force the `try-perf` branch to point to what the perf-tmp branch points to
+                client
+                    .update_branch("try-perf", s)
+                    .await
+                    .map_err(|e| format!("Error updating the try-perf branch: {e:?}"))?;
+            }
+            None => {
+                // Merge conflict
+                log::debug!(
+                    "Could not create unrolled commit for #{original_pr_number}. \
+                Merging the rolled up HEAD '{rolled_up_head}' into the previous master \
+                '{previous_master}' leads to a merge conflict."
+                );
+            }
+        };
 
         mapping.push(UnrolledCommit {
             original_pr_number,
             rollup_merge,
+            rolled_up_head,
             sha,
         });
         // Wait to ensure there's enough time for GitHub to checkout these changes before they are overwritten
@@ -120,8 +137,10 @@ pub struct UnrolledCommit<'a> {
     pub original_pr_number: &'a str,
     /// The original rollup merge commit
     pub rollup_merge: &'a Commit,
-    /// The sha of the new unrolled merge commit
-    pub sha: String,
+    /// The HEAD commit for the rolled up PR
+    pub rolled_up_head: String,
+    /// The sha of the new unrolled merge commit. `None` when creation failed due to merge conflicts.
+    pub sha: Option<String>,
 }
 
 lazy_static::lazy_static! {

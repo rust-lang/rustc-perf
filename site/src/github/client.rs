@@ -107,12 +107,15 @@ impl Client {
         Ok(())
     }
 
+    /// Merge the given sha into the given branch with the given commit message
+    ///
+    /// Returns `None` if the sha cannot be merged due to a merge conflict.
     pub async fn merge_branch(
         &self,
         branch: &str,
         sha: &str,
         commit_message: &str,
-    ) -> anyhow::Result<String> {
+    ) -> anyhow::Result<Option<String>> {
         #[derive(serde::Serialize)]
         struct MergeBranchRequest<'a> {
             base: &'a str,
@@ -125,12 +128,22 @@ impl Client {
             head: sha,
             commit_message,
         });
-        let response = self.send(req).await.context("PATCH /merges failed")?;
-        if !response.status().is_success() {
-            anyhow::bail!("{:?} != 201 CREATED", response.status());
-        }
+        let response = self
+            .send(req)
+            .await
+            .context("POST /merges failed to send")?;
 
-        Ok(response.json::<MergeBranchResponse>().await?.sha)
+        if response.status() == 409 {
+            // Return `None` on merge conflicts which are signaled by 409s
+            Ok(None)
+        } else if !response.status().is_success() {
+            Err(anyhow::format_err!(
+                "response has non-successful status: {:?} ",
+                response.status()
+            ))
+        } else {
+            Ok(Some(response.json::<MergeBranchResponse>().await?.sha))
+        }
     }
 
     pub async fn create_commit(
