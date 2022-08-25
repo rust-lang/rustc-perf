@@ -92,7 +92,9 @@ async fn enqueue_unrolled_try_builds<'a>(
                 &format!("Unrolled build for #{}", original_pr_number),
             )
             .await
-            .map_err(|e| format!("Error merging commit into perf-tmp: {e:?}"))?;
+            .map_err(|e| {
+                format!("Error merging #{original_pr_number}'s commit '{rolled_up_head}' into perf-tmp: {e:?}")
+            })?;
 
         // Force the `try-perf` branch to point to what the perf-tmp branch points to
         client
