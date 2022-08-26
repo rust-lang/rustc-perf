@@ -18,23 +18,27 @@ pub async fn unroll_rollup(
     previous_master: &str,
     rollup_pr_number: u32,
 ) -> Result<(), String> {
-    let format_commit = |s: &str| {
-        let (short, _) = s.split_at(8);
-        format!("[{short}](https://github.com/rust-lang-ci/rust/commit/{s})")
+    let format_commit = |s: &str, truncate: bool| {
+        let display = truncate.then(|| s.split_at(10).0).unwrap_or(s);
+        format!("[{display}](https://github.com/rust-lang-ci/rust/commit/{s})")
     };
     let mapping = enqueue_unrolled_try_builds(ci_client, rollup_merges, previous_master)
         .await?
         .into_iter()
         .fold(String::new(), |mut string, c| {
             use std::fmt::Write;
-            let commit = c.sha.as_deref().map(format_commit).unwrap_or_else(|| {
-                let head = format_commit(&c.rolled_up_head);
-                format!("❌ conflicts merging '{head}' into previous master ❌")
-            });
+            let commit = c
+                .sha
+                .as_deref()
+                .map(|s| format_commit(s, false))
+                .unwrap_or_else(|| {
+                    let head = format_commit(&c.rolled_up_head, true);
+                    format!("❌ conflicts merging '{head}' into previous master ❌")
+                });
             write!(&mut string, "|#{pr}|{commit}|\n", pr = c.original_pr_number).unwrap();
             string
         });
-    let previous_master = format_commit(previous_master);
+    let previous_master = format_commit(previous_master, true);
     let msg =
         format!("📌 Perf builds for each rolled up PR:\n\n\
         |PR# | Perf Build Sha|\n|----|:-----:|\n\
