@@ -230,6 +230,12 @@ pub enum Metric {
     LlvmBitcodeSize,
     #[serde(rename = "size:llvm_ir")]
     LlvmIrSize,
+    /// Total bytes of a generated documentation directory
+    #[serde(rename = "size:doc_bytes")]
+    DocByteSize,
+    /// Number of files inside a generated documentation directory.
+    #[serde(rename = "size:doc_files_count")]
+    DocFilesCount,
 }
 
 impl Metric {
@@ -259,6 +265,8 @@ impl Metric {
             Metric::AssemblyFileSize => "size:assembly_file",
             Metric::LlvmBitcodeSize => "size:llvm_bitcode",
             Metric::LlvmIrSize => "size:llvm_ir",
+            Metric::DocByteSize => "size:doc_bytes",
+            Metric::DocFilesCount => "size:doc_files_count",
         }
     }
 
