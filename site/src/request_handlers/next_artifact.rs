@@ -1,9 +1,22 @@
 use crate::load::{MissingReason, SiteCtxt};
-use collector::api::next_commit;
+use collector::api::next_artifact;
 
 use std::sync::Arc;
 
-pub async fn handle_next_commit(ctxt: Arc<SiteCtxt>) -> next_commit::Response {
+pub async fn handle_next_artifact(ctxt: Arc<SiteCtxt>) -> next_artifact::Response {
+    // Prefer benchmarking released artifacts first
+    match ctxt.missing_published_artifacts().await {
+        Ok(next_artifact) => {
+            if let Some(next_artifact) = next_artifact.into_iter().next() {
+                log::debug!("next_artifact: {next_artifact}");
+                return next_artifact::Response {
+                    artifact: Some(next_artifact::NextArtifact::Release(next_artifact)),
+                };
+            }
+        }
+        Err(error) => log::error!("Failed to fetch missing artifacts: {error:?}"),
+    }
+
     let next_commit = ctxt.missing_commits().await.into_iter().next();
 
     let next_commit = if let Some((commit, missing_reason)) = next_commit {
@@ -52,7 +65,7 @@ pub async fn handle_next_commit(ctxt: Arc<SiteCtxt>) -> next_commit::Response {
             commit.sha,
             missing_reason_dbg
         );
-        Some(next_commit::NextCommit {
+        Some(next_artifact::NextArtifact::Commit {
             commit,
             include,
             exclude,
@@ -62,7 +75,7 @@ pub async fn handle_next_commit(ctxt: Arc<SiteCtxt>) -> next_commit::Response {
         None
     };
 
-    next_commit::Response {
-        commit: next_commit,
+    next_artifact::Response {
+        artifact: next_commit,
     }
 }

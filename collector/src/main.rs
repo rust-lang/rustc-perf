@@ -2,8 +2,9 @@
 
 use anyhow::{bail, Context};
 use clap::Parser;
+use collector::api::next_artifact::NextArtifact;
 use collector::category::Category;
-use database::{ArtifactId, Commit, CommitType};
+use database::{ArtifactId, Commit, CommitType, Pool};
 use log::debug;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::collections::HashMap;
@@ -834,7 +835,7 @@ enum Commands {
         self_profile: SelfProfileOption,
     },
 
-    /// Benchmarks the next commit for perf.rust-lang.org
+    /// Benchmarks the next commit or release for perf.rust-lang.org
     BenchNext {
         /// Site URL
         site_url: String,
@@ -995,113 +996,64 @@ fn main_result() -> anyhow::Result<i32> {
             bench_rustc,
             self_profile,
         } => {
-            println!("processing commits");
+            println!("processing artifacts");
             let client = reqwest::blocking::Client::new();
-            let response: collector::api::next_commit::Response = client
-                .get(&format!("{}/perf/next_commit", site_url))
+            let response: collector::api::next_artifact::Response = client
+                .get(&format!("{}/perf/next_artifact", site_url))
                 .send()?
                 .json()?;
-            let next = if let Some(c) = response.commit {
+            let next = if let Some(c) = response.artifact {
                 c
             } else {
-                println!("no commit to benchmark");
-                // no missing commits
+                println!("no artifact to benchmark");
+                // no missing artifacts
                 return Ok(0);
             };
 
             let pool = database::Pool::open(&db.db);
 
-            let sysroot = Sysroot::install(next.commit.sha.to_string(), &target_triple)
-                .with_context(|| format!("failed to install sysroot for {:?}", next.commit))?;
+            match next {
+                NextArtifact::Release(tag) => {
+                    bench_published_artifact(tag, pool, &mut rt, &target_triple, &benchmark_dir)?;
+                }
+                NextArtifact::Commit {
+                    commit,
+                    include,
+                    exclude,
+                    runs,
+                } => {
+                    let sysroot = Sysroot::install(commit.sha.to_string(), &target_triple)
+                        .with_context(|| format!("failed to install sysroot for {:?}", commit))?;
 
-            let mut benchmarks = get_benchmarks(
-                &benchmark_dir,
-                next.include.as_deref(),
-                next.exclude.as_deref(),
-            )?;
-            benchmarks.retain(|b| b.category().is_primary_or_secondary());
+                    let mut benchmarks =
+                        get_benchmarks(&benchmark_dir, include.as_deref(), exclude.as_deref())?;
+                    benchmarks.retain(|b| b.category().is_primary_or_secondary());
 
-            let res = bench(
-                &mut rt,
-                pool,
-                &ArtifactId::Commit(next.commit),
-                &Profile::all(),
-                &Scenario::all(),
-                bench_rustc.bench_rustc,
-                Compiler::from_sysroot(&sysroot),
-                &benchmarks,
-                next.runs.map(|v| v as usize),
-                self_profile.self_profile,
-            );
+                    let res = bench(
+                        &mut rt,
+                        pool,
+                        &ArtifactId::Commit(commit),
+                        &Profile::all(),
+                        &Scenario::all(),
+                        bench_rustc.bench_rustc,
+                        Compiler::from_sysroot(&sysroot),
+                        &benchmarks,
+                        runs.map(|v| v as usize),
+                        self_profile.self_profile,
+                    );
 
-            client.post(&format!("{}/perf/onpush", site_url)).send()?;
+                    client.post(&format!("{}/perf/onpush", site_url)).send()?;
 
-            res.fail_if_nonzero()?;
+                    res.fail_if_nonzero()?;
+                }
+            }
+
             Ok(0)
         }
 
         Commands::BenchPublished { toolchain, db } => {
-            let status = Command::new("rustup")
-                .args(&["install", "--profile=minimal", &toolchain])
-                .status()
-                .context("rustup install")?;
-            if !status.success() {
-                anyhow::bail!("failed to install toolchain for {}", toolchain);
-            }
-
             let pool = database::Pool::open(&db.db);
-
-            let profiles = if collector::version_supports_doc(&toolchain) {
-                Profile::all()
-            } else {
-                Profile::all_non_doc()
-            };
-            let scenarios = if collector::version_supports_incremental(&toolchain) {
-                Scenario::all()
-            } else {
-                Scenario::all_non_incr()
-            };
-
-            let which = |tool| {
-                String::from_utf8(
-                    Command::new("rustup")
-                        .arg("which")
-                        .arg("--toolchain")
-                        .arg(&toolchain)
-                        .arg(tool)
-                        .output()
-                        .context(format!("rustup which {}", tool))?
-                        .stdout,
-                )
-                .context("utf8")
-            };
-            let rustc = which("rustc")?;
-            let rustdoc = which("rustdoc")?;
-            let cargo = which("cargo")?;
-
-            // Exclude benchmarks that don't work with a stable compiler.
-            let mut benchmarks = get_benchmarks(&benchmark_dir, None, None)?;
-            benchmarks.retain(|b| b.category().is_stable());
-
-            let res = bench(
-                &mut rt,
-                pool,
-                &ArtifactId::Tag(toolchain),
-                &profiles,
-                &scenarios,
-                /* bench_rustc */ false,
-                Compiler {
-                    rustc: Path::new(rustc.trim()),
-                    rustdoc: Some(Path::new(rustdoc.trim())),
-                    cargo: Path::new(cargo.trim()),
-                    is_nightly: false,
-                    triple: &target_triple,
-                },
-                &benchmarks,
-                Some(3),
-                /* is_self_profile */ false,
-            );
-            res.fail_if_nonzero()?;
+            bench_published_artifact(toolchain, pool, &mut rt, &target_triple, &benchmark_dir)?;
             Ok(0)
         }
 
@@ -1246,6 +1198,75 @@ fn main_result() -> anyhow::Result<i32> {
             Ok(0)
         }
     }
+}
+
+fn bench_published_artifact(
+    toolchain: String,
+    pool: Pool,
+    rt: &mut Runtime,
+    target_triple: &str,
+    benchmark_dir: &Path,
+) -> anyhow::Result<()> {
+    let status = Command::new("rustup")
+        .args(&["install", "--profile=minimal", &toolchain])
+        .status()
+        .context("rustup install")?;
+    if !status.success() {
+        anyhow::bail!("failed to install toolchain for {}", toolchain);
+    }
+
+    let profiles = if collector::version_supports_doc(&toolchain) {
+        Profile::all()
+    } else {
+        Profile::all_non_doc()
+    };
+    let scenarios = if collector::version_supports_incremental(&toolchain) {
+        Scenario::all()
+    } else {
+        Scenario::all_non_incr()
+    };
+
+    let which = |tool| {
+        String::from_utf8(
+            Command::new("rustup")
+                .arg("which")
+                .arg("--toolchain")
+                .arg(&toolchain)
+                .arg(tool)
+                .output()
+                .context(format!("rustup which {}", tool))?
+                .stdout,
+        )
+        .context("utf8")
+    };
+    let rustc = which("rustc")?;
+    let rustdoc = which("rustdoc")?;
+    let cargo = which("cargo")?;
+
+    // Exclude benchmarks that don't work with a stable compiler.
+    let mut benchmarks = get_benchmarks(&benchmark_dir, None, None)?;
+    benchmarks.retain(|b| b.category().is_stable());
+
+    let res = bench(
+        rt,
+        pool,
+        &ArtifactId::Tag(toolchain),
+        &profiles,
+        &scenarios,
+        /* bench_rustc */ false,
+        Compiler {
+            rustc: Path::new(rustc.trim()),
+            rustdoc: Some(Path::new(rustdoc.trim())),
+            cargo: Path::new(cargo.trim()),
+            is_nightly: false,
+            triple: &target_triple,
+        },
+        &benchmarks,
+        Some(3),
+        /* is_self_profile */ false,
+    );
+    res.fail_if_nonzero()?;
+    Ok(())
 }
 
 fn add_perf_config(directory: &PathBuf, category: Category) {

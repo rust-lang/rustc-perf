@@ -1,16 +1,19 @@
-pub mod next_commit {
+pub mod next_artifact {
     use database::Commit;
 
     #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-    pub struct NextCommit {
-        pub commit: Commit,
-        pub include: Option<String>,
-        pub exclude: Option<String>,
-        pub runs: Option<i32>,
+    pub enum NextArtifact {
+        Release(String),
+        Commit {
+            commit: Commit,
+            include: Option<String>,
+            exclude: Option<String>,
+            runs: Option<i32>,
+        },
     }
 
     #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
     pub struct Response {
-        pub commit: Option<NextCommit>,
+        pub artifact: Option<NextArtifact>,
     }
 }

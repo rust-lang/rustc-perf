@@ -2,7 +2,7 @@ mod bootstrap;
 mod dashboard;
 mod github;
 mod graph;
-mod next_commit;
+mod next_artifact;
 mod self_profile;
 mod status_page;
 
@@ -10,7 +10,7 @@ pub use bootstrap::handle_bootstrap;
 pub use dashboard::handle_dashboard;
 pub use github::handle_github;
 pub use graph::{handle_graph, handle_graphs};
-pub use next_commit::handle_next_commit;
+pub use next_artifact::handle_next_artifact;
 pub use self_profile::{
     handle_self_profile, handle_self_profile_processed_download, handle_self_profile_raw,
     handle_self_profile_raw_download,

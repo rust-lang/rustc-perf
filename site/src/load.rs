@@ -7,7 +7,9 @@ use std::time::Instant;
 
 use arc_swap::{ArcSwap, Guard};
 use chrono::{Duration, Utc};
+use lazy_static::lazy_static;
 use log::error;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use crate::db;
@@ -213,6 +215,47 @@ impl SiteCtxt {
         )
     }
 
+    /// Returns the not yet tested published artifacts, sorted from newest to oldest.
+    pub async fn missing_published_artifacts(&self) -> anyhow::Result<Vec<String>> {
+        let artifact_list: String = reqwest::get("https://static.rust-lang.org/manifests.txt")
+            .await?
+            .text()
+            .await?;
+
+        lazy_static! {
+            static ref VERSION_REGEX: Regex = Regex::new(r"(\d+\.\d+.\d+)").unwrap();
+        }
+
+        let conn = self.conn().await;
+
+        let index = self.index.load();
+        let tested_artifacts: HashSet<_> = index.artifacts().collect();
+        let in_progress_tagged_artifacts: HashSet<_> = conn
+            .in_progress_artifacts()
+            .await
+            .into_iter()
+            .filter_map(|artifact| match artifact {
+                ArtifactId::Commit(_) => None,
+                ArtifactId::Tag(tag) => Some(tag),
+            })
+            .collect();
+
+        // Gather at most last 20 published artifacts that are not yet tested and
+        // are not in progress.
+        let artifacts: Vec<_> = artifact_list
+            .lines()
+            .rev()
+            .filter_map(parse_published_artifact_tag)
+            .take(20)
+            .filter(|artifact| {
+                !tested_artifacts.contains(artifact.as_str())
+                    && !in_progress_tagged_artifacts.contains(artifact.as_str())
+            })
+            .collect();
+
+        Ok(artifacts)
+    }
+
     pub async fn get_benchmark_category_map(&self) -> HashMap<Benchmark, Category> {
         let benchmarks = self.pool.connection().await.get_benchmarks().await;
         benchmarks
@@ -248,6 +291,32 @@ impl SiteCtxt {
 
         commits
     }
+}
+
+/// Parses an artifact tag like `1.63.0` or `beta-2022-08-19` from a line taken from
+/// `https://static.rust-lang.org/manifests.txt`.
+fn parse_published_artifact_tag(line: &str) -> Option<String> {
+    lazy_static! {
+        static ref VERSION_REGEX: Regex = Regex::new(r"(\d+\.\d+.\d+)").unwrap();
+    }
+
+    let mut parts = line.rsplit("/").into_iter();
+    let name = parts.next();
+    let date = parts.next();
+
+    if let Some(date) = date {
+        if let Some(name) = name {
+            // Create beta artifact in the form of beta-YYYY-MM-DD
+            if name == "channel-rust-beta.toml" {
+                return Some(format!("beta-{date}"));
+            } else if let Some(capture) = VERSION_REGEX.captures(name) {
+                if let Some(version) = capture.get(1).map(|c| c.as_str()) {
+                    return Some(version.to_string());
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Calculating the missing commits.
@@ -680,6 +749,26 @@ mod tests {
                 all_commits,
                 time
             )
+        );
+    }
+
+    #[test]
+    fn parse_published_beta_artifact() {
+        assert_eq!(
+            parse_published_artifact_tag(
+                "static.rust-lang.org/dist/2022-08-15/channel-rust-beta.toml"
+            ),
+            Some("beta-2022-08-15".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_published_stable_artifact() {
+        assert_eq!(
+            parse_published_artifact_tag(
+                "static.rust-lang.org/dist/2022-08-15/channel-rust-1.63.0.toml"
+            ),
+            Some("1.63.0".to_string())
         );
     }
 }
