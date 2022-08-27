@@ -251,8 +251,8 @@ pub async fn parse_homu_comment(comment_body: &str) -> Option<String> {
     }
 
     let start = "<!-- homu: ";
-    let start_idx = comment_body.find(start).expect("found homu") + start.len();
-    let end_idx = start_idx + comment_body[start_idx..].find(" -->").unwrap();
+    let start_idx = comment_body.find(start)? + start.len();
+    let end_idx = start_idx + comment_body[start_idx..].find(" -->")?;
 
     let sha = match serde_json::from_str(&comment_body[start_idx..end_idx]) {
         Ok(HomuComment::TryBuildCompleted { merge_sha }) => merge_sha,
