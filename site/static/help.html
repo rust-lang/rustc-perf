@@ -51,20 +51,12 @@
                 <code>&lt;RUNS&gt;</code> times.
             </li>
         </ul>
-        <p><code>@rust-timer</code> has
-            <a href="https://github.com/rust-lang/rustc-perf/blob/dcae222b6a7fbb4c9e21d95bc93313ebe5107c7c/site/src/request_handlers/github.rs#L12-L21">more commands</a>
-            than just <code>@rust-timer queue</code>, but the <code>queue</code> command is the most used.
-        </p>
         <p><code>@rust-timer build $commit</code> will queue a perf run for the given commit <code>$commit</code>.
             It is usually invoked with the commit from a successful "try" run. (The
             <code>queue</code> command can be seen as a shortcut that automatically selects the
             "try" run's commit for the <code>build</code> command)
             This command also supports the same <code>include</code>, <code>exclude</code>, and <code>runs</code> options
             as <code>@rust-timer queue</code>.
-        </p>
-        <p>
-            The other two commands are a work in progress and will be documented here when they're
-            finalized. They are dedicated to helping diagnose the cause of regressions in rollup PRs.
         </p>
         <script src="shared.js"></script>
 </body>
