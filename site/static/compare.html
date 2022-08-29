@@ -275,7 +275,11 @@
                     </div>
                     <input type="checkbox" v-model="showRawData" style="margin-left: 20px;" />
                 </div>
-                <button @click="resetFilter">Reset filters</button>
+                <button @click="resetFilter" style="margin-right: 10px;">Reset filters</button>
+                <button @click="exportToMarkdown"
+                        title="Download the currently filtered data as a Markdown table">
+                    Export to Markdown
+                </button>
             </div>
         </fieldset>
         <p v-if="dataLoading && !data">Loading ...</p>
