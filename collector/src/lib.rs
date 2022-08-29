@@ -9,10 +9,8 @@ pub mod api;
 pub mod category;
 pub mod etw_parser;
 mod read2;
-pub mod self_profile;
 
 use process::Stdio;
-pub use self_profile::{QueryData, SelfProfile};
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Deserialize)]
 pub struct DeltaTime(#[serde(with = "round_float")] pub f64);
