@@ -22,7 +22,10 @@ use tokio::runtime::Runtime;
 mod execute;
 mod sysroot;
 
-use execute::{BenchProcessor, Benchmark, BenchmarkName, ProfileProcessor, Profiler};
+use execute::{
+    profiler::{ProfileProcessor, Profiler},
+    BenchProcessor, Benchmark, BenchmarkName,
+};
 use sysroot::Sysroot;
 
 #[derive(Debug, Copy, Clone)]
