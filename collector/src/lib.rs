@@ -8,7 +8,7 @@ use std::process::{self, Command};
 pub mod api;
 pub mod category;
 pub mod etw_parser;
-mod read2;
+mod utils;
 
 use process::Stdio;
 
@@ -186,6 +186,7 @@ pub fn robocopy(
 
 fn run_command_with_output(cmd: &mut Command) -> anyhow::Result<process::Output> {
     use anyhow::Context;
+    use utils::read2;
     let mut child = cmd
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
