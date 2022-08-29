@@ -6,7 +6,7 @@ use std::fmt;
 use std::process::{self, Command};
 
 pub mod api;
-pub mod category;
+pub mod benchmark;
 pub mod etw_parser;
 pub mod utils;
 

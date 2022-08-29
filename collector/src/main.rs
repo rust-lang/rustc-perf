@@ -3,7 +3,7 @@
 use anyhow::{bail, Context};
 use clap::Parser;
 use collector::api::next_artifact::NextArtifact;
-use collector::category::Category;
+use collector::benchmark::category::Category;
 use collector::utils;
 use database::{ArtifactId, Commit, CommitType, Pool};
 use log::debug;

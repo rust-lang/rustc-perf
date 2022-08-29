@@ -2,7 +2,7 @@
 
 use crate::{Compiler, Profile, Scenario};
 use anyhow::{bail, Context};
-use collector::category::Category;
+use collector::benchmark::category::Category;
 use collector::etw_parser;
 use collector::{command_output, utils};
 use database::{PatchName, QueryLabel};
