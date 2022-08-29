@@ -289,7 +289,7 @@ impl<'a> CargoProcess<'a> {
             // machinery works).
             let cargo_subcommand =
                 if let Some((ref mut processor, scenario, ..)) = self.processor_etc {
-                    let perf_tool = processor.perf_tool(self.profile);
+                    let perf_tool = processor.perf_tool();
                     if !perf_tool.is_scenario_allowed(scenario) {
                         return Err(anyhow::anyhow!(
                             "this perf tool doesn't support {:?} scenarios",
@@ -344,7 +344,7 @@ impl<'a> CargoProcess<'a> {
                     .as_mut()
                     .map(|v| &mut v.0)
                     .expect("needs_final needs a processor");
-                let perf_tool_name = processor.perf_tool(self.profile).name();
+                let perf_tool_name = processor.perf_tool().name();
                 // If we're using a processor, we expect that only the crate
                 // we're interested in benchmarking will be built, not any
                 // dependencies.
@@ -458,7 +458,7 @@ pub struct ProcessOutputData<'a> {
 /// processing.
 pub trait Processor {
     /// The `PerfTool` being used.
-    fn perf_tool(&self, _: Profile) -> PerfTool;
+    fn perf_tool(&self) -> PerfTool;
 
     /// Process the output produced by the particular `Profiler` being used.
     fn process_output(
@@ -477,7 +477,7 @@ pub trait Processor {
     ///
     /// Return "true" if planning on doing something different for second
     /// iteration.
-    fn finished_first_collection(&mut self, _: Profile) -> bool {
+    fn finished_first_collection(&mut self) -> bool {
         false
     }
 }
@@ -729,7 +729,7 @@ impl Upload {
 }
 
 impl<'a> Processor for BenchProcessor<'a> {
-    fn perf_tool(&self, _profile: Profile) -> PerfTool {
+    fn perf_tool(&self) -> PerfTool {
         if self.is_first_collection && self.is_self_profile {
             if cfg!(unix) {
                 PerfTool::BenchTool(Bencher::PerfStatSelfProfile)
@@ -749,11 +749,11 @@ impl<'a> Processor for BenchProcessor<'a> {
         self.is_first_collection = true;
     }
 
-    fn finished_first_collection(&mut self, profile: Profile) -> bool {
-        let original = self.perf_tool(profile);
+    fn finished_first_collection(&mut self) -> bool {
+        let original = self.perf_tool();
         self.is_first_collection = false;
         // We need to run again if we're going to use a different perf tool
-        self.perf_tool(profile) != original
+        self.perf_tool() != original
     }
 
     fn process_output(
@@ -857,7 +857,7 @@ impl<'a> ProfileProcessor<'a> {
 }
 
 impl<'a> Processor for ProfileProcessor<'a> {
-    fn perf_tool(&self, _: Profile) -> PerfTool {
+    fn perf_tool(&self) -> PerfTool {
         PerfTool::ProfileTool(self.profiler)
     }
 
@@ -1364,7 +1364,7 @@ impl Benchmark {
             processor.start_first_collection();
             for i in 0..cmp::max(iterations, 2) {
                 if i == 1 {
-                    let different = processor.finished_first_collection(profile);
+                    let different = processor.finished_first_collection();
                     if iterations == 1 && !different {
                         // Don't run twice if this processor doesn't need it and
                         // we've only been asked to run once.
