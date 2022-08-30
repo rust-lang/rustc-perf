@@ -8,7 +8,7 @@ use crate::github;
 use crate::load::SiteCtxt;
 use crate::selector::{self, Tag};
 
-use collector::category::Category;
+use collector::benchmark::category::Category;
 use collector::Bound;
 use serde::{Deserialize, Serialize};
 
@@ -1423,7 +1423,7 @@ fn compare_link(start: &ArtifactId, end: &ArtifactId) -> String {
 mod tests {
     use super::*;
 
-    use collector::category::Category;
+    use collector::benchmark::category::Category;
     use std::collections::HashSet;
 
     use database::{Profile, Scenario};

@@ -6,13 +6,11 @@ use std::fmt;
 use std::process::{self, Command};
 
 pub mod api;
-pub mod category;
+pub mod benchmark;
 pub mod etw_parser;
-mod read2;
-pub mod self_profile;
+pub mod utils;
 
 use process::Stdio;
-pub use self_profile::{QueryData, SelfProfile};
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Deserialize)]
 pub struct DeltaTime(#[serde(with = "round_float")] pub f64);
@@ -158,36 +156,9 @@ pub fn run_command(cmd: &mut Command) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[cfg(windows)]
-pub fn robocopy(
-    from: &std::path::Path,
-    to: &std::path::Path,
-    extra_args: &[&dyn AsRef<std::ffi::OsStr>],
-) -> anyhow::Result<()> {
-    let mut cmd = Command::new("robocopy");
-    cmd.arg(from).arg(to).arg("/s").arg("/e");
-
-    for arg in extra_args {
-        cmd.arg(arg.as_ref());
-    }
-
-    let output = run_command_with_output(&mut cmd)?;
-
-    if output.status.code() >= Some(8) {
-        // robocopy returns 0-7 on success
-        return Err(anyhow::anyhow!(
-            "expected success, got {}\n\nstderr={}\n\n stdout={}",
-            output.status,
-            String::from_utf8_lossy(&output.stderr),
-            String::from_utf8_lossy(&output.stdout)
-        ));
-    }
-
-    Ok(())
-}
-
 fn run_command_with_output(cmd: &mut Command) -> anyhow::Result<process::Output> {
     use anyhow::Context;
+    use utils::read2;
     let mut child = cmd
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

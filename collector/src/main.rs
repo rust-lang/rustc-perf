@@ -3,7 +3,8 @@
 use anyhow::{bail, Context};
 use clap::Parser;
 use collector::api::next_artifact::NextArtifact;
-use collector::category::Category;
+use collector::benchmark::category::Category;
+use collector::utils;
 use database::{ArtifactId, Commit, CommitType, Pool};
 use log::debug;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
@@ -21,7 +22,10 @@ use tokio::runtime::Runtime;
 mod execute;
 mod sysroot;
 
-use execute::{BenchProcessor, Benchmark, BenchmarkName, ProfileProcessor, Profiler};
+use execute::{
+    profiler::{ProfileProcessor, Profiler},
+    BenchProcessor, Benchmark, BenchmarkName,
+};
 use sysroot::Sysroot;
 
 #[derive(Debug, Copy, Clone)]
@@ -1335,7 +1339,7 @@ fn download_from_git(target: &Path, url: &str) -> anyhow::Result<()> {
         log::error!("Could not delete .git directory: {error:?}");
     }
 
-    execute::rename(&tmpdir, &target)?;
+    utils::fs::rename(&tmpdir, &target)?;
     Ok(())
 }
 
@@ -1365,7 +1369,7 @@ fn download_from_crates_io(target_dir: &Path, krate: &str, version: &str) -> any
     // under <crate-name>-<version> directory.
     let unpacked_dir = tmpdir.path().join(format!("{krate}-{version}"));
     generate_lockfile(&unpacked_dir);
-    execute::rename(&unpacked_dir, &target_dir)?;
+    utils::fs::rename(&unpacked_dir, &target_dir)?;
 
     Ok(())
 }

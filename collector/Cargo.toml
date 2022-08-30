@@ -37,15 +37,3 @@ rayon = "1.5.2"
 [target.'cfg(windows)'.dependencies]
 miow = "0.3"
 windows-sys = { version = "0.36.1", features = ["Win32_Foundation"] }
-
-[[bin]]
-name = "collector"
-path = "src/main.rs"
-
-[[bin]]
-name = "rustc-fake"
-path = "src/rustc-fake.rs"
-
-[[bin]]
-name = "bootstrap-rustc"
-path = "src/bootstrap-rustc.rs"
