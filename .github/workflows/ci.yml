@@ -135,7 +135,7 @@ jobs:
       # has problems with Rust debuginfo.
       - name: Install Valgrind
         run: |
-          git clone git://sourceware.org/git/valgrind.git
+          git clone https://sourceware.org/git/valgrind.git
           cd valgrind
           # Version from May 2022
           git checkout 74e180e3c4d9e6bb4b2a9cd22eca7703412c5d42
