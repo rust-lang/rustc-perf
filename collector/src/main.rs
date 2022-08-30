@@ -6,6 +6,7 @@ use clap::{Arg, ArgEnum, Parser, PossibleValue};
 use collector::api::next_artifact::NextArtifact;
 use collector::benchmark::category::Category;
 use collector::benchmark::profile::Profile;
+use collector::benchmark::scenario::Scenario;
 use collector::utils;
 use database::{ArtifactId, Commit, CommitType, Pool};
 use log::debug;
@@ -48,50 +49,6 @@ impl<'a> Compiler<'a> {
             cargo: &sysroot.cargo,
             triple: &sysroot.triple,
             is_nightly: true,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, clap::ArgEnum)]
-#[clap(rename_all = "PascalCase")]
-pub enum Scenario {
-    Full,
-    IncrFull,
-    IncrUnchanged,
-    IncrPatched,
-
-    // This one is only specified from the command line, and is converted to
-    // the above variants by `expand_all()`.
-    All,
-}
-
-impl Scenario {
-    fn all() -> Vec<Scenario> {
-        vec![
-            Scenario::Full,
-            Scenario::IncrFull,
-            Scenario::IncrUnchanged,
-            Scenario::IncrPatched,
-        ]
-    }
-
-    fn all_non_incr() -> Vec<Scenario> {
-        vec![Scenario::Full]
-    }
-
-    fn expand_all(scenarios: &[Self]) -> Vec<Self> {
-        if scenarios.contains(&Scenario::All) {
-            Self::all()
-        } else {
-            scenarios.to_vec()
-        }
-    }
-
-    fn is_incr(self) -> bool {
-        match self {
-            Scenario::Full => false,
-            Scenario::IncrFull | Scenario::IncrUnchanged | Scenario::IncrPatched => true,
-            Scenario::All => unreachable!(),
         }
     }
 }
@@ -545,7 +502,6 @@ fn generate_cachegrind_diffs(
                     Scenario::IncrPatched => (0..benchmark.patches.len())
                         .map(|i| format!("{:?}{}", scenario, i))
                         .collect::<Vec<_>>(),
-                    Scenario::All => unreachable!(),
                 }
             }) {
                 let filename = |prefix, id| {
@@ -743,6 +699,44 @@ impl TypedValueParser for ProfileArgParser {
     }
 }
 
+#[derive(Debug, Clone)]
+struct ScenarioArg(Vec<Scenario>);
+
+#[derive(Clone)]
+struct ScenarioArgParser;
+
+impl TypedValueParser for ScenarioArgParser {
+    type Value = ScenarioArg;
+
+    fn parse_ref(
+        &self,
+        cmd: &clap::Command,
+        arg: Option<&Arg>,
+        value: &OsStr,
+    ) -> Result<Self::Value, clap::Error> {
+        if value == "All" {
+            Ok(ScenarioArg(Scenario::all()))
+        } else {
+            let scenarios: Result<Vec<Scenario>, _> = value
+                .to_str()
+                .unwrap()
+                .split(",")
+                .map(|item| clap::value_parser!(Scenario).parse_ref(cmd, arg, OsStr::new(item)))
+                .collect();
+
+            Ok(ScenarioArg(scenarios?))
+        }
+    }
+
+    fn possible_values(&self) -> Option<Box<dyn Iterator<Item = PossibleValue<'static>> + '_>> {
+        let values = Scenario::value_variants()
+            .into_iter()
+            .filter_map(|item| item.to_possible_value())
+            .chain([PossibleValue::new("All")]);
+        Some(Box::new(values))
+    }
+}
+
 #[derive(Debug, clap::Parser)]
 #[clap(about, version, author)]
 struct Cli {
@@ -788,17 +782,13 @@ struct LocalOptions {
     rustdoc: Option<PathBuf>,
 
     /// Measure the scenarios in this comma-separated list
-    // This must be normalized via `Scenario::expand_all()` before use.
     #[clap(
         long = "scenarios",
         alias = "runs", // the old name, for backward compatibility
-        arg_enum,
-        multiple_values = true,
-        use_delimiter = true,
-        require_delimiter = true,
+        value_parser = ScenarioArgParser,
         default_value = "All"
     )]
-    scenarios: Vec<Scenario>,
+    scenarios: ScenarioArg,
 }
 
 #[derive(Debug, clap::Args)]
@@ -961,7 +951,7 @@ fn main_result() -> anyhow::Result<i32> {
             self_profile,
         } => {
             let profiles = &local.profiles.0;
-            let scenarios = Scenario::expand_all(&local.scenarios);
+            let scenarios = &local.scenarios.0;
 
             let pool = database::Pool::open(&db.db);
 
@@ -1086,7 +1076,7 @@ fn main_result() -> anyhow::Result<i32> {
             }
 
             let profiles = &local.profiles.0;
-            let scenarios = Scenario::expand_all(&local.scenarios);
+            let scenarios = &local.scenarios.0;
 
             let mut benchmarks = get_benchmarks(
                 &benchmark_dir,

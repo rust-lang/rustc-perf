@@ -1,9 +1,10 @@
 //! Execute benchmarks.
 
-use crate::{Compiler, Scenario};
+use crate::Compiler;
 use anyhow::{bail, Context};
 use collector::benchmark::category::Category;
 use collector::benchmark::profile::Profile;
+use collector::benchmark::scenario::Scenario;
 use collector::etw_parser;
 use collector::{command_output, utils};
 use database::{PatchName, QueryLabel};
@@ -749,7 +750,6 @@ impl<'a> Processor for BenchProcessor<'a> {
                             res,
                         );
                     }
-                    Scenario::All => unreachable!(),
                 }
                 Ok(Retry::No)
             }
