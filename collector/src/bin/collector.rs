@@ -7,7 +7,7 @@ use collector::api::next_artifact::NextArtifact;
 use collector::benchmark::category::Category;
 use collector::benchmark::profile::Profile;
 use collector::benchmark::scenario::Scenario;
-use collector::benchmark::{compile_time_benchmark_dir, get_benchmarks};
+use collector::benchmark::{compile_time_benchmark_dir, get_benchmarks, Benchmark, BenchmarkName};
 use collector::utils;
 use database::{ArtifactId, Commit, CommitType, Pool};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
@@ -25,7 +25,7 @@ use tokio::runtime::Runtime;
 
 use collector::execute::{
     profiler::{ProfileProcessor, Profiler},
-    BenchProcessor, Benchmark, BenchmarkName,
+    BenchProcessor,
 };
 use collector::toolchain::{get_local_toolchain, Compiler, Sysroot};
 
