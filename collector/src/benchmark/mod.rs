@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 pub mod category;
+pub(crate) mod patch;
 pub mod profile;
 pub mod scenario;
 
