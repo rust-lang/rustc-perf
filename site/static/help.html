@@ -40,34 +40,23 @@
         </p>
         <p><code>@rust-timer queue</code> has a few extra options that can be useful:</p>
         <ul>
-            <li><code>include=&lt;INCLUDE&gt;</code> only runs benchmarks with <code>&lt;INCLUDE&gt;</code> in their
-                title. For example, if you just want to run rustdoc benchmarks, do
-                <code>@bors try @rust-timer queue include=-doc</code>; the <code>-doc</code> matches the
-                <code>-doc</code> appended to rustdoc benchmarks. <code>&lt;INCLUDE&gt;</code> is a comma-separated list
-                of substrings; only one of the items in the list of substrings must match.
+            <li><code>include=&lt;INCLUDE&gt;</code> is a comma-separated list of benchmark prefixes. A benchmark is included in
+                the run only if its name matches one of the given prefixes.
             </li>
-            <li><code>exclude=&lt;EXCLUDE&gt;</code> is similar to <code>include=</code>, but instead skips any
-                benchmarks that have one of the items in the list of substrings as a substring of its name.</li>
+            <li><code>exclude=&lt;EXCLUDE&gt;</code> is a comma-separated list of benchmark prefixes, and the inverse of <code>include=</code>.
+                A benchmark is excluded from the run if its name matches one of the given prefixes.</li>
             <li><code>runs=&lt;RUNS&gt;</code> configures how many times the benchmark is run. <code>&lt;RUNS&gt;</code>
                 is an integer. All benchmarks run at least once by default, but some run more than one time. You can use
                 the <code>runs</code> option to override the default run count and make every benchmark run for
                 <code>&lt;RUNS&gt;</code> times.
             </li>
         </ul>
-        <p><code>@rust-timer</code> has
-            <a href="https://github.com/rust-lang/rustc-perf/blob/dcae222b6a7fbb4c9e21d95bc93313ebe5107c7c/site/src/request_handlers/github.rs#L12-L21">more commands</a>
-            than just <code>@rust-timer queue</code>, but the <code>queue</code> command is the most used.
-        </p>
         <p><code>@rust-timer build $commit</code> will queue a perf run for the given commit <code>$commit</code>.
             It is usually invoked with the commit from a successful "try" run. (The
             <code>queue</code> command can be seen as a shortcut that automatically selects the
             "try" run's commit for the <code>build</code> command)
             This command also supports the same <code>include</code>, <code>exclude</code>, and <code>runs</code> options
             as <code>@rust-timer queue</code>.
-        </p>
-        <p>
-            The other two commands are a work in progress and will be documented here when they're
-            finalized. They are dedicated to helping diagnose the cause of regressions in rollup PRs.
         </p>
         <script src="shared.js"></script>
 </body>
