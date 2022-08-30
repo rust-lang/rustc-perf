@@ -1,7 +1,7 @@
 # Rust Compiler Performance Benchmarking and Profiling
 
 Hardware and software details of the machine that executes the CI details can be found
-[here](perf-runner.md). 
+[here](perf-runner.md).
 
 ## The benchmarks
 
@@ -12,6 +12,7 @@ The individual benchmarks are described in the `README` file in the
 
 Before doing anything else, you should build `collector` (for running the
 benchmarks) and `site` (for viewing the results):
+
 ```
 cargo +nightly build --release
 ```
@@ -20,10 +21,13 @@ cargo +nightly build --release
 
 You may need to install OpenSSL libraries so that the `openssl-sys` crate used
 by several benchmarks will compile. On Ubuntu Linux 18.10 do the following:
+
 ```
 sudo apt install libssl1.0-dev
 ```
+
 Without this, you will likely get the following build panic on some benchmarks:
+
 ```
 This crate is only compatible with OpenSSL 1.0.1, 1.0.2, and 1.1.0, or LibreSSL
 2.5 and 2.6.0, but a different version of OpenSSL was found. The build is now
@@ -49,6 +53,7 @@ privileges. Ask in #t-compiler/help on [Zulip](rust-lang.zulipchat.com) and/or
 ping `@simulacrum` as a starting point.
 
 There are two ways for that person to do a benchmark run.
+
 - The easier way: they enter `@bors try @rust-timer queue` as a comment in
   the PR. This queues a try build and a benchmarking run. Several hours later,
   the results will be available at the given URL.
@@ -65,6 +70,7 @@ marked with a '?' in the `compare` page.
 ### How to benchmark a change on your own machine
 
 The following command runs the benchmark suite using a local rustc:
+
 ```
 ./target/release/collector bench_local <RUSTC>
 ```
@@ -91,7 +97,8 @@ The following arguments are mandatory.
   installed in order for this to work.
 
 The identifier under which the results will be put into the database varies.
-- If the `--id` option is specified, that identifer will be used.
+
+- If the `--id` option is specified, that identifier will be used.
 - Otherwise, if rustc is specified via a path, `Id` will be used.
 - Otherwise, rustc is specified via a `+`-prefixed toolchain specifier, and the
   toolchain name will be used.
@@ -99,6 +106,7 @@ The identifier under which the results will be put into the database varies.
 ### Benchmarking options
 
 The following options alter the behaviour of the `bench_local` subcommand.
+
 - `--bench-rustc`: there is a special `rustc` benchmark that involves
   downloading a recent Rust compiler and measuring the time taken to compile
   it. This benchmark works very differently to all the other benchmarks. For
@@ -164,9 +172,11 @@ the relevant rustc executables.
 ### How to view the measurements on your own machine
 
 Once the benchmarks have been run, start the website:
+
 ```
 ./target/release/site <DATABASE>
 ```
+
 wait for the "Loading complete" message to be printed, and then visit
 `localhost:2346/compare.html` in a web browser.
 
@@ -180,7 +190,7 @@ restart the server.
 
 ### Benchmarking on Windows
 
-To benchmark on Windows, you will need to run the collector in a elevated context
+To benchmark on Windows, you will need to run the collector in an elevated context
 so that it can access the hardware performance counters. Note: some virtualized
 environments do not permit access to these counters for guest VMs.
 
@@ -222,7 +232,7 @@ The Linux `perf` tool is used to gather most of the data.
 
 Benchmarking will only work for commits that have been built on rust-lang/rust
 repository in the last ~168 days, including try commits. Local benchmarking is
-of course theoretically possible for any commit, though some of the benchmarks
+of course theoretically possible for any commit, though some benchmarks
 may require recent compilers to build without patching.
 
 ## Profiling
@@ -232,189 +242,194 @@ might be optimized.
 
 ### Preparation
 
-If you are going to use any of the profilers that rely on line numbers
+If you are going to use any of the profilers that rely on line-numbers
 (OProfile, Cachegrind, Callgrind, DHAT, Massif or Bytehound) use the following
 `config.toml` file for your local build.
+
 ```
 [llvm]
 release-debuginfo = true
 [rust]
 debuginfo-level = 1
 ```
+
 Without this you won't get useful file names and line numbers in the output.
 
 ### Profiling local builds
 
 To profile a local rustc with one of several profilers:
+
 ```
 ./target/release/collector profile_local <PROFILER> <RUSTC>
 ```
+
 It will profile the entire suite and put the results in a directory called
 `results/`.
 
 The mandatory `<PROFILER>` argument must be one of the following.
+
 - `self-profile`: Profile with rustc's `-Zself-profile`.
-  - **Purpose**. This gathers the same high-level query/function data as the
-    `--self-profile` option of the `bench_local` subcommand, but it presents
-    the data in three different forms.
-  - **Slowdown**. Minimal.
-  - **Output**. Raw output is written to a directory with a `Zsp` prefix.
-    The files in that directory can be processed with various
-    [`measureme`](https://github.com/rust-lang/measureme/) tools.
-    Human-readable output from `summarize` is written to a file with a
-    `summarize` prefix; this is very similar to the query/function tables
-    produced by `bench_local` with the `--self-profile` option. Output from
-    `flamegraph`, viewable with a web browser, is written to a file with a
-    `flamegraph` prefix. Output from `crox`, viewable with Chromium's profiler,
-    is written to a file with a `crox` prefix.
+    - **Purpose**. This gathers the same high-level query/function data as the
+      `--self-profile` option of the `bench_local` subcommand, but it presents
+      the data in three different forms.
+    - **Slowdown**. Minimal.
+    - **Output**. Raw output is written to a directory with a `Zsp` prefix.
+      The files in that directory can be processed with various
+      [`measureme`](https://github.com/rust-lang/measureme/) tools.
+      Human-readable output from `summarize` is written to a file with a
+      `summarize` prefix; this is very similar to the query/function tables
+      produced by `bench_local` with the `--self-profile` option. Output from
+      `flamegraph`, viewable with a web browser, is written to a file with a
+      `flamegraph` prefix. Output from `crox`, viewable with Chromium's profiler,
+      is written to a file with a `crox` prefix.
 - `time-passes`: Profile with rustc's `-Ztime-passes`.
-  - **Purpose**. This gives a high-level indication of compiler performance by
-    showing how long each compilation pass takes.
-  - **Slowdown**. None.
-  - **Output**. Human-readable text output is written to files with a `Ztp`
-    prefix. Note that the parents of indented sub-passes are shown below those
-    passes, rather than above. Note also that the LLVM passes run in parallel,
-    which can make the output confusing.
+    - **Purpose**. This gives a high-level indication of compiler performance by
+      showing how long each compilation pass takes.
+    - **Slowdown**. None.
+    - **Output**. Human-readable text output is written to files with a `Ztp`
+      prefix. Note that the parents of indented sub-passes are shown below those
+      passes, rather than above. Note also that the LLVM passes run in parallel,
+      which can make the output confusing.
 - `perf-record`: Profile with
-    [`perf-record`](https://perf.wiki.kernel.org/index.php/Main_Page), a
-    sampling profiler.
-  - **Purpose**. `perf-record` is a general-purpose profiler, good for seeing
-    where execution time is spent and finding hot functions.
-  - **Slowdown**. Negligible.
-  - **Output**. Binary output is written to files with a `perf` prefix. Those
-    files can be read with `perf-report` and other similar `perf` commands, or
-    with the excellent [Hotspot](https://github.com/KDAB/hotspot) viewer.
+  [`perf-record`](https://perf.wiki.kernel.org/index.php/Main_Page), a
+  sampling profiler.
+    - **Purpose**. `perf-record` is a general-purpose profiler, good for seeing
+      where execution time is spent and finding hot functions.
+    - **Slowdown**. Negligible.
+    - **Output**. Binary output is written to files with a `perf` prefix. Those
+      files can be read with `perf-report` and other similar `perf` commands, or
+      with the excellent [Hotspot](https://github.com/KDAB/hotspot) viewer.
 - `oprofile`: Profile with [OProfile](http://oprofile.sourceforge.net/), a
   sampling profiler.
-  - **Purpose**. OProfile is a general-purpose profiler, good for seeing
-    where execution time is spent and finding hot functions and lines.
-  - **Slowdown**. Negligible.
-  - **Output**. Binary output is written to a directory with an `opout` prefix.
-    That directory can be processed with `opreport` and `opannotate`.
-    Human-readable output is also written to files with an `oprep` and an
-    `opann` prefix.
-  - **Notes**. OProfile fails moderately often with this message: "operf-record
-    process killed by signal 13". The failures seem to be random; re-running
-    often results in success.
+    - **Purpose**. OProfile is a general-purpose profiler, good for seeing
+      where execution time is spent and finding hot functions and lines.
+    - **Slowdown**. Negligible.
+    - **Output**. Binary output is written to a directory with an `opout` prefix.
+      That directory can be processed with `opreport` and `opannotate`.
+      Human-readable output is also written to files with an `oprep` and an
+      `opann` prefix.
+    - **Notes**. OProfile fails moderately often with this message: "operf-record
+      process killed by signal 13". The failures seem to be random; re-running
+      often results in success.
 - `cachegrind`: Profile with
   [Cachegrind](http://valgrind.org/docs/manual/cg-manual.html), a tracing
   profiler. Requires Valgrind 3.15 or later.
-  - **Purpose**. Cachegrind provides global, per-function, and per-source-line
-    instruction counts. This fine-grained information can be extremely useful.
-    Cachegrind's results are almost deterministic, which eases comparisons
-    across multiple runs.
-  - **Slowdown**. Roughly 3--10x.
-  - **Configuration**. Within `profile_local`, Cachegrind is configured to not
-    simulate caches and the branch predictor, even though it can, because the
-    simulation slows it down and 99% of the time instruction counts are all you
-    need.
-  - **Output**. Raw output is written to files with a `cgout` prefix.
-    Human-readable text output is written to files with a `cgann` prefix.
-  - **Diffs**. The `cg_diff` command can be used to diff two different raw
-    output files, which is very useful for comparing profiles produce by two
-    different versions of rustc. If those two versions are in different
-    directories (such as `rust0` and `rust1`), use a flag like
-    `--mod-filename='s/rust[01]/rustN/g'` to eliminate path differences.
+    - **Purpose**. Cachegrind provides global, per-function, and per-source-line
+      instruction counts. This fine-grained information can be extremely useful.
+      Cachegrind's results are almost deterministic, which eases comparisons
+      across multiple runs.
+    - **Slowdown**. Roughly 3--10x.
+    - **Configuration**. Within `profile_local`, Cachegrind is configured to not
+      simulate caches and the branch predictor, even though it can, because the
+      simulation slows it down and 99% of the time instruction counts are all you
+      need.
+    - **Output**. Raw output is written to files with a `cgout` prefix.
+      Human-readable text output is written to files with a `cgann` prefix.
+    - **Diffs**. The `cg_diff` command can be used to diff two different raw
+      output files, which is very useful for comparing profiles produce by two
+      different versions of rustc. If those two versions are in different
+      directories (such as `rust0` and `rust1`), use a flag like
+      `--mod-filename='s/rust[01]/rustN/g'` to eliminate path differences.
 - `callgrind`: Profile with
-    [Callgrind](http://valgrind.org/docs/manual/cl-manual.html), a tracing
-    profiler. Requires Valgrind 3.15 or later.
-  - **Purpose**. Callgrind collects the same information as Cachegrind, plus
-    function call information. So it can be used like either Cachegrind or
-    `perf-record`. However, it cannot perform diffs between profiles.
-  - **Slowdown**. Roughly 5--20x.
-  - **Configuration**. Like Cachegrind, within `profile_local` Callgrind is
-    configured to not simulate caches and the branch predictor.
-  - **Output**. Raw output is written to files with a `clgout` prefix; those
-    files can be viewed with the graphical
-    [KCachegrind](http://kcachegrind.github.io) tool. Human-readable
-    text output is also written to files with a `clgann` prefix; this output is
-    much the same as the `cgann`-prefixed files produced by Cachegrind, but
-    with extra annotations showing function call counts.
+  [Callgrind](http://valgrind.org/docs/manual/cl-manual.html), a tracing
+  profiler. Requires Valgrind 3.15 or later.
+    - **Purpose**. Callgrind collects the same information as Cachegrind, plus
+      function call information. So it can be used like either Cachegrind or
+      `perf-record`. However, it cannot perform diffs between profiles.
+    - **Slowdown**. Roughly 5--20x.
+    - **Configuration**. Like Cachegrind, within `profile_local` Callgrind is
+      configured to not simulate caches and the branch predictor.
+    - **Output**. Raw output is written to files with a `clgout` prefix; those
+      files can be viewed with the graphical
+      [KCachegrind](http://kcachegrind.github.io) tool. Human-readable
+      text output is also written to files with a `clgann` prefix; this output is
+      much the same as the `cgann`-prefixed files produced by Cachegrind, but
+      with extra annotations showing function call counts.
 - `dhat`: Profile with [DHAT](http://valgrind.org/docs/manual/dh-manual.html),
   a heap profiler. Requires Valgrind 3.15 or later.
-  - **Purpose**. DHAT is good for finding which parts of the code are causing a
-    lot of allocations. This is relevant if another profiler such as
-    `perf-record` or Cachegrind tell you that `malloc` and `free` are hot
-    functions (as they often are). It also gives insight into peak memory
-    usage, similar to Massif.
-  - **Slowdown**. Roughly 5--20x.
-  - **Configuration**. DHAT is configured within `profile_local` to run with
-    the non-default `--num-callers=4` option, which dictates stack depths.
-    (This value of 4 does not include inlined stack frames, so in practice the
-    depths of stack traces are a lot more than 4.) This is almost always
-    enough, but on the rare occasion it isn't, you can change the value in
-    `rustc-fake.rs` and rebuild `collector`. Note that higher values make DHAT
-    run more slowly and increase the size of its data files.
-  - **Output**. Raw output is written to files with a `dhout` prefix. Those
-    files can be viewed with DHAT's viewer (`dh_view.html`).
+    - **Purpose**. DHAT is good for finding which parts of the code are causing a
+      lot of allocations. This is relevant if another profiler such as
+      `perf-record` or Cachegrind tell you that `malloc` and `free` are hot
+      functions (as they often are). It also gives insight into peak memory
+      usage, similar to Massif.
+    - **Slowdown**. Roughly 5--20x.
+    - **Configuration**. DHAT is configured within `profile_local` to run with
+      the non-default `--num-callers=4` option, which dictates stack depths.
+      (This value of 4 does not include inlined stack frames, so in practice the
+      depths of stack traces are a lot more than 4.) This is almost always
+      enough, but on the rare occasion it isn't, you can change the value in
+      `rustc-fake.rs` and rebuild `collector`. Note that higher values make DHAT
+      run more slowly and increase the size of its data files.
+    - **Output**. Raw output is written to files with a `dhout` prefix. Those
+      files can be viewed with DHAT's viewer (`dh_view.html`).
 - `dhat-copy`: Profile with DHAT in "copy mode". Requires Valgrind 3.17 or later.
-  - **Purpose**. DHAT's copy mode is good for finding which parts of the code
-    are causing a lot of memory copies. This is relevant if another profiler
-    such as `perf-record` or Cachegrind tell you that functions like `memcpy`
-    or `memmove` are hot (as they often are).
-  - **Slowdown**. Roughly 5--20x.
-  - **Configuration**. Same as for DHAT.
-  - **Output**. Raw output is written to files with a `dhcopy` prefix. Those
-    files can be viewed with DHAT's viewer (`dh_view.html`).
+    - **Purpose**. DHAT's copy mode is good for finding which parts of the code
+      are causing a lot of memory copies. This is relevant if another profiler
+      such as `perf-record` or Cachegrind tell you that functions like `memcpy`
+      or `memmove` are hot (as they often are).
+    - **Slowdown**. Roughly 5--20x.
+    - **Configuration**. Same as for DHAT.
+    - **Output**. Raw output is written to files with a `dhcopy` prefix. Those
+      files can be viewed with DHAT's viewer (`dh_view.html`).
 - `massif`: Profile with
   [Massif](http://valgrind.org/docs/manual/ms-manual.html), a heap profiler.
-  - **Purpose**. Massif is designed to give insight into a program's peak
-    memory usage.
-  - **Slowdown**. Roughly 3--10x.
-  - **Output**. Raw output is written to files with a `msout` prefix. Those
-    files can be post-processed with `ms_print` or viewed with the graphical
-    [`massif-visualizer`](https://github.com/KDE/massif-visualizer); the latter
-    is recommended, though it sometimes fails to read output files that
-    `ms_print` can handle.
+    - **Purpose**. Massif is designed to give insight into a program's peak
+      memory usage.
+    - **Slowdown**. Roughly 3--10x.
+    - **Output**. Raw output is written to files with a `msout` prefix. Those
+      files can be post-processed with `ms_print` or viewed with the graphical
+      [`massif-visualizer`](https://github.com/KDE/massif-visualizer); the latter
+      is recommended, though it sometimes fails to read output files that
+      `ms_print` can handle.
 - `bytehound`: Profile with
   [Bytehound](https://github.com/koute/bytehound), a memory profiler. You must add the
   directory containing `libbytehound.so` to the `LD_LIBRARY_PATH` environment variable
   when you use this profiler.
-  - **Purpose**. Bytehound is designed to give insight into a program's memory usage.
-  - **Slowdown**. Roughly 2--4x.
-  - **Output**. Raw output is written to files with a `bytehound` prefix. Those
-    files can be viewed with the `bytehound server <filename>` command.
+    - **Purpose**. Bytehound is designed to give insight into a program's memory usage.
+    - **Slowdown**. Roughly 2--4x.
+    - **Output**. Raw output is written to files with a `bytehound` prefix. Those
+      files can be viewed with the `bytehound server <filename>` command.
 - `eprintln`: Profile with `eprintln!` statements.
-  - **Purpose**. Sometimes it is useful to do ad hoc profiling by inserting
-    `eprintln!` statements into rustc, e.g. to count how often particular paths
-    are hit, or to see what values particular expressions have each time they
-    are executed.
-  - **Slowdown**. Depends where the `eprintln!` statements are inserted.
-  - **Output**. The output of these `eprintln!` statements (and everything else
-    written to `stderr`) is written to files with an `eprintln` prefix. Those
-    files can be post-processed in any appropriate fashion;
-    [`counts`](https://github.com/nnethercote/counts) is one possibility.
+    - **Purpose**. Sometimes it is useful to do ad hoc profiling by inserting
+      `eprintln!` statements into rustc, e.g. to count how often particular paths
+      are hit, or to see what values particular expressions have each time they
+      are executed.
+    - **Slowdown**. Depends on where the `eprintln!` statements are inserted.
+    - **Output**. The output of these `eprintln!` statements (and everything else
+      written to `stderr`) is written to files with an `eprintln` prefix. Those
+      files can be post-processed in any appropriate fashion;
+      [`counts`](https://github.com/nnethercote/counts) is one possibility.
 - `llvm-lines`: Profile with [`cargo
   llvm-lines`](https://github.com/dtolnay/cargo-llvm-lines/) a code size
   measurer.
-  - **Purpose**. This command counts the number of lines of LLVM IR are
-    generated across all instantiations of each function. In other words, it's
-    a tool for finding code bloat.
-  - **Slowdown**. It Is likely to run faster than normal compilation.
-  - **Output**. Human-readable output is written to files with an `ll` prefix.
-  - **Notes**. Does not work with the `Check` profile. Also does not work
-    with the `IncrFull`, `IncrUnchanged`, and `IncrPatched` scenarios.
+    - **Purpose**. This command counts the number of lines of LLVM IR are
+      generated across all instantiations of each function. In other words, it's
+      a tool for finding code bloat.
+    - **Slowdown**. It Is likely to run faster than normal compilation.
+    - **Output**. Human-readable output is written to files with an `ll` prefix.
+    - **Notes**. Does not work with the `Check` profile. Also does not work
+      with the `IncrFull`, `IncrUnchanged`, and `IncrPatched` scenarios.
 - `llvm-ir`: Dump rustc-generated LLVM IR (before any LLVM passes)
-   - Purpose. This command provides access to the raw LLVM IR rustc produces,
-     which can be used for targeted improvements to functions (e.g., those
-     that get monomorphized a lot) and optimization of rustc IR emission in
-     general.
-   - Slowdown. Likely runs faster than regular builds due to skipping most of
-     the LLVM work.
-   - Output. Produces `llir` prefixed files, in LLVM IR textual format.
+    - Purpose. This command provides access to the raw LLVM IR rustc produces,
+      which can be used for targeted improvements to functions (e.g., those
+      that get monomorphized a lot) and optimization of rustc IR emission in
+      general.
+    - Slowdown. Likely runs faster than regular builds due to skipping most of
+      the LLVM work.
+    - Output. Produces `llir` prefixed files, in LLVM IR textual format.
 - `mono-items`: Dump monomorphization items for each (merged) CGU in the crate.
   These are also post-processed from the raw format into per-file dumps.
-  - **Purpose**. This is useful to investigate changes in CGU partionining.
-  - **Slowdown**. Equivalent to normal compilation.
-  - **Output**. File per CGU, currently, placed in a directory inside results.
-  - **Notes**. Will likely work best with the `Full` scenario, on either
-    `Debug` or `Opt` profiles.
+    - **Purpose**. This is useful to investigate changes in CGU partitioning.
+    - **Slowdown**. Equivalent to normal compilation.
+    - **Output**. File per CGU, currently, placed in a directory inside results.
+    - **Notes**. Will likely work best with the `Full` scenario, on either
+      `Debug` or `Opt` profiles.
 - `dep-graph`: Dump the incremental dependency graph (as produced by
   -Zdump-dep-graph).
-  - **Purpose**. This is useful when debugging changes to incremental behavior.
-  - **Slowdown**. Equivalent to normal compilation.
-  - **Output**. .dot and .txt file (.txt likely is what you want to see first).
-  - **Notes**. Works primarily with incremental compilation scenarios.
+    - **Purpose**. This is useful when debugging changes to incremental behavior.
+    - **Slowdown**. Equivalent to normal compilation.
+    - **Output**. .dot and .txt file (.txt likely is what you want to see first).
+    - **Notes**. Works primarily with incremental compilation scenarios.
 
 The mandatory `<RUSTC>` argument is a path to a rustc executable or a
 `+`-prefixed toolchain specifier, the same as for `bench_local`.
@@ -425,9 +440,10 @@ fashion to the one chosen for `bench_local`.
 ### Profiling options
 
 The following options alter the behaviour of the `profile_local` subcommand.
+
 - `--cargo <CARGO>`: as for `bench_local`.
 - `--exclude <EXCLUDE>`: as for `bench_local`.
-- `--id <ID>`: an identifer that will form part of the output filenames.
+- `--id <ID>`: an identifier that will form part of the output filenames.
 - `--include <INCLUDE>`: as for `bench_local`.
 - `--out-dir <OUT_DIR>`: a path (relative or absolute) to a directory in
   which the output will be placed. If the directory doesn't exist, it will be
@@ -441,7 +457,7 @@ The following options alter the behaviour of the `profile_local` subcommand.
 - `--rustdoc <RUSTDOC>` as for `bench_local`.
 - `--scenarios <SCENARIOS>`: as for `bench_local`.
 - `--jobs <JOB-COUNT>`: execute `<JOB-COUNT>` benchmarks in parallel. This is only allowed for certain
-profilers whose results are not affected by system noise (e.g. `callgrind` or `eprintln`).
+  profilers whose results are not affected by system noise (e.g. `callgrind` or `eprintln`).
 
 `RUST_LOG=debug` can be specified to enable verbose logging, which is useful
 for debugging `collector` itself.

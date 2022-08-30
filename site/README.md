@@ -18,7 +18,7 @@ git clone https://github.com/rust-lang/rustc-perf.git
 ## Launching
 
 If you've collected data locally, you will likely want to point the site at a
-local database. By default, a database called results.db located at the root of 
+local database. By default, a database called results.db located at the root of
 the project will be used. You can optionally pass a path to a database
 if you don't want to use the default.
 

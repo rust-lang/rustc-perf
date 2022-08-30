@@ -1,7 +1,9 @@
 # CI benchmarking machine
+
 The machine that actually executes the benchmarks in CI has the following configuration.
 
 ## Hardware
+
 - 6-core AMD Ryzen 5 3600 with HyperThreading (12 hardware threads total)
     <details>
     <summary>Output of `lscpu`</summary>
@@ -38,27 +40,35 @@ The machine that actually executes the benchmarks in CI has the following config
 - 64 GiB RAM, 32 GiB of swap
 
 ## Software
+
 - Kernel: `4.15.0-191-generic`
 - OS: Ubuntu `18.04`
 
 ## Configuration
+
 ### Turboboost
+
 Enabled.
 
 ### HyperThreading
+
 Enabled.
 
 ### CPU scaling
+
 Scaling governor set to `performance`.
 
 ### ASLR (Address Space Layout Randomization)
+
 Disabled with `kernel.randomize_va_space=0` in `sysctl.conf`.
 
 Note that ASLR is also
 [disabled explicitly](src/rustc-fake.rs) when gathering performance metrics.
 
 ### NMI watchdog
+
 Disabled with `kernel.nmi_watchdog=0` in `sysctl.conf`.
 
 ### Swap
+
 `vm.swappiness` set to `60`.

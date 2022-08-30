@@ -1,6 +1,7 @@
 # Rust Compiler Performance Monitoring & Benchmarking
 
-This repository contains two primary crates: 
+This repository contains two primary crates:
+
 * [`collector`](./collector): gathers data for each bors commit
 * [`site`](./site): [displays](https://perf.rust-lang.org) the data and provides a GitHub bot for on-demand benchmarking
 
