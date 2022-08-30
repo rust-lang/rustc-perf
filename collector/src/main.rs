@@ -24,13 +24,12 @@ use std::{str, time::Instant};
 use tokio::runtime::Runtime;
 
 mod execute;
-mod toolchain;
 
+use collector::toolchain::{Compiler, Sysroot};
 use execute::{
     profiler::{ProfileProcessor, Profiler},
     BenchProcessor, Benchmark, BenchmarkName,
 };
-use toolchain::{Compiler, Sysroot};
 
 fn n_normal_benchmarks_remaining(n: usize) -> String {
     let suffix = if n == 1 { "" } else { "s" };

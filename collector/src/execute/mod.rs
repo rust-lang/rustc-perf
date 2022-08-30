@@ -1,11 +1,11 @@
 //! Execute benchmarks.
 
-use crate::toolchain::Compiler;
 use anyhow::{bail, Context};
 use collector::benchmark::category::Category;
 use collector::benchmark::profile::Profile;
 use collector::benchmark::scenario::Scenario;
 use collector::etw_parser;
+use collector::toolchain::Compiler;
 use collector::{command_output, utils};
 use database::{PatchName, QueryLabel};
 use futures::stream::FuturesUnordered;
