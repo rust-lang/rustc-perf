@@ -1,6 +1,6 @@
 use crate::execute::{PerfTool, ProcessOutputData, Processor, Retry};
+use crate::utils;
 use anyhow::Context;
-use collector::utils;
 use std::collections::HashMap;
 use std::io::BufRead;
 use std::io::Write;
