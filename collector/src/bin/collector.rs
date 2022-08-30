@@ -23,10 +23,8 @@ use std::str::FromStr;
 use std::{str, time::Instant};
 use tokio::runtime::Runtime;
 
-use collector::execute::{
-    profiler::{ProfileProcessor, Profiler},
-    BenchProcessor,
-};
+use collector::execute::bencher::BenchProcessor;
+use collector::execute::profiler::{ProfileProcessor, Profiler};
 use collector::toolchain::{get_local_toolchain, Compiler, Sysroot};
 
 fn n_normal_benchmarks_remaining(n: usize) -> String {
