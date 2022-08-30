@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Context};
-use std::fmt;
 use std::fs::{self, File};
 use std::io::{BufReader, Read};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::{fmt, str};
 use tar::Archive;
 use xz2::bufread::XzDecoder;
 
@@ -208,5 +208,26 @@ impl SysrootDownload {
         }
 
         Ok(())
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct Compiler<'a> {
+    pub rustc: &'a Path,
+    pub rustdoc: Option<&'a Path>,
+    pub cargo: &'a Path,
+    pub triple: &'a str,
+    pub is_nightly: bool,
+}
+
+impl<'a> Compiler<'a> {
+    pub fn from_sysroot(sysroot: &'a Sysroot) -> Compiler<'a> {
+        Compiler {
+            rustc: &sysroot.rustc,
+            rustdoc: Some(&sysroot.rustdoc),
+            cargo: &sysroot.cargo,
+            triple: &sysroot.triple,
+            is_nightly: true,
+        }
     }
 }

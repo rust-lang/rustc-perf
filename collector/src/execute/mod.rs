@@ -1,6 +1,6 @@
 //! Execute benchmarks.
 
-use crate::Compiler;
+use crate::toolchain::Compiler;
 use anyhow::{bail, Context};
 use collector::benchmark::category::Category;
 use collector::benchmark::profile::Profile;

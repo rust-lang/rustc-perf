@@ -30,28 +30,7 @@ use execute::{
     profiler::{ProfileProcessor, Profiler},
     BenchProcessor, Benchmark, BenchmarkName,
 };
-use toolchain::Sysroot;
-
-#[derive(Debug, Copy, Clone)]
-pub struct Compiler<'a> {
-    pub rustc: &'a Path,
-    pub rustdoc: Option<&'a Path>,
-    pub cargo: &'a Path,
-    pub triple: &'a str,
-    pub is_nightly: bool,
-}
-
-impl<'a> Compiler<'a> {
-    fn from_sysroot(sysroot: &'a Sysroot) -> Compiler<'a> {
-        Compiler {
-            rustc: &sysroot.rustc,
-            rustdoc: Some(&sysroot.rustdoc),
-            cargo: &sysroot.cargo,
-            triple: &sysroot.triple,
-            is_nightly: true,
-        }
-    }
-}
+use toolchain::{Compiler, Sysroot};
 
 fn n_normal_benchmarks_remaining(n: usize) -> String {
     let suffix = if n == 1 { "" } else { "s" };

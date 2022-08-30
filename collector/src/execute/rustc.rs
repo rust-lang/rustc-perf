@@ -7,7 +7,7 @@
 //! no real reason for us to compile the standard library twice, and it avoids
 //! having to think about how to deduplicate results.
 
-use crate::Compiler;
+use crate::toolchain::Compiler;
 use anyhow::Context;
 use database::ArtifactId;
 use std::env;
