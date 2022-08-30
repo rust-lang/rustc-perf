@@ -1,14 +1,17 @@
 #![recursion_limit = "1024"]
 
 use anyhow::{bail, Context};
-use clap::Parser;
+use clap::builder::TypedValueParser;
+use clap::{Arg, ArgEnum, Parser, PossibleValue};
 use collector::api::next_artifact::NextArtifact;
 use collector::benchmark::category::Category;
+use collector::benchmark::profile::Profile;
 use collector::utils;
 use database::{ArtifactId, Commit, CommitType, Pool};
 use log::debug;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::fs;
 use std::fs::File;
 use std::io::BufWriter;
@@ -45,37 +48,6 @@ impl<'a> Compiler<'a> {
             cargo: &sysroot.cargo,
             triple: &sysroot.triple,
             is_nightly: true,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, clap::ArgEnum)]
-#[clap(rename_all = "PascalCase")]
-pub enum Profile {
-    Check,
-    Debug,
-    Doc,
-    Opt,
-
-    // This one is only specified from the command line, and is converted to
-    // the above variants by `expand_all()`.
-    All,
-}
-
-impl Profile {
-    fn all() -> Vec<Self> {
-        vec![Profile::Check, Profile::Debug, Profile::Doc, Profile::Opt]
-    }
-
-    fn all_non_doc() -> Vec<Self> {
-        vec![Profile::Check, Profile::Debug, Profile::Opt]
-    }
-
-    fn expand_all(profiles: &[Self]) -> Vec<Self> {
-        if profiles.contains(&Profile::All) {
-            Self::all()
-        } else {
-            profiles.to_vec()
         }
     }
 }
@@ -730,6 +702,47 @@ fn main() {
     }
 }
 
+#[derive(Debug, Clone)]
+struct ProfileArg(Vec<Profile>);
+
+#[derive(Clone)]
+struct ProfileArgParser;
+
+/// We need to use a TypedValueParser to provide possible values help.
+/// If we just use `FromStr` + `#[clap(possible_values = [...])]`, `clap` will not allow passing
+/// multiple values.
+impl TypedValueParser for ProfileArgParser {
+    type Value = ProfileArg;
+
+    fn parse_ref(
+        &self,
+        cmd: &clap::Command,
+        arg: Option<&Arg>,
+        value: &OsStr,
+    ) -> Result<Self::Value, clap::Error> {
+        if value == "All" {
+            Ok(ProfileArg(Profile::all()))
+        } else {
+            let profiles: Result<Vec<Profile>, _> = value
+                .to_str()
+                .unwrap()
+                .split(",")
+                .map(|item| clap::value_parser!(Profile).parse_ref(cmd, arg, OsStr::new(item)))
+                .collect();
+
+            Ok(ProfileArg(profiles?))
+        }
+    }
+
+    fn possible_values(&self) -> Option<Box<dyn Iterator<Item = PossibleValue<'static>> + '_>> {
+        let values = Profile::value_variants()
+            .into_iter()
+            .filter_map(|item| item.to_possible_value())
+            .chain([PossibleValue::new("All")]);
+        Some(Box::new(values))
+    }
+}
+
 #[derive(Debug, clap::Parser)]
 #[clap(about, version, author)]
 struct Cli {
@@ -749,18 +762,14 @@ struct LocalOptions {
     id: Option<String>,
 
     /// Measure the build profiles in this comma-separated list
-    // This must be normalized via `Profile::expand_all()` before use.
     #[clap(
         long = "profiles",
         alias = "builds", // the old name, for backward compatibility
-        arg_enum,
-        multiple_values = true,
-        use_delimiter = true,
-        require_delimiter = true,
+        value_parser = ProfileArgParser,
         // Don't run rustdoc by default
         default_value = "Check,Debug,Opt",
     )]
-    profiles: Vec<Profile>,
+    profiles: ProfileArg,
 
     /// The path to the local Cargo to use
     #[clap(long, parse(from_os_str))]
@@ -951,7 +960,7 @@ fn main_result() -> anyhow::Result<i32> {
             iterations,
             self_profile,
         } => {
-            let profiles = Profile::expand_all(&local.profiles);
+            let profiles = &local.profiles.0;
             let scenarios = Scenario::expand_all(&local.scenarios);
 
             let pool = database::Pool::open(&db.db);
@@ -1076,7 +1085,7 @@ fn main_result() -> anyhow::Result<i32> {
                 );
             }
 
-            let profiles = Profile::expand_all(&local.profiles);
+            let profiles = &local.profiles.0;
             let scenarios = Scenario::expand_all(&local.scenarios);
 
             let mut benchmarks = get_benchmarks(

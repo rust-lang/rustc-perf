@@ -1,8 +1,9 @@
 //! Execute benchmarks.
 
-use crate::{Compiler, Profile, Scenario};
+use crate::{Compiler, Scenario};
 use anyhow::{bail, Context};
 use collector::benchmark::category::Category;
+use collector::benchmark::profile::Profile;
 use collector::etw_parser;
 use collector::{command_output, utils};
 use database::{PatchName, QueryLabel};
@@ -125,7 +126,6 @@ impl PerfTool {
             ProfileTool(LlvmLines) => match profile {
                 Profile::Debug | Profile::Opt => Some("llvm-lines"),
                 Profile::Check | Profile::Doc => None,
-                Profile::All => unreachable!(),
             },
         }
     }
@@ -284,7 +284,6 @@ impl<'a> CargoProcess<'a> {
                 Profile::Opt => {
                     cmd.arg("--release");
                 }
-                Profile::All => unreachable!(),
             }
             cmd.args(&self.cargo_args);
             if env::var_os("CARGO_RECORD_TIMING").is_some() {
@@ -517,7 +516,6 @@ impl<'a> BenchProcessor<'a> {
             Profile::Debug => database::Profile::Debug,
             Profile::Doc => database::Profile::Doc,
             Profile::Opt => database::Profile::Opt,
-            Profile::All => unreachable!(),
         };
 
         if let Some(files) = stats.2 {
