@@ -1,7 +1,10 @@
+use crate::benchmark::profile::Profile;
 use anyhow::{anyhow, Context};
+use log::debug;
 use std::fs::{self, File};
 use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::{fmt, str};
 use tar::Archive;
 use xz2::bufread::XzDecoder;
@@ -230,4 +233,143 @@ impl<'a> Compiler<'a> {
             is_nightly: true,
         }
     }
+}
+
+/// Get a toolchain from the input.
+/// - `rustc`: check if the given one is acceptable.
+/// - `rustdoc`: if one is given, check if it is acceptable. Otherwise, if
+///   the `Doc` profile is requested, look for one next to the given `rustc`.
+/// - `cargo`: if one is given, check if it is acceptable. Otherwise, look
+///   for the nightly Cargo via `rustup`.
+pub fn get_local_toolchain(
+    profiles: &[Profile],
+    rustc: &str,
+    rustdoc: Option<&Path>,
+    cargo: Option<&Path>,
+    id: Option<&str>,
+    id_suffix: &str,
+) -> anyhow::Result<(PathBuf, Option<PathBuf>, PathBuf, String)> {
+    // `+`-prefixed rustc is an indicator to fetch the rustc of the toolchain
+    // specified. This follows the similar pattern used by rustup's binaries
+    // (e.g., `rustc +stage1`).
+    let (rustc, id) = if let Some(toolchain) = rustc.strip_prefix('+') {
+        let output = Command::new("rustup")
+            .args(&["which", "rustc", "--toolchain", &toolchain])
+            .output()
+            .context("failed to run `rustup which rustc`")?;
+
+        // Looks like a commit hash? Try to install it...
+        if !output.status.success() && toolchain.len() == 40 {
+            // No such toolchain exists, so let's try to install it with
+            // rustup-toolchain-install-master.
+
+            if Command::new("rustup-toolchain-install-master")
+                .arg("-V")
+                .output()
+                .is_err()
+            {
+                anyhow::bail!("rustup-toolchain-install-master is not installed but must be");
+            }
+
+            if !Command::new("rustup-toolchain-install-master")
+                .arg(&toolchain)
+                .status()
+                .context("failed to run `rustup-toolchain-install-master`")?
+                .success()
+            {
+                anyhow::bail!(
+                    "commit-like toolchain {} did not install successfully",
+                    toolchain
+                )
+            }
+        }
+
+        let output = Command::new("rustup")
+            .args(&["which", "rustc", "--toolchain", &toolchain])
+            .output()
+            .context("failed to run `rustup which rustc`")?;
+
+        if !output.status.success() {
+            anyhow::bail!("did not manage to obtain toolchain {}", toolchain);
+        }
+
+        let s = String::from_utf8(output.stdout)
+            .context("failed to convert `rustup which rustc` output to utf8")?;
+
+        let rustc = PathBuf::from(s.trim());
+        debug!("found rustc: {:?}", &rustc);
+
+        // When the id comes from a +toolchain, the suffix is *not* added.
+        let id = if let Some(id) = id {
+            let mut id = id.to_owned();
+            id.push_str(id_suffix);
+            id
+        } else {
+            toolchain.to_owned()
+        };
+        (rustc, id)
+    } else {
+        let rustc = PathBuf::from(rustc)
+            .canonicalize()
+            .with_context(|| format!("failed to canonicalize rustc executable {:?}", rustc))?;
+
+        // When specifying rustc via a path, the suffix is always added to the
+        // id.
+        let mut id = if let Some(id) = id {
+            id.to_owned()
+        } else {
+            "Id".to_string()
+        };
+        id.push_str(id_suffix);
+
+        (rustc, id)
+    };
+
+    let rustdoc =
+        if let Some(rustdoc) = &rustdoc {
+            Some(rustdoc.canonicalize().with_context(|| {
+                format!("failed to canonicalize rustdoc executable {:?}", rustdoc)
+            })?)
+        } else if profiles.contains(&Profile::Doc) {
+            // We need a `rustdoc`. Look for one next to `rustc`.
+            if let Ok(rustdoc) = rustc.with_file_name("rustdoc").canonicalize() {
+                debug!("found rustdoc: {:?}", &rustdoc);
+                Some(rustdoc)
+            } else {
+                anyhow::bail!(
+                    "'Doc' build specified but '--rustdoc' not specified and no 'rustdoc' found \
+                    next to 'rustc'"
+                );
+            }
+        } else {
+            // No `rustdoc` provided, but none needed.
+            None
+        };
+
+    let cargo = if let Some(cargo) = &cargo {
+        cargo
+            .canonicalize()
+            .with_context(|| format!("failed to canonicalize cargo executable {:?}", cargo))?
+    } else {
+        // Use the nightly cargo from `rustup`.
+        let output = Command::new("rustup")
+            .args(&["which", "cargo", "--toolchain=nightly"])
+            .output()
+            .context("failed to run `rustup which cargo --toolchain=nightly`")?;
+        if !output.status.success() {
+            anyhow::bail!(
+                "`rustup which cargo --toolchain=nightly` exited with status {}\nstderr={}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+            )
+        }
+        let s = String::from_utf8(output.stdout)
+            .context("failed to convert `rustup which cargo --toolchain=nightly` output to utf8")?;
+
+        let cargo = PathBuf::from(s.trim());
+        debug!("found cargo: {:?}", &cargo);
+        cargo
+    };
+
+    Ok((rustc, rustdoc, cargo, id))
 }
