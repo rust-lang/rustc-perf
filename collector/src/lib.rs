@@ -7,7 +7,6 @@ use std::process::{self, Command};
 
 pub mod api;
 pub mod benchmark;
-pub mod etw_parser;
 pub mod execute;
 pub mod toolchain;
 pub mod utils;

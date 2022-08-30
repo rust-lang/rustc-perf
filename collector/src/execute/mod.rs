@@ -4,7 +4,6 @@ use crate::benchmark::patch::Patch;
 use crate::benchmark::profile::Profile;
 use crate::benchmark::scenario::Scenario;
 use crate::benchmark::BenchmarkName;
-use crate::etw_parser;
 use crate::toolchain::Compiler;
 use crate::{command_output, utils};
 use anyhow::Context;
@@ -20,6 +19,7 @@ use std::str;
 use std::time::Duration;
 
 pub mod bencher;
+mod etw_parser;
 pub mod profiler;
 mod rustc;
 
