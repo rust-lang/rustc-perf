@@ -2,7 +2,6 @@ use crate::benchmark::category::Category;
 use crate::benchmark::patch::Patch;
 use crate::benchmark::profile::Profile;
 use crate::benchmark::scenario::Scenario;
-use crate::command_output;
 use crate::execute::{CargoProcess, Processor};
 use crate::toolchain::Compiler;
 use anyhow::{bail, Context};
@@ -11,7 +10,6 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::mem::ManuallyDrop;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use tempfile::TempDir;
 
 pub mod category;
@@ -107,6 +105,9 @@ impl Benchmark {
 
     #[cfg(unix)]
     fn copy(from: &Path, to: &Path) -> anyhow::Result<()> {
+        use crate::command_output;
+        use std::process::Command;
+
         let mut cmd = Command::new("cp");
         cmd.arg("-pLR").arg(from).arg(to);
         command_output(&mut cmd)?;
