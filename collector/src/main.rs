@@ -24,13 +24,13 @@ use std::{str, time::Instant};
 use tokio::runtime::Runtime;
 
 mod execute;
-mod sysroot;
+mod toolchain;
 
 use execute::{
     profiler::{ProfileProcessor, Profiler},
     BenchProcessor, Benchmark, BenchmarkName,
 };
-use sysroot::Sysroot;
+use toolchain::Sysroot;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Compiler<'a> {
