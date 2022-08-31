@@ -7,7 +7,7 @@
 //! no real reason for us to compile the standard library twice, and it avoids
 //! having to think about how to deduplicate results.
 
-use crate::Compiler;
+use crate::toolchain::Compiler;
 use anyhow::Context;
 use database::ArtifactId;
 use std::env;
@@ -101,7 +101,7 @@ fn record(
     .context("configuring")?;
     assert!(status.success(), "configure successful");
 
-    let output = collector::command_output(
+    let output = crate::command_output(
         Command::new("python3")
             .arg(
                 checkout

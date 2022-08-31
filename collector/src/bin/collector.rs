@@ -1,14 +1,17 @@
 #![recursion_limit = "1024"]
 
-use anyhow::{bail, Context};
-use clap::Parser;
+use anyhow::Context;
+use clap::builder::TypedValueParser;
+use clap::{Arg, ArgEnum, Parser, PossibleValue};
 use collector::api::next_artifact::NextArtifact;
 use collector::benchmark::category::Category;
+use collector::benchmark::profile::Profile;
+use collector::benchmark::scenario::Scenario;
+use collector::benchmark::{compile_time_benchmark_dir, get_benchmarks, Benchmark, BenchmarkName};
 use collector::utils;
 use database::{ArtifactId, Commit, CommitType, Pool};
-use log::debug;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
-use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::fs;
 use std::fs::File;
 use std::io::BufWriter;
@@ -19,110 +22,9 @@ use std::process::{Command, Stdio};
 use std::{str, time::Instant};
 use tokio::runtime::Runtime;
 
-mod execute;
-mod sysroot;
-
-use execute::{
-    profiler::{ProfileProcessor, Profiler},
-    BenchProcessor, Benchmark, BenchmarkName,
-};
-use sysroot::Sysroot;
-
-#[derive(Debug, Copy, Clone)]
-pub struct Compiler<'a> {
-    pub rustc: &'a Path,
-    pub rustdoc: Option<&'a Path>,
-    pub cargo: &'a Path,
-    pub triple: &'a str,
-    pub is_nightly: bool,
-}
-
-impl<'a> Compiler<'a> {
-    fn from_sysroot(sysroot: &'a Sysroot) -> Compiler<'a> {
-        Compiler {
-            rustc: &sysroot.rustc,
-            rustdoc: Some(&sysroot.rustdoc),
-            cargo: &sysroot.cargo,
-            triple: &sysroot.triple,
-            is_nightly: true,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, clap::ArgEnum)]
-#[clap(rename_all = "PascalCase")]
-pub enum Profile {
-    Check,
-    Debug,
-    Doc,
-    Opt,
-
-    // This one is only specified from the command line, and is converted to
-    // the above variants by `expand_all()`.
-    All,
-}
-
-impl Profile {
-    fn all() -> Vec<Self> {
-        vec![Profile::Check, Profile::Debug, Profile::Doc, Profile::Opt]
-    }
-
-    fn all_non_doc() -> Vec<Self> {
-        vec![Profile::Check, Profile::Debug, Profile::Opt]
-    }
-
-    fn expand_all(profiles: &[Self]) -> Vec<Self> {
-        if profiles.contains(&Profile::All) {
-            Self::all()
-        } else {
-            profiles.to_vec()
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, clap::ArgEnum)]
-#[clap(rename_all = "PascalCase")]
-pub enum Scenario {
-    Full,
-    IncrFull,
-    IncrUnchanged,
-    IncrPatched,
-
-    // This one is only specified from the command line, and is converted to
-    // the above variants by `expand_all()`.
-    All,
-}
-
-impl Scenario {
-    fn all() -> Vec<Scenario> {
-        vec![
-            Scenario::Full,
-            Scenario::IncrFull,
-            Scenario::IncrUnchanged,
-            Scenario::IncrPatched,
-        ]
-    }
-
-    fn all_non_incr() -> Vec<Scenario> {
-        vec![Scenario::Full]
-    }
-
-    fn expand_all(scenarios: &[Self]) -> Vec<Self> {
-        if scenarios.contains(&Scenario::All) {
-            Self::all()
-        } else {
-            scenarios.to_vec()
-        }
-    }
-
-    fn is_incr(self) -> bool {
-        match self {
-            Scenario::Full => false,
-            Scenario::IncrFull | Scenario::IncrUnchanged | Scenario::IncrPatched => true,
-            Scenario::All => unreachable!(),
-        }
-    }
-}
+use collector::execute::bencher::BenchProcessor;
+use collector::execute::profiler::{ProfileProcessor, Profiler};
+use collector::toolchain::{get_local_toolchain, Compiler, Sysroot};
 
 fn n_normal_benchmarks_remaining(n: usize) -> String {
     let suffix = if n == 1 { "" } else { "s" };
@@ -315,241 +217,6 @@ fn is_installed(name: &str) -> bool {
     Command::new(name).output().is_ok()
 }
 
-fn get_benchmarks(
-    benchmark_dir: &Path,
-    include: Option<&str>,
-    exclude: Option<&str>,
-) -> anyhow::Result<Vec<Benchmark>> {
-    let mut benchmarks = Vec::new();
-
-    let mut paths = Vec::new();
-    for entry in fs::read_dir(benchmark_dir)
-        .with_context(|| format!("failed to list benchmark dir '{}'", benchmark_dir.display()))?
-    {
-        let entry = entry?;
-        let path = entry.path();
-        let name = match entry.file_name().into_string() {
-            Ok(s) => s,
-            Err(e) => bail!("non-utf8 benchmark name: {:?}", e),
-        };
-
-        if !entry.file_type()?.is_dir() {
-            debug!("benchmark {} - ignored", name);
-            continue;
-        }
-
-        paths.push((path, name));
-    }
-
-    // For each --include/--exclude entry, we count how many times it's used,
-    // to enable `check_for_unused` below.
-    fn to_hashmap(xyz: Option<&str>) -> Option<HashMap<&str, usize>> {
-        xyz.map(|list| {
-            list.split(',')
-                .map(|x| (x, 0))
-                .collect::<HashMap<&str, usize>>()
-        })
-    }
-
-    let mut includes = to_hashmap(include);
-    let mut excludes = to_hashmap(exclude);
-
-    for (path, name) in paths {
-        let mut skip = false;
-
-        let name_matches = |prefixes: &mut HashMap<&str, usize>| {
-            for (prefix, n) in prefixes.iter_mut() {
-                if name.as_str().starts_with(prefix) {
-                    *n += 1;
-                    return true;
-                }
-            }
-            false
-        };
-
-        if let Some(includes) = includes.as_mut() {
-            skip |= !name_matches(includes);
-        }
-        if let Some(excludes) = excludes.as_mut() {
-            skip |= name_matches(excludes);
-        }
-        if skip {
-            continue;
-        }
-
-        debug!("benchmark `{}`- registered", name);
-        benchmarks.push(Benchmark::new(name, path)?);
-    }
-
-    // All prefixes must be used at least once. This is to catch typos.
-    let check_for_unused = |option, prefixes: Option<HashMap<&str, usize>>| {
-        if let Some(prefixes) = prefixes {
-            let unused: Vec<_> = prefixes
-                .into_iter()
-                .filter_map(|(i, n)| if n == 0 { Some(i) } else { None })
-                .collect();
-            if !unused.is_empty() {
-                bail!(
-                    "Warning: one or more unused --{} entries: {:?}",
-                    option,
-                    unused
-                );
-            }
-        }
-        Ok(())
-    };
-
-    check_for_unused("include", includes)?;
-    check_for_unused("exclude", excludes)?;
-
-    benchmarks.sort_by_key(|benchmark| benchmark.name.clone());
-
-    if benchmarks.is_empty() {
-        eprintln!("Warning: no benchmarks selected! Try less strict filters.");
-    }
-
-    Ok(benchmarks)
-}
-
-/// Get a toolchain from the input.
-/// - `rustc`: check if the given one is acceptable.
-/// - `rustdoc`: if one is given, check if it is acceptable. Otherwise, if
-///   the `Doc` profile is requested, look for one next to the given `rustc`.
-/// - `cargo`: if one is given, check if it is acceptable. Otherwise, look
-///   for the nightly Cargo via `rustup`.
-fn get_local_toolchain(
-    profiles: &[Profile],
-    rustc: &str,
-    rustdoc: Option<&Path>,
-    cargo: Option<&Path>,
-    id: Option<&str>,
-    id_suffix: &str,
-) -> anyhow::Result<(PathBuf, Option<PathBuf>, PathBuf, String)> {
-    // `+`-prefixed rustc is an indicator to fetch the rustc of the toolchain
-    // specified. This follows the similar pattern used by rustup's binaries
-    // (e.g., `rustc +stage1`).
-    let (rustc, id) = if let Some(toolchain) = rustc.strip_prefix('+') {
-        let output = Command::new("rustup")
-            .args(&["which", "rustc", "--toolchain", &toolchain])
-            .output()
-            .context("failed to run `rustup which rustc`")?;
-
-        // Looks like a commit hash? Try to install it...
-        if !output.status.success() && toolchain.len() == 40 {
-            // No such toolchain exists, so let's try to install it with
-            // rustup-toolchain-install-master.
-
-            if Command::new("rustup-toolchain-install-master")
-                .arg("-V")
-                .output()
-                .is_err()
-            {
-                anyhow::bail!("rustup-toolchain-install-master is not installed but must be");
-            }
-
-            if !Command::new("rustup-toolchain-install-master")
-                .arg(&toolchain)
-                .status()
-                .context("failed to run `rustup-toolchain-install-master`")?
-                .success()
-            {
-                anyhow::bail!(
-                    "commit-like toolchain {} did not install successfully",
-                    toolchain
-                )
-            }
-        }
-
-        let output = Command::new("rustup")
-            .args(&["which", "rustc", "--toolchain", &toolchain])
-            .output()
-            .context("failed to run `rustup which rustc`")?;
-
-        if !output.status.success() {
-            anyhow::bail!("did not manage to obtain toolchain {}", toolchain);
-        }
-
-        let s = String::from_utf8(output.stdout)
-            .context("failed to convert `rustup which rustc` output to utf8")?;
-
-        let rustc = PathBuf::from(s.trim());
-        debug!("found rustc: {:?}", &rustc);
-
-        // When the id comes from a +toolchain, the suffix is *not* added.
-        let id = if let Some(id) = id {
-            let mut id = id.to_owned();
-            id.push_str(id_suffix);
-            id
-        } else {
-            toolchain.to_owned()
-        };
-        (rustc, id)
-    } else {
-        let rustc = PathBuf::from(rustc)
-            .canonicalize()
-            .with_context(|| format!("failed to canonicalize rustc executable {:?}", rustc))?;
-
-        // When specifying rustc via a path, the suffix is always added to the
-        // id.
-        let mut id = if let Some(id) = id {
-            id.to_owned()
-        } else {
-            "Id".to_string()
-        };
-        id.push_str(id_suffix);
-
-        (rustc, id)
-    };
-
-    let rustdoc =
-        if let Some(rustdoc) = &rustdoc {
-            Some(rustdoc.canonicalize().with_context(|| {
-                format!("failed to canonicalize rustdoc executable {:?}", rustdoc)
-            })?)
-        } else if profiles.contains(&Profile::Doc) {
-            // We need a `rustdoc`. Look for one next to `rustc`.
-            if let Ok(rustdoc) = rustc.with_file_name("rustdoc").canonicalize() {
-                debug!("found rustdoc: {:?}", &rustdoc);
-                Some(rustdoc)
-            } else {
-                anyhow::bail!(
-                    "'Doc' build specified but '--rustdoc' not specified and no 'rustdoc' found \
-                    next to 'rustc'"
-                );
-            }
-        } else {
-            // No `rustdoc` provided, but none needed.
-            None
-        };
-
-    let cargo = if let Some(cargo) = &cargo {
-        cargo
-            .canonicalize()
-            .with_context(|| format!("failed to canonicalize cargo executable {:?}", cargo))?
-    } else {
-        // Use the nightly cargo from `rustup`.
-        let output = Command::new("rustup")
-            .args(&["which", "cargo", "--toolchain=nightly"])
-            .output()
-            .context("failed to run `rustup which cargo --toolchain=nightly`")?;
-        if !output.status.success() {
-            anyhow::bail!(
-                "`rustup which cargo --toolchain=nightly` exited with status {}\nstderr={}",
-                output.status,
-                String::from_utf8_lossy(&output.stderr)
-            )
-        }
-        let s = String::from_utf8(output.stdout)
-            .context("failed to convert `rustup which cargo --toolchain=nightly` output to utf8")?;
-
-        let cargo = PathBuf::from(s.trim());
-        debug!("found cargo: {:?}", &cargo);
-        cargo
-    };
-
-    Ok((rustc, rustdoc, cargo, id))
-}
-
 fn generate_cachegrind_diffs(
     id1: &str,
     id2: &str,
@@ -573,7 +240,6 @@ fn generate_cachegrind_diffs(
                     Scenario::IncrPatched => (0..benchmark.patches.len())
                         .map(|i| format!("{:?}{}", scenario, i))
                         .collect::<Vec<_>>(),
-                    Scenario::All => unreachable!(),
                 }
             }) {
                 let filename = |prefix, id| {
@@ -730,6 +396,85 @@ fn main() {
     }
 }
 
+#[derive(Debug, Clone)]
+struct ProfileArg(Vec<Profile>);
+
+#[derive(Clone)]
+struct ProfileArgParser;
+
+/// We need to use a TypedValueParser to provide possible values help.
+/// If we just use `FromStr` + `#[clap(possible_values = [...])]`, `clap` will not allow passing
+/// multiple values.
+impl TypedValueParser for ProfileArgParser {
+    type Value = ProfileArg;
+
+    fn parse_ref(
+        &self,
+        cmd: &clap::Command,
+        arg: Option<&Arg>,
+        value: &OsStr,
+    ) -> Result<Self::Value, clap::Error> {
+        if value == "All" {
+            Ok(ProfileArg(Profile::all()))
+        } else {
+            let profiles: Result<Vec<Profile>, _> = value
+                .to_str()
+                .unwrap()
+                .split(",")
+                .map(|item| clap::value_parser!(Profile).parse_ref(cmd, arg, OsStr::new(item)))
+                .collect();
+
+            Ok(ProfileArg(profiles?))
+        }
+    }
+
+    fn possible_values(&self) -> Option<Box<dyn Iterator<Item = PossibleValue<'static>> + '_>> {
+        let values = Profile::value_variants()
+            .into_iter()
+            .filter_map(|item| item.to_possible_value())
+            .chain([PossibleValue::new("All")]);
+        Some(Box::new(values))
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ScenarioArg(Vec<Scenario>);
+
+#[derive(Clone)]
+struct ScenarioArgParser;
+
+impl TypedValueParser for ScenarioArgParser {
+    type Value = ScenarioArg;
+
+    fn parse_ref(
+        &self,
+        cmd: &clap::Command,
+        arg: Option<&Arg>,
+        value: &OsStr,
+    ) -> Result<Self::Value, clap::Error> {
+        if value == "All" {
+            Ok(ScenarioArg(Scenario::all()))
+        } else {
+            let scenarios: Result<Vec<Scenario>, _> = value
+                .to_str()
+                .unwrap()
+                .split(",")
+                .map(|item| clap::value_parser!(Scenario).parse_ref(cmd, arg, OsStr::new(item)))
+                .collect();
+
+            Ok(ScenarioArg(scenarios?))
+        }
+    }
+
+    fn possible_values(&self) -> Option<Box<dyn Iterator<Item = PossibleValue<'static>> + '_>> {
+        let values = Scenario::value_variants()
+            .into_iter()
+            .filter_map(|item| item.to_possible_value())
+            .chain([PossibleValue::new("All")]);
+        Some(Box::new(values))
+    }
+}
+
 #[derive(Debug, clap::Parser)]
 #[clap(about, version, author)]
 struct Cli {
@@ -749,18 +494,14 @@ struct LocalOptions {
     id: Option<String>,
 
     /// Measure the build profiles in this comma-separated list
-    // This must be normalized via `Profile::expand_all()` before use.
     #[clap(
         long = "profiles",
         alias = "builds", // the old name, for backward compatibility
-        arg_enum,
-        multiple_values = true,
-        use_delimiter = true,
-        require_delimiter = true,
+        value_parser = ProfileArgParser,
         // Don't run rustdoc by default
         default_value = "Check,Debug,Opt",
     )]
-    profiles: Vec<Profile>,
+    profiles: ProfileArg,
 
     /// The path to the local Cargo to use
     #[clap(long, parse(from_os_str))]
@@ -779,17 +520,13 @@ struct LocalOptions {
     rustdoc: Option<PathBuf>,
 
     /// Measure the scenarios in this comma-separated list
-    // This must be normalized via `Scenario::expand_all()` before use.
     #[clap(
         long = "scenarios",
         alias = "runs", // the old name, for backward compatibility
-        arg_enum,
-        multiple_values = true,
-        use_delimiter = true,
-        require_delimiter = true,
+        value_parser = ScenarioArgParser,
         default_value = "All"
     )]
-    scenarios: Vec<Scenario>,
+    scenarios: ScenarioArg,
 }
 
 #[derive(Debug, clap::Args)]
@@ -930,7 +667,7 @@ fn main_result() -> anyhow::Result<i32> {
 
     let args = Cli::parse();
 
-    let benchmark_dir = PathBuf::from("collector/benchmarks");
+    let benchmark_dir = compile_time_benchmark_dir();
 
     let mut builder = tokio::runtime::Builder::new_multi_thread();
     // We want to minimize noise from the runtime
@@ -951,8 +688,8 @@ fn main_result() -> anyhow::Result<i32> {
             iterations,
             self_profile,
         } => {
-            let profiles = Profile::expand_all(&local.profiles);
-            let scenarios = Scenario::expand_all(&local.scenarios);
+            let profiles = &local.profiles.0;
+            let scenarios = &local.scenarios.0;
 
             let pool = database::Pool::open(&db.db);
 
@@ -1076,8 +813,8 @@ fn main_result() -> anyhow::Result<i32> {
                 );
             }
 
-            let profiles = Profile::expand_all(&local.profiles);
-            let scenarios = Scenario::expand_all(&local.scenarios);
+            let profiles = &local.profiles.0;
+            let scenarios = &local.scenarios.0;
 
             let mut benchmarks = get_benchmarks(
                 &benchmark_dir,
@@ -1389,7 +1126,7 @@ fn generate_lockfile(directory: &Path) {
         .expect("Cannot generate lock file");
 }
 
-pub fn get_commit_or_fake_it(sha: &str) -> anyhow::Result<Commit> {
+fn get_commit_or_fake_it(sha: &str) -> anyhow::Result<Commit> {
     let rt = tokio::runtime::Runtime::new().unwrap();
     Ok(rt
         .block_on(collector::master_commits())
