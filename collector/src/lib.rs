@@ -8,6 +8,7 @@ use std::process::{self, Command};
 pub mod api;
 pub mod benchmark;
 pub mod execute;
+pub mod runtime;
 pub mod toolchain;
 pub mod utils;
 

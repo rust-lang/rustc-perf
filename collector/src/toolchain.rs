@@ -233,6 +233,23 @@ impl<'a> Compiler<'a> {
             is_nightly: true,
         }
     }
+    pub fn from_toolchain(toolchain: &'a LocalToolchain, target_triple: &'a str) -> Compiler<'a> {
+        Compiler {
+            rustc: &toolchain.rustc,
+            rustdoc: toolchain.rustdoc.as_deref(),
+            cargo: &toolchain.cargo,
+            triple: target_triple,
+            is_nightly: true,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct LocalToolchain {
+    pub rustc: PathBuf,
+    pub rustdoc: Option<PathBuf>,
+    pub cargo: PathBuf,
+    pub id: String,
 }
 
 /// Get a toolchain from the input.
@@ -248,7 +265,7 @@ pub fn get_local_toolchain(
     cargo: Option<&Path>,
     id: Option<&str>,
     id_suffix: &str,
-) -> anyhow::Result<(PathBuf, Option<PathBuf>, PathBuf, String)> {
+) -> anyhow::Result<LocalToolchain> {
     // `+`-prefixed rustc is an indicator to fetch the rustc of the toolchain
     // specified. This follows the similar pattern used by rustup's binaries
     // (e.g., `rustc +stage1`).
@@ -371,5 +388,10 @@ pub fn get_local_toolchain(
         cargo
     };
 
-    Ok((rustc, rustdoc, cargo, id))
+    Ok(LocalToolchain {
+        rustc,
+        rustdoc,
+        cargo,
+        id,
+    })
 }
