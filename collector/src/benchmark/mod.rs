@@ -338,7 +338,7 @@ impl Benchmark {
 }
 
 pub fn compile_time_benchmark_dir() -> PathBuf {
-    PathBuf::from("collector/benchmarks")
+    PathBuf::from("collector/compile-benchmarks")
 }
 
 pub fn get_benchmarks(
