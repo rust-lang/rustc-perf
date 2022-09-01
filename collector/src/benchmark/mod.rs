@@ -6,7 +6,7 @@ use crate::execute::{CargoProcess, Processor};
 use crate::toolchain::Compiler;
 use anyhow::{bail, Context};
 use log::debug;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::mem::ManuallyDrop;
 use std::path::{Path, PathBuf};
@@ -41,6 +41,10 @@ struct BenchmarkConfig {
     touch_file: Option<String>,
 
     category: Category,
+    /// Profiles that are not useful for this benchmark.
+    /// They will be ignored during benchmarking.
+    #[serde(default)]
+    excluded_profiles: HashSet<Profile>,
 }
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Hash)]
@@ -183,9 +187,20 @@ impl Benchmark {
     ) -> anyhow::Result<()> {
         let iterations = iterations.unwrap_or(self.config.runs);
 
-        if self.config.disabled || profiles.is_empty() {
+        let profiles: Vec<Profile> = profiles
+            .into_iter()
+            .copied()
+            .filter(|profile| !self.config.excluded_profiles.contains(profile))
+            .collect();
+
+        if self.config.disabled {
             eprintln!("Skipping {}: disabled", self.name);
             bail!("disabled benchmark");
+        }
+
+        if profiles.is_empty() {
+            eprintln!("Skipping {}: no profiles selected", self.name);
+            return Ok(());
         }
 
         eprintln!("Preparing {}", self.name);
