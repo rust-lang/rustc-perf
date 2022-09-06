@@ -1,4 +1,4 @@
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, clap::ArgEnum)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, clap::ArgEnum, serde::Deserialize)]
 #[clap(rename_all = "PascalCase")]
 pub enum Scenario {
     Full,

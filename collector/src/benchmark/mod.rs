@@ -41,10 +41,16 @@ struct BenchmarkConfig {
     touch_file: Option<String>,
 
     category: Category,
+
     /// Profiles that are not useful for this benchmark.
     /// They will be ignored during benchmarking.
     #[serde(default)]
     excluded_profiles: HashSet<Profile>,
+
+    /// Scenarios that are not useful for this benchmark.
+    /// They will be ignored during benchmarking.
+    #[serde(default)]
+    excluded_scenarios: HashSet<Scenario>,
 }
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Hash)]
@@ -185,6 +191,11 @@ impl Benchmark {
         compiler: Compiler<'_>,
         iterations: Option<usize>,
     ) -> anyhow::Result<()> {
+        if self.config.disabled {
+            eprintln!("Skipping {}: disabled", self.name);
+            bail!("disabled benchmark");
+        }
+
         let iterations = iterations.unwrap_or(self.config.runs);
 
         let profiles: Vec<Profile> = profiles
@@ -193,13 +204,19 @@ impl Benchmark {
             .filter(|profile| !self.config.excluded_profiles.contains(profile))
             .collect();
 
-        if self.config.disabled {
-            eprintln!("Skipping {}: disabled", self.name);
-            bail!("disabled benchmark");
-        }
-
         if profiles.is_empty() {
             eprintln!("Skipping {}: no profiles selected", self.name);
+            return Ok(());
+        }
+
+        let scenarios: Vec<Scenario> = scenarios
+            .into_iter()
+            .copied()
+            .filter(|scenario| !self.config.excluded_scenarios.contains(scenario))
+            .collect();
+
+        if scenarios.is_empty() {
+            eprintln!("Skipping {}: no scenarios selected", self.name);
             return Ok(());
         }
 
