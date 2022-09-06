@@ -22,14 +22,6 @@ while : ; do
         # Install measureme tooling
         cargo install --git https://github.com/rust-lang/measureme --branch stable flamegraph crox summarize
 
-        touch todo-artifacts
-        for x in $(cat todo-artifacts) ; do
-                echo "Benching $x from todo-artifacts"
-                target/release/collector bench_published $x --db $DATABASE;
-        done
-        rm todo-artifacts
-        touch todo-artifacts
-
         target/release/collector bench_next $SITE_URL --self-profile --bench-rustc --db $DATABASE;
         echo finished run at `date`;
 

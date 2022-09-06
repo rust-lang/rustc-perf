@@ -756,6 +756,8 @@ fn main_result() -> anyhow::Result<i32> {
             match next {
                 NextArtifact::Release(tag) => {
                     bench_published_artifact(tag, pool, &mut rt, &target_triple, &benchmark_dir)?;
+
+                    client.post(&format!("{}/perf/onpush", site_url)).send()?;
                 }
                 NextArtifact::Commit {
                     commit,
