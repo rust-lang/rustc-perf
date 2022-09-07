@@ -79,6 +79,8 @@ compiler in interesting ways.
   the past.
 - **derive**: A large number of simple structs with a `#[derive]` attribute for common built-in traits such as Copy and Debug.
 - **externs**: A large number of extern functions has caused [slowdowns in the past](https://github.com/rust-lang/rust/pull/78448).
+- **helloworld-tiny**: A trivial program optimized with flags that should reduce binary size.
+  Gives a lower bound on compiled binary size.
 - **issue-46449**: A small program that caused [poor
   performance](https://github.com/rust-lang/rust/issues/46449) in the past.
 - **issue-58319**: A small program that caused [poor
