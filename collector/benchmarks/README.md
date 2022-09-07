@@ -104,6 +104,8 @@ compiler in interesting ways.
   actix-web and other libraries with similarly nested type combinators.
 - **regression-31157**: A small program that caused a [large performance
   regression](https://github.com/rust-lang/rust/issues/31157) from the past.
+- **ripgrep-13.0.0-tiny**: A line-oriented search tool, optimized with flags that should reduce
+  binary size.
 - **token-stream-stress**: A proc-macro crate. Constructs a long token stream
   much like the `quote` crate does, which caused [quadratic
   behavior](https://github.com/rust-lang/rust/issues/65080) in the past.
