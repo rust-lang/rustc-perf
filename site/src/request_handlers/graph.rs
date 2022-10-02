@@ -80,7 +80,11 @@ async fn create_graphs(
     request: graphs::Request,
     ctxt: &SiteCtxt,
 ) -> ServerResult<Arc<graphs::Response>> {
-    let artifact_ids = Arc::new(artifact_ids_for_range(ctxt, request.start, request.end));
+    let artifact_ids = Arc::new(master_artifact_ids_for_range(
+        ctxt,
+        request.start,
+        request.end,
+    ));
     let mut benchmarks = HashMap::new();
 
     let create_selector = |filter: &Option<String>| -> Selector<String> {
@@ -150,6 +154,15 @@ fn artifact_ids_for_range(ctxt: &SiteCtxt, start: Bound, end: Bound) -> Vec<Arti
         .enumerate()
         .filter(|(index, commit)| *index == 0 || *index == count - 1 || commit.is_master())
         .map(|c| c.1.into())
+        .collect()
+}
+
+/// Returns master commit artifact IDs for the given range.
+fn master_artifact_ids_for_range(ctxt: &SiteCtxt, start: Bound, end: Bound) -> Vec<ArtifactId> {
+    ctxt.data_range(start..=end)
+        .into_iter()
+        .filter(|commit| commit.is_master())
+        .map(|commit| commit.into())
         .collect()
 }
 
