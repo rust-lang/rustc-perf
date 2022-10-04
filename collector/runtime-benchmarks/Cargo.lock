@@ -52,6 +52,7 @@ dependencies = [
  "anyhow",
  "clap",
  "env_logger",
+ "libc",
  "log",
  "perf-event",
  "serde",

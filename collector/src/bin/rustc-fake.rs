@@ -68,7 +68,7 @@ fn main() {
         let wrapper = args.remove(pos);
         let wrapper = wrapper.to_str().unwrap();
 
-        raise_priority();
+        benchlib::process::raise_process_priority();
 
         // These strings come from `PerfTool::name()`.
         match wrapper {
@@ -491,20 +491,6 @@ fn exec(cmd: &mut Command) -> ! {
 }
 
 #[cfg(unix)]
-fn raise_priority() {
-    unsafe {
-        // Try to reduce jitter in wall time by increasing our priority to the
-        // maximum
-        for i in (1..21).rev() {
-            let r = libc::setpriority(libc::PRIO_PROCESS as _, libc::getpid() as libc::id_t, -i);
-            if r == 0 {
-                break;
-            }
-        }
-    }
-}
-
-#[cfg(unix)]
 fn print_memory() {
     use std::mem;
 
@@ -554,9 +540,6 @@ fn run_summarize(name: &str, prof_out_dir: &Path, prefix: &str) -> anyhow::Resul
     ));
     fs::read_to_string(&json).with_context(|| format!("failed to read {:?}", json))
 }
-
-#[cfg(windows)]
-fn raise_priority() {}
 
 #[cfg(windows)]
 fn print_memory() {}

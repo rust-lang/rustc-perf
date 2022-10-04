@@ -1,6 +1,7 @@
 use crate::cli::{parse_cli, Args, BenchmarkArgs};
 use crate::measure::benchmark_function;
 use crate::messages::BenchmarkResult;
+use crate::process::raise_process_priority;
 use log::LevelFilter;
 use std::collections::HashMap;
 
@@ -48,6 +49,8 @@ impl BenchmarkSuite {
     /// Execute the benchmark suite. It will parse CLI arguments and decide what to do based on
     /// them.
     pub fn run(self) -> anyhow::Result<()> {
+        raise_process_priority();
+
         let args = parse_cli()?;
         match args {
             Args::Benchmark(args) => {

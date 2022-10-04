@@ -1,5 +1,6 @@
-//! This library defines an API for performing benchmarks of Rust code. It is tailored for the
-//! use-case of `rustc-perf`, that's why we don't use e.g. `criterion` or `iai`.
+//! This library defines an API for performing benchmarks of Rust code and various other utilities
+//! for measuring and benchmarking. It is tailored for the use-case of `rustc-perf`, that's why we
+//! don't use e.g. `criterion` or `iai`.
 //!
 //! We want to be able to define short benchmarks in code, measure specific perf. counters and most
 //! importantly, consume the benchmark results in a programmatic way.
@@ -16,3 +17,4 @@ pub mod benchmark;
 mod cli;
 pub mod measure;
 pub mod messages;
+pub mod process;
