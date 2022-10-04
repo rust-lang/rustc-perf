@@ -1,13 +1,13 @@
-# The Benchmark Suite
+# The Compile-time Benchmark Suite
 
-This file describes the programs in the benchmark suite and explains why they
+This file describes the programs in the compile-time benchmark suite and explains why they
 were included.
 
 The suite changes over time. Sometimes the code for a benchmark is updated, in
 which case a small suffix will be added (starting with "-2", then "-3", and so
 on.)
 
-There are three categories of benchmarks, **Primary**, **Secondary**, and
+There are three categories of compile-time benchmarks, **Primary**, **Secondary**, and
 **Stable**.
 
 ## Primary
@@ -198,7 +198,7 @@ Rust code being written today.
       applies correctly, e.g. `target/release/collector bench_local +nightly
       --id Test --profiles=Check --scenarios=IncrPatched
       --include=$NEW_BENCHMARK`
-  - Add the new entry to `collector/benchmarks/README.md`.
+  - Add the new entry to `collector/compile-benchmarks/README.md`.
   - `git add` the `Cargo.lock` file, if it's not already part of the
     benchmark's committed code.
     - If the benchmark has a `.gitignore` file that contains `Cargo.lock`,
@@ -232,7 +232,7 @@ Rust code being written today.
 - In the first commit just remove the old code.
   - Do this with `git rm -r` on the directory.
 - In the second commit do everything else.
-  - Remove the entry from `collector/benchmarks/README.md`.
+  - Remove the entry from `collector/compile-benchmarks/README.md`.
   - `git grep` for occurrences of the old benchmark name (e.g. in
     `.github/workflows/ci.yml` or `ci/check-*.sh`) and see if anything needs
     changing... usually not.
