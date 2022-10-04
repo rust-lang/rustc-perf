@@ -316,7 +316,7 @@ app.component('test-cases-table', {
             return `/detailed-query.html?commit=${commit.commit}&base_commit=${baseCommit.commit}&benchmark=${testCase.benchmark + "-" + testCase.profile}&scenario=${testCase.scenario}`;
         },
         benchmarkLink(benchmark) {
-            return "https://github.com/rust-lang/rustc-perf/tree/master/collector/benchmarks/" + benchmark;
+            return "https://github.com/rust-lang/rustc-perf/tree/master/collector/compile-benchmarks/" + benchmark;
         },
         graphLink(commit, stat, testCase) {
             let date = new Date(commit.date);

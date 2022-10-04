@@ -77,7 +77,7 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
     let query = selector::Query::new()
         // FIXME: don't hardcode the stabilized benchmarks
         // This list was found via:
-        // `rg supports.stable collector/benchmarks/ -tjson -c --sort path`
+        // `rg supports.stable collector/compile-benchmarks/ -tjson -c --sort path`
         .set(
             selector::Tag::Benchmark,
             selector::Selector::Subset(vec![

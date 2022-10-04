@@ -5,8 +5,8 @@ Hardware and software details of the machine that executes the CI details can be
 
 ## The benchmarks
 
-The individual benchmarks are described in the `README` file in the
-`collector/benchmarks` directory.
+The individual compile time benchmarks are described in the `README` file in the
+`collector/compile-benchmarks` directory.
 
 ## How to build
 

@@ -33,6 +33,8 @@ filetime = "0.2.14"
 walkdir = "2"
 flate2 = { version = "1.0.22", features = ["rust_backend"] }
 rayon = "1.5.2"
+cargo_metadata = "0.15.0"
+benchlib = { path = "benchlib" }
 
 [target.'cfg(windows)'.dependencies]
 miow = "0.3"
