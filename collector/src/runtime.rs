@@ -18,23 +18,35 @@ pub fn bench_runtime(rustc: &str, id: Option<&str>, benchmark_dir: PathBuf) -> a
     for binary in binaries {
         let name = binary.path.file_name().and_then(|s| s.to_str()).unwrap();
 
-        let result = Command::new(&binary.path).arg("benchmark").output()?;
-        if !result.status.success() {
-            anyhow::bail!(
-                "Failed to run runtime benchmark {name}\n{}\n{}",
-                String::from_utf8_lossy(&result.stdout),
-                String::from_utf8_lossy(&result.stderr)
-            );
-        } else {
-            log::info!("Successfully ran runtime benchmark {name}",);
-
-            let data: Vec<BenchmarkResult> = serde_json::from_slice(&result.stdout)?;
-            // TODO: do something with the result
-            println!("{name}: {:?}", data);
-        }
+        let data: Vec<BenchmarkResult> = execute_runtime_binary(&binary.path, name)?;
+        // TODO: do something with the result
+        println!("{name}: {:?}", data);
     }
 
     Ok(())
+}
+
+fn execute_runtime_binary(binary: &Path, name: &str) -> anyhow::Result<Vec<BenchmarkResult>> {
+    // Turn off ASLR
+    let mut command = Command::new("setarch");
+    command.arg(std::env::consts::ARCH);
+    command.arg("-R");
+    command.arg(binary);
+    command.arg("benchmark");
+
+    let result = command.output()?;
+
+    if !result.status.success() {
+        return Err(anyhow::anyhow!(
+            "Failed to run runtime benchmark {name}\n{}\n{}",
+            String::from_utf8_lossy(&result.stdout),
+            String::from_utf8_lossy(&result.stderr)
+        ));
+    }
+
+    log::info!("Successfully ran runtime benchmark {name}");
+
+    Ok(serde_json::from_slice(&result.stdout)?)
 }
 
 /// Compiles all runtime benchmarks and returns the stdout output of Cargo.
