@@ -15,9 +15,16 @@ pub fn benchmark_suite<F: FnOnce(&mut BenchmarkSuite)>(define_func: F) {
     suite.run().expect("Benchmark suite has failed");
 }
 
+/// Type-erased function that performs a benchmark.
+struct BenchmarkWrapper {
+    func: Box<dyn Fn() -> anyhow::Result<BenchmarkResult>>,
+}
+
+type BenchmarkMap = HashMap<&'static str, BenchmarkWrapper>;
+
 #[derive(Default)]
 pub struct BenchmarkSuite {
-    benchmarks: HashMap<&'static str, BenchmarkWrapper>,
+    benchmarks: BenchmarkMap,
 }
 
 impl BenchmarkSuite {
@@ -54,33 +61,42 @@ impl BenchmarkSuite {
         let args = parse_cli()?;
         match args {
             Args::Benchmark(args) => {
-                self.run_benchmark(args)?;
+                run_benchmark(args, self.benchmarks)?;
             }
         }
 
-        Ok(())
-    }
-
-    fn run_benchmark(self, args: BenchmarkArgs) -> anyhow::Result<()> {
-        let mut items: Vec<_> = self.benchmarks.into_iter().collect();
-        items.sort_unstable_by_key(|item| item.0);
-
-        let mut results: Vec<BenchmarkResult> = Vec::with_capacity(items.len());
-        for (name, def) in items {
-            for i in 0..args.iterations {
-                let result = (def.func)()?;
-                log::info!("Benchmark (run {i}) `{}` completed: {:?}", name, result);
-                results.push(result);
-            }
-        }
-
-        println!("{}", serde_json::to_string(&results)?);
         Ok(())
     }
 }
 
-struct BenchmarkWrapper {
-    func: Box<dyn Fn() -> anyhow::Result<BenchmarkResult>>,
+fn run_benchmark(args: BenchmarkArgs, benchmarks: BenchmarkMap) -> anyhow::Result<()> {
+    let mut items: Vec<(&'static str, BenchmarkWrapper)> = benchmarks
+        .into_iter()
+        .filter(|(name, _)| passes_filter(name, args.exclude.as_deref(), args.include.as_deref()))
+        .collect();
+    items.sort_unstable_by_key(|item| item.0);
+
+    let mut results: Vec<BenchmarkResult> = Vec::with_capacity(items.len());
+    for (name, def) in items {
+        for i in 0..args.iterations {
+            let result = (def.func)()?;
+            log::info!("Benchmark (run {i}) `{name}` completed: {result:?}");
+            results.push(result);
+        }
+    }
+
+    println!("{}", serde_json::to_string(&results)?);
+    Ok(())
+}
+
+/// Tests if the name of the benchmark passes through the include and exclude filter flags.
+fn passes_filter(name: &str, exclude: Option<&str>, include: Option<&str>) -> bool {
+    match (exclude, include) {
+        (Some(exclude), Some(include)) => name.starts_with(include) && !name.starts_with(exclude),
+        (None, Some(include)) => name.starts_with(include),
+        (Some(exclude), None) => !name.starts_with(&exclude),
+        (None, None) => true,
+    }
 }
 
 /// Copied from `iai`, so that we don't have to use unstable features.

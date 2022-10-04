@@ -11,6 +11,14 @@ pub struct BenchmarkArgs {
     /// How many times should each benchmark be repeated.
     #[clap(long, default_value = "5")]
     pub iterations: u32,
+
+    /// Exclude all benchmarks matching a prefix in this comma-separated list
+    #[clap(long)]
+    pub exclude: Option<String>,
+
+    /// Include only benchmarks matching a prefix in this comma-separated list
+    #[clap(long)]
+    pub include: Option<String>,
 }
 
 pub fn parse_cli() -> anyhow::Result<Args> {

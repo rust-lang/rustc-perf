@@ -10,7 +10,17 @@ struct BenchmarkBinary {
     path: PathBuf,
 }
 
-pub fn bench_runtime(rustc: &str, id: Option<&str>, benchmark_dir: PathBuf) -> anyhow::Result<()> {
+/// Perform a series of runtime benchmarks using the provided `rustc` compiler.
+/// The runtime benchmarks are looked up in `benchmark_dir`, which is expected to be a path
+/// to a Cargo crate. All binaries built by that crate will are expected to be runtime benchmark
+/// suites that leverage `benchlib`.
+pub fn bench_runtime(
+    rustc: &str,
+    id: Option<&str>,
+    exclude: Option<String>,
+    include: Option<String>,
+    benchmark_dir: PathBuf,
+) -> anyhow::Result<()> {
     let toolchain = get_local_toolchain(&[Profile::Opt], rustc, None, None, id, "")?;
     let output = compile_runtime_benchmarks(&toolchain, &benchmark_dir)?;
     let binaries = gather_binaries(&output)?;
@@ -18,7 +28,8 @@ pub fn bench_runtime(rustc: &str, id: Option<&str>, benchmark_dir: PathBuf) -> a
     for binary in binaries {
         let name = binary.path.file_name().and_then(|s| s.to_str()).unwrap();
 
-        let data: Vec<BenchmarkResult> = execute_runtime_binary(&binary.path, name)?;
+        let data: Vec<BenchmarkResult> =
+            execute_runtime_binary(&binary.path, name, exclude.as_deref(), include.as_deref())?;
         // TODO: do something with the result
         println!("{name}: {:?}", data);
     }
@@ -26,13 +37,28 @@ pub fn bench_runtime(rustc: &str, id: Option<&str>, benchmark_dir: PathBuf) -> a
     Ok(())
 }
 
-fn execute_runtime_binary(binary: &Path, name: &str) -> anyhow::Result<Vec<BenchmarkResult>> {
+/// Execute a single runtime benchmark suite defined in a binary crate located in
+/// `runtime-benchmarks`. The binary is expected to use benchlib's `BenchmarkSuite` to execute
+/// a set of runtime benchmarks and return a list of `BenchmarkResult`s encoded as JSON.
+fn execute_runtime_binary(
+    binary: &Path,
+    name: &str,
+    exclude: Option<&str>,
+    include: Option<&str>,
+) -> anyhow::Result<Vec<BenchmarkResult>> {
     // Turn off ASLR
     let mut command = Command::new("setarch");
     command.arg(std::env::consts::ARCH);
     command.arg("-R");
     command.arg(binary);
     command.arg("benchmark");
+
+    if let Some(exclude) = exclude {
+        command.args(&["--exclude", exclude]);
+    }
+    if let Some(include) = include {
+        command.args(&["--include", include]);
+    }
 
     let result = command.output()?;
 
