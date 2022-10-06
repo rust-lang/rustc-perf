@@ -152,6 +152,8 @@ jobs:
         run: |
           git clone https://github.com/koute/bytehound
           cd bytehound
+          # Newer versions of Bytehound use unstable features
+          git checkout bcae7caa3b01bb60ec6d4159ac8b9af28a7c927a
           cargo build --release -p bytehound-preload
           echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${PWD}/target/release" >> $GITHUB_ENV
 
