@@ -267,14 +267,6 @@ The mandatory `<PROFILER>` argument must be one of the following.
     `flamegraph`, viewable with a web browser, is written to a file with a
     `flamegraph` prefix. Output from `crox`, viewable with Chromium's profiler,
     is written to a file with a `crox` prefix.
-- `time-passes`: Profile with rustc's `-Ztime-passes`.
-  - **Purpose**. This gives a high-level indication of compiler performance by
-    showing how long each compilation pass takes.
-  - **Slowdown**. None.
-  - **Output**. Human-readable text output is written to files with a `Ztp`
-    prefix. Note that the parents of indented sub-passes are shown below those
-    passes, rather than above. Note also that the LLVM passes run in parallel,
-    which can make the output confusing.
 - `perf-record`: Profile with
     [`perf-record`](https://perf.wiki.kernel.org/index.php/Main_Page), a
     sampling profiler.
@@ -374,16 +366,18 @@ The mandatory `<PROFILER>` argument must be one of the following.
   - **Slowdown**. Roughly 2--4x.
   - **Output**. Raw output is written to files with a `bytehound` prefix. Those
     files can be viewed with the `bytehound server <filename>` command.
-- `eprintln`: Profile with `eprintln!` statements.
+- `eprintln`: Profile via stderr, e.g. by using `eprintln!` statements.
   - **Purpose**. Sometimes it is useful to do ad hoc profiling by inserting
     `eprintln!` statements into rustc, e.g. to count how often particular paths
     are hit, or to see what values particular expressions have each time they
-    are executed.
-  - **Slowdown**. Depends where the `eprintln!` statements are inserted.
-  - **Output**. The output of these `eprintln!` statements (and everything else
-    written to `stderr`) is written to files with an `eprintln` prefix. Those
-    files can be post-processed in any appropriate fashion;
-    [`counts`](https://github.com/nnethercote/counts) is one possibility.
+    are executed. Alternatively, you can trigger some of rustc's built-in
+    profiling modes via environment variables, such as
+    `RUSTFLAGS=-Ztime-passes` or `RUSTFLAGS=-Zhir-stats`.
+  - **Slowdown**. Depends on how much extra output is being produced on stderr.
+  - **Output**. Everything written to stderr is copied to files with an
+    `eprintln` prefix. Those files can be post-processed in any appropriate
+    fashion; [`counts`](https://github.com/nnethercote/counts) is one
+    possibility.
 - `llvm-lines`: Profile with [`cargo
   llvm-lines`](https://github.com/dtolnay/cargo-llvm-lines/) a code size
   measurer.

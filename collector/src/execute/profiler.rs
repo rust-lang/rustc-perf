@@ -12,7 +12,6 @@ use std::{fs, process};
 #[derive(Clone, Copy, Debug, PartialEq, clap::ArgEnum)]
 pub enum Profiler {
     SelfProfile,
-    TimePasses,
     PerfRecord,
     Oprofile,
     Cachegrind,
@@ -155,15 +154,6 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 crox_cmd.arg(&zsp_files_prefix);
                 crox_cmd.status().context("crox")?;
                 utils::fs::rename("chrome_profiler.json", crox_file)?;
-            }
-
-            // `-Ztime-passes` output is redirected (via rustc-fake) to a file
-            // called `Ztp`. We copy that output into a file in the output dir.
-            Profiler::TimePasses => {
-                let tmp_ztp_file = filepath(data.cwd.as_ref(), "Ztp");
-                let ztp_file = filepath(self.output_dir, &out_file("Ztp"));
-
-                fs::copy(&tmp_ztp_file, &ztp_file)?;
             }
 
             // perf-record produces (via rustc-fake) a data file called `perf`.

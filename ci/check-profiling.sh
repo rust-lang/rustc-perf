@@ -22,18 +22,6 @@ cargo build -p collector --bin rustc-fake
 
 # TODO: self-profile.
 
-# time-passes.
-RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
-    cargo run -p collector --bin collector -- \
-    profile_local time-passes $bindir/rustc \
-        --id Test \
-        --profiles Check \
-        --cargo $bindir/cargo \
-        --include helloworld \
-        --scenarios Full
-test -f results/Ztp-Test-helloworld-Check-Full
-grep -q "time:.*total" results/Ztp-Test-helloworld-Check-Full
-
 # perf-record: untested because we get "The instructions:u event is not
 # supported" on GitHub Actions when the code below is run. Maybe because the
 # hardware is virtualized and performance counters aren't available?
