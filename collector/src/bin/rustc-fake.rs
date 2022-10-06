@@ -205,17 +205,6 @@ fn main() {
                 run_with_determinism_env(cmd);
             }
 
-            "TimePasses" => {
-                let mut cmd = Command::new(&tool);
-                cmd.arg("-Ztime-passes")
-                    .args(args)
-                    .stderr(std::process::Stdio::from(
-                        std::fs::File::create("Ztp").unwrap(),
-                    ));
-
-                run_with_determinism_env(cmd);
-            }
-
             "PerfRecord" => {
                 let mut cmd = Command::new("perf");
                 let has_perf = cmd.output().is_ok();
@@ -345,12 +334,12 @@ fn main() {
 
             "LlvmLines" => {
                 // `cargo llvm-lines` writes its output to stdout. But we can't
-                // redirect it to a file here like we do for "time-passes" and
-                // "eprintln". This is because `cargo llvm-lines` invokes rustc
-                // as part of its processing and then it does some analysis of
-                // its output and then it prints out some results. Because
-                // `rustc` (which this file wraps) doesn't produce the output,
-                // this file can't redirect that output.
+                // redirect it to a file here like we do for "eprintln". This
+                // is because `cargo llvm-lines` invokes rustc as part of its
+                // processing and then it does some analysis of its output and
+                // then it prints out some results. Because `rustc` (which this
+                // file wraps) doesn't produce the output, this file can't
+                // redirect that output.
                 let mut cmd = Command::new(&tool);
                 cmd.args(&args);
 
