@@ -169,6 +169,9 @@ async fn summarize_run(
 
     if !errors.is_empty() {
         writeln!(&mut message, "\n{errors}").unwrap();
+        if is_master_commit {
+            writeln!(&mut message, "\ncc @rust-lang/wg-compiler-performance").unwrap();
+        }
     }
 
     let mut table_written = false;
