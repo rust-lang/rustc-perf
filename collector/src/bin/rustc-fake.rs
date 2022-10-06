@@ -287,7 +287,7 @@ fn main() {
                 let has_valgrind = cmd.output().is_ok();
                 assert!(has_valgrind);
                 cmd.arg("--tool=dhat")
-                    .arg("--num-callers=4")
+                    .arg("--num-callers=8")
                     .arg("--dhat-out-file=dhout")
                     .arg(&tool)
                     .args(&args);
@@ -301,7 +301,7 @@ fn main() {
                 assert!(has_valgrind);
                 cmd.arg("--tool=dhat")
                     .arg("--mode=copy")
-                    .arg("--num-callers=4")
+                    .arg("--num-callers=8")
                     .arg("--dhat-out-file=dhcopy")
                     .arg(&tool)
                     .args(&args);
