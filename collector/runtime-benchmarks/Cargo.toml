@@ -1,2 +1,6 @@
 [workspace]
-members = ["hashmap", "nbody"]
+members = [
+    "hashmap",
+    "nbody",
+    "bufreader",
+]
