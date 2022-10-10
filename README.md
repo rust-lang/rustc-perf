@@ -8,4 +8,4 @@ Additional documentation on running and setting up the frontend and backend can
 be found in the `README` files in the `collector` and `site` directories.
 
 Additional documentation on the benchmark programs can be found in the `README`
-file in the `collector/benchmarks` directory.
+file in the `collector/compile-benchmarks` and `collector/runtime-benchmarks` directories.
