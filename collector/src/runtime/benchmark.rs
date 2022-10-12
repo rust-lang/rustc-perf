@@ -86,6 +86,7 @@ pub fn discover_benchmarks(cargo_stdout: &[u8]) -> anyhow::Result<BenchmarkDatab
         }
     }
 
+    binaries.sort_unstable_by(|a, b| a.path.cmp(&b.path));
     log::debug!("Found binaries: {:?}", binaries);
 
     Ok(BenchmarkDatabase { binaries })

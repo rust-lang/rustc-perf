@@ -1,8 +1,5 @@
-use crate::messages::BenchmarkStats;
+use crate::comm::messages::BenchmarkMeasurement;
 
-pub fn benchmark_function<F: FnOnce() -> R, R>(
-    _name: &'static str,
-    _func: F,
-) -> anyhow::Result<BenchmarkStats> {
+pub fn benchmark_function<F: FnOnce() -> R, R>(_func: F) -> anyhow::Result<BenchmarkMeasurement> {
     panic!("Runtime benchmarking is not supported on Windows");
 }
