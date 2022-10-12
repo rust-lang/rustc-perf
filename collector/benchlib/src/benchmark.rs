@@ -89,6 +89,24 @@ fn run_benchmark(args: BenchmarkArgs, benchmarks: BenchmarkMap) -> anyhow::Resul
     Ok(())
 }
 
+/// Adds a single benchmark to the benchmark suite.
+/// ```ignore
+/// use benchlib::define_benchmark;
+///
+/// define_benchmark!(suite, my_bench, {
+///     || do_something()
+/// });
+/// ```
+#[macro_export]
+macro_rules! define_benchmark {
+    ($suite:expr, $name:ident, $fun:expr) => {
+        let func = move || $fun;
+        $suite.register(stringify!($name), func);
+    };
+}
+
+pub use define_benchmark;
+
 /// Tests if the name of the benchmark passes through the include and exclude filter flags.
 fn passes_filter(name: &str, exclude: Option<&str>, include: Option<&str>) -> bool {
     match (exclude, include) {
