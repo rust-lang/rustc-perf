@@ -59,10 +59,18 @@ impl BenchmarkSuite {
             Args::Benchmark(args) => {
                 run_benchmark(args, self.benchmarks)?;
             }
+            Args::ListBenchmarks => list_benchmarks(self.benchmarks)?,
         }
 
         Ok(())
     }
+}
+
+fn list_benchmarks(benchmarks: BenchmarkMap) -> anyhow::Result<()> {
+    let benchmark_list: Vec<&str> = benchmarks.into_keys().collect();
+    serde_json::to_writer(std::io::stdout(), &benchmark_list)?;
+
+    Ok(())
 }
 
 fn run_benchmark(args: BenchmarkArgs, benchmarks: BenchmarkMap) -> anyhow::Result<()> {
@@ -104,7 +112,7 @@ macro_rules! define_benchmark {
 pub use define_benchmark;
 
 /// Tests if the name of the benchmark passes through the include and exclude filter flags.
-fn passes_filter(name: &str, exclude: Option<&str>, include: Option<&str>) -> bool {
+pub fn passes_filter(name: &str, exclude: Option<&str>, include: Option<&str>) -> bool {
     match (exclude, include) {
         (Some(exclude), Some(include)) => name.starts_with(include) && !name.starts_with(exclude),
         (None, Some(include)) => name.starts_with(include),

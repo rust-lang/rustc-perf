@@ -26,7 +26,7 @@ use tokio::runtime::Runtime;
 
 use collector::execute::bencher::BenchProcessor;
 use collector::execute::profiler::{ProfileProcessor, Profiler};
-use collector::runtime::bench_runtime;
+use collector::runtime::{bench_runtime, BenchmarkFilter};
 use collector::toolchain::{get_local_toolchain, Compiler, Sysroot};
 
 fn n_normal_benchmarks_remaining(n: usize) -> String {
@@ -710,8 +710,7 @@ fn main_result() -> anyhow::Result<i32> {
             bench_runtime(
                 &rustc,
                 id.as_deref(),
-                exclude,
-                include,
+                BenchmarkFilter::new(exclude, include),
                 runtime_benchmark_dir,
             )?;
             Ok(0)
