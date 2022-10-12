@@ -1,5 +1,5 @@
 use crate::benchmark::black_box;
-use crate::messages::BenchmarkResult;
+use crate::comm::messages::BenchmarkMeasurement;
 use perf_event::events::Hardware;
 use perf_event::{Builder, Counter, Group};
 use std::time::Instant;
@@ -18,7 +18,7 @@ struct Counters {
 pub fn benchmark_function<F: Fn() -> Bench + 'static, R, Bench: FnOnce() -> R + 'static>(
     name: &'static str,
     benchmark_constructor: F,
-) -> anyhow::Result<BenchmarkResult> {
+) -> anyhow::Result<BenchmarkMeasurement> {
     let mut group = create_group()?;
     let counters = prepare_counters(&mut group)?;
 
@@ -48,8 +48,7 @@ pub fn benchmark_function<F: Fn() -> Bench + 'static, R, Bench: FnOnce() -> R + 
     // Try to avoid optimizing the result out.
     black_box(output);
 
-    let result = BenchmarkResult {
-        name: String::from(name),
+    let result = BenchmarkMeasurement {
         cycles: measurement[&counters.cycles],
         instructions: measurement[&counters.instructions],
         branch_misses: measurement[&counters.branch_misses],

@@ -1,15 +1,22 @@
 use crate::benchmark::profile::Profile;
 use crate::toolchain::{get_local_toolchain, LocalToolchain};
 use benchlib::benchmark::passes_filter;
-use benchlib::messages::BenchmarkResult;
+use benchlib::comm::messages::BenchmarkMessage;
 use cargo_metadata::Message;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 #[derive(Debug)]
 struct BenchmarkBinary {
     path: PathBuf,
     benchmark_names: Vec<String>,
+}
+
+impl BenchmarkBinary {
+    fn name(&self) -> &str {
+        self.path.file_name().unwrap().to_str().unwrap()
+    }
 }
 
 #[derive(Debug)]
@@ -73,25 +80,40 @@ pub fn bench_runtime(
         total_benchmark_count - filtered
     );
 
+    let mut benchmark_index = 0;
     for binary in benchmark_db.binaries {
-        let name = binary.path.file_name().and_then(|s| s.to_str()).unwrap();
-
-        let data: Vec<BenchmarkResult> = execute_runtime_binary(&binary.path, name, &filter)?;
-        // TODO: do something with the result
-        println!("{name}: {:?}", data);
+        for message in execute_runtime_benchmark(&binary.path, &filter)? {
+            let message = message.map_err(|err| {
+                anyhow::anyhow!(
+                    "Cannot parse BenchmarkMessage from benchmark {}: {err:?}",
+                    binary.path.display()
+                )
+            })?;
+            match message {
+                BenchmarkMessage::Stats(stats) => {
+                    benchmark_index += 1;
+                    println!(
+                        "Finished {}/{} ({}/{})",
+                        binary.name(),
+                        stats.name,
+                        benchmark_index,
+                        filtered
+                    );
+                }
+            }
+        }
     }
 
     Ok(())
 }
 
-/// Execute a single runtime benchmark suite defined in a binary crate located in
+/// Starts executing a single runtime benchmark suite defined in a binary crate located in
 /// `runtime-benchmarks`. The binary is expected to use benchlib's `BenchmarkSuite` to execute
-/// a set of runtime benchmarks and return a list of `BenchmarkResult`s encoded as JSON.
-fn execute_runtime_binary(
+/// a set of runtime benchmarks and print `BenchmarkMessage`s encoded as JSON, one per line.
+fn execute_runtime_benchmark(
     binary: &Path,
-    name: &str,
     filter: &BenchmarkFilter,
-) -> anyhow::Result<Vec<BenchmarkResult>> {
+) -> anyhow::Result<impl Iterator<Item = anyhow::Result<BenchmarkMessage>>> {
     // Turn off ASLR
     let mut command = Command::new("setarch");
     command.arg(std::env::consts::ARCH);
@@ -106,19 +128,16 @@ fn execute_runtime_binary(
         command.args(&["--include", include]);
     }
 
-    let result = command.output()?;
+    command.stdout(Stdio::piped());
+    let mut child = command.spawn()?;
+    let stdout = child.stdout.take().unwrap();
 
-    if !result.status.success() {
-        return Err(anyhow::anyhow!(
-            "Failed to run runtime benchmark {name}\n{}\n{}",
-            String::from_utf8_lossy(&result.stdout),
-            String::from_utf8_lossy(&result.stderr)
-        ));
-    }
-
-    log::info!("Successfully ran runtime benchmark {name}");
-
-    Ok(serde_json::from_slice(&result.stdout)?)
+    let reader = BufReader::new(stdout);
+    let iterator = reader.lines().map(|line| {
+        line.and_then(|line| Ok(serde_json::from_str::<BenchmarkMessage>(&line)?))
+            .map_err(|err| err.into())
+    });
+    Ok(iterator)
 }
 
 /// Compiles all runtime benchmarks and returns the stdout output of Cargo.

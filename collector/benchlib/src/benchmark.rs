@@ -1,15 +1,14 @@
 use crate::cli::{parse_cli, Args, BenchmarkArgs};
+use crate::comm::messages::{BenchmarkMeasurement, BenchmarkMessage, BenchmarkStats};
+use crate::comm::output_message;
 use crate::measure::benchmark_function;
-use crate::messages::BenchmarkResult;
 use crate::process::raise_process_priority;
-use log::LevelFilter;
 use std::collections::HashMap;
 
 /// Create a new benchmark suite. Use the closure argument to define benchmarks.
 pub fn benchmark_suite<F: FnOnce(&mut BenchmarkSuite)>(define_func: F) {
-    env_logger::Builder::from_default_env()
-        .filter_level(LevelFilter::Info)
-        .init();
+    env_logger::init();
+
     let mut suite = BenchmarkSuite::new();
     define_func(&mut suite);
     suite.run().expect("Benchmark suite has failed");
@@ -17,7 +16,7 @@ pub fn benchmark_suite<F: FnOnce(&mut BenchmarkSuite)>(define_func: F) {
 
 /// Type-erased function that performs a benchmark.
 struct BenchmarkWrapper {
-    func: Box<dyn Fn() -> anyhow::Result<BenchmarkResult>>,
+    func: Box<dyn Fn() -> anyhow::Result<BenchmarkMeasurement>>,
 }
 
 type BenchmarkMap = HashMap<&'static str, BenchmarkWrapper>;
@@ -80,16 +79,25 @@ fn run_benchmark(args: BenchmarkArgs, benchmarks: BenchmarkMap) -> anyhow::Resul
         .collect();
     items.sort_unstable_by_key(|item| item.0);
 
-    let mut results: Vec<BenchmarkResult> = Vec::with_capacity(items.len());
+    let mut stdout = std::io::stdout().lock();
+
     for (name, def) in items {
+        let mut measurements: Vec<BenchmarkMeasurement> =
+            Vec::with_capacity(args.iterations as usize);
         for i in 0..args.iterations {
-            let result = (def.func)()?;
-            log::info!("Benchmark (run {i}) `{name}` completed: {result:?}");
-            results.push(result);
+            let measurement = (def.func)()?;
+            log::info!("Benchmark (run {i}) `{name}` completed: {measurement:?}");
+            measurements.push(measurement);
         }
+        output_message(
+            &mut stdout,
+            BenchmarkMessage::Stats(BenchmarkStats {
+                name: name.to_string(),
+                measurements,
+            }),
+        )?;
     }
 
-    println!("{}", serde_json::to_string(&results)?);
     Ok(())
 }
 

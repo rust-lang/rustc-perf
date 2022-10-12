@@ -15,6 +15,6 @@
 
 pub mod benchmark;
 mod cli;
+pub mod comm;
 pub mod measure;
-pub mod messages;
 pub mod process;
