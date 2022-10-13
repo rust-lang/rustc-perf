@@ -6,21 +6,23 @@ use core::result::Result::Ok;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+/// A binary that defines several benchmarks using the `benchmark_suite` function from `benchlib`.
 #[derive(Debug)]
-pub struct BenchmarkBinary {
-    pub path: PathBuf,
+pub struct BenchmarkSuite {
+    pub binary: PathBuf,
     pub benchmark_names: Vec<String>,
 }
 
-impl BenchmarkBinary {
+impl BenchmarkSuite {
     pub fn name(&self) -> &str {
-        self.path.file_name().unwrap().to_str().unwrap()
+        self.binary.file_name().unwrap().to_str().unwrap()
     }
 }
 
+/// A collection of benchmark suites gathered from a directory.
 #[derive(Debug)]
 pub struct BenchmarkDatabase {
-    pub binaries: Vec<BenchmarkBinary>,
+    pub suites: Vec<BenchmarkSuite>,
 }
 
 impl BenchmarkDatabase {
@@ -40,9 +42,9 @@ impl BenchmarkDatabase {
     }
 
     fn benchmark_names(&self) -> impl Iterator<Item = &str> {
-        self.binaries
+        self.suites
             .iter()
-            .flat_map(|binary| binary.benchmark_names.iter().map(|n| n.as_ref()))
+            .flat_map(|suite| suite.benchmark_names.iter().map(|n| n.as_ref()))
     }
 }
 
@@ -57,8 +59,10 @@ impl BenchmarkFilter {
     }
 }
 
-/// Parse Cargo JSON output and find all compiled binaries.
-/// Then execute each benchmark with the `list-benchmarks` command to find out its benchmark names.
+/// Parse Cargo JSON output to find all compiled binaries.
+/// We assume that each binary defines a benchmark suite using `benchlib`.
+/// We then execute each benchmark suite with the `list-benchmarks` command to find out its
+/// benchmark names.
 pub fn discover_benchmarks(cargo_stdout: &[u8]) -> anyhow::Result<BenchmarkDatabase> {
     let mut binaries = vec![];
 
@@ -75,8 +79,8 @@ pub fn discover_benchmarks(cargo_stdout: &[u8]) -> anyhow::Result<BenchmarkDatab
                                 path.display()
                             )
                         })?;
-                        binaries.push(BenchmarkBinary {
-                            path,
+                        binaries.push(BenchmarkSuite {
+                            binary: path,
                             benchmark_names: benchmarks,
                         });
                     }
@@ -86,10 +90,10 @@ pub fn discover_benchmarks(cargo_stdout: &[u8]) -> anyhow::Result<BenchmarkDatab
         }
     }
 
-    binaries.sort_unstable_by(|a, b| a.path.cmp(&b.path));
+    binaries.sort_unstable_by(|a, b| a.binary.cmp(&b.binary));
     log::debug!("Found binaries: {:?}", binaries);
 
-    Ok(BenchmarkDatabase { binaries })
+    Ok(BenchmarkDatabase { suites: binaries })
 }
 
 /// Uses the `list-benchmarks` command from `benchlib` to find the benchmark names from the given

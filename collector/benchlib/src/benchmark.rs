@@ -1,5 +1,5 @@
 use crate::cli::{parse_cli, Args, BenchmarkArgs};
-use crate::comm::messages::{BenchmarkMeasurement, BenchmarkMessage, BenchmarkStats};
+use crate::comm::messages::{BenchmarkMessage, BenchmarkResult, BenchmarkStats};
 use crate::comm::output_message;
 use crate::measure::benchmark_function;
 use crate::process::raise_process_priority;
@@ -14,9 +14,9 @@ pub fn benchmark_suite<F: FnOnce(&mut BenchmarkSuite)>(define_func: F) {
     suite.run().expect("Benchmark suite has failed");
 }
 
-/// Type-erased function that performs a benchmark.
+/// Type-erased function that executes a single benchmark.
 struct BenchmarkWrapper {
-    func: Box<dyn Fn() -> anyhow::Result<BenchmarkMeasurement>>,
+    func: Box<dyn Fn() -> anyhow::Result<BenchmarkStats>>,
 }
 
 type BenchmarkMap = HashMap<&'static str, BenchmarkWrapper>;
@@ -82,18 +82,17 @@ fn run_benchmark(args: BenchmarkArgs, benchmarks: BenchmarkMap) -> anyhow::Resul
     let mut stdout = std::io::stdout().lock();
 
     for (name, def) in items {
-        let mut measurements: Vec<BenchmarkMeasurement> =
-            Vec::with_capacity(args.iterations as usize);
+        let mut stats: Vec<BenchmarkStats> = Vec::with_capacity(args.iterations as usize);
         for i in 0..args.iterations {
-            let measurement = (def.func)()?;
-            log::info!("Benchmark (run {i}) `{name}` completed: {measurement:?}");
-            measurements.push(measurement);
+            let benchmark_stats = (def.func)()?;
+            log::info!("Benchmark (run {i}) `{name}` completed: {benchmark_stats:?}");
+            stats.push(benchmark_stats);
         }
         output_message(
             &mut stdout,
-            BenchmarkMessage::Stats(BenchmarkStats {
+            BenchmarkMessage::Result(BenchmarkResult {
                 name: name.to_string(),
-                measurements,
+                stats,
             }),
         )?;
     }

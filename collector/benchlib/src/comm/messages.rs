@@ -5,19 +5,19 @@ use std::time::Duration;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub enum BenchmarkMessage {
-    Stats(BenchmarkStats),
+    Result(BenchmarkResult),
 }
 
-/// Results of several measurements of a single benchmark.
+/// Stats gathered by several executions of a single benchmark.
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct BenchmarkResult {
+    pub name: String,
+    pub stats: Vec<BenchmarkStats>,
+}
+
+/// The stats gathered by a single benchmark execution.
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct BenchmarkStats {
-    pub name: String,
-    pub measurements: Vec<BenchmarkMeasurement>,
-}
-
-/// Results of a single benchmark execution.
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-pub struct BenchmarkMeasurement {
     pub cycles: u64,
     pub instructions: u64,
     pub branch_misses: u64,
