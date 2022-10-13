@@ -16,12 +16,14 @@ pub struct BenchmarkResult {
 }
 
 /// The stats gathered by a single benchmark execution.
+/// Some of the perf. counters may be missing if the machine that executes the benchmark is unable
+/// to gather them.
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct BenchmarkStats {
-    pub cycles: u64,
-    pub instructions: u64,
-    pub branch_misses: u64,
-    pub cache_misses: u64,
-    pub cache_references: u64,
+    pub cycles: Option<u64>,
+    pub instructions: Option<u64>,
+    pub branch_misses: Option<u64>,
+    pub cache_misses: Option<u64>,
+    pub cache_references: Option<u64>,
     pub wall_time: Duration,
 }
