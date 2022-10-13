@@ -34,17 +34,13 @@ impl BenchmarkSuite {
 
     /// Registers a single benchmark.
     /// `func` should return a closure that will be benchmarked.
-    pub fn register<F: Fn() -> Bench + 'static, R, Bench: FnOnce() -> R + 'static>(
+    pub fn register<F: Fn() -> Bench + Clone + 'static, R, Bench: FnOnce() -> R + 'static>(
         &mut self,
         name: &'static str,
-        func: F,
+        constructor: F,
     ) {
-        // We want to monomorphize the target `func` and then wrap it in a Box, to avoid going
-        // through a vtable when we execute the benchmarked function.
-        let benchmark_func = Box::new(move || {
-            let bench_fn = func();
-            benchmark_function(name, bench_fn)
-        });
+        // We want to type-erase the target `func` by wrapping it in a Box.
+        let benchmark_func = Box::new(move || benchmark_function(name, constructor.clone()));
         let benchmark_def = BenchmarkWrapper {
             func: benchmark_func,
         };
