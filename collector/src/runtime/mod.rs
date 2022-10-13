@@ -18,6 +18,7 @@ pub fn bench_runtime(
     id: Option<&str>,
     filter: BenchmarkFilter,
     benchmark_dir: PathBuf,
+    iterations: u32,
 ) -> anyhow::Result<()> {
     let toolchain = get_local_toolchain(&[Profile::Opt], rustc, None, None, id, "")?;
     let output = compile_runtime_benchmark_binaries(&toolchain, &benchmark_dir)?;
@@ -33,7 +34,7 @@ pub fn bench_runtime(
 
     let mut benchmark_index = 0;
     for binary in suite.groups {
-        for message in execute_runtime_benchmark_binary(&binary.binary, &filter)? {
+        for message in execute_runtime_benchmark_binary(&binary.binary, &filter, iterations)? {
             let message = message.map_err(|err| {
                 anyhow::anyhow!(
                     "Cannot parse BenchmarkMessage from benchmark {}: {err:?}",
@@ -65,6 +66,7 @@ pub fn bench_runtime(
 fn execute_runtime_benchmark_binary(
     binary: &Path,
     filter: &BenchmarkFilter,
+    iterations: u32,
 ) -> anyhow::Result<impl Iterator<Item = anyhow::Result<BenchmarkMessage>>> {
     // Turn off ASLR
     let mut command = Command::new("setarch");
@@ -72,6 +74,8 @@ fn execute_runtime_benchmark_binary(
     command.arg("-R");
     command.arg(binary);
     command.arg("run");
+    command.arg("--iterations");
+    command.arg(&iterations.to_string());
 
     if let Some(ref exclude) = filter.exclude {
         command.args(&["--exclude", exclude]);
