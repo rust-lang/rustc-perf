@@ -6,14 +6,14 @@ use core::result::Result::Ok;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// A binary that defines several benchmarks using the `benchmark_suite` function from `benchlib`.
+/// A binary that defines several benchmarks using the `benchmark_group` function from `benchlib`.
 #[derive(Debug)]
-pub struct BenchmarkSuite {
+pub struct BenchmarkGroup {
     pub binary: PathBuf,
     pub benchmark_names: Vec<String>,
 }
 
-impl BenchmarkSuite {
+impl BenchmarkGroup {
     pub fn name(&self) -> &str {
         self.binary.file_name().unwrap().to_str().unwrap()
     }
@@ -21,11 +21,11 @@ impl BenchmarkSuite {
 
 /// A collection of benchmark suites gathered from a directory.
 #[derive(Debug)]
-pub struct BenchmarkDatabase {
-    pub suites: Vec<BenchmarkSuite>,
+pub struct BenchmarkSuite {
+    pub groups: Vec<BenchmarkGroup>,
 }
 
-impl BenchmarkDatabase {
+impl BenchmarkSuite {
     pub fn total_benchmark_count(&self) -> u64 {
         self.benchmark_names().count() as u64
     }
@@ -42,7 +42,7 @@ impl BenchmarkDatabase {
     }
 
     fn benchmark_names(&self) -> impl Iterator<Item = &str> {
-        self.suites
+        self.groups
             .iter()
             .flat_map(|suite| suite.benchmark_names.iter().map(|n| n.as_ref()))
     }
@@ -63,8 +63,8 @@ impl BenchmarkFilter {
 /// We assume that each binary defines a benchmark suite using `benchlib`.
 /// We then execute each benchmark suite with the `list-benchmarks` command to find out its
 /// benchmark names.
-pub fn discover_benchmarks(cargo_stdout: &[u8]) -> anyhow::Result<BenchmarkDatabase> {
-    let mut binaries = vec![];
+pub fn discover_benchmarks(cargo_stdout: &[u8]) -> anyhow::Result<BenchmarkSuite> {
+    let mut groups = vec![];
 
     for message in Message::parse_stream(cargo_stdout) {
         let message = message?;
@@ -79,7 +79,7 @@ pub fn discover_benchmarks(cargo_stdout: &[u8]) -> anyhow::Result<BenchmarkDatab
                                 path.display()
                             )
                         })?;
-                        binaries.push(BenchmarkSuite {
+                        groups.push(BenchmarkGroup {
                             binary: path,
                             benchmark_names: benchmarks,
                         });
@@ -90,10 +90,10 @@ pub fn discover_benchmarks(cargo_stdout: &[u8]) -> anyhow::Result<BenchmarkDatab
         }
     }
 
-    binaries.sort_unstable_by(|a, b| a.binary.cmp(&b.binary));
-    log::debug!("Found binaries: {:?}", binaries);
+    groups.sort_unstable_by(|a, b| a.binary.cmp(&b.binary));
+    log::debug!("Found binaries: {:?}", groups);
 
-    Ok(BenchmarkDatabase { suites: binaries })
+    Ok(BenchmarkSuite { groups })
 }
 
 /// Uses the `list-benchmarks` command from `benchlib` to find the benchmark names from the given

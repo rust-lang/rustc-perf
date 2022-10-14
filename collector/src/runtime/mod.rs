@@ -12,7 +12,7 @@ pub use benchmark::BenchmarkFilter;
 /// Perform a series of runtime benchmarks using the provided `rustc` compiler.
 /// The runtime benchmarks are looked up in `benchmark_dir`, which is expected to be a path
 /// to a Cargo crate. All binaries built by that crate will are expected to be runtime benchmark
-/// suites that leverage `benchlib`.
+/// groups that leverage `benchlib`.
 pub fn bench_runtime(
     rustc: &str,
     id: Option<&str>,
@@ -20,11 +20,11 @@ pub fn bench_runtime(
     benchmark_dir: PathBuf,
 ) -> anyhow::Result<()> {
     let toolchain = get_local_toolchain(&[Profile::Opt], rustc, None, None, id, "")?;
-    let output = compile_runtime_benchmarks(&toolchain, &benchmark_dir)?;
-    let benchmark_db = benchmark::discover_benchmarks(&output)?;
+    let output = compile_runtime_benchmark_binaries(&toolchain, &benchmark_dir)?;
+    let suite = benchmark::discover_benchmarks(&output)?;
 
-    let total_benchmark_count = benchmark_db.total_benchmark_count();
-    let filtered = benchmark_db.filtered_benchmark_count(&filter);
+    let total_benchmark_count = suite.total_benchmark_count();
+    let filtered = suite.filtered_benchmark_count(&filter);
     println!(
         "Executing {} benchmarks ({} filtered out)",
         filtered,
@@ -32,8 +32,8 @@ pub fn bench_runtime(
     );
 
     let mut benchmark_index = 0;
-    for binary in benchmark_db.suites {
-        for message in execute_runtime_benchmark(&binary.binary, &filter)? {
+    for binary in suite.groups {
+        for message in execute_runtime_benchmark_binary(&binary.binary, &filter)? {
             let message = message.map_err(|err| {
                 anyhow::anyhow!(
                     "Cannot parse BenchmarkMessage from benchmark {}: {err:?}",
@@ -59,10 +59,10 @@ pub fn bench_runtime(
     Ok(())
 }
 
-/// Starts executing a single runtime benchmark suite defined in a binary crate located in
-/// `runtime-benchmarks`. The binary is expected to use benchlib's `BenchmarkSuite` to execute
+/// Starts executing a single runtime benchmark group defined in a binary crate located in
+/// `runtime-benchmarks`. The binary is expected to use benchlib's `BenchmarkGroup` to execute
 /// a set of runtime benchmarks and print `BenchmarkMessage`s encoded as JSON, one per line.
-fn execute_runtime_benchmark(
+fn execute_runtime_benchmark_binary(
     binary: &Path,
     filter: &BenchmarkFilter,
 ) -> anyhow::Result<impl Iterator<Item = anyhow::Result<BenchmarkMessage>>> {
@@ -92,8 +92,11 @@ fn execute_runtime_benchmark(
     Ok(iterator)
 }
 
-/// Compiles all runtime benchmarks and returns the stdout output of Cargo.
-fn compile_runtime_benchmarks(toolchain: &LocalToolchain, dir: &Path) -> anyhow::Result<Vec<u8>> {
+/// Compiles all runtime benchmark binaries (groups) and returns the stdout output of Cargo.
+fn compile_runtime_benchmark_binaries(
+    toolchain: &LocalToolchain,
+    dir: &Path,
+) -> anyhow::Result<Vec<u8>> {
     let result = Command::new(&toolchain.cargo)
         .env("RUSTC", &toolchain.rustc)
         .arg("build")

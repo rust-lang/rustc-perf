@@ -5,13 +5,13 @@ use crate::measure::benchmark_function;
 use crate::process::raise_process_priority;
 use std::collections::HashMap;
 
-/// Create a new benchmark suite. Use the closure argument to define benchmarks.
-pub fn benchmark_suite<F: FnOnce(&mut BenchmarkSuite)>(define_func: F) {
+/// Create a new benchmark group. Use the closure argument to define benchmarks.
+pub fn benchmark_group<F: FnOnce(&mut BenchmarkGroup)>(define_func: F) {
     env_logger::init();
 
-    let mut suite = BenchmarkSuite::new();
-    define_func(&mut suite);
-    suite.run().expect("Benchmark suite has failed");
+    let mut group = BenchmarkGroup::new();
+    define_func(&mut group);
+    group.run().expect("Benchmark group execution has failed");
 }
 
 /// Type-erased function that executes a single benchmark.
@@ -22,11 +22,11 @@ struct BenchmarkWrapper {
 type BenchmarkMap = HashMap<&'static str, BenchmarkWrapper>;
 
 #[derive(Default)]
-pub struct BenchmarkSuite {
+pub struct BenchmarkGroup {
     benchmarks: BenchmarkMap,
 }
 
-impl BenchmarkSuite {
+impl BenchmarkGroup {
     pub fn new() -> Self {
         Self::default()
     }
@@ -39,7 +39,7 @@ impl BenchmarkSuite {
         constructor: F,
     ) {
         // We want to type-erase the target `func` by wrapping it in a Box.
-        let benchmark_func = Box::new(move || benchmark_function(name, constructor.clone()));
+        let benchmark_func = Box::new(move || benchmark_function(constructor.clone()));
         let benchmark_def = BenchmarkWrapper {
             func: benchmark_func,
         };
@@ -48,7 +48,7 @@ impl BenchmarkSuite {
         }
     }
 
-    /// Execute the benchmark suite. It will parse CLI arguments and decide what to do based on
+    /// Execute the benchmark group. It will parse CLI arguments and decide what to do based on
     /// them.
     pub fn run(self) -> anyhow::Result<()> {
         raise_process_priority();
@@ -100,19 +100,19 @@ fn run_benchmark(args: BenchmarkArgs, benchmarks: BenchmarkMap) -> anyhow::Resul
     Ok(())
 }
 
-/// Adds a single benchmark to the benchmark suite.
+/// Adds a single benchmark to the benchmark group.
 /// ```ignore
 /// use benchlib::define_benchmark;
 ///
-/// define_benchmark!(suite, my_bench, {
+/// define_benchmark!(group, my_bench, {
 ///     || do_something()
 /// });
 /// ```
 #[macro_export]
 macro_rules! define_benchmark {
-    ($suite:expr, $name:ident, $fun:expr) => {
+    ($group:expr, $name:ident, $fun:expr) => {
         let func = move || $fun;
-        $suite.register(stringify!($name), func);
+        $group.register(stringify!($name), func);
     };
 }
 

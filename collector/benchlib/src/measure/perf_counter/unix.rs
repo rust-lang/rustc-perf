@@ -16,7 +16,6 @@ struct Counters {
 /// The function is executed twice, once to gather wall-time measurement and the second time to
 /// gather perf. counters.
 pub fn benchmark_function<F: Fn() -> Bench + 'static, R, Bench: FnOnce() -> R + 'static>(
-    name: &'static str,
     benchmark_constructor: F,
 ) -> anyhow::Result<BenchmarkStats> {
     let mut group = create_group()?;
