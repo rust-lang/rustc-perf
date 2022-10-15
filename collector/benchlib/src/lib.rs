@@ -18,3 +18,6 @@ mod cli;
 pub mod comm;
 pub mod measure;
 pub mod process;
+
+pub use benchmark::black_box;
+pub use benchmark::run_benchmark_group;

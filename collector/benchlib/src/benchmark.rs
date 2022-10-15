@@ -30,10 +30,11 @@ impl BenchmarkGroup {
     }
 
     /// Registers a single benchmark.
+    /// `benchmark_name` uniquely identifies the benchmark.
     /// `constructor` should return a closure that will be benchmarked.
     pub fn register<F: Fn() -> Bench + Clone + 'static, R, Bench: FnOnce() -> R + 'static>(
         &mut self,
-        name: &'static str,
+        benchmark_name: &'static str,
         constructor: F,
     ) {
         // We want to type-erase the target `func` by wrapping it in a Box.
@@ -41,8 +42,12 @@ impl BenchmarkGroup {
         let benchmark_def = BenchmarkWrapper {
             func: benchmark_func,
         };
-        if self.benchmarks.insert(name, benchmark_def).is_some() {
-            panic!("Benchmark {} was registered twice", name);
+        if self
+            .benchmarks
+            .insert(benchmark_name, benchmark_def)
+            .is_some()
+        {
+            panic!("Benchmark {} was registered twice", benchmark_name);
         }
     }
 
@@ -102,19 +107,60 @@ impl BenchmarkGroup {
 }
 
 /// Adds a single benchmark to the benchmark group.
-/// ```ignore
-/// use benchlib::define_benchmark;
 ///
-/// define_benchmark!(group, my_bench, {
-///     || do_something()
-/// });
+/// The first argument should be the `BenchmarkGroup` into which will the benchmark be stored.
+/// The second argument should be the name of the benchmark (a string literal).
+/// The third argument should be an identifier of a function that will be benchmarked.
+///
+/// If you do not provide any other arguments, the benchmarked function should not receive any
+/// parameters (it can return something though).
+///
+/// If you provide a fourth argument, it should be an expression `init` that prepares
+/// input data for the benchmarked function. The function should then receive a single parameter of
+/// the same type as `init`.
+/// ```
+/// use benchlib::{benchmark_group, define_benchmark};
+///
+/// fn calc_no_param() -> u32 { 1 + 1 }
+///
+/// fn calc_param(a: u32) -> u32 {
+///     a + 1
+/// }
+///
+/// fn main() {
+///     benchmark_group(|group| {
+///         define_benchmark!(group, my_bench, calc_no_param);
+///         define_benchmark!(group, my_bench, calc_param, 1);
+///     });
+/// }
 /// ```
 #[macro_export]
 macro_rules! define_benchmark {
-    ($group:expr, $name:ident, $fun:expr) => {
-        let func = move || $fun;
-        $group.register(stringify!($name), func);
-    };
+    // Version without init
+    ($group:expr, $name:literal, $fun:ident) => {{
+        let constructor = || {
+            move || {
+                let ret = $fun();
+
+                // Try to avoid optimizing the return value out.
+                $crate::benchmark::black_box(ret);
+            }
+        };
+        $group.register($name, constructor);
+    }};
+    // Version with init
+    ($group:expr, $name:literal, $fun:ident, $init:expr) => {{
+        let constructor = || {
+            let init = $init;
+            move || {
+                let ret = $fun(init);
+
+                // Try to avoid optimizing the return value out.
+                $crate::benchmark::black_box(ret);
+            }
+        };
+        $group.register($name, constructor);
+    }};
 }
 
 pub use define_benchmark;
