@@ -500,7 +500,7 @@ impl Connection for SqliteConnection {
         }
     }
 
-    async fn get_benchmarks(&self) -> Vec<BenchmarkData> {
+    async fn get_compile_benchmarks(&self) -> Vec<BenchmarkData> {
         let conn = self.raw_ref();
         let mut query = conn
             .prepare_cached("select name, category from benchmark")

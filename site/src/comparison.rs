@@ -125,7 +125,7 @@ pub async fn handle_compare(
     let prev = comparison.prev(master_commits);
     let next = comparison.next(master_commits);
     let is_contiguous = comparison.is_contiguous(&*conn, master_commits).await;
-    let benchmark_map = conn.get_benchmarks().await;
+    let benchmark_map = conn.get_compile_benchmarks().await;
 
     let comparisons = comparison
         .comparisons

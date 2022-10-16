@@ -555,7 +555,7 @@ where
                 .collect(),
         }
     }
-    async fn get_benchmarks(&self) -> Vec<BenchmarkData> {
+    async fn get_compile_benchmarks(&self) -> Vec<BenchmarkData> {
         let rows = self
             .conn()
             .query(&self.statements().get_benchmarks, &[])

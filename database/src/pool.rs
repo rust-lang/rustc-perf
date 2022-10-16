@@ -15,7 +15,7 @@ pub trait Connection: Send + Sync {
     async fn transaction(&mut self) -> Box<dyn Transaction + '_>;
 
     async fn load_index(&mut self) -> Index;
-    async fn get_benchmarks(&self) -> Vec<BenchmarkData>;
+    async fn get_compile_benchmarks(&self) -> Vec<BenchmarkData>;
 
     async fn artifact_by_name(&self, artifact: &str) -> Option<ArtifactId>;
 

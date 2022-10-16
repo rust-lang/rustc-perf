@@ -26,7 +26,7 @@ async fn main() {
 
     let mut benchmarks = HashSet::new();
     let benchmark_data: HashMap<String, BenchmarkData> = sqlite_conn
-        .get_benchmarks()
+        .get_compile_benchmarks()
         .await
         .into_iter()
         .map(|benchmark| (benchmark.name.clone(), benchmark))
