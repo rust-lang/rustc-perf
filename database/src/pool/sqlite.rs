@@ -322,6 +322,26 @@ static MIGRATIONS: &[Migration] = &[
     ),
     Migration::new("alter table benchmark add column category text not null default ''"),
     Migration::new("alter table pull_request_build add column commit_date timestamp"),
+    Migration::new(
+        r#"
+        create table runtime_benchmark(
+            name text primary key not null
+        );
+        create table runtime_pstat_series(
+            id integer primary key not null,
+            benchmark text not null references runtime_benchmark(name) on delete cascade on update cascade,
+            metric text not null,
+            UNIQUE(benchmark, metric)
+        );
+        create table runtime_pstat(
+            series integer references runtime_pstat_series(id) on delete cascade on update cascade,
+            aid integer references artifact(id) on delete cascade on update cascade,
+            cid integer references collection(id) on delete cascade on update cascade,
+            value double not null,
+            PRIMARY KEY(series, aid, cid)
+        );
+        "#,
+    ),
 ];
 
 #[async_trait::async_trait]
