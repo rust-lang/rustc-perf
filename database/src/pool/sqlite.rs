@@ -734,6 +734,35 @@ impl Connection for SqliteConnection {
             )
             .unwrap();
     }
+    async fn record_runtime_statistic(
+        &self,
+        collection: CollectionId,
+        artifact: ArtifactIdNumber,
+        benchmark: &str,
+        metric: &str,
+        value: f64,
+    ) {
+        self.raw_ref()
+            .execute(
+                "insert or ignore into runtime_pstat_series (benchmark, metric) VALUES (?, ?)",
+                params![&benchmark, &metric,],
+            )
+            .unwrap();
+        let sid: i32 = self
+            .raw_ref()
+            .query_row(
+                "select id from runtime_pstat_series where benchmark = ? and metric = ?",
+                params![&benchmark, &metric,],
+                |r| r.get(0),
+            )
+            .unwrap();
+        self.raw_ref()
+            .execute(
+                "insert into runtime_pstat (series, aid, cid, value) VALUES (?, ?, ?, ?)",
+                params![&sid, &artifact.0, &collection.0, &value],
+            )
+            .unwrap();
+    }
 
     async fn record_rustc_crate(
         &self,

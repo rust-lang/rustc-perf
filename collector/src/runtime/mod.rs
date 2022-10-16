@@ -1,14 +1,16 @@
 mod benchmark;
 
 use crate::toolchain::LocalToolchain;
-use benchlib::comm::messages::{BenchmarkMessage, BenchmarkResult, BenchmarkStats};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use thousands::Separable;
 
+use benchlib::comm::messages::{BenchmarkMessage, BenchmarkResult, BenchmarkStats};
 pub use benchmark::BenchmarkFilter;
-use database::Pool;
+use database::{ArtifactId, ArtifactIdNumber, Connection, Pool};
+
+use crate::utils::git::get_rustc_perf_commit;
 
 /// Perform a series of runtime benchmarks using the provided `rustc` compiler.
 /// The runtime benchmarks are looked up in `benchmark_dir`, which is expected to be a path
@@ -16,6 +18,7 @@ use database::Pool;
 /// groups that leverage `benchlib`.
 pub async fn bench_runtime(
     db: Pool,
+    artifact_id: ArtifactId,
     toolchain: LocalToolchain,
     filter: BenchmarkFilter,
     benchmark_dir: PathBuf,
@@ -23,10 +26,12 @@ pub async fn bench_runtime(
 ) -> anyhow::Result<()> {
     let suite = benchmark::discover_benchmarks(&toolchain, &benchmark_dir)?;
 
-    let connection = db.connection().await;
+    let conn = db.connection().await;
     for benchmark in suite.benchmark_names() {
-        connection.record_runtime_benchmark(benchmark).await;
+        conn.record_runtime_benchmark(benchmark).await;
     }
+
+    let artifact_id = conn.artifact_id(&artifact_id).await;
 
     let total_benchmark_count = suite.total_benchmark_count();
     let filtered = suite.filtered_benchmark_count(&filter);
@@ -35,6 +40,8 @@ pub async fn bench_runtime(
         filtered,
         total_benchmark_count - filtered
     );
+
+    let rustc_perf_version = get_rustc_perf_commit();
 
     let mut benchmark_index = 0;
     for binary in suite.groups {
@@ -55,13 +62,38 @@ pub async fn bench_runtime(
                         benchmark_index,
                         filtered
                     );
+
                     print_stats(&result);
+                    record_stats(&conn, artifact_id, &rustc_perf_version, result).await;
                 }
             }
         }
     }
 
     Ok(())
+}
+
+/// Records the results (stats) of a benchmark into the database.
+async fn record_stats(
+    conn: &Box<dyn Connection>,
+    artifact_id: ArtifactIdNumber,
+    rustc_perf_version: &str,
+    result: BenchmarkResult,
+) {
+    for stat in result.stats {
+        let collection_id = conn.collection_id(rustc_perf_version).await;
+
+        if let Some(value) = stat.instructions {
+            conn.record_runtime_statistic(
+                collection_id,
+                artifact_id,
+                &result.name,
+                "instructions:u",
+                value as f64,
+            )
+            .await;
+        }
+    }
 }
 
 /// Starts executing a single runtime benchmark group defined in a binary crate located in
@@ -94,8 +126,7 @@ fn execute_runtime_benchmark_binary(
 
     let reader = BufReader::new(stdout);
     let iterator = reader.lines().map(|line| {
-        line.and_then(|line| Ok(serde_json::from_str::<BenchmarkMessage>(&line)?))
-            .map_err(|err| err.into())
+        Ok(line.and_then(|line| Ok(serde_json::from_str::<BenchmarkMessage>(&line)?))?)
     });
     Ok(iterator)
 }

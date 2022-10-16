@@ -47,6 +47,14 @@ pub trait Connection: Send + Sync {
         metric: &str,
         value: f64,
     );
+    async fn record_runtime_statistic(
+        &self,
+        collection: CollectionId,
+        artifact: ArtifactIdNumber,
+        benchmark: &str,
+        metric: &str,
+        value: f64,
+    );
     /// Records a self-profile artifact in S3.
     ///
     /// The upload is a separate step (which may fail or be canceled, but that's

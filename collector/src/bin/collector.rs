@@ -720,8 +720,10 @@ fn main_result() -> anyhow::Result<i32> {
                 "",
             )?;
             let pool = Pool::open(&db.db);
+
             let fut = bench_runtime(
                 pool,
+                ArtifactId::Tag(toolchain.id.clone()),
                 toolchain,
                 BenchmarkFilter::new(local.exclude, local.include),
                 runtime_benchmark_dir,

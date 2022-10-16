@@ -8,6 +8,7 @@
 //! having to think about how to deduplicate results.
 
 use crate::toolchain::Compiler;
+use crate::utils::git::get_rustc_perf_commit;
 use anyhow::Context;
 use database::ArtifactId;
 use std::env;
@@ -140,17 +141,7 @@ fn record(
         }
     }
 
-    let version = String::from_utf8(
-        Command::new("git")
-            .arg("rev-parse")
-            .arg("HEAD")
-            .output()
-            .context("git rev-parse HEAD")
-            .unwrap()
-            .stdout,
-    )
-    .context("utf8")
-    .unwrap();
+    let version = get_rustc_perf_commit();
     let collection = rt.block_on(conn.collection_id(&version));
 
     for (krate, timing) in timing_data {

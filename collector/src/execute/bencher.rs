@@ -7,7 +7,7 @@ use crate::execute::{
     SelfProfileFiles, Stats, Upload,
 };
 use crate::toolchain::Compiler;
-use anyhow::Context;
+use crate::utils::git::get_rustc_perf_commit;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use std::path::PathBuf;
@@ -81,17 +81,7 @@ impl<'a> BenchProcessor<'a> {
         profile: Profile,
         stats: (Stats, Option<SelfProfile>, Option<SelfProfileFiles>),
     ) {
-        let version = String::from_utf8(
-            Command::new("git")
-                .arg("rev-parse")
-                .arg("HEAD")
-                .output()
-                .context("git rev-parse HEAD")
-                .unwrap()
-                .stdout,
-        )
-        .context("utf8")
-        .unwrap();
+        let version = get_rustc_perf_commit();
 
         let collection = self.rt.block_on(self.conn.collection_id(&version));
         let profile = match profile {

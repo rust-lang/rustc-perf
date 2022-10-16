@@ -739,6 +739,16 @@ where
             .await
             .unwrap();
     }
+    async fn record_runtime_statistic(
+        &self,
+        _collection: CollectionId,
+        _artifact: ArtifactIdNumber,
+        _benchmark: &str,
+        _metric: &str,
+        _value: f64,
+    ) {
+        unimplemented!()
+    }
 
     async fn record_rustc_crate(
         &self,
