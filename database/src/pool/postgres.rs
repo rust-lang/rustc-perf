@@ -1,7 +1,7 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{
-    ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkData, CollectionId, Commit, CommitType, Date,
-    Index, Profile, QueuedCommit, Scenario,
+    ArtifactId, ArtifactIdNumber, Benchmark, CollectionId, Commit, CommitType, CompileBenchmark,
+    Date, Index, Profile, QueuedCommit, Scenario,
 };
 use anyhow::Context as _;
 use chrono::{DateTime, TimeZone, Utc};
@@ -555,14 +555,14 @@ where
                 .collect(),
         }
     }
-    async fn get_compile_benchmarks(&self) -> Vec<BenchmarkData> {
+    async fn get_compile_benchmarks(&self) -> Vec<CompileBenchmark> {
         let rows = self
             .conn()
             .query(&self.statements().get_benchmarks, &[])
             .await
             .unwrap();
         rows.into_iter()
-            .map(|r| BenchmarkData {
+            .map(|r| CompileBenchmark {
                 name: r.get(0),
                 category: r.get(1),
             })
@@ -883,7 +883,7 @@ where
             .unwrap();
     }
 
-    async fn record_benchmark(
+    async fn record_compile_benchmark(
         &self,
         benchmark: &str,
         supports_stable: Option<bool>,

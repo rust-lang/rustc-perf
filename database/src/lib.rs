@@ -748,7 +748,7 @@ impl fmt::Display for CollectionId {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct BenchmarkData {
+pub struct CompileBenchmark {
     pub name: String,
     pub category: String,
 }

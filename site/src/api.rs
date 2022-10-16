@@ -132,7 +132,7 @@ pub mod bootstrap {
 pub mod comparison {
     use crate::comparison::Metric;
     use collector::Bound;
-    use database::{BenchmarkData, Date};
+    use database::{CompileBenchmark, Date};
     use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
 
@@ -149,8 +149,8 @@ pub mod comparison {
         pub category: String,
     }
 
-    impl From<BenchmarkData> for BenchmarkInfo {
-        fn from(data: BenchmarkData) -> Self {
+    impl From<CompileBenchmark> for BenchmarkInfo {
+        fn from(data: CompileBenchmark) -> Self {
             Self {
                 name: data.name,
                 category: data.category.to_string(),

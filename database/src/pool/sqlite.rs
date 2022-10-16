@@ -1,6 +1,6 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{
-    ArtifactId, Benchmark, BenchmarkData, CollectionId, Commit, CommitType, Date, Profile,
+    ArtifactId, Benchmark, CollectionId, Commit, CommitType, CompileBenchmark, Date, Profile,
 };
 use crate::{ArtifactIdNumber, Index, QueryDatum, QueuedCommit};
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
@@ -500,14 +500,38 @@ impl Connection for SqliteConnection {
         }
     }
 
-    async fn get_compile_benchmarks(&self) -> Vec<BenchmarkData> {
+    async fn record_compile_benchmark(
+        &self,
+        benchmark: &str,
+        supports_stable: Option<bool>,
+        category: String,
+    ) {
+        if let Some(stable) = supports_stable {
+            self.raw_ref()
+                .execute(
+                    "insert into benchmark (name, stabilized, category) VALUES (?, ?, ?)
+                ON CONFLICT (name) do update set stabilized = excluded.stabilized, category = excluded.category",
+                    params![benchmark, stable, category],
+                )
+                .unwrap();
+        } else {
+            self.raw_ref()
+                .execute(
+                    "insert into benchmark (name, stabilized, category) VALUES (?, ?, ?)
+                ON CONFLICT (name) do update set category = excluded.category",
+                    params![benchmark, false, category],
+                )
+                .unwrap();
+        }
+    }
+    async fn get_compile_benchmarks(&self) -> Vec<CompileBenchmark> {
         let conn = self.raw_ref();
         let mut query = conn
             .prepare_cached("select name, category from benchmark")
             .unwrap();
         let rows = query
             .query_map([], |row| {
-                Ok(BenchmarkData {
+                Ok(CompileBenchmark {
                     name: row.get(0)?,
                     category: row.get::<_, String>(1)?,
                 })
@@ -820,30 +844,6 @@ impl Connection for SqliteConnection {
                 params![&sid, &artifact.0, &error],
             )
             .unwrap();
-    }
-    async fn record_benchmark(
-        &self,
-        benchmark: &str,
-        supports_stable: Option<bool>,
-        category: String,
-    ) {
-        if let Some(stable) = supports_stable {
-            self.raw_ref()
-                .execute(
-                    "insert into benchmark (name, stabilized, category) VALUES (?, ?, ?)
-                ON CONFLICT (name) do update set stabilized = excluded.stabilized, category = excluded.category",
-                    params![benchmark, stable, category],
-                )
-                .unwrap();
-        } else {
-            self.raw_ref()
-                .execute(
-                    "insert into benchmark (name, stabilized, category) VALUES (?, ?, ?)
-                ON CONFLICT (name) do update set category = excluded.category",
-                    params![benchmark, false, category],
-                )
-                .unwrap();
-        }
     }
     async fn collector_start(&self, aid: ArtifactIdNumber, steps: &[String]) {
         // Clean out any leftover unterminated steps.

@@ -118,7 +118,7 @@ fn bench(
             }
             let mut tx = rt.block_on(conn.transaction());
             let (supports_stable, category) = category.db_representation();
-            rt.block_on(tx.conn().record_benchmark(
+            rt.block_on(tx.conn().record_compile_benchmark(
                 &benchmark_name.0,
                 Some(supports_stable),
                 category,
