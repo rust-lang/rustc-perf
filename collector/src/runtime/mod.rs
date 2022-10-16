@@ -8,18 +8,25 @@ use std::process::{Command, Stdio};
 use thousands::Separable;
 
 pub use benchmark::BenchmarkFilter;
+use database::Pool;
 
 /// Perform a series of runtime benchmarks using the provided `rustc` compiler.
 /// The runtime benchmarks are looked up in `benchmark_dir`, which is expected to be a path
 /// to a Cargo crate. All binaries built by that crate will are expected to be runtime benchmark
 /// groups that leverage `benchlib`.
-pub fn bench_runtime(
+pub async fn bench_runtime(
+    db: Pool,
     toolchain: LocalToolchain,
     filter: BenchmarkFilter,
     benchmark_dir: PathBuf,
     iterations: u32,
 ) -> anyhow::Result<()> {
     let suite = benchmark::discover_benchmarks(&toolchain, &benchmark_dir)?;
+
+    let connection = db.connection().await;
+    for benchmark in suite.benchmark_names() {
+        connection.record_runtime_benchmark(benchmark).await;
+    }
 
     let total_benchmark_count = suite.total_benchmark_count();
     let filtered = suite.filtered_benchmark_count(&filter);

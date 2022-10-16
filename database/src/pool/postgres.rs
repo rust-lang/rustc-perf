@@ -922,6 +922,9 @@ where
                 .unwrap();
         }
     }
+    async fn record_runtime_benchmark(&self, _name: &str) {
+        unimplemented!()
+    }
 
     async fn collector_start(&self, aid: ArtifactIdNumber, steps: &[String]) {
         // Clean up -- we'll re-insert any missing things in the loop below.

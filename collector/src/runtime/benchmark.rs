@@ -45,7 +45,7 @@ impl BenchmarkSuite {
             .count() as u64
     }
 
-    fn benchmark_names(&self) -> impl Iterator<Item = &str> {
+    pub fn benchmark_names(&self) -> impl Iterator<Item = &str> {
         self.groups
             .iter()
             .flat_map(|suite| suite.benchmark_names.iter().map(|n| n.as_ref()))

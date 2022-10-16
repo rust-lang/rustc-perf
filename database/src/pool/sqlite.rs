@@ -543,6 +543,15 @@ impl Connection for SqliteConnection {
         }
         benchmarks
     }
+    async fn record_runtime_benchmark(&self, name: &str) {
+        self.raw_ref()
+            .execute(
+                "insert into runtime_benchmark (name) VALUES (?)
+                ON CONFLICT (name) do nothing",
+                params![name],
+            )
+            .unwrap();
+    }
 
     async fn get_pstats(
         &self,

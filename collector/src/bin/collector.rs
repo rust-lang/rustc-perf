@@ -571,6 +571,9 @@ enum Commands {
         /// How many iterations of each benchmark should be executed.
         #[clap(long, default_value = "5")]
         iterations: u32,
+
+        #[clap(flatten)]
+        db: DbOption,
     },
     /// Benchmarks a local rustc
     BenchLocal {
@@ -703,7 +706,11 @@ fn main_result() -> anyhow::Result<i32> {
     let target_triple = format!("{}-unknown-linux-gnu", std::env::consts::ARCH);
 
     match args.command {
-        Commands::BenchRuntimeLocal { local, iterations } => {
+        Commands::BenchRuntimeLocal {
+            local,
+            iterations,
+            db,
+        } => {
             let toolchain = get_local_toolchain(
                 &[Profile::Opt],
                 &local.rustc,
@@ -712,12 +719,15 @@ fn main_result() -> anyhow::Result<i32> {
                 local.id.as_deref(),
                 "",
             )?;
-            bench_runtime(
+            let pool = Pool::open(&db.db);
+            let fut = bench_runtime(
+                pool,
                 toolchain,
                 BenchmarkFilter::new(local.exclude, local.include),
                 runtime_benchmark_dir,
                 iterations,
-            )?;
+            );
+            rt.block_on(fut)?;
             Ok(0)
         }
         Commands::BenchLocal {
