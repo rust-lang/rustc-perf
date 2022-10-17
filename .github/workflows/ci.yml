@@ -109,11 +109,40 @@ jobs:
         run: cargo build -p collector
 
       - name: Check benchmarks
-        run: sh -x -c "ci/check-benchmarks.sh"
+        run: sh -x -c "ci/check-compile-benchmarks.sh"
         env:
           JEMALLOC_OVERRIDE: /usr/lib/x86_64-linux-gnu/libjemalloc.so
           BENCH_INCLUDE_EXCLUDE_OPTS: ${{ matrix.BENCH_INCLUDE_EXCLUDE_OPTS }}
           PROFILES: ${{ matrix.PROFILES }}
+          SHELL: "/bin/bash"
+
+  test_runtime_benchmarks:
+    name: Test runtime benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the source code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 1
+
+      - name: Install latest beta
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: beta
+          override: true
+
+      - name: Configure environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y linux-tools-common linux-tools-generic linux-tools-`uname -r`
+          echo -1 | sudo tee /proc/sys/kernel/perf_event_paranoid
+
+      - name: Build collector
+        run: cargo build -p collector
+
+      - name: Check runtime benchmarks
+        run: sh -x -c "ci/check-runtime-benchmarks.sh"
+        env:
           SHELL: "/bin/bash"
 
   test_profiling:
