@@ -8,7 +8,7 @@ pub enum BenchmarkMessage {
     Result(BenchmarkResult),
 }
 
-/// Stats gathered by several executions of a single benchmark.
+/// Stats gathered by several iterations of a single benchmark.
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct BenchmarkResult {
     pub name: String,

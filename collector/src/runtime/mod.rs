@@ -71,7 +71,7 @@ fn execute_runtime_benchmark_binary(
     command.arg(std::env::consts::ARCH);
     command.arg("-R");
     command.arg(binary);
-    command.arg("benchmark");
+    command.arg("run");
 
     if let Some(ref exclude) = filter.exclude {
         command.args(&["--exclude", exclude]);

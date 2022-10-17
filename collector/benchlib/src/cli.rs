@@ -3,9 +3,9 @@ use clap::{FromArgMatches, IntoApp};
 #[derive(clap::Parser, Debug)]
 pub enum Args {
     /// Benchmark all benchmarks in this benchmark group and print the results as JSON.
-    Benchmark(BenchmarkArgs),
+    Run(BenchmarkArgs),
     /// List benchmarks that are defined in the current group as a JSON array.
-    ListBenchmarks,
+    List,
 }
 
 #[derive(clap::Parser, Debug)]

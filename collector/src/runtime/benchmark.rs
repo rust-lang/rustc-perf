@@ -6,7 +6,8 @@ use core::result::Result::Ok;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// A binary that defines several benchmarks using the `benchmark_group` function from `benchlib`.
+/// A binary that defines several benchmarks using the `run_benchmark_group` function from
+/// `benchlib`.
 #[derive(Debug)]
 pub struct BenchmarkGroup {
     pub binary: PathBuf,
@@ -29,6 +30,7 @@ impl BenchmarkSuite {
     pub fn total_benchmark_count(&self) -> u64 {
         self.benchmark_names().count() as u64
     }
+
     pub fn filtered_benchmark_count(&self, filter: &BenchmarkFilter) -> u64 {
         self.benchmark_names()
             .filter(|benchmark| {
@@ -96,9 +98,9 @@ pub fn discover_benchmarks(cargo_stdout: &[u8]) -> anyhow::Result<BenchmarkSuite
     Ok(BenchmarkSuite { groups })
 }
 
-/// Uses the `list-benchmarks` command from `benchlib` to find the benchmark names from the given
+/// Uses a command from `benchlib` to find the benchmark names from the given
 /// benchmark binary.
 fn gather_benchmarks(binary: &Path) -> anyhow::Result<Vec<String>> {
-    let output = Command::new(binary).arg("list-benchmarks").output()?;
+    let output = Command::new(binary).arg("list").output()?;
     Ok(serde_json::from_slice(&output.stdout)?)
 }

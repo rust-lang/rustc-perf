@@ -1,9 +1,9 @@
 use benchlib;
-use benchlib::benchmark::benchmark_group;
+use benchlib::benchmark::run_benchmark_group;
 use benchlib::define_benchmark;
 
 fn main() {
-    benchmark_group(|group| {
+    run_benchmark_group(|group| {
         // Measures how long does it take to insert 10 thousand numbers into a `hashbrown` hashmap.
         define_benchmark!(group, hashmap_insert_10k, {
             let mut map = hashbrown::HashMap::with_capacity_and_hasher(

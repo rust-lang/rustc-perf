@@ -5,8 +5,8 @@ use crate::measure::benchmark_function;
 use crate::process::raise_process_priority;
 use std::collections::HashMap;
 
-/// Create a new benchmark group. Use the closure argument to define benchmarks.
-pub fn benchmark_group<F: FnOnce(&mut BenchmarkGroup)>(define_func: F) {
+/// Create a new benchmark group. Use the closure argument to define individual benchmarks.
+pub fn run_benchmark_group<F: FnOnce(&mut BenchmarkGroup)>(define_func: F) {
     env_logger::init();
 
     let mut group = BenchmarkGroup::new();
@@ -19,11 +19,9 @@ struct BenchmarkWrapper {
     func: Box<dyn Fn() -> anyhow::Result<BenchmarkStats>>,
 }
 
-type BenchmarkMap = HashMap<&'static str, BenchmarkWrapper>;
-
 #[derive(Default)]
 pub struct BenchmarkGroup {
-    benchmarks: BenchmarkMap,
+    benchmarks: HashMap<&'static str, BenchmarkWrapper>,
 }
 
 impl BenchmarkGroup {
@@ -32,7 +30,7 @@ impl BenchmarkGroup {
     }
 
     /// Registers a single benchmark.
-    /// `func` should return a closure that will be benchmarked.
+    /// `constructor` should return a closure that will be benchmarked.
     pub fn register<F: Fn() -> Bench + Clone + 'static, R, Bench: FnOnce() -> R + 'static>(
         &mut self,
         name: &'static str,
@@ -55,49 +53,52 @@ impl BenchmarkGroup {
 
         let args = parse_cli()?;
         match args {
-            Args::Benchmark(args) => {
-                run_benchmark(args, self.benchmarks)?;
+            Args::Run(args) => {
+                self.run_benchmarks(args)?;
             }
-            Args::ListBenchmarks => list_benchmarks(self.benchmarks)?,
+            Args::List => self.list_benchmarks()?,
         }
 
         Ok(())
     }
-}
 
-fn list_benchmarks(benchmarks: BenchmarkMap) -> anyhow::Result<()> {
-    let benchmark_list: Vec<&str> = benchmarks.into_keys().collect();
-    serde_json::to_writer(std::io::stdout(), &benchmark_list)?;
+    fn run_benchmarks(self, args: BenchmarkArgs) -> anyhow::Result<()> {
+        let mut items: Vec<(&'static str, BenchmarkWrapper)> = self
+            .benchmarks
+            .into_iter()
+            .filter(|(name, _)| {
+                passes_filter(name, args.exclude.as_deref(), args.include.as_deref())
+            })
+            .collect();
+        items.sort_unstable_by_key(|item| item.0);
 
-    Ok(())
-}
+        let mut stdout = std::io::stdout().lock();
 
-fn run_benchmark(args: BenchmarkArgs, benchmarks: BenchmarkMap) -> anyhow::Result<()> {
-    let mut items: Vec<(&'static str, BenchmarkWrapper)> = benchmarks
-        .into_iter()
-        .filter(|(name, _)| passes_filter(name, args.exclude.as_deref(), args.include.as_deref()))
-        .collect();
-    items.sort_unstable_by_key(|item| item.0);
-
-    let mut stdout = std::io::stdout().lock();
-
-    for (name, def) in items {
-        let mut stats: Vec<BenchmarkStats> = Vec::with_capacity(args.iterations as usize);
-        for i in 0..args.iterations {
-            let benchmark_stats = (def.func)()?;
-            log::info!("Benchmark (run {i}) `{name}` completed: {benchmark_stats:?}");
-            stats.push(benchmark_stats);
+        for (name, def) in items {
+            let mut stats: Vec<BenchmarkStats> = Vec::with_capacity(args.iterations as usize);
+            for i in 0..args.iterations {
+                let benchmark_stats = (def.func)()?;
+                log::info!("Benchmark (run {i}) `{name}` completed: {benchmark_stats:?}");
+                stats.push(benchmark_stats);
+            }
+            output_message(
+                &mut stdout,
+                BenchmarkMessage::Result(BenchmarkResult {
+                    name: name.to_string(),
+                    stats,
+                }),
+            )?;
         }
-        output_message(
-            &mut stdout,
-            BenchmarkMessage::Result(BenchmarkResult {
-                name: name.to_string(),
-                stats,
-            }),
-        )?;
+
+        Ok(())
     }
 
-    Ok(())
+    fn list_benchmarks(self) -> anyhow::Result<()> {
+        let benchmark_list: Vec<&str> = self.benchmarks.into_keys().collect();
+        serde_json::to_writer(std::io::stdout(), &benchmark_list)?;
+
+        Ok(())
+    }
 }
 
 /// Adds a single benchmark to the benchmark group.

@@ -1,13 +1,13 @@
 //! Calculates the N-body simulation.
 //! Code taken from https://github.com/prestontw/rust-nbody
 
-use benchlib::benchmark::benchmark_group;
+use benchlib::benchmark::run_benchmark_group;
 use benchlib::define_benchmark;
 
 mod nbody;
 
 fn main() {
-    benchmark_group(|group| {
+    run_benchmark_group(|group| {
         define_benchmark!(group, nbody_10k, {
             let mut nbody_10k = nbody::init(10000);
             || {
