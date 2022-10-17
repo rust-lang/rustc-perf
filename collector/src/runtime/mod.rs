@@ -1,7 +1,7 @@
 mod benchmark;
 
 use crate::benchmark::profile::Profile;
-use crate::toolchain::{get_local_toolchain, LocalToolchain};
+use crate::toolchain::get_local_toolchain;
 use benchlib::comm::messages::{BenchmarkMessage, BenchmarkResult, BenchmarkStats};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -20,8 +20,7 @@ pub fn bench_runtime(
     benchmark_dir: PathBuf,
 ) -> anyhow::Result<()> {
     let toolchain = get_local_toolchain(&[Profile::Opt], rustc, None, None, id, "")?;
-    let output = compile_runtime_benchmark_binaries(&toolchain, &benchmark_dir)?;
-    let suite = benchmark::discover_benchmarks(&output)?;
+    let suite = benchmark::discover_benchmarks(&toolchain, &benchmark_dir)?;
 
     let total_benchmark_count = suite.total_benchmark_count();
     let filtered = suite.filtered_benchmark_count(&filter);
@@ -90,32 +89,6 @@ fn execute_runtime_benchmark_binary(
             .map_err(|err| err.into())
     });
     Ok(iterator)
-}
-
-/// Compiles all runtime benchmark binaries (groups) and returns the stdout output of Cargo.
-fn compile_runtime_benchmark_binaries(
-    toolchain: &LocalToolchain,
-    dir: &Path,
-) -> anyhow::Result<Vec<u8>> {
-    let result = Command::new(&toolchain.cargo)
-        .env("RUSTC", &toolchain.rustc)
-        .arg("build")
-        .arg("--release")
-        .arg("--message-format")
-        .arg("json")
-        .current_dir(dir)
-        .output()?;
-
-    if !result.status.success() {
-        anyhow::bail!(
-            "Failed to compile runtime benchmarks\n{}\n{}",
-            String::from_utf8_lossy(&result.stdout),
-            String::from_utf8_lossy(&result.stderr)
-        );
-    } else {
-        log::info!("Successfully compiled runtime benchmarks");
-        return Ok(result.stdout);
-    }
 }
 
 fn calculate_mean<I: Iterator<Item = f64> + Clone>(iter: I) -> f64 {
