@@ -575,6 +575,10 @@ enum Commands {
         /// Include only benchmarks matching a prefix in this comma-separated list
         #[clap(long)]
         include: Option<String>,
+
+        /// How many iterations of each benchmark should be executed.
+        #[clap(long, default_value = "5")]
+        iterations: u32,
     },
     /// Benchmarks a local rustc
     BenchLocal {
@@ -706,12 +710,14 @@ fn main_result() -> anyhow::Result<i32> {
             id,
             exclude,
             include,
+            iterations,
         } => {
             bench_runtime(
                 &rustc,
                 id.as_deref(),
                 BenchmarkFilter::new(exclude, include),
                 runtime_benchmark_dir,
+                iterations,
             )?;
             Ok(0)
         }
