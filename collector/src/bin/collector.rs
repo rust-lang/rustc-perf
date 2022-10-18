@@ -496,16 +496,6 @@ struct LocalOptions {
     #[clap(long)]
     id: Option<String>,
 
-    /// Measure the build profiles in this comma-separated list
-    #[clap(
-        long = "profiles",
-        alias = "builds", // the old name, for backward compatibility
-        value_parser = ProfileArgParser,
-        // Don't run rustdoc by default
-        default_value = "Check,Debug,Opt",
-    )]
-    profiles: ProfileArg,
-
     /// The path to the local Cargo to use
     #[clap(long, parse(from_os_str))]
     cargo: Option<PathBuf>,
@@ -517,10 +507,19 @@ struct LocalOptions {
     /// Include only benchmarks matching a prefix in this comma-separated list
     #[clap(long)]
     include: Option<String>,
+}
 
-    /// The path to the local rustdoc to measure
-    #[clap(long, parse(from_os_str))]
-    rustdoc: Option<PathBuf>,
+#[derive(Debug, clap::Args)]
+struct CompileTimeOptions {
+    /// Measure the build profiles in this comma-separated list
+    #[clap(
+        long = "profiles",
+        alias = "builds", // the old name, for backward compatibility
+        value_parser = ProfileArgParser,
+        // Don't run rustdoc by default
+        default_value = "Check,Debug,Opt",
+    )]
+    profiles: ProfileArg,
 
     /// Measure the scenarios in this comma-separated list
     #[clap(
@@ -530,6 +529,10 @@ struct LocalOptions {
         default_value = "All"
     )]
     scenarios: ScenarioArg,
+
+    /// The path to the local rustdoc to measure
+    #[clap(long, parse(from_os_str))]
+    rustdoc: Option<PathBuf>,
 }
 
 #[derive(Debug, clap::Args)]
@@ -586,6 +589,9 @@ enum Commands {
         local: LocalOptions,
 
         #[clap(flatten)]
+        opts: CompileTimeOptions,
+
+        #[clap(flatten)]
         db: DbOption,
 
         #[clap(flatten)]
@@ -631,6 +637,9 @@ enum Commands {
 
         #[clap(flatten)]
         local: LocalOptions,
+
+        #[clap(flatten)]
+        opts: CompileTimeOptions,
 
         /// Output directory
         #[clap(long = "out-dir", default_value = "results/")]
@@ -723,20 +732,21 @@ fn main_result() -> anyhow::Result<i32> {
         }
         Commands::BenchLocal {
             local,
+            opts,
             db,
             bench_rustc,
             iterations,
             self_profile,
         } => {
-            let profiles = &local.profiles.0;
-            let scenarios = &local.scenarios.0;
+            let profiles = &opts.profiles.0;
+            let scenarios = &opts.scenarios.0;
 
             let pool = database::Pool::open(&db.db);
 
             let toolchain = get_local_toolchain(
                 &profiles,
                 &local.rustc,
-                local.rustdoc.as_deref(),
+                opts.rustdoc.as_deref(),
                 local.cargo.as_deref(),
                 local.id.as_deref(),
                 "",
@@ -852,6 +862,7 @@ fn main_result() -> anyhow::Result<i32> {
         Commands::ProfileLocal {
             profiler,
             local,
+            opts,
             out_dir,
             rustc2,
             jobs,
@@ -864,8 +875,8 @@ fn main_result() -> anyhow::Result<i32> {
                 );
             }
 
-            let profiles = &local.profiles.0;
-            let scenarios = &local.scenarios.0;
+            let profiles = &opts.profiles.0;
+            let scenarios = &opts.scenarios.0;
 
             let mut benchmarks = get_compile_benchmarks(
                 &compile_benchmark_dir,
@@ -887,7 +898,7 @@ fn main_result() -> anyhow::Result<i32> {
                     let toolchain = get_local_toolchain(
                         &profiles,
                         &rustc,
-                        local.rustdoc.as_deref(),
+                        opts.rustdoc.as_deref(),
                         local.cargo.as_deref(),
                         local.id.as_deref(),
                         suffix,
