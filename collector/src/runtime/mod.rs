@@ -102,24 +102,36 @@ fn calculate_mean<I: Iterator<Item = f64> + Clone>(iter: I) -> f64 {
 }
 
 fn print_stats(result: &BenchmarkResult) {
-    fn print_metric<F: Fn(&BenchmarkStats) -> u64>(result: &BenchmarkResult, name: &str, f: F) {
-        let mean = calculate_mean(result.stats.iter().map(&f).map(|v| v as f64));
-        let stddev = calculate_mean(
-            result
-                .stats
-                .iter()
-                .map(&f)
-                .map(|v| (v as f64 - mean).powf(2.0)),
-        )
-        .sqrt();
-
+    fn print_metric<F: Fn(&BenchmarkStats) -> Option<u64>>(
+        result: &BenchmarkResult,
+        name: &str,
+        f: F,
+    ) {
         let name = format!("[{name}]");
-        println!("{name:>20}: {:>16} (+/- {:>8})", mean as u64, stddev as u64);
+        let has_data = result.stats.iter().map(&f).all(|v| v.is_some());
+        if has_data {
+            let f = |stats: &BenchmarkStats| -> u64 { f(stats).unwrap() };
+            let mean = calculate_mean(result.stats.iter().map(&f).map(|v| v as f64));
+            let stddev = calculate_mean(
+                result
+                    .stats
+                    .iter()
+                    .map(&f)
+                    .map(|v| (v as f64 - mean).powf(2.0)),
+            )
+            .sqrt();
+
+            println!("{name:>20}: {:>16} (+/- {:>8})", mean as u64, stddev as u64);
+        } else {
+            println!("{name:>20}: Not available");
+        }
     }
 
     print_metric(result, "Instructions", |m| m.instructions);
     print_metric(result, "Cycles", |m| m.cycles);
-    print_metric(result, "Wall time [us]", |m| m.wall_time.as_micros() as u64);
+    print_metric(result, "Wall time [us]", |m| {
+        Some(m.wall_time.as_micros() as u64)
+    });
     print_metric(result, "Branch misses", |m| m.branch_misses);
     print_metric(result, "Cache misses", |m| m.cache_misses);
 }
