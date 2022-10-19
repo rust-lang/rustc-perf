@@ -19,6 +19,34 @@
     </div>
     <br />
     <div id="app">
+        <h2>Comparing <span id="stat-header">{{stat}}</span> between <span id="before">{{before}}</span> and
+            <span id="after">{{after}}</span>
+        </h2>
+        <div v-if="data" style="margin: 12px 0;">
+            <div style="display: flex;justify-content: center;">
+                <div class="description-box">
+                    <div v-if="data.prev" class="description-arrow"><a v-bind:href="prevLink">&larr;</a></div>
+                    <div style="padding: 10px;">
+                        <span><a v-if="data.a.pr" v-bind:href="prLink(data.a.pr)">#{{data.a.pr}}</a>&nbsp;</span>
+                        <span v-if="data.a.date">{{formatDate(data.a.date)}}</span>
+                        (<a v-bind:href="commitLink(data.a.commit)">{{short(data.a)}}</a>)
+                    </div>
+                </div>
+                <div v-if="notContinuous" id="not-continuous" title="WARNING! The commits are not continuous.">...
+                </div>
+                <div class="description-box">
+                    <div style="padding: 10px;">
+                        <span><a v-if="data.b.pr" v-bind:href="prLink(data.b.pr)">#{{data.b.pr}}</a>&nbsp;</span>
+                        <span v-if="data.b.date">{{formatDate(data.b.date)}}</span>
+                        (<a v-bind:href="commitLink(data.b.commit)">{{short(data.b)}}</a>)
+                    </div>
+                    <div v-if="data.next" class="description-arrow"><a v-bind:href="nextLink">&rarr;</a></div>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: center;">
+                <a v-bind:href="compareLink">🔎 compare commits</a>
+            </div>
+        </div>
         <fieldset id="settings">
             <legend id="search-toggle" class="section-heading">Do another comparison<span
                 class="toggle-indicator" id="search-toggle-indicator"></span></legend>
@@ -55,34 +83,6 @@
                 ['Binary size', 'size:linked_artifact', 'Size of the generated binary artifact']
             ]" :class="{ active: stat === metric[1] }" :title="metric[2]">
                 <a :href="createUrlForMetric(metric[1])">{{ metric[0] }}</a>
-            </div>
-        </div>
-        <h2>Comparing <span id="stat-header">{{stat}}</span> between <span id="before">{{before}}</span> and
-            <span id="after">{{after}}</span>
-        </h2>
-        <div v-if="data" style="margin: 12px 0;">
-            <div style="display: flex;justify-content: center;">
-                <div class="description-box">
-                    <div v-if="data.prev" class="description-arrow"><a v-bind:href="prevLink">&larr;</a></div>
-                    <div style="padding: 10px;">
-                        <span><a v-if="data.a.pr" v-bind:href="prLink(data.a.pr)">#{{data.a.pr}}</a>&nbsp;</span>
-                        <span v-if="data.a.date">{{formatDate(data.a.date)}}</span>
-                        (<a v-bind:href="commitLink(data.a.commit)">{{short(data.a)}}</a>)
-                    </div>
-                </div>
-                <div v-if="notContinuous" id="not-continuous" title="WARNING! The commits are not continuous.">...
-                </div>
-                <div class="description-box">
-                    <div style="padding: 10px;">
-                        <span><a v-if="data.b.pr" v-bind:href="prLink(data.b.pr)">#{{data.b.pr}}</a>&nbsp;</span>
-                        <span v-if="data.b.date">{{formatDate(data.b.date)}}</span>
-                        (<a v-bind:href="commitLink(data.b.commit)">{{short(data.b)}}</a>)
-                    </div>
-                    <div v-if="data.next" class="description-arrow"><a v-bind:href="nextLink">&rarr;</a></div>
-                </div>
-            </div>
-            <div style="display: flex; justify-content: center;">
-                <a v-bind:href="compareLink">🔎 compare commits</a>
             </div>
         </div>
         <fieldset id="filters" class="collapsible-section">
