@@ -119,12 +119,17 @@ macro_rules! define_benchmark {
 
 pub use define_benchmark;
 
-/// Tests if the name of the benchmark passes through the include and exclude filter flags.
+/// Tests if the name of the benchmark passes through the include and exclude filters.
+/// Both filters can contain multiple comma-separated prefixes.
 pub fn passes_filter(name: &str, exclude: Option<&str>, include: Option<&str>) -> bool {
     match (exclude, include) {
-        (Some(exclude), Some(include)) => name.starts_with(include) && !name.starts_with(exclude),
-        (None, Some(include)) => name.starts_with(include),
-        (Some(exclude), None) => !name.starts_with(&exclude),
+        (Some(exclude), Some(include)) => {
+            let included = include.split(",").any(|filter| name.starts_with(filter));
+            let excluded = exclude.split(",").any(|filter| name.starts_with(filter));
+            included && !excluded
+        }
+        (None, Some(include)) => include.split(",").any(|filter| name.starts_with(filter)),
+        (Some(exclude), None) => !exclude.split(",").any(|filter| name.starts_with(filter)),
         (None, None) => true,
     }
 }
@@ -135,5 +140,43 @@ pub fn black_box<T>(dummy: T) -> T {
         let ret = std::ptr::read_volatile(&dummy);
         std::mem::forget(dummy);
         ret
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::benchmark::passes_filter;
+
+    #[test]
+    fn test_passes_filter_no_filter() {
+        assert!(passes_filter("foo", None, None));
+    }
+
+    #[test]
+    fn test_passes_filter_include() {
+        assert!(!passes_filter("foo", None, Some("bar")));
+        assert!(!passes_filter("foo", None, Some("foobar")));
+
+        assert!(passes_filter("foo", None, Some("f")));
+        assert!(passes_filter("foo", None, Some("foo")));
+        assert!(passes_filter("foo", None, Some("bar,baz,foo")));
+    }
+
+    #[test]
+    fn test_passes_filter_exclude() {
+        assert!(passes_filter("foo", Some("bar"), None));
+        assert!(passes_filter("foo", Some("foobar"), None));
+
+        assert!(!passes_filter("foo", Some("f"), None));
+        assert!(!passes_filter("foo", Some("foo"), None));
+        assert!(!passes_filter("foo", Some("bar,baz,foo"), None));
+    }
+
+    #[test]
+    fn test_passes_filter_include_exclude() {
+        assert!(!passes_filter("foo", Some("bar"), Some("baz")));
+        assert!(passes_filter("foo", Some("bar"), Some("foo")));
+        assert!(!passes_filter("foo", Some("foo"), Some("bar")));
+        assert!(!passes_filter("foo", Some("foo"), Some("foo")));
     }
 }
