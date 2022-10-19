@@ -1,7 +1,6 @@
 mod benchmark;
 
-use crate::benchmark::profile::Profile;
-use crate::toolchain::get_local_toolchain;
+use crate::toolchain::LocalToolchain;
 use benchlib::comm::messages::{BenchmarkMessage, BenchmarkResult, BenchmarkStats};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -14,13 +13,11 @@ pub use benchmark::BenchmarkFilter;
 /// to a Cargo crate. All binaries built by that crate will are expected to be runtime benchmark
 /// groups that leverage `benchlib`.
 pub fn bench_runtime(
-    rustc: &str,
-    id: Option<&str>,
+    toolchain: LocalToolchain,
     filter: BenchmarkFilter,
     benchmark_dir: PathBuf,
     iterations: u32,
 ) -> anyhow::Result<()> {
-    let toolchain = get_local_toolchain(&[Profile::Opt], rustc, None, None, id, "")?;
     let suite = benchmark::discover_benchmarks(&toolchain, &benchmark_dir)?;
 
     let total_benchmark_count = suite.total_benchmark_count();

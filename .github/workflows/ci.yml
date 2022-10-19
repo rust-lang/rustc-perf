@@ -108,7 +108,7 @@ jobs:
       - name: Build collector
         run: cargo build -p collector
 
-      - name: Check benchmarks
+      - name: Check compile benchmarks
         run: sh -x -c "ci/check-compile-benchmarks.sh"
         env:
           JEMALLOC_OVERRIDE: /usr/lib/x86_64-linux-gnu/libjemalloc.so
@@ -195,7 +195,7 @@ jobs:
       - name: Build collector
         run: cargo build -p collector
 
-      - name: Check benchmarks
+      - name: Check profiling
         run: sh -x -c "ci/check-profiling.sh"
 
   database-check:

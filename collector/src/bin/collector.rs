@@ -704,9 +704,16 @@ fn main_result() -> anyhow::Result<i32> {
 
     match args.command {
         Commands::BenchRuntimeLocal { local, iterations } => {
-            bench_runtime(
+            let toolchain = get_local_toolchain(
+                &[Profile::Opt],
                 &local.rustc,
+                None,
+                local.cargo.as_deref(),
                 local.id.as_deref(),
+                "",
+            )?;
+            bench_runtime(
+                toolchain,
                 BenchmarkFilter::new(local.exclude, local.include),
                 runtime_benchmark_dir,
                 iterations,
