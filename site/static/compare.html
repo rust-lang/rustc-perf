@@ -50,7 +50,8 @@
             <div v-for="metric in [
                 ['Instructions', 'instructions:u', 'Number of executed instructions'],
                 ['Cycles', 'cycles:u', 'Number of executed cycles'],
-                ['Max RSS', 'max-rss', 'Highest amount of total allocated memory during the course of the compilation'],
+                ['Wall time', 'wall-time', 'Wall time'],
+                ['Max RSS', 'max-rss', 'Peak memory usage (resident set size)'],
                 ['Binary size', 'size:linked_artifact', 'Size of the generated binary artifact']
             ]" :class="{ active: stat === metric[1] }" :title="metric[2]">
                 <a :href="createUrlForMetric(metric[1])">{{ metric[0] }}</a>
