@@ -105,24 +105,6 @@ impl BenchmarkGroup {
     }
 }
 
-/// Adds a single benchmark to the benchmark group.
-/// ```ignore
-/// use benchlib::define_benchmark;
-///
-/// define_benchmark!(group, my_bench, {
-///     || do_something()
-/// });
-/// ```
-#[macro_export]
-macro_rules! define_benchmark {
-    ($group:expr, $name:ident, $fun:expr) => {
-        let func = move || $fun;
-        $group.register_benchmark(stringify!($name), func);
-    };
-}
-
-pub use define_benchmark;
-
 /// Tests if the name of the benchmark passes through the include and exclude filters.
 /// Both filters can contain multiple comma-separated prefixes.
 pub fn passes_filter(name: &str, exclude: Option<&str>, include: Option<&str>) -> bool {

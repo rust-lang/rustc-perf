@@ -1,9 +1,6 @@
-use std::io::{BufRead, BufReader, Write};
-
-use snap::{read::FrameDecoder, write::FrameEncoder};
-
 use benchlib::benchmark::{black_box, run_benchmark_group};
-use benchlib::define_benchmark;
+use snap::{read::FrameDecoder, write::FrameEncoder};
+use std::io::{BufRead, BufReader, Write};
 
 const BYTES: usize = 64 * 1024 * 1024;
 
@@ -12,7 +9,7 @@ fn main() {
     // The pattern we want is a BufReader which wraps a Read impl where one Read::read call will
     // never fill the whole BufReader buffer.
     run_benchmark_group(|group| {
-        define_benchmark!(group, bufreader_snappy, {
+        group.register_benchmark("bufreader_snappy", || {
             let data = vec![0u8; BYTES];
             move || {
                 let mut compressed = Vec::new();
