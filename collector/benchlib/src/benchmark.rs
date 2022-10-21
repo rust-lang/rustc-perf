@@ -15,13 +15,11 @@ pub fn run_benchmark_group<F: FnOnce(&mut BenchmarkGroup)>(define_func: F) {
 }
 
 /// Type-erased function that executes a single benchmark.
-struct BenchmarkWrapper {
-    func: Box<dyn Fn() -> anyhow::Result<BenchmarkStats>>,
-}
+type BenchmarkFn = Box<dyn Fn() -> anyhow::Result<BenchmarkStats>>;
 
 #[derive(Default)]
 pub struct BenchmarkGroup {
-    benchmarks: HashMap<&'static str, BenchmarkWrapper>,
+    benchmarks: HashMap<&'static str, BenchmarkFn>,
 }
 
 impl BenchmarkGroup {
@@ -37,11 +35,8 @@ impl BenchmarkGroup {
         constructor: F,
     ) {
         // We want to type-erase the target `func` by wrapping it in a Box.
-        let benchmark_func = Box::new(move || benchmark_function(constructor.clone()));
-        let benchmark_def = BenchmarkWrapper {
-            func: benchmark_func,
-        };
-        if self.benchmarks.insert(name, benchmark_def).is_some() {
+        let benchmark_fn = Box::new(move || benchmark_function(constructor.clone()));
+        if self.benchmarks.insert(name, benchmark_fn).is_some() {
             panic!("Benchmark {} was registered twice", name);
         }
     }
@@ -63,7 +58,7 @@ impl BenchmarkGroup {
     }
 
     fn run_benchmarks(self, args: BenchmarkArgs) -> anyhow::Result<()> {
-        let mut items: Vec<(&'static str, BenchmarkWrapper)> = self
+        let mut items: Vec<(&'static str, BenchmarkFn)> = self
             .benchmarks
             .into_iter()
             .filter(|(name, _)| {
@@ -74,10 +69,10 @@ impl BenchmarkGroup {
 
         let mut stdout = std::io::stdout().lock();
 
-        for (name, def) in items {
+        for (name, benchmark_fn) in items {
             let mut stats: Vec<BenchmarkStats> = Vec::with_capacity(args.iterations as usize);
             for i in 0..args.iterations {
-                let benchmark_stats = (def.func)()?;
+                let benchmark_stats = benchmark_fn()?;
                 log::info!("Benchmark (run {i}) `{name}` completed: {benchmark_stats:?}");
                 stats.push(benchmark_stats);
             }
