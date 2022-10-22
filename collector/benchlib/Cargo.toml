@@ -15,5 +15,5 @@ env_logger = "0.9.0"
 clap = { version = "3.2", features = ["derive"] }
 libc = "0.2"
 
-[target.'cfg(unix)'.dependencies]
+[target.'cfg(target_os = "linux")'.dependencies]
 perf-event = "0.4.7"
