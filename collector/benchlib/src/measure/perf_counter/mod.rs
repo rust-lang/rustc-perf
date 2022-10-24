@@ -1,11 +1,11 @@
-#[cfg(unix)]
-mod unix;
+#[cfg(target_os = "linux")]
+mod linux;
 
-#[cfg(windows)]
-mod windows;
+#[cfg(not(target_os = "linux"))]
+mod non_linux;
 
-#[cfg(unix)]
-pub use unix::benchmark_function;
+#[cfg(target_os = "linux")]
+pub use linux::benchmark_function;
 
-#[cfg(windows)]
-pub use windows::benchmark_function;
+#[cfg(not(target_os = "linux"))]
+pub use non_linux::benchmark_function;
