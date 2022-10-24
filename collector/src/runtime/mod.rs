@@ -5,6 +5,7 @@ use benchlib::comm::messages::{BenchmarkMessage, BenchmarkResult, BenchmarkStats
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use thousands::Separable;
 
 pub use benchmark::BenchmarkFilter;
 
@@ -118,7 +119,11 @@ fn print_stats(result: &BenchmarkResult) {
             )
             .sqrt();
 
-            println!("{name:>20}: {:>16} (+/- {:>8})", mean as u64, stddev as u64);
+            println!(
+                "{name:>20}: {:>16} (+/- {:>8})",
+                (mean as u64).separate_with_commas(),
+                (stddev as u64).separate_with_commas()
+            );
         } else {
             println!("{name:>20}: Not available");
         }
