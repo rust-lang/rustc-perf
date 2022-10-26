@@ -42,11 +42,12 @@ The machine that actually executes the benchmarks in CI has the following config
 - OS: Ubuntu `18.04`
 
 ## Configuration
-### Turboboost
-Enabled.
+### HyperThreading & Turboboost
+As of November 2022, both are disabled.
 
-### HyperThreading
-Enabled.
+Prior to October 2022, both were enabled. During October 2022 some
+experimentation was done which found that disabling both reduced variance
+signficantly.
 
 ### CPU scaling
 Scaling governor set to `performance`.
