@@ -26,6 +26,10 @@ They mostly consist of real-world crates.
   ensure a lot of invariants. Stresses anything related to resolving
   trait bounds, by having a lot of trait impls for a large number of different
   types.
+- **diesel-2.0.2**: A type safe SQL query builder. Utilizes the type system to
+  ensure a lot of invariants. Stresses anything related to resolving
+  trait bounds, by having a lot of trait impls for a large number of different
+  types.
 - **helloworld**: A trivial program. Gives a lower bound on compile time.
 - **html5ever-0.26.0**: An HTML parser. Stresses macro parsing code.
 - **hyper-0.14.18**: A fairly large crate. Utilizes async/await, and used by

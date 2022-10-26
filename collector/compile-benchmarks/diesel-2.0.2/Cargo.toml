@@ -224,3 +224,5 @@ sqlite = [
 unstable = ["diesel_derives/nightly"]
 with-deprecated = ["diesel_derives/with-deprecated"]
 without-deprecated = ["diesel_derives/without-deprecated"]
+
+[workspace]

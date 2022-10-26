@@ -1,0 +1,12 @@
+diff --git a/src/type_impls/tuples.rs b/src/type_impls/tuples.rs
+index ade44953..03336402 100644
+--- a/src/type_impls/tuples.rs
++++ b/src/type_impls/tuples.rs
+@@ -493,6 +493,7 @@ macro_rules! impl_sql_type {
+         impl<$($ST,)*> SqlType for ($($ST,)*)
+         where
+             $($ST: SqlType,)*
++
+             $($bounds)*
+             $T1::IsNull: OneIsNullable<$($is_null)*>,
+         {
