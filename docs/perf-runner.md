@@ -46,8 +46,8 @@ The machine that actually executes the benchmarks in CI has the following config
 As of November 2022, both are disabled.
 
 Prior to October 2022, both were enabled. During October 2022 some
-experimentation was done which found that disabling both reduced variance
-signficantly.
+[experimentation](https://github.com/rust-lang/rustc-perf/issues/1450) was done
+which found that disabling both reduced variance signficantly.
 
 ### CPU scaling
 Scaling governor set to `performance`.
