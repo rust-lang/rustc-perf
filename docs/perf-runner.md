@@ -47,7 +47,7 @@ As of November 2022, both are disabled.
 
 Prior to October 2022, both were enabled. During October 2022 some
 [experimentation](https://github.com/rust-lang/rustc-perf/issues/1450) was done
-which found that disabling both reduced variance signficantly.
+which found that disabling both reduced variance significantly.
 
 ### CPU scaling
 Scaling governor set to `performance`.
