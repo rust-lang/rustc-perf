@@ -5,23 +5,25 @@ use crate::measure::benchmark_function;
 use crate::process::raise_process_priority;
 use std::collections::HashMap;
 
-/// Create a new benchmark group. Use the closure argument to define individual benchmarks.
-pub fn run_benchmark_group<F: FnOnce(&mut BenchmarkGroup)>(define_func: F) {
+/// Create and run a new benchmark group. Use the closure argument to register
+/// the individual benchmarks.
+pub fn run_benchmark_group<F>(register: F)
+where
+    F: FnOnce(&mut BenchmarkGroup),
+{
     env_logger::init();
 
     let mut group = BenchmarkGroup::new();
-    define_func(&mut group);
+    register(&mut group);
     group.run().expect("Benchmark group execution has failed");
 }
 
 /// Type-erased function that executes a single benchmark.
-struct BenchmarkWrapper {
-    func: Box<dyn Fn() -> anyhow::Result<BenchmarkStats>>,
-}
+type BenchmarkFn = Box<dyn Fn() -> anyhow::Result<BenchmarkStats>>;
 
 #[derive(Default)]
 pub struct BenchmarkGroup {
-    benchmarks: HashMap<&'static str, BenchmarkWrapper>,
+    benchmarks: HashMap<&'static str, BenchmarkFn>,
 }
 
 impl BenchmarkGroup {
@@ -30,19 +32,21 @@ impl BenchmarkGroup {
     }
 
     /// Registers a single benchmark.
-    /// `constructor` should return a closure that will be benchmarked.
-    pub fn register<F: Fn() -> Bench + Clone + 'static, R, Bench: FnOnce() -> R + 'static>(
-        &mut self,
-        name: &'static str,
-        constructor: F,
-    ) {
+    ///
+    /// `constructor` returns a closure that will be benchmarked. This means
+    /// `constructor` can do initialization steps outside of the code that is
+    /// measured. `constructor` may be called multiple times (e.g. once for a
+    /// run with performance counters and once for a run without), but the
+    /// closure it produces each time will only be called once.
+    pub fn register_benchmark<Ctor, Bench, R>(&mut self, name: &'static str, constructor: Ctor)
+    where
+        Ctor: Fn() -> Bench + Clone + 'static,
+        Bench: FnOnce() -> R + 'static,
+    {
         // We want to type-erase the target `func` by wrapping it in a Box.
-        let benchmark_func = Box::new(move || benchmark_function(constructor.clone()));
-        let benchmark_def = BenchmarkWrapper {
-            func: benchmark_func,
-        };
-        if self.benchmarks.insert(name, benchmark_def).is_some() {
-            panic!("Benchmark {} was registered twice", name);
+        let benchmark_fn = Box::new(move || benchmark_function(constructor.clone()));
+        if self.benchmarks.insert(name, benchmark_fn).is_some() {
+            panic!("Benchmark '{}' was registered twice", name);
         }
     }
 
@@ -63,7 +67,7 @@ impl BenchmarkGroup {
     }
 
     fn run_benchmarks(self, args: BenchmarkArgs) -> anyhow::Result<()> {
-        let mut items: Vec<(&'static str, BenchmarkWrapper)> = self
+        let mut items: Vec<(&'static str, BenchmarkFn)> = self
             .benchmarks
             .into_iter()
             .filter(|(name, _)| {
@@ -74,10 +78,10 @@ impl BenchmarkGroup {
 
         let mut stdout = std::io::stdout().lock();
 
-        for (name, def) in items {
+        for (name, benchmark_fn) in items {
             let mut stats: Vec<BenchmarkStats> = Vec::with_capacity(args.iterations as usize);
             for i in 0..args.iterations {
-                let benchmark_stats = (def.func)()?;
+                let benchmark_stats = benchmark_fn()?;
                 log::info!("Benchmark (run {i}) `{name}` completed: {benchmark_stats:?}");
                 stats.push(benchmark_stats);
             }
@@ -100,24 +104,6 @@ impl BenchmarkGroup {
         Ok(())
     }
 }
-
-/// Adds a single benchmark to the benchmark group.
-/// ```ignore
-/// use benchlib::define_benchmark;
-///
-/// define_benchmark!(group, my_bench, {
-///     || do_something()
-/// });
-/// ```
-#[macro_export]
-macro_rules! define_benchmark {
-    ($group:expr, $name:ident, $fun:expr) => {
-        let func = move || $fun;
-        $group.register(stringify!($name), func);
-    };
-}
-
-pub use define_benchmark;
 
 /// Tests if the name of the benchmark passes through the include and exclude filters.
 /// Both filters can contain multiple comma-separated prefixes.
