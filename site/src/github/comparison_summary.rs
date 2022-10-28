@@ -1,6 +1,6 @@
 use crate::comparison::{
-    deserves_attention_icount, write_summary_table, write_summary_table_footer, ArtifactComparison,
-    ArtifactComparisonSummary, Direction, Metric,
+    deserves_attention_icount, write_summary_table, ArtifactComparison, ArtifactComparisonSummary,
+    Direction, Metric,
 };
 use crate::load::SiteCtxt;
 
@@ -174,7 +174,6 @@ async fn summarize_run(
         }
     }
 
-    let mut table_written = false;
     let metrics = vec![
         (
             "Instruction count",
@@ -203,34 +202,28 @@ async fn summarize_run(
         ));
 
         let (primary, secondary) = comparison.summarize_by_category(&benchmark_map);
-        table_written |= write_metric_summary(primary, secondary, highly_reliable, &mut message);
-    }
-
-    if table_written {
-        write_summary_table_footer(&mut message);
+        write_metric_summary(primary, secondary, highly_reliable, &mut message);
     }
 
     Ok(message)
 }
 
-/// Returns true if a summary table was written to `message`.
 fn write_metric_summary(
     primary: ArtifactComparisonSummary,
     secondary: ArtifactComparisonSummary,
     highly_reliable: bool,
     message: &mut String,
-) -> bool {
+) {
     if !primary.is_relevant() && !secondary.is_relevant() {
         message
             .push_str("This benchmark run did not return any relevant results for this metric.\n");
-        false
     } else {
         if highly_reliable {
             message.push_str(
                 "This is a highly reliable metric that was used to determine the \
                 overall result at the top of this comment.\n\n",
             );
-            write_summary_table(&primary, &secondary, true, false, message);
+            write_summary_table(&primary, &secondary, false, message);
         } else {
             // `<details>` means it is hidden, requiring a click to reveal.
             message.push_str("<details>\n<summary>Results</summary>\n\n");
@@ -238,10 +231,9 @@ fn write_metric_summary(
                 "This is a less reliable metric that may be of interest but was not \
                 used to determine the overall result at the top of this comment.\n\n",
             );
-            write_summary_table(&primary, &secondary, true, false, message);
+            write_summary_table(&primary, &secondary, false, message);
             message.push_str("</details>\n");
         }
-        true
     }
 }
 

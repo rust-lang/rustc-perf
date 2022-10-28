@@ -13,10 +13,12 @@ use collector::Bound;
 use serde::{Deserialize, Serialize};
 
 use database::CommitType;
+use std::cmp;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt::Write;
 use std::hash::Hash;
+use std::iter;
 use std::sync::Arc;
 
 type BoxedError = Box<dyn Error + Send + Sync>;
@@ -95,7 +97,7 @@ pub async fn handle_triage(
                     .clone()
                     .summarize_by_category(&benchmark_map);
                 let mut result = String::from("**Summary**:\n\n");
-                write_summary_table(&primary, &secondary, false, true, &mut result);
+                write_summary_table(&primary, &secondary, true, &mut result);
                 result
             }
             None => String::from("**ERROR**: no data found for end bound"),
@@ -330,7 +332,7 @@ impl ArtifactComparisonSummary {
         let cmp = |b1: &TestResultComparison, b2: &TestResultComparison| {
             b1.relative_change()
                 .partial_cmp(&b2.relative_change())
-                .unwrap_or(std::cmp::Ordering::Equal)
+                .unwrap_or(cmp::Ordering::Equal)
         };
         relevant_comparisons.sort_by(cmp);
 
@@ -498,7 +500,7 @@ impl ArtifactComparisonSummary {
             let most_neg = self.most_negative_change().unwrap();
             let most_pos_abs = most_pos.relative_change().abs();
             let most_neg_abs = most_neg.relative_change().abs();
-            if most_neg_abs.partial_cmp(&most_pos_abs) == Some(std::cmp::Ordering::Greater) {
+            if most_neg_abs.partial_cmp(&most_pos_abs) == Some(cmp::Ordering::Greater) {
                 Some(most_neg)
             } else {
                 Some(most_pos)
@@ -547,7 +549,7 @@ async fn write_triage_summary(
     let link = &compare_link(start, end);
     write!(&mut result, " [(Comparison Link)]({})\n\n", link).unwrap();
 
-    write_summary_table(&primary, &secondary, false, true, &mut result);
+    write_summary_table(&primary, &secondary, true, &mut result);
 
     result
 }
@@ -556,7 +558,6 @@ async fn write_triage_summary(
 pub fn write_summary_table(
     primary: &ArtifactComparisonSummary,
     secondary: &ArtifactComparisonSummary,
-    with_footnotes: bool,
     include_metric: bool,
     result: &mut String,
 ) {
@@ -569,7 +570,7 @@ pub fn write_summary_table(
                 .map(|m| format!("({})", m.metric.as_str()))
         })
         .flatten()
-        .unwrap_or_else(|| String::from("          "));
+        .unwrap_or_else(|| "          ".to_string());
 
     fn render_stat<F: FnOnce() -> Option<f64>>(count: usize, calculate: F) -> String {
         let value = if count > 0 { calculate() } else { None };
@@ -588,10 +589,10 @@ pub fn write_summary_table(
     }
 
     // (label, mean, max, count)
-    let mut column_data = vec![];
+    let mut columns = vec![];
 
     // label
-    column_data.push(vec![
+    columns.push(vec![
         "Regressions ❌ <br /> (primary)".to_string(),
         "Regressions ❌ <br /> (secondary)".to_string(),
         "Improvements ✅ <br /> (primary)".to_string(),
@@ -600,7 +601,7 @@ pub fn write_summary_table(
     ]);
 
     // mean
-    column_data.push(vec![
+    columns.push(vec![
         render_stat(primary.num_regressions, || {
             Some(primary.arithmetic_mean_of_regressions())
         }),
@@ -622,7 +623,7 @@ pub fn write_summary_table(
 
     // range
     let rel_change = |r: Option<&TestResultComparison>| r.unwrap().relative_change() * 100.0;
-    column_data.push(vec![
+    columns.push(vec![
         render_range(primary.num_regressions, || {
             (
                 rel_change(primary.smallest_regression()),
@@ -656,7 +657,7 @@ pub fn write_summary_table(
     ]);
 
     // count
-    column_data.push(vec![
+    columns.push(vec![
         primary.num_regressions.to_string(),
         secondary.num_regressions.to_string(),
         primary.num_improvements.to_string(),
@@ -668,38 +669,68 @@ pub fn write_summary_table(
     // easy to read for anyone who is viewing the Markdown source.
     let column_labels = [
         metric,
-        format!("mean{}", if with_footnotes { "[^1]" } else { "" }),
+        "mean".to_string(),
         "range".to_string(),
-        format!("count{}", if with_footnotes { "[^2]" } else { "" }),
+        "count".to_string(),
     ];
-    let counts: Vec<usize> = column_labels.iter().map(|s| s.chars().count()).collect();
-    for column in &column_labels {
-        write!(result, "| {} ", column).unwrap();
-    }
-    result.push_str("|\n");
-    for &count in &counts {
-        write!(result, "|:{}:", "-".repeat(count)).unwrap();
+
+    // Calculate the console width of a string, allowing for double-width
+    // chars. The `unicode_width` crate does this properly, but with only two
+    // emoji in use we can do it easily ourselves.
+    let width = |s: &str| {
+        s.chars()
+            .map(|c| if c == '❌' || c == '✅' { 2 } else { 1 })
+            .sum()
+    };
+
+    // Get the width of each column.
+    let column_widths: Vec<usize> = column_labels
+        .iter()
+        .zip(columns.iter())
+        .map(|(column_label, column)| {
+            // Get the maximum width of the column data cells and the column label.
+            column
+                .iter()
+                .chain(iter::once(column_label))
+                .map(|cell| width(cell))
+                .max()
+                .unwrap()
+        })
+        .collect();
+
+    // Write column labels.
+    for (column_label, &column_width) in column_labels.iter().zip(column_widths.iter()) {
+        write!(
+            result,
+            "| {}{} ",
+            column_label,
+            " ".repeat(column_width - width(column_label))
+        )
+        .unwrap();
     }
     result.push_str("|\n");
 
-    for row in 0..5 {
-        let row_data = column_data.iter().map(|rows| rows[row].clone());
-        debug_assert_eq!(row_data.len(), column_labels.len());
-        for (column, &count) in row_data.zip(&counts) {
-            write!(result, "| {:<1$} ", column, count).unwrap();
+    // Write lines under the column labels.
+    for &column_width in &column_widths {
+        write!(result, "|:{}:", "-".repeat(column_width)).unwrap();
+    }
+    result.push_str("|\n");
+
+    // Write the column data.
+    for row_idx in 0..5 {
+        let row = columns.iter().map(|rows| rows[row_idx].clone());
+        assert_eq!(row.len(), column_labels.len());
+        for (cell, &column_width) in row.zip(column_widths.iter()) {
+            write!(
+                result,
+                "| {}{} ",
+                cell,
+                " ".repeat(column_width - width(&cell))
+            )
+            .unwrap();
         }
         result.push_str("|\n");
     }
-}
-
-pub fn write_summary_table_footer(result: &mut String) {
-    writeln!(
-        result,
-        r#"
-[^1]: *the arithmetic mean of the percent change*
-[^2]: *number of relevant changes*"#
-    )
-    .unwrap();
 }
 
 /// Compare two bounds on a given stat
@@ -1051,7 +1082,7 @@ impl HistoricalData {
             .zip(self.data.iter())
             .map(|(d, &r)| d / r)
             .collect::<Vec<_>>();
-        deltas.sort_by(|d1, d2| d1.partial_cmp(d2).unwrap_or(std::cmp::Ordering::Equal));
+        deltas.sort_by(|d1, d2| d1.partial_cmp(d2).unwrap_or(cmp::Ordering::Equal));
         deltas
     }
 
@@ -1253,7 +1284,7 @@ impl TestResultComparison {
     }
 }
 
-impl std::cmp::PartialEq for TestResultComparison {
+impl cmp::PartialEq for TestResultComparison {
     fn eq(&self, other: &Self) -> bool {
         self.benchmark == other.benchmark
             && self.profile == other.profile
@@ -1261,7 +1292,7 @@ impl std::cmp::PartialEq for TestResultComparison {
     }
 }
 
-impl std::cmp::Eq for TestResultComparison {}
+impl cmp::Eq for TestResultComparison {}
 
 impl std::hash::Hash for TestResultComparison {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -1437,11 +1468,13 @@ mod tests {
                 (Category::Primary, 1.0, 3.0),
             ],
             r#"
-| Regressions ❌ <br /> (primary) | 146.7%   | [100.0%, 200.0%] | 3         |
-| Regressions ❌ <br /> (secondary) | -        | -     | 0         |
-| Improvements ✅ <br /> (primary) | -        | -     | 0         |
-| Improvements ✅ <br /> (secondary) | -        | -     | 0         |
-| All ❌✅ (primary) | 146.7%   | [100.0%, 200.0%] | 3         |
+| (instructions:u)                   | mean   | range            | count |
+|:----------------------------------:|:------:|:----------------:|:-----:|
+| Regressions ❌ <br /> (primary)    | 146.7% | [100.0%, 200.0%] | 3     |
+| Regressions ❌ <br /> (secondary)  | -      | -                | 0     |
+| Improvements ✅ <br /> (primary)   | -      | -                | 0     |
+| Improvements ✅ <br /> (secondary) | -      | -                | 0     |
+| All ❌✅ (primary)                 | 146.7% | [100.0%, 200.0%] | 3     |
 "#
             .trim_start(),
         );
@@ -1456,11 +1489,13 @@ mod tests {
                 (Category::Primary, 4.0, 1.0),
             ],
             r#"
-| Regressions ❌ <br /> (primary) | -        | -     | 0         |
-| Regressions ❌ <br /> (secondary) | -        | -     | 0         |
-| Improvements ✅ <br /> (primary) | -71.7%   | [-80.0%, -60.0%] | 3         |
-| Improvements ✅ <br /> (secondary) | -        | -     | 0         |
-| All ❌✅ (primary) | -71.7%   | [-80.0%, -60.0%] | 3         |
+| (instructions:u)                   | mean   | range            | count |
+|:----------------------------------:|:------:|:----------------:|:-----:|
+| Regressions ❌ <br /> (primary)    | -      | -                | 0     |
+| Regressions ❌ <br /> (secondary)  | -      | -                | 0     |
+| Improvements ✅ <br /> (primary)   | -71.7% | [-80.0%, -60.0%] | 3     |
+| Improvements ✅ <br /> (secondary) | -      | -                | 0     |
+| All ❌✅ (primary)                 | -71.7% | [-80.0%, -60.0%] | 3     |
 "#
             .trim_start(),
         );
@@ -1475,11 +1510,13 @@ mod tests {
                 (Category::Secondary, 4.0, 1.0),
             ],
             r#"
-| Regressions ❌ <br /> (primary) | -        | -     | 0         |
-| Regressions ❌ <br /> (secondary) | -        | -     | 0         |
-| Improvements ✅ <br /> (primary) | -        | -     | 0         |
-| Improvements ✅ <br /> (secondary) | -71.7%   | [-80.0%, -60.0%] | 3         |
-| All ❌✅ (primary) | -        | -     | 0         |
+| (instructions:u)                   | mean   | range            | count |
+|:----------------------------------:|:------:|:----------------:|:-----:|
+| Regressions ❌ <br /> (primary)    | -      | -                | 0     |
+| Regressions ❌ <br /> (secondary)  | -      | -                | 0     |
+| Improvements ✅ <br /> (primary)   | -      | -                | 0     |
+| Improvements ✅ <br /> (secondary) | -71.7% | [-80.0%, -60.0%] | 3     |
+| All ❌✅ (primary)                 | -      | -                | 0     |
 "#
             .trim_start(),
         );
@@ -1494,11 +1531,13 @@ mod tests {
                 (Category::Secondary, 1.0, 3.0),
             ],
             r#"
-| Regressions ❌ <br /> (primary) | -        | -     | 0         |
-| Regressions ❌ <br /> (secondary) | 146.7%   | [100.0%, 200.0%] | 3         |
-| Improvements ✅ <br /> (primary) | -        | -     | 0         |
-| Improvements ✅ <br /> (secondary) | -        | -     | 0         |
-| All ❌✅ (primary) | -        | -     | 0         |
+| (instructions:u)                   | mean   | range            | count |
+|:----------------------------------:|:------:|:----------------:|:-----:|
+| Regressions ❌ <br /> (primary)    | -      | -                | 0     |
+| Regressions ❌ <br /> (secondary)  | 146.7% | [100.0%, 200.0%] | 3     |
+| Improvements ✅ <br /> (primary)   | -      | -                | 0     |
+| Improvements ✅ <br /> (secondary) | -      | -                | 0     |
+| All ❌✅ (primary)                 | -      | -                | 0     |
 "#
             .trim_start(),
         );
@@ -1514,11 +1553,13 @@ mod tests {
                 (Category::Primary, 4.0, 1.0),
             ],
             r#"
-| Regressions ❌ <br /> (primary) | 150.0%   | [100.0%, 200.0%] | 2         |
-| Regressions ❌ <br /> (secondary) | -        | -     | 0         |
-| Improvements ✅ <br /> (primary) | -62.5%   | [-75.0%, -50.0%] | 2         |
-| Improvements ✅ <br /> (secondary) | -        | -     | 0         |
-| All ❌✅ (primary) | 43.8%    | [-75.0%, 200.0%] | 4         |
+| (instructions:u)                   | mean   | range            | count |
+|:----------------------------------:|:------:|:----------------:|:-----:|
+| Regressions ❌ <br /> (primary)    | 150.0% | [100.0%, 200.0%] | 2     |
+| Regressions ❌ <br /> (secondary)  | -      | -                | 0     |
+| Improvements ✅ <br /> (primary)   | -62.5% | [-75.0%, -50.0%] | 2     |
+| Improvements ✅ <br /> (secondary) | -      | -                | 0     |
+| All ❌✅ (primary)                 | 43.8%  | [-75.0%, 200.0%] | 4     |
 "#
             .trim_start(),
         );
@@ -1536,11 +1577,13 @@ mod tests {
                 (Category::Primary, 4.0, 1.0),
             ],
             r#"
-| Regressions ❌ <br /> (primary) | 150.0%   | [100.0%, 200.0%] | 2         |
-| Regressions ❌ <br /> (secondary) | 100.0%   | [100.0%, 100.0%] | 1         |
-| Improvements ✅ <br /> (primary) | -62.5%   | [-75.0%, -50.0%] | 2         |
-| Improvements ✅ <br /> (secondary) | -66.7%   | [-66.7%, -66.7%] | 1         |
-| All ❌✅ (primary) | 43.8%    | [-75.0%, 200.0%] | 4         |
+| (instructions:u)                   | mean   | range            | count |
+|:----------------------------------:|:------:|:----------------:|:-----:|
+| Regressions ❌ <br /> (primary)    | 150.0% | [100.0%, 200.0%] | 2     |
+| Regressions ❌ <br /> (secondary)  | 100.0% | [100.0%, 100.0%] | 1     |
+| Improvements ✅ <br /> (primary)   | -62.5% | [-75.0%, -50.0%] | 2     |
+| Improvements ✅ <br /> (secondary) | -66.7% | [-66.7%, -66.7%] | 1     |
+| All ❌✅ (primary)                 | 43.8%  | [-75.0%, 200.0%] | 4     |
 "#
             .trim_start(),
         );
@@ -1554,11 +1597,13 @@ mod tests {
                 (Category::Primary, 5.0, 6.0),
             ],
             r#"
-| Regressions ❌ <br /> (primary) | 20.0%    | [20.0%, 20.0%] | 1         |
-| Regressions ❌ <br /> (secondary) | -        | -     | 0         |
-| Improvements ✅ <br /> (primary) | -50.0%   | [-50.0%, -50.0%] | 1         |
-| Improvements ✅ <br /> (secondary) | -        | -     | 0         |
-| All ❌✅ (primary) | -15.0%   | [-50.0%, 20.0%] | 2         |
+| (instructions:u)                   | mean   | range            | count |
+|:----------------------------------:|:------:|:----------------:|:-----:|
+| Regressions ❌ <br /> (primary)    | 20.0%  | [20.0%, 20.0%]   | 1     |
+| Regressions ❌ <br /> (secondary)  | -      | -                | 0     |
+| Improvements ✅ <br /> (primary)   | -50.0% | [-50.0%, -50.0%] | 1     |
+| Improvements ✅ <br /> (secondary) | -      | -                | 0     |
+| All ❌✅ (primary)                 | -15.0% | [-50.0%, 20.0%]  | 2     |
 "#
             .trim_start(),
         );
@@ -1572,11 +1617,13 @@ mod tests {
                 (Category::Primary, 6.0, 5.0),
             ],
             r#"
-| Regressions ❌ <br /> (primary) | 100.0%   | [100.0%, 100.0%] | 1         |
-| Regressions ❌ <br /> (secondary) | -        | -     | 0         |
-| Improvements ✅ <br /> (primary) | -16.7%   | [-16.7%, -16.7%] | 1         |
-| Improvements ✅ <br /> (secondary) | -        | -     | 0         |
-| All ❌✅ (primary) | 41.7%    | [-16.7%, 100.0%] | 2         |
+| (instructions:u)                   | mean   | range            | count |
+|:----------------------------------:|:------:|:----------------:|:-----:|
+| Regressions ❌ <br /> (primary)    | 100.0% | [100.0%, 100.0%] | 1     |
+| Regressions ❌ <br /> (secondary)  | -      | -                | 0     |
+| Improvements ✅ <br /> (primary)   | -16.7% | [-16.7%, -16.7%] | 1     |
+| Improvements ✅ <br /> (secondary) | -      | -                | 0     |
+| All ❌✅ (primary)                 | 41.7%  | [-16.7%, 100.0%] | 2     |
 "#
             .trim_start(),
         );
@@ -1625,8 +1672,14 @@ mod tests {
         let secondary = ArtifactComparisonSummary::summarize(secondary_comparisons);
 
         let mut result = String::new();
-        write_summary_table(&primary, &secondary, true, true, &mut result);
-        let header = "| (instructions:u) | mean[^1] | range | count[^2] |\n|:----------------:|:--------:|:-----:|:---------:|\n";
-        assert_eq!(result, format!("{header}{expected}"));
+        write_summary_table(&primary, &secondary, true, &mut result);
+        // We don't use `assert_eq!` here because it stringifies the arguments,
+        // making the tables hard to read when printed.
+        if result != expected {
+            panic!(
+                "output mismatch:\nexpected:\n{}actual:\n{}",
+                expected, result
+            );
+        }
     }
 }
