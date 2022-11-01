@@ -1,9 +1,6 @@
 function findQueryParam(name) {
-    let urlParams = window.location.search?.substring(1).split("&").map(x => x.split("="));
-    let pair = urlParams?.find(x => x[0] === name)
-    if (pair) {
-        return unescape(pair[1]);
-    }
+    let params = new URLSearchParams(window.location.search.slice(1));
+    return params.get(name);
 }
 
 function createDefaultFilter() {
@@ -29,6 +26,43 @@ function createDefaultFilter() {
     };
 }
 
+/**
+ * Loads the initial state of UI filters from URL parameters.
+ */
+function initializeFilterFromUrl() {
+    const defaultFilter = createDefaultFilter();
+    let params = new URLSearchParams(window.location.search.slice(1));
+
+    function getBoolOrDefault(name, defaultValue) {
+        const urlValue = params.get(name);
+        if (urlValue !== null) {
+            return urlValue === "true";
+        }
+        return defaultValue;
+    }
+
+    return {
+        name: params.get("name"),
+        nonRelevant: getBoolOrDefault("nonRelevant", defaultFilter.nonRelevant),
+        profile: {
+            check: getBoolOrDefault("check", defaultFilter.profile.check),
+            debug: getBoolOrDefault("debug", defaultFilter.profile.debug),
+            opt: getBoolOrDefault("opt", defaultFilter.profile.opt),
+            doc: getBoolOrDefault("doc", defaultFilter.profile.doc)
+        },
+        scenario: {
+            full: getBoolOrDefault("full", defaultFilter.scenario.full),
+            incrFull: getBoolOrDefault("incrFull", defaultFilter.scenario.incrFull),
+            incrUnchanged: getBoolOrDefault("incrUnchanged", defaultFilter.scenario.incrUnchanged),
+            incrPatched: getBoolOrDefault("incrPatched", defaultFilter.scenario.incrPatched)
+        },
+        category: {
+            primary: getBoolOrDefault("primary", defaultFilter.category.primary),
+            secondary: getBoolOrDefault("secondary", defaultFilter.category.secondary)
+        }
+    };
+}
+
 const app = Vue.createApp({
     mounted() {
         const app = this;
@@ -46,7 +80,7 @@ const app = Vue.createApp({
     },
     data() {
         return {
-            filter: createDefaultFilter(),
+            filter: initializeFilterFromUrl(),
             showRawData: false,
             data: null,
             dataLoading: false
