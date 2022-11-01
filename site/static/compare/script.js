@@ -1,5 +1,9 @@
+function getQueryParams() {
+    return new URLSearchParams(window.location.search);
+}
+
 function findQueryParam(name) {
-    const params = new URLSearchParams(window.location.search.slice(1));
+    const params = getQueryParams();
     return params.get(name);
 }
 
@@ -32,7 +36,7 @@ function createDefaultFilter() {
  */
 function initializeFilterFromUrl() {
     const defaultFilter = createDefaultFilter();
-    const params = new URLSearchParams(window.location.search.slice(1));
+    const params = getQueryParams();
 
     function getBoolOrDefault(name, defaultValue) {
         const urlValue = params.get(name);
@@ -70,7 +74,7 @@ function initializeFilterFromUrl() {
  */
 function storeFilterToUrl(filter) {
     const defaultFilter = createDefaultFilter();
-    const params = new URLSearchParams(window.location.search);
+    const params = getQueryParams();
 
     function storeOrReset(name, value, defaultValue) {
         if (value === defaultValue) {
@@ -361,10 +365,9 @@ const app = Vue.createApp({
             return result;
         },
         createUrlForMetric(metric) {
-            let start = findQueryParam("start");
-            let end = findQueryParam("end");
-
-            return createUrlFromParams(createSearchParamsForMetric(metric, start, end));
+            const params = getQueryParams();
+            params.set("stat", metric);
+            return createUrlFromParams(params);
         },
         resetFilter() {
             this.filter = createDefaultFilter();
@@ -767,20 +770,6 @@ function makeData(state, app) {
     });
 }
 
-function createSearchParamsForMetric(stat, start, end) {
-    let params = new URLSearchParams();
-    if (start !== undefined) {
-        params.append("start", start);
-    }
-    if (end !== undefined) {
-        params.append("end", end);
-    }
-    if (stat !== undefined) {
-        params.append("stat", stat);
-    }
-    return params.toString();
-}
-
 function createUrlFromParams(params) {
     const url = new URL(window.location);
     url.search = params;
@@ -791,7 +780,12 @@ function submitSettings() {
     let stat = getSelected("stats");
     let start = document.getElementById("start-bound").value;
     let end = document.getElementById("end-bound").value;
-    let params = createSearchParamsForMetric(stat, start, end);
+
+    const params = getQueryParams();
+    params.set("stat", stat);
+    params.set("start", start);
+    params.set("end", end);
+
     window.location.search = params.toString();
 }
 
