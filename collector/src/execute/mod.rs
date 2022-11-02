@@ -588,7 +588,7 @@ fn process_stat_output(
         let name = get!(parts.next());
         let _time = get!(parts.next());
         let pct = get!(parts.next());
-        if cnt == "<not supported>" || cnt.len() == 0 {
+        if cnt == "<not supported>" || cnt == "<not counted>" || cnt.len() == 0 {
             continue;
         }
         if !pct.starts_with("100.") {
