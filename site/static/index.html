@@ -441,11 +441,11 @@
         function submit_settings() {
             let start = document.getElementById("start-bound").value;
             let end = document.getElementById("end-bound").value;
-            let params = new URLSearchParams();
-            params.append("start", start);
-            params.append("end", end);
-            params.append("kind", getSelected("kind"));
-            params.append("stat", getSelected("stats"));
+            let params = new URLSearchParams(window.location.search);
+            params.set("start", start);
+            params.set("end", end);
+            params.set("kind", getSelected("kind"));
+            params.set("stat", getSelected("stats"));
             window.location.search = params.toString();
         }
 
