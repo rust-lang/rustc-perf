@@ -1,5 +1,8 @@
 use crate::api::{github, ServerResult};
-use crate::github::{client, enqueue_shas, parse_homu_comment, rollup_pr_number, unroll_rollup};
+use crate::github::{
+    client, enqueue_shas, parse_homu_comment, rollup_pr_number, unroll_rollup,
+    RUST_REPO_GITHUB_API_URL,
+};
 use crate::load::SiteCtxt;
 
 use std::sync::Arc;
@@ -29,10 +32,7 @@ async fn handle_push(ctxt: Arc<SiteCtxt>, push: github::Push) -> ServerResult<gi
         &ctxt,
         "https://api.github.com/repos/rust-lang-ci/rust".to_owned(),
     );
-    let main_repo_client = client::Client::from_ctxt(
-        &ctxt,
-        "https://api.github.com/repos/rust-lang/rust".to_owned(),
-    );
+    let main_repo_client = client::Client::from_ctxt(&ctxt, RUST_REPO_GITHUB_API_URL.to_owned());
     if push.r#ref != "refs/heads/master" || push.sender.login != "bors" {
         return Ok(github::Response);
     }
@@ -70,10 +70,7 @@ async fn handle_issue(
     issue: github::Issue,
     comment: github::Comment,
 ) -> ServerResult<github::Response> {
-    let main_client = client::Client::from_ctxt(
-        &ctxt,
-        "https://api.github.com/repos/rust-lang/rust".to_owned(),
-    );
+    let main_client = client::Client::from_ctxt(&ctxt, RUST_REPO_GITHUB_API_URL.to_owned());
     let ci_client = client::Client::from_ctxt(
         &ctxt,
         "https://api.github.com/repos/rust-lang-ci/rust".to_owned(),

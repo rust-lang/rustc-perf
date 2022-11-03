@@ -6,6 +6,7 @@ use crate::load::SiteCtxt;
 
 use database::{ArtifactId, QueuedCommit};
 
+use crate::github::RUST_REPO_GITHUB_API_URL;
 use std::collections::HashSet;
 use std::fmt::Write;
 
@@ -66,10 +67,7 @@ pub async fn post_finished(ctxt: &SiteCtxt) {
 ///
 /// `is_master_commit` is used to differentiate messages for try runs and post-merge runs.
 async fn post_comparison_comment(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: bool) {
-    let client = super::client::Client::from_ctxt(
-        ctxt,
-        "https://api.github.com/repos/rust-lang/rust".to_owned(),
-    );
+    let client = super::client::Client::from_ctxt(ctxt, RUST_REPO_GITHUB_API_URL.to_owned());
     let pr = commit.pr;
     let body = match summarize_run(ctxt, commit, is_master_commit).await {
         Ok(message) => message,

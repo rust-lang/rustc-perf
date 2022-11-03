@@ -8,6 +8,8 @@ use serde::Deserialize;
 
 type BoxedError = Box<dyn std::error::Error + Send + Sync>;
 
+pub const RUST_REPO_GITHUB_API_URL: &str = "https://api.github.com/repos/rust-lang/rust";
+
 pub use comparison_summary::post_finished;
 
 /// Enqueues try build artifacts and posts a message about them on the original rollup PR
