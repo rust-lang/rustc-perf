@@ -134,6 +134,7 @@ const app = Vue.createApp({
                             category: (benchmarkMap[c.benchmark] || {}).category || "secondary",
                             isRelevant: c.is_relevant,
                             significanceFactor: c.significance_factor,
+                            significanceThreshold: (c.significance_threshold * 100.0), // ensure the threshold is in %
                             datumA,
                             datumB,
                             percent,
@@ -152,7 +153,7 @@ const app = Vue.createApp({
         bootstrapTotals() {
             const a = this.data.a.bootstrap_total / 1e9;
             const b = this.data.b.bootstrap_total / 1e9;
-            return {a, b};
+            return { a, b };
         },
         bootstraps() {
             return Object.entries(this.data.a.bootstrap).map(e => {
@@ -359,10 +360,16 @@ app.component('test-cases-table', {
                 Significance Factor<span class="tooltip">?
                     <span class="tooltiptext">
                         How much a particular result is over the significance threshold. A factor of 2.50x
-                        means
-                        the result is 2.5 times over the significance threshold. You can see <a
-                            href="https://github.com/rust-lang/rustc-perf/blob/master/docs/comparison-analysis.md#what-makes-a-test-result-significant">
-                            here</a> how the significance threshold is calculated.
+                        means the result is 2.5 times over the significance threshold.
+                    </span>
+                </span>
+            </th>
+            <th>
+                Significance Threshold<span class="tooltip">?
+                    <span class="tooltiptext">
+                        The minimum % change that is considered significant. The higher the significance, the noisier a test case is.
+                        You can see <a href="https://github.com/rust-lang/rustc-perf/blob/master/docs/comparison-analysis.md#what-makes-a-test-result-significant">
+                        here</a> how the significance threshold is calculated.
                     </span>
                 </span>
             </th>
@@ -395,6 +402,9 @@ app.component('test-cases-table', {
                 </td>
                 <td>
                     {{ testCase.significanceFactor ? testCase.significanceFactor.toFixed(2) + "x" : "-" }}
+                </td>
+                <td>
+                    {{ testCase.significanceThreshold ? testCase.significanceThreshold.toFixed(2) + "%" : "-" }}
                 </td>
                 <td v-if="showRawData" class="numeric">
                   <a v-bind:href="detailedQueryLink(commitA, testCase)">
@@ -447,7 +457,7 @@ const SummaryRange = {
   [<SummaryPercentValue :value="range[0]" :padWidth="6" />, <SummaryPercentValue :value="range[1]" :padWidth="6" />]
 </div>
 <div v-else style="text-align: center;">-</div>
-`, components: {SummaryPercentValue}
+`, components: { SummaryPercentValue }
 };
 const SummaryCount = {
     props: {
@@ -510,7 +520,7 @@ app.component('summary-table', {
     </tbody>
 </table>
 `,
-    components: {SummaryRange, SummaryPercentValue, SummaryCount}
+    components: { SummaryRange, SummaryPercentValue, SummaryCount }
 });
 
 app.component("aggregations", {
