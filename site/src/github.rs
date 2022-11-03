@@ -9,6 +9,13 @@ use serde::Deserialize;
 type BoxedError = Box<dyn std::error::Error + Send + Sync>;
 
 pub const RUST_REPO_GITHUB_API_URL: &str = "https://api.github.com/repos/rust-lang/rust";
+pub const RUST_REPO_GITHUB_GRAPH_URL: &str = "https://api.github.com/graphql";
+
+/// Comments that are temporary and do not add any value once there has been a new development
+/// (a rustc build or a perf. run was finished) are marked with this comment.
+///
+/// They are removed once a perf. run comparison summary is posted on a PR.
+pub const COMMENT_MARK_TEMPORARY: &str = "<!-- rust-timer: temporary -->";
 
 pub use comparison_summary::post_finished;
 
@@ -236,6 +243,7 @@ pub async fn enqueue_shas(
             ));
         }
     }
+    msg.push_str(&format!("\n{COMMENT_MARK_TEMPORARY}"));
     main_client.post_comment(pr_number, msg).await;
     Ok(())
 }

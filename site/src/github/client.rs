@@ -1,6 +1,7 @@
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 use http::header::USER_AGENT;
+use serde::de::DeserializeOwned;
 
 use crate::{api::github::Issue, load::SiteCtxt};
 
@@ -226,6 +227,124 @@ impl Client {
         }
     }
 
+    pub async fn get_comments(&self, pull_request: u32) -> anyhow::Result<Vec<ResponseComment>> {
+        const QUERY: &str = "query($owner: String!, $repo: String!, $pr: Int!, $cursor: String) {
+                repository(owner: $owner, name: $repo) {
+                    pullRequest(number: $pr) {
+                        comments(first: 100, after: $cursor) {
+                            nodes {
+                                id
+                                body
+                                isMinimized
+                                viewerDidAuthor
+                            }
+                            pageInfo {
+                                endCursor
+                            }
+                        }
+                    }
+                }
+            }";
+
+        #[derive(Debug, serde::Deserialize)]
+        struct Response {
+            repository: ResponseRepo,
+        }
+        #[derive(Debug, serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct ResponseRepo {
+            pull_request: ResponsePR,
+        }
+        #[derive(Debug, serde::Deserialize)]
+        struct ResponsePR {
+            comments: ResponseComments,
+        }
+        #[derive(Debug, serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct ResponseComments {
+            nodes: Vec<ResponseComment>,
+            page_info: GraphPageInfo,
+        }
+
+        let owner = "rust-lang";
+        let repo = "rust";
+
+        let mut comments = Vec::new();
+        let mut cursor = None;
+        loop {
+            let mut resp: Response = self
+                .graphql(
+                    QUERY,
+                    serde_json::json!({
+                        "owner": owner,
+                        "repo": repo,
+                        "pr": pull_request,
+                        "cursor": cursor,
+                    }),
+                )
+                .await?;
+            cursor = resp.repository.pull_request.comments.page_info.end_cursor;
+            comments.append(&mut resp.repository.pull_request.comments.nodes);
+
+            if cursor.is_none() {
+                break;
+            }
+        }
+        Ok(comments)
+    }
+
+    pub async fn hide_comment(&self, comment_id: &str, reason: &str) -> anyhow::Result<()> {
+        #[derive(serde::Deserialize)]
+        struct MinimizeData {}
+
+        const MINIMIZE: &str = "mutation($node_id: ID!, $reason: ReportedContentClassifiers!) {
+            minimizeComment(input: {subjectId: $node_id, classifier: $reason}) {
+                __typename
+            }
+        }";
+
+        self.graphql::<Option<MinimizeData>, _>(
+            MINIMIZE,
+            serde_json::json!({
+                "node_id": comment_id,
+                "reason": reason,
+            }),
+        )
+        .await?;
+        Ok(())
+    }
+
+    async fn graphql<T: DeserializeOwned, V: serde::Serialize>(
+        &self,
+        query: &str,
+        variables: V,
+    ) -> anyhow::Result<T> {
+        #[derive(serde::Serialize)]
+        struct GraphPayload<'a, V> {
+            query: &'a str,
+            variables: V,
+        }
+
+        let response: GraphResponse<T> = self
+            .inner
+            .post(&self.repository_url)
+            .json(&GraphPayload { query, variables })
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+
+        if response.errors.is_empty() {
+            Ok(response.data)
+        } else {
+            Err(anyhow::anyhow!(
+                "GraphQL query failed: {}",
+                response.errors[0].message
+            ))
+        }
+    }
+
     async fn send(
         &self,
         request: reqwest::RequestBuilder,
@@ -236,6 +355,34 @@ impl Client {
             .send()
             .await
     }
+}
+
+#[derive(serde::Deserialize)]
+struct GraphResponse<T> {
+    data: T,
+    #[serde(default)]
+    errors: Vec<GraphError>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct GraphError {
+    message: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GraphPageInfo {
+    end_cursor: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResponseComment {
+    pub id: String,
+    pub body: String,
+    pub is_minimized: bool,
+    // Is the account that fetches this comment also the original author of the comment?
+    pub viewer_did_author: bool,
 }
 
 #[derive(Debug, serde::Deserialize)]
