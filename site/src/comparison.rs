@@ -190,6 +190,8 @@ pub enum Metric {
     CpuClock,
     #[serde(rename = "cpu-clock:u")]
     CpuClockUser,
+    #[serde(rename = "cycles")]
+    Cycles,
     #[serde(rename = "cycles:u")]
     CyclesUser,
     #[serde(rename = "faults")]
@@ -246,6 +248,7 @@ impl Metric {
             Metric::ContextSwitches => "context-switches",
             Metric::CpuClock => "cpu-clock",
             Metric::CpuClockUser => "cpu-clock:u",
+            Metric::Cycles => "cycles",
             Metric::CyclesUser => "cycles:u",
             Metric::Faults => "faults",
             Metric::FaultsUser => "faults:u",
