@@ -243,8 +243,12 @@ pub async fn enqueue_shas(
             ));
         }
     }
-    msg.push_str(&format!("\n{COMMENT_MARK_TEMPORARY}"));
-    main_client.post_comment(pr_number, msg).await;
+
+    if !msg.is_empty() {
+        msg.push_str(&format!("\n{COMMENT_MARK_TEMPORARY}"));
+        main_client.post_comment(pr_number, msg).await;
+    }
+
     Ok(())
 }
 
