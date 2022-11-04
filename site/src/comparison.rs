@@ -135,6 +135,7 @@ pub async fn handle_compare(
             profile: comparison.profile.to_string(),
             scenario: comparison.scenario.to_string(),
             is_relevant: comparison.is_relevant(),
+            significance_threshold: comparison.significance_threshold(),
             significance_factor: comparison.significance_factor(),
             statistics: comparison.results,
         })
@@ -1015,8 +1016,7 @@ pub struct HistoricalDataMap {
 }
 
 impl HistoricalDataMap {
-    const NUM_PREVIOUS_COMMITS: usize = 100;
-    const MIN_PREVIOUS_COMMITS: usize = 50;
+    const NUM_PREVIOUS_COMMITS: usize = 30;
 
     async fn calculate(
         ctxt: &SiteCtxt,
@@ -1033,7 +1033,7 @@ impl HistoricalDataMap {
         ));
 
         // Return early if we don't have enough data for historical analysis
-        if previous_commits.len() < Self::MIN_PREVIOUS_COMMITS {
+        if previous_commits.len() < Self::NUM_PREVIOUS_COMMITS {
             return Ok(Self {
                 data: historical_data,
             });
@@ -1057,7 +1057,7 @@ impl HistoricalDataMap {
         }
 
         // Only retain test cases for which we have enough data to calculate variance.
-        historical_data.retain(|_, v| v.data.len() >= Self::MIN_PREVIOUS_COMMITS);
+        historical_data.retain(|_, v| v.data.len() >= Self::NUM_PREVIOUS_COMMITS);
 
         Ok(Self {
             data: historical_data,
