@@ -6,6 +6,7 @@ use crate::load::SiteCtxt;
 
 use database::{ArtifactId, QueuedCommit};
 
+use crate::github::{COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL, RUST_REPO_GITHUB_GRAPH_URL};
 use std::collections::HashSet;
 use std::fmt::Write;
 
@@ -57,7 +58,10 @@ pub async fn post_finished(ctxt: &SiteCtxt) {
             assert_eq!(completed, queued_commit);
 
             let is_master_commit = master_commits.contains(&queued_commit.sha);
-            post_comparison_comment(ctxt, queued_commit, is_master_commit).await;
+            if let Err(error) = post_comparison_comment(ctxt, queued_commit, is_master_commit).await
+            {
+                log::error!("Cannot post comparison comment: {error:?}");
+            }
         }
     }
 }
@@ -65,11 +69,12 @@ pub async fn post_finished(ctxt: &SiteCtxt) {
 /// Posts a comment to GitHub summarizing the comparison of the queued commit with its parent
 ///
 /// `is_master_commit` is used to differentiate messages for try runs and post-merge runs.
-async fn post_comparison_comment(ctxt: &SiteCtxt, commit: QueuedCommit, is_master_commit: bool) {
-    let client = super::client::Client::from_ctxt(
-        ctxt,
-        "https://api.github.com/repos/rust-lang/rust".to_owned(),
-    );
+async fn post_comparison_comment(
+    ctxt: &SiteCtxt,
+    commit: QueuedCommit,
+    is_master_commit: bool,
+) -> anyhow::Result<()> {
+    let client = super::client::Client::from_ctxt(ctxt, RUST_REPO_GITHUB_API_URL.to_owned());
     let pr = commit.pr;
     let body = match summarize_run(ctxt, commit, is_master_commit).await {
         Ok(message) => message,
@@ -77,6 +82,21 @@ async fn post_comparison_comment(ctxt: &SiteCtxt, commit: QueuedCommit, is_maste
     };
 
     client.post_comment(pr, body).await;
+
+    let graph_client =
+        super::client::Client::from_ctxt(ctxt, RUST_REPO_GITHUB_GRAPH_URL.to_owned());
+    for comment in graph_client.get_comments(pr).await? {
+        // If this bot is the author of the comment, the comment is not yet minimized and it is
+        // a temporary comment, minimize it.
+        if comment.viewer_did_author
+            && !comment.is_minimized
+            && comment.body.contains(COMMENT_MARK_TEMPORARY)
+        {
+            log::debug!("Hiding comment {}", comment.id);
+            graph_client.hide_comment(&comment.id, "OUTDATED").await?;
+        }
+    }
+    Ok(())
 }
 
 fn make_comparison_url(commit: &QueuedCommit, stat: Metric) -> String {

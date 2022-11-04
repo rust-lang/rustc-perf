@@ -1,5 +1,8 @@
 use crate::api::{github, ServerResult};
-use crate::github::{client, enqueue_shas, parse_homu_comment, rollup_pr_number, unroll_rollup};
+use crate::github::{
+    client, enqueue_shas, parse_homu_comment, rollup_pr_number, unroll_rollup,
+    COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL,
+};
 use crate::load::SiteCtxt;
 
 use std::sync::Arc;
@@ -29,10 +32,7 @@ async fn handle_push(ctxt: Arc<SiteCtxt>, push: github::Push) -> ServerResult<gi
         &ctxt,
         "https://api.github.com/repos/rust-lang-ci/rust".to_owned(),
     );
-    let main_repo_client = client::Client::from_ctxt(
-        &ctxt,
-        "https://api.github.com/repos/rust-lang/rust".to_owned(),
-    );
+    let main_repo_client = client::Client::from_ctxt(&ctxt, RUST_REPO_GITHUB_API_URL.to_owned());
     if push.r#ref != "refs/heads/master" || push.sender.login != "bors" {
         return Ok(github::Response);
     }
@@ -70,10 +70,7 @@ async fn handle_issue(
     issue: github::Issue,
     comment: github::Comment,
 ) -> ServerResult<github::Response> {
-    let main_client = client::Client::from_ctxt(
-        &ctxt,
-        "https://api.github.com/repos/rust-lang/rust".to_owned(),
-    );
+    let main_client = client::Client::from_ctxt(&ctxt, RUST_REPO_GITHUB_API_URL.to_owned());
     let ci_client = client::Client::from_ctxt(
         &ctxt,
         "https://api.github.com/repos/rust-lang-ci/rust".to_owned(),
@@ -112,7 +109,10 @@ async fn handle_rust_timer(
         main_client
             .post_comment(
                 issue.number,
-                "Insufficient permissions to issue commands to rust-timer.",
+                format!(
+                    "Insufficient permissions to issue commands to rust-timer.
+{COMMENT_MARK_TEMPORARY}"
+                ),
             )
             .await;
         return Ok(github::Response);
@@ -129,9 +129,13 @@ async fn handle_rust_timer(
         main_client
             .post_comment(
                 issue.number,
-                "Awaiting bors try build completion.
+                format!(
+                    "Awaiting bors try build completion.
 
-@rustbot label: +S-waiting-on-perf",
+@rustbot label: +S-waiting-on-perf
+
+{COMMENT_MARK_TEMPORARY}"
+                ),
             )
             .await;
         return Ok(github::Response);
