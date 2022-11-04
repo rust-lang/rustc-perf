@@ -357,19 +357,19 @@ app.component('test-cases-table', {
             <th>Scenario</th>
             <th>% Change</th>
             <th>
-                Significance Factor<span class="tooltip">?
+                Significance Threshold<span class="tooltip">?
                     <span class="tooltiptext">
-                        How much a particular result is over the significance threshold. A factor of 2.50x
-                        means the result is 2.5 times over the significance threshold.
+                        The minimum % change that is considered significant. The higher the significance threshold, the noisier a test case is.
+                        You can see <a href="https://github.com/rust-lang/rustc-perf/blob/master/docs/comparison-analysis.md#what-makes-a-test-result-significant">
+                        here</a> how the significance threshold is calculated.
                     </span>
                 </span>
             </th>
             <th>
-                Significance Threshold<span class="tooltip">?
+                Significance Factor<span class="tooltip">?
                     <span class="tooltiptext">
-                        The minimum % change that is considered significant. The higher the significance, the noisier a test case is.
-                        You can see <a href="https://github.com/rust-lang/rustc-perf/blob/master/docs/comparison-analysis.md#what-makes-a-test-result-significant">
-                        here</a> how the significance threshold is calculated.
+                        How much a particular result is over the significance threshold. A factor of 2.50x
+                        means the result is 2.5 times over the significance threshold.
                     </span>
                 </span>
             </th>
@@ -401,10 +401,10 @@ app.component('test-cases-table', {
                     </a>
                 </td>
                 <td>
-                    {{ testCase.significanceFactor ? testCase.significanceFactor.toFixed(2) + "x" : "-" }}
+                    {{ testCase.significanceThreshold ? testCase.significanceThreshold.toFixed(2) + "%" : "-" }}
                 </td>
                 <td>
-                    {{ testCase.significanceThreshold ? testCase.significanceThreshold.toFixed(2) + "%" : "-" }}
+                    {{ testCase.significanceFactor ? testCase.significanceFactor.toFixed(2) + "x" : "-" }}
                 </td>
                 <td v-if="showRawData" class="numeric">
                   <a v-bind:href="detailedQueryLink(commitA, testCase)">
