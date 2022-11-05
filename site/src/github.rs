@@ -9,7 +9,6 @@ use serde::Deserialize;
 type BoxedError = Box<dyn std::error::Error + Send + Sync>;
 
 pub const RUST_REPO_GITHUB_API_URL: &str = "https://api.github.com/repos/rust-lang/rust";
-pub const RUST_REPO_GITHUB_GRAPH_URL: &str = "https://api.github.com/graphql";
 
 /// Comments that are temporary and do not add any value once there has been a new development
 /// (a rustc build or a perf. run was finished) are marked with this comment.

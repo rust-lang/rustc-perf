@@ -1,9 +1,12 @@
 use anyhow::Context;
 use chrono::{DateTime, Utc};
+use http::header;
 use http::header::USER_AGENT;
 use serde::de::DeserializeOwned;
 
 use crate::{api::github::Issue, load::SiteCtxt};
+
+const BOT_USER_AGENT: &str = "perf-rust-lang-org-server";
 
 /// A client for interacting with the GitHub API
 pub struct Client {
@@ -227,6 +230,49 @@ impl Client {
         }
     }
 
+    async fn send(
+        &self,
+        request: reqwest::RequestBuilder,
+    ) -> Result<reqwest::Response, reqwest::Error> {
+        request
+            .header(USER_AGENT, BOT_USER_AGENT)
+            .basic_auth("rust-timer", Some(&self.token))
+            .send()
+            .await
+    }
+}
+
+const GRAPHQL_API_BASE: &str = "https://api.github.com/graphql";
+
+/// A client for interacting with the GraphQL GitHub API.
+pub struct GraphQLClient {
+    inner: reqwest::Client,
+}
+
+impl GraphQLClient {
+    /// Create a GraphQL client from a `SiteCtxt`.
+    pub fn from_ctxt(ctxt: &SiteCtxt) -> Self {
+        let token = ctxt
+            .config
+            .keys
+            .github_api_token
+            .clone()
+            .expect("needs github API token");
+
+        let mut headers = header::HeaderMap::new();
+        headers.insert(USER_AGENT, header::HeaderValue::from_static(BOT_USER_AGENT));
+        headers.insert(
+            header::AUTHORIZATION,
+            header::HeaderValue::from_str(&format!("token {}", token)).unwrap(),
+        );
+
+        let client = reqwest::ClientBuilder::new()
+            .default_headers(headers)
+            .build()
+            .unwrap();
+        Self { inner: client }
+    }
+
     pub async fn get_comments(&self, pull_request: u32) -> anyhow::Result<Vec<ResponseComment>> {
         const QUERY: &str = "query($owner: String!, $repo: String!, $pr: Int!, $cursor: String) {
                 repository(owner: $owner, name: $repo) {
@@ -273,7 +319,7 @@ impl Client {
         let mut cursor = None;
         loop {
             let mut resp: Response = self
-                .graphql(
+                .send(
                     QUERY,
                     serde_json::json!({
                         "owner": owner,
@@ -303,7 +349,7 @@ impl Client {
             }
         }";
 
-        self.graphql::<Option<MinimizeData>, _>(
+        self.send::<Option<MinimizeData>, _>(
             MINIMIZE,
             serde_json::json!({
                 "node_id": comment_id,
@@ -314,7 +360,7 @@ impl Client {
         Ok(())
     }
 
-    async fn graphql<T: DeserializeOwned, V: serde::Serialize>(
+    async fn send<T: DeserializeOwned, V: serde::Serialize>(
         &self,
         query: &str,
         variables: V,
@@ -327,7 +373,7 @@ impl Client {
 
         let response: GraphResponse<T> = self
             .inner
-            .post(&self.repository_url)
+            .post(GRAPHQL_API_BASE)
             .json(&GraphPayload { query, variables })
             .send()
             .await?
@@ -343,17 +389,6 @@ impl Client {
                 response.errors[0].message
             ))
         }
-    }
-
-    async fn send(
-        &self,
-        request: reqwest::RequestBuilder,
-    ) -> Result<reqwest::Response, reqwest::Error> {
-        request
-            .header(USER_AGENT, "perf-rust-lang-org-server")
-            .basic_auth("rust-timer", Some(&self.token))
-            .send()
-            .await
     }
 }
 
