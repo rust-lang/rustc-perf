@@ -6,7 +6,7 @@ use crate::load::SiteCtxt;
 
 use database::{ArtifactId, QueuedCommit};
 
-use crate::github::{COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL, RUST_REPO_GITHUB_GRAPH_URL};
+use crate::github::{COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL};
 use std::collections::HashSet;
 use std::fmt::Write;
 
@@ -83,8 +83,7 @@ async fn post_comparison_comment(
 
     client.post_comment(pr, body).await;
 
-    let graph_client =
-        super::client::Client::from_ctxt(ctxt, RUST_REPO_GITHUB_GRAPH_URL.to_owned());
+    let graph_client = super::client::GraphQLClient::from_ctxt(ctxt);
     for comment in graph_client.get_comments(pr).await? {
         // If this bot is the author of the comment, the comment is not yet minimized and it is
         // a temporary comment, minimize it.
