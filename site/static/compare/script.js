@@ -1,9 +1,10 @@
+function getQueryParams() {
+    return new URLSearchParams(window.location.search);
+}
+
 function findQueryParam(name) {
-    let urlParams = window.location.search?.substring(1).split("&").map(x => x.split("="));
-    let pair = urlParams?.find(x => x[0] === name)
-    if (pair) {
-        return unescape(pair[1]);
-    }
+    const params = getQueryParams();
+    return params.get(name);
 }
 
 function createDefaultFilter() {
@@ -29,6 +30,81 @@ function createDefaultFilter() {
     };
 }
 
+/**
+ * Loads the initial state of UI filters from URL parameters.
+ * Keep in sync with `storeFilterToUrl` and `createDefaultFilter`!
+ */
+function initializeFilterFromUrl() {
+    const defaultFilter = createDefaultFilter();
+    const params = getQueryParams();
+
+    function getBoolOrDefault(name, defaultValue) {
+        const urlValue = params.get(name);
+        if (urlValue !== null) {
+            return urlValue === "true";
+        }
+        return defaultValue;
+    }
+
+    return {
+        name: params.get("name"),
+        nonRelevant: getBoolOrDefault("nonRelevant", defaultFilter.nonRelevant),
+        profile: {
+            check: getBoolOrDefault("check", defaultFilter.profile.check),
+            debug: getBoolOrDefault("debug", defaultFilter.profile.debug),
+            opt: getBoolOrDefault("opt", defaultFilter.profile.opt),
+            doc: getBoolOrDefault("doc", defaultFilter.profile.doc)
+        },
+        scenario: {
+            full: getBoolOrDefault("full", defaultFilter.scenario.full),
+            incrFull: getBoolOrDefault("incrFull", defaultFilter.scenario.incrFull),
+            incrUnchanged: getBoolOrDefault("incrUnchanged", defaultFilter.scenario.incrUnchanged),
+            incrPatched: getBoolOrDefault("incrPatched", defaultFilter.scenario.incrPatched)
+        },
+        category: {
+            primary: getBoolOrDefault("primary", defaultFilter.category.primary),
+            secondary: getBoolOrDefault("secondary", defaultFilter.category.secondary)
+        }
+    };
+}
+
+/**
+ * Stores the given filter parameters into URL, so that the current "view" can be shared with
+ * others easily.
+ */
+function storeFilterToUrl(filter) {
+    const defaultFilter = createDefaultFilter();
+    const params = getQueryParams();
+
+    function storeOrReset(name, value, defaultValue) {
+        if (value === defaultValue) {
+            if (params.has(name)) {
+                params.delete(name);
+            }
+        } else {
+            params.set(name, value);
+        }
+    }
+
+    storeOrReset("name", filter.name || null, defaultFilter.name);
+    storeOrReset("nonRelevant", filter.nonRelevant, defaultFilter.nonRelevant);
+    storeOrReset("check", filter.profile.check, defaultFilter.profile.check);
+    storeOrReset("debug", filter.profile.debug, defaultFilter.profile.debug);
+    storeOrReset("opt", filter.profile.opt, defaultFilter.profile.opt);
+    storeOrReset("doc", filter.profile.doc, defaultFilter.profile.doc);
+    storeOrReset("full", filter.scenario.full, defaultFilter.scenario.full);
+    storeOrReset("incrFull", filter.scenario.incrFull, defaultFilter.scenario.incrFull);
+    storeOrReset("incrUnchanged", filter.scenario.incrUnchanged, defaultFilter.scenario.incrUnchanged);
+    storeOrReset("incrPatched", filter.scenario.incrPatched, defaultFilter.scenario.incrPatched);
+    storeOrReset("primary", filter.category.primary, defaultFilter.category.primary);
+    storeOrReset("secondary", filter.category.secondary, defaultFilter.category.secondary);
+
+    // Change URL without creating a history entry
+    if (history.replaceState) {
+        history.replaceState({}, null, createUrlFromParams(params));
+    }
+}
+
 const app = Vue.createApp({
     mounted() {
         const app = this;
@@ -46,10 +122,19 @@ const app = Vue.createApp({
     },
     data() {
         return {
-            filter: createDefaultFilter(),
+            filter: initializeFilterFromUrl(),
             showRawData: false,
             data: null,
             dataLoading: false
+        }
+    },
+    watch: {
+        // Every time the filter changes, update URL
+        filter: {
+            handler(newValue, oldValue) {
+                storeFilterToUrl(newValue);
+            },
+            deep: true
         }
     },
     computed: {
@@ -281,10 +366,9 @@ const app = Vue.createApp({
             return result;
         },
         createUrlForMetric(metric) {
-            let start = findQueryParam("start");
-            let end = findQueryParam("end");
-
-            return createUrlFromParams(createSearchParamsForMetric(metric, start, end));
+            const params = getQueryParams();
+            params.set("stat", metric);
+            return createUrlFromParams(params);
         },
         resetFilter() {
             this.filter = createDefaultFilter();
@@ -696,29 +780,22 @@ function makeData(state, app) {
     });
 }
 
-function createSearchParamsForMetric(stat, start, end) {
-    let params = new URLSearchParams();
-    if (start !== undefined) {
-        params.append("start", start);
-    }
-    if (end !== undefined) {
-        params.append("end", end);
-    }
-    if (stat !== undefined) {
-        params.append("stat", stat);
-    }
-    return params.toString();
-}
-
 function createUrlFromParams(params) {
-    return window.location.protocol + "//" + window.location.host + window.location.pathname + "?" + params;
+    const url = new URL(window.location);
+    url.search = params;
+    return url.toString();
 }
 
 function submitSettings() {
     let stat = getSelected("stats");
     let start = document.getElementById("start-bound").value;
     let end = document.getElementById("end-bound").value;
-    let params = createSearchParamsForMetric(stat, start, end);
+
+    const params = getQueryParams();
+    params.set("stat", stat);
+    params.set("start", start);
+    params.set("end", end);
+
     window.location.search = params.toString();
 }
 
