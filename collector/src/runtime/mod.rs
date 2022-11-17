@@ -24,7 +24,7 @@ pub fn bench_runtime(
     let total_benchmark_count = suite.total_benchmark_count();
     let filtered = suite.filtered_benchmark_count(&filter);
     println!(
-        "Executing {} benchmarks ({} filtered out)",
+        "Executing {} benchmarks ({} filtered out)\n",
         filtered,
         total_benchmark_count - filtered
     );
@@ -120,7 +120,7 @@ fn print_stats(result: &BenchmarkResult) {
             .sqrt();
 
             println!(
-                "{name:>20}: {:>16} (+/- {:>8})",
+                "{name:>18}: {:>16} (+/- {:>11})",
                 (mean as u64).separate_with_commas(),
                 (stddev as u64).separate_with_commas()
             );
@@ -131,9 +131,10 @@ fn print_stats(result: &BenchmarkResult) {
 
     print_metric(result, "Instructions", |m| m.instructions);
     print_metric(result, "Cycles", |m| m.cycles);
-    print_metric(result, "Wall time [us]", |m| {
+    print_metric(result, "Wall time [µs]", |m| {
         Some(m.wall_time.as_micros() as u64)
     });
     print_metric(result, "Branch misses", |m| m.branch_misses);
     print_metric(result, "Cache misses", |m| m.cache_misses);
+    println!();
 }
