@@ -131,7 +131,7 @@ fn print_stats(result: &BenchmarkResult) {
 
     print_metric(result, "Instructions", |m| m.instructions);
     print_metric(result, "Cycles", |m| m.cycles);
-    print_metric(result, "Wall time [us]", |m| {
+    print_metric(result, "Wall time [µs]", |m| {
         Some(m.wall_time.as_micros() as u64)
     });
     print_metric(result, "Branch misses", |m| m.branch_misses);
