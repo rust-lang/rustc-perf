@@ -11,6 +11,7 @@ function createDefaultFilter() {
     return {
         name: null,
         nonRelevant: false,
+        showRawData: false,
         profile: {
             check: true,
             debug: true,
@@ -49,6 +50,7 @@ function initializeFilterFromUrl() {
     return {
         name: params.get("name"),
         nonRelevant: getBoolOrDefault("nonRelevant", defaultFilter.nonRelevant),
+        showRawData: getBoolOrDefault("showRawData", defaultFilter.showRawData),
         profile: {
             check: getBoolOrDefault("check", defaultFilter.profile.check),
             debug: getBoolOrDefault("debug", defaultFilter.profile.debug),
@@ -88,6 +90,7 @@ function storeFilterToUrl(filter) {
 
     storeOrReset("name", filter.name || null, defaultFilter.name);
     storeOrReset("nonRelevant", filter.nonRelevant, defaultFilter.nonRelevant);
+    storeOrReset("showRawData", filter.showRawData, defaultFilter.showRawData);
     storeOrReset("check", filter.profile.check, defaultFilter.profile.check);
     storeOrReset("debug", filter.profile.debug, defaultFilter.profile.debug);
     storeOrReset("opt", filter.profile.opt, defaultFilter.profile.opt);
@@ -123,7 +126,6 @@ const app = Vue.createApp({
     data() {
         return {
             filter: initializeFilterFromUrl(),
-            showRawData: false,
             data: null,
             dataLoading: false
         }

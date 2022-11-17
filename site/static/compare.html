@@ -274,7 +274,7 @@
                             </span>
                         </span>
                     </div>
-                    <input type="checkbox" v-model="showRawData" style="margin-left: 20px;" />
+                    <input type="checkbox" v-model="filter.showRawData" style="margin-left: 20px;" />
                 </div>
                 <button @click="resetFilter" style="margin-right: 10px;">Reset filters</button>
                 <button @click="exportToMarkdown"
@@ -315,7 +315,7 @@
             <test-cases-table
                 title="Primary"
                 :cases="testCases.filter(c => c.category === 'primary')"
-                :show-raw-data="showRawData"
+                :show-raw-data="filter.showRawData"
                 :commit-a="data.a"
                 :commit-b="data.b"
                 :stat="stat"
@@ -329,7 +329,7 @@
             <test-cases-table
                 title="Secondary"
                 :cases="testCases.filter(c => c.category === 'secondary')"
-                :show-raw-data="showRawData"
+                :show-raw-data="filter.showRawData"
                 :commit-a="data.a"
                 :commit-b="data.b"
                 :stat="stat"
