@@ -300,6 +300,6 @@ for rollup, we strongly recommend not doing so since this PR may lead to changes
 compiler perf.{next_steps}
 
 @bors rollup=never
-@rustbot label: +S-waiting-on-review -S-waiting-on-perf {sign}perf-regression",
+@rustbot label: -S-waiting-on-perf {sign}perf-regression",
     )
 }
