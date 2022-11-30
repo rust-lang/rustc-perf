@@ -175,7 +175,7 @@ jobs:
           echo "${PWD}/build/bin" >> $GITHUB_PATH
 
       - name: Install profilers
-        run: cargo install --version 0.4.12 cargo-llvm-lines
+        run: cargo install --version 0.4.22 cargo-llvm-lines
 
       - name: Install Bytehound
         run: |
