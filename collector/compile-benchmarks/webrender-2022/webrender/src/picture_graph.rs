@@ -123,7 +123,7 @@ impl PictureGraph {
         }
     }
 
-    /// Propegate bounding rects from pictures to parents (leaf -> root ordered pass)
+    /// Propagate bounding rects from pictures to parents (leaf -> root ordered pass)
     pub fn propagate_bounding_rects(
         &mut self,
         pictures: &mut [PicturePrimitive],
