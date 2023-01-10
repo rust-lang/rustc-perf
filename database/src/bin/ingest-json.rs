@@ -921,12 +921,7 @@ async fn ingest<T: Ingesting>(conn: &T, caches: &mut IdCache, path: &Path) {
             } else {
                 Profile::Debug
             };
-            let profile_str = match profile {
-                Profile::Check => "check",
-                Profile::Debug => "debug",
-                Profile::Doc => "doc",
-                Profile::Opt => "opt",
-            };
+            let profile_str = profile.as_str();
             let state = match &run.state {
                 BenchmarkState::Clean => Scenario::Empty,
                 BenchmarkState::IncrementalStart => Scenario::IncrementalEmpty,

@@ -226,6 +226,17 @@ pub enum Profile {
     Opt,
 }
 
+impl Profile {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Profile::Check => "check",
+            Profile::Opt => "opt",
+            Profile::Debug => "debug",
+            Profile::Doc => "doc",
+        }
+    }
+}
+
 impl std::str::FromStr for Profile {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -241,16 +252,7 @@ impl std::str::FromStr for Profile {
 
 impl fmt::Display for Profile {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Profile::Check => "check",
-                Profile::Opt => "opt",
-                Profile::Debug => "debug",
-                Profile::Doc => "doc",
-            }
-        )
+        write!(f, "{}", self.as_str())
     }
 }
 
