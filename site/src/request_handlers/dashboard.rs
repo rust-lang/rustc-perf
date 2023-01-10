@@ -156,6 +156,7 @@ pub struct ByProfile<T> {
     pub check: T,
     pub debug: T,
     pub doc: T,
+    pub json_doc: T,
     pub opt: T,
 }
 
@@ -169,6 +170,7 @@ impl<T> ByProfile<T> {
             check: f(Profile::Check).await?,
             debug: f(Profile::Debug).await?,
             doc: f(Profile::Doc).await?,
+            json_doc: f(Profile::JsonDoc).await?,
             opt: f(Profile::Opt).await?,
         })
     }
@@ -181,6 +183,7 @@ impl<T> std::ops::Index<Profile> for ByProfile<T> {
             Profile::Check => &self.check,
             Profile::Debug => &self.debug,
             Profile::Doc => &self.doc,
+            Profile::JsonDoc => &self.json_doc,
             Profile::Opt => &self.opt,
         }
     }

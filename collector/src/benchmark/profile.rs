@@ -4,15 +4,20 @@ pub enum Profile {
     Check,
     Debug,
     Doc,
+    JsonDoc,
     Opt,
 }
 
 impl Profile {
     pub fn all() -> Vec<Self> {
-        vec![Profile::Check, Profile::Debug, Profile::Doc, Profile::Opt]
+        vec![Profile::Check, Profile::Debug, Profile::Doc, Profile::JsonDoc, Profile::Opt]
     }
 
     pub fn all_non_doc() -> Vec<Self> {
         vec![Profile::Check, Profile::Debug, Profile::Opt]
+    }
+
+    pub fn is_doc(self) -> bool {
+        matches!(self, Self::Doc | Self::JsonDoc)
     }
 }

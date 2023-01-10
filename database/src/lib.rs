@@ -222,6 +222,8 @@ pub enum Profile {
     Debug,
     /// A doc build
     Doc,
+    /// A doc build with `--output-format=json` option.
+    JsonDoc,
     /// An optimized "release" build
     Opt,
 }
@@ -233,6 +235,7 @@ impl std::str::FromStr for Profile {
             "check" => Profile::Check,
             "debug" => Profile::Debug,
             "doc" => Profile::Doc,
+            "jsondoc" => Profile::JsonDoc,
             "opt" => Profile::Opt,
             _ => return Err(format!("{} is not a profile", s)),
         })
@@ -249,6 +252,7 @@ impl fmt::Display for Profile {
                 Profile::Opt => "opt",
                 Profile::Debug => "debug",
                 Profile::Doc => "doc",
+                Profile::JsonDoc => "jsondoc",
             }
         )
     }

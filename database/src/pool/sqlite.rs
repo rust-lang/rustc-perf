@@ -473,6 +473,7 @@ impl Connection for SqliteConnection {
                                 "opt" => Profile::Opt,
                                 "debug" => Profile::Debug,
                                 "doc" => Profile::Doc,
+                                "jsondoc" => Profile::JsonDoc,
                                 o => unreachable!("{}: not a profile", o),
                             },
                             row.get::<_, String>(3)?.as_str().parse().unwrap(),

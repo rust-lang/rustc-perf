@@ -347,15 +347,15 @@ pub fn get_local_toolchain(
             Some(rustdoc.canonicalize().with_context(|| {
                 format!("failed to canonicalize rustdoc executable {:?}", rustdoc)
             })?)
-        } else if profiles.contains(&Profile::Doc) {
+        } else if profiles.iter().any(|p| p.is_doc()) {
             // We need a `rustdoc`. Look for one next to `rustc`.
             if let Ok(rustdoc) = rustc.with_file_name("rustdoc").canonicalize() {
                 debug!("found rustdoc: {:?}", &rustdoc);
                 Some(rustdoc)
             } else {
                 anyhow::bail!(
-                    "'Doc' build specified but '--rustdoc' not specified and no 'rustdoc' found \
-                    next to 'rustc'"
+                    "'Doc' or 'JsonDoc' build specified but '--rustdoc' not specified and no \
+                    'rustdoc' found next to 'rustc'"
                 );
             }
         } else {
