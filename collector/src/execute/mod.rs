@@ -61,7 +61,7 @@ impl PerfTool {
             | ProfileTool(DepGraph)
             | ProfileTool(MonoItems)
             | ProfileTool(LlvmIr) => {
-                if profile == Profile::Doc {
+                if profile.is_doc() {
                     Some("rustdoc")
                 } else {
                     Some("rustc")
@@ -69,7 +69,7 @@ impl PerfTool {
             }
             ProfileTool(LlvmLines) => match profile {
                 Profile::Debug | Profile::Opt => Some("llvm-lines"),
-                Profile::Check | Profile::Doc => None,
+                Profile::Check | Profile::Doc | Profile::JsonDoc => None,
             },
         }
     }
@@ -210,9 +210,10 @@ impl<'a> CargoProcess<'a> {
                         Some(sub) => sub,
                     }
                 } else {
-                    match self.profile {
-                        Profile::Doc => "rustdoc",
-                        _ => "rustc",
+                    if self.profile.is_doc() {
+                        "rustdoc"
+                    } else {
+                        "rustc"
                     }
                 };
 
@@ -224,6 +225,9 @@ impl<'a> CargoProcess<'a> {
                 }
                 Profile::Debug => {}
                 Profile::Doc => {}
+                Profile::JsonDoc => {
+                    cmd.env("RUSTDOCFLAGS", "-Z unstable-options --output-format=json");
+                }
                 Profile::Opt => {
                     cmd.arg("--release");
                 }

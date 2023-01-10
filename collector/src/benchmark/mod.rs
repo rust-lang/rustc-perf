@@ -291,7 +291,7 @@ impl Benchmark {
                 }
 
                 // Rustdoc does not support incremental compilation
-                if profile != Profile::Doc {
+                if profile.is_doc() {
                     // An incremental  from scratch (slowest incremental case).
                     // This is required for any subsequent incremental builds.
                     if scenarios.iter().any(|s| s.is_incr()) {

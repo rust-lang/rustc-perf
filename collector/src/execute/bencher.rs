@@ -98,6 +98,7 @@ impl<'a> BenchProcessor<'a> {
             Profile::Check => database::Profile::Check,
             Profile::Debug => database::Profile::Debug,
             Profile::Doc => database::Profile::Doc,
+            Profile::JsonDoc => database::Profile::JsonDoc,
             Profile::Opt => database::Profile::Opt,
         };
 
