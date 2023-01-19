@@ -468,13 +468,7 @@ impl Connection for SqliteConnection {
                         row.get::<_, i32>(0)? as u32,
                         (
                             Benchmark::from(row.get::<_, String>(1)?.as_str()),
-                            match row.get::<_, String>(2)?.as_str() {
-                                "check" => Profile::Check,
-                                "opt" => Profile::Opt,
-                                "debug" => Profile::Debug,
-                                "doc" => Profile::Doc,
-                                o => unreachable!("{}: not a profile", o),
-                            },
+                            Profile::from_str(row.get::<_, String>(2)?.as_str()).unwrap(),
                             row.get::<_, String>(3)?.as_str().parse().unwrap(),
                             row.get::<_, String>(4)?.as_str().into(),
                         ),
