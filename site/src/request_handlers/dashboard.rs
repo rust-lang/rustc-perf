@@ -1,4 +1,3 @@
-use collector::benchmark::{compile_benchmark_dir, get_compile_benchmarks};
 use std::sync::Arc;
 
 use crate::api::{dashboard, ServerResult};
@@ -75,18 +74,23 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
             .collect::<Vec<_>>(),
     );
 
-    let stable_benchmarks: Vec<String> =
-        get_compile_benchmarks(&compile_benchmark_dir(), None, None)
-            .map_err(|error| format!("Could not load benchmarks: {error:?}"))?
-            .into_iter()
-            .filter(|benchmark| benchmark.category().is_stable())
-            .map(|benchmark| benchmark.name.to_string())
-            .collect();
-
     let query = selector::Query::new()
+        // FIXME: don't hardcode the stabilized benchmarks
+        // This list was found via:
+        // `rg supports.stable collector/compile-benchmarks/ -tjson -c --sort path`
         .set(
             selector::Tag::Benchmark,
-            selector::Selector::Subset(stable_benchmarks),
+            selector::Selector::Subset(vec![
+                "encoding",
+                "futures",
+                "html5ever",
+                "inflate",
+                "piston-image",
+                "regex",
+                "style-servo",
+                "syn",
+                "tokio-webpush-simple",
+            ]),
         )
         .set(selector::Tag::Metric, selector::Selector::One("wall-time"));
 
