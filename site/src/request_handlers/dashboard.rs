@@ -116,7 +116,7 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
                         .collect::<Vec<_>>(),
                 )
                 .map(|((_id, point), _interpolated)| {
-                    (point.expect("interpolated") * 10.0).round() / 10.0
+                    (point.expect("interpolated") * 100.0).round() / 100.0
                 })
                 .collect::<Vec<_>>();
 
