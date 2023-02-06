@@ -230,6 +230,19 @@ fn main() {
                 run_with_determinism_env(cmd);
             }
 
+            "Samply" => {
+                let mut cmd = Command::new("samply");
+                let has_samply = cmd.output().is_ok();
+                assert!(has_samply);
+                cmd.arg("record")
+                    .arg("--no-open")
+                    .arg("--save-only")
+                    .arg(&tool)
+                    .args(&args);
+
+                run_with_determinism_env(cmd);
+            }
+
             "Cachegrind" => {
                 let mut cmd = Command::new("valgrind");
                 let has_valgrind = cmd.output().is_ok();

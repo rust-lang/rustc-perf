@@ -14,6 +14,7 @@ pub enum Profiler {
     SelfProfile,
     PerfRecord,
     Oprofile,
+    Samply,
     Cachegrind,
     Callgrind,
     Dhat,
@@ -204,6 +205,16 @@ impl<'a> Processor for ProfileProcessor<'a> {
                     .arg("0.5")
                     .arg(&session_dir_arg);
                 fs::write(opann_file, &op_annotate_cmd.output()?.stdout)?;
+            }
+
+            // Samply produces (via rustc-fake) a data file called
+            // `profile.json`. We copy it from the temp dir to the output dir,
+            // giving it a new name in the process.
+            Profiler::Samply => {
+                let tmp_samply_file = filepath(data.cwd.as_ref(), "profile.json");
+                let samply_file = filepath(self.output_dir, &out_file("samply"));
+
+                fs::copy(&tmp_samply_file, &samply_file)?;
             }
 
             // Cachegrind produces (via rustc-fake) a data file called `cgout`.

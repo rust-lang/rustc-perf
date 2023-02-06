@@ -39,6 +39,9 @@ cargo build -p collector --bin rustc-fake
 # oprofile: untested... it's not used much, and might have the same problems
 # that `perf` has due to virtualized hardware.
 
+# samply: untested because it has the same problems that `perf` has due to
+# virtualized hardware.
+
 # Cachegrind.
 RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
     cargo run -p collector --bin collector -- \

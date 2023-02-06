@@ -289,6 +289,13 @@ The mandatory `<PROFILER>` argument must be one of the following.
   - **Notes**. OProfile fails moderately often with this message: "operf-record
     process killed by signal 13". The failures seem to be random; re-running
     often results in success.
+- `samply`: Profile with [Samply](https://github.com/mstange/samply/), a
+  sampling profiler.
+  - **Purpose**. Samply is a general-purpose profiler, good for seeing
+    where execution time is spent and finding hot functions.
+  - **Slowdown**. Negligible.
+  - **Output**. Binary output is written to a file with a `samply` prefix.
+    That file can be loaded with `samply load`.
 - `cachegrind`: Profile with
   [Cachegrind](http://valgrind.org/docs/manual/cg-manual.html), a tracing
   profiler. Requires Valgrind 3.15 or later.
