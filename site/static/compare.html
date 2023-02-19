@@ -314,7 +314,8 @@
             </div>
             <test-cases-table
                 title="Primary"
-                :cases="testCases.filter(c => c.category === 'primary')"
+                :cases="primaryCases"
+                :has-non-relevant="testCasesWithNonRelevant.filter(c => c.category === 'primary').length > 0"
                 :show-raw-data="filter.showRawData"
                 :commit-a="data.a"
                 :commit-b="data.b"
@@ -328,7 +329,8 @@
             <hr />
             <test-cases-table
                 title="Secondary"
-                :cases="testCases.filter(c => c.category === 'secondary')"
+                :cases="secondaryCases"
+                :has-non-relevant="testCasesWithNonRelevant.filter(c => c.category === 'secondary').length > 0"
                 :show-raw-data="filter.showRawData"
                 :commit-a="data.a"
                 :commit-b="data.b"
