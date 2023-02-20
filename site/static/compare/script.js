@@ -152,7 +152,7 @@ const app = Vue.createApp({
         compareLink() {
             return `https://github.com/rust-lang/rust/compare/${this.data.a.commit}...${this.data.b.commit}`;
         },
-        testCases() {
+        testCasesWithNonRelevant() {
             let data = this.data;
             const filter = this.filter;
             const benchmarkMap = this.benchmarkMap;
@@ -197,13 +197,10 @@ const app = Vue.createApp({
                 let nameFilter = filter.name && filter.name.trim();
                 nameFilter = !nameFilter || name.includes(nameFilter);
 
-                const relevanceFilter = filter.nonRelevant ? true : testCase.isRelevant;
-
                 return (
                     profileFilter(testCase.profile) &&
                     scenarioFilter(testCase.scenario) &&
                     categoryFilter(testCase.category) &&
-                    relevanceFilter &&
                     nameFilter
                 );
             }
@@ -236,6 +233,15 @@ const app = Vue.createApp({
             testCases.sort((a, b) => Math.abs(b.percent) - Math.abs(a.percent));
 
             return testCases;
+        },
+        testCases() {
+            return this.filterNonRelevant(this.testCasesWithNonRelevant);
+        },
+        primaryCases() {
+            return this.testCases.filter(c => c.category === "primary");
+        },
+        secondaryCases() {
+            return this.testCases.filter(c => c.category === "secondary");
         },
         bootstrapTotals() {
             const a = this.data.a.bootstrap_total / 1e9;
@@ -377,6 +383,12 @@ const app = Vue.createApp({
         },
         exportToMarkdown() {
             exportToMarkdown(this.testCases);
+        },
+        filterNonRelevant(cases) {
+            if (this.filter.nonRelevant) {
+                return cases;
+            }
+            return cases.filter(c => c.isRelevant);
         }
     },
 });
@@ -384,6 +396,7 @@ const app = Vue.createApp({
 app.component('test-cases-table', {
     props: {
         cases: Array,
+        hasNonRelevant: Boolean,
         showRawData: Boolean,
         commitA: Object,
         commitB: Object,
@@ -433,7 +446,7 @@ app.component('test-cases-table', {
   </span>
 </div>
 <div v-if="cases.length === 0" style="text-align: center;">
-  No results
+  {{ hasNonRelevant ? "No relevant results" : "No results" }}
 </div>
 <table v-else class="benches compare">
     <thead>
@@ -555,7 +568,7 @@ const SummaryCount = {
 `
 };
 
-app.component('summary-table', {
+app.component("summary-table", {
     props: {
         summary: Object,
         withLegend: {
