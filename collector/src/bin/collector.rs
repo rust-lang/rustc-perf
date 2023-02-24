@@ -664,7 +664,7 @@ struct DownloadCommand {
     force: bool,
 
     /// What category does the benchmark belong to
-    #[clap(long, short('c'), arg_enum, global = true, default_value = "secondary")]
+    #[clap(long, short('c'), arg_enum, global = true, default_value = "primary")]
     category: Category,
 
     #[clap(subcommand)]
