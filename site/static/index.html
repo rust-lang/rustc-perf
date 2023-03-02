@@ -102,7 +102,7 @@
 
         const otherCacheStateColors = ["#8085e9", "#f15c80", "#e4d354", "#2b908f", "#f45b5b", "#91e8e1"];
         const interpolatedColor = "#fcb0f1";
-        const basicProfiles = ["Check", "Debug", "Opt"];
+        const profiles = ["Check", "Debug", "Opt", "Doc"];
 
         function tooltipPlugin({ onclick, commits, isInterpolated, absoluteMode, shiftX = 10, shiftY = 10 }) {
             let tooltipLeftOffset = 0;
@@ -385,7 +385,7 @@
 
                     let plotOpts = genPlotOpts({
                         title: benchName + "-" + benchKind,
-                        width: Math.floor(window.innerWidth / 3) - 16,
+                        width: Math.floor(window.innerWidth / 4) - 16,
                         height: 300,
                         yAxisLabel,
                         series: seriesOpts,
@@ -426,7 +426,7 @@
             sortedBenchNames.forEach(name => {
                 benchmarks[name] = {};
 
-                for (let profile of basicProfiles) {
+                for (let profile of profiles) {
                     if (data.benchmarks[name].hasOwnProperty(profile)) {
                         benchmarks[name][profile.toLowerCase()] = optInterpolated(data.benchmarks[name][profile]);
                     }
