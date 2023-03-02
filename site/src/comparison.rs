@@ -213,8 +213,12 @@ pub enum Metric {
     BranchMisses,
     #[serde(rename = "cache-misses")]
     CacheMisses,
+    /// Rustc guesses the codegen unit size by MIR count.
     #[serde(rename = "size:codegen_unit_size_estimate")]
     CodegenUnitSize,
+    /// The codegen unit size by llvm ir count, the real size of a cgu.
+    #[serde(rename = "size:cgu_instructions")]
+    CodegenUnitLlvmIrCount,
     #[serde(rename = "size:dep_graph")]
     DepGraphSize,
     #[serde(rename = "size:linked_artifact")]
@@ -261,6 +265,7 @@ impl Metric {
             Metric::BranchMisses => "branch-misses",
             Metric::CacheMisses => "cache-misses",
             Metric::CodegenUnitSize => "size:codegen_unit_size_estimate",
+            Metric::CodegenUnitLlvmIrCount => "size:cgu_instructions",
             Metric::DepGraphSize => "size:dep_graph",
             Metric::LinkedArtifactSize => "size:linked_artifact",
             Metric::ObjectFileSize => "size:object_file",
