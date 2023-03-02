@@ -177,7 +177,7 @@ fn create_summary(
     let mut summary_benchmark = HashMap::new();
     let summary_query_cases = iproduct!(
         ctxt.summary_scenarios(),
-        vec![Profile::Check, Profile::Debug, Profile::Opt]
+        vec![Profile::Check, Profile::Debug, Profile::Opt, Profile::Doc]
     );
     for (scenario, profile) in summary_query_cases {
         let baseline = match baselines.entry((profile, scenario)) {
