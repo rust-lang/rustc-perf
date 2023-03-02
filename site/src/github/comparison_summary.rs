@@ -6,7 +6,7 @@ use crate::load::SiteCtxt;
 
 use database::{ArtifactId, QueuedCommit};
 
-use crate::github::{COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL};
+use crate::github::{COMMENT_MARK_ROLLUP, COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL};
 use std::collections::HashSet;
 use std::fmt::Write;
 
@@ -76,13 +76,11 @@ async fn post_comparison_comment(
 ) -> anyhow::Result<()> {
     let client = super::client::Client::from_ctxt(ctxt, RUST_REPO_GITHUB_API_URL.to_owned());
     let pr = commit.pr;
-    let body = match summarize_run(ctxt, commit, is_master_commit).await {
-        Ok(message) => message,
-        Err(error) => error,
-    };
 
-    client.post_comment(pr, body).await;
+    // Was this perf. run triggered from a PR that was already merged and is a rollup?
+    let mut is_rollup = false;
 
+    // Scan comments to hide outdated ones and gather context
     let graph_client = super::client::GraphQLClient::from_ctxt(ctxt);
     for comment in graph_client.get_comments(pr).await? {
         // If this bot is the author of the comment, the comment is not yet minimized and it is
@@ -94,7 +92,27 @@ async fn post_comparison_comment(
             log::debug!("Hiding comment {}", comment.id);
             graph_client.hide_comment(&comment.id, "OUTDATED").await?;
         }
+
+        if comment.viewer_did_author && comment.body.contains(COMMENT_MARK_ROLLUP) {
+            is_rollup = true;
+        }
     }
+
+    let source = if is_master_commit {
+        PerfRunSource::MasterCommit
+    } else if is_rollup {
+        PerfRunSource::TryBuildRollup
+    } else {
+        PerfRunSource::TryBuild
+    };
+
+    let body = match summarize_run(ctxt, commit, source).await {
+        Ok(message) => message,
+        Err(error) => error,
+    };
+
+    client.post_comment(pr, body).await;
+
     Ok(())
 }
 
@@ -125,10 +143,20 @@ async fn calculate_metric_comparison(
     }
 }
 
+/// What caused this perf. run to be executed?
+enum PerfRunSource {
+    // PR merged to master
+    MasterCommit,
+    // Manual try build on a PR
+    TryBuild,
+    // Manual try build on a merged rollup PR
+    TryBuildRollup,
+}
+
 async fn summarize_run(
     ctxt: &SiteCtxt,
     commit: QueuedCommit,
-    is_master_commit: bool,
+    source: PerfRunSource,
 ) -> Result<String, String> {
     let benchmark_map = ctxt.get_benchmark_category_map().await;
 
@@ -179,16 +207,16 @@ async fn summarize_run(
     )
     .unwrap();
 
-    let next_steps = if is_master_commit {
-        master_run_body(is_regression)
-    } else {
-        try_run_body(is_regression)
+    let next_steps = match source {
+        PerfRunSource::TryBuild => try_run_body(is_regression),
+        PerfRunSource::TryBuildRollup => "".to_string(),
+        PerfRunSource::MasterCommit => master_run_body(is_regression),
     };
     writeln!(&mut message, "{next_steps}\n").unwrap();
 
     if !errors.is_empty() {
         writeln!(&mut message, "\n{errors}").unwrap();
-        if is_master_commit {
+        if matches!(source, PerfRunSource::MasterCommit) {
             writeln!(&mut message, "\ncc @rust-lang/wg-compiler-performance").unwrap();
         }
     }
