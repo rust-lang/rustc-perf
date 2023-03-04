@@ -16,6 +16,9 @@ pub const RUST_REPO_GITHUB_API_URL: &str = "https://api.github.com/repos/rust-la
 /// They are removed once a perf. run comparison summary is posted on a PR.
 pub const COMMENT_MARK_TEMPORARY: &str = "<!-- rust-timer: temporary -->";
 
+/// Used for comment that contains unrolled commits for merged rolled-up PRs.
+pub const COMMENT_MARK_ROLLUP: &str = "<!-- rust-timer: rollup -->";
+
 pub use comparison_summary::post_finished;
 
 /// Enqueues try build artifacts and posts a message about them on the original rollup PR
@@ -51,7 +54,8 @@ pub async fn unroll_rollup(
         format!("📌 Perf builds for each rolled up PR:\n\n\
         |PR# | Perf Build Sha|\n|----|:-----:|\n\
         {mapping}\n\n*previous master*: {previous_master}\n\nIn the case of a perf regression, \
-        run the following command for each PR you suspect might be the cause: `@rust-timer build $SHA`");
+        run the following command for each PR you suspect might be the cause: `@rust-timer build $SHA`\n\
+        {COMMENT_MARK_ROLLUP}");
     main_repo_client.post_comment(rollup_pr_number, msg).await;
     Ok(())
 }
