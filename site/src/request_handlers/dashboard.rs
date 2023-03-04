@@ -149,6 +149,7 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
         check: by_profile.check,
         debug: by_profile.debug,
         opt: by_profile.opt,
+        doc: by_profile.doc,
     })
 }
 

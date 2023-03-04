@@ -38,6 +38,7 @@ pub mod dashboard {
         pub check: Cases,
         pub debug: Cases,
         pub opt: Cases,
+        pub doc: Cases,
     }
 }
 
