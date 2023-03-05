@@ -1,7 +1,7 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{
-    ArtifactId, ArtifactIdNumber, Benchmark, BenchmarkData, CollectionId, Commit, CommitType, Date,
-    Index, Profile, QueuedCommit, Scenario,
+    ArtifactId, ArtifactIdNumber, Benchmark, CollectionId, Commit, CommitType, CompileBenchmark,
+    Date, Index, Profile, QueuedCommit, Scenario,
 };
 use anyhow::Context as _;
 use chrono::{DateTime, TimeZone, Utc};
@@ -555,14 +555,14 @@ where
                 .collect(),
         }
     }
-    async fn get_benchmarks(&self) -> Vec<BenchmarkData> {
+    async fn get_compile_benchmarks(&self) -> Vec<CompileBenchmark> {
         let rows = self
             .conn()
             .query(&self.statements().get_benchmarks, &[])
             .await
             .unwrap();
         rows.into_iter()
-            .map(|r| BenchmarkData {
+            .map(|r| CompileBenchmark {
                 name: r.get(0),
                 category: r.get(1),
             })
@@ -739,6 +739,16 @@ where
             .await
             .unwrap();
     }
+    async fn record_runtime_statistic(
+        &self,
+        _collection: CollectionId,
+        _artifact: ArtifactIdNumber,
+        _benchmark: &str,
+        _metric: &str,
+        _value: f64,
+    ) {
+        unimplemented!()
+    }
 
     async fn record_rustc_crate(
         &self,
@@ -883,7 +893,7 @@ where
             .unwrap();
     }
 
-    async fn record_benchmark(
+    async fn record_compile_benchmark(
         &self,
         benchmark: &str,
         supports_stable: Option<bool>,
@@ -921,6 +931,9 @@ where
                 .await
                 .unwrap();
         }
+    }
+    async fn record_runtime_benchmark(&self, _name: &str) {
+        unimplemented!()
     }
 
     async fn collector_start(&self, aid: ArtifactIdNumber, steps: &[String]) {

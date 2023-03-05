@@ -258,7 +258,7 @@ impl SiteCtxt {
     }
 
     pub async fn get_benchmark_category_map(&self) -> HashMap<Benchmark, Category> {
-        let benchmarks = self.pool.connection().await.get_benchmarks().await;
+        let benchmarks = self.pool.connection().await.get_compile_benchmarks().await;
         benchmarks
             .into_iter()
             .map(|bench| {

@@ -1,6 +1,6 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{
-    ArtifactId, Benchmark, BenchmarkData, CollectionId, Commit, CommitType, Date, Profile,
+    ArtifactId, Benchmark, CollectionId, Commit, CommitType, CompileBenchmark, Date, Profile,
 };
 use crate::{ArtifactIdNumber, Index, QueryDatum, QueuedCommit};
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
@@ -322,6 +322,26 @@ static MIGRATIONS: &[Migration] = &[
     ),
     Migration::new("alter table benchmark add column category text not null default ''"),
     Migration::new("alter table pull_request_build add column commit_date timestamp"),
+    Migration::new(
+        r#"
+        create table runtime_benchmark(
+            name text primary key not null
+        );
+        create table runtime_pstat_series(
+            id integer primary key not null,
+            benchmark text not null references runtime_benchmark(name) on delete cascade on update cascade,
+            metric text not null,
+            UNIQUE(benchmark, metric)
+        );
+        create table runtime_pstat(
+            series integer references runtime_pstat_series(id) on delete cascade on update cascade,
+            aid integer references artifact(id) on delete cascade on update cascade,
+            cid integer references collection(id) on delete cascade on update cascade,
+            value double not null,
+            PRIMARY KEY(series, aid, cid)
+        );
+        "#,
+    ),
 ];
 
 #[async_trait::async_trait]
@@ -480,14 +500,38 @@ impl Connection for SqliteConnection {
         }
     }
 
-    async fn get_benchmarks(&self) -> Vec<BenchmarkData> {
+    async fn record_compile_benchmark(
+        &self,
+        benchmark: &str,
+        supports_stable: Option<bool>,
+        category: String,
+    ) {
+        if let Some(stable) = supports_stable {
+            self.raw_ref()
+                .execute(
+                    "insert into benchmark (name, stabilized, category) VALUES (?, ?, ?)
+                ON CONFLICT (name) do update set stabilized = excluded.stabilized, category = excluded.category",
+                    params![benchmark, stable, category],
+                )
+                .unwrap();
+        } else {
+            self.raw_ref()
+                .execute(
+                    "insert into benchmark (name, stabilized, category) VALUES (?, ?, ?)
+                ON CONFLICT (name) do update set category = excluded.category",
+                    params![benchmark, false, category],
+                )
+                .unwrap();
+        }
+    }
+    async fn get_compile_benchmarks(&self) -> Vec<CompileBenchmark> {
         let conn = self.raw_ref();
         let mut query = conn
             .prepare_cached("select name, category from benchmark")
             .unwrap();
         let rows = query
             .query_map([], |row| {
-                Ok(BenchmarkData {
+                Ok(CompileBenchmark {
                     name: row.get(0)?,
                     category: row.get::<_, String>(1)?,
                 })
@@ -498,6 +542,15 @@ impl Connection for SqliteConnection {
             benchmarks.push(row.unwrap());
         }
         benchmarks
+    }
+    async fn record_runtime_benchmark(&self, name: &str) {
+        self.raw_ref()
+            .execute(
+                "insert into runtime_benchmark (name) VALUES (?)
+                ON CONFLICT (name) do nothing",
+                params![name],
+            )
+            .unwrap();
     }
 
     async fn get_pstats(
@@ -681,6 +734,35 @@ impl Connection for SqliteConnection {
             )
             .unwrap();
     }
+    async fn record_runtime_statistic(
+        &self,
+        collection: CollectionId,
+        artifact: ArtifactIdNumber,
+        benchmark: &str,
+        metric: &str,
+        value: f64,
+    ) {
+        self.raw_ref()
+            .execute(
+                "insert or ignore into runtime_pstat_series (benchmark, metric) VALUES (?, ?)",
+                params![&benchmark, &metric,],
+            )
+            .unwrap();
+        let sid: i32 = self
+            .raw_ref()
+            .query_row(
+                "select id from runtime_pstat_series where benchmark = ? and metric = ?",
+                params![&benchmark, &metric,],
+                |r| r.get(0),
+            )
+            .unwrap();
+        self.raw_ref()
+            .execute(
+                "insert into runtime_pstat (series, aid, cid, value) VALUES (?, ?, ?, ?)",
+                params![&sid, &artifact.0, &collection.0, &value],
+            )
+            .unwrap();
+    }
 
     async fn record_rustc_crate(
         &self,
@@ -800,30 +882,6 @@ impl Connection for SqliteConnection {
                 params![&sid, &artifact.0, &error],
             )
             .unwrap();
-    }
-    async fn record_benchmark(
-        &self,
-        benchmark: &str,
-        supports_stable: Option<bool>,
-        category: String,
-    ) {
-        if let Some(stable) = supports_stable {
-            self.raw_ref()
-                .execute(
-                    "insert into benchmark (name, stabilized, category) VALUES (?, ?, ?)
-                ON CONFLICT (name) do update set stabilized = excluded.stabilized, category = excluded.category",
-                    params![benchmark, stable, category],
-                )
-                .unwrap();
-        } else {
-            self.raw_ref()
-                .execute(
-                    "insert into benchmark (name, stabilized, category) VALUES (?, ?, ?)
-                ON CONFLICT (name) do update set category = excluded.category",
-                    params![benchmark, false, category],
-                )
-                .unwrap();
-        }
     }
     async fn collector_start(&self, aid: ArtifactIdNumber, steps: &[String]) {
         // Clean out any leftover unterminated steps.
