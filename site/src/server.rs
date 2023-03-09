@@ -599,7 +599,7 @@ async fn handle_fs_path(req: &Request, path: &str) -> Option<http::Response<hype
     }
 
     let source = match path {
-        "/help.html" | "/status.html" => TEMPLATES
+        "/bootstrap.html" | "/help.html" | "/status.html" => TEMPLATES
             .render(&format!("pages/{}", path.trim_start_matches("/")))
             .await
             .unwrap()

@@ -1,0 +1,72 @@
+{% extends "layout.html" %}
+{% block head %}
+<link rel="stylesheet" href="uPlot.min.css" />
+<link rel="stylesheet" type="text/css" href="perf.css" />
+<style>
+    .uplot {
+        display: inline-block;
+        vertical-align: top;
+        width: min-content;
+    }
+
+    .u-over {
+        box-shadow: 0px 0px 0px 0.5px #ccc;
+    }
+
+    .u-legend {
+        text-align: left;
+        padding-left: 50px;
+    }
+
+    .u-inline tr {
+        margin-right: 8px;
+    }
+
+    .u-label {
+        font-size: 12px;
+    }
+
+    .u-tooltip {
+        font-size: 10pt;
+        position: absolute;
+        background: #fff;
+        display: none;
+        border: 2px solid black;
+        padding: 4px;
+        pointer-events: none;
+        z-index: 100;
+        white-space: pre;
+        font-family: monospace;
+    }
+
+    body {
+        padding: 1em;
+        margin: 0;
+    }
+</style>
+{% endblock %}
+{% block content %}
+<div>
+    <div id="settings">
+        start: <input placeholder="yyyy-mm-dd or commit" id="start-bound" />
+        end: <input placeholder="yyyy-mm-dd or commit" id="end-bound" />
+        <a href="#" onClick="submit_settings(); return false;">Submit</a>
+    </div>
+    <div>
+        See <a href="/compare.html">compare page</a> for descriptions of what
+        the names mean.
+    </div>
+    <div id="loading">
+        <h2>Loading &amp; rendering data..</h2>
+        <h3>This may take a while!</h3>
+    </div>
+    <div id="byCrateChart"></div>
+    <div id="totalChart"></div>
+    <div id="as-of"></div>
+</div>
+{% endblock %}
+{% block script %}
+<script src="uPlot.iife.min.js"></script>
+<script src="shared.js"></script>
+<script src="scripts/bootstrap.js"></script>
+{% endblock %}
