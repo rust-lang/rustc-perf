@@ -613,12 +613,10 @@ async fn handle_fs_path(req: &Request, path: &str) -> Option<http::Response<hype
         _ => (),
     }
 
-    let start = Instant::now();
     let source = match path {
         "/help.html" => TEMPLATES.render("help.html").await.unwrap().into_bytes(),
         _ => fs::read(&fs_path).unwrap(),
     };
-    println!("{:?}", start.elapsed());
 
     Some(response.body(hyper::Body::from(source)).unwrap())
 }
