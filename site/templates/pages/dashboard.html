@@ -1,0 +1,16 @@
+{% extends "layout.html" %}
+{% block head %}
+<link rel="stylesheet" type="text/css" href="perf.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highcharts/6.0.7/highcharts.js"></script>
+{% endblock %}
+{% block content %}
+<div id="check-average-times"></div>
+<div id="debug-average-times"></div>
+<div id="opt-average-times"></div>
+<div id="doc-average-times"></div>
+<div id="as-of"></div>
+{% endblock %}
+{% block script %}
+<script src="shared.js"></script>
+<script src="scripts/dashboard.js"></script>
+{% endblock %}
