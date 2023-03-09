@@ -45,6 +45,7 @@ inferno = { version="0.10", default-features = false }
 mime = "0.3"
 prometheus = "0.12"
 uuid = { version = "0.8.2", features = ["v4"] }
+tera = "1.18"
 
 [target.'cfg(unix)'.dependencies]
 jemallocator = "0.3"

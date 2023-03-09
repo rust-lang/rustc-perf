@@ -2,7 +2,7 @@ use brotli::enc::BrotliEncoderParams;
 use brotli::BrotliCompress;
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::sync::Arc;
@@ -28,6 +28,7 @@ pub use crate::api::{
 use crate::db::{self, ArtifactId};
 use crate::load::{Config, SiteCtxt};
 use crate::request_handlers;
+use crate::templates::TemplateRenderer;
 
 pub type Request = http::Request<hyper::Body>;
 pub type Response = http::Response<hyper::Body>;
@@ -336,7 +337,7 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
         None
     };
 
-    if let Some(response) = handle_fs_path(&req, path) {
+    if let Some(response) = handle_fs_path(&req, path).await {
         return Ok(response);
     }
 
@@ -565,10 +566,14 @@ where
 
 lazy_static::lazy_static! {
     static ref VERSION_UUID: Uuid = Uuid::new_v4(); // random UUID used as ETag for cache revalidation
+    static ref TEMPLATES: TemplateRenderer = {
+        let livereload = std::env::var("LIVERELOAD").is_ok();
+        TemplateRenderer::new(PathBuf::from("site/templates"), livereload).unwrap()
+    };
 }
 
 /// Handle the case where the path is to a static file
-fn handle_fs_path(req: &Request, path: &str) -> Option<http::Response<hyper::Body>> {
+async fn handle_fs_path(req: &Request, path: &str) -> Option<http::Response<hyper::Body>> {
     let fs_path = format!(
         "site/static{}",
         match path {
@@ -597,7 +602,6 @@ fn handle_fs_path(req: &Request, path: &str) -> Option<http::Response<hyper::Bod
         }
     }
 
-    let source = fs::read(&fs_path).unwrap();
     let p = Path::new(&fs_path);
     match p.extension().and_then(|x| x.to_str()) {
         Some("html") => response = response.header_typed(ContentType::html()),
@@ -608,6 +612,14 @@ fn handle_fs_path(req: &Request, path: &str) -> Option<http::Response<hyper::Bod
         Some("js") => response = response.header("Content-Type", "application/javascript"),
         _ => (),
     }
+
+    let start = Instant::now();
+    let source = match path {
+        "/help.html" => TEMPLATES.render("help.html").await.unwrap().into_bytes(),
+        _ => fs::read(&fs_path).unwrap(),
+    };
+    println!("{:?}", start.elapsed());
+
     Some(response.body(hyper::Body::from(source)).unwrap())
 }
 

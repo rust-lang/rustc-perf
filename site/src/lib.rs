@@ -21,3 +21,4 @@ mod interpolate;
 mod request_handlers;
 mod selector;
 mod self_profile;
+mod templates;
