@@ -1429,7 +1429,7 @@ Revision range: [{first_commit}..{last_commit}](https://perf.rust-lang.org/?star
 TODO: Nags
 
 "#####,
-        date = chrono::Utc::today().format("%Y-%m-%d"),
+        date = chrono::Utc::now().format("%Y-%m-%d"),
         first_commit = start,
         last_commit = end,
         num_comparisons = num_comparisons,

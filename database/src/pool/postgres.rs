@@ -498,7 +498,7 @@ where
                                 let timestamp: Option<DateTime<Utc>> = row.get(2);
                                 match timestamp {
                                     Some(t) => Date(t),
-                                    None => Date(Utc.ymd(2001, 01, 01).and_hms(0, 0, 0)),
+                                    None => Date(Utc.with_ymd_and_hms(2001, 01, 01, 0, 0, 0).unwrap()),
                                 }
                             },
                             r#type: CommitType::from_str(&row.get::<_, String>(3)).unwrap()
