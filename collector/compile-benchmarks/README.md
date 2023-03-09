@@ -15,13 +15,15 @@ There are three categories of compile-time benchmarks, **Primary**, **Secondary*
 These are real programs that are important in some way, and worth tracking.
 They mostly consist of real-world crates.
 
-- **bitmaps-3.1.0**: A bitmaps implementation. Stresses code handling traits.
+- **bitmaps-3.1.0**: A bitmaps implementation. Stresses the compiler's trait
+  handling by implementing a trait `Bits` for the type `BitsImpl<N>` for every
+  `N` value from 1 to 1024.
 - **cargo-0.60.0**: The Rust package manager. A large program, and an important
-  one in the Rust ecosystem.
-- **clap-3.1.6**: A command line argument parser. A crate used by many Rust
-  programs.
+  part of the Rust ecosystem.
+- **clap-3.1.6**: A command line argument parser library. A crate used by many
+  Rust programs.
 - **cranelift-codegen-0.82.1**: The largest crate from a code generator. Used by
-  wasmtime.
+  wasmtime. Stresses obligation processing, but less than `keccak`.
 - **diesel-1.4.8**: A type safe SQL query builder. Utilizes the type system to
   ensure a lot of invariants. Stresses anything related to resolving
   trait bounds, by having a lot of trait impls for a large number of different
@@ -38,7 +40,8 @@ They mostly consist of real-world crates.
   types, constants, and functions, but relatively little normal code. Stresses
   the parser. A very widely-used crate.
 - **regex-1.5.5**: A regular expression parser. Used by many Rust programs.
-- **ripgrep-13.0.0**: A line-oriented search tool. A widely-used utility.
+- **ripgrep-13.0.0**: A line-oriented search tool. A widely-used utility, and a
+  binary crate.
 - **serde-1.0.136**: A serialization/deserialization crate. Used by many other
   Rust programs.
 - **serde_derive-1.0.136**: A proc-macro sub-crate used by `serde`. Used by
@@ -76,7 +79,7 @@ compiler in interesting ways.
   of code that caused exponential behavior in the past.
 - **deep-vector**: A test containing a single large vector of zeroes, which
   caused [poor performance](https://github.com/rust-lang/rust/issues/20936) in
-  the past.
+  the past. Stresses macro expansion and type inference.
 - **derive**: A large number of simple structs with a `#[derive]` attribute for common built-in traits such as Copy and Debug.
 - **externs**: A large number of extern functions has caused [slowdowns in the past](https://github.com/rust-lang/rust/pull/78448).
 - **helloworld-tiny**: A trivial program optimized with flags that should reduce binary size.
@@ -89,7 +92,7 @@ compiler in interesting ways.
   [severe performance regression](https://github.com/rust-lang/rust/issues/88862)
   when trying to normalize large opaque types with late-bound regions.
 - **keccak**: A cryptography algorithm. Contains a huge function with a very
-  high number of locals and basic blocks.
+  high number of locals and basic blocks, which stresses obligation processing.
 - **many-assoc-items**: Contains a struct with many associated items, which
   caused [quadratic behavior](https://github.com/rust-lang/rust/issues/68957)
   in the past.
