@@ -40,7 +40,7 @@ impl Bound {
             Bound::Commit(sha) => commit.sha == **sha,
             Bound::Date(date) => commit.is_master() && commit.date.0.naive_utc().date() >= *date,
             Bound::None => {
-                let last_month = chrono::Utc::now().date().naive_utc() - chrono::Duration::days(30);
+                let last_month = chrono::Utc::now().date_naive() - chrono::Duration::days(30);
                 commit.is_master() && last_month <= commit.date.0.naive_utc().date()
             }
         }
@@ -50,7 +50,7 @@ impl Bound {
     pub fn right_match(&self, commit: &Commit) -> bool {
         match self {
             Bound::Commit(sha) => commit.sha == **sha,
-            Bound::Date(date) => commit.is_master() && commit.date.0.date().naive_utc() <= *date,
+            Bound::Date(date) => commit.is_master() && commit.date.0.date_naive() <= *date,
             Bound::None => commit.is_master(),
         }
     }

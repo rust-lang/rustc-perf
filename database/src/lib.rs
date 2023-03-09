@@ -66,7 +66,7 @@ impl Date {
     }
 
     pub fn ymd_hms(year: i32, month: u32, day: u32, h: u32, m: u32, s: u32) -> Date {
-        Date(Utc.ymd(year, month, day).and_hms(h, m, s))
+        Date(Utc.with_ymd_and_hms(year, month, day, h, m, s).unwrap())
     }
 
     pub fn empty() -> Date {

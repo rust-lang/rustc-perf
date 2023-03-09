@@ -438,8 +438,8 @@ impl Connection for SqliteConnection {
                         date: {
                             let timestamp: Option<i64> = row.get(2)?;
                             match timestamp {
-                                Some(t) => Date(Utc.timestamp(t, 0)),
-                                None => Date(Utc.ymd(2001, 01, 01).and_hms(0, 0, 0)),
+                                Some(t) => Date(Utc.timestamp_opt(t, 0).unwrap()),
+                                None => Date(Utc.with_ymd_and_hms(2001, 01, 01, 0, 0, 0).unwrap()),
                             }
                         },
                         r#type: CommitType::from_str(&row.get::<_, String>(3)?).unwrap(),
@@ -648,7 +648,7 @@ impl Connection for SqliteConnection {
                     include: row.get(3).unwrap(),
                     exclude: row.get(4).unwrap(),
                     runs: row.get(5).unwrap(),
-                    commit_date: row.get::<_, Option<i64>>(6).unwrap().map(|timestamp| Date(DateTime::from_utc(NaiveDateTime::from_timestamp(timestamp, 0), Utc)))
+                    commit_date: row.get::<_, Option<i64>>(6).unwrap().map(|timestamp| Date(DateTime::from_utc(NaiveDateTime::from_timestamp_opt(timestamp, 0).unwrap(), Utc)))
                 })
             })
             .collect::<Result<Vec<_>, _>>()
@@ -679,7 +679,7 @@ impl Connection for SqliteConnection {
                         include: row.get(3).unwrap(),
                         exclude: row.get(4).unwrap(),
                         runs: row.get(5).unwrap(),
-                        commit_date: row.get::<_, Option<i64>>(6).unwrap().map(|timestamp| Date(DateTime::from_utc(NaiveDateTime::from_timestamp(timestamp, 0), Utc)))
+                        commit_date: row.get::<_, Option<i64>>(6).unwrap().map(|timestamp| Date(DateTime::from_utc(NaiveDateTime::from_timestamp_opt(timestamp, 0).unwrap(), Utc)))
                     })
                 },
             )
@@ -955,7 +955,7 @@ impl Connection for SqliteConnection {
                 "try" | "master" => ArtifactId::Commit(Commit {
                     sha: name,
                     date: date
-                        .map(|d| Utc.timestamp(d, 0))
+                        .map(|d| Utc.timestamp_opt(d, 0).unwrap())
                         .map(Date)
                         .unwrap_or_else(|| Date::ymd_hms(2001, 01, 01, 0, 0, 0)),
                     r#type: CommitType::from_str(&ty).unwrap(),
@@ -1011,7 +1011,7 @@ impl Connection for SqliteConnection {
                 order by date_recorded desc \
                 limit 1;",
                 params![],
-                |r| Ok(Utc.timestamp(r.get(0)?, 0)),
+                |r| Ok(Utc.timestamp_opt(r.get(0)?, 0).unwrap()),
             )
             .optional()
             .unwrap()
@@ -1155,13 +1155,16 @@ impl Connection for SqliteConnection {
         match ty.as_str() {
             "master" => Some(ArtifactId::Commit(Commit {
                 sha: artifact.to_owned(),
-                date: Date(Utc.timestamp(date.expect("master has date"), 0)),
+                date: Date(
+                    Utc.timestamp_opt(date.expect("master has date"), 0)
+                        .unwrap(),
+                ),
                 r#type: CommitType::Master,
             })),
             "try" => Some(ArtifactId::Commit(Commit {
                 sha: artifact.to_owned(),
                 date: date
-                    .map(|d| Date(Utc.timestamp(d, 0)))
+                    .map(|d| Date(Utc.timestamp_opt(d, 0).unwrap()))
                     .unwrap_or_else(|| Date::ymd_hms(2000, 1, 1, 0, 0, 0)),
                 r#type: CommitType::Try,
             })),

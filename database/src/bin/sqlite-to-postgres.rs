@@ -67,7 +67,7 @@ impl Table for Artifact {
             .serialize(ArtifactRow {
                 id: row.get(0).unwrap(),
                 name: row.get_ref(1).unwrap().as_str().unwrap(),
-                date: Nullable(date.map(|seconds| Utc.timestamp(seconds, 0))),
+                date: Nullable(date.map(|seconds| Utc.timestamp_opt(seconds, 0).unwrap())),
                 typ: row.get_ref(3).unwrap().as_str().unwrap(),
             })
             .unwrap();
@@ -102,7 +102,7 @@ impl Table for ArtifactCollectionDuration {
         writer
             .serialize(ArtifactCollectionDurationRow {
                 aid: row.get(0).unwrap(),
-                date_recorded: Utc.timestamp(date_recorded, 0),
+                date_recorded: Utc.timestamp_opt(date_recorded, 0).unwrap(),
                 duration: row.get(2).unwrap(),
             })
             .unwrap();
@@ -200,8 +200,8 @@ impl Table for CollectorProgress {
     fn write_postgres_csv_row<W: Write>(writer: &mut csv::Writer<W>, row: &rusqlite::Row) {
         let start: Option<i64> = row.get(2).unwrap();
         let end: Option<i64> = row.get(3).unwrap();
-        let start_time = Nullable(start.map(|seconds| Utc.timestamp(seconds, 0)));
-        let end_time = Nullable(end.map(|seconds| Utc.timestamp(seconds, 0)));
+        let start_time = Nullable(start.map(|seconds| Utc.timestamp_opt(seconds, 0).unwrap()));
+        let end_time = Nullable(end.map(|seconds| Utc.timestamp_opt(seconds, 0).unwrap()));
 
         writer
             .serialize(CollectorProgressRow {
@@ -386,7 +386,9 @@ impl Table for PullRequestBuild {
                 pr: row.get(1).unwrap(),
                 parent_sha: row.get_ref(2).unwrap().try_into().unwrap(),
                 complete: row.get(3).unwrap(),
-                requested: Nullable(requested.map(|seconds| Utc.timestamp(seconds, 0))),
+                requested: Nullable(
+                    requested.map(|seconds| Utc.timestamp_opt(seconds, 0).unwrap()),
+                ),
                 include: row.get_ref(5).unwrap().try_into().unwrap(),
                 exclude: row.get_ref(6).unwrap().try_into().unwrap(),
                 runs: row.get(7).unwrap(),
