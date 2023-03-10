@@ -598,16 +598,21 @@ async fn handle_fs_path(req: &Request, path: &str) -> Option<http::Response<hype
         }
     }
 
+    async fn render_page(path: &str) -> Vec<u8> {
+        TEMPLATES
+            .render(&format!("pages/{}", path))
+            .await
+            .unwrap()
+            .into_bytes()
+    }
+
     let source = match path {
+        "/index.html" => render_page("graphs.html").await,
         "/bootstrap.html"
         | "/dashboard.html"
         | "/detailed-query.html"
         | "/help.html"
-        | "/status.html" => TEMPLATES
-            .render(&format!("pages/{}", path.trim_start_matches("/")))
-            .await
-            .unwrap()
-            .into_bytes(),
+        | "/status.html" => render_page(path.trim_start_matches("/")).await,
         _ => {
             if !Path::new(&fs_path).is_file() {
                 return None;
