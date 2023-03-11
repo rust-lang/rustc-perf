@@ -609,6 +609,7 @@ async fn handle_fs_path(req: &Request, path: &str) -> Option<http::Response<hype
     let source = match path {
         "/index.html" => render_page("graphs.html").await,
         "/bootstrap.html"
+        | "/compare.html"
         | "/dashboard.html"
         | "/detailed-query.html"
         | "/help.html"
