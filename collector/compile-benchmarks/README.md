@@ -189,6 +189,7 @@ Rust code being written today.
       `"cargo_toml"` entry.
     - If you get a "non-wrapped rustc" error when running it, you'll need a
       `"touch_file"` entry.
+    - See [`collector/src/benchmark/mod.rs`](https://github.com/rust-lang/rustc-perf/blob/12cb796f8a932a891b385ba23a36d78a2867ace1/collector/src/benchmark/mod.rs#L24-L27) for a complete reference.
   - Consider adding one or more `N-*.patch` files for the `IncrPatched`
     scenario.
     - If it's a primary benchmark, you should definitely do this.
