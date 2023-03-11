@@ -1,0 +1,28 @@
+{% extends "layout.html" %}
+{% block head %}
+<style>
+    #missing-commits th {
+        text-align: center;
+    }
+
+    #missing-commits td {
+        text-align: left;
+        padding: 0 0.5em;
+    }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highcharts/6.0.7/highcharts.js"></script>
+{% endblock %}
+{% block content %}
+<div>
+    <div id="data">
+        <div id="data-insert-js"></div>
+        Benchmarking errors for last commit:
+        <div id="benchmark-state"></div>
+    </div>
+    <div id="as-of"></div>
+</div>
+{% endblock %}
+{% block script %}
+<script src="shared.js"></script>
+<script src="scripts/status.js"></script>
+{% endblock %}

@@ -586,10 +586,6 @@ async fn handle_fs_path(req: &Request, path: &str) -> Option<http::Response<hype
         return Some(not_found());
     }
 
-    if !Path::new(&fs_path).is_file() {
-        return None;
-    }
-
     let etag = ETag::from_str(&*format!(r#""{}""#, *VERSION_UUID)).unwrap();
     let mut response = http::Response::builder()
         .header_typed(etag.clone())
@@ -602,6 +598,20 @@ async fn handle_fs_path(req: &Request, path: &str) -> Option<http::Response<hype
         }
     }
 
+    let source = match path {
+        "/bootstrap.html" | "/help.html" | "/status.html" => TEMPLATES
+            .render(&format!("pages/{}", path.trim_start_matches("/")))
+            .await
+            .unwrap()
+            .into_bytes(),
+        _ => {
+            if !Path::new(&fs_path).is_file() {
+                return None;
+            }
+            fs::read(&fs_path).unwrap()
+        }
+    };
+
     let p = Path::new(&fs_path);
     match p.extension().and_then(|x| x.to_str()) {
         Some("html") => response = response.header_typed(ContentType::html()),
@@ -612,11 +622,6 @@ async fn handle_fs_path(req: &Request, path: &str) -> Option<http::Response<hype
         Some("js") => response = response.header("Content-Type", "application/javascript"),
         _ => (),
     }
-
-    let source = match path {
-        "/help.html" => TEMPLATES.render("help.html").await.unwrap().into_bytes(),
-        _ => fs::read(&fs_path).unwrap(),
-    };
 
     Some(response.body(hyper::Body::from(source)).unwrap())
 }
