@@ -292,7 +292,7 @@ function renderPlots(data, state) {
 
             let plotOpts = genPlotOpts({
                 title: benchName + "-" + benchKind,
-                width: Math.floor(window.innerWidth / 4) - 16,
+                width: Math.floor(window.innerWidth / 4) - 40,
                 height: 300,
                 yAxisLabel,
                 series: seriesOpts,
