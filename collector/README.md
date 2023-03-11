@@ -346,7 +346,10 @@ The mandatory `<PROFILER>` argument must be one of the following.
     `rustc-fake.rs` and rebuild `collector`. Note that higher values make DHAT
     run more slowly and increase the size of its data files.
   - **Output**. Raw output is written to files with a `dhout` prefix. Those
-    files can be viewed with DHAT's viewer (`dh_view.html`).
+    files can be viewed with DHAT's viewer (`dh_view.html`). You can find
+    `dh_view.html` in the `dhat` directory of the `Valgrind` repository. It is also deployed e.g.
+    [here](https://nnethercote.github.io/dh_view/dh_view.html).
+
 - `dhat-copy`: Profile with DHAT in "copy mode". Requires Valgrind 3.17 or later.
   - **Purpose**. DHAT's copy mode is good for finding which parts of the code
     are causing a lot of memory copies. This is relevant if another profiler
