@@ -41,7 +41,7 @@ bytes = "1.0"
 url = "2"
 analyzeme = { git = "https://github.com/rust-lang/measureme", branch = "master" }
 tar = "0.4"
-inferno = { version="0.10", default-features = false }
+inferno = { version="0.11", default-features = false }
 mime = "0.3"
 prometheus = "0.12"
 uuid = { version = "0.8.2", features = ["v4"] }
