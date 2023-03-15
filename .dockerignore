@@ -5,3 +5,9 @@
 !/collector
 !/Cargo.toml
 !/Cargo.lock
+venv
+rust
+rust-baseline
+instrumentation-data
+heaptrack
+cache

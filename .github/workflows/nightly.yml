@@ -1,0 +1,58 @@
+name: Nightly release
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 23 * * *"
+  push:
+    branches:
+      - ci-nightly
+
+jobs:
+  publish_release:
+    name: Publish release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set version
+        run: |
+          echo "RUSTC_PERF_VERSION=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+
+      - name: Checkout the source code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 1
+
+      - name: Install stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: 1.66.0
+          override: true
+
+      - uses: Swatinem/rust-cache@v1
+
+      - name: Compile
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --bin site
+
+      - name: Prepare archive
+        id: archive
+        run: |
+          export ARCHIVE_NAME=rustc-perf-${{ env.RUSTC_PERF_VERSION }}-linux-x64.tar.gz
+          cp target/release/site rustc-perf-site
+          tar -czvf $ARCHIVE_NAME rustc-perf-site
+          echo "ARCHIVE_NAME=${ARCHIVE_NAME}" >> $GITHUB_ENV
+
+      - name: Create release
+        uses: ncipollo/release-action@v1
+        with:
+          body: Nightly release of `rustc-perf` (`${{ github.sha }}`)
+          token: ${{ secrets.GITHUB_TOKEN }}
+          allowUpdates: true
+          name: ${{ env.RUSTC_PERF_VERSION }}
+          prerelease: true
+          tag: nightly
+          commit: ${{ github.sha }}
+          artifacts: ${{ env.ARCHIVE_NAME }}
+          removeArtifacts: true
