@@ -450,3 +450,17 @@ profilers whose results are not affected by system noise (e.g. `callgrind` or `e
 
 `RUST_LOG=debug` can be specified to enable verbose logging, which is useful
 for debugging `collector` itself.
+
+
+## How `rustc` wrapping works
+When a crate is benchmarked or profiled, the real `rustc` is replaced with the `rustc-fake` binary,
+which parses commands passed from the `collector` and invokes the actual profiling or benchmarking
+tool.
+
+Profiling/benchmarking a crate is performed in two steps:
+1) Preparation - here all dependencies are compiled and build scripts are executed.
+During this step, `cargo` is invoked with `... -- --skip-this-rustc`, which causes `rustc-fake` to skip
+compilation of the final/leaf crate. Cargo only passes arguments after `--` to the final crate,
+therefore this does not affect the compilation of dependencies.
+2) Profiling/benchmarking - `cargo` is invoked with `--wrap-rustc-with <TOOL>`, which executes the
+specified profiling tool by `rustc-fake`.
