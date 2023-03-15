@@ -253,15 +253,18 @@ impl Benchmark {
             for (profile, prep_dir) in &profile_dirs {
                 let server = server.clone();
                 s.spawn::<_, anyhow::Result<()>>(move |_| {
+                    // Panic the thread if an error occurs to make sure that the whole scope will
+                    // also panic if there was some error.
                     self.mk_cargo_process(compiler, prep_dir.path(), *profile)
                         .jobserver(server)
-                        .run_rustc(false)?;
+                        .run_rustc(false)
+                        .unwrap();
                     Ok(())
                 });
             }
             Ok(())
         })
-        .unwrap()?;
+        .expect("Preparation has failed")?;
 
         for (profile, prep_dir) in profile_dirs {
             eprintln!("Running {}: {:?} + {:?}", self.name, profile, scenarios);
