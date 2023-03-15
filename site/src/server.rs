@@ -2,12 +2,12 @@ use brotli::enc::BrotliEncoderParams;
 use brotli::BrotliCompress;
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::sync::Arc;
 use std::time::Instant;
-use std::{fmt, fs, str};
+use std::{fmt, str};
 
 use futures::{future::FutureExt, stream::StreamExt};
 use headers::{Authorization, CacheControl, ContentType, ETag, Header, HeaderMapExt, IfNoneMatch};
@@ -28,7 +28,7 @@ pub use crate::api::{
 use crate::db::{self, ArtifactId};
 use crate::load::{Config, SiteCtxt};
 use crate::request_handlers;
-use crate::templates::TemplateRenderer;
+use crate::resources::ResourceResolver;
 
 pub type Request = http::Request<hyper::Body>;
 pub type Response = http::Response<hyper::Body>;
@@ -566,23 +566,12 @@ where
 
 lazy_static::lazy_static! {
     static ref VERSION_UUID: Uuid = Uuid::new_v4(); // random UUID used as ETag for cache revalidation
-    static ref TEMPLATES: TemplateRenderer = {
-        let livereload = std::env::var("LIVERELOAD").is_ok();
-        TemplateRenderer::new(PathBuf::from("site/templates"), livereload).unwrap()
-    };
+    static ref TEMPLATES: ResourceResolver = ResourceResolver::new().expect("Cannot load resources");
 }
 
 /// Handle the case where the path is to a static file
 async fn handle_fs_path(req: &Request, path: &str) -> Option<http::Response<hyper::Body>> {
-    let fs_path = format!(
-        "site/static{}",
-        match path {
-            "" | "/" => "/index.html",
-            _ => path,
-        }
-    );
-
-    if fs_path.contains("./") | fs_path.contains("../") {
+    if path.contains("./") | path.contains("../") {
         return Some(not_found());
     }
 
@@ -598,31 +587,26 @@ async fn handle_fs_path(req: &Request, path: &str) -> Option<http::Response<hype
         }
     }
 
-    async fn render_page(path: &str) -> Vec<u8> {
+    async fn resolve_template(path: &str) -> Vec<u8> {
         TEMPLATES
-            .render(&format!("pages/{}", path))
+            .get_template(&format!("pages/{}", path))
             .await
             .unwrap()
-            .into_bytes()
     }
 
+    let relative_path = path.trim_start_matches("/");
     let source = match path {
-        "" | "/" | "/index.html" => render_page("graphs.html").await,
+        "" | "/" | "/index.html" => resolve_template("graphs.html").await,
         "/bootstrap.html"
         | "/compare.html"
         | "/dashboard.html"
         | "/detailed-query.html"
         | "/help.html"
-        | "/status.html" => render_page(path.trim_start_matches("/")).await,
-        _ => {
-            if !Path::new(&fs_path).is_file() {
-                return None;
-            }
-            fs::read(&fs_path).unwrap()
-        }
+        | "/status.html" => resolve_template(relative_path).await,
+        _ => TEMPLATES.get_static_asset(relative_path)?,
     };
 
-    let p = Path::new(&fs_path);
+    let p = Path::new(&path);
     match p.extension().and_then(|x| x.to_str()) {
         Some("html") => response = response.header_typed(ContentType::html()),
         Some("png") => response = response.header_typed(ContentType::png()),
