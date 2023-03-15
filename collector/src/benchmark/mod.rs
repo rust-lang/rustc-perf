@@ -248,20 +248,31 @@ impl Benchmark {
         // to do this in Cargo today. We would also ideally build in the same
         // target directory, but that's also not possible, as Cargo takes a
         // target-directory global lock during compilation.
-        crossbeam_utils::thread::scope::<_, anyhow::Result<()>>(|s| {
+        std::thread::scope::<_, anyhow::Result<()>>(|s| {
             let server = jobserver::Client::new(num_cpus::get()).context("jobserver::new")?;
+            let mut threads = Vec::with_capacity(profile_dirs.len());
             for (profile, prep_dir) in &profile_dirs {
                 let server = server.clone();
-                s.spawn::<_, anyhow::Result<()>>(move |_| {
+                let thread = s.spawn::<_, anyhow::Result<()>>(move || {
                     self.mk_cargo_process(compiler, prep_dir.path(), *profile)
                         .jobserver(server)
                         .run_rustc(false)?;
                     Ok(())
                 });
+                threads.push(thread);
             }
+
+            // Propagate all potential errors and panics eagerly as an error to avoid panicking
+            // the scope.
+            for thread in threads {
+                let result = thread
+                    .join()
+                    .map_err(|error| anyhow::anyhow!("Preparation panicked: {error:?}"))?;
+                result?;
+            }
+
             Ok(())
-        })
-        .unwrap()?;
+        })?;
 
         for (profile, prep_dir) in profile_dirs {
             eprintln!("Running {}: {:?} + {:?}", self.name, profile, scenarios);

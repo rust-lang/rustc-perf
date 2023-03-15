@@ -395,7 +395,6 @@ dependencies = [
  "cargo_metadata",
  "chrono",
  "clap",
- "crossbeam-utils",
  "database",
  "env_logger 0.8.3",
  "filetime",
