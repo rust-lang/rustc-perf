@@ -137,21 +137,18 @@ test ! -s results/eprintln-Test-helloworld-Check-Full
 # Including both `helloworld` and `regex-1.5.5` benchmarks, as they exercise the
 # zero dependency and the greater than zero dependency cases, respectively, the
 # latter of which has broken before.
-#
-# XXX: `regex-1.5.5` is currently excluded because it's failing on CI, even
-# though it works locally. #1537 is the issue for this.
 RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
     cargo run -p collector --bin collector -- \
     profile_local llvm-lines $bindir/rustc \
         --id Test \
         --profiles Debug \
         --cargo $bindir/cargo \
-        --include helloworld \
+        --include helloworld,regex-1.5.5 \
         --scenarios Full
 test -f results/ll-Test-helloworld-Debug-Full
 grep -q "Lines.*Copies.*Function name" results/ll-Test-helloworld-Debug-Full
-#test -f results/ll-Test-regex-1.5.5-Debug-Full
-#grep -q "Lines.*Copies.*Function name" results/ll-Test-regex-1.5.5-Debug-Full
+test -f results/ll-Test-regex-1.5.5-Debug-Full
+grep -q "Lines.*Copies.*Function name" results/ll-Test-regex-1.5.5-Debug-Full
 
 # llvm-ir. `Debug` not `Check` because it works better that way.
 RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \

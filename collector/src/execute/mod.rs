@@ -75,6 +75,14 @@ impl PerfTool {
         }
     }
 
+    /// Should return true if this perf tool calls Cargo "recursively" inside of it.
+    /// This is not compatible with a check that is performed to make sure that only the
+    /// final rustc is invoked during a benchmark/profiling phase.
+    /// See the `EXPECT_ONLY_WRAPPED_RUSTC` environment variable in `rustc-fake`.
+    fn calls_cargo_recursively(&self) -> bool {
+        matches!(self, PerfTool::ProfileTool(profiler::Profiler::LlvmLines))
+    }
+
     fn is_scenario_allowed(&self, scenario: Scenario) -> bool {
         use bencher::Bencher::*;
         use profiler::Profiler::*;
@@ -252,7 +260,9 @@ impl<'a> CargoProcess<'a> {
                 // If we're using a processor, we expect that only the crate
                 // we're interested in benchmarking will be built, not any
                 // dependencies.
-                cmd.env("EXPECT_ONLY_WRAPPED_RUSTC", "1");
+                if !processor.perf_tool().calls_cargo_recursively() {
+                    cmd.env("EXPECT_ONLY_WRAPPED_RUSTC", "1");
+                }
                 cmd.arg("--wrap-rustc-with");
                 cmd.arg(perf_tool_name);
                 cmd.args(&self.rustc_args);
