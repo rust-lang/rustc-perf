@@ -248,6 +248,7 @@ impl Benchmark {
         // to do this in Cargo today. We would also ideally build in the same
         // target directory, but that's also not possible, as Cargo takes a
         // target-directory global lock during compilation.
+        let preparation_start = std::time::Instant::now();
         std::thread::scope::<_, anyhow::Result<()>>(|s| {
             let server = jobserver::Client::new(num_cpus::get()).context("jobserver::new")?;
             let mut threads = Vec::with_capacity(profile_dirs.len());
@@ -273,6 +274,11 @@ impl Benchmark {
 
             Ok(())
         })?;
+        log::trace!(
+            "preparing {} took {} seconds",
+            self.name,
+            preparation_start.elapsed().as_secs()
+        );
 
         for (profile, prep_dir) in profile_dirs {
             eprintln!("Running {}: {:?} + {:?}", self.name, profile, scenarios);
