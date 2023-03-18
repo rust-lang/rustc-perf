@@ -497,7 +497,7 @@ struct LocalOptions {
     id: Option<String>,
 
     /// The path to the local Cargo to use
-    #[clap(long, parse(from_os_str))]
+    #[clap(long, value_parser)]
     cargo: Option<PathBuf>,
 
     /// Exclude all benchmarks matching a prefix in this comma-separated list
@@ -531,7 +531,7 @@ struct CompileTimeOptions {
     scenarios: ScenarioArg,
 
     /// The path to the local rustdoc to measure
-    #[clap(long, parse(from_os_str))]
+    #[clap(long, value_parser)]
     rustdoc: Option<PathBuf>,
 }
 

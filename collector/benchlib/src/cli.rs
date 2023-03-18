@@ -1,4 +1,4 @@
-use clap::{FromArgMatches, IntoApp};
+use clap::{CommandFactory, FromArgMatches};
 
 #[derive(clap::Parser, Debug)]
 pub enum Args {
@@ -24,7 +24,7 @@ pub struct BenchmarkArgs {
 }
 
 pub fn parse_cli() -> anyhow::Result<Args> {
-    let app = Args::into_app();
+    let app = Args::command();
 
     // Set the name of the help to the current binary name
     let app = app.name(
