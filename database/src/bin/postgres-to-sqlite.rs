@@ -472,8 +472,7 @@ async fn main() -> anyhow::Result<()> {
                 .long("exclude-tables")
                 .value_name("TABLES")
                 .value_parser(PossibleValuesParser::new(table_names))
-                .takes_value(true)
-                .use_value_delimiter(true)
+                .value_delimiter(',')
                 .help("Exclude given tables (as foreign key constraints allow)"),
         )
         .arg(
@@ -486,8 +485,8 @@ async fn main() -> anyhow::Result<()> {
             clap::Arg::new("since-weeks-ago")
                 .action(ArgAction::Set)
                 .long("since-weeks-ago")
-                .takes_value(true)
                 .value_name("WEEKS")
+                .value_parser(clap::value_parser!(u32))
                 .help("Exclude data associated with artifacts whose date value precedes <WEEKS> weeks ago"),
         )
         .arg(
