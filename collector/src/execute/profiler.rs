@@ -9,7 +9,7 @@ use std::process::Command;
 use std::{fs, process};
 
 // Tools usable with the profiling subcommands, and named on the command line.
-#[derive(Clone, Copy, Debug, PartialEq, clap::ArgEnum)]
+#[derive(Clone, Copy, Debug, PartialEq, clap::ValueEnum)]
 pub enum Profiler {
     SelfProfile,
     PerfRecord,

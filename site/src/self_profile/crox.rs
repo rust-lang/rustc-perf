@@ -30,7 +30,6 @@ struct Event {
     #[serde(rename = "ph")]
     event_type: EventType,
     #[serde(rename = "ts", serialize_with = "as_micros")]
-    #[serde()]
     timestamp: Duration,
     #[serde(rename = "dur", serialize_with = "as_micros")]
     duration: Duration,
@@ -101,7 +100,7 @@ fn generate_thread_to_collapsed_thread_mapping(
                 next_end_iter.next();
                 // need to lookup the thread_id due to new and collapsed threads
                 let mapped_thread_id = *thread_to_collapsed_thread
-                    .get(&next_thread_id)
+                    .get(next_thread_id)
                     .unwrap_or(&next_thread_id);
 
                 thread_to_collapsed_thread.insert(thread_id, mapped_thread_id);

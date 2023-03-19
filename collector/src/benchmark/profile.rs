@@ -5,8 +5,8 @@
 // to the database crate.
 // In general, the database versions of types used in the collector should be considered a DB
 // implementation detail, as they may change when we alter database layout.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, clap::ArgEnum, serde::Deserialize)]
-#[clap(rename_all = "PascalCase")]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, clap::ValueEnum, serde::Deserialize)]
+#[value(rename_all = "PascalCase")]
 pub enum Profile {
     Check,
     Debug,

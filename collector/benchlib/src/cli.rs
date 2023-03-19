@@ -1,4 +1,4 @@
-use clap::{FromArgMatches, IntoApp};
+use clap::{CommandFactory, FromArgMatches};
 
 #[derive(clap::Parser, Debug)]
 pub enum Args {
@@ -11,26 +11,35 @@ pub enum Args {
 #[derive(clap::Parser, Debug)]
 pub struct BenchmarkArgs {
     /// How many times should each benchmark be repeated.
-    #[clap(long, default_value = "5")]
+    #[arg(long, default_value = "5")]
     pub iterations: u32,
 
     /// Exclude all benchmarks matching a prefix in this comma-separated list
-    #[clap(long)]
+    #[arg(long)]
     pub exclude: Option<String>,
 
     /// Include only benchmarks matching a prefix in this comma-separated list
-    #[clap(long)]
+    #[arg(long)]
     pub include: Option<String>,
 }
 
+#[test]
+fn verify_cli() {
+    // By default, clap lazily checks subcommands. This provides eager testing
+    // without having to run the binary for each subcommand.
+    use clap::CommandFactory;
+    Args::command().debug_assert()
+}
+
 pub fn parse_cli() -> anyhow::Result<Args> {
-    let app = Args::into_app();
+    let app = Args::command();
 
     // Set the name of the help to the current binary name
     let app = app.name(
         std::env::current_exe()?
             .file_name()
             .and_then(|s| s.to_str())
+            .map(|s| s.to_owned())
             .expect("Binary name not found"),
     );
 

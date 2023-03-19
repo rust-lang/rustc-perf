@@ -177,14 +177,15 @@ jobs:
       - name: Install profilers
         run: cargo install --version 0.4.12 cargo-llvm-lines
 
-      - name: Install Bytehound
-        run: |
-          git clone https://github.com/koute/bytehound
-          cd bytehound
-          # Newer versions of Bytehound use unstable features
-          git checkout d8363a1f959cc52f2ce0e0603120b9ad2e70d506
-          cargo build --release -p bytehound-preload
-          echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${PWD}/target/release" >> $GITHUB_ENV
+      # Bytehound is currently broken, removing it to keep CI green.
+      #- name: Install Bytehound
+      #  run: |
+      #    mkdir -p bytehound
+      #    cd bytehound
+      #    wget https://github.com/koute/bytehound/releases/download/0.11.0/bytehound-x86_64-unknown-linux-gnu.tgz
+      #    tar xf bytehound-x86_64-unknown-linux-gnu.tgz
+      #    cd ..
+      #    echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${PWD}/bytehound" >> $GITHUB_ENV
 
       - name: Configure environment
         run: |

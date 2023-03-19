@@ -616,7 +616,7 @@ impl<'a> TryFrom<rusqlite::types::ValueRef<'a>> for Nullable<&'a str> {
 async fn main() -> anyhow::Result<()> {
     env_logger::init();
 
-    let matches = clap::App::new("sqlite-to-postgres")
+    let matches = clap::Command::new("sqlite-to-postgres")
         .about("Exports a rustc-perf SQLite database to a Postgres database")
         .version(clap::crate_version!())
         .arg(
@@ -636,8 +636,8 @@ async fn main() -> anyhow::Result<()> {
         )
         .get_matches();
 
-    let postgres = matches.value_of("postgres-db").unwrap();
-    let sqlite = matches.value_of("sqlite-db").unwrap();
+    let postgres = matches.get_one::<String>("postgres-db").unwrap();
+    let sqlite = matches.get_one::<String>("sqlite-db").unwrap();
 
     let mut sqlite = sqlite::Sqlite::new(sqlite.into())
         .open()

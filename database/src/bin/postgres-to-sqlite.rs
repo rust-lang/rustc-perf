@@ -4,6 +4,7 @@
 //! transactions, and will likely fail if used on a populated database.
 
 use chrono::{DateTime, Utc};
+use clap::{builder::PossibleValuesParser, ArgAction};
 use database::pool::{postgres, sqlite, ConnectionManager};
 use futures::StreamExt;
 use rusqlite::params;
@@ -462,37 +463,41 @@ async fn main() -> anyhow::Result<()> {
 
     let table_names: Vec<_> = tables.iter().map(|table| table.name()).collect();
 
-    let matches = clap::App::new("postgres-to-sqlite")
+    let matches = clap::Command::new("postgres-to-sqlite")
         .about("Exports a rustc-perf Postgres database to a SQLite database")
         .version(clap::crate_version!())
         .arg(
             clap::Arg::new("exclude-tables")
+                .action(ArgAction::Set)
                 .long("exclude-tables")
-                .takes_value(true)
                 .value_name("TABLES")
-                .possible_values(&table_names)
-                .use_delimiter(true)
+                .value_parser(PossibleValuesParser::new(table_names))
+                .value_delimiter(',')
                 .help("Exclude given tables (as foreign key constraints allow)"),
         )
         .arg(
             clap::Arg::new("no-self-profile")
+                .action(ArgAction::SetTrue)
                 .long("no-self-profile")
                 .help("Exclude some potentially large self-profile tables (additive with --exclude-tables)"),
         )
         .arg(
             clap::Arg::new("since-weeks-ago")
+                .action(ArgAction::Set)
                 .long("since-weeks-ago")
-                .takes_value(true)
                 .value_name("WEEKS")
+                .value_parser(clap::value_parser!(u32))
                 .help("Exclude data associated with artifacts whose date value precedes <WEEKS> weeks ago"),
         )
         .arg(
             clap::Arg::new("fast-unsafe")
+                .action(ArgAction::SetTrue)
                 .long("fast-unsafe")
                 .help("Enable faster execution at the risk of corrupting SQLite database in the event of a crash"),
         )
         .arg(
             clap::Arg::new("postgres-db")
+                .action(ArgAction::Set)
                 .required(true)
                 .value_name("POSTGRES_DB")
                 .help(
@@ -502,31 +507,29 @@ async fn main() -> anyhow::Result<()> {
         )
         .arg(
             clap::Arg::new("sqlite-db")
+                .action(ArgAction::Set)
                 .required(true)
                 .value_name("SQLITE_DB")
                 .help("SQLite database file"),
         )
         .get_matches();
 
-    let postgres = matches.value_of("postgres-db").unwrap();
-    let sqlite = matches.value_of("sqlite-db").unwrap();
+    let postgres = matches.get_one::<String>("postgres-db").unwrap();
+    let sqlite = matches.get_one::<String>("sqlite-db").unwrap();
 
     let mut exclude_tables: std::collections::HashSet<_> = matches
-        .values_of("exclude-tables")
+        .get_many::<String>("exclude-tables")
         .unwrap_or_default()
+        .cloned()
         .collect();
 
-    if matches.is_present("no-self-profile") {
-        exclude_tables.insert(SelfProfileQuerySeries.name());
-        exclude_tables.insert(SelfProfileQuery.name());
+    if matches.get_flag("no-self-profile") {
+        exclude_tables.insert(SelfProfileQuerySeries.name().to_owned());
+        exclude_tables.insert(SelfProfileQuery.name().to_owned());
         // `RawSelfProfile` is intentionally kept.
     }
 
-    let since_weeks_ago = match matches.value_of_t("since-weeks-ago") {
-        Ok(weeks) => Some(weeks),
-        Err(err) if err.kind == clap::ErrorKind::ArgumentNotFound => None,
-        Err(err) => err.exit(),
-    };
+    let since_weeks_ago = matches.get_one::<u32>("since-weeks-ago").copied();
 
     let mut postgres: tokio_postgres::Client =
         postgres::Postgres::new(postgres.into()).open().await.into();
@@ -537,7 +540,7 @@ async fn main() -> anyhow::Result<()> {
         .into_inner()
         .unwrap();
 
-    if matches.is_present("fast-unsafe") {
+    if matches.get_flag("fast-unsafe") {
         sqlite.pragma_update(None, "journal_mode", &"OFF").unwrap();
         sqlite.pragma_update(None, "synchronous", &"OFF").unwrap();
     }
@@ -558,7 +561,7 @@ async fn main() -> anyhow::Result<()> {
     let sqlite_tx = sqlite.transaction().unwrap();
 
     for &table in tables {
-        if !exclude_tables.contains(&table.name()) {
+        if !exclude_tables.contains(table.name()) {
             copy(table, &postgres_tx, &sqlite_tx, since_weeks_ago).await;
         }
     }
