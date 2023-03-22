@@ -55,6 +55,8 @@ test -f results/cgout-Test-helloworld-Check-Full
 grep -q "events: Ir" results/cgout-Test-helloworld-Check-Full
 test -f results/cgann-Test-helloworld-Check-Full
 grep -q "PROGRAM TOTALS" results/cgann-Test-helloworld-Check-Full
+# Ensure the jemalloc file/function aggregation is working.
+grep -q "<all-jemalloc-files>:<all-jemalloc-functions>" results/cgann-Test-helloworld-Check-Full
 
 # Callgrind.
 RUST_BACKTRACE=1 RUST_LOG=raw_cargo_messages=trace,collector=debug,rust_sysroot=debug \
