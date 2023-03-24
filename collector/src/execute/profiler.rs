@@ -6,7 +6,7 @@ use std::io::BufRead;
 use std::io::Write;
 use std::path::Path;
 use std::process::Command;
-use std::{fs, process};
+use std::{fs, io, process};
 
 // Tools usable with the profiling subcommands, and named on the command line.
 #[derive(Clone, Copy, Debug, PartialEq, clap::ValueEnum)]
@@ -226,7 +226,46 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 let cgout_file = filepath(self.output_dir, &out_file("cgout"));
                 let cgann_file = filepath(self.output_dir, &out_file("cgann"));
 
-                fs::copy(&tmp_cgout_file, &cgout_file)?;
+                // It's useful to filter all `file:function` entries from
+                // jemalloc into a single fake
+                // `<all-jemalloc-files>:<all-jemalloc-functions>` entry. That
+                // way the cost of all allocations is visible in one line,
+                // rather than spread across many small entries.
+                //
+                // The downside is that we don't get any annotations within
+                // jemalloc source files, but this is no real loss, given that
+                // jemalloc is basically a black box whose code we never look
+                // at anyway. DHAT is the best way to profile allocations.
+                let reader = io::BufReader::new(fs::File::open(&tmp_cgout_file)?);
+                let mut writer = io::BufWriter::new(fs::File::create(&cgout_file)?);
+                let mut in_jemalloc_file = false;
+
+                // A Cachegrind profile contains `fn=<function-name>` lines,
+                // `fl=<filename>` lines, and everything else. We just need to
+                // modify the `fn=` and `fl=` lines that refer to jemalloc
+                // code.
+                for line in reader.lines() {
+                    let line = line?;
+                    if line.starts_with("fl=") {
+                        // All jemalloc filenames have `/jemalloc/` or
+                        // something like `/jemalloc-sys-1e20251078fe5355/` in
+                        // them.
+                        in_jemalloc_file = line.contains("/jemalloc");
+                        if in_jemalloc_file {
+                            writeln!(writer, "fl=<all-jemalloc-files>")?;
+                            continue;
+                        }
+                    } else if line.starts_with("fn=") {
+                        // Any function within a jemalloc file is a jemalloc
+                        // function.
+                        if in_jemalloc_file {
+                            writeln!(writer, "fn=<all-jemalloc-functions>")?;
+                            continue;
+                        }
+                    }
+                    writeln!(writer, "{}", line)?;
+                }
+                writer.flush()?;
 
                 let mut cg_annotate_cmd = Command::new("cg_annotate");
                 cg_annotate_cmd
@@ -301,11 +340,8 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 let tmp_eprintln_file = filepath(data.cwd.as_ref(), "eprintln");
                 let eprintln_file = filepath(self.output_dir, &out_file("eprintln"));
 
-                let mut final_file =
-                    std::io::BufWriter::new(std::fs::File::create(&eprintln_file)?);
-                for line in
-                    std::io::BufReader::new(std::fs::File::open(&tmp_eprintln_file)?).lines()
-                {
+                let mut final_file = io::BufWriter::new(std::fs::File::create(&eprintln_file)?);
+                for line in io::BufReader::new(std::fs::File::open(&tmp_eprintln_file)?).lines() {
                     let line = line?;
                     // rustc under Cargo currently ~always emits artifact
                     // messages -- which we don't want in final
@@ -355,7 +391,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
 
                 for (cgu, items) in &by_cgu {
                     let cgu_file = filepath(&out_dir, cgu);
-                    let mut file = std::io::BufWriter::new(
+                    let mut file = io::BufWriter::new(
                         fs::File::create(&cgu_file).with_context(|| format!("{:?}", cgu_file))?,
                     );
                     for (name, linkage) in items {
