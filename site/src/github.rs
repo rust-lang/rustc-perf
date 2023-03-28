@@ -319,10 +319,11 @@ pub(crate) async fn pr_title(pr: u32) -> String {
             .ok_or_else(malformed_json_error)?
             .to_owned())
     }
+    let request_dbg = format!("{:?}", request);
     match send(request).await {
         Ok(t) => t,
         Err(e) => {
-            eprintln!("Error fetching url: {}", e);
+            log::error!("Error fetching {}: {:?}", request_dbg, e);
             String::from("<UNKNOWN>")
         }
     }
@@ -335,7 +336,10 @@ fn github_request(url: &str) -> reqwest::RequestBuilder {
         .header("Content-Type", "application/json")
         .header("User-Agent", "rustc-perf");
     if let Some(token) = std::env::var("GITHUB_TOKEN").ok() {
-        request = request.header("Authorization", format!("token {}", token));
+        let mut value =
+            reqwest::header::HeaderValue::from_str(&format!("token {}", token)).unwrap();
+        value.set_sensitive(true);
+        request = request.header("Authorization", value);
     }
     request
 }
@@ -343,12 +347,16 @@ fn github_request(url: &str) -> reqwest::RequestBuilder {
 async fn send_request<T: serde::de::DeserializeOwned>(
     request: reqwest::RequestBuilder,
 ) -> Result<T, BoxedError> {
-    Ok(request
-        .send()
-        .await?
-        .error_for_status()?
-        .json::<T>()
-        .await?)
+    let response = request.send().await?;
+    match response.error_for_status_ref() {
+        Ok(_) => {}
+        Err(e) => {
+            return Err(anyhow::anyhow!("response = {:?}", response)
+                .context(e)
+                .into())
+        }
+    }
+    Ok(response.json::<T>().await?)
 }
 
 fn malformed_json_error() -> String {
