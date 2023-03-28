@@ -448,7 +448,7 @@ pub mod triage {
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct Request {
         pub start: Bound,
-        pub end: Option<Bound>,
+        pub end: Bound,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
