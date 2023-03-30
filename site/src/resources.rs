@@ -6,7 +6,7 @@ use rust_embed::RustEmbed;
 /// Static files and templates are embedded into the binary (in release mode) or hot-reloaded
 /// from the `site` directory (in debug mode).
 #[derive(RustEmbed)]
-#[folder = "static/"]
+#[folder = "frontend/static/"]
 #[include = "*.js"]
 #[include = "*.css"]
 #[include = "*.svg"]
@@ -14,7 +14,7 @@ use rust_embed::RustEmbed;
 struct StaticAssets;
 
 #[derive(RustEmbed)]
-#[folder = "templates/"]
+#[folder = "frontend/templates/"]
 #[include = "*.html"]
 struct TemplateAssets;
 
