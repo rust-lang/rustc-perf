@@ -4,7 +4,7 @@ use tokio::sync::RwLock;
 use rust_embed::RustEmbed;
 
 /// Static files and templates are embedded into the binary (in release mode) or hot-reloaded
-/// from the `site` directory (in debug mode).
+/// from the `frontend/static` directory (in debug mode).
 #[derive(RustEmbed)]
 #[folder = "frontend/static/"]
 #[include = "*.js"]
@@ -13,6 +13,13 @@ use rust_embed::RustEmbed;
 #[include = "*.png"]
 struct StaticAssets;
 
+/// Frontend source files compiled by `npm`.
+#[derive(RustEmbed)]
+#[folder = "frontend/dist"]
+#[include = "*.js"]
+struct StaticCompiledAssets;
+
+/// HTML template files that will be rendered by `tera`.
 #[derive(RustEmbed)]
 #[folder = "frontend/templates/"]
 #[include = "*.html"]
@@ -32,7 +39,9 @@ impl ResourceResolver {
     }
 
     pub fn get_static_asset(&self, path: &str) -> Option<Vec<u8>> {
-        StaticAssets::get(path).map(|file| file.data.to_vec())
+        StaticCompiledAssets::get(path)
+            .or_else(|| StaticAssets::get(path))
+            .map(|file| file.data.to_vec())
     }
 
     pub async fn get_template(&self, path: &str) -> anyhow::Result<Vec<u8>> {

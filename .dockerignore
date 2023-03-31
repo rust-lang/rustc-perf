@@ -2,6 +2,7 @@
 !/database
 !/intern
 !/site
+/site/frontend/node_modules
 !/collector
 !/Cargo.toml
 !/Cargo.lock

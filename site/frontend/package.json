@@ -1,0 +1,30 @@
+{
+  "name": "perf-rlo-ui",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "watch": "parcel watch",
+    "build": "parcel build",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@parcel/transformer-vue": "^2.8.3",
+    "@types/highcharts": "^7.0.0",
+    "typescript": "^5.0.2"
+  },
+  "dependencies": {
+    "highcharts": "6.0.7",
+    "parcel": "^2.8.3",
+    "sass": "^1.59.3",
+    "vite": "^4.2.1",
+    "vue": "^3.2.47"
+  },
+  "targets": {
+    "dashboard": {
+      "source": "src/pages/dashboard.ts",
+      "distDir": "dist/scripts"
+    }
+  }
+}
