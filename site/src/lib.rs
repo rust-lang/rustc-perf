@@ -19,6 +19,6 @@ mod average;
 mod comparison;
 mod interpolate;
 mod request_handlers;
+mod resources;
 mod selector;
 mod self_profile;
-mod templates;
