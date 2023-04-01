@@ -56,7 +56,7 @@ Scaling governor set to `performance`.
 Disabled with `kernel.randomize_va_space=0` in `sysctl.conf`.
 
 Note that ASLR is also
-[disabled explicitly](src/bin/rustc-fake.rs) when gathering performance metrics.
+[disabled explicitly](../collector/src/bin/rustc-fake.rs) when gathering performance metrics.
 
 ### NMI watchdog
 Disabled with `kernel.nmi_watchdog=0` in `sysctl.conf`.
