@@ -49,21 +49,29 @@ pub async fn handle_triage(
     let mut num_comparisons = 0;
     let metric = Metric::InstructionsUser;
     let benchmark_map = ctxt.get_benchmark_category_map().await;
-    loop {
-        let comparison =
-            match compare_given_commits(before, next.clone(), metric, ctxt, &master_commits)
-                .await
-                .map_err(|e| format!("error comparing commits: {}", e))?
-            {
-                Some(c) => c,
-                None => {
-                    log::info!(
-                        "No data found for end bound {:?}. Ending comparison...",
-                        next
-                    );
-                    break;
-                }
-            };
+    // Track whether we are on the known last iteration
+    let mut last_iteration = false;
+
+    let end = loop {
+        let comparison = match compare_given_commits(
+            before.clone(),
+            next.clone(),
+            metric,
+            ctxt,
+            &master_commits,
+        )
+        .await
+        .map_err(|e| format!("error comparing commits: {}", e))?
+        {
+            Some(c) => c,
+            None => {
+                log::info!(
+                    "No data found for end bound {:?}. Ending comparison...",
+                    next
+                );
+                break before;
+            }
+        };
         num_comparisons += 1;
         log::info!(
             "Comparing {} to {}",
@@ -74,17 +82,25 @@ pub async fn handle_triage(
         // handle results of comparison
         populate_report(&comparison, &benchmark_map, &mut report).await;
 
-        // Check that there is a next commit and that the
-        // after commit is not equal to `end`
+        // If we already know this is the last iteration, we can stop
+        if last_iteration {
+            break before;
+        }
+
+        // Decide whether to keep doing comparisons or not
         match comparison.next(&master_commits).map(Bound::Commit) {
-            Some(n) if Some(&next) != end.as_ref() => {
+            // There is a next commit, and it is not the end bound.
+            // We keep doing comparisons...
+            Some(n) => {
                 before = next;
+                // The next iteration is the last if the next bound is equal to the end bound
+                last_iteration = n != end;
                 next = n;
             }
-            _ => break,
+            // There is no next commit so we stop.
+            None => break before,
         }
-    }
-    let end = end.unwrap_or(next);
+    };
 
     // Summarize the entire triage from start commit to end commit
     let summary =
