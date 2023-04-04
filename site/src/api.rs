@@ -448,6 +448,7 @@ pub mod triage {
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct Request {
         pub start: Bound,
+        #[serde(default)]
         pub end: Bound,
     }
 
