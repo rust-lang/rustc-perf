@@ -35,6 +35,9 @@ pub async fn handle_triage(
     let start_artifact = ctxt
         .artifact_id_for_bound(start.clone(), true)
         .ok_or(format!("could not find start commit for bound {:?}", start))?;
+    let end_artifact = ctxt
+        .artifact_id_for_bound(end.clone(), false)
+        .ok_or(format!("could not find end commit for bound {:?}", end))?;
     // This gives a better error, but is still not great -- the common case here
     // is that we've had a 422 error and as such had a fork. It's possible we
     // could diagnose that and give a nicer error here telling the user which
@@ -49,8 +52,6 @@ pub async fn handle_triage(
     let mut num_comparisons = 0;
     let metric = Metric::InstructionsUser;
     let benchmark_map = ctxt.get_benchmark_category_map().await;
-    // Track whether we are on the known last iteration
-    let mut last_iteration = false;
 
     let end = loop {
         let comparison = match compare_given_commits(
@@ -83,7 +84,7 @@ pub async fn handle_triage(
         populate_report(&comparison, &benchmark_map, &mut report).await;
 
         // If we already know this is the last iteration, we can stop
-        if last_iteration {
+        if comparison.b.artifact == end_artifact {
             break before;
         }
 
@@ -93,8 +94,6 @@ pub async fn handle_triage(
             // We keep doing comparisons...
             Some(n) => {
                 before = next;
-                // The next iteration is the last if the next bound is equal to the end bound
-                last_iteration = n != end;
                 next = n;
             }
             // There is no next commit so we stop.

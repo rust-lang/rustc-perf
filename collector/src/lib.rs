@@ -23,13 +23,14 @@ pub struct DeltaTime(#[serde(with = "round_float")] pub f64);
 /// In the case of commits or tags this is an exact bound, but for dates
 /// it's a best effort (i.e., if the bound is a date but there are no artifacts
 /// for that date, we'll find the artifact that most closely matches).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub enum Bound {
     /// An unverified git commit (in sha form) or a tag of a commit (e.g., "1.53.0")
     Commit(String),
     /// A date in time
     Date(NaiveDate),
     /// No bound
+    #[default]
     None,
 }
 
