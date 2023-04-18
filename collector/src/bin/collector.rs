@@ -512,6 +512,10 @@ struct LocalOptions {
     #[arg(long)]
     exclude: Option<String>,
 
+    /// Exclude all benchmarks matching a suffix in this comma-separated list
+    #[arg(long)]
+    exclude_suffix: Option<String>,
+
     /// Include only benchmarks matching a prefix in this comma-separated list
     #[arg(long)]
     include: Option<String>,
