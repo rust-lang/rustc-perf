@@ -410,13 +410,7 @@ pub fn get_compile_benchmarks(
         let mut skip = false;
 
         let name_matches = |prefixes: &mut HashMap<&str, usize>| {
-            for (prefix, n) in prefixes.iter_mut() {
-                if name.as_str().starts_with(prefix) {
-                    *n += 1;
-                    return true;
-                }
-            }
-            false
+            substring_matches(prefixes, |prefix| name.starts_with(prefix))
         };
 
         if let Some(includes) = includes.as_mut() {
@@ -461,4 +455,20 @@ pub fn get_compile_benchmarks(
     }
 
     Ok(benchmarks)
+}
+
+/// Helper to verify if a benchmark name matches a given substring, like a prefix or a suffix. The
+/// `predicate` closure will be passed each substring from `substrings` until it returns true, and
+/// in that case the substring's number of uses in the map will be increased.
+fn substring_matches(
+    substrings: &mut HashMap<&str, usize>,
+    predicate: impl Fn(&str) -> bool,
+) -> bool {
+    for (substring, n) in substrings.iter_mut() {
+        if predicate(substring) {
+            *n += 1;
+            return true;
+        }
+    }
+    false
 }
