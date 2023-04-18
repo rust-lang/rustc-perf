@@ -371,6 +371,7 @@ pub fn get_compile_benchmarks(
     benchmark_dir: &Path,
     include: Option<&str>,
     exclude: Option<&str>,
+    exclude_suffix: Option<&str>,
 ) -> anyhow::Result<Vec<Benchmark>> {
     let mut benchmarks = Vec::new();
 
@@ -405,19 +406,23 @@ pub fn get_compile_benchmarks(
 
     let mut includes = to_hashmap(include);
     let mut excludes = to_hashmap(exclude);
+    let mut exclude_suffixes = to_hashmap(exclude_suffix);
 
     for (path, name) in paths {
         let mut skip = false;
 
-        let name_matches = |prefixes: &mut HashMap<&str, usize>| {
+        let name_matches_prefix = |prefixes: &mut HashMap<&str, usize>| {
             substring_matches(prefixes, |prefix| name.starts_with(prefix))
         };
 
         if let Some(includes) = includes.as_mut() {
-            skip |= !name_matches(includes);
+            skip |= !name_matches_prefix(includes);
         }
         if let Some(excludes) = excludes.as_mut() {
-            skip |= name_matches(excludes);
+            skip |= name_matches_prefix(excludes);
+        }
+        if let Some(exclude_suffixes) = exclude_suffixes.as_mut() {
+            skip |= substring_matches(exclude_suffixes, |suffix| name.ends_with(suffix));
         }
         if skip {
             continue;
