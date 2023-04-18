@@ -432,10 +432,10 @@ pub fn get_compile_benchmarks(
         benchmarks.push(Benchmark::new(name, path)?);
     }
 
-    // All prefixes must be used at least once. This is to catch typos.
-    let check_for_unused = |option, prefixes: Option<HashMap<&str, usize>>| {
-        if let Some(prefixes) = prefixes {
-            let unused: Vec<_> = prefixes
+    // All prefixes/suffixes must be used at least once. This is to catch typos.
+    let check_for_unused = |option, substrings: Option<HashMap<&str, usize>>| {
+        if let Some(substrings) = substrings {
+            let unused: Vec<_> = substrings
                 .into_iter()
                 .filter_map(|(i, n)| if n == 0 { Some(i) } else { None })
                 .collect();
@@ -452,6 +452,7 @@ pub fn get_compile_benchmarks(
 
     check_for_unused("include", includes)?;
     check_for_unused("exclude", excludes)?;
+    check_for_unused("exclude-suffix", exclude_suffixes)?;
 
     benchmarks.sort_by_key(|benchmark| benchmark.name.clone());
 
