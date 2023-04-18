@@ -25,6 +25,10 @@
     "dashboard": {
       "source": "src/pages/dashboard.ts",
       "distDir": "dist/scripts"
+    },
+    "status": {
+      "source": "src/pages/status.ts",
+      "distDir": "dist/scripts"
     }
   },
   "browserslist": "> 0.5%, last 3 years, not dead"

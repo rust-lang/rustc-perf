@@ -74,7 +74,7 @@ function populate_data(response: DashboardResponse) {
 
 async function make_data() {
     const response = await fetch(DASHBOARD_DATA_URL, {});
-    let data = await response.json();
+    const data = await response.json();
     populate_data(data);
 }
 

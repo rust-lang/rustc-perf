@@ -1,6 +1,44 @@
-function populate_data(data) {
+import {STATUS_DATA_URL} from "../configuration";
+
+interface Commit {
+    sha: string;
+    date: string;
+    type: "Try" | "Master";
+}
+
+interface BenchmarkStatus {
+    name: string;
+    error: string;
+}
+
+interface Step {
+    step: string;
+    is_done: boolean;
+    expected_duration: number;
+    current_progress: number;
+}
+
+/**
+ * The `any` types in the interface below were chosen because the types are quite complex
+ * on the Rust side (they are modeled with enums encoded in a way that is not so simple to model in
+ * TS).
+ */
+interface CurrentState {
+    artifact: any;
+    progress: [Step];
+}
+
+interface StatusResponse {
+    last_commit: Commit | null
+    benchmarks: [BenchmarkStatus],
+    missing: [[Commit, any]],
+    current: CurrentState | null,
+    most_recent_end: number | null,
+}
+
+function populate_data(data: StatusResponse) {
     let state_div = document.querySelector("#benchmark-state");
-    if (data.last_commit) {
+    if (data.last_commit !== null) {
         let element = document.createElement("p");
         element.innerHTML = `SHA: ${data.last_commit.sha}, date: ${data.last_commit.date}`;
         state_div.appendChild(element);
@@ -11,7 +49,7 @@ function populate_data(data) {
                     <summary>${benchmark.name} - error</summary>
                     <pre class="benchmark-error"></pre>
                 </details>`;
-        element.querySelector(".benchmark-error").innerText = benchmark.error;
+        element.querySelector<HTMLElement>(".benchmark-error").innerText = benchmark.error;
         state_div.appendChild(element);
     }
     let missing_div = document.querySelector("#data-insert-js");
@@ -39,9 +77,8 @@ function populate_data(data) {
             tr.appendChild(td);
             td = document.createElement("td");
             let progress = document.createElement("progress");
-            progress.setAttribute("max", step.expected_duration);
-            progress.setAttribute("value", step.is_done ?
-                step.expected_duration : step.current_progress);
+            progress.setAttribute("max", step.expected_duration.toString());
+            progress.setAttribute("value", (step.is_done ? step.expected_duration : step.current_progress).toString());
             td.appendChild(progress);
             tr.appendChild(td);
             td = document.createElement("td");
@@ -75,7 +112,7 @@ function populate_data(data) {
             let end = new Date(data.most_recent_end * 1000);
             element.innerHTML = `No current collection in progress. Last one
                     finished at ${end.toLocaleString()} local time,
-                    ${format_duration(Math.trunc((new Date() - end) / 1000))} ago.`;
+                    ${format_duration(Math.trunc((Date.now() - end.getTime()) / 1000))} ago.`;
         } else {
             element.innerHTML = "No current collection in progress.";
         }
@@ -163,16 +200,10 @@ function format_duration(seconds) {
     return s;
 }
 
-function addHours(date, hours) {
-    let ret = new Date(date);
-    ret.setTime(ret.getTime() + (hours * 60 * 60 * 1000));
-    return ret;
-}
-
-function make_data() {
-    fetch(BASE_URL + "/status_page", {}).then(function (response) {
-        response.json().then(data => populate_data(data));
-    });
+async function make_data() {
+    const response = await fetch(STATUS_DATA_URL, {});
+    const data = await response.json();
+    populate_data(data);
 }
 
 make_data();
