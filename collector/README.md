@@ -120,6 +120,11 @@ The following options alter the behaviour of the `bench_local` subcommand.
   argument is a comma-separated list of benchmark prefixes. When this option is
   specified, a benchmark is excluded from the run if its name matches one of
   the given prefixes.
+- `--exclude-suffix <EXCLUDE>`: this is used to run a subset of the benchmarks. The
+  argument is a comma-separated list of benchmark suffixes. When this option is
+  specified, a benchmark is excluded from the run if its name matches one of
+  the given suffixes. This can be useful to quickly exclude the benchmarks
+  dedicated to artifact sizes (ending with `-tiny`).
 - `--id <ID>` the identifier that will be used to identify the results in the
   database.
 - `--include <INCLUDE>`: the inverse of `--exclude`. The argument is a
