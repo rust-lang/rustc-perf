@@ -371,6 +371,7 @@ pub fn get_compile_benchmarks(
     benchmark_dir: &Path,
     include: Option<&str>,
     exclude: Option<&str>,
+    exclude_suffix: Option<&str>,
 ) -> anyhow::Result<Vec<Benchmark>> {
     let mut benchmarks = Vec::new();
 
@@ -405,25 +406,23 @@ pub fn get_compile_benchmarks(
 
     let mut includes = to_hashmap(include);
     let mut excludes = to_hashmap(exclude);
+    let mut exclude_suffixes = to_hashmap(exclude_suffix);
 
     for (path, name) in paths {
         let mut skip = false;
 
-        let name_matches = |prefixes: &mut HashMap<&str, usize>| {
-            for (prefix, n) in prefixes.iter_mut() {
-                if name.as_str().starts_with(prefix) {
-                    *n += 1;
-                    return true;
-                }
-            }
-            false
+        let name_matches_prefix = |prefixes: &mut HashMap<&str, usize>| {
+            substring_matches(prefixes, |prefix| name.starts_with(prefix))
         };
 
         if let Some(includes) = includes.as_mut() {
-            skip |= !name_matches(includes);
+            skip |= !name_matches_prefix(includes);
         }
         if let Some(excludes) = excludes.as_mut() {
-            skip |= name_matches(excludes);
+            skip |= name_matches_prefix(excludes);
+        }
+        if let Some(exclude_suffixes) = exclude_suffixes.as_mut() {
+            skip |= substring_matches(exclude_suffixes, |suffix| name.ends_with(suffix));
         }
         if skip {
             continue;
@@ -433,10 +432,10 @@ pub fn get_compile_benchmarks(
         benchmarks.push(Benchmark::new(name, path)?);
     }
 
-    // All prefixes must be used at least once. This is to catch typos.
-    let check_for_unused = |option, prefixes: Option<HashMap<&str, usize>>| {
-        if let Some(prefixes) = prefixes {
-            let unused: Vec<_> = prefixes
+    // All prefixes/suffixes must be used at least once. This is to catch typos.
+    let check_for_unused = |option, substrings: Option<HashMap<&str, usize>>| {
+        if let Some(substrings) = substrings {
+            let unused: Vec<_> = substrings
                 .into_iter()
                 .filter_map(|(i, n)| if n == 0 { Some(i) } else { None })
                 .collect();
@@ -453,6 +452,7 @@ pub fn get_compile_benchmarks(
 
     check_for_unused("include", includes)?;
     check_for_unused("exclude", excludes)?;
+    check_for_unused("exclude-suffix", exclude_suffixes)?;
 
     benchmarks.sort_by_key(|benchmark| benchmark.name.clone());
 
@@ -461,4 +461,20 @@ pub fn get_compile_benchmarks(
     }
 
     Ok(benchmarks)
+}
+
+/// Helper to verify if a benchmark name matches a given substring, like a prefix or a suffix. The
+/// `predicate` closure will be passed each substring from `substrings` until it returns true, and
+/// in that case the substring's number of uses in the map will be increased.
+fn substring_matches(
+    substrings: &mut HashMap<&str, usize>,
+    predicate: impl Fn(&str) -> bool,
+) -> bool {
+    for (substring, n) in substrings.iter_mut() {
+        if predicate(substring) {
+            *n += 1;
+            return true;
+        }
+    }
+    false
 }

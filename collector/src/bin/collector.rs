@@ -512,6 +512,10 @@ struct LocalOptions {
     #[arg(long)]
     exclude: Option<String>,
 
+    /// Exclude all benchmarks matching a suffix in this comma-separated list
+    #[arg(long)]
+    exclude_suffix: Option<String>,
+
     /// Include only benchmarks matching a prefix in this comma-separated list
     #[arg(long)]
     include: Option<String>,
@@ -766,6 +770,7 @@ fn main_result() -> anyhow::Result<i32> {
                 &compile_benchmark_dir,
                 local.include.as_deref(),
                 local.exclude.as_deref(),
+                local.exclude_suffix.as_deref(),
             )?;
             benchmarks.retain(|b| b.category().is_primary_or_secondary());
 
@@ -832,6 +837,7 @@ fn main_result() -> anyhow::Result<i32> {
                         &compile_benchmark_dir,
                         include.as_deref(),
                         exclude.as_deref(),
+                        None,
                     )?;
                     benchmarks.retain(|b| b.category().is_primary_or_secondary());
 
@@ -892,6 +898,7 @@ fn main_result() -> anyhow::Result<i32> {
                 &compile_benchmark_dir,
                 local.include.as_deref(),
                 local.exclude.as_deref(),
+                local.exclude_suffix.as_deref(),
             )?;
             benchmarks.retain(|b| b.category().is_primary_or_secondary());
 
@@ -1051,7 +1058,7 @@ fn bench_published_artifact(
     let cargo = which("cargo")?;
 
     // Exclude benchmarks that don't work with a stable compiler.
-    let mut benchmarks = get_compile_benchmarks(&benchmark_dir, None, None)?;
+    let mut benchmarks = get_compile_benchmarks(&benchmark_dir, None, None, None)?;
     benchmarks.retain(|b| b.category().is_stable());
 
     let res = bench(
