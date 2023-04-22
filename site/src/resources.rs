@@ -17,6 +17,7 @@ struct StaticAssets;
 #[derive(RustEmbed)]
 #[folder = "frontend/dist"]
 #[include = "*.js"]
+#[include = "*.css"]
 struct StaticCompiledAssets;
 
 /// HTML template files that will be rendered by `tera`.
