@@ -51,6 +51,10 @@ jobs:
           toolchain: beta
           override: true
 
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: windows
+
       - name: cargo check
         run: cargo check
         env:
