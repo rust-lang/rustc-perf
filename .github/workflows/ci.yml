@@ -1,6 +1,8 @@
 name: CI
 on:
-  push: {}
+  push:
+    branches:
+      - master
   pull_request: {}
   schedule:
     - cron: "0 12 * * 1" # Every Monday at 12:00 UTC
