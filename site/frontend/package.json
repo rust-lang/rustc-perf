@@ -35,6 +35,14 @@
     "bootstrap": {
       "source": "src/pages/bootstrap.ts",
       "distDir": "dist/scripts"
+    },
+    "graphs": {
+      "source": "src/pages/graphs.ts",
+      "distDir": "dist/scripts"
+    },
+    "uplot": {
+      "source": "node_modules/uplot/dist/uPlot.min.css",
+      "distDir": "dist/styles"
     }
   },
   "browserslist": "> 0.5%, last 3 years, not dead"
