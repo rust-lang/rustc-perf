@@ -1,6 +1,6 @@
 import {STATUS_DATA_URL} from "../urls";
 
-import {getRequest} from "../utils/requests";
+import {getJson} from "../utils/requests";
 
 interface Commit {
     sha: string;
@@ -203,7 +203,7 @@ function format_duration(seconds) {
 }
 
 async function make_data() {
-    const response = await getRequest<StatusResponse>(STATUS_DATA_URL);
+    const response = await getJson<StatusResponse>(STATUS_DATA_URL);
     populate_data(response);
 }
 

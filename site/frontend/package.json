@@ -13,10 +13,13 @@
     "@babel/types": "^7.21.4",
     "@parcel/transformer-vue": "^2.8.3",
     "@types/highcharts": "^7.0.0",
+    "@types/msgpack-lite": "^0.1.8",
+    "buffer": "^5.7.1",
     "typescript": "^5.0.2"
   },
   "dependencies": {
     "highcharts": "6.0.7",
+    "msgpack-lite": "^0.1.26",
     "parcel": "^2.8.3",
     "sass": "^1.59.3",
     "uplot": "^1.6.24",
@@ -38,6 +41,10 @@
     },
     "graphs": {
       "source": "src/pages/graphs.ts",
+      "distDir": "dist/scripts"
+    },
+    "compare": {
+      "source": "src/pages/compare.ts",
       "distDir": "dist/scripts"
     },
     "uplot": {

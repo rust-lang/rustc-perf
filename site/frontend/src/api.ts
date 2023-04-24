@@ -1,4 +1,4 @@
-import {getRequest} from "./utils/requests";
+import {getJson} from "./utils/requests";
 import {INFO_URL} from "./urls";
 
 export interface BenchmarkInfo {
@@ -9,5 +9,5 @@ export interface BenchmarkInfo {
 }
 
 export async function loadBenchmarkInfo() {
-  return await getRequest<BenchmarkInfo>(INFO_URL);
+  return await getJson<BenchmarkInfo>(INFO_URL);
 }

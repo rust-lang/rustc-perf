@@ -7,10 +7,10 @@ import {BootstrapData, BootstrapSelector} from "./state";
 import {BOOTSTRAP_DATA_URL} from "../../urls";
 import {generateUrlParams, getUrlParams, navigateToUrlParams} from "../../utils/navigation";
 
-import {postRequest} from "../../utils/requests";
+import {postJson} from "../../utils/requests";
 
 async function loadBootstrapData(selector: BootstrapSelector, loading: Ref<boolean>) {
-    const bootstrapData: BootstrapData = await withLoading(loading, () => postRequest<BootstrapData>(BOOTSTRAP_DATA_URL, selector));
+    const bootstrapData: BootstrapData = await withLoading(loading, () => postJson<BootstrapData>(BOOTSTRAP_DATA_URL, selector));
 
     // Wait for the UI to be updated, which also resets the plot HTML elements.
     // Then draw the plots.

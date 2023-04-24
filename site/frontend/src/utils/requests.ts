@@ -1,4 +1,6 @@
-export async function postRequest<T>(path: string, body: any): Promise<T> {
+import {decode} from "msgpack-lite";
+
+export async function postJson<T>(path: string, body: any): Promise<T> {
   const response = await fetch(path, {
     method: "POST",
     body: JSON.stringify(body)
@@ -6,7 +8,7 @@ export async function postRequest<T>(path: string, body: any): Promise<T> {
   return await response.json();
 }
 
-export async function getRequest<T>(path: string, params: Dict<string> = {}): Promise<T> {
+export async function getJson<T>(path: string, params: Dict<string> = {}): Promise<T> {
   let url = path;
 
   if (Object.keys(params).length > 0) {
@@ -21,4 +23,20 @@ export async function getRequest<T>(path: string, params: Dict<string> = {}): Pr
 
   const response = await fetch(url, {});
   return await response.json();
+}
+
+export async function postMsgpack(path: string, body: any) {
+  const response = await fetch(path, {
+    method: "POST",
+    body: JSON.stringify(body),
+    mode: "cors"
+  });
+  if (response.ok) {
+    const buffer = await response.clone().arrayBuffer();
+    return decode(new Uint8Array(buffer));
+  } else {
+    const text = await response.text();
+    alert(text);
+    throw new Error(`Invalid response from server: ${text}`);
+  }
 }
