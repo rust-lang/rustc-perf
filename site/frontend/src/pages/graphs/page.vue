@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import {getRequest} from "../../api";
 import {nextTick, Ref, ref} from "vue";
 import {withLoading} from "../../utils/loading";
-import {BenchmarkInfo, GraphData, GraphKind, GraphsSelector} from "./state";
-import {GRAPH_DATA_URL, INFO_URL} from "../../urls";
+import {GraphData, GraphKind, GraphsSelector} from "./state";
+import {GRAPH_DATA_URL} from "../../urls";
 import DataSelector, {SelectionParams} from "./data-selector.vue";
 import {getUrlParams} from "../../utils/document";
 import {renderPlots} from "./plots";
 import {generateUrlParams, navigateToUrlParams} from "../../utils/navigation";
+import {getRequest} from "../../utils/requests";
+import {BenchmarkInfo, loadBenchmarkInfo} from "../../api";
 
 function loadSelectorFromUrl(urlParams: Dict<string>): GraphsSelector {
     const start = urlParams["start"] ?? "";
@@ -97,7 +98,7 @@ function updateSelection(params: SelectionParams) {
     }));
 }
 
-const info: BenchmarkInfo = await getRequest<BenchmarkInfo>(INFO_URL);
+const info: BenchmarkInfo = await loadBenchmarkInfo();
 
 const loading = ref(true);
 

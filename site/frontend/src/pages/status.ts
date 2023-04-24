@@ -1,5 +1,6 @@
 import {STATUS_DATA_URL} from "../urls";
-import {getRequest} from "../api";
+
+import {getRequest} from "../utils/requests";
 
 interface Commit {
     sha: string;

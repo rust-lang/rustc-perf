@@ -6,7 +6,8 @@ import {renderPlots} from "./plots";
 import {BootstrapData, BootstrapSelector} from "./state";
 import {BOOTSTRAP_DATA_URL} from "../../urls";
 import {generateUrlParams, getUrlParams, navigateToUrlParams} from "../../utils/navigation";
-import {postRequest} from "../../api";
+
+import {postRequest} from "../../utils/requests";
 
 async function loadBootstrapData(selector: BootstrapSelector, loading: Ref<boolean>) {
     const bootstrapData: BootstrapData = await withLoading(loading, () => postRequest<BootstrapData>(BOOTSTRAP_DATA_URL, selector));

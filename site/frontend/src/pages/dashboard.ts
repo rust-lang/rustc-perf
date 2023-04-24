@@ -1,6 +1,7 @@
 import Highcharts from "highcharts";
 import {DASHBOARD_DATA_URL} from "../urls";
-import {getRequest} from "../api";
+
+import {getRequest} from "../utils/requests";
 
 interface DashboardCases {
     clean_averages: [number],
