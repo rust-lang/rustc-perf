@@ -26,36 +26,6 @@ ul li input {
     margin: 10px 0;
 }
 
-#commits {
-    border: none;
-    display: flex;
-    padding: 0px;
-}
-
-.commit-input {
-    width: 270px;
-    display: flex;
-    flex-direction: column;
-}
-
-.commit-input label {
-    font-size: 12px;
-    font-weight: bold;
-    margin-bottom: 6px;
-}
-
-#metric {
-    position: relative;
-    height: 40px;
-}
-
-#stats {
-    border-radius: 5px;
-    width: 200px;
-    font-size: 14px;
-    margin-left: 52px;
-}
-
 .section-heading {
     font-size: 16px;
 }
@@ -83,12 +53,6 @@ input {
 
 input[type="checkbox"] {
     height: auto;
-}
-
-#settings input[type=submit] {
-    width: 100%;
-    font-weight: bold;
-    background: #ADD8E6;
 }
 
 .cache-label {

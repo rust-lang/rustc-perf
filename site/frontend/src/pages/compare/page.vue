@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import {loadBenchmarkInfo} from "../../api";
 import AsOf from "../../components/as-of.vue";
-import {getUrlParams} from "../../utils/navigation";
-import {computed, Ref, ref} from "vue";
+import {generateUrlParams, getUrlParams, navigateToUrlParams} from "../../utils/navigation";
+import {Ref, ref} from "vue";
 import {withLoading} from "../../utils/loading";
 import {postMsgpack} from "../../utils/requests";
 import {COMPARE_DATA_URL} from "../../urls";
-import {ArtifactDescription, CompareResponse, CompareSelector} from "./state";
+import {CompareResponse, CompareSelector} from "./state";
 import BootstrapTable from "./bootstrap-table.vue";
 import Header from "./header.vue";
-import {formatDate} from "./shared";
+import DataSelector, {SelectionParams} from "./data-selector.vue";
 
 // TODO: reset defaults
 function loadSelectorFromUrl(urlParams: Dict<string>): CompareSelector {
@@ -35,6 +35,14 @@ async function loadCompareData(selector: CompareSelector, loading: Ref<boolean>)
   data.value = response;
 }
 
+function updateSelection(params: SelectionParams) {
+  navigateToUrlParams(generateUrlParams({
+    start: params.start,
+    end: params.end,
+    stat: params.stat
+  }));
+}
+
 let loading = ref(false);
 
 const info = await loadBenchmarkInfo();
@@ -51,6 +59,8 @@ loadCompareData(selector, loading);
       <p>Loading ...</p>
     </div>
     <div v-else>
+      <DataSelector :start="selector.start" :end="selector.end" :stat="selector.stat"
+                    :info="info" @change="updateSelection" />
       <BootstrapTable :data="data" />
     </div>
   </div>

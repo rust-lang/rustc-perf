@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import {Component, Suspense} from "vue";
+import {Suspense} from "vue";
 
 const props = defineProps<{
-  component: Component
+  component: Object
 }>();
+const component = props.component as any;
 </script>
 
 <template>
   <Suspense>
-    <component :is="props.component" />
+    <component :is="component" />
   </Suspense>
 </template>

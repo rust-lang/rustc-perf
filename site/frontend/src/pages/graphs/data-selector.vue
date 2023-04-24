@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {onMounted, ref} from "vue";
-import {BenchmarkInfo, GraphKind} from "./state";
+import {GraphKind} from "./state";
+import {BenchmarkInfo} from "../../api";
 
 export interface SelectionParams {
   start: string;
@@ -52,8 +53,7 @@ function submitSettings() {
     <option value="percentrelative">Percent Delta from Previous</option>
   </select>
     <select ref="statRef">
-      <option :selected="value === stat ? 'selected' : null"
-              v-for="value in info.stats" :value="value">{{ value }}
+      <option v-for="value in info.stats" :value="value">{{ value }}
       </option>
     </select>&nbsp;<a href="#" @click.prevent="submitSettings">Submit</a>
   </div>
