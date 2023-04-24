@@ -5,7 +5,7 @@ import {withLoading} from "../../utils/loading";
 import {renderPlots} from "./plots";
 import {BootstrapData, BootstrapSelector} from "./state";
 import {BOOTSTRAP_DATA_URL} from "../../urls";
-import {generateUrlParams, getUrlParams, navigateToUrlParams} from "../../utils/navigation";
+import {createUrlParams, getUrlParams, navigateToUrlParams} from "../../utils/navigation";
 
 import {postJson} from "../../utils/requests";
 
@@ -29,7 +29,7 @@ function loadSelectorFromUrl(urlParams: Dict<string>): BootstrapSelector {
 }
 
 function updateSelection(params: SelectionParams) {
-    navigateToUrlParams(generateUrlParams({
+    navigateToUrlParams(createUrlParams({
         start: params.start,
         end: params.end
     }));

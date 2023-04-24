@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {loadBenchmarkInfo} from "../../api";
 import AsOf from "../../components/as-of.vue";
-import {generateUrlParams, getUrlParams, navigateToUrlParams} from "../../utils/navigation";
+import {createUrlParams, getUrlParams, navigateToUrlParams} from "../../utils/navigation";
 import {Ref, ref} from "vue";
 import {withLoading} from "../../utils/loading";
 import {postMsgpack} from "../../utils/requests";
@@ -10,6 +10,7 @@ import {CompareResponse, CompareSelector} from "./state";
 import BootstrapTable from "./bootstrap-table.vue";
 import Header from "./header.vue";
 import DataSelector, {SelectionParams} from "./data-selector.vue";
+import QuickLinks from "./quick-links.vue";
 
 // TODO: reset defaults
 function loadSelectorFromUrl(urlParams: Dict<string>): CompareSelector {
@@ -36,7 +37,7 @@ async function loadCompareData(selector: CompareSelector, loading: Ref<boolean>)
 }
 
 function updateSelection(params: SelectionParams) {
-  navigateToUrlParams(generateUrlParams({
+  navigateToUrlParams(createUrlParams({
     start: params.start,
     end: params.end,
     stat: params.stat
@@ -61,6 +62,7 @@ loadCompareData(selector, loading);
     <div v-else>
       <DataSelector :start="selector.start" :end="selector.end" :stat="selector.stat"
                     :info="info" @change="updateSelection" />
+      <QuickLinks :stat="selector.stat" />
       <BootstrapTable :data="data" />
     </div>
   </div>

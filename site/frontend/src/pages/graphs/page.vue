@@ -6,7 +6,7 @@ import {GRAPH_DATA_URL} from "../../urls";
 import DataSelector, {SelectionParams} from "./data-selector.vue";
 import {getUrlParams} from "../../utils/navigation";
 import {renderPlots} from "./plots";
-import {generateUrlParams, navigateToUrlParams} from "../../utils/navigation";
+import {createUrlParams, navigateToUrlParams} from "../../utils/navigation";
 import {getJson} from "../../utils/requests";
 import {BenchmarkInfo, loadBenchmarkInfo} from "../../api";
 import AsOf from "../../components/as-of.vue";
@@ -91,12 +91,12 @@ async function loadGraphData(selector: GraphsSelector, loading: Ref<boolean>) {
 }
 
 function updateSelection(params: SelectionParams) {
-    navigateToUrlParams(generateUrlParams({
-        start: params.start,
-        end: params.end,
-        kind: params.kind,
-        stat: params.stat
-    }));
+  navigateToUrlParams(createUrlParams({
+    start: params.start,
+    end: params.end,
+    kind: params.kind,
+    stat: params.stat
+  }));
 }
 
 const info: BenchmarkInfo = await loadBenchmarkInfo();

@@ -218,18 +218,6 @@ input[type="checkbox"] {
     color: inherit;
 }
 
-.quick-links {
-    display: flex;
-    flex-direction: row;
-    margin: 10px 0;
-}
-.quick-links div {
-    margin-right: 10px;
-}
-.quick-links .active {
-    font-weight: bold;
-}
-
 .summary-table th {
     text-align: center;
 }

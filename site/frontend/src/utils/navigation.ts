@@ -1,4 +1,8 @@
-export function generateUrlParams(params: Dict<string>): URLSearchParams {
+export function createUrlParams(params: Dict<string>): URLSearchParams {
+    return createUrlWithParams(params).searchParams;
+}
+
+export function createUrlWithParams(params: Dict<string>): URL {
     const originalUrl = window.location.toString();
     const url = new URL(originalUrl);
     for (const [key, value] of Object.entries(params)) {
@@ -6,7 +10,7 @@ export function generateUrlParams(params: Dict<string>): URLSearchParams {
             url.searchParams.set(key, value);
         }
     }
-    return url.searchParams;
+    return url;
 }
 
 export function getUrlParams(): Dict<string> {
