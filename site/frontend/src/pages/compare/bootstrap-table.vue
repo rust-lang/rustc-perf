@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {CompareResponse} from "./state";
+import {CompareResponse} from "./types";
 
 const props = defineProps<{data: CompareResponse}>();
 

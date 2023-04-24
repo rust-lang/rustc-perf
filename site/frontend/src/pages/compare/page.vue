@@ -2,15 +2,18 @@
 import {loadBenchmarkInfo} from "../../api";
 import AsOf from "../../components/as-of.vue";
 import {createUrlParams, getUrlParams, navigateToUrlParams} from "../../utils/navigation";
-import {Ref, ref} from "vue";
+import {computed, Ref, ref} from "vue";
 import {withLoading} from "../../utils/loading";
 import {postMsgpack} from "../../utils/requests";
 import {COMPARE_DATA_URL} from "../../urls";
-import {CompareResponse, CompareSelector} from "./state";
+import {CompareResponse, CompareSelector, DataFilter} from "./types";
 import BootstrapTable from "./bootstrap-table.vue";
 import Header from "./header.vue";
 import DataSelector, {SelectionParams} from "./data-selector.vue";
 import QuickLinks from "./quick-links.vue";
+import Filters from "./filters.vue";
+import {exportToMarkdown} from "./export";
+import {computeBenchmarkMap, computeTestCases} from "./data";
 
 // TODO: reset defaults
 function loadSelectorFromUrl(urlParams: Dict<string>): CompareSelector {
@@ -44,12 +47,41 @@ function updateSelection(params: SelectionParams) {
   }));
 }
 
-let loading = ref(false);
+function exportData() {
+  exportToMarkdown(testCases.value);
+}
+
+const defaultFilter: DataFilter = {
+  name: null,
+  nonRelevant: false,
+  showRawData: false,
+  profile: {
+    check: true,
+    debug: true,
+    opt: true,
+    doc: true
+  },
+  scenario: {
+    full: true,
+    incrFull: true,
+    incrUnchanged: true,
+    incrPatched: true
+  },
+  category: {
+    primary: true,
+    secondary: true
+  }
+};
+const benchmarkMap = computed(() => computeBenchmarkMap(data.value));
+const testCases = computed(() => computeTestCases(filter.value, data.value, benchmarkMap.value));
+
+const loading = ref(false);
 
 const info = await loadBenchmarkInfo();
 const selector = loadSelectorFromUrl(getUrlParams());
+const filter = ref({...defaultFilter});
 
-let data: Ref<CompareResponse | null> = ref(null);
+const data: Ref<CompareResponse | null> = ref(null);
 loadCompareData(selector, loading);
 </script>
 
@@ -63,6 +95,8 @@ loadCompareData(selector, loading);
       <DataSelector :start="selector.start" :end="selector.end" :stat="selector.stat"
                     :info="info" @change="updateSelection" />
       <QuickLinks :stat="selector.stat" />
+      <Filters :defaultFilter="defaultFilter" @change="f => filter = f"
+               @export="exportData" />
       <BootstrapTable :data="data" />
     </div>
   </div>

@@ -1,3 +1,30 @@
+export interface DataFilter {
+  name: string | null;
+  nonRelevant: boolean;
+  showRawData: boolean;
+  profile: {
+    check: boolean;
+    debug: boolean;
+    opt: boolean;
+    doc: boolean;
+  };
+  scenario: {
+    full: boolean;
+    incrFull: boolean;
+    incrUnchanged: boolean;
+    incrPatched: boolean;
+  };
+  category: {
+    primary: boolean;
+    secondary: boolean;
+  }
+}
+
+export type Profile = "check" | "debug" | "opt" | "doc";
+export type Category = "primary" | "secondary";
+
+export type BenchmarkMap = Dict<{category: Category}>;
+
 export interface CompareSelector {
   start: string;
   end: string;
@@ -6,7 +33,7 @@ export interface CompareSelector {
 
 export interface BenchmarkDescription {
   name: string;
-  category: string;
+  category: Category;
 }
 
 export interface ArtifactDescription {
@@ -19,7 +46,7 @@ export interface ArtifactDescription {
 
 export interface Comparison {
   benchmark: string;
-  profile: string;
+  profile: Profile;
   scenario: string;
   is_relevant: boolean;
   significance_threshold: number;

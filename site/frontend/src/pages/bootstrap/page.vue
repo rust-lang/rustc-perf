@@ -35,7 +35,7 @@ function updateSelection(params: SelectionParams) {
     }));
 }
 
-let loading = ref(true);
+const loading = ref(true);
 
 const selector: BootstrapSelector = loadSelectorFromUrl(getUrlParams());
 loadBootstrapData(selector, loading);

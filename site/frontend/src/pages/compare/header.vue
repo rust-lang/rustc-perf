@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {ArtifactDescription, CompareResponse, CompareSelector} from "./state";
+import {ArtifactDescription, CompareResponse, CompareSelector} from "./types";
 import {formatDate} from "./shared";
 import {computed} from "vue";
 
