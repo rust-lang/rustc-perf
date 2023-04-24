@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import Toggle from "./toggle.vue";
-import {DataFilter} from "./types";
-import Tooltip from "./tooltip.vue";
+import Toggle from "../toggle.vue";
+import {DataFilter} from "../types";
+import Tooltip from "../tooltip.vue";
 import {ref, toRaw, watch} from "vue";
 
 const props = defineProps<{defaultFilter: DataFilter}>();

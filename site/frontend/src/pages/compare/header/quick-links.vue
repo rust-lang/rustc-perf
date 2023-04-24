@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {createUrlWithParams, getUrlParams} from "../../utils/navigation";
+import {createUrlWithParams, getUrlParams} from "../../../utils/navigation";
 
 const props = defineProps<{stat: string}>();
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import {ArtifactDescription, CompareResponse, CompareSelector} from "./types";
-import {formatDate} from "./shared";
+import {ArtifactDescription, CompareResponse, CompareSelector} from "../types";
+import {formatDate} from "../shared";
 import {computed} from "vue";
 
 const props = defineProps<{

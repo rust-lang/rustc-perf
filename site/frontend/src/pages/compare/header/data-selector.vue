@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import {BenchmarkInfo} from "../../api";
+import {BenchmarkInfo} from "../../../api";
 import {onMounted, ref} from "vue";
-import Toggle from "./toggle.vue";
+import Toggle from "../toggle.vue";
 
 export interface SelectionParams {
   start: string;
