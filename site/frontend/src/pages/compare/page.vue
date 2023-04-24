@@ -2,18 +2,14 @@
 import {loadBenchmarkInfo} from "../../api";
 import AsOf from "../../components/as-of.vue";
 import {getUrlParams} from "../../utils/navigation";
-import {Ref, ref} from "vue";
+import {computed, Ref, ref} from "vue";
 import {withLoading} from "../../utils/loading";
 import {postMsgpack} from "../../utils/requests";
 import {COMPARE_DATA_URL} from "../../urls";
-import {CompareResponse} from "./state";
+import {ArtifactDescription, CompareResponse, CompareSelector} from "./state";
 import BootstrapTable from "./bootstrap-table.vue";
-
-interface CompareSelector {
-  start: string;
-  end: string;
-  stat: string;
-}
+import Header from "./header.vue";
+import {formatDate} from "./shared";
 
 // TODO: reset defaults
 function loadSelectorFromUrl(urlParams: Dict<string>): CompareSelector {
@@ -28,7 +24,7 @@ function loadSelectorFromUrl(urlParams: Dict<string>): CompareSelector {
 }
 
 async function loadCompareData(selector: CompareSelector, loading: Ref<boolean>) {
-  data.value = await withLoading(loading, async () => {
+  const response: CompareResponse = await withLoading(loading, async () => {
     const params = {
       start: selector.start,
       end: selector.end,
@@ -36,6 +32,7 @@ async function loadCompareData(selector: CompareSelector, loading: Ref<boolean>)
     };
     return await postMsgpack<CompareResponse>(COMPARE_DATA_URL, params);
   });
+  data.value = response;
 }
 
 let loading = ref(false);
@@ -43,27 +40,21 @@ let loading = ref(false);
 const info = await loadBenchmarkInfo();
 const selector = loadSelectorFromUrl(getUrlParams());
 
-const before = "TODO";
-const after = "TODO";
-
 let data: Ref<CompareResponse | null> = ref(null);
 loadCompareData(selector, loading);
 </script>
 
 <template>
-  <div id="app">
-    <h2>Comparing <span id="stat-header">{{selector.stat}}</span> between <span id="before">{{before}}</span> and
-      <span id="after">{{after}}</span>
-    </h2>
+  <div>
+    <Header :data="data" :selector="selector" />
     <div v-if="loading || data === null">
       <p>Loading ...</p>
     </div>
     <div v-else>
       <BootstrapTable :data="data" />
     </div>
-
-    </div>
-<!--  </div>-->
+  </div>
+  <!--  </div>-->
   <br>
   <AsOf :info="info" />
 </template>

@@ -158,29 +158,6 @@ input[type="checkbox"] {
     opacity: 1;
 }
 
-.description-box {
-    border: 1px solid;
-    display: flex;
-}
-
-.description-arrow {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    background: #8dcc8d;
-    padding: 5px;
-}
-
-#not-continuous {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    text-align: center;
-    background: #cc3300;
-    border: 1px solid;
-    cursor: help;
-}
-
 .benches {
     font-size: medium;
 }
@@ -189,14 +166,6 @@ input[type="checkbox"] {
     content: '';
     display: block;
     height: 10px;
-}
-
-#bootstrap th {
-    text-align: center;
-}
-
-#bootstrap td {
-    text-align: center;
 }
 
 .benches tbody:first-child th {

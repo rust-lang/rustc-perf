@@ -1,3 +1,9 @@
+export interface CompareSelector {
+  start: string;
+  end: string;
+  stat: string;
+}
+
 export interface BenchmarkDescription {
   name: string;
   category: string;

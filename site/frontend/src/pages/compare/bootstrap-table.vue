@@ -66,7 +66,7 @@ function percentClass(pct: number): string {
 
 <template>
   <div class="category-title">Bootstrap timings</div>
-  <table id="bootstrap" class="compare" style="margin: auto;"
+  <table class="bootstrap" style="margin: auto;"
          v-if="Object.keys(props.data.a.bootstrap).length > 0">
     <tr>
       <td colspan="4">Values in seconds. Variance is 1-3% on smaller crates!</td>
@@ -96,3 +96,12 @@ function percentClass(pct: number): string {
     </template>
   </table>
 </template>
+
+<style scoped>
+.bootstrap th {
+    text-align: center;
+}
+.bootstrap td {
+    text-align: center;
+}
+</style>
