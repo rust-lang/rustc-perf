@@ -15,6 +15,7 @@ import Filters from "./filters.vue";
 import {exportToMarkdown} from "./export";
 import {computeBenchmarkMap, computeSummary, computeTestCases} from "./data";
 import OverallTable from "./summary/overall-table.vue";
+import Aggregations from "./summary/aggregations.vue";
 
 // TODO: reset defaults
 function loadSelectorFromUrl(urlParams: Dict<string>): CompareSelector {
@@ -100,6 +101,7 @@ loadCompareData(selector, loading);
       <Filters :defaultFilter="defaultFilter" @change="f => filter = f"
                @export="exportData" />
       <OverallTable :summary="filteredSummary" />
+      <Aggregations :cases="testCases" />
       <BootstrapTable :data="data" />
     </div>
   </div>
