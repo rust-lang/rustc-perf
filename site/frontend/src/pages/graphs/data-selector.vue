@@ -3,20 +3,20 @@ import {onMounted, ref} from "vue";
 import {BenchmarkInfo, GraphKind} from "./state";
 
 export interface SelectionParams {
-    start: string;
-    end: string;
-    kind: GraphKind;
-    stat: string;
+  start: string;
+  end: string;
+  kind: GraphKind;
+  stat: string;
 }
 
 interface Props extends SelectionParams {
-    info: BenchmarkInfo;
+  info: BenchmarkInfo;
 }
 
 const props = defineProps<Props>();
 
 const emit = defineEmits<{
-    (e: "change", params: SelectionParams): void
+  (e: "change", params: SelectionParams): void
 }>();
 
 const startRef = ref<HTMLInputElement | null>(null);
@@ -25,19 +25,20 @@ const kindRef = ref<HTMLSelectElement | null>(null);
 const statRef = ref<HTMLSelectElement | null>(null);
 
 onMounted(() => {
-    startRef.value.value = props.start;
-    endRef.value.value = props.end;
-    kindRef.value.value = props.kind;
-})
+  startRef.value.value = props.start;
+  endRef.value.value = props.end;
+  kindRef.value.value = props.kind;
+  statRef.value.value = props.stat;
+});
 
 function submitSettings() {
-    const start = startRef.value.value;
-    const end = endRef.value.value;
-    const kind = kindRef.value.value as GraphKind;
-    const stat = statRef.value.value;
+  const start = startRef.value.value;
+  const end = endRef.value.value;
+  const kind = kindRef.value.value as GraphKind;
+  const stat = statRef.value.value;
 
-    const params = {start, end, kind, stat};
-    emit("change", params);
+  const params = {start, end, kind, stat};
+  emit("change", params);
 }
 </script>
 
@@ -46,13 +47,14 @@ function submitSettings() {
     start: <input placeholder="yyyy-mm-dd or commit" ref="startRef" />
     end: <input placeholder="yyyy-mm-dd or commit" ref="endRef" />
     Graph kind: <select ref="kindRef">
-      <option selected="selected" value="raw">Raw</option>
-      <option value="percentfromfirst">Percent Delta from First</option>
-      <option value="percentrelative">Percent Delta from Previous</option>
-    </select>
+    <option selected="selected" value="raw">Raw</option>
+    <option value="percentfromfirst">Percent Delta from First</option>
+    <option value="percentrelative">Percent Delta from Previous</option>
+  </select>
     <select ref="statRef">
       <option :selected="value === stat ? 'selected' : null"
-              v-for="value in info.stats" :value="value">{{ value }}</option>
+              v-for="value in info.stats" :value="value">{{ value }}
+      </option>
     </select>&nbsp;<a href="#" @click.prevent="submitSettings">Submit</a>
   </div>
 </template>
