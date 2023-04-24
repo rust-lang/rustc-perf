@@ -6,3 +6,9 @@ export function formatDate(dateString: string): string {
   }
   return `${date.getUTCFullYear()}-${padStr(date.getUTCMonth() + 1)}-${padStr(date.getUTCDate())} `;
 }
+export function signIfPositive(pct: number): string {
+  if (pct >= 0) {
+    return "+";
+  }
+  return "";
+}

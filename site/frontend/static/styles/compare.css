@@ -86,16 +86,6 @@ input[type="checkbox"] {
     margin-top: 10px;
 }
 
-#main-summary {
-    border: 1px dashed;
-    padding: 4px;
-    border-radius: 6px;
-
-    display: flex;
-    justify-content: center;
-    position: relative;
-}
-
 .summary-container {
     display: flex;
     flex-direction: column;
@@ -141,14 +131,6 @@ input[type="checkbox"] {
 
 .silent-link {
     color: inherit;
-}
-
-.summary-table th {
-    text-align: center;
-}
-.summary-table td, .summary-table th {
-    padding: 2px 5px;
-    vertical-align: middle;
 }
 
 .aggregation-section > .header {

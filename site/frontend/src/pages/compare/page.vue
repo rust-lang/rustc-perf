@@ -13,7 +13,8 @@ import DataSelector, {SelectionParams} from "./data-selector.vue";
 import QuickLinks from "./quick-links.vue";
 import Filters from "./filters.vue";
 import {exportToMarkdown} from "./export";
-import {computeBenchmarkMap, computeTestCases} from "./data";
+import {computeBenchmarkMap, computeSummary, computeTestCases} from "./data";
+import OverallTable from "./summary/overall-table.vue";
 
 // TODO: reset defaults
 function loadSelectorFromUrl(urlParams: Dict<string>): CompareSelector {
@@ -74,6 +75,7 @@ const defaultFilter: DataFilter = {
 };
 const benchmarkMap = computed(() => computeBenchmarkMap(data.value));
 const testCases = computed(() => computeTestCases(filter.value, data.value, benchmarkMap.value));
+const filteredSummary = computed(() => computeSummary(testCases.value));
 
 const loading = ref(false);
 
@@ -97,6 +99,7 @@ loadCompareData(selector, loading);
       <QuickLinks :stat="selector.stat" />
       <Filters :defaultFilter="defaultFilter" @change="f => filter = f"
                @export="exportData" />
+      <OverallTable :summary="filteredSummary" />
       <BootstrapTable :data="data" />
     </div>
   </div>
