@@ -9,6 +9,7 @@ import {renderPlots} from "./plots";
 import {generateUrlParams, navigateToUrlParams} from "../../utils/navigation";
 import {getRequest} from "../../utils/requests";
 import {BenchmarkInfo, loadBenchmarkInfo} from "../../api";
+import AsOf from "../../components/as-of.vue";
 
 function loadSelectorFromUrl(urlParams: Dict<string>): GraphsSelector {
     const start = urlParams["start"] ?? "";
@@ -124,13 +125,12 @@ loadGraphData(selector, loading);
   </div>
   <div v-else>
     <div id="charts"></div>
-    <div v-if="!hasSpecificSelection(selector)" style="margin-top: 50px; border-top: 1px solid #ccc;">
+    <div v-if="!hasSpecificSelection(selector)"
+         style="margin-top: 50px; border-top: 1px solid #ccc;">
       <div style="padding: 20px 0"><strong>Benchmarks for artifact sizes</strong></div>
       <div id="size-charts"></div>
     </div>
-    <div id="as-of">
-      Updated as of: {{ new Date(info.as_of).toLocaleString() }}
-    </div>
+    <AsOf :info="info" />
   </div>
   <a href="https://github.com/rust-lang-nursery/rustc-perf">
     <img
