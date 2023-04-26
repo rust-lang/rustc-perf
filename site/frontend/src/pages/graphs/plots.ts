@@ -1,3 +1,6 @@
+import uPlot, {TypedArray} from "uplot";
+import {GraphData, GraphsSelector} from "./state";
+
 const commonCacheStateColors = {
     "full": "#7cb5ec",
     "incr-full": "#434348",
@@ -220,7 +223,37 @@ function genPlotOpts({
     };
 }
 
-function renderPlots(data, state) {
+function normalizeData(data: GraphData): GraphData {
+    let sortedBenchNames = Object.keys(data.benchmarks).sort();
+
+    let benchmarks = {};
+
+    function optInterpolated(profile) {
+        for (let scenario in profile)
+            profile[scenario].interpolated_indices = new Set(profile[scenario].interpolated_indices);
+
+        return profile;
+    }
+
+    sortedBenchNames.forEach(name => {
+        benchmarks[name] = {};
+
+        for (let profile of profiles) {
+            if (data.benchmarks[name].hasOwnProperty(profile)) {
+                benchmarks[name][profile.toLowerCase()] = optInterpolated(data.benchmarks[name][profile]);
+            }
+        }
+    });
+
+    return {
+        benchmarks: benchmarks,
+        ...data
+    };
+}
+
+export function renderPlots(rawData: GraphData, selector: GraphsSelector) {
+    const data = normalizeData(rawData);
+
     for (let benchName in data.benchmarks) {
         let benchKinds = data.benchmarks[benchName];
 
@@ -231,36 +264,36 @@ function renderPlots(data, state) {
             let cacheStateNames = Object.keys(cacheStates);
             cacheStateNames.sort();
 
-            let yAxis = state.stat;
+            let yAxis = selector.stat;
             let yAxisUnit = null;
-            if (state.stat == "instructions:u") {
+            if (selector.stat == "instructions:u") {
                 yAxis = "CPU instructions";
                 yAxisUnit = "count";
-            } else if (state.stat == "cycles:u") {
+            } else if (selector.stat == "cycles:u") {
                 yAxis = "CPU cycles";
                 yAxisUnit = "count";
-            } else if (state.stat == "cpu-clock") {
+            } else if (selector.stat == "cpu-clock") {
                 yAxis = "CPU clock";
                 yAxisUnit = "seconds";
-            } else if (state.stat == "task-clock") {
+            } else if (selector.stat == "task-clock") {
                 yAxis = "Task clock";
                 yAxisUnit = "seconds";
-            } else if (state.stat == "wall-time") {
+            } else if (selector.stat == "wall-time") {
                 yAxis = "Wall time";
                 yAxisUnit = "seconds";
-            } else if (state.stat == "max-rss") {
+            } else if (selector.stat == "max-rss") {
                 yAxis = "Maximum resident set size";
                 yAxisUnit = "kB";
-            } else if (state.stat == "faults") {
+            } else if (selector.stat == "faults") {
                 yAxis = "Faults";
                 yAxisUnit = "count";
             }
 
-            if (state.kind == "raw" && benchName == "Summary") {
+            if (selector.kind == "raw" && benchName == "Summary") {
                 yAxisUnit = "relative";
-            } else if (state.kind == "percentfromfirst") {
+            } else if (selector.kind == "percentfromfirst") {
                 yAxisUnit = "% change from first";
-            } else if (state.kind == "percentrelative") {
+            } else if (selector.kind == "percentrelative") {
                 yAxisUnit = "% change from previous";
             }
 
@@ -297,72 +330,16 @@ function renderPlots(data, state) {
                 yAxisLabel,
                 series: seriesOpts,
                 commits: data.commits,
-                stat: state.stat,
+                stat: selector.stat,
                 isInterpolated(dataIdx) {
                     return indices.has(dataIdx);
                 },
-                absoluteMode: state.kind == "raw",
+                absoluteMode: selector.kind == "raw",
             });
 
-            let u = new uPlot(plotOpts, plotData,
-                document.querySelector("#charts"));
+            new uPlot(plotOpts, plotData as any as TypedArray[], document.querySelector<HTMLElement>("#charts"));
 
             i++;
         }
     }
-    document.querySelector("#loading").style.display = 'none';
 }
-
-function get_json(path, query) {
-    let q = Object.entries(query).map(e => `${e[0]}=${e[1]}`).join("&");
-    return fetch(BASE_URL + path + "?" + q).then(r => r.json());
-}
-
-function prepData(data) {
-    let sortedBenchNames = Object.keys(data.benchmarks).sort();
-
-    let benchmarks = {};
-
-    function optInterpolated(profile) {
-        for (let scenario in profile)
-            profile[scenario].interpolated_indices = new Set(profile[scenario].interpolated_indices);
-
-        return profile;
-    }
-
-    sortedBenchNames.forEach(name => {
-        benchmarks[name] = {};
-
-        for (let profile of profiles) {
-            if (data.benchmarks[name].hasOwnProperty(profile)) {
-                benchmarks[name][profile.toLowerCase()] = optInterpolated(data.benchmarks[name][profile]);
-            }
-        }
-    });
-
-    data.benchmarks = benchmarks;
-
-    return data;
-}
-
-function submit_settings() {
-    let start = document.getElementById("start-bound").value;
-    let end = document.getElementById("end-bound").value;
-    let params = new URLSearchParams(window.location.search);
-    params.set("start", start);
-    params.set("end", end);
-    params.set("kind", getSelected("kind"));
-    params.set("stat", getSelected("stats"));
-    window.location.search = params.toString();
-}
-
-loadState(state => {
-    let values = Object.assign({}, {
-        start: "",
-        end: "",
-        stat: "instructions:u",
-        kind: "raw",
-    }, state);
-    get_json("/graphs", values).then(prepData).then(data =>
-        renderPlots(data, values));
-});

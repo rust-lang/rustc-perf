@@ -1,8 +1,6 @@
 import uPlot, {TypedArray} from "uplot";
 import {BootstrapData, BootstrapSelector} from "./state";
 
-import "uplot/dist/uPlot.min.css";
-
 function tooltipPlugin({onclick, commits, shiftX = 10, shiftY = 10}) {
     let tooltipLeftOffset = 0;
     let tooltipTopOffset = 0;

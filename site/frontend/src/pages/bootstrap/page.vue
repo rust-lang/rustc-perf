@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import DataSelector, {SelectionParams} from "../../components/data-selector.vue";
+import DataSelector, {SelectionParams} from "./data-selector.vue";
 import {nextTick, Ref, ref} from "vue";
 import {withLoading} from "../../utils/loading";
 import {renderPlots} from "./plots";
@@ -41,21 +41,19 @@ loadBootstrapData(selector, loading);
 </script>
 
 <template>
-  <div>
-    <DataSelector :start="selector.start" :end="selector.end"
-                  @change="updateSelection"></DataSelector>
-    <div v-if="loading" id="loading">
-      <h2>Loading &amp; rendering data..</h2>
-      <h3>This may take a while!</h3>
+  <DataSelector :start="selector.start" :end="selector.end"
+                @change="updateSelection"></DataSelector>
+  <div v-if="loading" id="loading">
+    <h2>Loading &amp; rendering data..</h2>
+    <h3>This may take a while!</h3>
+  </div>
+  <div v-else>
+    <div>
+      See <a href="/compare.html">compare page</a> for descriptions of what
+      the names mean.
     </div>
-    <div v-else>
-      <div>
-        See <a href="/compare.html">compare page</a> for descriptions of what
-        the names mean.
-      </div>
-      <div id="byCrateChart"></div>
-      <div id="totalChart"></div>
-      <div id="as-of"></div>
-    </div>
+    <div id="byCrateChart"></div>
+    <div id="totalChart"></div>
+    <div id="as-of"></div>
   </div>
 </template>
