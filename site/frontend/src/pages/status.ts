@@ -1,4 +1,4 @@
-import {STATUS_DATA_URL} from "../configuration";
+import {STATUS_DATA_URL} from "../urls";
 
 interface Commit {
     sha: string;
