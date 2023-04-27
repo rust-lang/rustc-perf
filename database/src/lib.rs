@@ -292,7 +292,7 @@ impl std::str::FromStr for Scenario {
                 if s.starts_with("incr-patched: ") {
                     Scenario::IncrementalPatch(PatchName::from(&s["incr-patched: ".len()..]))
                 } else {
-                    return Err(format!("{} is not a profile", s));
+                    return Err(format!("{} is not a scenario", s));
                 }
             }
         })
