@@ -6,6 +6,9 @@ export interface GraphsSelector {
     end: string;
     kind: GraphKind;
     stat: string;
+    benchmark: string | null;
+    scenario: string | null;
+    profile: string | null;
 }
 
 export interface Series {
