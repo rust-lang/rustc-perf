@@ -47,45 +47,6 @@ input[type="checkbox"] {
     height: auto;
 }
 
-.benches {
-    font-size: medium;
-}
-
-.benches tbody::before {
-    content: '';
-    display: block;
-    height: 10px;
-}
-
-.benches tbody:first-child th {
-    text-align: center;
-}
-
-.benches tbody:not(:first-child) th {
-    border-right: dotted 1px;
-}
-
-.benches th {
-    text-align: center;
-    width: 25%;
-    min-width: 50px;
-}
-.benches td {
-    text-align: center;
-    width: 25%;
-}
-.benches td.numeric {
-    text-align: right;
-}
-
-.benchmark-name {
-    text-align: center;
-}
-
-.bench-table {
-    margin-top: 10px;
-}
-
 .summary-container {
     display: flex;
     flex-direction: column;
@@ -127,8 +88,4 @@ input[type="checkbox"] {
     font-size: 1.2em;
     margin: 10px;
     text-align: center;
-}
-
-.silent-link {
-    color: inherit;
 }

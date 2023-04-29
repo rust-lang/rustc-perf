@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {CompareResponse} from "./types";
+import {percentClass} from "./shared";
 
 const props = defineProps<{data: CompareResponse}>();
 
@@ -45,20 +46,6 @@ function diffClass(diff: number): string {
     klass = "positive";
   } else if (diff < -1) {
     klass = "negative";
-  }
-  return klass;
-}
-
-function percentClass(pct: number): string {
-  let klass = "";
-  if (pct > 1) {
-    klass = "positive";
-  } else if (pct > 0) {
-    klass = "slightly-positive";
-  } else if (pct < -1) {
-    klass = "negative";
-  } else if (pct < -0) {
-    klass = "slightly-negative";
   }
   return klass;
 }

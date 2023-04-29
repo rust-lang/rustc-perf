@@ -13,9 +13,15 @@ import DataSelector, {SelectionParams} from "./header/data-selector.vue";
 import QuickLinks from "./header/quick-links.vue";
 import Filters from "./header/filters.vue";
 import {exportToMarkdown} from "./export";
-import {computeBenchmarkMap, computeSummary, computeTestCases} from "./data";
+import {
+  computeBenchmarkMap,
+  computeSummary,
+  computeTestCasesWithNonRelevant, filterNonRelevant
+} from "./data";
 import OverallTable from "./summary/overall-table.vue";
 import Aggregations from "./summary/aggregations.vue";
+import Benchmarks from "./benchmarks/benchmarks.vue";
+import TestCasesTable from "./benchmarks/test-cases-table.vue";
 
 // TODO: reset defaults
 function loadSelectorFromUrl(urlParams: Dict<string>): CompareSelector {
@@ -75,7 +81,8 @@ const defaultFilter: DataFilter = {
   }
 };
 const benchmarkMap = computed(() => computeBenchmarkMap(data.value));
-const testCases = computed(() => computeTestCases(filter.value, data.value, benchmarkMap.value));
+const allTestCases = computed(() => computeTestCasesWithNonRelevant(filter.value, data.value, benchmarkMap.value));
+const testCases = computed(() => filterNonRelevant(filter.value, allTestCases.value));
 const filteredSummary = computed(() => computeSummary(testCases.value));
 
 const loading = ref(false);
@@ -102,8 +109,15 @@ loadCompareData(selector, loading);
                @export="exportData" />
       <OverallTable :summary="filteredSummary" />
       <Aggregations :cases="testCases" />
+      <Benchmarks :data="data"
+                  :test-cases="testCases"
+                  :all-test-cases="allTestCases"
+                  :filter="filter"
+                  :stat="selector.stat"
+      ></Benchmarks>
       <BootstrapTable :data="data" />
     </div>
+
   </div>
   <!--  </div>-->
   <br>

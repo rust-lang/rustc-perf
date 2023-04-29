@@ -12,3 +12,17 @@ export function signIfPositive(pct: number): string {
   }
   return "";
 }
+
+export function percentClass(pct: number): string {
+  let klass = "";
+  if (pct > 1) {
+    klass = "positive";
+  } else if (pct > 0) {
+    klass = "slightly-positive";
+  } else if (pct < -1) {
+    klass = "negative";
+  } else if (pct < -0) {
+    klass = "slightly-negative";
+  }
+  return klass;
+}

@@ -21,10 +21,12 @@ const summary = computed(() => props.summary);
   </div>
   <table v-else class="summary-table">
     <thead v-if="withLegend">
-    <th><!-- icon --></th>
-    <th>Range</th>
-    <th>Mean</th>
-    <th>Count</th>
+      <tr>
+        <th><!-- icon --></th>
+        <th>Range</th>
+        <th>Mean</th>
+        <th>Count</th>
+      </tr>
     </thead>
     <tbody>
     <tr class="positive">

@@ -109,20 +109,11 @@ export function computeTestCasesWithNonRelevant(
   return testCases;
 }
 
-function filterNonRelevant(filter: DataFilter, cases: TestCase[]): TestCase[] {
+export function filterNonRelevant(filter: DataFilter, cases: TestCase[]): TestCase[] {
   if (filter.nonRelevant) {
     return cases;
   }
   return cases.filter(c => c.isRelevant);
-}
-
-export function computeTestCases(
-  filter: DataFilter,
-  data: CompareResponse,
-  benchmarkMap: BenchmarkMap
-): TestCase[] {
-  const cases = computeTestCasesWithNonRelevant(filter, data, benchmarkMap);
-  return filterNonRelevant(filter, cases);
 }
 
 /**
