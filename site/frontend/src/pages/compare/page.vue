@@ -97,12 +97,12 @@ loadCompareData(selector, loading);
 <template>
   <div>
     <Header :data="data" :selector="selector" />
-    <div v-if="loading || data === null">
+    <DataSelector :start="selector.start" :end="selector.end" :stat="selector.stat"
+                  :info="info" @change="updateSelection" />
+    <div v-if="loading">
       <p>Loading ...</p>
     </div>
-    <div v-else>
-      <DataSelector :start="selector.start" :end="selector.end" :stat="selector.stat"
-                    :info="info" @change="updateSelection" />
+    <div v-if="data !== null">
       <QuickLinks :stat="selector.stat" />
       <Filters :defaultFilter="defaultFilter" @change="f => filter = f"
                @export="exportData" />
