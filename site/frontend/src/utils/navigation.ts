@@ -2,12 +2,12 @@ export function createUrlParams(params: Dict<string>): URLSearchParams {
     return createUrlWithParams(params).searchParams;
 }
 
-export function createUrlWithParams(params: Dict<string>): URL {
+export function createUrlWithParams(params: Dict<any>): URL {
     const originalUrl = window.location.toString();
     const url = new URL(originalUrl);
     for (const [key, value] of Object.entries(params)) {
         if (value !== null && value !== undefined && value !== "") {
-            url.searchParams.set(key, value);
+            url.searchParams.set(key, value.toString());
         }
     }
     return url;
