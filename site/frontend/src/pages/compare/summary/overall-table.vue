@@ -23,7 +23,7 @@ const summary = computed(() => props.summary);
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .main-summary {
     border: 1px dashed;
     padding: 4px;

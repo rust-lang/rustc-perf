@@ -6,7 +6,7 @@
 </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .tooltip {
     position: relative;
     border-radius: 50%;

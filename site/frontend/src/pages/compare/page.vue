@@ -119,7 +119,6 @@ loadCompareData(selector, loading);
     </div>
 
   </div>
-  <!--  </div>-->
   <br>
   <AsOf :info="info" />
 </template>

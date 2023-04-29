@@ -84,7 +84,7 @@ function diffClass(diff: number): string {
   </table>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .bootstrap th {
     text-align: center;
 }

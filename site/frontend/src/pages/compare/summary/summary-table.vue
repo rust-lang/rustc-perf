@@ -81,7 +81,7 @@ const summary = computed(() => props.summary);
   </table>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .summary-table th {
     text-align: center;
 }

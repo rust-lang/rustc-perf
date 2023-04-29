@@ -125,7 +125,7 @@ function prettifyRawNumber(number: number): string {
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .benches {
     font-size: medium;
 }

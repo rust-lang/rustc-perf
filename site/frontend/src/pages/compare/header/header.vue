@@ -79,7 +79,7 @@ const after = computed(() => formatBound(props.data?.b ?? null, props.selector.e
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .description-box {
     border: 1px solid;
     display: flex;

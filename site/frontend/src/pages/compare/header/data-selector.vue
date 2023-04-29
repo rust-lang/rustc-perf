@@ -72,7 +72,7 @@ function submitSettings() {
   </fieldset>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .settings input[type=submit] {
     width: 100%;
     font-weight: bold;

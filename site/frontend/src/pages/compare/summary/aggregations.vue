@@ -61,7 +61,7 @@ function calculateSummary(keyAttribute: string, keyValue: string): SummaryGroup 
   </fieldset>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .aggregation-section > .header {
     margin-top: 5px;
     font-size: 16px;

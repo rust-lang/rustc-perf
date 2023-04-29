@@ -20,7 +20,7 @@ const opened = ref(props.defaultOpened);
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .toggle {
     cursor: pointer;
 }

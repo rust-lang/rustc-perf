@@ -35,7 +35,7 @@ const metrics = [
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .quick-links {
     display: flex;
     flex-direction: row;

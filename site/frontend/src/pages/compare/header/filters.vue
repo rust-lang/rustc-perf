@@ -175,7 +175,7 @@ watch(filter, (newValue, _) => {
   </fieldset>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .section-heading {
     font-size: 16px;
 }

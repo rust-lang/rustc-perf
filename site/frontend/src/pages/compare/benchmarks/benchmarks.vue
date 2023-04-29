@@ -66,32 +66,7 @@ const secondaryHasNonRelevant = computed(() => props.allTestCases.filter(c => c.
         <Section title="Secondary" link="primary" :linkUp="true"></Section>
       </template>
     </TestCasesTable>
-    <!--      :cases="primaryCases"-->
-    <!--      :has-non-relevant="testCasesWithNonRelevant.filter(c => c.category === 'primary').length > 0"-->
-    <!--      :show-raw-data="filter.showRawData"-->
-    <!--      :commit-a="data.a"-->
-    <!--      :commit-b="data.b"-->
-    <!--      :stat="stat"-->
-    <!--      :before="before"-->
-    <!--      :after="after"-->
-    <!--      id="primary-benchmarks"-->
-    <!--    <hr />-->
-    <!--    <test-cases-table-->
-    <!--      :cases="secondaryCases"-->
-    <!--      :has-non-relevant="testCasesWithNonRelevant.filter(c => c.category === 'secondary').length > 0"-->
-    <!--      :show-raw-data="filter.showRawData"-->
-    <!--      :commit-a="data.a"-->
-    <!--      :commit-b="data.b"-->
-    <!--      :stat="stat"-->
-    <!--      :before="before"-->
-    <!--      :after="after"-->
-    <!--      id="secondary-benchmarks"-->
-    <!--    ></test-cases-table>-->
     <br />
     <hr />
   </div>
 </template>
-
-<style scoped>
-
-</style>
