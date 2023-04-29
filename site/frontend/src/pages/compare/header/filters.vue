@@ -22,7 +22,7 @@ watch(filter, (newValue, _) => {
 
 <template>
   <fieldset class="collapsible-section">
-    <Toggle>
+    <Toggle :defaultOpened="true">
       <template #label>Filters</template>
       <template #content>
         <div>

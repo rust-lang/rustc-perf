@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import {ref} from "vue";
 
-let opened = ref(false);
+const props = withDefaults(defineProps<{
+  defaultOpened?: boolean
+}>(), {
+  defaultOpened: false
+});
+
+const opened = ref(props.defaultOpened);
 </script>
 
 <template>
