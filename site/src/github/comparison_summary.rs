@@ -246,6 +246,12 @@ async fn summarize_run(
             MetricReliability::Low,
             calculate_metric_comparison(ctxt, &commit, Metric::CyclesUser).await?,
         ),
+        (
+            "Binary size",
+            Metric::LinkedArtifactSize,
+            MetricReliability::Low,
+            calculate_metric_comparison(ctxt, &commit, Metric::LinkedArtifactSize).await?,
+        ),
     ];
 
     for (title, metric, reliability, comparison) in metrics {
