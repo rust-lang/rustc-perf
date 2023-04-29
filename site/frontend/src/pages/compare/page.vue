@@ -23,10 +23,9 @@ import OverallTable from "./summary/overall-table.vue";
 import Aggregations from "./summary/aggregations.vue";
 import Benchmarks from "./benchmarks/benchmarks.vue";
 
-// TODO: reset defaults
 function loadSelectorFromUrl(urlParams: Dict<string>): CompareSelector {
-  const start = urlParams["start"] ?? "2021-05-01";
-  const end = urlParams["end"] ?? "2021-06-01";
+  const start = urlParams["start"] ?? "";
+  const end = urlParams["end"] ?? "";
   const stat = urlParams["stat"] ?? "instructions:u";
   return {
     start,
