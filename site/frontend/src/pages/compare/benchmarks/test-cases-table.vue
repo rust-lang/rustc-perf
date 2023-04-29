@@ -128,6 +128,11 @@ function prettifyRawNumber(number: number): string {
 <style scoped lang="scss">
 .benches {
     font-size: medium;
+    table-layout: fixed;
+
+    td, th {
+        padding: 0.3em;
+    }
 }
 
 .benches tbody::before {

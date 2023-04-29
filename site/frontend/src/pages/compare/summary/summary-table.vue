@@ -82,12 +82,13 @@ const summary = computed(() => props.summary);
 </template>
 
 <style scoped lang="scss">
-.summary-table th {
-    text-align: center;
-}
-
-.summary-table td, .summary-table th {
+.summary-table {
+  td {
+    text-align: right;
+  }
+  td, th {
     padding: 2px 5px;
     vertical-align: middle;
+  }
 }
 </style>

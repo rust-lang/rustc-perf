@@ -76,56 +76,6 @@ img {
   margin-left: auto;
 }
 
-.big_summary {
-  display: block;
-  margin-top: -20px;
-  font-size: 15em;
-  font-weight: 500;
-  z-index: -1;
-}
-.positive {
-  color: red;
-}
-.slightly-positive {
-  color: #ea7272;
-}
-.negative {
-  color: green;
-}
-.slightly-negative {
-  color: #74b374
-}
-.neutral {
-  color: black;
-}
-.summary_table td {
-  padding: 4px;
-}
-.summary_table th {
-  padding: 4px;
-}
-
 #as-of {
-  text-align: center;
-}
-
-.compare, .stats {
-  table-layout: fixed;
-}
-
-.stats td, .compare td, .stats th, .compare th {
-  padding: 0.3em;
-}
-
-table td, table th {
-  text-align: right;
-}
-
-.space {
-  width: 1em;
-}
-
-.group-by {
-  padding-bottom: 1em;
-  display: block;
+    text-align: center;
 }

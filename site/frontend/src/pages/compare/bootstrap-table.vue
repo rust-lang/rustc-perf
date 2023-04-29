@@ -85,10 +85,12 @@ function diffClass(diff: number): string {
 </template>
 
 <style scoped lang="scss">
-.bootstrap th {
+.bootstrap {
+  table-layout: fixed;
+
+  td, th {
     text-align: center;
-}
-.bootstrap td {
-    text-align: center;
+    padding: 0.3em;
+  }
 }
 </style>

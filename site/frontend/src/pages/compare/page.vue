@@ -16,12 +16,12 @@ import {exportToMarkdown} from "./export";
 import {
   computeBenchmarkMap,
   computeSummary,
-  computeTestCasesWithNonRelevant, filterNonRelevant
+  computeTestCasesWithNonRelevant,
+  filterNonRelevant
 } from "./data";
 import OverallTable from "./summary/overall-table.vue";
 import Aggregations from "./summary/aggregations.vue";
 import Benchmarks from "./benchmarks/benchmarks.vue";
-import TestCasesTable from "./benchmarks/test-cases-table.vue";
 
 // TODO: reset defaults
 function loadSelectorFromUrl(urlParams: Dict<string>): CompareSelector {
@@ -117,7 +117,6 @@ loadCompareData(selector, loading);
       ></Benchmarks>
       <BootstrapTable :data="data" />
     </div>
-
   </div>
   <br>
   <AsOf :info="info" />

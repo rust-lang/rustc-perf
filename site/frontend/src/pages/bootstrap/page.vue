@@ -55,6 +55,5 @@ loadBootstrapData(selector, loading);
     </div>
     <div id="byCrateChart"></div>
     <div id="totalChart"></div>
-    <div id="as-of"></div>
   </div>
 </template>
