@@ -227,6 +227,8 @@ async fn summarize_run(
         }
     }
 
+    let bootstrap = summarize_bootstrap(&inst_comparison);
+
     let metrics = vec![
         (
             "Instruction count",
@@ -264,7 +266,23 @@ async fn summarize_run(
         write_metric_summary(primary, secondary, reliability, &mut message);
     }
 
+    write!(&mut message, "\n{bootstrap}").unwrap();
+
     Ok(message)
+}
+
+fn summarize_bootstrap(comparison: &ArtifactComparison) -> String {
+    let prev_s = comparison.a.bootstrap_total as f64 / 1e9;
+    let current_s = comparison.b.bootstrap_total as f64 / 1e9;
+
+    if prev_s == 0.0 || current_s == 0.0 {
+        return "**Bootstrap**: missing data".to_string();
+    }
+
+    let change = (current_s / prev_s) - 1.0;
+    let change = change * 100.0;
+
+    format!("**Bootstrap**: {prev_s}s -> {current_s}s ({change:.2}%)")
 }
 
 fn write_metric_summary(
