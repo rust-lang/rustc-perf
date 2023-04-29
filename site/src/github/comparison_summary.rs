@@ -153,6 +153,12 @@ enum PerfRunSource {
     TryBuildRollup,
 }
 
+// How reliable is a given metric?
+enum MetricReliability {
+    High,
+    Low,
+}
+
 async fn summarize_run(
     ctxt: &SiteCtxt,
     commit: QueuedCommit,
@@ -225,31 +231,31 @@ async fn summarize_run(
         (
             "Instruction count",
             Metric::InstructionsUser,
-            true, // highly reliable
+            MetricReliability::High,
             inst_comparison,
         ),
         (
             "Max RSS (memory usage)",
             Metric::MaxRSS,
-            false, // not highly reliable
+            MetricReliability::Low,
             calculate_metric_comparison(ctxt, &commit, Metric::MaxRSS).await?,
         ),
         (
             "Cycles",
             Metric::CyclesUser,
-            false, // not highly reliable
+            MetricReliability::Low,
             calculate_metric_comparison(ctxt, &commit, Metric::CyclesUser).await?,
         ),
     ];
 
-    for (title, metric, highly_reliable, comparison) in metrics {
+    for (title, metric, reliability, comparison) in metrics {
         message.push_str(&format!(
             "\n### [{title}]({})\n",
             make_comparison_url(&commit, metric)
         ));
 
         let (primary, secondary) = comparison.summarize_by_category(&benchmark_map);
-        write_metric_summary(primary, secondary, highly_reliable, &mut message);
+        write_metric_summary(primary, secondary, reliability, &mut message);
     }
 
     Ok(message)
@@ -258,28 +264,31 @@ async fn summarize_run(
 fn write_metric_summary(
     primary: ArtifactComparisonSummary,
     secondary: ArtifactComparisonSummary,
-    highly_reliable: bool,
+    realibility: MetricReliability,
     message: &mut String,
 ) {
     if !primary.is_relevant() && !secondary.is_relevant() {
         message
             .push_str("This benchmark run did not return any relevant results for this metric.\n");
     } else {
-        if highly_reliable {
-            message.push_str(
-                "This is a highly reliable metric that was used to determine the \
+        match realibility {
+            MetricReliability::High => {
+                message.push_str(
+                    "This is a highly reliable metric that was used to determine the \
                 overall result at the top of this comment.\n\n",
-            );
-            write_summary_table(&primary, &secondary, false, message);
-        } else {
-            // `<details>` means it is hidden, requiring a click to reveal.
-            message.push_str("<details>\n<summary>Results</summary>\n\n");
-            message.push_str(
-                "This is a less reliable metric that may be of interest but was not \
+                );
+                write_summary_table(&primary, &secondary, false, message);
+            }
+            MetricReliability::Low => {
+                // `<details>` means it is hidden, requiring a click to reveal.
+                message.push_str("<details>\n<summary>Results</summary>\n\n");
+                message.push_str(
+                    "This is a less reliable metric that may be of interest but was not \
                 used to determine the overall result at the top of this comment.\n\n",
-            );
-            write_summary_table(&primary, &secondary, false, message);
-            message.push_str("</details>\n");
+                );
+                write_summary_table(&primary, &secondary, false, message);
+                message.push_str("</details>\n");
+            }
         }
     }
 }
