@@ -223,38 +223,31 @@ function genPlotOpts({
     };
 }
 
-function normalizeData(data: GraphData): GraphData {
-    let sortedBenchNames = Object.keys(data.benchmarks).sort();
-
-    let benchmarks = {};
-
+function normalizeData(data: GraphData) {
     function optInterpolated(profile) {
-        for (let scenario in profile)
+        for (const scenario in profile) {
             profile[scenario].interpolated_indices = new Set(profile[scenario].interpolated_indices);
+        }
 
         return profile;
     }
 
-    sortedBenchNames.forEach(name => {
-        benchmarks[name] = {};
-
-        for (let profile of profiles) {
+    for (const name of Object.keys(data.benchmarks)) {
+        for (const profile of profiles) {
             if (data.benchmarks[name].hasOwnProperty(profile)) {
-                benchmarks[name][profile.toLowerCase()] = optInterpolated(data.benchmarks[name][profile]);
+                data.benchmarks[name][profile.toLowerCase()] = optInterpolated(data.benchmarks[name][profile]);
+                delete data.benchmarks[name][profile];
             }
         }
-    });
-
-    return {
-        benchmarks: benchmarks,
-        ...data
-    };
+    }
 }
 
-export function renderPlots(rawData: GraphData, selector: GraphsSelector) {
-    const data = normalizeData(rawData);
+export function renderPlots(data: GraphData, selector: GraphsSelector) {
+    normalizeData(data);
 
-    for (let benchName in data.benchmarks) {
+    const names = Object.keys(data.benchmarks).sort();
+
+    for (const benchName of names) {
         let benchKinds = data.benchmarks[benchName];
 
         let i = 0;
