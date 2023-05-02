@@ -242,7 +242,9 @@ function normalizeData(data: GraphData) {
     }
 }
 
-export function renderPlots(data: GraphData, selector: GraphsSelector) {
+// Renders the plots data with the given parameters from the `selector`, into a DOM node optionally
+// selected by the `elementSelector` query.
+export function renderPlots(data: GraphData, selector: GraphsSelector, elementSelector: string = "#charts") {
     normalizeData(data);
 
     const names = Object.keys(data.benchmarks).sort();
@@ -330,7 +332,7 @@ export function renderPlots(data: GraphData, selector: GraphsSelector) {
                 absoluteMode: selector.kind == "raw",
             });
 
-            new uPlot(plotOpts, plotData as any as TypedArray[], document.querySelector<HTMLElement>("#charts"));
+            new uPlot(plotOpts, plotData as any as TypedArray[], document.querySelector<HTMLElement>(elementSelector));
 
             i++;
         }
