@@ -37,6 +37,19 @@ function filterBenchmarks(data: GraphData, filter: (key: string) => boolean): Gr
   };
 }
 
+/*
+ * Returns true if a specific subset of charts is selected by benchmark
+ * name, profile or scenario. In that case, the regular aligned grid of charts
+ * will not be shown.
+ */
+function hasSpecificSelection(selector: GraphsSelector): boolean {
+  return (
+    selector.benchmark !== null ||
+    selector.profile !== null ||
+    selector.scenario !== null
+  );
+}
+
 async function loadGraphData(selector: GraphsSelector, loading: Ref<boolean>) {
   const graphData: GraphData = await withLoading(loading, async () => {
     const params = {
@@ -55,17 +68,24 @@ async function loadGraphData(selector: GraphsSelector, loading: Ref<boolean>) {
   // Then draw the plots.
   await nextTick();
 
-  // First, render everything but the less important benchmarks about artifact sizes. This keeps the
-  // grouping and alignment of 4 charts per row where all 4 charts are about a given benchmark. So,
-  // we exclude the benchmarks ending in "-tiny".
-  const withoutTiny = filterBenchmarks(graphData, (benchName) => !benchName.endsWith("-tiny"));
-  renderPlots(withoutTiny, selector);
+  // If we select a smaller subset of benchmarks, then just show them.
+  if (hasSpecificSelection(selector)) {
+    renderPlots(graphData, selector, "#charts");
+  } else {
+    // If we select all of them, we expect that there will be a regular grid.
 
-  // Then, render only the size-related ones in their own dedicated section as they are less important
-  // than having the better grouping. So, we only include the benchmarks ending in "-tiny" and render
-  // them in the appropriate section.
-  const onlyTiny = filterBenchmarks(graphData, (benchName) => benchName.endsWith("-tiny"));
-  renderPlots(onlyTiny, selector, "#size-charts");
+    // So, first render everything but the less important benchmarks about artifact sizes.
+    // This keeps the grouping and alignment of 4 charts per row where all 4 charts are about a
+    // given benchmark. So, we exclude the benchmarks ending in "-tiny".
+    const withoutTiny = filterBenchmarks(graphData, (benchName) => !benchName.endsWith("-tiny"));
+    renderPlots(withoutTiny, selector, "#charts");
+
+    // Then, render only the size-related ones in their own dedicated section as they are less
+    // important than having the better grouping. So, we only include the benchmarks ending in
+    // "-tiny" and render them in the appropriate section.
+    const onlyTiny = filterBenchmarks(graphData, (benchName) => benchName.endsWith("-tiny"));
+    renderPlots(onlyTiny, selector, "#size-charts");
+  }
 }
 
 function updateSelection(params: SelectionParams) {
@@ -79,7 +99,7 @@ function updateSelection(params: SelectionParams) {
 
 const info: BenchmarkInfo = await getRequest<BenchmarkInfo>(INFO_URL);
 
-let loading = ref(true);
+const loading = ref(true);
 
 const selector: GraphsSelector = loadSelectorFromUrl(getUrlParams());
 loadGraphData(selector, loading);
@@ -103,7 +123,7 @@ loadGraphData(selector, loading);
   </div>
   <div v-else>
     <div id="charts"></div>
-    <div style="margin-top: 50px; border-top: 1px solid #ccc;">
+    <div v-if="!hasSpecificSelection(selector)" style="margin-top: 50px; border-top: 1px solid #ccc;">
       <div style="padding: 20px 0"><strong>Benchmarks for artifact sizes</strong></div>
       <div id="size-charts"></div>
     </div>

@@ -244,7 +244,7 @@ function normalizeData(data: GraphData) {
 
 // Renders the plots data with the given parameters from the `selector`, into a DOM node optionally
 // selected by the `elementSelector` query.
-export function renderPlots(data: GraphData, selector: GraphsSelector, elementSelector: string = "#charts") {
+export function renderPlots(data: GraphData, selector: GraphsSelector, elementSelector: string) {
     normalizeData(data);
 
     const names = Object.keys(data.benchmarks).sort();
