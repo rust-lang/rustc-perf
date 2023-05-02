@@ -24,7 +24,9 @@ function loadSelectorFromUrl(urlParams: Dict<string>): GraphsSelector {
     stat,
     benchmark,
     scenario,
-    profile
+    profile,
+    exclude_suffix: null,
+    include_suffix: null,
   };
 }
 

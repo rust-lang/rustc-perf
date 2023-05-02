@@ -9,6 +9,10 @@ export interface GraphsSelector {
     benchmark: string | null;
     scenario: string | null;
     profile: string | null;
+    // Exclude benchmarks whose name ends with this suffix
+    exclude_suffix: string | null;
+    // Only include benchmarks whose name ends with this suffix
+    include_suffix: string | null;
 }
 
 export interface Series {
