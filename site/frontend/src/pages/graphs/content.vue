@@ -47,7 +47,24 @@ async function loadGraphData(selector: GraphsSelector, loading: Ref<boolean>) {
   // Wait for the UI to be updated, which also resets the plot HTML elements.
   // Then draw the plots.
   await nextTick();
-  renderPlots(graphData, selector);
+
+  // First, render everything but the less important benchmarks about artifact sizes. This keeps the
+  // grouping and alignment of 4 charts per row where all 4 charts are about a given benchmark. So,
+  // we exclude the benchmarks ending in "-tiny".
+  let defaultSelector = {
+    ...selector,
+    exclude_suffix: "-tiny"
+  };
+  renderPlots(graphData, defaultSelector);
+
+  // Then, render only the size-related ones in their own dedicated section as they are less important
+  // than having the better grouping. So, we only include the benchmarks ending in "-tiny" and render
+  // them in the appropriate section.
+  let sizeSelector = {
+    ...selector,
+    include_suffix: "-tiny"
+  };
+  renderPlots(graphData, sizeSelector, "#size-charts");
 }
 
 function updateSelection(params: SelectionParams) {
@@ -85,6 +102,10 @@ loadGraphData(selector, loading);
   </div>
   <div v-else>
     <div id="charts"></div>
+    <div style="margin-top: 50px; border-top: 1px solid #ccc;">
+      <div style="padding: 20px 0"><strong>Benchmarks for artifact sizes</strong></div>
+      <div id="size-charts"></div>
+    </div>
     <div id="as-of">
       Updated as of: {{ new Date(info.as_of).toLocaleString() }}
     </div>
