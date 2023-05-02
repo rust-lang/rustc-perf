@@ -250,16 +250,6 @@ export function renderPlots(data: GraphData, selector: GraphsSelector, elementSe
     const names = Object.keys(data.benchmarks).sort();
 
     for (const benchName of names) {
-        // If the selector requires it, filter benchmarks depending on their name:
-        // - only display a benchmark if its name matches a suffix.
-        if (selector.include_suffix !== null && !benchName.endsWith(selector.include_suffix)) {
-            continue;
-        }
-        // - only display a benchmark if its name doesn't match a suffix.
-        if (selector.exclude_suffix !== null && benchName.endsWith(selector.exclude_suffix)) {
-            continue;
-        }
-
         let benchKinds = data.benchmarks[benchName];
 
         let i = 0;

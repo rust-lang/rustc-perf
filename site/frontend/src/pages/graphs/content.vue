@@ -24,9 +24,16 @@ function loadSelectorFromUrl(urlParams: Dict<string>): GraphsSelector {
     stat,
     benchmark,
     scenario,
-    profile,
-    exclude_suffix: null,
-    include_suffix: null,
+    profile
+  };
+}
+
+function filterBenchmarks(data: GraphData, filter: (key: string) => boolean): GraphData {
+  const benchmarks = Object.fromEntries(Object.entries(data.benchmarks)
+    .filter(([key, _]) => filter(key)));
+  return {
+    ...data,
+    benchmarks
   };
 }
 
@@ -51,20 +58,14 @@ async function loadGraphData(selector: GraphsSelector, loading: Ref<boolean>) {
   // First, render everything but the less important benchmarks about artifact sizes. This keeps the
   // grouping and alignment of 4 charts per row where all 4 charts are about a given benchmark. So,
   // we exclude the benchmarks ending in "-tiny".
-  let defaultSelector = {
-    ...selector,
-    exclude_suffix: "-tiny"
-  };
-  renderPlots(graphData, defaultSelector);
+  const withoutTiny = filterBenchmarks(graphData, (benchName) => !benchName.endsWith("-tiny"));
+  renderPlots(withoutTiny, selector);
 
   // Then, render only the size-related ones in their own dedicated section as they are less important
   // than having the better grouping. So, we only include the benchmarks ending in "-tiny" and render
   // them in the appropriate section.
-  let sizeSelector = {
-    ...selector,
-    include_suffix: "-tiny"
-  };
-  renderPlots(graphData, sizeSelector, "#size-charts");
+  const onlyTiny = filterBenchmarks(graphData, (benchName) => benchName.endsWith("-tiny"));
+  renderPlots(onlyTiny, selector, "#size-charts");
 }
 
 function updateSelection(params: SelectionParams) {
