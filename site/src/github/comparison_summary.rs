@@ -153,10 +153,10 @@ enum PerfRunSource {
     TryBuildRollup,
 }
 
-// How reliable is a given metric?
-enum MetricReliability {
-    High,
-    Low,
+// Should the metric be shown by default in the summary?
+enum DefaultMetricVisibility {
+    Shown,
+    Hidden,
 }
 
 async fn summarize_run(
@@ -233,37 +233,37 @@ async fn summarize_run(
         (
             "Instruction count",
             Metric::InstructionsUser,
-            MetricReliability::High,
+            DefaultMetricVisibility::Shown,
             inst_comparison,
         ),
         (
             "Max RSS (memory usage)",
             Metric::MaxRSS,
-            MetricReliability::Low,
+            DefaultMetricVisibility::Hidden,
             calculate_metric_comparison(ctxt, &commit, Metric::MaxRSS).await?,
         ),
         (
             "Cycles",
             Metric::CyclesUser,
-            MetricReliability::Low,
+            DefaultMetricVisibility::Hidden,
             calculate_metric_comparison(ctxt, &commit, Metric::CyclesUser).await?,
         ),
         (
             "Binary size",
             Metric::LinkedArtifactSize,
-            MetricReliability::Low,
+            DefaultMetricVisibility::Hidden,
             calculate_metric_comparison(ctxt, &commit, Metric::LinkedArtifactSize).await?,
         ),
     ];
 
-    for (title, metric, reliability, comparison) in metrics {
+    for (title, metric, visibility, comparison) in metrics {
         message.push_str(&format!(
             "\n### [{title}]({})\n",
             make_comparison_url(&commit, metric)
         ));
 
         let (primary, secondary) = comparison.summarize_by_category(&benchmark_map);
-        write_metric_summary(primary, secondary, reliability, &mut message);
+        write_metric_summary(primary, secondary, visibility, &mut message);
     }
 
     write!(&mut message, "\n{bootstrap}").unwrap();
@@ -288,22 +288,22 @@ fn summarize_bootstrap(comparison: &ArtifactComparison) -> String {
 fn write_metric_summary(
     primary: ArtifactComparisonSummary,
     secondary: ArtifactComparisonSummary,
-    realibility: MetricReliability,
+    visibility: DefaultMetricVisibility,
     message: &mut String,
 ) {
     if !primary.is_relevant() && !secondary.is_relevant() {
         message
             .push_str("This benchmark run did not return any relevant results for this metric.\n");
     } else {
-        match realibility {
-            MetricReliability::High => {
+        match visibility {
+            DefaultMetricVisibility::Shown => {
                 message.push_str(
                     "This is a highly reliable metric that was used to determine the \
                 overall result at the top of this comment.\n\n",
                 );
                 write_summary_table(&primary, &secondary, false, message);
             }
-            MetricReliability::Low => {
+            DefaultMetricVisibility::Hidden => {
                 // `<details>` means it is hidden, requiring a click to reveal.
                 message.push_str("<details>\n<summary>Results</summary>\n\n");
                 message.push_str(
