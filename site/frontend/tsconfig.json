@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "lib": ["es5", "es2015", "es2017", "dom"],
+    "lib": ["es2020", "dom"],
     "target": "es2017",
     "moduleResolution": "node",
     "rootDir": "src",
