@@ -14,7 +14,6 @@
     "@parcel/transformer-vue": "^2.8.3",
     "@types/highcharts": "^7.0.0",
     "@types/msgpack-lite": "^0.1.8",
-    "buffer": "^5.7.1",
     "typescript": "^5.0.2"
   },
   "dependencies": {
@@ -52,5 +51,8 @@
       "distDir": "dist/styles"
     }
   },
-  "browserslist": "> 0.5%, last 3 years, not dead"
+  "browserslist": "> 0.5%, last 3 years, not dead",
+  "alias": {
+    "buffer": false
+  }
 }
