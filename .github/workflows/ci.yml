@@ -28,6 +28,8 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: .
+          # Export the image to Docker to make it available in the next step
+          load: true
           tags: rustc-perf
           cache-from: type=gha
           cache-to: type=gha,mode=max
