@@ -4,6 +4,8 @@
     "target": "es2017",
     "moduleResolution": "node",
     "rootDir": "src",
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "jsx": "preserve",
+    "jsxFactory": "h"
   }
 }

@@ -5,11 +5,12 @@ import {withLoading} from "../../utils/loading";
 import {renderPlots} from "./plots";
 import {BootstrapData, BootstrapSelector} from "./state";
 import {BOOTSTRAP_DATA_URL} from "../../urls";
-import {generateUrlParams, getUrlParams, navigateToUrlParams} from "../../utils/navigation";
-import {postRequest} from "../../api";
+import {createUrlParams, getUrlParams, navigateToUrlParams} from "../../utils/navigation";
+
+import {postJson} from "../../utils/requests";
 
 async function loadBootstrapData(selector: BootstrapSelector, loading: Ref<boolean>) {
-    const bootstrapData: BootstrapData = await withLoading(loading, () => postRequest<BootstrapData>(BOOTSTRAP_DATA_URL, selector));
+    const bootstrapData: BootstrapData = await withLoading(loading, () => postJson<BootstrapData>(BOOTSTRAP_DATA_URL, selector));
 
     // Wait for the UI to be updated, which also resets the plot HTML elements.
     // Then draw the plots.
@@ -28,13 +29,13 @@ function loadSelectorFromUrl(urlParams: Dict<string>): BootstrapSelector {
 }
 
 function updateSelection(params: SelectionParams) {
-    navigateToUrlParams(generateUrlParams({
+    navigateToUrlParams(createUrlParams({
         start: params.start,
         end: params.end
     }));
 }
 
-let loading = ref(true);
+const loading = ref(true);
 
 const selector: BootstrapSelector = loadSelectorFromUrl(getUrlParams());
 loadBootstrapData(selector, loading);
@@ -54,6 +55,5 @@ loadBootstrapData(selector, loading);
     </div>
     <div id="byCrateChart"></div>
     <div id="totalChart"></div>
-    <div id="as-of"></div>
   </div>
 </template>

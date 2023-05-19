@@ -1,6 +1,7 @@
 import Highcharts from "highcharts";
 import {DASHBOARD_DATA_URL} from "../urls";
-import {getRequest} from "../api";
+
+import {getJson} from "../utils/requests";
 
 interface DashboardCases {
     clean_averages: [number],
@@ -74,7 +75,7 @@ function populate_data(response: DashboardResponse) {
 }
 
 async function make_data() {
-    const response = await getRequest<DashboardResponse>(DASHBOARD_DATA_URL);
+    const response = await getJson<DashboardResponse>(DASHBOARD_DATA_URL);
     populate_data(response);
 }
 

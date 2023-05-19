@@ -26,3 +26,6 @@ It uses a custom backend for transpiling `TypeScript`, which transpiles for brow
 the `browserslist` attribute in `package.json`. It does not perform type-checking, that is why
 there is a dedicated `npm run check` action that uses `tsc`. It is performed on CI to find typ errors.
 The `tsconfig.json` file is only used by the type-checking action.
+
+The `buffer` alias in `package.json` is used to deter Parcel from providing `buffer` module 
+polyfill. This polyfill breaks the minidifed JS Parcel output (at least in Parcel `2.8.3`).

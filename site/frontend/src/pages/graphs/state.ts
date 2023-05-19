@@ -21,10 +21,3 @@ export interface GraphData {
     commits: [[number, string]],
     benchmarks: Dict<Dict<Dict<Series>>>,
 }
-
-export interface BenchmarkInfo {
-    // Known statistic values from the DB
-    stats: [string];
-    // Last loaded run date
-    as_of: string | null;
-}
