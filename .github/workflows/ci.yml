@@ -23,8 +23,14 @@ jobs:
       - name: Formatting check
         run: cargo fmt --all -- --check
 
-      - name: Test and build
-        run: docker build -t rustc-perf .
+      - uses: docker/setup-buildx-action@v2
+      - name: Build and push
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          tags: rustc-perf
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Deploy to production
         uses: rust-lang/simpleinfra/github-actions/upload-docker-image@master
