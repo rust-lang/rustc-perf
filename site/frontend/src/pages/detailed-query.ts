@@ -50,11 +50,8 @@ function populate_data(data, state: Selector) {
     txt += `<br><a href="${self_href}">query info for just this commit</a>`;
   }
   document.querySelector("#title").innerHTML = txt;
-  let dl_url = (commit, bench, run) => {
-    return `/perf/download-raw-self-profile?commit=${commit}&benchmark=${bench}&scenario=${run}`;
-  };
   let dl_link = (commit, bench, run) => {
-    let url = dl_url(commit, bench, run);
+    let url = `/perf/download-raw-self-profile?commit=${commit}&benchmark=${bench}&scenario=${run}`;
     return `<a href="${url}">raw</a>`;
   };
   let processed_url = (commit, bench, run, ty) => {
@@ -297,19 +294,19 @@ interface Selector {
   commit: string;
   base_commit: string | null;
   benchmark: string;
-  // #[serde(alias = "run_name")]
   scenario: string;
   sort_idx: string | number;
 }
 
 async function loadData() {
   const params = getUrlParams();
+  const {commit, base_commit, benchmark, scenario, sort_idx} = params;
   const selector: Selector = {
-    commit: params["commit"],
-    base_commit: params["base_commit"] ?? null,
-    benchmark: params["benchmark"],
-    scenario: params["scenario"],
-    sort_idx: params["sort_idx"] ?? "-2"
+    commit,
+    base_commit: base_commit ?? null,
+    benchmark,
+    scenario,
+    sort_idx: sort_idx ?? "-2"
   };
 
   const response = await postMsgpack(SELF_PROFILE_DATA_URL, selector);

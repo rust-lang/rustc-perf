@@ -6,8 +6,11 @@ export function createUrlWithParams(params: Dict<any>): URL {
     const originalUrl = window.location.toString();
     const url = new URL(originalUrl);
     for (const [key, value] of Object.entries(params)) {
-        if (value !== null && value !== undefined && value !== "") {
-            url.searchParams.set(key, value.toString());
+        if (value !== null && value !== undefined) {
+            const stringified = value.toString();
+            if (stringified !== "") {
+                url.searchParams.set(key, stringified);
+            }
         }
     }
     return url;
