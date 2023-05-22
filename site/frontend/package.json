@@ -46,6 +46,10 @@
       "source": "src/pages/compare.ts",
       "distDir": "dist/scripts"
     },
+    "detailed-query": {
+      "source": "src/pages/detailed-query.ts",
+      "distDir": "dist/scripts"
+    },
     "uplot": {
       "source": "node_modules/uplot/dist/uPlot.min.css",
       "distDir": "dist/styles"
