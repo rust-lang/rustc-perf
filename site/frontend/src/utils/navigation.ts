@@ -16,6 +16,19 @@ export function createUrlWithParams(params: Dict<any>): URL {
     return url;
 }
 
+/**
+ * Creates a URL with the current window location and the passed parameters.
+ */
+export function createUrlFromParams(params: Dict<string>): URL {
+    const url = new URL(window.location.toString());
+    const searchParams = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+        searchParams.set(key, value);
+    }
+    url.search = searchParams.toString();
+    return url;
+}
+
 export function getUrlParams(): Dict<string> {
     const url = new URL(window.location.toString());
 

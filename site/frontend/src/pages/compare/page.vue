@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import {loadBenchmarkInfo} from "../../api";
 import AsOf from "../../components/as-of.vue";
-import {createUrlParams, getUrlParams, navigateToUrlParams} from "../../utils/navigation";
+import {
+  createUrlFromParams,
+  createUrlParams,
+  getUrlParams,
+  navigateToUrlParams
+} from "../../utils/navigation";
 import {computed, Ref, ref} from "vue";
 import {withLoading} from "../../utils/loading";
 import {postMsgpack} from "../../utils/requests";
@@ -34,6 +39,72 @@ function loadSelectorFromUrl(urlParams: Dict<string>): CompareSelector {
   };
 }
 
+function loadFilterFromUrl(urlParams: Dict<string>, defaultFilter: DataFilter): DataFilter {
+  function getBoolOrDefault(name: string, defaultValue: boolean): boolean {
+    if (urlParams.hasOwnProperty(name)) {
+      return urlParams[name] === "true";
+    }
+    return defaultValue;
+  }
+
+  return {
+    name: urlParams["name"] ?? defaultFilter.name,
+    nonRelevant: getBoolOrDefault("nonRelevant", defaultFilter.nonRelevant),
+    showRawData: getBoolOrDefault("showRawData", defaultFilter.showRawData),
+    profile: {
+      check: getBoolOrDefault("check", defaultFilter.profile.check),
+      debug: getBoolOrDefault("debug", defaultFilter.profile.debug),
+      opt: getBoolOrDefault("opt", defaultFilter.profile.opt),
+      doc: getBoolOrDefault("doc", defaultFilter.profile.doc)
+    },
+    scenario: {
+      full: getBoolOrDefault("full", defaultFilter.scenario.full),
+      incrFull: getBoolOrDefault("incrFull", defaultFilter.scenario.incrFull),
+      incrUnchanged: getBoolOrDefault("incrUnchanged", defaultFilter.scenario.incrUnchanged),
+      incrPatched: getBoolOrDefault("incrPatched", defaultFilter.scenario.incrPatched)
+    },
+    category: {
+      primary: getBoolOrDefault("primary", defaultFilter.category.primary),
+      secondary: getBoolOrDefault("secondary", defaultFilter.category.secondary)
+    }
+  };
+}
+
+/**
+ * Stores the given filter parameters into URL, so that the current "view" can be shared with
+ * others easily.
+ */
+function storeFilterToUrl(filter: DataFilter, defaultFilter: DataFilter, urlParams: Dict<string>) {
+  function storeOrReset<T extends boolean | string>(name: string, value: T, defaultValue: T) {
+    if (value === defaultValue) {
+      if (urlParams.hasOwnProperty(name)) {
+        delete urlParams[name];
+      }
+    } else {
+      urlParams[name] = value.toString();
+    }
+  }
+
+  storeOrReset("name", filter.name || null, defaultFilter.name);
+  storeOrReset("nonRelevant", filter.nonRelevant, defaultFilter.nonRelevant);
+  storeOrReset("showRawData", filter.showRawData, defaultFilter.showRawData);
+  storeOrReset("check", filter.profile.check, defaultFilter.profile.check);
+  storeOrReset("debug", filter.profile.debug, defaultFilter.profile.debug);
+  storeOrReset("opt", filter.profile.opt, defaultFilter.profile.opt);
+  storeOrReset("doc", filter.profile.doc, defaultFilter.profile.doc);
+  storeOrReset("full", filter.scenario.full, defaultFilter.scenario.full);
+  storeOrReset("incrFull", filter.scenario.incrFull, defaultFilter.scenario.incrFull);
+  storeOrReset("incrUnchanged", filter.scenario.incrUnchanged, defaultFilter.scenario.incrUnchanged);
+  storeOrReset("incrPatched", filter.scenario.incrPatched, defaultFilter.scenario.incrPatched);
+  storeOrReset("primary", filter.category.primary, defaultFilter.category.primary);
+  storeOrReset("secondary", filter.category.secondary, defaultFilter.category.secondary);
+
+  // Change URL without creating a history entry
+  if (history.replaceState) {
+    history.replaceState({}, null, createUrlFromParams(urlParams).toString());
+  }
+}
+
 async function loadCompareData(selector: CompareSelector, loading: Ref<boolean>) {
   const response: CompareResponse = await withLoading(loading, async () => {
     const params = {
@@ -54,9 +125,16 @@ function updateSelection(params: SelectionParams) {
   }));
 }
 
+function updateFilter(newFilter: DataFilter) {
+  filter.value = newFilter;
+  storeFilterToUrl(newFilter, defaultFilter, getUrlParams());
+}
+
 function exportData() {
   exportToMarkdown(testCases.value);
 }
+
+const urlParams = getUrlParams();
 
 const defaultFilter: DataFilter = {
   name: null,
@@ -87,8 +165,8 @@ const filteredSummary = computed(() => computeSummary(testCases.value));
 const loading = ref(false);
 
 const info = await loadBenchmarkInfo();
-const selector = loadSelectorFromUrl(getUrlParams());
-const filter = ref({...defaultFilter});
+const selector = loadSelectorFromUrl(urlParams);
+const filter = ref(loadFilterFromUrl(urlParams, defaultFilter));
 
 const data: Ref<CompareResponse | null> = ref(null);
 loadCompareData(selector, loading);
@@ -104,7 +182,9 @@ loadCompareData(selector, loading);
     </div>
     <div v-if="data !== null">
       <QuickLinks :stat="selector.stat" />
-      <Filters :defaultFilter="defaultFilter" @change="f => filter = f"
+      <Filters :defaultFilter="defaultFilter"
+               :initialFilter="filter"
+               @change="updateFilter"
                @export="exportData" />
       <OverallTable :summary="filteredSummary" />
       <Aggregations :cases="testCases" />
