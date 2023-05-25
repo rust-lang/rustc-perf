@@ -17,7 +17,7 @@ export interface DataFilter {
   category: {
     primary: boolean;
     secondary: boolean;
-  }
+  };
 }
 
 export type Profile = "check" | "debug" | "opt" | "doc";

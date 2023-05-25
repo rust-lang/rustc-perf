@@ -14,21 +14,38 @@ export interface BenchmarkProps {
 
 const props = defineProps<BenchmarkProps>();
 
-function Section({title, link, linkUp}: {title: string, link: string, linkUp: boolean}) {
+function Section({
+  title,
+  link,
+  linkUp,
+}: {
+  title: string;
+  link: string;
+  linkUp: boolean;
+}) {
   return (
     <div class="category-title">
       {title} benchmarks
-      <span title={`To ${link} benchmarks`}>&nbsp;
+      <span title={`To ${link} benchmarks`}>
+        &nbsp;
         <a href={`#${link}-benchmarks`}>{linkUp ? "⮭" : "⮯"}</a>
       </span>
     </div>
   );
 }
 
-const primaryCases = computed(() => props.testCases.filter(c => c.category === "primary"));
-const secondaryCases = computed(() => props.testCases.filter(c => c.category === "secondary"));
-const primaryHasNonRelevant = computed(() => props.allTestCases.filter(c => c.category === "primary").length > 0);
-const secondaryHasNonRelevant = computed(() => props.allTestCases.filter(c => c.category === "secondary").length > 0);
+const primaryCases = computed(() =>
+  props.testCases.filter((c) => c.category === "primary")
+);
+const secondaryCases = computed(() =>
+  props.testCases.filter((c) => c.category === "secondary")
+);
+const primaryHasNonRelevant = computed(
+  () => props.allTestCases.filter((c) => c.category === "primary").length > 0
+);
+const secondaryHasNonRelevant = computed(
+  () => props.allTestCases.filter((c) => c.category === "secondary").length > 0
+);
 </script>
 
 <template>
@@ -41,26 +58,28 @@ const secondaryHasNonRelevant = computed(() => props.allTestCases.filter(c => c.
       </details>
       <hr />
     </div>
-    <TestCasesTable id="primary-benchmarks"
-                    :cases="primaryCases"
-                    :has-non-relevant="primaryHasNonRelevant"
-                    :show-raw-data="filter.showRawData"
-                    :commit-a="data.a"
-                    :commit-b="data.b"
-                    :stat="stat"
+    <TestCasesTable
+      id="primary-benchmarks"
+      :cases="primaryCases"
+      :has-non-relevant="primaryHasNonRelevant"
+      :show-raw-data="filter.showRawData"
+      :commit-a="data.a"
+      :commit-b="data.b"
+      :stat="stat"
     >
       <template #header>
         <Section title="Primary" link="secondary" :linkUp="false"></Section>
       </template>
     </TestCasesTable>
     <hr />
-    <TestCasesTable id="secondary-benchmarks"
-                    :cases="secondaryCases"
-                    :has-non-relevant="secondaryHasNonRelevant"
-                    :show-raw-data="filter.showRawData"
-                    :commit-a="data.a"
-                    :commit-b="data.b"
-                    :stat="stat"
+    <TestCasesTable
+      id="secondary-benchmarks"
+      :cases="secondaryCases"
+      :has-non-relevant="secondaryHasNonRelevant"
+      :show-raw-data="filter.showRawData"
+      :commit-a="data.a"
+      :commit-b="data.b"
+      :stat="stat"
     >
       <template #header>
         <Section title="Secondary" link="primary" :linkUp="true"></Section>

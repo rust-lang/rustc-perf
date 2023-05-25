@@ -5,18 +5,28 @@ import SummaryRange from "./range.vue";
 import SummaryCount from "./count.vue";
 import SummaryPercentValue from "./percent-value.vue";
 
-const props = withDefaults(defineProps<{
-  summary: SummaryGroup,
-  withLegend?: boolean
-}>(), {
-  withLegend: true
-});
+const props = withDefaults(
+  defineProps<{
+    summary: SummaryGroup;
+    withLegend?: boolean;
+  }>(),
+  {
+    withLegend: true,
+  }
+);
 const summary = computed(() => props.summary);
 </script>
 
 <template>
-  <div v-if="summary.all.count === 0"
-       style="flex-grow: 1; display: flex; flex-direction: column; justify-content: center;">
+  <div
+    v-if="summary.all.count === 0"
+    style="
+      flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    "
+  >
     <span>No results</span>
   </div>
   <table v-else class="summary-table">
@@ -29,54 +39,61 @@ const summary = computed(() => props.summary);
       </tr>
     </thead>
     <tbody>
-    <tr class="positive">
-      <td title="Regressions" v-if="withLegend">❌</td>
-      <template v-if="summary.regressions.count !== 0">
+      <tr class="positive">
+        <td title="Regressions" v-if="withLegend">❌</td>
+        <template v-if="summary.regressions.count !== 0">
+          <td>
+            <SummaryRange :range="summary.regressions.range" />
+          </td>
+          <td>
+            <SummaryPercentValue :value="summary.regressions.average" />
+          </td>
+          <td>
+            <SummaryCount
+              :cases="summary.regressions.count"
+              :benchmarks="summary.regressions.benchmarks"
+            />
+          </td>
+        </template>
+        <template v-else>
+          <td colspan="3" style="text-align: center">No regressions</td>
+        </template>
+      </tr>
+      <tr class="negative">
+        <td title="Improvements" v-if="withLegend">✅</td>
+        <template v-if="summary.improvements.count !== 0">
+          <td>
+            <SummaryRange :range="summary.improvements.range" />
+          </td>
+          <td>
+            <SummaryPercentValue :value="summary.improvements.average" />
+          </td>
+          <td>
+            <SummaryCount
+              :cases="summary.improvements.count"
+              :benchmarks="summary.improvements.benchmarks"
+            />
+          </td>
+        </template>
+        <template v-else>
+          <td colspan="3" style="text-align: center">No improvements</td>
+        </template>
+      </tr>
+      <tr>
+        <td title="All changes" v-if="withLegend">❌,✅</td>
         <td>
-          <SummaryRange :range="summary.regressions.range" />
+          <SummaryRange :range="summary.all.range" />
         </td>
         <td>
-          <SummaryPercentValue :value="summary.regressions.average" />
+          <SummaryPercentValue :value="summary.all.average" />
         </td>
         <td>
-          <SummaryCount :cases="summary.regressions.count"
-                        :benchmarks="summary.regressions.benchmarks" />
+          <SummaryCount
+            :cases="summary.all.count"
+            :benchmarks="summary.all.benchmarks"
+          />
         </td>
-      </template>
-      <template v-else>
-        <td colspan="3" style="text-align: center;">No regressions</td>
-      </template>
-    </tr>
-    <tr class="negative">
-      <td title="Improvements" v-if="withLegend">✅</td>
-      <template v-if="summary.improvements.count !== 0">
-        <td>
-          <SummaryRange :range="summary.improvements.range" />
-        </td>
-        <td>
-          <SummaryPercentValue :value="summary.improvements.average" />
-        </td>
-        <td>
-          <SummaryCount :cases="summary.improvements.count"
-                        :benchmarks="summary.improvements.benchmarks" />
-        </td>
-      </template>
-      <template v-else>
-        <td colspan="3" style="text-align: center;">No improvements</td>
-      </template>
-    </tr>
-    <tr>
-      <td title="All changes" v-if="withLegend">❌,✅</td>
-      <td>
-        <SummaryRange :range="summary.all.range" />
-      </td>
-      <td>
-        <SummaryPercentValue :value="summary.all.average" />
-      </td>
-      <td>
-        <SummaryCount :cases="summary.all.count" :benchmarks="summary.all.benchmarks" />
-      </td>
-    </tr>
+      </tr>
     </tbody>
   </table>
 </template>
@@ -86,7 +103,8 @@ const summary = computed(() => props.summary);
   td {
     text-align: right;
   }
-  td, th {
+  td,
+  th {
     padding: 2px 5px;
     vertical-align: middle;
   }

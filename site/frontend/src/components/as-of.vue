@@ -2,7 +2,7 @@
 import {BenchmarkInfo} from "../api";
 
 const props = defineProps<{
-  info: BenchmarkInfo
+  info: BenchmarkInfo;
 }>();
 </script>
 <template>

@@ -18,7 +18,11 @@ function benchmarkLink(benchmark: string): string {
   return `https://github.com/rust-lang/rustc-perf/tree/master/collector/compile-benchmarks/${benchmark}`;
 }
 
-function graphLink(commit: ArtifactDescription, stat: string, testCase: TestCase): string {
+function graphLink(
+  commit: ArtifactDescription,
+  stat: string,
+  testCase: TestCase
+): string {
   let date = new Date(commit.date);
   // Move to `30 days ago` to display history of the test case
   date.setUTCDate(date.getUTCDate() - 30);
@@ -31,11 +35,18 @@ function graphLink(commit: ArtifactDescription, stat: string, testCase: TestCase
   return `/index.html?start=${start}&end=${end}&benchmark=${testCase.benchmark}&profile=${testCase.profile}&scenario=${testCase.scenario}&stat=${stat}`;
 }
 
-function detailedQueryPercentLink(commit: ArtifactDescription, baseCommit: ArtifactDescription, testCase: TestCase): string {
+function detailedQueryPercentLink(
+  commit: ArtifactDescription,
+  baseCommit: ArtifactDescription,
+  testCase: TestCase
+): string {
   return `/detailed-query.html?commit=${commit.commit}&base_commit=${baseCommit.commit}&benchmark=${testCase.benchmark}-${testCase.profile}&scenario=${testCase.scenario}`;
 }
 
-function detailedQueryRawDataLink(commit: ArtifactDescription, testCase: TestCase) {
+function detailedQueryRawDataLink(
+  commit: ArtifactDescription,
+  testCase: TestCase
+) {
   return `/detailed-query.html?commit=${commit.commit}&benchmark=${testCase.benchmark}-${testCase.profile}&scenario=${testCase.scenario}`;
 }
 
@@ -47,79 +58,105 @@ function prettifyRawNumber(number: number): string {
 <template>
   <div class="bench-table" :id="id">
     <slot name="header"></slot>
-    <div v-if="cases.length === 0" style="text-align: center;">
+    <div v-if="cases.length === 0" style="text-align: center">
       {{ hasNonRelevant ? "No relevant results" : "No results" }}
     </div>
     <table v-else class="benches compare">
       <thead>
-      <tr>
-        <th>Benchmark</th>
-        <th>Profile</th>
-        <th>Scenario</th>
-        <th>% Change</th>
-        <th>
-          Significance Threshold
-          <Tooltip>
-            The minimum % change that is considered significant. The higher the significance
-            threshold, the noisier a test case is.
-            You can see <a
-            href="https://github.com/rust-lang/rustc-perf/blob/master/docs/comparison-analysis.md#what-makes-a-test-result-significant">
-            here</a> how the significance threshold is calculated.
-          </Tooltip>
-        </th>
-        <th>
-          Significance Factor
-          <Tooltip>
-            How much a particular result is over the significance threshold. A factor of 2.50x
-            means the result is 2.5 times over the significance threshold.
-          </Tooltip>
-        </th>
-        <th v-if="showRawData">Before</th>
-        <th v-if="showRawData">After</th>
-      </tr>
+        <tr>
+          <th>Benchmark</th>
+          <th>Profile</th>
+          <th>Scenario</th>
+          <th>% Change</th>
+          <th>
+            Significance Threshold
+            <Tooltip>
+              The minimum % change that is considered significant. The higher
+              the significance threshold, the noisier a test case is. You can
+              see
+              <a
+                href="https://github.com/rust-lang/rustc-perf/blob/master/docs/comparison-analysis.md#what-makes-a-test-result-significant"
+              >
+                here</a
+              >
+              how the significance threshold is calculated.
+            </Tooltip>
+          </th>
+          <th>
+            Significance Factor
+            <Tooltip>
+              How much a particular result is over the significance threshold. A
+              factor of 2.50x means the result is 2.5 times over the
+              significance threshold.
+            </Tooltip>
+          </th>
+          <th v-if="showRawData">Before</th>
+          <th v-if="showRawData">After</th>
+        </tr>
       </thead>
       <tbody>
-      <template v-for="testCase in cases">
-        <tr>
-          <td>
-            <a v-bind:href="benchmarkLink(testCase.benchmark)"
-               class="silent-link"
-               target="_blank">
-              {{ testCase.benchmark }}
-            </a>
-          </td>
-          <td>
-            <a v-bind:href="graphLink(commitB, stat, testCase)" target="_blank" class="silent-link">
-              {{ testCase.profile }}
-            </a>
-          </td>
-          <td>{{ testCase.scenario }}</td>
-          <td>
-            <a v-bind:href="detailedQueryPercentLink(commitB, commitA, testCase)">
-              <span v-bind:class="percentClass(testCase.percent)">
+        <template v-for="testCase in cases">
+          <tr>
+            <td>
+              <a
+                v-bind:href="benchmarkLink(testCase.benchmark)"
+                class="silent-link"
+                target="_blank"
+              >
+                {{ testCase.benchmark }}
+              </a>
+            </td>
+            <td>
+              <a
+                v-bind:href="graphLink(commitB, stat, testCase)"
+                target="_blank"
+                class="silent-link"
+              >
+                {{ testCase.profile }}
+              </a>
+            </td>
+            <td>{{ testCase.scenario }}</td>
+            <td>
+              <a
+                v-bind:href="
+                  detailedQueryPercentLink(commitB, commitA, testCase)
+                "
+              >
+                <span v-bind:class="percentClass(testCase.percent)">
                   {{ testCase.percent.toFixed(2) }}%
-              </span>
-            </a>
-          </td>
-          <td>
-            {{ testCase.significanceThreshold ? testCase.significanceThreshold.toFixed(2) + "%" : "-"
-            }}
-          </td>
-          <td>
-            {{ testCase.significanceFactor ? testCase.significanceFactor.toFixed(2) + "x" : "-" }}
-          </td>
-          <td v-if="showRawData" class="numeric">
-            <a v-bind:href="detailedQueryRawDataLink(commitA, testCase)">
-              <abbr :title="testCase.datumA">{{ prettifyRawNumber(testCase.datumA) }}</abbr>
-            </a>
-          </td>
-          <td v-if="showRawData" class="numeric">
-            <a v-bind:href="detailedQueryRawDataLink(commitB, testCase)">
-              <abbr :title="testCase.datumB">{{ prettifyRawNumber(testCase.datumB) }}</abbr>
-            </a>
-          </td>
-        </tr>
-      </template>
+                </span>
+              </a>
+            </td>
+            <td>
+              {{
+                testCase.significanceThreshold
+                  ? testCase.significanceThreshold.toFixed(2) + "%"
+                  : "-"
+              }}
+            </td>
+            <td>
+              {{
+                testCase.significanceFactor
+                  ? testCase.significanceFactor.toFixed(2) + "x"
+                  : "-"
+              }}
+            </td>
+            <td v-if="showRawData" class="numeric">
+              <a v-bind:href="detailedQueryRawDataLink(commitA, testCase)">
+                <abbr :title="testCase.datumA">{{
+                  prettifyRawNumber(testCase.datumA)
+                }}</abbr>
+              </a>
+            </td>
+            <td v-if="showRawData" class="numeric">
+              <a v-bind:href="detailedQueryRawDataLink(commitB, testCase)">
+                <abbr :title="testCase.datumB">{{
+                  prettifyRawNumber(testCase.datumB)
+                }}</abbr>
+              </a>
+            </td>
+          </tr>
+        </template>
       </tbody>
     </table>
   </div>
@@ -127,48 +164,49 @@ function prettifyRawNumber(number: number): string {
 
 <style scoped lang="scss">
 .benches {
-    font-size: medium;
-    table-layout: fixed;
+  font-size: medium;
+  table-layout: fixed;
 
-    td, th {
-        padding: 0.3em;
-    }
+  td,
+  th {
+    padding: 0.3em;
+  }
 }
 
 .benches tbody::before {
-    content: '';
-    display: block;
-    height: 10px;
+  content: "";
+  display: block;
+  height: 10px;
 }
 
 .benches tbody:first-child th {
-    text-align: center;
+  text-align: center;
 }
 
 .benches tbody:not(:first-child) th {
-    border-right: dotted 1px;
+  border-right: dotted 1px;
 }
 
 .benches th {
-    text-align: center;
-    width: 25%;
-    min-width: 50px;
+  text-align: center;
+  width: 25%;
+  min-width: 50px;
 }
 
 .benches td {
-    text-align: center;
-    width: 25%;
+  text-align: center;
+  width: 25%;
 }
 
 .benches td.numeric {
-    text-align: right;
+  text-align: right;
 }
 
 .bench-table {
-    margin-top: 10px;
+  margin-top: 10px;
 }
 
 .silent-link {
-    color: inherit;
+  color: inherit;
 }
 </style>

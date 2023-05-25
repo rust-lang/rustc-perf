@@ -4,10 +4,13 @@ import Toggle from "../toggle.vue";
 import SummaryTable from "./summary-table.vue";
 
 const props = defineProps<{
-  cases: TestCase[]
+  cases: TestCase[];
 }>();
 
-function calculateSummary(keyAttribute: string, keyValue: string): SummaryGroup {
+function calculateSummary(
+  keyAttribute: string,
+  keyValue: string
+): SummaryGroup {
   const benchmarks = [];
   for (const benchmark of props.cases) {
     if (benchmark[keyAttribute].startsWith(keyValue)) {
@@ -27,21 +30,35 @@ function calculateSummary(keyAttribute: string, keyValue: string): SummaryGroup 
           <div class="aggregation-section">
             <div class="header">Profile</div>
             <div class="groups">
-              <div class="group" v-for="profile in ['check', 'debug', 'opt', 'doc']">
+              <div
+                class="group"
+                v-for="profile in ['check', 'debug', 'opt', 'doc']"
+              >
                 <div class="group-header">{{ profile }}</div>
-                <SummaryTable :summary="calculateSummary('profile', profile)"
-                              :withLegend="false"></SummaryTable>
+                <SummaryTable
+                  :summary="calculateSummary('profile', profile)"
+                  :withLegend="false"
+                ></SummaryTable>
               </div>
             </div>
           </div>
           <div class="aggregation-section">
             <div class="header">Scenario</div>
             <div class="groups">
-              <div class="group"
-                   v-for="scenario in ['full', 'incr-full', 'incr-unchanged', 'incr-patched']">
+              <div
+                class="group"
+                v-for="scenario in [
+                  'full',
+                  'incr-full',
+                  'incr-unchanged',
+                  'incr-patched',
+                ]"
+              >
                 <div class="group-header">{{ scenario }}</div>
-                <SummaryTable :summary="calculateSummary('scenario', scenario)"
-                              :withLegend="false"></SummaryTable>
+                <SummaryTable
+                  :summary="calculateSummary('scenario', scenario)"
+                  :withLegend="false"
+                ></SummaryTable>
               </div>
             </div>
           </div>
@@ -50,8 +67,10 @@ function calculateSummary(keyAttribute: string, keyValue: string): SummaryGroup 
             <div class="groups">
               <div class="group" v-for="category in ['primary', 'secondary']">
                 <div class="group-header">{{ category }}</div>
-                <SummaryTable :summary="calculateSummary('category', category)"
-                              :withLegend="false"></SummaryTable>
+                <SummaryTable
+                  :summary="calculateSummary('category', category)"
+                  :withLegend="false"
+                ></SummaryTable>
               </div>
             </div>
           </div>
@@ -63,29 +82,29 @@ function calculateSummary(keyAttribute: string, keyValue: string): SummaryGroup 
 
 <style scoped lang="scss">
 .aggregation-section > .header {
-    margin-top: 5px;
-    font-size: 16px;
-    text-align: center;
+  margin-top: 5px;
+  font-size: 16px;
+  text-align: center;
 }
 
 .aggregation-section > .groups {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .aggregation-section .group {
-    min-width: 45%;
-    border: 1px dotted black;
-    padding: 5px;
-    margin: 10px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+  min-width: 45%;
+  border: 1px dotted black;
+  padding: 5px;
+  margin: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .aggregation-section .group-header {
-    margin-bottom: 5px;
-    font-weight: bold;
+  margin-bottom: 5px;
+  font-weight: bold;
 }
 </style>

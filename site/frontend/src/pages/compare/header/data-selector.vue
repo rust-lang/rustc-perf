@@ -16,7 +16,7 @@ interface Props extends SelectionParams {
 const props = defineProps<Props>();
 
 const emit = defineEmits<{
-  (e: "change", params: SelectionParams): void
+  (e: "change", params: SelectionParams): void;
 }>();
 
 const startRef = ref<HTMLInputElement | null>(null);
@@ -46,61 +46,78 @@ function submitSettings() {
       <template #content>
         <div class="commits section">
           <div class="section-heading">Commits</div>
-          <div style="display: flex; width: 100%; justify-content: space-around;">
+          <div
+            style="display: flex; width: 100%; justify-content: space-around"
+          >
             <div class="commit-input">
               <label for="start-bound">Before</label>
-              <input width="100em" placeholder="YYYY-MM-DD or Commit SHA" ref="startRef" />
+              <input
+                width="100em"
+                placeholder="YYYY-MM-DD or Commit SHA"
+                ref="startRef"
+              />
             </div>
             <div class="commit-input">
               <label for="end-bound">After</label>
-              <input width="100em" placeholder="YYYY-MM-DD or Commit SHA" ref="endRef" />
+              <input
+                width="100em"
+                placeholder="YYYY-MM-DD or Commit SHA"
+                ref="endRef"
+              />
             </div>
           </div>
         </div>
         <div class="metric section">
           <div class="section-heading">Metric</div>
-          <div style="display: flex; flex-direction: column; justify-content: center;">
+          <div
+            style="
+              display: flex;
+              flex-direction: column;
+              justify-content: center;
+            "
+          >
             <select class="stats" ref="statRef">
-              <option v-for="value in props.info.stats" :value="value">{{ value }}
+              <option v-for="value in props.info.stats" :value="value">
+                {{ value }}
               </option>
             </select>
           </div>
         </div>
-        <input type="submit" value="Submit" @click.prevent="submitSettings">
+        <input type="submit" value="Submit" @click.prevent="submitSettings" />
       </template>
     </Toggle>
   </fieldset>
 </template>
 
 <style scoped lang="scss">
-.settings input[type=submit] {
-    width: 100%;
-    font-weight: bold;
-    background: #ADD8E6;
+.settings input[type="submit"] {
+  width: 100%;
+  font-weight: bold;
+  background: #add8e6;
 }
 .commits {
-    border: none;
-    display: flex;
-    padding: 0;
+  border: none;
+  display: flex;
+  padding: 0;
 }
 .commit-input {
-    width: 270px;
-    display: flex;
-    flex-direction: column;
+  width: 270px;
+  display: flex;
+  flex-direction: column;
 }
 .commit-input label {
-    font-size: 12px;
-    font-weight: bold;
-    margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: bold;
+  margin-bottom: 6px;
 }
 .metric {
-    position: relative;
-    height: 40px;
+  position: relative;
+  height: 40px;
 }
 .stats {
-    border-radius: 5px;
-    width: 200px;
-    font-size: 14px;
-    margin-left: 52px;
+  border-radius: 5px;
+  width: 200px;
+  font-size: 14px;
+  margin-left: 52px;
 }
 </style>

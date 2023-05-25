@@ -2,7 +2,7 @@
 import {Suspense} from "vue";
 
 const props = defineProps<{
-  component: Object
+  component: Object;
 }>();
 const component = props.component as any;
 </script>

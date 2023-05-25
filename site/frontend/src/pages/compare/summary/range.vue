@@ -8,7 +8,8 @@ const range = computed(() => props.range);
 
 <template>
   <div v-if="range.length > 0">
-    [<SummaryPercentValue :value="range[0]" :padWidth="6" />, <SummaryPercentValue :value="range[1]" :padWidth="6" />]
+    [<SummaryPercentValue :value="range[0]" :padWidth="6" />,
+    <SummaryPercentValue :value="range[1]" :padWidth="6" />]
   </div>
-  <div v-else style="text-align: center;">-</div>
+  <div v-else style="text-align: center">-</div>
 </template>

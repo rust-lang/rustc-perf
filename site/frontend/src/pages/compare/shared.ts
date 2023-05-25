@@ -1,10 +1,11 @@
 export function formatDate(dateString: string): string {
   const date = new Date(dateString);
   function padStr(i) {
-    return (i < 10) ? "0" + i : "" + i;
-
+    return i < 10 ? "0" + i : "" + i;
   }
-  return `${date.getUTCFullYear()}-${padStr(date.getUTCMonth() + 1)}-${padStr(date.getUTCDate())} `;
+  return `${date.getUTCFullYear()}-${padStr(date.getUTCMonth() + 1)}-${padStr(
+    date.getUTCDate()
+  )} `;
 }
 export function signIfPositive(pct: number): string {
   if (pct >= 0) {

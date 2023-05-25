@@ -7,9 +7,9 @@ import {deepCopy} from "../../../utils/copy";
 
 const props = defineProps<{
   // When reset, set filter to this value
-  defaultFilter: DataFilter,
+  defaultFilter: DataFilter;
   // Initialize the filter with this value
-  initialFilter: DataFilter
+  initialFilter: DataFilter;
 }>();
 const emit = defineEmits<{
   (e: "change", filter: DataFilter): void;
@@ -22,9 +22,13 @@ function reset() {
 }
 
 let filter = ref(deepCopy(props.initialFilter));
-watch(filter, (newValue, _) => {
-  emit("change", toRaw(newValue));
-}, {deep: true});
+watch(
+  filter,
+  (newValue, _) => {
+    emit("change", toRaw(newValue));
+  },
+  {deep: true}
+);
 </script>
 
 <template>
@@ -39,101 +43,146 @@ watch(filter, (newValue, _) => {
           </div>
           <div class="section section-list-wrapper">
             <div class="section-heading">
-              <div style="width: 160px;">
+              <div style="width: 160px">
                 <span>Profiles</span>
-                <Tooltip>The different compilation profiles (check, debug, opt, doc).</Tooltip>
+                <Tooltip
+                  >The different compilation profiles (check, debug, opt,
+                  doc).</Tooltip
+                >
               </div>
             </div>
             <ul class="states-list">
               <li>
                 <label>
-                  <input type="checkbox" id="profile-check" v-model="filter.profile.check" />
+                  <input
+                    type="checkbox"
+                    id="profile-check"
+                    v-model="filter.profile.check"
+                  />
                   <span class="cache-label">check</span>
                 </label>
                 <Tooltip>Check build that does not generate any code.</Tooltip>
               </li>
               <li>
                 <label>
-                  <input type="checkbox" id="profile-debug" v-model="filter.profile.debug" />
+                  <input
+                    type="checkbox"
+                    id="profile-debug"
+                    v-model="filter.profile.debug"
+                  />
                   <span class="cache-label">debug</span>
                 </label>
                 <Tooltip>Debug build that produces unoptimized code.</Tooltip>
               </li>
               <li>
                 <label>
-                  <input type="checkbox" id="profile-opt"
-                         v-model="filter.profile.opt" />
+                  <input
+                    type="checkbox"
+                    id="profile-opt"
+                    v-model="filter.profile.opt"
+                  />
                   <span class="cache-label">opt</span>
                 </label>
-                <Tooltip>Release build that produces as optimized code as possible.</Tooltip>
+                <Tooltip
+                  >Release build that produces as optimized code as
+                  possible.</Tooltip
+                >
               </li>
               <li>
                 <label>
-                  <input type="checkbox" id="profile-doc"
-                         v-model="filter.profile.doc" />
+                  <input
+                    type="checkbox"
+                    id="profile-doc"
+                    v-model="filter.profile.doc"
+                  />
                   <span class="cache-label">doc</span>
                 </label>
-                <Tooltip>Documentation build that produces HTML documentation site produced by
-                  `rustdoc`.
+                <Tooltip
+                  >Documentation build that produces HTML documentation site
+                  produced by `rustdoc`.
                 </Tooltip>
               </li>
             </ul>
           </div>
           <div class="section section-list-wrapper">
             <div class="section-heading">
-              <div style="width: 160px;">
+              <div style="width: 160px">
                 <span>Scenarios</span>
-                <Tooltip>The different scenarios based on their incremental compilation cache
-                  state.
+                <Tooltip
+                  >The different scenarios based on their incremental
+                  compilation cache state.
                 </Tooltip>
               </div>
             </div>
             <ul class="states-list">
               <li>
                 <label>
-                  <input type="checkbox" id="build-full" v-model="filter.scenario.full" />
+                  <input
+                    type="checkbox"
+                    id="build-full"
+                    v-model="filter.scenario.full"
+                  />
                   <span class="cache-label">full</span>
                 </label>
-                <Tooltip>A non-incremental full build starting with empty cache.</Tooltip>
+                <Tooltip
+                  >A non-incremental full build starting with empty
+                  cache.</Tooltip
+                >
               </li>
               <li>
                 <label>
-                  <input type="checkbox" id="build-incremental-full"
-                         v-model="filter.scenario.incrFull" />
+                  <input
+                    type="checkbox"
+                    id="build-incremental-full"
+                    v-model="filter.scenario.incrFull"
+                  />
                   <span class="cache-label">incr-full</span>
                 </label>
-                <Tooltip>An incremental build starting with empty cache.</Tooltip>
+                <Tooltip
+                  >An incremental build starting with empty cache.</Tooltip
+                >
               </li>
               <li>
                 <label>
-                  <input type="checkbox" id="build-incremental-unchanged"
-                         v-model="filter.scenario.incrUnchanged" />
+                  <input
+                    type="checkbox"
+                    id="build-incremental-unchanged"
+                    v-model="filter.scenario.incrUnchanged"
+                  />
                   <span class="cache-label">incr-unchanged</span>
                 </label>
-                <Tooltip>An incremental build starting with complete cache, and unchanged source
-                  directory --
-                  the "perfect" scenario for incremental.
+                <Tooltip
+                  >An incremental build starting with complete cache, and
+                  unchanged source directory -- the "perfect" scenario for
+                  incremental.
                 </Tooltip>
               </li>
               <li>
                 <label>
-                  <input type="checkbox" id="build-incremental-patched"
-                         v-model="filter.scenario.incrPatched" />
+                  <input
+                    type="checkbox"
+                    id="build-incremental-patched"
+                    v-model="filter.scenario.incrPatched"
+                  />
                   <span class="cache-label">incr-patched</span>
                 </label>
-                <Tooltip>An incremental build starting with complete cache, and an altered source
-                  directory.
-                  The typical variant of this is "println" which represents the addition of a
-                  `println!` macro somewhere in the source code.
+                <Tooltip
+                  >An incremental build starting with complete cache, and an
+                  altered source directory. The typical variant of this is
+                  "println" which represents the addition of a `println!` macro
+                  somewhere in the source code.
                 </Tooltip>
               </li>
             </ul>
           </div>
           <div class="section section-list-wrapper">
             <div class="section-heading">
-              <div style="width: 160px;">
+              <div style="width: 160px">
                 <span>Categories</span>
-                <Tooltip>Select benchmarks based on their category (primary or secondary).</Tooltip>
+                <Tooltip
+                  >Select benchmarks based on their category (primary or
+                  secondary).</Tooltip
+                >
               </div>
             </div>
             <ul class="states-list">
@@ -154,26 +203,43 @@ watch(filter, (newValue, _) => {
             </ul>
           </div>
           <div class="section">
-            <div class="section-heading"><span>Show non-relevant results</span>
+            <div class="section-heading">
+              <span>Show non-relevant results</span>
               <Tooltip>
-                Whether to show test case results that are not relevant (i.e., not significant or
-                have a large enough magnitude). You can see
+                Whether to show test case results that are not relevant (i.e.,
+                not significant or have a large enough magnitude). You can see
                 <a
-                  href="https://github.com/rust-lang/rustc-perf/blob/master/docs/comparison-analysis.md#how-is-relevance-of-a-test-run-summary-determined">
-                  here</a> how relevance is calculated.
+                  href="https://github.com/rust-lang/rustc-perf/blob/master/docs/comparison-analysis.md#how-is-relevance-of-a-test-run-summary-determined"
+                >
+                  here</a
+                >
+                how relevance is calculated.
               </Tooltip>
             </div>
-            <input type="checkbox" v-model="filter.nonRelevant" style="margin-left: 20px;" />
+            <input
+              type="checkbox"
+              v-model="filter.nonRelevant"
+              style="margin-left: 20px"
+            />
           </div>
           <div class="section">
-            <div class="section-heading"><span>Display raw data</span>
+            <div class="section-heading">
+              <span>Display raw data</span>
               <Tooltip>Whether to display or not raw data columns.</Tooltip>
             </div>
-            <input type="checkbox" v-model="filter.showRawData" style="margin-left: 20px;" />
+            <input
+              type="checkbox"
+              v-model="filter.showRawData"
+              style="margin-left: 20px"
+            />
           </div>
-          <button @click="reset" style="margin-right: 10px;">Reset filters</button>
-          <button @click="emit('export')"
-                  title="Download the currently filtered data as a Markdown table">
+          <button @click="reset" style="margin-right: 10px">
+            Reset filters
+          </button>
+          <button
+            @click="emit('export')"
+            title="Download the currently filtered data as a Markdown table"
+          >
             Export to Markdown
           </button>
         </div>
@@ -184,44 +250,44 @@ watch(filter, (newValue, _) => {
 
 <style scoped lang="scss">
 .section-heading {
-    font-size: 16px;
+  font-size: 16px;
 }
 
 #filter {
-    margin-left: 52px;
+  margin-left: 52px;
 }
 
 .states-list {
-    display: flex;
-    flex-direction: column;
-    align-items: start;
-    list-style: none;
-    margin: 0;
-    padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
 .section-list-wrapper {
-    flex-direction: column;
+  flex-direction: column;
 }
 
 @media (min-width: 760px) {
-    .states-list {
-        justify-content: start;
-        flex-direction: row;
-        align-items: center;
-        width: 80%;
-    }
+  .states-list {
+    justify-content: start;
+    flex-direction: row;
+    align-items: center;
+    width: 80%;
+  }
 
-    .section-list-wrapper {
-        flex-direction: row;
-    }
+  .section-list-wrapper {
+    flex-direction: row;
+  }
 }
 
 .states-list > li {
-    margin-right: 15px;
+  margin-right: 15px;
 }
 
 .cache-label {
-    font-weight: bold;
+  font-weight: bold;
 }
 </style>

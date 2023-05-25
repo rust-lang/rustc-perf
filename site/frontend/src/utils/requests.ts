@@ -3,12 +3,15 @@ import {decode} from "msgpack-lite";
 export async function postJson<T>(path: string, body: any): Promise<T> {
   const response = await fetch(path, {
     method: "POST",
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
   });
   return await response.json();
 }
 
-export async function getJson<T>(path: string, params: Dict<string> = {}): Promise<T> {
+export async function getJson<T>(
+  path: string,
+  params: Dict<string> = {}
+): Promise<T> {
   let url = path;
 
   if (Object.keys(params).length > 0) {
@@ -29,7 +32,7 @@ export async function postMsgpack(path: string, body: any) {
   const response = await fetch(path, {
     method: "POST",
     body: JSON.stringify(body),
-    mode: "cors"
+    mode: "cors",
   });
   if (response.ok) {
     const buffer = await response.clone().arrayBuffer();
