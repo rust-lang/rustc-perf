@@ -3,18 +3,25 @@ import Toggle from "../toggle.vue";
 import {DataFilter} from "../types";
 import Tooltip from "../tooltip.vue";
 import {ref, toRaw, watch} from "vue";
+import {deepCopy} from "../../../utils/copy";
 
-const props = defineProps<{defaultFilter: DataFilter}>();
+const props = defineProps<{
+  // When reset, set filter to this value
+  defaultFilter: DataFilter,
+  // Initialize the filter with this value
+  initialFilter: DataFilter
+}>();
 const emit = defineEmits<{
   (e: "change", filter: DataFilter): void;
   (e: "export"): void;
 }>();
 
 function reset() {
-  filter.value = props.defaultFilter;
+  // We must not change the default filter
+  filter.value = deepCopy(props.defaultFilter);
 }
 
-let filter = ref({...props.defaultFilter});
+let filter = ref(deepCopy(props.initialFilter));
 watch(filter, (newValue, _) => {
   emit("change", toRaw(newValue));
 }, {deep: true});

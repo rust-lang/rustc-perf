@@ -1,8 +1,8 @@
-export function createUrlParams(params: Dict<string>): URLSearchParams {
-    return createUrlWithParams(params).searchParams;
-}
-
-export function createUrlWithParams(params: Dict<any>): URL {
+/**
+ * Creates a URL with the current window location and current parameters, and adds
+ * the passed parameters to the URL.
+ */
+export function createUrlWithAppendedParams(params: Dict<any>): URL {
     const originalUrl = window.location.toString();
     const url = new URL(originalUrl);
     for (const [key, value] of Object.entries(params)) {
@@ -13,6 +13,19 @@ export function createUrlWithParams(params: Dict<any>): URL {
             }
         }
     }
+    return url;
+}
+
+/**
+ * Creates a URL with the current window location and the passed parameters.
+ */
+export function createUrlFromParams(params: Dict<string>): URL {
+    const url = new URL(window.location.toString());
+    const searchParams = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+        searchParams.set(key, value);
+    }
+    url.search = searchParams.toString();
     return url;
 }
 

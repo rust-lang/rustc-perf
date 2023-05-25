@@ -4,39 +4,38 @@ import {withLoading} from "../../utils/loading";
 import {GraphData, GraphKind, GraphsSelector} from "./state";
 import {GRAPH_DATA_URL} from "../../urls";
 import DataSelector, {SelectionParams} from "./data-selector.vue";
-import {getUrlParams} from "../../utils/navigation";
+import {createUrlWithAppendedParams, getUrlParams, navigateToUrlParams} from "../../utils/navigation";
 import {renderPlots} from "./plots";
-import {createUrlParams, navigateToUrlParams} from "../../utils/navigation";
 import {getJson} from "../../utils/requests";
 import {BenchmarkInfo, loadBenchmarkInfo} from "../../api";
 import AsOf from "../../components/as-of.vue";
 
 function loadSelectorFromUrl(urlParams: Dict<string>): GraphsSelector {
-    const start = urlParams["start"] ?? "";
-    const end = urlParams["end"] ?? "";
-    const kind: GraphKind = urlParams["kind"] as GraphKind ?? "raw";
-    const stat = urlParams["stat"] ?? "instructions:u";
-    const benchmark = urlParams["benchmark"] ?? null;
-    const scenario = urlParams["scenario"] ?? null;
-    const profile = urlParams["profile"] ?? null;
-    return {
-        start,
-        end,
-        kind,
-        stat,
-        benchmark,
-        scenario,
-        profile
-    };
+  const start = urlParams["start"] ?? "";
+  const end = urlParams["end"] ?? "";
+  const kind: GraphKind = urlParams["kind"] as GraphKind ?? "raw";
+  const stat = urlParams["stat"] ?? "instructions:u";
+  const benchmark = urlParams["benchmark"] ?? null;
+  const scenario = urlParams["scenario"] ?? null;
+  const profile = urlParams["profile"] ?? null;
+  return {
+    start,
+    end,
+    kind,
+    stat,
+    benchmark,
+    scenario,
+    profile
+  };
 }
 
 function filterBenchmarks(data: GraphData, filter: (key: string) => boolean): GraphData {
-    const benchmarks = Object.fromEntries(Object.entries(data.benchmarks)
-        .filter(([key, _]) => filter(key)));
-    return {
-        ...data,
-        benchmarks
-    };
+  const benchmarks = Object.fromEntries(Object.entries(data.benchmarks)
+    .filter(([key, _]) => filter(key)));
+  return {
+    ...data,
+    benchmarks
+  };
 }
 
 /*
@@ -45,11 +44,11 @@ function filterBenchmarks(data: GraphData, filter: (key: string) => boolean): Gr
  * will not be shown.
  */
 function hasSpecificSelection(selector: GraphsSelector): boolean {
-    return (
-        selector.benchmark !== null ||
-        selector.profile !== null ||
-        selector.scenario !== null
-    );
+  return (
+    selector.benchmark !== null ||
+    selector.profile !== null ||
+    selector.scenario !== null
+  );
 }
 
 async function loadGraphData(selector: GraphsSelector, loading: Ref<boolean>) {
@@ -61,42 +60,42 @@ async function loadGraphData(selector: GraphsSelector, loading: Ref<boolean>) {
       stat: selector.stat,
       benchmark: selector.benchmark,
       scenario: selector.scenario,
-      profile: selector.profile,
+      profile: selector.profile
     };
     return await getJson<GraphData>(GRAPH_DATA_URL, params);
   });
 
-    // Wait for the UI to be updated, which also resets the plot HTML elements.
-    // Then draw the plots.
-    await nextTick();
+  // Wait for the UI to be updated, which also resets the plot HTML elements.
+  // Then draw the plots.
+  await nextTick();
 
-    // If we select a smaller subset of benchmarks, then just show them.
-    if (hasSpecificSelection(selector)) {
-        renderPlots(graphData, selector, "#charts");
-    } else {
-        // If we select all of them, we expect that there will be a regular grid.
+  // If we select a smaller subset of benchmarks, then just show them.
+  if (hasSpecificSelection(selector)) {
+    renderPlots(graphData, selector, "#charts");
+  } else {
+    // If we select all of them, we expect that there will be a regular grid.
 
-        // So, first render everything but the less important benchmarks about artifact sizes.
-        // This keeps the grouping and alignment of 4 charts per row where all 4 charts are about a
-        // given benchmark. So, we exclude the benchmarks ending in "-tiny".
-        const withoutTiny = filterBenchmarks(graphData, (benchName) => !benchName.endsWith("-tiny"));
-        renderPlots(withoutTiny, selector, "#charts");
+    // So, first render everything but the less important benchmarks about artifact sizes.
+    // This keeps the grouping and alignment of 4 charts per row where all 4 charts are about a
+    // given benchmark. So, we exclude the benchmarks ending in "-tiny".
+    const withoutTiny = filterBenchmarks(graphData, (benchName) => !benchName.endsWith("-tiny"));
+    renderPlots(withoutTiny, selector, "#charts");
 
-        // Then, render only the size-related ones in their own dedicated section as they are less
-        // important than having the better grouping. So, we only include the benchmarks ending in
-        // "-tiny" and render them in the appropriate section.
-        const onlyTiny = filterBenchmarks(graphData, (benchName) => benchName.endsWith("-tiny"));
-        renderPlots(onlyTiny, selector, "#size-charts");
-    }
+    // Then, render only the size-related ones in their own dedicated section as they are less
+    // important than having the better grouping. So, we only include the benchmarks ending in
+    // "-tiny" and render them in the appropriate section.
+    const onlyTiny = filterBenchmarks(graphData, (benchName) => benchName.endsWith("-tiny"));
+    renderPlots(onlyTiny, selector, "#size-charts");
+  }
 }
 
 function updateSelection(params: SelectionParams) {
-  navigateToUrlParams(createUrlParams({
+  navigateToUrlParams(createUrlWithAppendedParams({
     start: params.start,
     end: params.end,
     kind: params.kind,
     stat: params.stat
-  }));
+  }).searchParams);
 }
 
 const info: BenchmarkInfo = await loadBenchmarkInfo();
@@ -134,9 +133,9 @@ loadGraphData(selector, loading);
   </div>
   <a href="https://github.com/rust-lang-nursery/rustc-perf">
     <img
-        style="position: absolute; top: 0; right: 0; border: 0; clip-path: polygon(8% 0%, 100% 92%, 100% 0%);"
-        src="https://camo.githubusercontent.com/38ef81f8aca64bb9a64448d0d70f1308ef5341ab/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f72696768745f6461726b626c75655f3132313632312e706e67"
-        alt="Fork me on GitHub"
-        data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_darkblue_121621.png">
+      style="position: absolute; top: 0; right: 0; border: 0; clip-path: polygon(8% 0%, 100% 92%, 100% 0%);"
+      src="https://camo.githubusercontent.com/38ef81f8aca64bb9a64448d0d70f1308ef5341ab/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f72696768745f6461726b626c75655f3132313632312e706e67"
+      alt="Fork me on GitHub"
+      data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_darkblue_121621.png">
   </a>
 </template>
