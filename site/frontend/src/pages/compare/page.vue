@@ -3,7 +3,7 @@ import {loadBenchmarkInfo} from "../../api";
 import AsOf from "../../components/as-of.vue";
 import {
   createUrlFromParams,
-  createUrlParams,
+  createUrlWithAppendedParams,
   getUrlParams,
   navigateToUrlParams
 } from "../../utils/navigation";
@@ -118,11 +118,11 @@ async function loadCompareData(selector: CompareSelector, loading: Ref<boolean>)
 }
 
 function updateSelection(params: SelectionParams) {
-  navigateToUrlParams(createUrlParams({
+  navigateToUrlParams(createUrlWithAppendedParams({
     start: params.start,
     end: params.end,
     stat: params.stat
-  }));
+  }).searchParams);
 }
 
 function updateFilter(newFilter: DataFilter) {

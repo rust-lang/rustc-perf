@@ -5,34 +5,34 @@ import {withLoading} from "../../utils/loading";
 import {renderPlots} from "./plots";
 import {BootstrapData, BootstrapSelector} from "./state";
 import {BOOTSTRAP_DATA_URL} from "../../urls";
-import {createUrlParams, getUrlParams, navigateToUrlParams} from "../../utils/navigation";
+import {createUrlWithAppendedParams, getUrlParams, navigateToUrlParams} from "../../utils/navigation";
 
 import {postJson} from "../../utils/requests";
 
 async function loadBootstrapData(selector: BootstrapSelector, loading: Ref<boolean>) {
-    const bootstrapData: BootstrapData = await withLoading(loading, () => postJson<BootstrapData>(BOOTSTRAP_DATA_URL, selector));
+  const bootstrapData: BootstrapData = await withLoading(loading, () => postJson<BootstrapData>(BOOTSTRAP_DATA_URL, selector));
 
-    // Wait for the UI to be updated, which also resets the plot HTML elements.
-    // Then draw the plots.
-    await nextTick();
-    renderPlots(bootstrapData, selector);
+  // Wait for the UI to be updated, which also resets the plot HTML elements.
+  // Then draw the plots.
+  await nextTick();
+  renderPlots(bootstrapData, selector);
 }
 
 function loadSelectorFromUrl(urlParams: Dict<string>): BootstrapSelector {
-    const start = urlParams["start"] ?? "";
-    const end = urlParams["end"] ?? "";
-    return {
-        start,
-        end,
-        min_seconds: 25
-    };
+  const start = urlParams["start"] ?? "";
+  const end = urlParams["end"] ?? "";
+  return {
+    start,
+    end,
+    min_seconds: 25
+  };
 }
 
 function updateSelection(params: SelectionParams) {
-    navigateToUrlParams(createUrlParams({
-        start: params.start,
-        end: params.end
-    }));
+  navigateToUrlParams(createUrlWithAppendedParams({
+    start: params.start,
+    end: params.end
+  }).searchParams);
 }
 
 const loading = ref(true);

@@ -1,4 +1,4 @@
-import {createUrlWithParams, getUrlParams} from "../utils/navigation";
+import {createUrlWithAppendedParams, getUrlParams} from "../utils/navigation";
 import {postMsgpack} from "../utils/requests";
 import {SELF_PROFILE_DATA_URL} from "../urls";
 
@@ -158,7 +158,7 @@ function populate_data(data, state: Selector) {
       }
     }
     let inner = th.innerHTML;
-    th.innerHTML = `<a href="${createUrlWithParams(clickState).toString()}">${inner}</a>`;
+    th.innerHTML = `<a href="${createUrlWithAppendedParams(clickState).toString()}">${inner}</a>`;
   }
 
   if (!state.scenario.includes("incr-")) {
