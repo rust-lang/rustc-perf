@@ -20,6 +20,7 @@ You can build the website in multiple ways:
   
   # Build frontend
   $ cd site/frontend
+  $ npm install
   $ npm run build
   
   # Build website binary
