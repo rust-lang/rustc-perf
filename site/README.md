@@ -31,6 +31,8 @@ You can build the website in multiple ways:
   seconds to 1; this is on the production database and smaller data sets are
   likely to load considerably faster.
 
+For more information about working with the frontend, see [this README](frontend/README.md).
+
 ## Launching
 
 If you've collected data locally, you will likely want to point the site at a
