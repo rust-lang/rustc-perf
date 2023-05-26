@@ -2,12 +2,15 @@ import {computeSummary, TestCase} from "./data";
 
 export function exportToMarkdown(testCases: TestCase[]) {
   function changesTable(cases) {
-    let data = "| Benchmark | Profile | Scenario | % Change | Significance Factor |\n";
-    data += "|:---:|:---:|:---:|:---:|:---:|\n"
+    let data =
+      "| Benchmark | Profile | Scenario | % Change | Significance Factor |\n";
+    data += "|:---:|:---:|:---:|:---:|:---:|\n";
 
     for (const testCase of cases) {
       data += `| ${testCase.benchmark} | ${testCase.profile} | ${testCase.scenario} `;
-      data += `| ${testCase.percent.toFixed(2)}% | ${testCase.significanceFactor.toFixed(2)}x\n`;
+      data += `| ${testCase.percent.toFixed(
+        2
+      )}% | ${testCase.significanceFactor.toFixed(2)}x\n`;
     }
 
     return data;
@@ -28,22 +31,32 @@ export function exportToMarkdown(testCases: TestCase[]) {
   let content = "# Summary\n";
   content += "| | Range | Mean | Count |\n";
   content += "|:---:|:---:|:---:|:---:|\n";
-  content += `| Regressions | ${formatRange(regressions.range)} | ${regressions.average.toFixed(2)}% | ${regressions.count} |\n`;
-  content += `| Improvements | ${formatRange(improvements.range)} | ${improvements.average.toFixed(2)}% | ${improvements.count} |\n`;
-  content += `| All | ${formatRange(all.range)} | ${all.average.toFixed(2)}% | ${all.count} |\n\n`;
+  content += `| Regressions | ${formatRange(
+    regressions.range
+  )} | ${regressions.average.toFixed(2)}% | ${regressions.count} |\n`;
+  content += `| Improvements | ${formatRange(
+    improvements.range
+  )} | ${improvements.average.toFixed(2)}% | ${improvements.count} |\n`;
+  content += `| All | ${formatRange(all.range)} | ${all.average.toFixed(
+    2
+  )}% | ${all.count} |\n\n`;
 
   content += "# Primary benchmarks\n";
-  content += changesTable(testCases.filter(testCase => testCase.category === "primary"));
+  content += changesTable(
+    testCases.filter((testCase) => testCase.category === "primary")
+  );
 
   content += "\n# Secondary benchmarks\n";
-  content += changesTable(testCases.filter(testCase => testCase.category === "secondary"));
+  content += changesTable(
+    testCases.filter((testCase) => testCase.category === "secondary")
+  );
 
   downloadFile(content, "perf-summary.md");
 }
 
 function downloadFile(content, name) {
   const blob = new Blob([content], {
-    type: "text/markdown"
+    type: "text/markdown",
   });
 
   const url = window.URL.createObjectURL(blob);

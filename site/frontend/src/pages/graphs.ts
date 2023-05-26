@@ -3,6 +3,6 @@ import {createApp} from "vue";
 import WithSuspense from "../components/with-suspense.vue";
 
 const app = createApp(WithSuspense, {
-  component: Graphs
+  component: Graphs,
 });
 app.mount("#app");

@@ -17,7 +17,7 @@ interface Props extends SelectionParams {
 const props = defineProps<Props>();
 
 const emit = defineEmits<{
-  (e: "change", params: SelectionParams): void
+  (e: "change", params: SelectionParams): void;
 }>();
 
 const startRef = ref<HTMLInputElement | null>(null);
@@ -45,16 +45,17 @@ function submitSettings() {
 
 <template>
   <div id="settings">
-    start: <input placeholder="yyyy-mm-dd or commit" ref="startRef" />
-    end: <input placeholder="yyyy-mm-dd or commit" ref="endRef" />
-    Graph kind: <select ref="kindRef">
-    <option value="raw">Raw</option>
-    <option value="percentfromfirst">Percent Delta from First</option>
-    <option value="percentrelative">Percent Delta from Previous</option>
-  </select>
+    start: <input placeholder="yyyy-mm-dd or commit" ref="startRef" /> end:
+    <input placeholder="yyyy-mm-dd or commit" ref="endRef" /> Graph kind:
+    <select ref="kindRef">
+      <option value="raw">Raw</option>
+      <option value="percentfromfirst">Percent Delta from First</option>
+      <option value="percentrelative">Percent Delta from Previous</option>
+    </select>
     <select ref="statRef">
-      <option v-for="value in info.stats" :value="value">{{ value }}
-      </option>
-    </select>&nbsp;<a href="#" @click.prevent="submitSettings">Submit</a>
+      <option v-for="value in info.stats" :value="value">
+        {{ value }}
+      </option></select
+    >&nbsp;<a href="#" @click.prevent="submitSettings">Submit</a>
   </div>
 </template>

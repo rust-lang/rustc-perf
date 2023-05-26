@@ -1,4 +1,11 @@
-import {BenchmarkMap, Category, CompareResponse, Comparison, DataFilter, Profile} from "./types";
+import {
+  BenchmarkMap,
+  Category,
+  CompareResponse,
+  Comparison,
+  DataFilter,
+  Profile,
+} from "./types";
 
 export interface Summary {
   count: number;
@@ -79,26 +86,25 @@ export function computeTestCasesWithNonRelevant(
     );
   }
 
-  let testCases =
-    data.comparisons
-      .map((c: Comparison): TestCase => {
-        const datumA = c.statistics[0];
-        const datumB = c.statistics[1];
-        const percent = 100 * ((datumB - datumA) / datumA);
-        return {
-          benchmark: c.benchmark,
-          profile: c.profile,
-          scenario: c.scenario,
-          category: (benchmarkMap[c.benchmark] || {}).category || "secondary",
-          isRelevant: c.is_relevant,
-          significanceFactor: c.significance_factor,
-          significanceThreshold: (c.significance_threshold * 100.0), // ensure the threshold is in %
-          datumA,
-          datumB,
-          percent
-        };
-      })
-      .filter(tc => shouldShowTestCase(tc));
+  let testCases = data.comparisons
+    .map((c: Comparison): TestCase => {
+      const datumA = c.statistics[0];
+      const datumB = c.statistics[1];
+      const percent = 100 * ((datumB - datumA) / datumA);
+      return {
+        benchmark: c.benchmark,
+        profile: c.profile,
+        scenario: c.scenario,
+        category: (benchmarkMap[c.benchmark] || {}).category || "secondary",
+        isRelevant: c.is_relevant,
+        significanceFactor: c.significance_factor,
+        significanceThreshold: c.significance_threshold * 100.0, // ensure the threshold is in %
+        datumA,
+        datumB,
+        percent,
+      };
+    })
+    .filter((tc) => shouldShowTestCase(tc));
 
   // Sort by name first, so that there is a canonical ordering
   // of test cases. This ensures the overall order is stable, even if
@@ -109,11 +115,14 @@ export function computeTestCasesWithNonRelevant(
   return testCases;
 }
 
-export function filterNonRelevant(filter: DataFilter, cases: TestCase[]): TestCase[] {
+export function filterNonRelevant(
+  filter: DataFilter,
+  cases: TestCase[]
+): TestCase[] {
   if (filter.nonRelevant) {
     return cases;
   }
-  return cases.filter(c => c.isRelevant);
+  return cases.filter((c) => c.isRelevant);
 }
 
 /**
@@ -123,15 +132,15 @@ export function filterNonRelevant(filter: DataFilter, cases: TestCase[]): TestCa
 export function computeSummary(testCases: TestCase[]): SummaryGroup {
   const regressions = {
     values: [],
-    benchmarks: new Set()
+    benchmarks: new Set(),
   };
   const improvements = {
     values: [],
-    benchmarks: new Set()
+    benchmarks: new Set(),
   };
   const all = {
     values: [],
-    benchmarks: new Set()
+    benchmarks: new Set(),
   };
 
   const handleTestCase = (items, testCase) => {
@@ -155,10 +164,7 @@ export function computeSummary(testCases: TestCase[]): SummaryGroup {
     const count = values.length;
     let range: Array<number> = [];
     if (count > 0) {
-      range = [
-        Math.min.apply(null, values),
-        Math.max.apply(null, values)
-      ];
+      range = [Math.min.apply(null, values), Math.max.apply(null, values)];
     }
 
     const sum = values.reduce((acc, item) => acc + item, 0);
@@ -168,25 +174,27 @@ export function computeSummary(testCases: TestCase[]): SummaryGroup {
       count,
       benchmarks: benchmarks.size,
       average,
-      range
+      range,
     };
   };
 
   return {
     improvements: computeSummary(improvements),
     regressions: computeSummary(regressions),
-    all: computeSummary(all)
+    all: computeSummary(all),
   };
 }
 
-export function computeBenchmarkMap(data: CompareResponse | null): BenchmarkMap {
-    if (data === null) return {};
+export function computeBenchmarkMap(
+  data: CompareResponse | null
+): BenchmarkMap {
+  if (data === null) return {};
 
-    const benchmarks = {};
-    for (const benchmark of data.benchmark_data) {
-      benchmarks[benchmark.name] = {
-        category: benchmark.category
-      };
-    }
-    return benchmarks;
+  const benchmarks = {};
+  for (const benchmark of data.benchmark_data) {
+    benchmarks[benchmark.name] = {
+      category: benchmark.category,
+    };
+  }
+  return benchmarks;
 }

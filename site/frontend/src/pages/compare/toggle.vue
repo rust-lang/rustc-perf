@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import {ref} from "vue";
 
-const props = withDefaults(defineProps<{
-  defaultOpened?: boolean
-}>(), {
-  defaultOpened: false
-});
+const props = withDefaults(
+  defineProps<{
+    defaultOpened?: boolean;
+  }>(),
+  {
+    defaultOpened: false,
+  }
+);
 
 const opened = ref(props.defaultOpened);
 </script>
@@ -13,7 +16,7 @@ const opened = ref(props.defaultOpened);
 <template>
   <legend class="toggle section-heading" @click="opened = !opened">
     <slot name="label"></slot>
-    <span>{{opened ? ' ▼' : ' ▶'}}</span>
+    <span>{{ opened ? " ▼" : " ▶" }}</span>
   </legend>
   <div v-show="opened">
     <slot name="content"></slot>
@@ -22,6 +25,6 @@ const opened = ref(props.defaultOpened);
 
 <style scoped lang="scss">
 .toggle {
-    cursor: pointer;
+  cursor: pointer;
 }
 </style>
