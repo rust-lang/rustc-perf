@@ -20,6 +20,7 @@ You can build the website in multiple ways:
   
   # Build frontend
   $ cd site/frontend
+  $ npm install
   $ npm run build
   
   # Build website binary
@@ -29,6 +30,8 @@ You can build the website in multiple ways:
   The `--release` flag is on purpose, reducing startup time 15x from roughly 15
   seconds to 1; this is on the production database and smaller data sets are
   likely to load considerably faster.
+
+For more information about working with the frontend, see [this README](frontend/README.md).
 
 ## Launching
 
