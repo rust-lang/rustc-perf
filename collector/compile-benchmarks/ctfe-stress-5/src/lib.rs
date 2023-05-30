@@ -1,6 +1,4 @@
 #![allow(dead_code)]
-#![feature(const_eval_limit)]
-#![const_eval_limit = "10000000"]
 use std::mem::MaybeUninit;
 
 // Try to make CTFE actually do a lot of computation, without producing a big result.
