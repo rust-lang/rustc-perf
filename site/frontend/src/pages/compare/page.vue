@@ -170,9 +170,20 @@ function updateSelection(params: SelectionParams) {
   );
 }
 
+/**
+ * When the filter changes, the URL is updated.
+ * After that happens, we want to re-render the quick links component, because
+ * it contains links that are "relative" to the current URL. Changing this
+ * key ref will cause it to be re-rendered.
+ */
+function refreshQuickLinks() {
+  quickLinksKey.value += 1;
+}
+
 function updateFilter(newFilter: DataFilter) {
-  filter.value = newFilter;
   storeFilterToUrl(newFilter, defaultFilter, getUrlParams());
+  filter.value = newFilter;
+  refreshQuickLinks();
 }
 
 function exportData() {
@@ -213,6 +224,7 @@ const filteredSummary = computed(() => computeSummary(testCases.value));
 
 const loading = ref(false);
 
+const quickLinksKey = ref(0);
 const info = await loadBenchmarkInfo();
 const selector = loadSelectorFromUrl(urlParams);
 const filter = ref(loadFilterFromUrl(urlParams, defaultFilter));
@@ -235,7 +247,7 @@ loadCompareData(selector, loading);
       <p>Loading ...</p>
     </div>
     <div v-if="data !== null">
-      <QuickLinks :stat="selector.stat" />
+      <QuickLinks :stat="selector.stat" :key="quickLinksKey" />
       <Filters
         :defaultFilter="defaultFilter"
         :initialFilter="filter"
