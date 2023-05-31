@@ -169,11 +169,10 @@ the relevant rustc executables.
 
 ### How to view the measurements on your own machine
 
-Once the benchmarks have been run, start the website:
-```
-./target/release/site <DATABASE>
-```
-wait for the "Loading complete" message to be printed, and then visit
+Once the benchmarks have been run, build and start the website.
+You can find instructions on how to do that [here](../site/README.md).
+
+Wait for the "Loading complete" message to be printed, and then visit
 `localhost:2346/compare.html` in a web browser.
 
 Enter the IDs for two runs in the "Commit/Date A" and "Commit/Date B" text
