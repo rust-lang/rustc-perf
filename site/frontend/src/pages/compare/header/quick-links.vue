@@ -1,8 +1,5 @@
 <script setup lang="ts">
-import {
-  createUrlWithAppendedParams,
-  getUrlParams,
-} from "../../../utils/navigation";
+import {createUrlWithAppendedParams} from "../../../utils/navigation";
 
 const props = defineProps<{stat: string}>();
 
@@ -19,8 +16,7 @@ function createMetric(
 }
 
 function createUrlForMetric(stat: string): string {
-  const params = getUrlParams();
-  params["stat"] = stat;
+  const params = {stat};
   return createUrlWithAppendedParams(params).toString();
 }
 
