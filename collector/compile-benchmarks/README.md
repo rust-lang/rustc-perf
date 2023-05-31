@@ -222,6 +222,7 @@ Rust code being written today.
       --profiles=Check,Debug,Opt --scenarios=Full --include=$NEW,helloworld
     target/release/site results.db
     ```
+    (See [here](../../site/README.md) for instructions on how to build the website).
     Then switch to wall-times, compare `Test` against itself, and toggle the
     "Show non-relevant results"/"Display raw data" check boxes to make sure it
     hasn't changed drastically.
