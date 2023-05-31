@@ -27,7 +27,17 @@ jobs:
 
       - uses: Swatinem/rust-cache@v1
 
-      - name: Compile
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Compile frontend
+        run: |
+          cd site/frontend
+          npm ci
+          npm run build
+
+      - name: Compile site
         uses: actions-rs/cargo@v1
         with:
           command: build
