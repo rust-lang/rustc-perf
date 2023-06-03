@@ -1,3 +1,8 @@
+use collector::benchmark::category::Category;
+use collector::benchmark::BenchmarkConfig;
+use lazy_static::lazy_static;
+use rust_embed::RustEmbed;
+use std::path::Path;
 use std::sync::Arc;
 
 use crate::api::{dashboard, ServerResult};
@@ -74,23 +79,14 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
             .collect::<Vec<_>>(),
     );
 
+    lazy_static! {
+        static ref STABLE_BENCHMARKS: Vec<String> = get_stable_benchmarks();
+    }
+
     let query = selector::Query::new()
-        // FIXME: don't hardcode the stabilized benchmarks
-        // This list was found via:
-        // `rg supports.stable collector/compile-benchmarks/ -tjson -c --sort path`
         .set(
             selector::Tag::Benchmark,
-            selector::Selector::Subset(vec![
-                "encoding",
-                "futures",
-                "html5ever",
-                "inflate",
-                "piston-image",
-                "regex",
-                "style-servo",
-                "syn",
-                "tokio-webpush-simple",
-            ]),
+            selector::Selector::Subset(STABLE_BENCHMARKS.clone()),
         )
         .set(selector::Tag::Metric, selector::Selector::One("wall-time"));
 
@@ -151,6 +147,44 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
         opt: by_profile.opt,
         doc: by_profile.doc,
     })
+}
+
+#[derive(RustEmbed)]
+#[folder = "../collector/compile-benchmarks"]
+#[include = "*/perf-config.json"]
+struct EmbeddedBenchmarks;
+
+/// The configurations of compile-time benchmarks are embedded directly within the binary using
+/// the `Benchmarks` struct.
+///
+/// Here we parse the benchmarks configurations and return only stable benchmarks.
+fn get_stable_benchmarks() -> Vec<String> {
+    EmbeddedBenchmarks::iter()
+        .filter_map(|path| EmbeddedBenchmarks::get(&path).map(|file| (file, path)))
+        .filter_map(|(file, path)| {
+            let config: BenchmarkConfig = match serde_json::from_slice(&file.data) {
+                Ok(config) => config,
+                Err(error) => {
+                    log::error!(
+                        "Cannot deserialized stored perf-config.json from {path}: {error:?}"
+                    );
+                    return None;
+                }
+            };
+            if config.category() == Category::Stable {
+                Some(
+                    Path::new(path.as_ref())
+                        .parent()
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .to_string(),
+                )
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 pub struct ByProfile<T> {

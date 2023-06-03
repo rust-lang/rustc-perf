@@ -24,7 +24,7 @@ fn default_runs() -> usize {
 /// This is the internal representation of an individual benchmark's
 /// perf-config.json file.
 #[derive(Debug, Clone, serde::Deserialize)]
-struct BenchmarkConfig {
+pub struct BenchmarkConfig {
     cargo_opts: Option<String>,
     cargo_rustc_opts: Option<String>,
     cargo_toml: Option<String>,
@@ -51,6 +51,12 @@ struct BenchmarkConfig {
     /// They will be ignored during benchmarking.
     #[serde(default)]
     excluded_scenarios: HashSet<Scenario>,
+}
+
+impl BenchmarkConfig {
+    pub fn category(&self) -> Category {
+        self.category
+    }
 }
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Hash)]
