@@ -1,38 +1,35 @@
-mod benchmark;
-
-use crate::toolchain::LocalToolchain;
 use std::future::Future;
 use std::io::{BufRead, BufReader};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Command, Stdio};
+
 use thousands::Separable;
 
 use benchlib::comm::messages::{BenchmarkMessage, BenchmarkResult, BenchmarkStats};
+pub use benchmark::discover_benchmarks;
 pub use benchmark::BenchmarkFilter;
-use database::{ArtifactId, ArtifactIdNumber, CollectionId, Connection, Pool};
+pub use benchmark::{BenchmarkGroup, BenchmarkSuite};
+use database::{ArtifactIdNumber, CollectionId, Connection};
 
 use crate::utils::git::get_rustc_perf_commit;
+use crate::CollectorCtx;
+
+mod benchmark;
 
 /// Perform a series of runtime benchmarks using the provided `rustc` compiler.
 /// The runtime benchmarks are looked up in `benchmark_dir`, which is expected to be a path
 /// to a Cargo crate. All binaries built by that crate are expected to be runtime benchmark
 /// groups that use `benchlib`.
 pub async fn bench_runtime(
-    db: &Pool,
-    artifact_id: ArtifactId,
-    toolchain: LocalToolchain,
+    mut conn: Box<dyn Connection>,
+    suite: BenchmarkSuite,
+    mut collector: CollectorCtx,
     filter: BenchmarkFilter,
-    benchmark_dir: PathBuf,
     iterations: u32,
 ) -> anyhow::Result<()> {
-    let suite = benchmark::discover_benchmarks(&toolchain, &benchmark_dir)?;
-
-    let conn = db.connection().await;
     for benchmark in suite.benchmark_names() {
         conn.record_runtime_benchmark(benchmark).await;
     }
-
-    let artifact_id = conn.artifact_id(&artifact_id).await;
 
     let total_benchmark_count = suite.total_benchmark_count();
     let filtered = suite.filtered_benchmark_count(&filter);
@@ -45,12 +42,17 @@ pub async fn bench_runtime(
     let rustc_perf_version = get_rustc_perf_commit();
 
     let mut benchmark_index = 0;
-    for binary in suite.groups {
-        for message in execute_runtime_benchmark_binary(&binary.binary, &filter, iterations)? {
+    for group in suite.groups {
+        if !collector.start_runtime_step(conn.as_mut(), &group).await {
+            eprintln!("skipping {} -- already benchmarked", group.name());
+            continue;
+        }
+
+        for message in execute_runtime_benchmark_binary(&group.binary, &filter, iterations)? {
             let message = message.map_err(|err| {
                 anyhow::anyhow!(
                     "Cannot parse BenchmarkMessage from benchmark {}: {err:?}",
-                    binary.binary.display()
+                    group.binary.display()
                 )
             })?;
             match message {
@@ -58,17 +60,25 @@ pub async fn bench_runtime(
                     benchmark_index += 1;
                     println!(
                         "Finished {}/{} ({}/{})",
-                        binary.name(),
+                        group.name(),
                         result.name,
                         benchmark_index,
                         filtered
                     );
 
                     print_stats(&result);
-                    record_stats(&conn, artifact_id, &rustc_perf_version, result).await;
+                    record_stats(
+                        &conn,
+                        collector.artifact_row_id,
+                        &rustc_perf_version,
+                        result,
+                    )
+                    .await;
                 }
             }
         }
+
+        collector.end_runtime_step(conn.as_mut(), &group).await;
     }
 
     Ok(())
