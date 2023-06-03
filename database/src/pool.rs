@@ -34,6 +34,7 @@ pub trait Connection: Send + Sync {
     /// the statistics for a particular artifact.
     async fn record_duration(&self, artifact: ArtifactIdNumber, duration: Duration);
 
+    /// One collection corresponds to all gathered metrics for a single iteration of a test case.
     async fn collection_id(&self, version: &str) -> CollectionId;
     async fn artifact_id(&self, artifact: &ArtifactId) -> ArtifactIdNumber;
 

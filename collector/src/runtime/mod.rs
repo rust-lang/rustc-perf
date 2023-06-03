@@ -1,6 +1,7 @@
 mod benchmark;
 
 use crate::toolchain::LocalToolchain;
+use std::future::Future;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -8,16 +9,16 @@ use thousands::Separable;
 
 use benchlib::comm::messages::{BenchmarkMessage, BenchmarkResult, BenchmarkStats};
 pub use benchmark::BenchmarkFilter;
-use database::{ArtifactId, ArtifactIdNumber, Connection, Pool};
+use database::{ArtifactId, ArtifactIdNumber, CollectionId, Connection, Pool};
 
 use crate::utils::git::get_rustc_perf_commit;
 
 /// Perform a series of runtime benchmarks using the provided `rustc` compiler.
 /// The runtime benchmarks are looked up in `benchmark_dir`, which is expected to be a path
-/// to a Cargo crate. All binaries built by that crate will are expected to be runtime benchmark
-/// groups that leverage `benchlib`.
+/// to a Cargo crate. All binaries built by that crate are expected to be runtime benchmark
+/// groups that use `benchlib`.
 pub async fn bench_runtime(
-    db: Pool,
+    db: &Pool,
     artifact_id: ArtifactId,
     toolchain: LocalToolchain,
     filter: BenchmarkFilter,
@@ -80,19 +81,76 @@ async fn record_stats(
     rustc_perf_version: &str,
     result: BenchmarkResult,
 ) {
-    for stat in result.stats {
+    fn record<'a>(
+        conn: &'a Box<dyn Connection>,
+        artifact_id: ArtifactIdNumber,
+        collection_id: CollectionId,
+        result: &'a BenchmarkResult,
+        value: Option<u64>,
+        metric: &'a str,
+    ) -> impl Future<Output = ()> + 'a {
+        async move {
+            if let Some(value) = value {
+                conn.record_runtime_statistic(
+                    collection_id,
+                    artifact_id,
+                    &result.name,
+                    metric,
+                    value as f64,
+                )
+                .await;
+            }
+        }
+    }
+
+    for stat in &result.stats {
         let collection_id = conn.collection_id(rustc_perf_version).await;
 
-        if let Some(value) = stat.instructions {
-            conn.record_runtime_statistic(
-                collection_id,
-                artifact_id,
-                &result.name,
-                "instructions:u",
-                value as f64,
-            )
-            .await;
-        }
+        record(
+            conn,
+            artifact_id,
+            collection_id,
+            &result,
+            stat.instructions,
+            "instructions:u",
+        )
+        .await;
+        record(
+            conn,
+            artifact_id,
+            collection_id,
+            &result,
+            stat.cycles,
+            "cycles:u",
+        )
+        .await;
+        record(
+            conn,
+            artifact_id,
+            collection_id,
+            &result,
+            stat.branch_misses,
+            "branch-misses",
+        )
+        .await;
+        record(
+            conn,
+            artifact_id,
+            collection_id,
+            &result,
+            stat.cache_misses,
+            "cache-misses",
+        )
+        .await;
+        record(
+            conn,
+            artifact_id,
+            collection_id,
+            &result,
+            Some(stat.wall_time.as_nanos() as u64),
+            "wall-time",
+        )
+        .await;
     }
 }
 
