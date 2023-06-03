@@ -6,6 +6,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use crate::api::{dashboard, ServerResult};
+use crate::comparison::Metric;
 use crate::db::{self, ArtifactId, Profile, Scenario};
 use crate::load::SiteCtxt;
 use crate::selector;
@@ -83,12 +84,9 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
         static ref STABLE_BENCHMARKS: Vec<String> = get_stable_benchmarks();
     }
 
-    let query = selector::Query::new()
-        .set(
-            selector::Tag::Benchmark,
-            selector::Selector::Subset(STABLE_BENCHMARKS.clone()),
-        )
-        .set(selector::Tag::Metric, selector::Selector::One("wall-time"));
+    let query = selector::CompileBenchmarkQuery::new()
+        .benchmark(selector::Selector::Subset(STABLE_BENCHMARKS.clone()))
+        .metric(selector::Selector::One(Metric::WallTime));
 
     let summary_scenarios = ctxt.summary_scenarios();
     let by_profile = ByProfile::new::<String, _, _>(|profile| {
@@ -100,11 +98,11 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
             let mut cases = dashboard::Cases::default();
             for scenario in summary_scenarios.iter() {
                 let responses = ctxt
-                    .statistic_series(
+                    .compile_statistic_series(
                         query
                             .clone()
-                            .set(selector::Tag::Profile, selector::Selector::One(profile))
-                            .set(selector::Tag::Scenario, selector::Selector::One(scenario)),
+                            .profile(selector::Selector::One(profile))
+                            .scenario(selector::Selector::One(*scenario)),
                         aids.clone(),
                     )
                     .await?;

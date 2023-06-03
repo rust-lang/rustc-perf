@@ -26,11 +26,11 @@ use crate::interpolate::Interpolate;
 use crate::load::SiteCtxt;
 
 use collector::Bound;
-use database::{Benchmark, Commit, Index, Lookup, Metric};
+use database::{Benchmark, Commit, Index, Lookup};
 
+use crate::comparison::Metric;
 use std::fmt;
 use std::ops::RangeInclusive;
-use std::str::FromStr;
 use std::sync::Arc;
 
 /// Finds the most appropriate `ArtifactId` for a given bound.
@@ -149,7 +149,7 @@ impl GetValue for Scenario {
     }
 }
 
-impl GetValue for Metric {
+impl GetValue for database::Metric {
     fn value(component: &PathComponent) -> Option<&Self> {
         match component {
             PathComponent::Metric(v) => Some(v),
@@ -163,7 +163,7 @@ pub enum PathComponent {
     Benchmark(Benchmark),
     Profile(Profile),
     Scenario(Scenario),
-    Metric(Metric),
+    Metric(database::Metric),
 }
 
 impl PathComponent {
@@ -175,12 +175,6 @@ impl PathComponent {
             PathComponent::Metric(_) => Tag::Metric,
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct QueryComponent {
-    pub tag: Tag,
-    pub raw: Selector<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -198,7 +192,7 @@ impl<T> Selector<T> {
             Selector::One(o) => Selector::One(f(o)),
         }
     }
-    fn try_map<U, E>(self, mut f: impl FnMut(T) -> Result<U, E>) -> Result<Selector<U>, E> {
+    pub fn try_map<U, E>(self, mut f: impl FnMut(T) -> Result<U, E>) -> Result<Selector<U>, E> {
         Ok(match self {
             Selector::All => Selector::All,
             Selector::Subset(subset) => {
@@ -285,88 +279,61 @@ impl Path {
     }
 }
 
-#[derive(Clone, Hash, Eq, PartialEq)]
-pub struct Query {
-    path: Vec<QueryComponent>,
+#[derive(Clone, Hash, Eq, PartialEq, Debug)]
+pub struct CompileBenchmarkQuery {
+    benchmark: Selector<String>,
+    scenario: Selector<Scenario>,
+    profile: Selector<Profile>,
+    metric: Selector<database::Metric>,
 }
 
-impl fmt::Debug for Query {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Query {{")?;
-        for (idx, qc) in self.path.iter().enumerate() {
-            if idx != 0 {
-                write!(f, ", ")?;
-            }
-            write!(f, "{:?}={:?}", qc.tag, qc.raw)?;
-        }
-        write!(f, " }}")?;
-        Ok(())
-    }
-}
-
-impl Query {
+impl CompileBenchmarkQuery {
     pub fn new() -> Self {
-        Self { path: vec![] }
+        Self {
+            benchmark: Selector::All,
+            scenario: Selector::All,
+            profile: Selector::All,
+            metric: Selector::All,
+        }
     }
 
-    pub fn set<T>(mut self, tag: Tag, selector: Selector<T>) -> Self
-    where
-        T: fmt::Display,
-    {
-        if let Some(idx) = self.path.iter().position(|c| c.tag == tag) {
-            self.path[idx].raw = selector.map(|s| s.to_string());
-        } else {
-            self.path.push(QueryComponent {
-                tag,
-                raw: selector.map(|s| s.to_string()),
-            });
-        }
+    pub fn benchmark(mut self, selector: Selector<String>) -> Self {
+        self.benchmark = selector;
         self
     }
 
-    pub fn get(&self, tag: Tag) -> Result<&QueryComponent, String> {
-        if let Some(idx) = self.path.iter().position(|pc| pc.tag == tag) {
-            Ok(&self.path[idx])
-        } else {
-            Err(format!("query must have {:?} selector", tag))
-        }
+    pub fn profile(mut self, selector: Selector<Profile>) -> Self {
+        self.profile = selector;
+        self
     }
 
-    fn extract(&mut self, tag: Tag) -> Result<QueryComponent, String> {
-        if let Some(idx) = self.path.iter().position(|pc| pc.tag == tag) {
-            Ok(self.path.swap_remove(idx))
-        } else {
-            Err(format!("query must have {:?} selector", tag))
-        }
+    pub fn scenario(mut self, selector: Selector<Scenario>) -> Self {
+        self.scenario = selector;
+        self
     }
 
-    fn extract_as<T>(&mut self, tag: Tag) -> Result<Selector<T>, String>
-    where
-        T: FromStr,
-        <T as FromStr>::Err: fmt::Display,
-    {
-        self.extract(tag)?.raw.try_map(|p| {
-            p.parse::<T>()
-                .map_err(|e| format!("failed to parse query tag {:?}: {}", tag, e))
-        })
+    pub fn metric(mut self, selector: Selector<Metric>) -> Self {
+        self.metric = selector.map(|v| v.as_str().into());
+        self
     }
 
-    fn assert_empty(&self) -> Result<(), String> {
-        if self.path.is_empty() {
-            Ok(())
-        } else {
-            Err(format!("Extra components: {:?}", self.path))
+    pub fn all_for_metric(metric: Metric) -> Self {
+        Self {
+            benchmark: Selector::All,
+            profile: Selector::All,
+            scenario: Selector::All,
+            metric: Selector::One(metric.as_str().into()),
         }
     }
 }
 
 impl SiteCtxt {
-    pub async fn statistic_series(
+    pub async fn compile_statistic_series(
         &self,
-        query: Query,
+        query: CompileBenchmarkQuery,
         artifact_ids: Arc<Vec<ArtifactId>>,
     ) -> Result<Vec<SeriesResponse<StatisticSeries>>, String> {
-        StatisticSeries::execute_query(artifact_ids.clone(), self, query.clone()).await
+        StatisticSeries::execute_compile_query(artifact_ids, self, query).await
     }
 }
 
@@ -376,26 +343,21 @@ pub struct StatisticSeries {
 }
 
 impl StatisticSeries {
-    async fn execute_query(
+    async fn execute_compile_query(
         artifact_ids: Arc<Vec<ArtifactId>>,
         ctxt: &SiteCtxt,
-        mut query: Query,
+        query: CompileBenchmarkQuery,
     ) -> Result<Vec<SeriesResponse<Self>>, String> {
         let dumped = format!("{:?}", query);
-        let benchmark = query.extract_as::<String>(Tag::Benchmark)?;
-        let profile = query.extract_as::<Profile>(Tag::Profile)?;
-        let scenario = query.extract_as::<Scenario>(Tag::Scenario)?;
-        let metric = query.extract_as::<Metric>(Tag::Metric)?;
-        query.assert_empty()?;
 
         let index = ctxt.index.load();
         let mut statistic_descriptions = index
             .all_statistic_descriptions()
             .filter(|&&(b, p, s, m)| {
-                benchmark.matches(b)
-                    && profile.matches(p)
-                    && scenario.matches(s)
-                    && metric.matches(m)
+                query.benchmark.matches(b)
+                    && query.profile.matches(p)
+                    && query.scenario.matches(s)
+                    && query.metric.matches(m)
             })
             .collect::<Vec<_>>();
 

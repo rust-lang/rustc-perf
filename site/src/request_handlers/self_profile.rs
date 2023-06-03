@@ -10,9 +10,10 @@ use hyper::StatusCode;
 
 use crate::api::self_profile::{ArtifactSize, ArtifactSizeDelta};
 use crate::api::{self_profile, self_profile_processed, self_profile_raw, ServerResult};
+use crate::comparison::Metric;
 use crate::db::ArtifactId;
 use crate::load::SiteCtxt;
-use crate::selector::{self, Tag};
+use crate::selector::{self};
 use crate::self_profile::{
     extract_profiling_data, fetch_raw_self_profile_data, get_self_profile_raw_data,
 };
@@ -582,17 +583,11 @@ pub async fn handle_self_profile(
         .ok()
         .ok_or("sort_idx needs to be i32".to_string())?;
 
-    let query = selector::Query::new()
-        .set(Tag::Benchmark, selector::Selector::One(bench_name))
-        .set(Tag::Profile, selector::Selector::One(profile))
-        .set(
-            Tag::Scenario,
-            selector::Selector::One(body.scenario.clone()),
-        )
-        .set(
-            Tag::Metric,
-            selector::Selector::One("cpu-clock".to_string()),
-        );
+    let query = selector::CompileBenchmarkQuery::new()
+        .benchmark(selector::Selector::One(bench_name.to_string()))
+        .profile(selector::Selector::One(profile.parse().unwrap()))
+        .scenario(selector::Selector::One(scenario))
+        .metric(selector::Selector::One(Metric::CpuClock));
 
     // Helper for finding an `ArtifactId` based on a commit sha
     let find_aid = |commit: &str| {
@@ -607,7 +602,9 @@ pub async fn handle_self_profile(
     }
     let commits = Arc::new(commits);
 
-    let mut cpu_responses = ctxt.statistic_series(query, commits.clone()).await?;
+    let mut cpu_responses = ctxt
+        .compile_statistic_series(query, commits.clone())
+        .await?;
     assert_eq!(cpu_responses.len(), 1, "all selectors are exact");
     let mut cpu_response = cpu_responses.remove(0).series;
 

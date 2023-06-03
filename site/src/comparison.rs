@@ -6,13 +6,14 @@ use crate::api;
 use crate::db::{ArtifactId, Benchmark, Lookup, Profile, Scenario};
 use crate::github;
 use crate::load::SiteCtxt;
-use crate::selector::{self, Tag};
+use crate::selector::{self};
 
 use collector::benchmark::category::Category;
 use collector::Bound;
 use serde::{Deserialize, Serialize};
 
 use database::CommitType;
+use serde::de::IntoDeserializer;
 use std::cmp;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
@@ -20,6 +21,7 @@ use std::fmt::Write;
 use std::hash::Hash;
 use std::iter;
 use std::ops::Deref;
+use std::str::FromStr;
 use std::sync::Arc;
 
 type BoxedError = Box<dyn Error + Send + Sync>;
@@ -257,6 +259,15 @@ pub enum Metric {
     /// Number of files inside a generated documentation directory.
     #[serde(rename = "size:doc_files_count")]
     DocFilesCount,
+}
+
+impl FromStr for Metric {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Metric::deserialize(s.into_deserializer())
+            .map_err(|e: serde::de::value::Error| format!("Unknown metric `{s}`: {e:?}"))
+    }
 }
 
 impl Metric {
@@ -787,15 +798,11 @@ async fn compare_given_commits(
     let aids = Arc::new(vec![a.clone(), b.clone()]);
 
     // get all crates, cache, and profile combinations for the given metric
-    let query = selector::Query::new()
-        .set::<String>(Tag::Benchmark, selector::Selector::All)
-        .set::<String>(Tag::Scenario, selector::Selector::All)
-        .set::<String>(Tag::Profile, selector::Selector::All)
-        .set(Tag::Metric, selector::Selector::One(metric.as_str()));
+    let query = selector::CompileBenchmarkQuery::all_for_metric(metric);
 
     // `responses` contains series iterators. The first element in the iterator is the data
     // for `a` and the second is the data for `b`
-    let mut responses = ctxt.statistic_series(query.clone(), aids).await?;
+    let mut responses = ctxt.compile_statistic_series(query, aids).await?;
 
     let conn = ctxt.conn().await;
     let statistics_for_a = statistics_from_series(&mut responses);
@@ -1072,14 +1079,10 @@ impl HistoricalDataMap {
         }
 
         // get all crates, cache, and profile combinations for the given metric
-        let query = selector::Query::new()
-            .set::<String>(Tag::Benchmark, selector::Selector::All)
-            .set::<String>(Tag::Scenario, selector::Selector::All)
-            .set::<String>(Tag::Profile, selector::Selector::All)
-            .set(Tag::Metric, selector::Selector::One(metric.as_str()));
+        let query = selector::CompileBenchmarkQuery::all_for_metric(metric);
 
         let mut previous_commit_series = ctxt
-            .statistic_series(query, previous_commits.clone())
+            .compile_statistic_series(query, previous_commits.clone())
             .await?;
 
         for _ in previous_commits.iter() {
