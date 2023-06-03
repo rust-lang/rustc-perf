@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use crate::api::graphs::GraphKind;
 use crate::api::{graph, graphs, ServerResult};
-use crate::db::{self, ArtifactId, Benchmark, Profile, Scenario};
+use crate::db::{self, ArtifactId, Profile, Scenario};
 use crate::interpolate::IsInterpolated;
 use crate::load::SiteCtxt;
 use crate::selector::{CompileBenchmarkQuery, Selector, SeriesResponse};
@@ -119,9 +119,9 @@ async fn create_graphs(
     }
 
     for response in interpolated_responses {
-        let benchmark = response.path.get::<Benchmark>()?.to_string();
-        let profile = *response.path.get::<Profile>()?;
-        let scenario = response.path.get::<Scenario>()?.to_string();
+        let benchmark = response.key.benchmark.to_string();
+        let profile = response.key.profile;
+        let scenario = response.key.scenario.to_string();
         let graph_series = graph_series(response.series.into_iter(), request.kind);
 
         benchmarks
@@ -188,9 +188,9 @@ fn create_summary(
                 let baseline_responses = interpolated_responses
                     .iter()
                     .filter(|sr| {
-                        let p = sr.path.get::<Profile>().unwrap();
-                        let s = sr.path.get::<Scenario>().unwrap();
-                        *p == profile && *s == Scenario::Empty
+                        let p = sr.key.profile;
+                        let s = sr.key.scenario;
+                        p == profile && s == Scenario::Empty
                     })
                     .map(|sr| sr.series.iter().cloned())
                     .collect();
@@ -205,9 +205,9 @@ fn create_summary(
         let summary_case_responses = interpolated_responses
             .iter()
             .filter(|sr| {
-                let p = sr.path.get::<Profile>().unwrap();
-                let s = sr.path.get::<Scenario>().unwrap();
-                *p == profile && *s == scenario
+                let p = sr.key.profile;
+                let s = sr.key.scenario;
+                p == profile && s == scenario
             })
             .map(|sr| sr.series.iter().cloned())
             .collect();

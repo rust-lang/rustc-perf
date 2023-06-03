@@ -952,10 +952,14 @@ where
         } else {
             continue;
         };
-        let benchmark = *response.path.get::<Benchmark>().unwrap();
-        let profile = *response.path.get::<Profile>().unwrap();
-        let scenario = *response.path.get::<Scenario>().unwrap();
-        stats.insert((benchmark, profile, scenario), value);
+        stats.insert(
+            (
+                response.key.benchmark,
+                response.key.profile,
+                response.key.scenario,
+            ),
+            value,
+        );
     }
     stats
 }

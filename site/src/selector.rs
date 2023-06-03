@@ -110,73 +110,6 @@ impl Iterator for ArtifactIdIter {
     }
 }
 
-#[derive(Copy, Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Tag {
-    Benchmark,
-    Profile,
-    Scenario,
-    Metric,
-}
-
-pub trait GetValue {
-    fn value(component: &PathComponent) -> Option<&Self>;
-}
-
-impl GetValue for Benchmark {
-    fn value(component: &PathComponent) -> Option<&Self> {
-        match component {
-            PathComponent::Benchmark(v) => Some(v),
-            _ => None,
-        }
-    }
-}
-
-impl GetValue for Profile {
-    fn value(component: &PathComponent) -> Option<&Self> {
-        match component {
-            PathComponent::Profile(v) => Some(v),
-            _ => None,
-        }
-    }
-}
-
-impl GetValue for Scenario {
-    fn value(component: &PathComponent) -> Option<&Self> {
-        match component {
-            PathComponent::Scenario(v) => Some(v),
-            _ => None,
-        }
-    }
-}
-
-impl GetValue for database::Metric {
-    fn value(component: &PathComponent) -> Option<&Self> {
-        match component {
-            PathComponent::Metric(v) => Some(v),
-            _ => None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
-pub enum PathComponent {
-    Benchmark(Benchmark),
-    Profile(Profile),
-    Scenario(Scenario),
-    Metric(database::Metric),
-}
-
-impl PathComponent {
-    pub fn as_tag(&self) -> Tag {
-        match self {
-            PathComponent::Benchmark(_) => Tag::Benchmark,
-            PathComponent::Profile(_) => Tag::Profile,
-            PathComponent::Scenario(_) => Tag::Scenario,
-            PathComponent::Metric(_) => Tag::Metric,
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Selector<T> {
     All,
@@ -227,14 +160,14 @@ impl<T> Selector<T> {
 
 #[derive(Debug)]
 pub struct SeriesResponse<T> {
-    pub path: Path,
+    pub key: CompileBenchmarkKey,
     pub series: T,
 }
 
 impl<T> SeriesResponse<T> {
     pub fn map<U>(self, m: impl FnOnce(T) -> U) -> SeriesResponse<U> {
         SeriesResponse {
-            path: self.path,
+            key: self.key,
             series: m(self.series),
         }
     }
@@ -245,37 +178,6 @@ impl<T> SeriesResponse<T> {
         T::Item: crate::db::Point,
     {
         self.map(|s| Interpolate::new(s))
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Path {
-    path: Vec<PathComponent>,
-}
-
-impl Path {
-    pub fn new() -> Self {
-        Self { path: vec![] }
-    }
-
-    pub fn set(mut self, component: PathComponent) -> Self {
-        if let Some(idx) = self
-            .path
-            .iter()
-            .position(|c| c.as_tag() == component.as_tag())
-        {
-            self.path[idx] = component;
-        } else {
-            self.path.push(component);
-        }
-        self
-    }
-
-    pub fn get<V: 'static + GetValue>(&self) -> Result<&V, String> {
-        self.path
-            .iter()
-            .find_map(V::value)
-            .ok_or_else(|| format!("query must have {:?} selector", std::any::type_name::<V>()))
     }
 }
 
@@ -325,6 +227,13 @@ impl CompileBenchmarkQuery {
             metric: Selector::One(metric.as_str().into()),
         }
     }
+}
+
+#[derive(Debug)]
+pub struct CompileBenchmarkKey {
+    pub benchmark: Benchmark,
+    pub profile: Profile,
+    pub scenario: Scenario,
 }
 
 impl SiteCtxt {
@@ -407,11 +316,11 @@ impl StatisticSeries {
                             points.into_iter()
                         },
                     },
-                    path: Path::new()
-                        .set(PathComponent::Benchmark(benchmark))
-                        .set(PathComponent::Profile(profile))
-                        .set(PathComponent::Scenario(scenario))
-                        .set(PathComponent::Metric(metric)),
+                    key: CompileBenchmarkKey {
+                        benchmark,
+                        profile,
+                        scenario,
+                    },
                 }
             })
             .collect::<Vec<_>>();
