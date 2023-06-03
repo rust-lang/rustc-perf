@@ -357,66 +357,6 @@ impl PartialOrd for Scenario {
     }
 }
 
-#[derive(Deserialize, Serialize, Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct LabelPath {
-    pub benchmark: Option<Benchmark>,
-    pub profile: Option<Profile>,
-    pub scenario: Option<Scenario>,
-    pub metric: Option<Metric>,
-    pub query: Option<QueryLabel>,
-}
-
-impl LabelPath {
-    pub fn new() -> Self {
-        assert_eq!(std::mem::size_of::<LabelPath>(), 48);
-        Self {
-            benchmark: None,
-            profile: None,
-            scenario: None,
-            metric: None,
-            query: None,
-        }
-    }
-
-    pub fn set(&mut self, component: Label) {
-        match component {
-            Label::Benchmark(b) => self.benchmark = Some(b),
-            Label::Profile(p) => self.profile = Some(p),
-            Label::Scenario(s) => self.scenario = Some(s),
-            Label::Metric(m) => self.metric = Some(m),
-            Label::Query(q) => self.query = Some(q),
-        }
-    }
-
-    pub fn remove(&mut self, component: LabelTag) {
-        match component {
-            LabelTag::Benchmark => self.benchmark = None,
-            LabelTag::Profile => self.profile = None,
-            LabelTag::Scenario => self.scenario = None,
-            LabelTag::Metric => self.metric = None,
-            LabelTag::Query => self.query = None,
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum LabelTag {
-    Benchmark,
-    Profile,
-    Scenario,
-    Metric,
-    Query,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum Label {
-    Benchmark(Benchmark),
-    Profile(Profile),
-    Scenario(Scenario),
-    Metric(Metric),
-    Query(QueryLabel),
-}
-
 /// An identifier for a built version of the compiler
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum ArtifactId {
@@ -441,27 +381,6 @@ impl From<Commit> for ArtifactId {
     }
 }
 
-#[async_trait::async_trait]
-pub trait SeriesType: Sized {
-    async fn get(
-        conn: &dyn pool::Connection,
-        stat_description_row_id: u32,
-        artifact_row_id: ArtifactIdNumber,
-    ) -> Option<Self>;
-}
-
-#[async_trait::async_trait]
-impl SeriesType for f64 {
-    async fn get(
-        conn: &dyn pool::Connection,
-        stat_description_row_id: u32,
-        artifact_row_id: ArtifactIdNumber,
-    ) -> Option<Self> {
-        conn.get_pstats(&[stat_description_row_id], &[Some(artifact_row_id)])
-            .await[0][0]
-    }
-}
-
 intern!(pub struct QueryLabel);
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -472,9 +391,6 @@ pub struct QueryDatum {
     pub number_of_cache_hits: u32,
     pub invocation_count: u32,
 }
-
-#[derive(Hash, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct LabelId(pub u8, pub u32);
 
 /// A database row ID for an artifact in the artifact table
 #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -665,16 +581,6 @@ impl Index {
         let artifact_row_id = artifact_id.lookup(self)?;
         let stat_description_row_id = label.lookup(self)?;
         Some((stat_description_row_id, artifact_row_id))
-    }
-
-    pub async fn get<T: SeriesType>(
-        &self,
-        db: &mut dyn pool::Connection,
-        label: &DbLabel,
-        artifact_id: &ArtifactId,
-    ) -> Option<T> {
-        let (stat_description_row_id, artifact_row_id) = self.lookup(label, artifact_id)?;
-        T::get(db, stat_description_row_id, artifact_row_id).await
     }
 
     pub fn artifacts(&self) -> impl Iterator<Item = &'_ str> + '_ {

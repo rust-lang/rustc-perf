@@ -26,7 +26,7 @@ use crate::interpolate::Interpolate;
 use crate::load::SiteCtxt;
 
 use collector::Bound;
-use database::{Benchmark, Commit, Index, Lookup, Metric, QueryLabel};
+use database::{Benchmark, Commit, Index, Lookup, Metric};
 
 use std::fmt;
 use std::ops::RangeInclusive;
@@ -116,7 +116,6 @@ pub enum Tag {
     Profile,
     Scenario,
     Metric,
-    QueryLabel,
 }
 
 pub trait GetValue {
@@ -159,21 +158,11 @@ impl GetValue for Metric {
     }
 }
 
-impl GetValue for QueryLabel {
-    fn value(component: &PathComponent) -> Option<&Self> {
-        match component {
-            PathComponent::QueryLabel(v) => Some(v),
-            _ => None,
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum PathComponent {
     Benchmark(Benchmark),
     Profile(Profile),
     Scenario(Scenario),
-    QueryLabel(QueryLabel),
     Metric(Metric),
 }
 
@@ -184,7 +173,6 @@ impl PathComponent {
             PathComponent::Profile(_) => Tag::Profile,
             PathComponent::Scenario(_) => Tag::Scenario,
             PathComponent::Metric(_) => Tag::Metric,
-            PathComponent::QueryLabel(_) => Tag::QueryLabel,
         }
     }
 }
