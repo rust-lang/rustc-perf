@@ -36,8 +36,7 @@ fn main() {
     let rustc = env::var_os("RUSTC_REAL").unwrap();
     let actually_rustdoc = name.ends_with("rustdoc-fake");
     let tool = if actually_rustdoc {
-        let rustdoc = env::var_os("RUSTDOC_REAL").unwrap();
-        rustdoc
+        env::var_os("RUSTDOC_REAL").unwrap()
     } else {
         rustc
     };
@@ -134,14 +133,14 @@ fn main() {
                 // Go ahead and run `xperf -stop rustc-perf-counters` in case there are leftover
                 // counters running from a failed prior attempt.
                 let mut cmd = Command::new(&xperf);
-                cmd.args(&["-stop", "rustc-perf-counters"]);
+                cmd.args(["-stop", "rustc-perf-counters"]);
                 cmd.status().expect("failed to spawn xperf");
 
                 let tracelog = std::env::var("TRACELOG").unwrap_or("tracelog.exe".to_string());
                 let mut cmd = Command::new(tracelog);
                 assert!(cmd.output().is_ok(), "tracelog.exe could not be started");
 
-                cmd.args(&[
+                cmd.args([
                     "-start",
                     "rustc-perf-counters",
                     "-f",
@@ -395,7 +394,7 @@ fn main() {
                 panic!("unknown wrapper: {}", wrapper);
             }
         }
-    } else if let Some(_) = args.iter().position(|arg| arg == "--skip-this-rustc") {
+    } else if args.iter().any(|arg| arg == "--skip-this-rustc") {
         // do nothing
     } else {
         // Abort if non-wrapped rustc
@@ -465,7 +464,7 @@ fn process_self_profile_output(prof_out_dir: PathBuf, args: &[OsString]) {
         };
         println!("!self-profile-output:{}", json);
     } else {
-        let prefix = prefix.expect(&format!("found prefix {:?}", prof_out_dir));
+        let prefix = prefix.unwrap_or_else(|| panic!("found prefix {:?}", prof_out_dir));
         let json = run_summarize("summarize", &prof_out_dir, &prefix)
             .or_else(|_| run_summarize("summarize-0.7", &prof_out_dir, &prefix))
             .expect("able to run summarize or summarize-0.7");
@@ -522,9 +521,9 @@ fn print_time(dur: Duration) {
 
 fn run_summarize(name: &str, prof_out_dir: &Path, prefix: &str) -> anyhow::Result<String> {
     let mut cmd = Command::new(name);
-    cmd.current_dir(&prof_out_dir);
+    cmd.current_dir(prof_out_dir);
     cmd.arg("summarize").arg("--json");
-    cmd.arg(&prefix);
+    cmd.arg(prefix);
     let status = cmd
         .status()
         .with_context(|| format!("Command::new({}).status() failed", name))?;
@@ -536,7 +535,7 @@ fn run_summarize(name: &str, prof_out_dir: &Path, prefix: &str) -> anyhow::Resul
             prefix
         )
     }
-    let json = prof_out_dir.join(&format!(
+    let json = prof_out_dir.join(format!(
         "{}.json",
         prefix.strip_suffix(".mm_profdata").unwrap_or(prefix)
     ));

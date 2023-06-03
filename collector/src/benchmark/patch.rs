@@ -30,7 +30,7 @@ impl Patch {
         assert!(path.is_file());
         let (index, name) = {
             let file_name = path.file_name().unwrap().to_string_lossy();
-            let mut parts = file_name.split("-");
+            let mut parts = file_name.split('-');
             let index = parts.next().unwrap().parse().unwrap_or_else(|e| {
                 panic!(
                     "{:?} should be in the format 000-name.patch, \
@@ -61,7 +61,7 @@ impl Patch {
         log::debug!("applying {} to {:?}", self.name, dir);
 
         let mut cmd = Command::new("git");
-        cmd.current_dir(dir).args(&["apply"]).arg(&*self.path);
+        cmd.current_dir(dir).args(["apply"]).arg(&*self.path);
 
         command_output(&mut cmd)?;
 

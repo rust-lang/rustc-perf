@@ -541,8 +541,8 @@ async fn main() -> anyhow::Result<()> {
         .unwrap();
 
     if matches.get_flag("fast-unsafe") {
-        sqlite.pragma_update(None, "journal_mode", &"OFF").unwrap();
-        sqlite.pragma_update(None, "synchronous", &"OFF").unwrap();
+        sqlite.pragma_update(None, "journal_mode", "OFF").unwrap();
+        sqlite.pragma_update(None, "synchronous", "OFF").unwrap();
     }
 
     // Postgres repeatable-read transactions use a snapshot of the database, and

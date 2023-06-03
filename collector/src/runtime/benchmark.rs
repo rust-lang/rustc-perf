@@ -37,7 +37,7 @@ impl BenchmarkSuite {
         self.benchmark_names()
             .filter(|benchmark| {
                 passes_filter(
-                    &benchmark,
+                    benchmark,
                     filter.exclude.as_deref(),
                     filter.include.as_deref(),
                 )

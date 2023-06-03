@@ -154,7 +154,7 @@ pub mod comparison {
         fn from(data: CompileBenchmark) -> Self {
             Self {
                 name: data.name,
-                category: data.category.to_string(),
+                category: data.category,
             }
         }
     }

@@ -101,7 +101,7 @@ where
         match item.value() {
             Some(pt) => {
                 self.last_seen = Some(pt);
-                return Some((item, IsInterpolated::No));
+                Some((item, IsInterpolated::No))
             }
             None => {
                 if let Some(last) = self.last_seen {

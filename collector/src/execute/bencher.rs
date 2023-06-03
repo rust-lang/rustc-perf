@@ -179,12 +179,10 @@ impl<'a> Processor for BenchProcessor<'a> {
             } else {
                 PerfTool::BenchTool(Bencher::XperfStatSelfProfile)
             }
+        } else if cfg!(unix) {
+            PerfTool::BenchTool(Bencher::PerfStat)
         } else {
-            if cfg!(unix) {
-                PerfTool::BenchTool(Bencher::PerfStat)
-            } else {
-                PerfTool::BenchTool(Bencher::XperfStat)
-            }
+            PerfTool::BenchTool(Bencher::XperfStat)
         }
     }
 

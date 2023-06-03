@@ -153,8 +153,8 @@ async fn handle_rust_timer(
 
     enqueue_shas(
         &ctxt,
-        &main_client,
-        &ci_client,
+        main_client,
+        ci_client,
         issue.number,
         build_captures(&comment.body).map(|(commit, _)| commit),
     )
@@ -166,7 +166,7 @@ async fn handle_rust_timer(
 /// Run the `@rust-timer build` regex over the comment message extracting the commit and the other captures
 fn build_captures(comment_body: &str) -> impl Iterator<Item = (&str, regex::Captures)> {
     BODY_TIMER_BUILD
-        .captures_iter(&comment_body)
+        .captures_iter(comment_body)
         .filter_map(|captures| {
             captures.get(1).map(|m| {
                 let commit = m

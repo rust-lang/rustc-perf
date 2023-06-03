@@ -68,7 +68,7 @@ pub async fn bench_runtime(
 
                     print_stats(&result);
                     record_stats(
-                        &conn,
+                        conn.as_ref(),
                         collector.artifact_row_id,
                         &rustc_perf_version,
                         result,
@@ -86,13 +86,13 @@ pub async fn bench_runtime(
 
 /// Records the results (stats) of a benchmark into the database.
 async fn record_stats(
-    conn: &Box<dyn Connection>,
+    conn: &dyn Connection,
     artifact_id: ArtifactIdNumber,
     rustc_perf_version: &str,
     result: BenchmarkResult,
 ) {
     fn record<'a>(
-        conn: &'a Box<dyn Connection>,
+        conn: &'a dyn Connection,
         artifact_id: ArtifactIdNumber,
         collection_id: CollectionId,
         result: &'a BenchmarkResult,
@@ -182,10 +182,10 @@ fn execute_runtime_benchmark_binary(
     command.arg(&iterations.to_string());
 
     if let Some(ref exclude) = filter.exclude {
-        command.args(&["--exclude", exclude]);
+        command.args(["--exclude", exclude]);
     }
     if let Some(ref include) = filter.include {
-        command.args(&["--include", include]);
+        command.args(["--include", include]);
     }
 
     command.stdout(Stdio::piped());

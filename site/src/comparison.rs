@@ -43,7 +43,7 @@ pub async fn handle_triage(
     // is that we've had a 422 error and as such had a fork. It's possible we
     // could diagnose that and give a nicer error here telling the user which
     // commit to use.
-    let mut next = next_commit(&start_artifact, &master_commits)
+    let mut next = next_commit(&start_artifact, master_commits)
         .map(|c| Bound::Commit(c.sha.clone()))
         .ok_or(format!("no next commit for {:?}", start_artifact))?;
 
@@ -55,25 +55,20 @@ pub async fn handle_triage(
     let benchmark_map = ctxt.get_benchmark_category_map().await;
 
     let end = loop {
-        let comparison = match compare_given_commits(
-            before.clone(),
-            next.clone(),
-            metric,
-            ctxt,
-            &master_commits,
-        )
-        .await
-        .map_err(|e| format!("error comparing commits: {}", e))?
-        {
-            Some(c) => c,
-            None => {
-                log::info!(
-                    "No data found for end bound {:?}. Ending comparison...",
-                    next
-                );
-                break before;
-            }
-        };
+        let comparison =
+            match compare_given_commits(before.clone(), next.clone(), metric, ctxt, master_commits)
+                .await
+                .map_err(|e| format!("error comparing commits: {}", e))?
+            {
+                Some(c) => c,
+                None => {
+                    log::info!(
+                        "No data found for end bound {:?}. Ending comparison...",
+                        next
+                    );
+                    break before;
+                }
+            };
         num_comparisons += 1;
         log::info!(
             "Comparing {} to {}",
@@ -90,7 +85,7 @@ pub async fn handle_triage(
         }
 
         // Decide whether to keep doing comparisons or not
-        match comparison.next(&master_commits).map(Bound::Commit) {
+        match comparison.next(master_commits).map(Bound::Commit) {
             // There is a next commit, and it is not the end bound.
             // We keep doing comparisons...
             Some(n) => {
@@ -109,9 +104,8 @@ pub async fn handle_triage(
             .map_err(|e| format!("error comparing beginning and ending commits: {}", e))?
         {
             Some(summary_comparison) => {
-                let (primary, secondary) = summary_comparison
-                    .clone()
-                    .summarize_compile_by_category(&benchmark_map);
+                let (primary, secondary) =
+                    summary_comparison.summarize_compile_by_category(&benchmark_map);
                 let mut result = String::from("**Summary**:\n\n");
                 write_summary_table(&primary, &secondary, true, &mut result);
                 result
@@ -184,7 +178,7 @@ async fn populate_report(
 ) {
     let (primary, secondary) = comparison
         .clone()
-        .summarize_compile_by_category(&benchmark_map);
+        .summarize_compile_by_category(benchmark_map);
     // Get the combined direction of the primary and secondary summaries
     let direction = Direction::join(primary.direction(), secondary.direction());
     if direction == Direction::None {
@@ -372,7 +366,7 @@ impl ArtifactComparisonSummary {
 
     /// The direction of the changes
     pub fn direction(&self) -> Direction {
-        if self.relevant_comparisons.len() == 0 {
+        if self.relevant_comparisons.is_empty() {
             return Direction::None;
         }
 
@@ -381,11 +375,11 @@ impl ArtifactComparisonSummary {
             .iter()
             .partition(|c| c.is_regression());
 
-        if regressions.len() == 0 {
+        if regressions.is_empty() {
             return Direction::Improvement;
         }
 
-        if improvements.len() == 0 {
+        if improvements.is_empty() {
             return Direction::Regression;
         }
 
@@ -402,7 +396,7 @@ impl ArtifactComparisonSummary {
             has_medium_and_above_improvements,
             has_medium_and_above_regressions,
         ) {
-            (true, true) => return Direction::Mixed,
+            (true, true) => Direction::Mixed,
             (true, false) => {
                 if regressions_ratio >= 0.15 {
                     Direction::Mixed
@@ -418,7 +412,7 @@ impl ArtifactComparisonSummary {
                 }
             }
             (false, false) => {
-                if regressions_ratio >= 0.1 && regressions_ratio <= 0.9 {
+                if (0.1..=0.9).contains(&regressions_ratio) {
                     Direction::Mixed
                 } else if regressions_ratio <= 0.1 {
                     Direction::Improvement
@@ -576,7 +570,7 @@ async fn write_triage_summary(
     let link = &compare_link(start, end);
     write!(&mut result, " [(Comparison Link)]({})\n\n", link).unwrap();
 
-    write_summary_table(&primary, &secondary, true, &mut result);
+    write_summary_table(primary, secondary, true, &mut result);
 
     result
 }

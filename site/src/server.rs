@@ -108,7 +108,7 @@ impl Server {
         let ctxt = self.ctxt.clone();
         let ctxt = ctxt.read();
         let ctxt = ctxt.as_ref().unwrap();
-        let result = handler(&ctxt);
+        let result = handler(ctxt);
         Ok(http::Response::builder()
             .header_typed(ContentType::json())
             .body(hyper::Body::from(serde_json::to_string(&result).unwrap()))
@@ -212,7 +212,7 @@ impl Server {
             let steps = conn.in_progress_steps(&ArtifactId::from(last_commit)).await;
             let g = prometheus::IntGaugeVec::new(
                 prometheus::core::Opts {
-                    namespace: format!("rustc_perf"),
+                    namespace: "rustc_perf".to_string(),
                     subsystem: String::new(),
                     name: String::from("step_duration_seconds"),
                     help: String::from("step duration"),
@@ -241,9 +241,9 @@ impl Server {
             static ref LAST_UPDATE: Mutex<Option<Instant>> = Mutex::new(None);
         }
 
-        let last = LAST_UPDATE.lock().clone();
+        let last = *LAST_UPDATE.lock();
         if let Some(last) = last {
-            let min = 60 * 1; // 1 minutes
+            let min = 60; // 1 minutes
             let elapsed = last.elapsed();
             if elapsed < std::time::Duration::from_secs(min) {
                 return http::Response::builder()
@@ -325,14 +325,15 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
         .map_or(false, |e| e.to_str().unwrap().contains("br"));
 
     let compression = if allow_compression {
-        let mut brotli = BrotliEncoderParams::default();
         // In tests on /perf/graphs and /perf/get, quality = 2 reduces size by 20-40% compared to 0,
         // while quality = 4 takes 80% longer but reduces size by less than 5% compared to 2.
         // Around 4-5 is sometimes said to be "smaller and faster than gzip".
         // [Google's default is 6](https://github.com/google/ngx_brotli#brotli_comp_level),
         // higher levels offer only small size savings but are much slower.
-        brotli.quality = 2;
-        Some(brotli)
+        Some(BrotliEncoderParams {
+            quality: 2,
+            ..Default::default()
+        })
     } else {
         None
     };
@@ -354,17 +355,17 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
         "/perf/info" => return server.handle_get(&req, request_handlers::handle_info),
         "/perf/dashboard" => {
             return server
-                .handle_get_async(&req, |c| request_handlers::handle_dashboard(c))
+                .handle_get_async(&req, request_handlers::handle_dashboard)
                 .await;
         }
         "/perf/status_page" => {
             return server
-                .handle_get_async(&req, |c| request_handlers::handle_status_page(c))
+                .handle_get_async(&req, request_handlers::handle_status_page)
                 .await;
         }
         "/perf/next_artifact" => {
             return server
-                .handle_get_async(&req, |c| request_handlers::handle_next_artifact(c))
+                .handle_get_async(&req, request_handlers::handle_next_artifact)
                 .await;
         }
         "/perf/triage" if *req.method() == http::Method::GET => {
@@ -429,9 +430,7 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
 
     match path {
         "/perf/get" => Ok(to_response(
-            crate::comparison::handle_compare(check!(parse_body(&body)), &ctxt)
-                .await
-                .map_err(|e| e.to_string()),
+            crate::comparison::handle_compare(check!(parse_body(&body)), &ctxt).await,
             &compression,
         )),
         "/perf/collected" => {
@@ -516,22 +515,22 @@ fn parse_body<D>(body: &[u8]) -> Result<D, Response>
 where
     D: DeserializeOwned,
 {
-    match serde_json::from_slice(&body) {
+    match serde_json::from_slice(body) {
         Ok(d) => Ok(d),
         Err(err) => {
             error!(
                 "failed to deserialize request {}: {:?}",
-                String::from_utf8_lossy(&body),
+                String::from_utf8_lossy(body),
                 err
             );
-            return Err(http::Response::builder()
+            Err(http::Response::builder()
                 .header_typed(ContentType::text_utf8())
                 .status(StatusCode::BAD_REQUEST)
                 .body(hyper::Body::from(format!(
                     "Failed to deserialize request: {:?}",
                     err
                 )))
-                .unwrap());
+                .unwrap())
         }
     }
 }
@@ -551,16 +550,14 @@ where
 
     match serde_json::from_str(&serde_json::to_string(&params).unwrap()) {
         Ok(d) => Ok(d),
-        Err(err) => {
-            return Err(http::Response::builder()
-                .header_typed(ContentType::text_utf8())
-                .status(StatusCode::BAD_REQUEST)
-                .body(hyper::Body::from(format!(
-                    "Failed to deserialize request {}: {:?}",
-                    uri, err,
-                )))
-                .unwrap());
-        }
+        Err(err) => Err(http::Response::builder()
+            .header_typed(ContentType::text_utf8())
+            .status(StatusCode::BAD_REQUEST)
+            .body(hyper::Body::from(format!(
+                "Failed to deserialize request {}: {:?}",
+                uri, err,
+            )))
+            .unwrap()),
     }
 }
 
@@ -575,7 +572,7 @@ async fn handle_fs_path(req: &Request, path: &str) -> Option<http::Response<hype
         return Some(not_found());
     }
 
-    let etag = ETag::from_str(&*format!(r#""{}""#, *VERSION_UUID)).unwrap();
+    let etag = ETag::from_str(&format!(r#""{}""#, *VERSION_UUID)).unwrap();
     let mut response = http::Response::builder()
         .header_typed(etag.clone())
         .header(CACHE_CONTROL, "max-age=60, stale-while-revalidate=86400"); // tell client to use cached response for one day, but revalidate in background if older than one minute
@@ -594,7 +591,7 @@ async fn handle_fs_path(req: &Request, path: &str) -> Option<http::Response<hype
             .unwrap()
     }
 
-    let relative_path = path.trim_start_matches("/");
+    let relative_path = path.trim_start_matches('/');
     let source = match path {
         "" | "/" | "/index.html" => resolve_template("graphs.html").await,
         "/bootstrap.html"
@@ -642,7 +639,7 @@ fn verify_gh(config: &Config, req: &http::request::Parts, body: &[u8]) -> bool {
         Some(v) => v,
         None => return false,
     };
-    verify_gh_sig(config, &gh_header, &body).unwrap_or(false)
+    verify_gh_sig(config, &gh_header, body).unwrap_or(false)
 }
 
 fn verify_gh_sig(cfg: &Config, header: &str, body: &[u8]) -> Option<bool> {
@@ -713,7 +710,7 @@ fn to_triage_response(result: ServerResult<api::triage::Response>) -> Response {
         Err(err) => http::Response::builder()
             .status(StatusCode::INTERNAL_SERVER_ERROR)
             .header_typed(ContentType::text_utf8())
-            .body(hyper::Body::from(err.to_string()))
+            .body(hyper::Body::from(err))
             .unwrap(),
     }
 }

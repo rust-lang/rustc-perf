@@ -50,7 +50,7 @@ pub fn artifact_id_for_bound(data: &Index, bound: Bound, is_left: bool) -> Optio
             .rfind(|commit| bound.right_match(commit))
             .cloned()
     };
-    commit.map(|c| ArtifactId::Commit(c)).or_else(|| {
+    commit.map(ArtifactId::Commit).or_else(|| {
         data.artifacts()
             .find(|aid| match &bound {
                 Bound::Commit(c) => *c == **aid,
@@ -345,10 +345,10 @@ impl Query {
         T: FromStr,
         <T as FromStr>::Err: fmt::Display,
     {
-        Ok(self.extract(tag)?.raw.try_map(|p| {
+        self.extract(tag)?.raw.try_map(|p| {
             p.parse::<T>()
                 .map_err(|e| format!("failed to parse query tag {:?}: {}", tag, e))
-        })?)
+        })
     }
 
     fn assert_empty(&self) -> Result<(), String> {

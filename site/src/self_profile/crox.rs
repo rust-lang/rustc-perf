@@ -101,7 +101,7 @@ fn generate_thread_to_collapsed_thread_mapping(
                 // need to lookup the thread_id due to new and collapsed threads
                 let mapped_thread_id = *thread_to_collapsed_thread
                     .get(next_thread_id)
-                    .unwrap_or(&next_thread_id);
+                    .unwrap_or(next_thread_id);
 
                 thread_to_collapsed_thread.insert(thread_id, mapped_thread_id);
             } else {
@@ -120,7 +120,7 @@ fn get_args(full_event: &analyzeme::Event) -> Option<HashMap<String, String>> {
                 .additional_data
                 .iter()
                 .enumerate()
-                .map(|(i, arg)| (format!("arg{}", i).to_string(), arg.to_string()))
+                .map(|(i, arg)| (format!("arg{}", i), arg.to_string()))
                 .collect(),
         )
     } else {
@@ -180,7 +180,7 @@ pub fn generate(self_profile_data: Vec<u8>, opt: Opt) -> anyhow::Result<Vec<u8>>
         .map(|index| index + 14);
     if let Some(index) = index_of_crate_name {
         let (_, last) = data.metadata().cmd.split_at(index);
-        let (crate_name, _) = last.split_at(last.find(" ").unwrap_or(last.len()));
+        let (crate_name, _) = last.split_at(last.find(' ').unwrap_or(last.len()));
 
         let process_name = json!({
             "name": "process_name",

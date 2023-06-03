@@ -166,6 +166,7 @@ fn master_artifact_ids_for_range(ctxt: &SiteCtxt, start: Bound, end: Bound) -> V
         .collect()
 }
 
+#[allow(clippy::type_complexity)]
 /// Creates a summary "benchmark" that averages the results of all other
 /// test cases per profile type
 fn create_summary(

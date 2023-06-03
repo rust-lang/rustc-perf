@@ -23,7 +23,7 @@ pub async fn post_finished(ctxt: &SiteCtxt) {
     let mut known_commits = index
         .commits()
         .into_iter()
-        .map(|c| c.sha.to_string())
+        .map(|c| c.sha)
         .collect::<HashSet<_>>();
     let (master_commits, queued_pr_commits, in_progress_artifacts) = futures::join!(
         collector::master_commits(),
@@ -178,8 +178,8 @@ async fn summarize_run(
     let errors = if !inst_comparison.newly_failed_benchmarks.is_empty() {
         let benchmarks = inst_comparison
             .newly_failed_benchmarks
-            .iter()
-            .map(|(benchmark, _)| format!("- {benchmark}"))
+            .keys()
+            .map(|benchmark| format!("- {benchmark}"))
             .collect::<Vec<_>>()
             .join("\n");
         format!("\n**Warning ⚠**: The following benchmark(s) failed to build:\n{benchmarks}\n")

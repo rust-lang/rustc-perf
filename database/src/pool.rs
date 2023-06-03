@@ -38,6 +38,7 @@ pub trait Connection: Send + Sync {
     async fn collection_id(&self, version: &str) -> CollectionId;
     async fn artifact_id(&self, artifact: &ArtifactId) -> ArtifactIdNumber;
 
+    #[allow(clippy::too_many_arguments)]
     async fn record_statistic(
         &self,
         collection: CollectionId,
@@ -68,6 +69,7 @@ pub trait Connection: Send + Sync {
         profile: Profile,
         scenario: Scenario,
     );
+    #[allow(clippy::too_many_arguments)]
     async fn record_self_profile_query(
         &self,
         collection: CollectionId,

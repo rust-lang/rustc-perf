@@ -348,8 +348,7 @@ fn profile(
             let benchmark_id = format!("{} ({}/{})", benchmark.name, i + 1, benchmarks.len());
             eprintln!("Executing benchmark {benchmark_id}");
             let mut processor = ProfileProcessor::new(profiler, out_dir, id);
-            let result =
-                benchmark.measure(&mut processor, &profiles, &scenarios, compiler, Some(1));
+            let result = benchmark.measure(&mut processor, profiles, scenarios, compiler, Some(1));
             eprintln!("Finished benchmark {benchmark_id}");
 
             if let Err(ref s) = result {
@@ -400,7 +399,7 @@ impl TypedValueParser for ProfileArgParser {
             let profiles: Result<Vec<Profile>, _> = value
                 .to_str()
                 .unwrap()
-                .split(",")
+                .split(',')
                 .map(|item| clap::value_parser!(Profile).parse_ref(cmd, arg, OsStr::new(item)))
                 .collect();
 
@@ -410,7 +409,7 @@ impl TypedValueParser for ProfileArgParser {
 
     fn possible_values(&self) -> Option<Box<dyn Iterator<Item = PossibleValue> + '_>> {
         let values = Profile::value_variants()
-            .into_iter()
+            .iter()
             .filter_map(|item| item.to_possible_value())
             .chain([PossibleValue::new("All")]);
         Some(Box::new(values))
@@ -438,7 +437,7 @@ impl TypedValueParser for ScenarioArgParser {
             let scenarios: Result<Vec<Scenario>, _> = value
                 .to_str()
                 .unwrap()
-                .split(",")
+                .split(',')
                 .map(|item| clap::value_parser!(Scenario).parse_ref(cmd, arg, OsStr::new(item)))
                 .collect();
 
@@ -448,7 +447,7 @@ impl TypedValueParser for ScenarioArgParser {
 
     fn possible_values(&self) -> Option<Box<dyn Iterator<Item = PossibleValue> + '_>> {
         let values = Scenario::value_variants()
-            .into_iter()
+            .iter()
             .filter_map(|item| item.to_possible_value())
             .chain([PossibleValue::new("All")]);
         Some(Box::new(values))
@@ -744,7 +743,7 @@ fn main_result() -> anyhow::Result<i32> {
             let pool = database::Pool::open(&db.db);
 
             let toolchain = get_local_toolchain(
-                &profiles,
+                profiles,
                 &local.rustc,
                 opts.rustdoc.as_deref(),
                 local.cargo.as_deref(),
@@ -792,7 +791,7 @@ fn main_result() -> anyhow::Result<i32> {
             println!("processing artifacts");
             let client = reqwest::blocking::Client::new();
             let response: collector::api::next_artifact::Response = client
-                .get(&format!("{}/perf/next_artifact", site_url))
+                .get(format!("{}/perf/next_artifact", site_url))
                 .send()?
                 .json()?;
             let next = if let Some(c) = response.artifact {
@@ -815,7 +814,7 @@ fn main_result() -> anyhow::Result<i32> {
                         &compile_benchmark_dir,
                     )?;
 
-                    client.post(&format!("{}/perf/onpush", site_url)).send()?;
+                    client.post(format!("{}/perf/onpush", site_url)).send()?;
                 }
                 NextArtifact::Commit {
                     commit,
@@ -853,7 +852,7 @@ fn main_result() -> anyhow::Result<i32> {
                         collector,
                     );
 
-                    client.post(&format!("{}/perf/onpush", site_url)).send()?;
+                    client.post(format!("{}/perf/onpush", site_url)).send()?;
 
                     res.fail_if_nonzero()?;
                 }
@@ -912,8 +911,8 @@ fn main_result() -> anyhow::Result<i32> {
             let mut get_toolchain_and_profile =
                 |rustc: &str, suffix: &str| -> anyhow::Result<String> {
                     let toolchain = get_local_toolchain(
-                        &profiles,
-                        &rustc,
+                        profiles,
+                        rustc,
                         opts.rustdoc.as_deref(),
                         local.cargo.as_deref(),
                         local.id.as_deref(),
@@ -926,8 +925,8 @@ fn main_result() -> anyhow::Result<i32> {
                         profiler,
                         &out_dir,
                         &benchmarks,
-                        &profiles,
-                        &scenarios,
+                        profiles,
+                        scenarios,
                         &mut errors,
                     );
                     Ok(toolchain.id)
@@ -950,8 +949,8 @@ fn main_result() -> anyhow::Result<i32> {
                         &id2,
                         &out_dir,
                         &benchmarks,
-                        &profiles,
-                        &scenarios,
+                        profiles,
+                        scenarios,
                         &mut errors,
                     );
                     if diffs.len() > 1 {
@@ -983,8 +982,8 @@ fn main_result() -> anyhow::Result<i32> {
                 .unwrap();
             let last_sha = String::from_utf8(last_sha.stdout).expect("utf8");
             let last_sha = last_sha.split_whitespace().next().expect(&last_sha);
-            let commit = get_commit_or_fake_it(&last_sha).expect("success");
-            let mut sysroot = Sysroot::install(commit.sha.to_string(), &target_triple)?;
+            let commit = get_commit_or_fake_it(last_sha).expect("success");
+            let mut sysroot = Sysroot::install(commit.sha, &target_triple)?;
             sysroot.preserve(); // don't delete it
 
             // Print the directory containing the toolchain.
@@ -1035,7 +1034,7 @@ fn bench_published_artifact(
     benchmark_dir: &Path,
 ) -> anyhow::Result<()> {
     let status = Command::new("rustup")
-        .args(&["install", "--profile=minimal", &toolchain])
+        .args(["install", "--profile=minimal", &toolchain])
         .status()
         .context("rustup install")?;
     if !status.success() {
@@ -1071,7 +1070,7 @@ fn bench_published_artifact(
     let cargo = which("cargo")?;
 
     // Exclude benchmarks that don't work with a stable compiler.
-    let mut benchmarks = get_compile_benchmarks(&benchmark_dir, None, None, None)?;
+    let mut benchmarks = get_compile_benchmarks(benchmark_dir, None, None, None)?;
     benchmarks.retain(|b| b.category().is_stable());
 
     let artifact_id = ArtifactId::Tag(toolchain);
@@ -1091,7 +1090,7 @@ fn bench_published_artifact(
             rustdoc: Some(Path::new(rustdoc.trim())),
             cargo: Path::new(cargo.trim()),
             is_nightly: false,
-            triple: &target_triple,
+            triple: target_triple,
         },
         &benchmarks,
         Some(3),
@@ -1102,7 +1101,7 @@ fn bench_published_artifact(
     Ok(())
 }
 
-fn add_perf_config(directory: &PathBuf, category: Category) {
+fn add_perf_config(directory: &Path, category: Category) {
     let data = serde_json::json!({
         "category": category.to_string()
     });
@@ -1118,10 +1117,12 @@ fn add_perf_config(directory: &PathBuf, category: Category) {
 fn check_target_dir(target_dir: &Path, force: bool) -> anyhow::Result<()> {
     if target_dir.exists() {
         if force {
-            std::fs::remove_dir_all(&target_dir).expect(&format!(
-                "Cannot remove previous directory at {}",
-                target_dir.display()
-            ));
+            std::fs::remove_dir_all(target_dir).unwrap_or_else(|_| {
+                panic!(
+                    "Cannot remove previous directory at {}",
+                    target_dir.display()
+                )
+            });
         } else {
             return Err(anyhow::anyhow!(
                 "Directory {} already exists",
@@ -1138,9 +1139,9 @@ fn get_downloaded_crate_target(benchmark_dir: &Path, cmd: &DownloadCommand) -> P
         // URLs in general can end with /, which we also want to remove to make sure that the
         // last part of the URL is the repository name.
         DownloadSubcommand::Git { url } => url
-            .trim_end_matches("/")
+            .trim_end_matches('/')
             .trim_end_matches(".git")
-            .split("/")
+            .split('/')
             .last()
             .expect("Crate name could not be determined from git URL")
             .to_string(),
@@ -1168,7 +1169,7 @@ fn download_from_git(target: &Path, url: &str) -> anyhow::Result<()> {
         log::error!("Could not delete .git directory: {error:?}");
     }
 
-    utils::fs::rename(&tmpdir, &target)?;
+    utils::fs::rename(&tmpdir, target)?;
     Ok(())
 }
 
@@ -1198,7 +1199,7 @@ fn download_from_crates_io(target_dir: &Path, krate: &str, version: &str) -> any
     // under <crate-name>-<version> directory.
     let unpacked_dir = tmpdir.path().join(format!("{krate}-{version}"));
     generate_lockfile(&unpacked_dir);
-    utils::fs::rename(&unpacked_dir, &target_dir)?;
+    utils::fs::rename(&unpacked_dir, target_dir)?;
 
     Ok(())
 }
@@ -1235,7 +1236,7 @@ fn get_commit_or_fake_it(sha: &str) -> anyhow::Result<Commit> {
             log::warn!("utilizing fake commit!");
             Commit {
                 sha: sha.into(),
-                date: database::Date::ymd_hms(2000, 01, 01, 0, 0, 0),
+                date: database::Date::ymd_hms(2000, 1, 1, 0, 0, 0),
                 r#type: CommitType::Master,
             }
         }))

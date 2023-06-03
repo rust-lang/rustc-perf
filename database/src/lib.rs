@@ -43,7 +43,7 @@ impl std::str::FromStr for Date {
             Ok(value) => Ok(Date(value.with_timezone(&Utc))),
             Err(error) => Err(DateParseError {
                 input: s.to_string(),
-                format: format!("RFC 3339"),
+                format: "RFC 3339".to_string(),
                 error,
             }),
         }
@@ -199,7 +199,7 @@ impl Eq for Commit {}
 
 impl PartialOrd for Commit {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(&other))
+        Some(self.cmp(other))
     }
 }
 
@@ -288,9 +288,8 @@ impl std::str::FromStr for Scenario {
             "incr-full" => Scenario::IncrementalEmpty,
             "incr-unchanged" => Scenario::IncrementalFresh,
             _ => {
-                // FIXME: use str::strip_prefix when stabilized
-                if s.starts_with("incr-patched: ") {
-                    Scenario::IncrementalPatch(PatchName::from(&s["incr-patched: ".len()..]))
+                if let Some(stripped) = s.strip_prefix("incr-patched: ") {
+                    Scenario::IncrementalPatch(PatchName::from(stripped))
                 } else {
                     return Err(format!("{} is not a scenario", s));
                 }
@@ -313,9 +312,9 @@ impl fmt::Display for Scenario {
 impl Scenario {
     pub fn to_id(&self) -> String {
         match self {
-            Scenario::Empty => format!("full"),
-            Scenario::IncrementalEmpty => format!("incr-full"),
-            Scenario::IncrementalFresh => format!("incr-unchanged"),
+            Scenario::Empty => "full".to_string(),
+            Scenario::IncrementalEmpty => "incr-full".to_string(),
+            Scenario::IncrementalFresh => "incr-unchanged".to_string(),
             Scenario::IncrementalPatch(name) => format!("incr-patched-{}", name),
         }
     }
@@ -626,7 +625,7 @@ impl Index {
         self.commits()
             .into_iter()
             .find(|c| c.sha == *commit)
-            .map(|c| ArtifactId::Commit(c))
+            .map(ArtifactId::Commit)
             .or_else(|| {
                 self.artifacts()
                     .find(|a| *a == commit)

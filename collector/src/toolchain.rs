@@ -22,7 +22,7 @@ impl Sysroot {
     pub fn install(sha: String, triple: &str) -> anyhow::Result<Self> {
         let unpack_into = "cache";
 
-        fs::create_dir_all(&unpack_into)?;
+        fs::create_dir_all(unpack_into)?;
 
         let download = SysrootDownload {
             directory: unpack_into.into(),
@@ -170,13 +170,13 @@ impl SysrootDownload {
             }
         }
 
-        return Err(anyhow!(
+        Err(anyhow!(
             "unable to download sha {} triple {} module {} from any of {:?}",
             self.rust_sha,
             self.triple,
             variant,
             urls
-        ));
+        ))
     }
 
     fn extract<T: Read>(&self, variant: ModuleVariant, reader: T) -> anyhow::Result<()> {
@@ -201,7 +201,7 @@ impl SysrootDownload {
             } else {
                 continue;
             };
-            fs::create_dir_all(&path.parent().unwrap()).with_context(|| {
+            fs::create_dir_all(path.parent().unwrap()).with_context(|| {
                 format!(
                     "could not create intermediate directories for {}",
                     path.display()
@@ -271,7 +271,7 @@ pub fn get_local_toolchain(
     // (e.g., `rustc +stage1`).
     let (rustc, id) = if let Some(toolchain) = rustc.strip_prefix('+') {
         let output = Command::new("rustup")
-            .args(&["which", "rustc", "--toolchain", &toolchain])
+            .args(["which", "rustc", "--toolchain", toolchain])
             .output()
             .context("failed to run `rustup which rustc`")?;
 
@@ -289,7 +289,7 @@ pub fn get_local_toolchain(
             }
 
             if !Command::new("rustup-toolchain-install-master")
-                .arg(&toolchain)
+                .arg(toolchain)
                 .status()
                 .context("failed to run `rustup-toolchain-install-master`")?
                 .success()
@@ -302,7 +302,7 @@ pub fn get_local_toolchain(
         }
 
         let output = Command::new("rustup")
-            .args(&["which", "rustc", "--toolchain", &toolchain])
+            .args(["which", "rustc", "--toolchain", toolchain])
             .output()
             .context("failed to run `rustup which rustc`")?;
 
@@ -370,7 +370,7 @@ pub fn get_local_toolchain(
     } else {
         // Use the nightly cargo from `rustup`.
         let output = Command::new("rustup")
-            .args(&["which", "cargo", "--toolchain=nightly"])
+            .args(["which", "cargo", "--toolchain=nightly"])
             .output()
             .context("failed to run `rustup which cargo --toolchain=nightly`")?;
         if !output.status.success() {

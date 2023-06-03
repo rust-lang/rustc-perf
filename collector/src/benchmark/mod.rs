@@ -88,7 +88,7 @@ impl Benchmark {
             }
         }
 
-        let mut patches: Vec<_> = patches.into_iter().map(|p| Patch::new(p)).collect();
+        let mut patches: Vec<_> = patches.into_iter().map(Patch::new).collect();
         patches.sort_by_key(|p| p.index);
 
         let config_path = path.join("perf-config.json");
@@ -205,7 +205,7 @@ impl Benchmark {
         let iterations = iterations.unwrap_or(self.config.runs);
 
         let profiles: Vec<Profile> = profiles
-            .into_iter()
+            .iter()
             .copied()
             .filter(|profile| !self.config.excluded_profiles.contains(profile))
             .collect();
@@ -216,7 +216,7 @@ impl Benchmark {
         }
 
         let scenarios: Vec<Scenario> = scenarios
-            .into_iter()
+            .iter()
             .copied()
             .filter(|scenario| !self.config.excluded_scenarios.contains(scenario))
             .collect();
@@ -346,7 +346,7 @@ impl Benchmark {
                                     processor,
                                     Scenario::IncrPatched,
                                     &scenario_str,
-                                    Some(&patch),
+                                    Some(patch),
                                 )
                                 .run_rustc(true)?;
                         }
