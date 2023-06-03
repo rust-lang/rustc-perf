@@ -166,7 +166,7 @@ pub mod comparison {
 
         pub a: ArtifactDescription,
         pub b: ArtifactDescription,
-        pub comparisons: Vec<Comparison>,
+        pub compile_comparisons: Vec<CompileBenchmarkComparison>,
 
         pub new_errors: Vec<(String, String)>,
 
@@ -176,7 +176,7 @@ pub mod comparison {
         /// If `a` and `b` are adjacent artifacts (i.e., `a` is the parent of
         /// `b`).
         pub is_contiguous: bool,
-        pub benchmark_data: Vec<BenchmarkInfo>,
+        pub compile_benchmark_data: Vec<BenchmarkInfo>,
     }
 
     #[derive(Debug, Clone, Serialize)]
@@ -190,7 +190,7 @@ pub mod comparison {
 
     /// A serializable wrapper for `comparison::ArtifactData`.
     #[derive(Debug, Clone, Serialize)]
-    pub struct Comparison {
+    pub struct CompileBenchmarkComparison {
         pub benchmark: String,
         pub profile: String,
         pub scenario: String,

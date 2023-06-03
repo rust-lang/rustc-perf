@@ -189,7 +189,7 @@ async fn summarize_run(
 
     let (inst_primary, inst_secondary) = inst_comparison
         .clone()
-        .summarize_by_category(&benchmark_map);
+        .summarize_compile_by_category(&benchmark_map);
 
     let direction = inst_primary.direction().join(inst_secondary.direction());
     let overall_result = match direction {
@@ -262,7 +262,7 @@ async fn summarize_run(
             make_comparison_url(&commit, metric)
         ));
 
-        let (primary, secondary) = comparison.summarize_by_category(&benchmark_map);
+        let (primary, secondary) = comparison.summarize_compile_by_category(&benchmark_map);
         write_metric_summary(primary, secondary, visibility, &mut message);
     }
 

@@ -19,6 +19,7 @@ use std::error::Error;
 use std::fmt::Write;
 use std::hash::Hash;
 use std::iter;
+use std::ops::Deref;
 use std::sync::Arc;
 
 type BoxedError = Box<dyn Error + Send + Sync>;
@@ -110,7 +111,7 @@ pub async fn handle_triage(
             Some(summary_comparison) => {
                 let (primary, secondary) = summary_comparison
                     .clone()
-                    .summarize_by_category(&benchmark_map);
+                    .summarize_compile_by_category(&benchmark_map);
                 let mut result = String::from("**Summary**:\n\n");
                 write_summary_table(&primary, &secondary, true, &mut result);
                 result
@@ -140,12 +141,12 @@ pub async fn handle_compare(
     let prev = comparison.prev(master_commits);
     let next = comparison.next(master_commits);
     let is_contiguous = comparison.is_contiguous(&*conn, master_commits).await;
-    let benchmark_map = conn.get_compile_benchmarks().await;
+    let compile_benchmark_map = conn.get_compile_benchmarks().await;
 
-    let comparisons = comparison
-        .comparisons
+    let compile_comparisons = comparison
+        .compile_comparisons
         .into_iter()
-        .map(|comparison| api::comparison::Comparison {
+        .map(|comparison| api::comparison::CompileBenchmarkComparison {
             benchmark: comparison.benchmark.to_string(),
             profile: comparison.profile.to_string(),
             scenario: comparison.scenario.to_string(),
@@ -165,11 +166,11 @@ pub async fn handle_compare(
         prev,
         a: comparison.a.into(),
         b: comparison.b.into(),
-        comparisons,
+        compile_comparisons,
         new_errors,
         next,
         is_contiguous,
-        benchmark_data: benchmark_map
+        compile_benchmark_data: compile_benchmark_map
             .into_iter()
             .map(|bench| bench.into())
             .collect(),
@@ -181,7 +182,9 @@ async fn populate_report(
     benchmark_map: &HashMap<Benchmark, Category>,
     report: &mut HashMap<Direction, Vec<String>>,
 ) {
-    let (primary, secondary) = comparison.clone().summarize_by_category(&benchmark_map);
+    let (primary, secondary) = comparison
+        .clone()
+        .summarize_compile_by_category(&benchmark_map);
     // Get the combined direction of the primary and secondary summaries
     let direction = Direction::join(primary.direction(), secondary.direction());
     if direction == Direction::None {
@@ -337,7 +340,7 @@ pub struct ArtifactComparisonSummary {
 
 impl ArtifactComparisonSummary {
     /// Summarize a collection of `TestResultComparison`
-    pub fn summarize(comparisons: HashSet<TestResultComparison>) -> Self {
+    pub fn summarize(comparisons: Vec<TestResultComparison>) -> Self {
         let mut num_improvements = 0;
         let mut num_regressions = 0;
 
@@ -811,13 +814,15 @@ async fn compare_given_commits(
         .filter_map(|(test_case, a)| {
             statistics_for_b
                 .get(&test_case)
-                .map(|&b| TestResultComparison {
+                .map(|&b| CompileTestResultComparison {
                     benchmark: test_case.0,
                     profile: test_case.1,
                     scenario: test_case.2,
-                    metric,
-                    historical_data: historical_data.data.remove(&test_case),
-                    results: (a, b),
+                    comparison: TestResultComparison {
+                        metric,
+                        historical_data: historical_data.data.remove(&test_case),
+                        results: (a, b),
+                    },
                 })
         })
         .collect();
@@ -831,7 +836,7 @@ async fn compare_given_commits(
     Ok(Some(ArtifactComparison {
         a: ArtifactDescription::for_artifact(&*conn, a.clone(), master_commits).await,
         b: ArtifactDescription::for_artifact(&*conn, b.clone(), master_commits).await,
-        comparisons,
+        compile_comparisons: comparisons,
         newly_failed_benchmarks: errors_in_b.into_iter().collect(),
     }))
 }
@@ -978,8 +983,8 @@ impl From<ArtifactDescription> for api::comparison::ArtifactDescription {
 pub struct ArtifactComparison {
     pub a: ArtifactDescription,
     pub b: ArtifactDescription,
-    /// Test result comparisons between the two artifacts
-    pub comparisons: HashSet<TestResultComparison>,
+    /// Compile test result comparisons between the two artifacts
+    pub compile_comparisons: HashSet<CompileTestResultComparison>,
     /// A map from benchmark name to an error which occured when building `b` but not `a`.
     pub newly_failed_benchmarks: HashMap<String, String>,
 }
@@ -1014,17 +1019,30 @@ impl ArtifactComparison {
     }
 
     /// Splits an artifact comparison into primary and secondary summaries based on benchmark category
-    pub fn summarize_by_category(
+    pub fn summarize_compile_by_category(
         self,
         category_map: &HashMap<Benchmark, Category>,
     ) -> (ArtifactComparisonSummary, ArtifactComparisonSummary) {
-        let (primary, secondary) = self
-            .comparisons
+        let (primary, secondary): (
+            Vec<CompileTestResultComparison>,
+            Vec<CompileTestResultComparison>,
+        ) = self
+            .compile_comparisons
             .into_iter()
             .partition(|s| category_map.get(&s.benchmark()) == Some(&Category::Primary));
         (
-            ArtifactComparisonSummary::summarize(primary),
-            ArtifactComparisonSummary::summarize(secondary),
+            ArtifactComparisonSummary::summarize(
+                primary
+                    .into_iter()
+                    .map(|comparison| comparison.comparison)
+                    .collect(),
+            ),
+            ArtifactComparisonSummary::summarize(
+                secondary
+                    .into_iter()
+                    .map(|comparison| comparison.comparison)
+                    .collect(),
+            ),
         )
     }
 }
@@ -1190,9 +1208,6 @@ pub fn next_commit<'a>(
 // A single comparison between two test results
 #[derive(Debug, Clone)]
 pub struct TestResultComparison {
-    benchmark: Benchmark,
-    profile: Profile,
-    scenario: Scenario,
     metric: Metric,
     historical_data: Option<HistoricalData>,
     results: (f64, f64),
@@ -1202,10 +1217,6 @@ impl TestResultComparison {
     /// The amount of relative change considered significant when
     /// we cannot determine from historical data
     const DEFAULT_SIGNIFICANCE_THRESHOLD: f64 = 0.002;
-
-    pub fn benchmark(&self) -> Benchmark {
-        self.benchmark
-    }
 
     fn is_regression(&self) -> bool {
         let (a, b) = self.results;
@@ -1307,7 +1318,29 @@ impl TestResultComparison {
     }
 }
 
-impl cmp::PartialEq for TestResultComparison {
+#[derive(Debug, Clone)]
+pub struct CompileTestResultComparison {
+    benchmark: Benchmark,
+    profile: Profile,
+    scenario: Scenario,
+    comparison: TestResultComparison,
+}
+
+impl CompileTestResultComparison {
+    pub fn benchmark(&self) -> Benchmark {
+        self.benchmark
+    }
+}
+
+impl Deref for CompileTestResultComparison {
+    type Target = TestResultComparison;
+
+    fn deref(&self) -> &Self::Target {
+        &self.comparison
+    }
+}
+
+impl cmp::PartialEq for CompileTestResultComparison {
     fn eq(&self, other: &Self) -> bool {
         self.benchmark == other.benchmark
             && self.profile == other.profile
@@ -1315,9 +1348,9 @@ impl cmp::PartialEq for TestResultComparison {
     }
 }
 
-impl cmp::Eq for TestResultComparison {}
+impl cmp::Eq for CompileTestResultComparison {}
 
-impl std::hash::Hash for TestResultComparison {
+impl std::hash::Hash for CompileTestResultComparison {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.benchmark.hash(state);
         self.profile.hash(state);
@@ -1478,9 +1511,6 @@ mod tests {
     use super::*;
 
     use collector::benchmark::category::Category;
-    use std::collections::HashSet;
-
-    use database::{Profile, Scenario};
 
     #[test]
     fn summary_table_only_regressions_primary() {
@@ -1672,19 +1702,16 @@ mod tests {
 
     // (category, before, after)
     fn check_table(values: Vec<(Category, f64, f64)>, expected: &str) {
-        let mut primary_comparisons = HashSet::new();
-        let mut secondary_comparisons = HashSet::new();
-        for (index, (category, before, after)) in values.into_iter().enumerate() {
+        let mut primary_comparisons = Vec::new();
+        let mut secondary_comparisons = Vec::new();
+        for (category, before, after) in values.into_iter() {
             let target = if category == Category::Primary {
                 &mut primary_comparisons
             } else {
                 &mut secondary_comparisons
             };
 
-            target.insert(TestResultComparison {
-                benchmark: index.to_string().as_str().into(),
-                profile: Profile::Check,
-                scenario: Scenario::Empty,
+            target.push(TestResultComparison {
                 metric: Metric::InstructionsUser,
                 historical_data: None,
                 results: (before, after),
