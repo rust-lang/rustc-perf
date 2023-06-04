@@ -65,6 +65,8 @@ id          name        date        type
 
 A "collection" of benchmarks tied only differing by the statistic collected.
 
+This corresponds to a [`test result`](../docs/glossary.md#testing).
+
 This is a way to collect statistics together signifying that they belong to the same logical benchmark run.
 
 Currently, the collection also marks the git sha of the currently running collector binary.
@@ -124,6 +126,8 @@ of a crate, profile, scenario and the metric being collected.
 * profile: what type of compilation is happening - check build, optimized build (a.k.a. release build), debug build, or doc build.
 * cache (aka `scenario`): describes how much of the incremental cache is full. An empty incremental cache means that the compiler must do a full build.
 * statistic (aka `metric`): the type of metric being collected
+
+This corresponds to a [`statistic description`](../docs/glossary.md).
 
 There is a separate table for this collection to avoid duplicating crates, prfiles, scenarios etc.
 many times in the `pstat` table.
