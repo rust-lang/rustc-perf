@@ -524,9 +524,6 @@ mod index_serde {
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum DbLabel {
-    Errors {
-        benchmark: Benchmark,
-    },
     StatisticDescription {
         benchmark: Benchmark,
         profile: Profile,
@@ -544,7 +541,6 @@ impl Lookup for DbLabel {
     type Id = u32;
     fn lookup(&self, index: &Index) -> Option<Self::Id> {
         match self {
-            DbLabel::Errors { benchmark } => index.errors.get(benchmark),
             DbLabel::StatisticDescription {
                 benchmark,
                 profile,
