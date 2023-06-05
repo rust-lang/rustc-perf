@@ -1,4 +1,4 @@
-use database::{CompileBenchmark, Lookup, Pool};
+use database::{CompileBenchmark, Pool};
 use hashbrown::HashMap;
 use std::collections::HashSet;
 
@@ -45,7 +45,8 @@ async fn main() {
         let sqlite_aid = sqlite_conn.artifact_id(&aid).await;
         let postgres_aid = postgres_conn.artifact_id(&aid).await;
 
-        for &(benchmark, profile, scenario, metric) in sqlite_idx.all_statistic_descriptions() {
+        for (&(benchmark, profile, scenario, metric), id) in sqlite_idx.all_statistic_descriptions()
+        {
             if benchmarks.insert(benchmark) {
                 postgres_conn
                     .record_compile_benchmark(
@@ -55,15 +56,6 @@ async fn main() {
                     )
                     .await;
             }
-
-            let id = database::DbLabel::StatisticDescription {
-                benchmark,
-                profile,
-                scenario,
-                metric,
-            }
-            .lookup(&sqlite_idx)
-            .unwrap();
 
             let stat = sqlite_conn
                 .get_pstats(&[id], &[Some(sqlite_aid)])

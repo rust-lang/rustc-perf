@@ -563,6 +563,8 @@ impl Lookup for ArtifactId {
     }
 }
 
+pub type StatisticalDescriptionId = u32;
+
 impl Index {
     pub async fn load(conn: &mut dyn pool::Connection) -> Index {
         conn.load_index().await
@@ -613,8 +615,16 @@ impl Index {
     // for it as keeping indices around would be annoying.
     pub fn all_statistic_descriptions(
         &self,
-    ) -> impl Iterator<Item = &'_ (Benchmark, Profile, Scenario, Metric)> + '_ {
-        self.pstat_series.map.keys()
+    ) -> impl Iterator<
+        Item = (
+            &(Benchmark, Profile, Scenario, Metric),
+            StatisticalDescriptionId,
+        ),
+    > + '_ {
+        self.pstat_series
+            .map
+            .iter()
+            .map(|(test_case, &row_id)| (test_case, row_id))
     }
 
     pub fn artifact_id_for_commit(&self, commit: &str) -> Option<ArtifactId> {

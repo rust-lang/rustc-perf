@@ -274,7 +274,7 @@ impl StatisticSeries {
         let index = ctxt.index.load();
         let mut statistic_descriptions = index
             .all_statistic_descriptions()
-            .filter(|&&(b, p, s, m)| {
+            .filter(|(&(b, p, s, m), _)| {
                 query.benchmark.matches(b)
                     && query.profile.matches(p)
                     && query.scenario.matches(s)
@@ -284,18 +284,7 @@ impl StatisticSeries {
 
         statistic_descriptions.sort_unstable();
 
-        let sids = statistic_descriptions
-            .iter()
-            .map(|&&(b, p, s, m)| {
-                let query = crate::db::DbLabel::StatisticDescription {
-                    benchmark: b,
-                    profile: p,
-                    scenario: s,
-                    metric: m,
-                };
-                query.lookup(&index).unwrap()
-            })
-            .collect::<Vec<_>>();
+        let sids: Vec<_> = statistic_descriptions.iter().map(|(_, sid)| *sid).collect();
         let aids = artifact_ids
             .iter()
             .map(|aid| aid.lookup(&index))
@@ -312,7 +301,7 @@ impl StatisticSeries {
             .into_iter()
             .zip(&statistic_descriptions)
             .filter(|(points, _)| points.iter().any(|value| value.is_some()))
-            .map(|(points, &&(benchmark, profile, scenario, metric))| {
+            .map(|(points, (&(benchmark, profile, scenario, metric), _))| {
                 SeriesResponse {
                     series: StatisticSeries {
                         artifact_ids: ArtifactIdIter::new(artifact_ids.clone()),
