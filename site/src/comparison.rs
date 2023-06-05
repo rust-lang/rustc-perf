@@ -6,7 +6,7 @@ use crate::api;
 use crate::db::{ArtifactId, Benchmark, Lookup, Profile, Scenario};
 use crate::github;
 use crate::load::SiteCtxt;
-use crate::selector::{self};
+use crate::selector::{self, CompileBenchmarkQuery, CompileTestCase, TestCase};
 
 use collector::benchmark::category::Category;
 use collector::Bound;
@@ -798,27 +798,28 @@ async fn compare_given_commits(
     let aids = Arc::new(vec![a.clone(), b.clone()]);
 
     // get all crates, cache, and profile combinations for the given metric
-    let query = selector::CompileBenchmarkQuery::all_for_metric(metric);
+    let query = CompileBenchmarkQuery::all_for_metric(metric);
 
     // `responses` contains series iterators. The first element in the iterator is the data
     // for `a` and the second is the data for `b`
-    let mut responses = ctxt.compile_statistic_series(query, aids).await?;
+    let mut responses = ctxt.compile_statistic_series(query.clone(), aids).await?;
 
     let conn = ctxt.conn().await;
     let statistics_for_a = statistics_from_series(&mut responses);
     let statistics_for_b = statistics_from_series(&mut responses);
 
     let mut historical_data =
-        HistoricalDataMap::calculate(ctxt, a.clone(), master_commits, metric).await?;
+        HistoricalDataMap::<CompileTestCase>::calculate(ctxt, a.clone(), master_commits, query)
+            .await?;
     let comparisons = statistics_for_a
         .into_iter()
         .filter_map(|(test_case, a)| {
             statistics_for_b
                 .get(&test_case)
                 .map(|&b| CompileTestResultComparison {
-                    benchmark: test_case.0,
-                    profile: test_case.1,
-                    scenario: test_case.2,
+                    benchmark: test_case.benchmark,
+                    profile: test_case.profile,
+                    scenario: test_case.scenario,
                     comparison: TestResultComparison {
                         metric,
                         historical_data: historical_data.data.remove(&test_case),
@@ -877,8 +878,7 @@ pub struct ArtifactDescription {
     pub bootstrap_total: u64,
 }
 
-type StatisticsMap = HashMap<TestCase, f64>;
-type TestCase = (Benchmark, Profile, Scenario);
+type StatisticsMap<TestCase> = HashMap<TestCase, f64>;
 
 impl ArtifactDescription {
     /// For the given `ArtifactId`, consume the first datapoint in each of the given `SeriesResponse`
@@ -939,11 +939,13 @@ impl ArtifactDescription {
     }
 }
 
-fn statistics_from_series<T>(series: &mut [selector::SeriesResponse<T>]) -> StatisticsMap
+fn statistics_from_series<Case: TestCase, T>(
+    series: &mut [selector::SeriesResponse<Case, T>],
+) -> StatisticsMap<Case>
 where
     T: Iterator<Item = (ArtifactId, Option<f64>)>,
 {
-    let mut stats: StatisticsMap = HashMap::new();
+    let mut stats: StatisticsMap<Case> = HashMap::new();
     for response in series {
         let (_, point) = response.series.next().expect("must have element");
 
@@ -952,14 +954,7 @@ where
         } else {
             continue;
         };
-        stats.insert(
-            (
-                response.key.benchmark,
-                response.key.profile,
-                response.key.scenario,
-            ),
-            value,
-        );
+        stats.insert(response.test_case.clone(), value);
     }
     stats
 }
@@ -1053,19 +1048,19 @@ impl ArtifactComparison {
 }
 
 /// The historical data for a certain benchmark
-pub struct HistoricalDataMap {
+pub struct HistoricalDataMap<TestCase> {
     /// Historical data on a per test case basis
-    pub data: HashMap<(Benchmark, Profile, Scenario), HistoricalData>,
+    pub data: HashMap<TestCase, HistoricalData>,
 }
 
-impl HistoricalDataMap {
+impl HistoricalDataMap<CompileTestCase> {
     const NUM_PREVIOUS_COMMITS: usize = 30;
 
     async fn calculate(
         ctxt: &SiteCtxt,
         from: ArtifactId,
         master_commits: &[collector::MasterCommit],
-        metric: Metric,
+        query: CompileBenchmarkQuery,
     ) -> Result<Self, BoxedError> {
         let mut historical_data = HashMap::new();
 
@@ -1082,16 +1077,13 @@ impl HistoricalDataMap {
             });
         }
 
-        // get all crates, cache, and profile combinations for the given metric
-        let query = selector::CompileBenchmarkQuery::all_for_metric(metric);
-
         let mut previous_commit_series = ctxt
             .compile_statistic_series(query, previous_commits.clone())
             .await?;
 
         for _ in previous_commits.iter() {
-            for (test_case, stat) in statistics_from_series(&mut previous_commit_series) {
-                historical_data.entry(test_case).or_default().push(stat);
+            for (key, stat) in statistics_from_series(&mut previous_commit_series) {
+                historical_data.entry(key).or_default().push(stat);
             }
         }
 

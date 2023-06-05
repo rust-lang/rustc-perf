@@ -30,6 +30,7 @@ use database::{Benchmark, Commit, Index, Lookup};
 
 use crate::comparison::Metric;
 use std::fmt;
+use std::hash::Hash;
 use std::ops::RangeInclusive;
 use std::sync::Arc;
 
@@ -158,21 +159,28 @@ impl<T> Selector<T> {
     }
 }
 
+/// Represents the parameters of a single benchmark execution that collects a set of statistics.
+pub trait TestCase: std::fmt::Debug + Clone + Hash + Eq + PartialEq {}
+
 #[derive(Debug)]
-pub struct SeriesResponse<T> {
-    pub key: CompileBenchmarkKey,
+pub struct SeriesResponse<Case, T> {
+    pub test_case: Case,
     pub series: T,
 }
 
-impl<T> SeriesResponse<T> {
-    pub fn map<U>(self, m: impl FnOnce(T) -> U) -> SeriesResponse<U> {
+impl<TestCase, T> SeriesResponse<TestCase, T> {
+    pub fn map<U>(self, m: impl FnOnce(T) -> U) -> SeriesResponse<TestCase, U> {
+        let SeriesResponse {
+            test_case: key,
+            series,
+        } = self;
         SeriesResponse {
-            key: self.key,
-            series: m(self.series),
+            test_case: key,
+            series: m(series),
         }
     }
 
-    pub fn interpolate(self) -> SeriesResponse<Interpolate<T>>
+    pub fn interpolate(self) -> SeriesResponse<TestCase, Interpolate<T>>
     where
         T: Iterator,
         T::Item: crate::db::Point,
@@ -231,19 +239,21 @@ impl Default for CompileBenchmarkQuery {
     }
 }
 
-#[derive(Debug)]
-pub struct CompileBenchmarkKey {
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct CompileTestCase {
     pub benchmark: Benchmark,
     pub profile: Profile,
     pub scenario: Scenario,
 }
+
+impl TestCase for CompileTestCase {}
 
 impl SiteCtxt {
     pub async fn compile_statistic_series(
         &self,
         query: CompileBenchmarkQuery,
         artifact_ids: Arc<Vec<ArtifactId>>,
-    ) -> Result<Vec<SeriesResponse<StatisticSeries>>, String> {
+    ) -> Result<Vec<SeriesResponse<CompileTestCase, StatisticSeries>>, String> {
         StatisticSeries::execute_compile_query(artifact_ids, self, query).await
     }
 }
@@ -258,7 +268,7 @@ impl StatisticSeries {
         artifact_ids: Arc<Vec<ArtifactId>>,
         ctxt: &SiteCtxt,
         query: CompileBenchmarkQuery,
-    ) -> Result<Vec<SeriesResponse<Self>>, String> {
+    ) -> Result<Vec<SeriesResponse<CompileTestCase, Self>>, String> {
         let dumped = format!("{:?}", query);
 
         let index = ctxt.index.load();
@@ -318,7 +328,7 @@ impl StatisticSeries {
                             points.into_iter()
                         },
                     },
-                    key: CompileBenchmarkKey {
+                    test_case: CompileTestCase {
                         benchmark,
                         profile,
                         scenario,
