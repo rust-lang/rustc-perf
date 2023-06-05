@@ -1,6 +1,6 @@
 body {
     font-family: monospace;
-    margin: 3em auto;
+    margin: 2em auto;
 }
 p {
     margin-top: 1.2em;
@@ -70,10 +70,16 @@ img {
   border: 0;
 }
 .container {
-  padding-right: 4em;
-  padding-left: 4em;
+  padding-right: 1em;
+  padding-left: 1em;
   margin-right: auto;
   margin-left: auto;
+}
+@media (min-width: 600px) {
+    .container {
+        padding-right: 4em;
+        padding-left: 4em;
+    }
 }
 
 #as-of {
