@@ -288,7 +288,7 @@ fn parse_published_artifact_tag(line: &str) -> Option<String> {
         static ref VERSION_REGEX: Regex = Regex::new(r"(\d+\.\d+.\d+)").unwrap();
     }
 
-    let mut parts = line.rsplit("/").into_iter();
+    let mut parts = line.rsplit('/');
     let name = parts.next();
     let date = parts.next();
 
@@ -459,7 +459,7 @@ fn sort_queue(
 }
 
 // Copy of Iterator::partition_in_place, which is currently unstable.
-fn partition_in_place<'a, I, T: 'a, P>(mut iter: I, ref mut predicate: P) -> usize
+fn partition_in_place<'a, I, T: 'a, P>(mut iter: I, mut predicate: P) -> usize
 where
     I: Sized + DoubleEndedIterator<Item = &'a mut T>,
     P: FnMut(&T) -> bool,
@@ -488,8 +488,8 @@ where
 
     // Repeatedly find the first `false` and swap it with the last `true`.
     let mut true_count = 0;
-    while let Some(head) = iter.find(is_false(predicate, &mut true_count)) {
-        if let Some(tail) = iter.rfind(is_true(predicate)) {
+    while let Some(head) = iter.find(is_false(&mut predicate, &mut true_count)) {
+        if let Some(tail) = iter.rfind(is_true(&mut predicate)) {
             std::mem::swap(head, tail);
             true_count += 1;
         } else {

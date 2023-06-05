@@ -1,3 +1,5 @@
+#![allow(clippy::type_complexity)]
+
 use arc_swap::ArcSwap;
 use bumpalo::Bump;
 use hashbrown::HashSet;
@@ -8,6 +10,7 @@ use std::ptr;
 use std::ptr::NonNull;
 use std::sync::Arc;
 
+#[allow(clippy::missing_safety_doc)]
 pub trait InternString {
     unsafe fn to_interned(s: ArenaStr) -> Self;
 }
@@ -188,9 +191,9 @@ pub fn intern<T: InternString>(value: &str) -> T {
 #[serde(into = "&'static str")]
 pub struct ArenaStr(NonNull<u8>);
 
-impl Into<&'static str> for ArenaStr {
-    fn into(self) -> &'static str {
-        self.as_str()
+impl From<ArenaStr> for &'static str {
+    fn from(val: ArenaStr) -> Self {
+        val.as_str()
     }
 }
 

@@ -104,8 +104,8 @@ impl Migration {
     fn execute(&self, conn: &mut rusqlite::Connection, migration_id: i32) {
         if self.foreign_key_constraints_enabled {
             let tx = conn.transaction().unwrap();
-            tx.execute_batch(&self.sql).unwrap();
-            tx.pragma_update(None, "user_version", &migration_id)
+            tx.execute_batch(self.sql).unwrap();
+            tx.pragma_update(None, "user_version", migration_id)
                 .unwrap();
             tx.commit().unwrap();
             return;
@@ -115,7 +115,7 @@ impl Migration {
         // from the section titled, "Making Other Kinds Of Table Schema Changes".
 
         // 1.  If foreign key constraints are enabled, disable them using PRAGMA foreign_keys=OFF.
-        conn.pragma_update(None, "foreign_keys", &"OFF").unwrap();
+        conn.pragma_update(None, "foreign_keys", "OFF").unwrap();
 
         // 2.  Start a transaction.
         let tx = conn.transaction().unwrap();
@@ -145,7 +145,7 @@ impl Migration {
         // 9.  If any views refer to table X in a way that is affected by the schema change, then
         //     drop those views using DROP VIEW and recreate them with whatever changes are
         //     necessary to accommodate the schema change using CREATE VIEW.
-        tx.execute_batch(&self.sql).unwrap();
+        tx.execute_batch(self.sql).unwrap();
 
         // 10. If foreign key constraints were originally enabled then run PRAGMA foreign_key_check
         //     to verify that the schema change did not break any foreign key constraints.
@@ -178,14 +178,14 @@ impl Migration {
         })
         .unwrap();
 
-        tx.pragma_update(None, "user_version", &migration_id)
+        tx.pragma_update(None, "user_version", migration_id)
             .unwrap();
 
         // 11. Commit the transaction started in step 2.
         tx.commit().unwrap();
 
         // 12. If foreign keys constraints were originally enabled, reenable them now.
-        conn.pragma_update(None, "foreign_keys", &"ON").unwrap();
+        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
     }
 }
 
@@ -349,9 +349,9 @@ impl ConnectionManager for Sqlite {
     type Connection = Mutex<rusqlite::Connection>;
     async fn open(&self) -> Self::Connection {
         let mut conn = rusqlite::Connection::open(&self.0).unwrap();
-        conn.pragma_update(None, "cache_size", &-128000).unwrap();
-        conn.pragma_update(None, "journal_mode", &"WAL").unwrap();
-        conn.pragma_update(None, "foreign_keys", &"ON").unwrap();
+        conn.pragma_update(None, "cache_size", -128000).unwrap();
+        conn.pragma_update(None, "journal_mode", "WAL").unwrap();
+        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
 
         self.1.call_once(|| {
             let version: i32 = conn
@@ -361,8 +361,8 @@ impl ConnectionManager for Sqlite {
                     |row| row.get(0),
                 )
                 .unwrap();
-            for mid in (version as usize + 1)..MIGRATIONS.len() {
-                MIGRATIONS[mid].execute(&mut conn, mid as i32);
+            for (mid, migration) in MIGRATIONS.iter().enumerate().skip(version as usize + 1) {
+                migration.execute(&mut conn, mid as i32);
             }
         });
 
@@ -439,7 +439,7 @@ impl Connection for SqliteConnection {
                             let timestamp: Option<i64> = row.get(2)?;
                             match timestamp {
                                 Some(t) => Date(Utc.timestamp_opt(t, 0).unwrap()),
-                                None => Date(Utc.with_ymd_and_hms(2001, 01, 01, 0, 0, 0).unwrap()),
+                                None => Date(Utc.with_ymd_and_hms(2001, 1, 1, 0, 0, 0).unwrap()),
                             }
                         },
                         r#type: CommitType::from_str(&row.get::<_, String>(3)?).unwrap(),
@@ -957,7 +957,7 @@ impl Connection for SqliteConnection {
                     date: date
                         .map(|d| Utc.timestamp_opt(d, 0).unwrap())
                         .map(Date)
-                        .unwrap_or_else(|| Date::ymd_hms(2001, 01, 01, 0, 0, 0)),
+                        .unwrap_or_else(|| Date::ymd_hms(2001, 1, 1, 0, 0, 0)),
                     r#type: CommitType::from_str(&ty).unwrap(),
                 }),
                 "release" => ArtifactId::Tag(name),
@@ -1087,7 +1087,7 @@ impl Connection for SqliteConnection {
     }
 
     async fn get_bootstrap(&self, aids: &[ArtifactIdNumber]) -> Vec<Option<Duration>> {
-        aids.into_iter()
+        aids.iter()
             .map(|aid| {
                 self.raw_ref()
                     .prepare(

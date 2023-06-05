@@ -2,7 +2,7 @@ import {
   BenchmarkMap,
   Category,
   CompareResponse,
-  Comparison,
+  CompileBenchmarkComparison,
   DataFilter,
   Profile,
 } from "./types";
@@ -86,8 +86,8 @@ export function computeTestCasesWithNonRelevant(
     );
   }
 
-  let testCases = data.comparisons
-    .map((c: Comparison): TestCase => {
+  let testCases = data.compile_comparisons
+    .map((c: CompileBenchmarkComparison): TestCase => {
       const datumA = c.statistics[0];
       const datumB = c.statistics[1];
       const percent = 100 * ((datumB - datumA) / datumA);
@@ -191,7 +191,7 @@ export function computeBenchmarkMap(
   if (data === null) return {};
 
   const benchmarks = {};
-  for (const benchmark of data.benchmark_data) {
+  for (const benchmark of data.compile_benchmark_data) {
     benchmarks[benchmark.name] = {
       category: benchmark.category,
     };

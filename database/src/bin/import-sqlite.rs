@@ -77,7 +77,7 @@ async fn main() {
                     .record_statistic(
                         cid,
                         postgres_aid,
-                        &benchmark.to_string(),
+                        &benchmark,
                         profile,
                         scenario,
                         metric.as_str(),

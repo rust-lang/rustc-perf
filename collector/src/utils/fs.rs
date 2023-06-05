@@ -97,7 +97,7 @@ pub fn get_file_count_and_size(path: &Path) -> std::io::Result<(u64, u64)> {
     let (count, size) = if path.is_dir() {
         let mut file_count = 0;
         let mut total_size = 0;
-        for entry in fs::read_dir(&path)? {
+        for entry in fs::read_dir(path)? {
             let path = entry?.path();
             let (count, size) = get_file_count_and_size(&path)?;
             file_count += count;

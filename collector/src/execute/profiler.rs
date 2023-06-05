@@ -101,7 +101,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
             // post-process them with `summarize`, `flamegraph`, and `crox` to
             // produce several data files in the output dir.
             Profiler::SelfProfile => {
-                let tmp_zsp_dir = filepath(data.cwd.as_ref(), "Zsp");
+                let tmp_zsp_dir = filepath(data.cwd, "Zsp");
                 let zsp_dir = filepath(self.output_dir, &out_file("Zsp"));
                 let zsp_files_prefix = filepath(&zsp_dir, "Zsp");
                 let summarize_file = filepath(self.output_dir, &out_file("summarize"));
@@ -140,8 +140,8 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 let mut summarize_cmd = Command::new("summarize");
                 summarize_cmd.arg("summarize").arg(&zsp_files_prefix);
                 fs::write(
-                    &summarize_file,
-                    &summarize_cmd.output().context("summarize")?.stdout,
+                    summarize_file,
+                    summarize_cmd.output().context("summarize")?.stdout,
                 )?;
 
                 // Run `flamegraph`.
@@ -161,10 +161,10 @@ impl<'a> Processor for ProfileProcessor<'a> {
             // We copy it from the temp dir to the output dir, giving it a new
             // name in the process.
             Profiler::PerfRecord => {
-                let tmp_perf_file = filepath(data.cwd.as_ref(), "perf");
+                let tmp_perf_file = filepath(data.cwd, "perf");
                 let perf_file = filepath(self.output_dir, &out_file("perf"));
 
-                fs::copy(&tmp_perf_file, &perf_file)?;
+                fs::copy(tmp_perf_file, perf_file)?;
             }
 
             // OProfile produces (via rustc-fake) a data directory called
@@ -172,7 +172,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
             // giving it a new name in the process, and then post-process it
             // twice to produce another two data files in the output dir.
             Profiler::Oprofile => {
-                let tmp_opout_dir = filepath(data.cwd.as_ref(), "oprofile_data");
+                let tmp_opout_dir = filepath(data.cwd, "oprofile_data");
                 let opout_dir = filepath(self.output_dir, &out_file("opout"));
                 let oprep_file = filepath(self.output_dir, &out_file("oprep"));
                 let opann_file = filepath(self.output_dir, &out_file("opann"));
@@ -181,7 +181,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 if opout_dir.exists() {
                     fs::remove_dir_all(&opout_dir)?;
                 }
-                utils::fs::rename(&tmp_opout_dir, &opout_dir)?;
+                utils::fs::rename(tmp_opout_dir, &opout_dir)?;
 
                 let mut session_dir_arg = "--session-dir=".to_string();
                 session_dir_arg.push_str(opout_dir.to_str().unwrap());
@@ -195,7 +195,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
                     .arg("--threshold")
                     .arg("0.5")
                     .arg(&session_dir_arg);
-                fs::write(oprep_file, &op_report_cmd.output()?.stdout)?;
+                fs::write(oprep_file, op_report_cmd.output()?.stdout)?;
 
                 let mut op_annotate_cmd = Command::new("opannotate");
                 // Other possibly useful args: --assembly
@@ -204,17 +204,17 @@ impl<'a> Processor for ProfileProcessor<'a> {
                     .arg("--threshold")
                     .arg("0.5")
                     .arg(&session_dir_arg);
-                fs::write(opann_file, &op_annotate_cmd.output()?.stdout)?;
+                fs::write(opann_file, op_annotate_cmd.output()?.stdout)?;
             }
 
             // Samply produces (via rustc-fake) a data file called
             // `profile.json`. We copy it from the temp dir to the output dir,
             // giving it a new name in the process.
             Profiler::Samply => {
-                let tmp_samply_file = filepath(data.cwd.as_ref(), "profile.json");
+                let tmp_samply_file = filepath(data.cwd, "profile.json");
                 let samply_file = filepath(self.output_dir, &out_file("samply"));
 
-                fs::copy(&tmp_samply_file, &samply_file)?;
+                fs::copy(tmp_samply_file, samply_file)?;
             }
 
             // Cachegrind produces (via rustc-fake) a data file called `cgout`.
@@ -222,7 +222,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
             // name in the process, and then post-process it to produce another
             // data file in the output dir.
             Profiler::Cachegrind => {
-                let tmp_cgout_file = filepath(data.cwd.as_ref(), "cgout");
+                let tmp_cgout_file = filepath(data.cwd, "cgout");
                 let cgout_file = filepath(self.output_dir, &out_file("cgout"));
                 let cgann_file = filepath(self.output_dir, &out_file("cgann"));
 
@@ -272,7 +272,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
                     .arg("--auto=yes")
                     .arg("--show-percs=yes")
                     .arg(&cgout_file);
-                fs::write(cgann_file, &cg_annotate_cmd.output()?.stdout)?;
+                fs::write(cgann_file, cg_annotate_cmd.output()?.stdout)?;
             }
 
             // Callgrind produces (via rustc-fake) a data file called `clgout`.
@@ -280,55 +280,55 @@ impl<'a> Processor for ProfileProcessor<'a> {
             // name in the process, and then post-process it to produce another
             // data file in the output dir.
             Profiler::Callgrind => {
-                let tmp_clgout_file = filepath(data.cwd.as_ref(), "clgout");
+                let tmp_clgout_file = filepath(data.cwd, "clgout");
                 let clgout_file = filepath(self.output_dir, &out_file("clgout"));
                 let clgann_file = filepath(self.output_dir, &out_file("clgann"));
 
-                fs::copy(&tmp_clgout_file, &clgout_file)?;
+                fs::copy(tmp_clgout_file, &clgout_file)?;
 
                 let mut clg_annotate_cmd = Command::new("callgrind_annotate");
                 clg_annotate_cmd
                     .arg("--auto=yes")
                     .arg("--show-percs=yes")
                     .arg(&clgout_file);
-                fs::write(clgann_file, &clg_annotate_cmd.output()?.stdout)?;
+                fs::write(clgann_file, clg_annotate_cmd.output()?.stdout)?;
             }
 
             // DHAT produces (via rustc-fake) a data file called `dhout`. We
             // copy it from the temp dir to the output dir, giving it a new
             // name in the process.
             Profiler::Dhat => {
-                let tmp_dhout_file = filepath(data.cwd.as_ref(), "dhout");
+                let tmp_dhout_file = filepath(data.cwd, "dhout");
                 let dhout_file = filepath(self.output_dir, &out_file("dhout"));
 
-                fs::copy(&tmp_dhout_file, &dhout_file)?;
+                fs::copy(tmp_dhout_file, dhout_file)?;
             }
 
             // DHAT (in copy mode) produces (via rustc-fake) a data file called
             // `dhcopy`. We copy it from the temp dir to the output dir, giving
             // it a new name in the process.
             Profiler::DhatCopy => {
-                let tmp_dhcopy_file = filepath(data.cwd.as_ref(), "dhcopy");
+                let tmp_dhcopy_file = filepath(data.cwd, "dhcopy");
                 let dhcopy_file = filepath(self.output_dir, &out_file("dhcopy"));
 
-                fs::copy(&tmp_dhcopy_file, &dhcopy_file)?;
+                fs::copy(tmp_dhcopy_file, dhcopy_file)?;
             }
 
             // Massif produces (via rustc-fake) a data file called `msout`. We
             // copy it from the temp dir to the output dir, giving it a new
             // name in the process.
             Profiler::Massif => {
-                let tmp_msout_file = filepath(data.cwd.as_ref(), "msout");
+                let tmp_msout_file = filepath(data.cwd, "msout");
                 let msout_file = filepath(self.output_dir, &out_file("msout"));
 
-                fs::copy(&tmp_msout_file, &msout_file)?;
+                fs::copy(tmp_msout_file, msout_file)?;
             }
 
             // Bytehound produces (via rustc-fake) a data file called
             // `bytehound.dat`. We copy it from the temp dir to the output dir, giving
             // it a new name in the process.
             Profiler::Bytehound => {
-                let tmp_bytehound_file = filepath(data.cwd.as_ref(), "bytehound.dat");
+                let tmp_bytehound_file = filepath(data.cwd, "bytehound.dat");
                 let target_file = filepath(self.output_dir, &out_file("bhout"));
                 fs::copy(tmp_bytehound_file, target_file)?;
             }
@@ -337,7 +337,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
             // called `eprintln`. We copy it from the temp dir to the output
             // dir, giving it a new name in the process.
             Profiler::Eprintln => {
-                let tmp_eprintln_file = filepath(data.cwd.as_ref(), "eprintln");
+                let tmp_eprintln_file = filepath(data.cwd, "eprintln");
                 let eprintln_file = filepath(self.output_dir, &out_file("eprintln"));
 
                 let mut final_file = io::BufWriter::new(std::fs::File::create(&eprintln_file)?);
@@ -359,7 +359,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
             // called `mono-items`. We copy it from the temp dir to the output
             // dir, giving it a new name in the process.
             Profiler::MonoItems => {
-                let tmp_file = filepath(data.cwd.as_ref(), "mono-items");
+                let tmp_file = filepath(data.cwd, "mono-items");
                 let out_dir = self.output_dir.join(&out_file("mono-items"));
                 let _ = fs::create_dir_all(&out_dir);
                 let result_file = filepath(&out_dir, "raw");
@@ -382,7 +382,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
                     };
 
                     for cgu in cgus.split(' ') {
-                        let cgu_name_end = cgu.rfind('[').expect(&cgu);
+                        let cgu_name_end = cgu.rfind('[').expect(cgu);
                         let cgu_name = &cgu[..cgu_name_end];
                         let linkage = &cgu[cgu_name_end + 1..cgu.len() - 1];
                         by_cgu.entry(cgu_name).or_default().push((name, linkage));
@@ -401,24 +401,24 @@ impl<'a> Processor for ProfileProcessor<'a> {
             }
 
             Profiler::DepGraph => {
-                let tmp_file = filepath(data.cwd.as_ref(), "dep_graph.txt");
+                let tmp_file = filepath(data.cwd, "dep_graph.txt");
                 let output =
                     filepath(self.output_dir, &out_file("dep-graph")).with_extension("txt");
 
-                fs::copy(&tmp_file, &output)?;
+                fs::copy(tmp_file, output)?;
 
-                let tmp_file = filepath(data.cwd.as_ref(), "dep_graph.dot");
+                let tmp_file = filepath(data.cwd, "dep_graph.dot");
                 let output =
                     filepath(self.output_dir, &out_file("dep-graph")).with_extension("dot");
 
                 // May not exist if not incremental, but then that's OK.
-                fs::copy(&tmp_file, &output)?;
+                fs::copy(tmp_file, output)?;
             }
 
             Profiler::LlvmIr => {
-                let tmp_file = filepath(data.cwd.as_ref(), "llvm-ir");
+                let tmp_file = filepath(data.cwd, "llvm-ir");
                 let output = filepath(self.output_dir, &out_file("llir"));
-                fs::copy(&tmp_file, &output)?;
+                fs::copy(tmp_file, output)?;
             }
 
             // `cargo llvm-lines` writes its output to stdout. We copy that
@@ -426,7 +426,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
             Profiler::LlvmLines => {
                 let ll_file = filepath(self.output_dir, &out_file("ll"));
 
-                fs::write(ll_file, &output.stdout)?;
+                fs::write(ll_file, output.stdout)?;
             }
         }
         Ok(Retry::No)

@@ -94,7 +94,7 @@ impl<'de> Deserialize<'de> for Bound {
 
                 let bound = value
                     .parse::<chrono::NaiveDate>()
-                    .map(|d| Bound::Date(d))
+                    .map(Bound::Date)
                     .unwrap_or(Bound::Commit(value.to_string()));
                 Ok(bound)
             }
@@ -116,7 +116,7 @@ where
 }
 
 pub fn version_supports_doc(version_str: &str) -> bool {
-    if let Some(version) = version_str.parse::<semver::Version>().ok() {
+    if let Ok(version) = version_str.parse::<semver::Version>() {
         version >= semver::Version::new(1, 46, 0)
     } else {
         assert!(version_str.starts_with("beta") || version_str.starts_with("master"));
@@ -125,7 +125,7 @@ pub fn version_supports_doc(version_str: &str) -> bool {
 }
 
 pub fn version_supports_incremental(version_str: &str) -> bool {
-    if let Some(version) = version_str.parse::<semver::Version>().ok() {
+    if let Ok(version) = version_str.parse::<semver::Version>() {
         version >= semver::Version::new(1, 24, 0)
     } else {
         assert!(version_str.starts_with("beta") || version_str.starts_with("master"));

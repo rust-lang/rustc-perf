@@ -43,7 +43,7 @@ impl std::str::FromStr for Date {
             Ok(value) => Ok(Date(value.with_timezone(&Utc))),
             Err(error) => Err(DateParseError {
                 input: s.to_string(),
-                format: format!("RFC 3339"),
+                format: "RFC 3339".to_string(),
                 error,
             }),
         }
@@ -199,7 +199,7 @@ impl Eq for Commit {}
 
 impl PartialOrd for Commit {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(&other))
+        Some(self.cmp(other))
     }
 }
 
@@ -288,9 +288,8 @@ impl std::str::FromStr for Scenario {
             "incr-full" => Scenario::IncrementalEmpty,
             "incr-unchanged" => Scenario::IncrementalFresh,
             _ => {
-                // FIXME: use str::strip_prefix when stabilized
-                if s.starts_with("incr-patched: ") {
-                    Scenario::IncrementalPatch(PatchName::from(&s["incr-patched: ".len()..]))
+                if let Some(stripped) = s.strip_prefix("incr-patched: ") {
+                    Scenario::IncrementalPatch(PatchName::from(stripped))
                 } else {
                     return Err(format!("{} is not a scenario", s));
                 }
@@ -313,9 +312,9 @@ impl fmt::Display for Scenario {
 impl Scenario {
     pub fn to_id(&self) -> String {
         match self {
-            Scenario::Empty => format!("full"),
-            Scenario::IncrementalEmpty => format!("incr-full"),
-            Scenario::IncrementalFresh => format!("incr-unchanged"),
+            Scenario::Empty => "full".to_string(),
+            Scenario::IncrementalEmpty => "incr-full".to_string(),
+            Scenario::IncrementalFresh => "incr-unchanged".to_string(),
             Scenario::IncrementalPatch(name) => format!("incr-patched-{}", name),
         }
     }
@@ -357,66 +356,6 @@ impl PartialOrd for Scenario {
     }
 }
 
-#[derive(Deserialize, Serialize, Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct LabelPath {
-    pub benchmark: Option<Benchmark>,
-    pub profile: Option<Profile>,
-    pub scenario: Option<Scenario>,
-    pub metric: Option<Metric>,
-    pub query: Option<QueryLabel>,
-}
-
-impl LabelPath {
-    pub fn new() -> Self {
-        assert_eq!(std::mem::size_of::<LabelPath>(), 48);
-        Self {
-            benchmark: None,
-            profile: None,
-            scenario: None,
-            metric: None,
-            query: None,
-        }
-    }
-
-    pub fn set(&mut self, component: Label) {
-        match component {
-            Label::Benchmark(b) => self.benchmark = Some(b),
-            Label::Profile(p) => self.profile = Some(p),
-            Label::Scenario(s) => self.scenario = Some(s),
-            Label::Metric(m) => self.metric = Some(m),
-            Label::Query(q) => self.query = Some(q),
-        }
-    }
-
-    pub fn remove(&mut self, component: LabelTag) {
-        match component {
-            LabelTag::Benchmark => self.benchmark = None,
-            LabelTag::Profile => self.profile = None,
-            LabelTag::Scenario => self.scenario = None,
-            LabelTag::Metric => self.metric = None,
-            LabelTag::Query => self.query = None,
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum LabelTag {
-    Benchmark,
-    Profile,
-    Scenario,
-    Metric,
-    Query,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum Label {
-    Benchmark(Benchmark),
-    Profile(Profile),
-    Scenario(Scenario),
-    Metric(Metric),
-    Query(QueryLabel),
-}
-
 /// An identifier for a built version of the compiler
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum ArtifactId {
@@ -441,27 +380,6 @@ impl From<Commit> for ArtifactId {
     }
 }
 
-#[async_trait::async_trait]
-pub trait SeriesType: Sized {
-    async fn get(
-        conn: &dyn pool::Connection,
-        stat_description_row_id: u32,
-        artifact_row_id: ArtifactIdNumber,
-    ) -> Option<Self>;
-}
-
-#[async_trait::async_trait]
-impl SeriesType for f64 {
-    async fn get(
-        conn: &dyn pool::Connection,
-        stat_description_row_id: u32,
-        artifact_row_id: ArtifactIdNumber,
-    ) -> Option<Self> {
-        conn.get_pstats(&[stat_description_row_id], &[Some(artifact_row_id)])
-            .await[0][0]
-    }
-}
-
 intern!(pub struct QueryLabel);
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -472,9 +390,6 @@ pub struct QueryDatum {
     pub number_of_cache_hits: u32,
     pub invocation_count: u32,
 }
-
-#[derive(Hash, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct LabelId(pub u8, pub u32);
 
 /// A database row ID for an artifact in the artifact table
 #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -667,16 +582,6 @@ impl Index {
         Some((stat_description_row_id, artifact_row_id))
     }
 
-    pub async fn get<T: SeriesType>(
-        &self,
-        db: &mut dyn pool::Connection,
-        label: &DbLabel,
-        artifact_id: &ArtifactId,
-    ) -> Option<T> {
-        let (stat_description_row_id, artifact_row_id) = self.lookup(label, artifact_id)?;
-        T::get(db, stat_description_row_id, artifact_row_id).await
-    }
-
     pub fn artifacts(&self) -> impl Iterator<Item = &'_ str> + '_ {
         self.artifacts.map.keys().map(|s| &**s)
     }
@@ -720,7 +625,7 @@ impl Index {
         self.commits()
             .into_iter()
             .find(|c| c.sha == *commit)
-            .map(|c| ArtifactId::Commit(c))
+            .map(ArtifactId::Commit)
             .or_else(|| {
                 self.artifacts()
                     .find(|a| *a == commit)

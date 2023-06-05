@@ -110,12 +110,12 @@ impl BenchmarkGroup {
 pub fn passes_filter(name: &str, exclude: Option<&str>, include: Option<&str>) -> bool {
     match (exclude, include) {
         (Some(exclude), Some(include)) => {
-            let included = include.split(",").any(|filter| name.starts_with(filter));
-            let excluded = exclude.split(",").any(|filter| name.starts_with(filter));
+            let included = include.split(',').any(|filter| name.starts_with(filter));
+            let excluded = exclude.split(',').any(|filter| name.starts_with(filter));
             included && !excluded
         }
-        (None, Some(include)) => include.split(",").any(|filter| name.starts_with(filter)),
-        (Some(exclude), None) => !exclude.split(",").any(|filter| name.starts_with(filter)),
+        (None, Some(include)) => include.split(',').any(|filter| name.starts_with(filter)),
+        (Some(exclude), None) => !exclude.split(',').any(|filter| name.starts_with(filter)),
         (None, None) => true,
     }
 }

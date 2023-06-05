@@ -88,7 +88,7 @@ impl Client {
             anyhow::bail!("{:?} != 201 CREATED", response.status());
         }
 
-        Ok(response.json().await.context("deserializing failed")?)
+        response.json().await.context("deserializing failed")
     }
 
     pub async fn update_branch(&self, branch: &str, sha: &str) -> anyhow::Result<()> {
@@ -216,7 +216,7 @@ impl Client {
         let body = body.into();
         let req = self
             .inner
-            .post(&format!(
+            .post(format!(
                 "{}/issues/{}/comments",
                 self.repository_url, pr_number
             ))

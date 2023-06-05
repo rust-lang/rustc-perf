@@ -21,7 +21,7 @@ pub async fn handle_bootstrap(
     let conn = ctxt.conn().await;
     let ids = commits
         .iter()
-        .map(|c| conn.artifact_id(&c))
+        .map(|c| conn.artifact_id(c))
         .collect::<FuturesOrdered<_>>()
         .collect::<Vec<_>>()
         .await;

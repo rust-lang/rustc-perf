@@ -6,19 +6,22 @@ use crate::api;
 use crate::db::{ArtifactId, Benchmark, Lookup, Profile, Scenario};
 use crate::github;
 use crate::load::SiteCtxt;
-use crate::selector::{self, Tag};
+use crate::selector::{self};
 
 use collector::benchmark::category::Category;
 use collector::Bound;
 use serde::{Deserialize, Serialize};
 
 use database::CommitType;
+use serde::de::IntoDeserializer;
 use std::cmp;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt::Write;
 use std::hash::Hash;
 use std::iter;
+use std::ops::Deref;
+use std::str::FromStr;
 use std::sync::Arc;
 
 type BoxedError = Box<dyn Error + Send + Sync>;
@@ -42,7 +45,7 @@ pub async fn handle_triage(
     // is that we've had a 422 error and as such had a fork. It's possible we
     // could diagnose that and give a nicer error here telling the user which
     // commit to use.
-    let mut next = next_commit(&start_artifact, &master_commits)
+    let mut next = next_commit(&start_artifact, master_commits)
         .map(|c| Bound::Commit(c.sha.clone()))
         .ok_or(format!("no next commit for {:?}", start_artifact))?;
 
@@ -54,25 +57,20 @@ pub async fn handle_triage(
     let benchmark_map = ctxt.get_benchmark_category_map().await;
 
     let end = loop {
-        let comparison = match compare_given_commits(
-            before.clone(),
-            next.clone(),
-            metric,
-            ctxt,
-            &master_commits,
-        )
-        .await
-        .map_err(|e| format!("error comparing commits: {}", e))?
-        {
-            Some(c) => c,
-            None => {
-                log::info!(
-                    "No data found for end bound {:?}. Ending comparison...",
-                    next
-                );
-                break before;
-            }
-        };
+        let comparison =
+            match compare_given_commits(before.clone(), next.clone(), metric, ctxt, master_commits)
+                .await
+                .map_err(|e| format!("error comparing commits: {}", e))?
+            {
+                Some(c) => c,
+                None => {
+                    log::info!(
+                        "No data found for end bound {:?}. Ending comparison...",
+                        next
+                    );
+                    break before;
+                }
+            };
         num_comparisons += 1;
         log::info!(
             "Comparing {} to {}",
@@ -89,7 +87,7 @@ pub async fn handle_triage(
         }
 
         // Decide whether to keep doing comparisons or not
-        match comparison.next(&master_commits).map(Bound::Commit) {
+        match comparison.next(master_commits).map(Bound::Commit) {
             // There is a next commit, and it is not the end bound.
             // We keep doing comparisons...
             Some(n) => {
@@ -108,9 +106,8 @@ pub async fn handle_triage(
             .map_err(|e| format!("error comparing beginning and ending commits: {}", e))?
         {
             Some(summary_comparison) => {
-                let (primary, secondary) = summary_comparison
-                    .clone()
-                    .summarize_by_category(&benchmark_map);
+                let (primary, secondary) =
+                    summary_comparison.summarize_compile_by_category(&benchmark_map);
                 let mut result = String::from("**Summary**:\n\n");
                 write_summary_table(&primary, &secondary, true, &mut result);
                 result
@@ -140,12 +137,12 @@ pub async fn handle_compare(
     let prev = comparison.prev(master_commits);
     let next = comparison.next(master_commits);
     let is_contiguous = comparison.is_contiguous(&*conn, master_commits).await;
-    let benchmark_map = conn.get_compile_benchmarks().await;
+    let compile_benchmark_map = conn.get_compile_benchmarks().await;
 
-    let comparisons = comparison
-        .comparisons
+    let compile_comparisons = comparison
+        .compile_comparisons
         .into_iter()
-        .map(|comparison| api::comparison::Comparison {
+        .map(|comparison| api::comparison::CompileBenchmarkComparison {
             benchmark: comparison.benchmark.to_string(),
             profile: comparison.profile.to_string(),
             scenario: comparison.scenario.to_string(),
@@ -165,11 +162,11 @@ pub async fn handle_compare(
         prev,
         a: comparison.a.into(),
         b: comparison.b.into(),
-        comparisons,
+        compile_comparisons,
         new_errors,
         next,
         is_contiguous,
-        benchmark_data: benchmark_map
+        compile_benchmark_data: compile_benchmark_map
             .into_iter()
             .map(|bench| bench.into())
             .collect(),
@@ -181,7 +178,9 @@ async fn populate_report(
     benchmark_map: &HashMap<Benchmark, Category>,
     report: &mut HashMap<Direction, Vec<String>>,
 ) {
-    let (primary, secondary) = comparison.clone().summarize_by_category(&benchmark_map);
+    let (primary, secondary) = comparison
+        .clone()
+        .summarize_compile_by_category(benchmark_map);
     // Get the combined direction of the primary and secondary summaries
     let direction = Direction::join(primary.direction(), secondary.direction());
     if direction == Direction::None {
@@ -262,6 +261,15 @@ pub enum Metric {
     DocFilesCount,
 }
 
+impl FromStr for Metric {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Metric::deserialize(s.into_deserializer())
+            .map_err(|e: serde::de::value::Error| format!("Unknown metric `{s}`: {e:?}"))
+    }
+}
+
 impl Metric {
     pub fn as_str(&self) -> &str {
         match self {
@@ -337,7 +345,7 @@ pub struct ArtifactComparisonSummary {
 
 impl ArtifactComparisonSummary {
     /// Summarize a collection of `TestResultComparison`
-    pub fn summarize(comparisons: HashSet<TestResultComparison>) -> Self {
+    pub fn summarize(comparisons: Vec<TestResultComparison>) -> Self {
         let mut num_improvements = 0;
         let mut num_regressions = 0;
 
@@ -369,7 +377,7 @@ impl ArtifactComparisonSummary {
 
     /// The direction of the changes
     pub fn direction(&self) -> Direction {
-        if self.relevant_comparisons.len() == 0 {
+        if self.relevant_comparisons.is_empty() {
             return Direction::None;
         }
 
@@ -378,11 +386,11 @@ impl ArtifactComparisonSummary {
             .iter()
             .partition(|c| c.is_regression());
 
-        if regressions.len() == 0 {
+        if regressions.is_empty() {
             return Direction::Improvement;
         }
 
-        if improvements.len() == 0 {
+        if improvements.is_empty() {
             return Direction::Regression;
         }
 
@@ -399,7 +407,7 @@ impl ArtifactComparisonSummary {
             has_medium_and_above_improvements,
             has_medium_and_above_regressions,
         ) {
-            (true, true) => return Direction::Mixed,
+            (true, true) => Direction::Mixed,
             (true, false) => {
                 if regressions_ratio >= 0.15 {
                     Direction::Mixed
@@ -415,7 +423,7 @@ impl ArtifactComparisonSummary {
                 }
             }
             (false, false) => {
-                if regressions_ratio >= 0.1 && regressions_ratio <= 0.9 {
+                if (0.1..=0.9).contains(&regressions_ratio) {
                     Direction::Mixed
                 } else if regressions_ratio <= 0.1 {
                     Direction::Improvement
@@ -573,7 +581,7 @@ async fn write_triage_summary(
     let link = &compare_link(start, end);
     write!(&mut result, " [(Comparison Link)]({})\n\n", link).unwrap();
 
-    write_summary_table(&primary, &secondary, true, &mut result);
+    write_summary_table(primary, secondary, true, &mut result);
 
     result
 }
@@ -790,15 +798,11 @@ async fn compare_given_commits(
     let aids = Arc::new(vec![a.clone(), b.clone()]);
 
     // get all crates, cache, and profile combinations for the given metric
-    let query = selector::Query::new()
-        .set::<String>(Tag::Benchmark, selector::Selector::All)
-        .set::<String>(Tag::Scenario, selector::Selector::All)
-        .set::<String>(Tag::Profile, selector::Selector::All)
-        .set(Tag::Metric, selector::Selector::One(metric.as_str()));
+    let query = selector::CompileBenchmarkQuery::all_for_metric(metric);
 
     // `responses` contains series iterators. The first element in the iterator is the data
     // for `a` and the second is the data for `b`
-    let mut responses = ctxt.statistic_series(query.clone(), aids).await?;
+    let mut responses = ctxt.compile_statistic_series(query, aids).await?;
 
     let conn = ctxt.conn().await;
     let statistics_for_a = statistics_from_series(&mut responses);
@@ -811,13 +815,15 @@ async fn compare_given_commits(
         .filter_map(|(test_case, a)| {
             statistics_for_b
                 .get(&test_case)
-                .map(|&b| TestResultComparison {
+                .map(|&b| CompileTestResultComparison {
                     benchmark: test_case.0,
                     profile: test_case.1,
                     scenario: test_case.2,
-                    metric,
-                    historical_data: historical_data.data.remove(&test_case),
-                    results: (a, b),
+                    comparison: TestResultComparison {
+                        metric,
+                        historical_data: historical_data.data.remove(&test_case),
+                        results: (a, b),
+                    },
                 })
         })
         .collect();
@@ -831,7 +837,7 @@ async fn compare_given_commits(
     Ok(Some(ArtifactComparison {
         a: ArtifactDescription::for_artifact(&*conn, a.clone(), master_commits).await,
         b: ArtifactDescription::for_artifact(&*conn, b.clone(), master_commits).await,
-        comparisons,
+        compile_comparisons: comparisons,
         newly_failed_benchmarks: errors_in_b.into_iter().collect(),
     }))
 }
@@ -946,10 +952,14 @@ where
         } else {
             continue;
         };
-        let benchmark = *response.path.get::<Benchmark>().unwrap();
-        let profile = *response.path.get::<Profile>().unwrap();
-        let scenario = *response.path.get::<Scenario>().unwrap();
-        stats.insert((benchmark, profile, scenario), value);
+        stats.insert(
+            (
+                response.key.benchmark,
+                response.key.profile,
+                response.key.scenario,
+            ),
+            value,
+        );
     }
     stats
 }
@@ -978,8 +988,8 @@ impl From<ArtifactDescription> for api::comparison::ArtifactDescription {
 pub struct ArtifactComparison {
     pub a: ArtifactDescription,
     pub b: ArtifactDescription,
-    /// Test result comparisons between the two artifacts
-    pub comparisons: HashSet<TestResultComparison>,
+    /// Compile test result comparisons between the two artifacts
+    pub compile_comparisons: HashSet<CompileTestResultComparison>,
     /// A map from benchmark name to an error which occured when building `b` but not `a`.
     pub newly_failed_benchmarks: HashMap<String, String>,
 }
@@ -1014,17 +1024,30 @@ impl ArtifactComparison {
     }
 
     /// Splits an artifact comparison into primary and secondary summaries based on benchmark category
-    pub fn summarize_by_category(
+    pub fn summarize_compile_by_category(
         self,
         category_map: &HashMap<Benchmark, Category>,
     ) -> (ArtifactComparisonSummary, ArtifactComparisonSummary) {
-        let (primary, secondary) = self
-            .comparisons
+        let (primary, secondary): (
+            Vec<CompileTestResultComparison>,
+            Vec<CompileTestResultComparison>,
+        ) = self
+            .compile_comparisons
             .into_iter()
             .partition(|s| category_map.get(&s.benchmark()) == Some(&Category::Primary));
         (
-            ArtifactComparisonSummary::summarize(primary),
-            ArtifactComparisonSummary::summarize(secondary),
+            ArtifactComparisonSummary::summarize(
+                primary
+                    .into_iter()
+                    .map(|comparison| comparison.comparison)
+                    .collect(),
+            ),
+            ArtifactComparisonSummary::summarize(
+                secondary
+                    .into_iter()
+                    .map(|comparison| comparison.comparison)
+                    .collect(),
+            ),
         )
     }
 }
@@ -1060,14 +1083,10 @@ impl HistoricalDataMap {
         }
 
         // get all crates, cache, and profile combinations for the given metric
-        let query = selector::Query::new()
-            .set::<String>(Tag::Benchmark, selector::Selector::All)
-            .set::<String>(Tag::Scenario, selector::Selector::All)
-            .set::<String>(Tag::Profile, selector::Selector::All)
-            .set(Tag::Metric, selector::Selector::One(metric.as_str()));
+        let query = selector::CompileBenchmarkQuery::all_for_metric(metric);
 
         let mut previous_commit_series = ctxt
-            .statistic_series(query, previous_commits.clone())
+            .compile_statistic_series(query, previous_commits.clone())
             .await?;
 
         for _ in previous_commits.iter() {
@@ -1190,9 +1209,6 @@ pub fn next_commit<'a>(
 // A single comparison between two test results
 #[derive(Debug, Clone)]
 pub struct TestResultComparison {
-    benchmark: Benchmark,
-    profile: Profile,
-    scenario: Scenario,
     metric: Metric,
     historical_data: Option<HistoricalData>,
     results: (f64, f64),
@@ -1202,10 +1218,6 @@ impl TestResultComparison {
     /// The amount of relative change considered significant when
     /// we cannot determine from historical data
     const DEFAULT_SIGNIFICANCE_THRESHOLD: f64 = 0.002;
-
-    pub fn benchmark(&self) -> Benchmark {
-        self.benchmark
-    }
 
     fn is_regression(&self) -> bool {
         let (a, b) = self.results;
@@ -1307,7 +1319,29 @@ impl TestResultComparison {
     }
 }
 
-impl cmp::PartialEq for TestResultComparison {
+#[derive(Debug, Clone)]
+pub struct CompileTestResultComparison {
+    benchmark: Benchmark,
+    profile: Profile,
+    scenario: Scenario,
+    comparison: TestResultComparison,
+}
+
+impl CompileTestResultComparison {
+    pub fn benchmark(&self) -> Benchmark {
+        self.benchmark
+    }
+}
+
+impl Deref for CompileTestResultComparison {
+    type Target = TestResultComparison;
+
+    fn deref(&self) -> &Self::Target {
+        &self.comparison
+    }
+}
+
+impl cmp::PartialEq for CompileTestResultComparison {
     fn eq(&self, other: &Self) -> bool {
         self.benchmark == other.benchmark
             && self.profile == other.profile
@@ -1315,9 +1349,9 @@ impl cmp::PartialEq for TestResultComparison {
     }
 }
 
-impl cmp::Eq for TestResultComparison {}
+impl cmp::Eq for CompileTestResultComparison {}
 
-impl std::hash::Hash for TestResultComparison {
+impl std::hash::Hash for CompileTestResultComparison {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.benchmark.hash(state);
         self.profile.hash(state);
@@ -1478,9 +1512,6 @@ mod tests {
     use super::*;
 
     use collector::benchmark::category::Category;
-    use std::collections::HashSet;
-
-    use database::{Profile, Scenario};
 
     #[test]
     fn summary_table_only_regressions_primary() {
@@ -1672,19 +1703,16 @@ mod tests {
 
     // (category, before, after)
     fn check_table(values: Vec<(Category, f64, f64)>, expected: &str) {
-        let mut primary_comparisons = HashSet::new();
-        let mut secondary_comparisons = HashSet::new();
-        for (index, (category, before, after)) in values.into_iter().enumerate() {
+        let mut primary_comparisons = Vec::new();
+        let mut secondary_comparisons = Vec::new();
+        for (category, before, after) in values.into_iter() {
             let target = if category == Category::Primary {
                 &mut primary_comparisons
             } else {
                 &mut secondary_comparisons
             };
 
-            target.insert(TestResultComparison {
-                benchmark: index.to_string().as_str().into(),
-                profile: Profile::Check,
-                scenario: Scenario::Empty,
+            target.push(TestResultComparison {
                 metric: Metric::InstructionsUser,
                 historical_data: None,
                 results: (before, after),

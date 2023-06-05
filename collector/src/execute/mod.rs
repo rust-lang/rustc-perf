@@ -149,7 +149,7 @@ impl<'a> CargoProcess<'a> {
             // Not all cargo invocations (e.g. `cargo clean`) need all of these
             // env vars set, but it doesn't hurt to have them.
             .env("RUSTC", &*FAKE_RUSTC)
-            .env("RUSTC_REAL", &self.compiler.rustc)
+            .env("RUSTC_REAL", self.compiler.rustc)
             // We separately pass -Cincremental to the leaf crate --
             // CARGO_INCREMENTAL is cached separately for both the leaf crate
             // and any in-tree dependencies, and we don't want that; it wastes
@@ -446,7 +446,7 @@ impl Upload {
                 format!("self-profile-{}.tar.sz", collection)
             }
             SelfProfileFiles::Eight { file } => {
-                let data = std::fs::read(&file).expect("read profile data");
+                let data = std::fs::read(file).expect("read profile data");
                 let mut data = snap::read::FrameEncoder::new(&data[..]);
                 let mut compressed = Vec::new();
                 data.read_to_end(&mut compressed).expect("compressed");
@@ -465,7 +465,7 @@ impl Upload {
             .arg(upload.path())
             .arg(&format!(
                 "s3://rustc-perf/{}",
-                &prefix.join(&filename).to_str().unwrap()
+                &prefix.join(filename).to_str().unwrap()
             ))
             .spawn()
             .expect("spawn aws");
@@ -538,24 +538,23 @@ fn process_stat_output(
     let mut prefix: Option<String> = None;
     let mut file: Option<PathBuf> = None;
     for line in stdout.lines() {
-        if line.starts_with("!self-profile-output:") {
-            profile = Some(serde_json::from_str(&line["!self-profile-output:".len()..]).unwrap());
+        if let Some(stripped) = line.strip_prefix("!self-profile-output:") {
+            profile = Some(serde_json::from_str(stripped).unwrap());
             continue;
         }
-        if line.starts_with("!self-profile-dir:") {
-            dir = Some(PathBuf::from(&line["!self-profile-dir:".len()..]));
+        if let Some(stripped) = line.strip_prefix("!self-profile-dir:") {
+            dir = Some(PathBuf::from(stripped));
             continue;
         }
-        if line.starts_with("!self-profile-prefix:") {
-            prefix = Some(String::from(&line["!self-profile-prefix:".len()..]));
+        if let Some(stripped) = line.strip_prefix("!self-profile-prefix:") {
+            prefix = Some(String::from(stripped));
             continue;
         }
-        if line.starts_with("!self-profile-file:") {
-            file = Some(PathBuf::from(&line["!self-profile-file:".len()..]));
+        if let Some(stripped) = line.strip_prefix("!self-profile-file:") {
+            file = Some(PathBuf::from(stripped));
             continue;
         }
-        if line.starts_with("!counters-file:") {
-            let counter_file = &line["!counters-file:".len()..];
+        if let Some(counter_file) = line.strip_prefix("!counters-file:") {
             let counters = etw_parser::parse_etw_file(counter_file).unwrap();
 
             stats.insert("cycles".into(), counters.total_cycles as f64);
@@ -566,12 +565,12 @@ fn process_stat_output(
             stats.insert("cpu-clock".into(), counters.cpu_clock);
             continue;
         }
-        if line.starts_with("!wall-time:") {
-            let d = &line["!wall-time:".len()..];
+        if let Some(stripped) = line.strip_prefix("!wall-time:") {
             stats.insert(
                 "wall-time".into(),
-                d.parse()
-                    .map_err(|e| DeserializeStatError::ParseError(d.to_string(), e))?,
+                stripped
+                    .parse()
+                    .map_err(|e| DeserializeStatError::ParseError(stripped.to_string(), e))?,
             );
             continue;
         }
@@ -600,7 +599,7 @@ fn process_stat_output(
         let name = get!(parts.next());
         let _time = get!(parts.next());
         let pct = get!(parts.next());
-        if cnt == "<not supported>" || cnt == "<not counted>" || cnt.len() == 0 {
+        if cnt == "<not supported>" || cnt == "<not counted>" || cnt.is_empty() {
             continue;
         }
         if !pct.starts_with("100.") {
@@ -641,10 +640,8 @@ fn process_stat_output(
             string_data,
             events,
         })
-    } else if let Some(file) = file {
-        Some(SelfProfileFiles::Eight { file })
     } else {
-        None
+        file.map(|file| SelfProfileFiles::Eight { file })
     };
 
     if stats.is_empty() {

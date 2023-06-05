@@ -1,5 +1,3 @@
-use env_logger;
-
 use futures::future::FutureExt;
 use parking_lot::RwLock;
 use site::load;

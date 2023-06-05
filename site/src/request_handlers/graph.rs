@@ -4,10 +4,10 @@ use std::sync::Arc;
 
 use crate::api::graphs::GraphKind;
 use crate::api::{graph, graphs, ServerResult};
-use crate::db::{self, ArtifactId, Benchmark, Profile, Scenario};
+use crate::db::{self, ArtifactId, Profile, Scenario};
 use crate::interpolate::IsInterpolated;
 use crate::load::SiteCtxt;
-use crate::selector::{Query, Selector, SeriesResponse, Tag};
+use crate::selector::{CompileBenchmarkQuery, Selector, SeriesResponse};
 
 pub async fn handle_graph(
     request: graph::Request,
@@ -57,12 +57,12 @@ async fn create_graph(
 ) -> ServerResult<graph::Response> {
     let artifact_ids = artifact_ids_for_range(&ctxt, request.start, request.end);
     let mut series_iterator = ctxt
-        .statistic_series(
-            Query::new()
-                .set::<String>(Tag::Benchmark, Selector::One(request.benchmark))
-                .set::<String>(Tag::Profile, Selector::One(request.profile))
-                .set::<String>(Tag::Scenario, Selector::One(request.scenario))
-                .set::<String>(Tag::Metric, Selector::One(request.metric)),
+        .compile_statistic_series(
+            CompileBenchmarkQuery::default()
+                .benchmark(Selector::One(request.benchmark))
+                .profile(Selector::One(request.profile.parse()?))
+                .scenario(Selector::One(request.scenario.parse()?))
+                .metric(Selector::One(request.metric.parse()?)),
             Arc::new(artifact_ids),
         )
         .await?
@@ -95,16 +95,17 @@ async fn create_graphs(
     };
 
     let benchmark_selector = create_selector(&request.benchmark);
-    let profile_selector = create_selector(&request.profile);
-    let scenario_selector = create_selector(&request.scenario);
+    let profile_selector = create_selector(&request.profile).try_map(|v| v.parse::<Profile>())?;
+    let scenario_selector =
+        create_selector(&request.scenario).try_map(|v| v.parse::<Scenario>())?;
 
     let interpolated_responses: Vec<_> = ctxt
-        .statistic_series(
-            Query::new()
-                .set::<String>(Tag::Benchmark, benchmark_selector)
-                .set::<String>(Tag::Profile, profile_selector)
-                .set::<String>(Tag::Scenario, scenario_selector)
-                .set::<String>(Tag::Metric, Selector::One(request.stat)),
+        .compile_statistic_series(
+            CompileBenchmarkQuery::default()
+                .benchmark(benchmark_selector)
+                .profile(profile_selector)
+                .scenario(scenario_selector)
+                .metric(Selector::One(request.stat.parse()?)),
             artifact_ids.clone(),
         )
         .await?
@@ -118,9 +119,9 @@ async fn create_graphs(
     }
 
     for response in interpolated_responses {
-        let benchmark = response.path.get::<Benchmark>()?.to_string();
-        let profile = *response.path.get::<Profile>()?;
-        let scenario = response.path.get::<Scenario>()?.to_string();
+        let benchmark = response.key.benchmark.to_string();
+        let profile = response.key.profile;
+        let scenario = response.key.scenario.to_string();
         let graph_series = graph_series(response.series.into_iter(), request.kind);
 
         benchmarks
@@ -166,6 +167,7 @@ fn master_artifact_ids_for_range(ctxt: &SiteCtxt, start: Bound, end: Bound) -> V
         .collect()
 }
 
+#[allow(clippy::type_complexity)]
 /// Creates a summary "benchmark" that averages the results of all other
 /// test cases per profile type
 fn create_summary(
@@ -186,9 +188,9 @@ fn create_summary(
                 let baseline_responses = interpolated_responses
                     .iter()
                     .filter(|sr| {
-                        let p = sr.path.get::<Profile>().unwrap();
-                        let s = sr.path.get::<Scenario>().unwrap();
-                        *p == profile && *s == Scenario::Empty
+                        let p = sr.key.profile;
+                        let s = sr.key.scenario;
+                        p == profile && s == Scenario::Empty
                     })
                     .map(|sr| sr.series.iter().cloned())
                     .collect();
@@ -203,9 +205,9 @@ fn create_summary(
         let summary_case_responses = interpolated_responses
             .iter()
             .filter(|sr| {
-                let p = sr.path.get::<Profile>().unwrap();
-                let s = sr.path.get::<Scenario>().unwrap();
-                *p == profile && *s == scenario
+                let p = sr.key.profile;
+                let s = sr.key.scenario;
+                p == profile && s == scenario
             })
             .map(|sr| sr.series.iter().cloned())
             .collect();

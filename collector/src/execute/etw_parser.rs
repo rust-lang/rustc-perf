@@ -169,7 +169,7 @@ fn parse_events(r: &mut dyn BufRead, headers: Vec<EventHeader>) -> anyhow::Resul
             .columns
             .iter()
             .position(|c| c == name)
-            .expect(&format!("failed to find column {}", name))
+            .unwrap_or_else(|| panic!("failed to find column {}", name))
             + 1
     };
 
@@ -222,7 +222,7 @@ fn parse_events(r: &mut dyn BufRead, headers: Vec<EventHeader>) -> anyhow::Resul
 
         let pid = process_name[l_paren + 1..r_paran].trim();
         pid.parse()
-            .expect(&format!("failed to parse '{}' to pid", pid))
+            .unwrap_or_else(|_| panic!("failed to parse '{}' to pid", pid))
     }
 
     let mut buffer = Vec::new();
@@ -454,7 +454,7 @@ pub fn parse_etw_file(path: &str) -> anyhow::Result<Counters> {
 
     let events = parse_events(&mut file, headers)?;
 
-    Ok(process_events(events)?)
+    process_events(events)
 }
 
 #[cfg(test)]

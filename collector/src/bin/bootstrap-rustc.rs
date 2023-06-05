@@ -15,9 +15,9 @@ fn run() -> i32 {
     let status = cmd.status().expect("spawned");
 
     if status.success() {
-        return 0;
+        0
     } else {
-        return 1;
+        1
     }
 }
 

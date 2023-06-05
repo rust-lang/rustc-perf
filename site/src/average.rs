@@ -97,11 +97,11 @@ mod tests {
 
         let a = average.next().unwrap();
         assert_eq!(a, ("a", 50.0));
-        assert_eq!(a.interpolated(), false);
+        assert!(!a.interpolated());
 
         let b = average.next().unwrap();
         assert_eq!(b, ("b", 250.0));
-        assert_eq!(b.interpolated(), false);
+        assert!(!b.interpolated());
 
         assert!(average.next().is_none());
     }
@@ -126,11 +126,11 @@ mod tests {
 
         let a = average.next().unwrap();
         assert_eq!(a, (("a", Some(50.0)), IsInterpolated::No));
-        assert_eq!(a.interpolated(), false);
+        assert!(!a.interpolated());
 
         let b = average.next().unwrap();
         assert_eq!(b, (("b", Some(150.0)), IsInterpolated::Yes));
-        assert_eq!(b.interpolated(), true);
+        assert!(b.interpolated());
 
         assert!(average.next().is_none());
     }

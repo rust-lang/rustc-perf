@@ -31,7 +31,7 @@ export interface CompareSelector {
   stat: string;
 }
 
-export interface BenchmarkDescription {
+export interface CompileBenchmarkDescription {
   name: string;
   category: Category;
 }
@@ -44,7 +44,7 @@ export interface ArtifactDescription {
   bootstrap_total: number;
 }
 
-export interface Comparison {
+export interface CompileBenchmarkComparison {
   benchmark: string;
   profile: Profile;
   scenario: string;
@@ -62,7 +62,7 @@ export interface CompareResponse {
   a: ArtifactDescription;
   b: ArtifactDescription;
 
-  comparisons: [Comparison];
+  compile_comparisons: [CompileBenchmarkComparison];
   new_errors: Array<[string, string]>;
-  benchmark_data: [BenchmarkDescription];
+  compile_benchmark_data: [CompileBenchmarkDescription];
 }

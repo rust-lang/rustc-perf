@@ -12,10 +12,10 @@ pub struct Opt {
 }
 
 fn is_interesting(name: &str) -> bool {
-    match name {
-        "codegen_module" | "codegen_module_optimize" | "codegen_module_perform_lto" => true,
-        _ => false,
-    }
+    matches!(
+        name,
+        "codegen_module" | "codegen_module_optimize" | "codegen_module_perform_lto"
+    )
 }
 
 fn by_thread(self_profile_data: Vec<u8>) -> anyhow::Result<(u64, HashMap<u32, Vec<Event>>)> {

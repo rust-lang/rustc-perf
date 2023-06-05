@@ -26,7 +26,7 @@ pub fn measure(
 ) -> anyhow::Result<()> {
     eprintln!("Running rustc");
 
-    checkout(&artifact).context("checking out rust-lang/rust")?;
+    checkout(artifact).context("checking out rust-lang/rust")?;
 
     record(rt, conn, compiler, artifact, aid)?;
 
@@ -86,7 +86,7 @@ fn record(
             .canonicalize()
             .context("configure script canonicalize")?,
     )
-    .current_dir(&checkout)
+    .current_dir(checkout)
     .arg("--set")
     .arg("llvm.download-ci-llvm=true")
     .arg("--set")
@@ -95,7 +95,7 @@ fn record(
     .arg("rust.deny-warnings=false")
     .arg("--set")
     .arg(&format!("build.rustc={}", fake_rustc.to_str().unwrap()))
-    .env("RUSTC_PERF_REAL_RUSTC", &compiler.rustc)
+    .env("RUSTC_PERF_REAL_RUSTC", compiler.rustc)
     .arg("--set")
     .arg(&format!("build.cargo={}", compiler.cargo.to_str().unwrap()))
     .status()
@@ -110,8 +110,8 @@ fn record(
                     .canonicalize()
                     .context("x.py script canonicalize")?,
             )
-            .current_dir(&checkout)
-            .env("RUSTC_PERF_REAL_RUSTC", &compiler.rustc)
+            .current_dir(checkout)
+            .env("RUSTC_PERF_REAL_RUSTC", compiler.rustc)
             .arg("build")
             .arg("--stage")
             .arg("0")
@@ -134,7 +134,7 @@ fn record(
             let crate_name = iter.next().expect("has crate name");
             let _ = iter.next().expect("test:false");
             let timing = iter.next().expect("test:false");
-            let timing = Duration::from_secs_f64(timing.parse::<f64>().expect(&timing));
+            let timing = Duration::from_secs_f64(timing.parse::<f64>().expect(timing));
             *timing_data
                 .entry(crate_name)
                 .or_insert_with(|| Duration::new(0, 0)) += timing;

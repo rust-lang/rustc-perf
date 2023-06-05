@@ -39,14 +39,14 @@ lazy_static::lazy_static! {
 async fn make_client(db_url: &str) -> anyhow::Result<tokio_postgres::Client> {
     if db_url.contains("rds.amazonaws.com") {
         let cert = &CERTIFICATE_PEM[..];
-        let cert = Certificate::from_pem(&cert).context("made certificate")?;
+        let cert = Certificate::from_pem(cert).context("made certificate")?;
         let connector = TlsConnector::builder()
             .add_root_certificate(cert)
             .build()
             .context("built TlsConnector")?;
         let connector = MakeTlsConnector::new(connector);
 
-        let (db_client, connection) = match tokio_postgres::connect(&db_url, connector).await {
+        let (db_client, connection) = match tokio_postgres::connect(db_url, connector).await {
             Ok(v) => v,
             Err(e) => {
                 anyhow::bail!("failed to connect to DB: {}", e);
@@ -62,7 +62,7 @@ async fn make_client(db_url: &str) -> anyhow::Result<tokio_postgres::Client> {
     } else {
         eprintln!("Warning: Non-TLS connection to non-RDS DB");
         let (db_client, connection) =
-            match tokio_postgres::connect(&db_url, tokio_postgres::NoTls).await {
+            match tokio_postgres::connect(db_url, tokio_postgres::NoTls).await {
                 Ok(v) => v,
                 Err(e) => {
                     anyhow::bail!("failed to connect to DB: {}", e);
@@ -238,10 +238,13 @@ impl ConnectionManager for Postgres {
                 .await
                 .unwrap();
             let version: Option<i32> = version.get(0);
-            for mid in (version.unwrap_or(0) as usize + 1)..MIGRATIONS.len() {
-                let sql = MIGRATIONS[mid];
+            for (mid, sql) in MIGRATIONS
+                .iter()
+                .enumerate()
+                .skip(version.unwrap_or(0) as usize + 1)
+            {
                 let tx = client.transaction().await.unwrap();
-                tx.batch_execute(&sql).await.unwrap();
+                tx.batch_execute(sql).await.unwrap();
                 tx.execute(
                     "insert into migrations (id, query) VALUES ($1, $2)",
                     &[&(mid as i32), &sql],
@@ -302,9 +305,9 @@ pub struct PostgresConnection {
     conn: tokio_postgres::Client,
 }
 
-impl Into<tokio_postgres::Client> for PostgresConnection {
-    fn into(self) -> tokio_postgres::Client {
-        self.conn
+impl From<PostgresConnection> for tokio_postgres::Client {
+    fn from(val: PostgresConnection) -> Self {
+        val.conn
     }
 }
 
@@ -331,10 +334,10 @@ impl<'a> PClient for PostgresTransaction<'a> {
 impl PClient for ManagedConnection<PostgresConnection> {
     type Client = tokio_postgres::Client;
     fn conn(&self) -> &Self::Client {
-        &(&**self).conn
+        &(**self).conn
     }
     fn conn_mut(&mut self) -> &mut Self::Client {
-        &mut (&mut **self).conn
+        &mut (**self).conn
     }
     fn statements(&self) -> &Arc<CachedStatements> {
         &self.statements
@@ -498,7 +501,7 @@ where
                                 let timestamp: Option<DateTime<Utc>> = row.get(2);
                                 match timestamp {
                                     Some(t) => Date(t),
-                                    None => Date(Utc.with_ymd_and_hms(2001, 01, 01, 0, 0, 0).unwrap()),
+                                    None => Date(Utc.with_ymd_and_hms(2001, 1, 1, 0, 0, 0).unwrap()),
                                 }
                             },
                             r#type: CommitType::from_str(&row.get::<_, String>(3)).unwrap()
@@ -734,7 +737,7 @@ where
         self.conn()
             .execute(
                 &self.statements().insert_pstat,
-                &[&sid, &(artifact.0 as i32), &(collection.0 as i32), &stat],
+                &[&sid, &(artifact.0 as i32), &{ collection.0 }, &stat],
             )
             .await
             .unwrap();
@@ -762,7 +765,7 @@ where
                 &self.statements().insert_rustc,
                 &[
                     &(artifact.0 as i32),
-                    &(collection.0 as i32),
+                    &{ collection.0 },
                     &krate,
                     &(value.as_nanos() as i64),
                 ],
@@ -852,9 +855,9 @@ where
             .execute(
                 &self.statements().insert_self_profile_query,
                 &[
-                    &(sid as i32),
+                    &{ sid },
                     &(artifact.0 as i32),
-                    &(collection.0 as i32),
+                    &{ collection.0 },
                     &i64::try_from(qd.self_time.as_nanos()).unwrap(),
                     &i64::try_from(qd.blocked_time.as_nanos()).unwrap(),
                     &i64::try_from(qd.incremental_load_time.as_nanos()).unwrap(),
@@ -1024,7 +1027,7 @@ where
                     date: row
                         .get::<_, Option<_>>(1)
                         .map(Date)
-                        .unwrap_or_else(|| Date::ymd_hms(2001, 01, 01, 0, 0, 0)),
+                        .unwrap_or_else(|| Date::ymd_hms(2001, 1, 1, 0, 0, 0)),
                     r#type: CommitType::from_str(&ty).unwrap(),
                 }),
                 "release" => ArtifactId::Tag(row.get(0)),

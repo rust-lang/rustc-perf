@@ -26,11 +26,11 @@ use crate::interpolate::Interpolate;
 use crate::load::SiteCtxt;
 
 use collector::Bound;
-use database::{Benchmark, Commit, Index, Lookup, Metric, QueryLabel};
+use database::{Benchmark, Commit, Index, Lookup};
 
+use crate::comparison::Metric;
 use std::fmt;
 use std::ops::RangeInclusive;
-use std::str::FromStr;
 use std::sync::Arc;
 
 /// Finds the most appropriate `ArtifactId` for a given bound.
@@ -50,7 +50,7 @@ pub fn artifact_id_for_bound(data: &Index, bound: Bound, is_left: bool) -> Optio
             .rfind(|commit| bound.right_match(commit))
             .cloned()
     };
-    commit.map(|c| ArtifactId::Commit(c)).or_else(|| {
+    commit.map(ArtifactId::Commit).or_else(|| {
         data.artifacts()
             .find(|aid| match &bound {
                 Bound::Commit(c) => *c == **aid,
@@ -110,91 +110,6 @@ impl Iterator for ArtifactIdIter {
     }
 }
 
-#[derive(Copy, Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Tag {
-    Benchmark,
-    Profile,
-    Scenario,
-    Metric,
-    QueryLabel,
-}
-
-pub trait GetValue {
-    fn value(component: &PathComponent) -> Option<&Self>;
-}
-
-impl GetValue for Benchmark {
-    fn value(component: &PathComponent) -> Option<&Self> {
-        match component {
-            PathComponent::Benchmark(v) => Some(v),
-            _ => None,
-        }
-    }
-}
-
-impl GetValue for Profile {
-    fn value(component: &PathComponent) -> Option<&Self> {
-        match component {
-            PathComponent::Profile(v) => Some(v),
-            _ => None,
-        }
-    }
-}
-
-impl GetValue for Scenario {
-    fn value(component: &PathComponent) -> Option<&Self> {
-        match component {
-            PathComponent::Scenario(v) => Some(v),
-            _ => None,
-        }
-    }
-}
-
-impl GetValue for Metric {
-    fn value(component: &PathComponent) -> Option<&Self> {
-        match component {
-            PathComponent::Metric(v) => Some(v),
-            _ => None,
-        }
-    }
-}
-
-impl GetValue for QueryLabel {
-    fn value(component: &PathComponent) -> Option<&Self> {
-        match component {
-            PathComponent::QueryLabel(v) => Some(v),
-            _ => None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
-pub enum PathComponent {
-    Benchmark(Benchmark),
-    Profile(Profile),
-    Scenario(Scenario),
-    QueryLabel(QueryLabel),
-    Metric(Metric),
-}
-
-impl PathComponent {
-    pub fn as_tag(&self) -> Tag {
-        match self {
-            PathComponent::Benchmark(_) => Tag::Benchmark,
-            PathComponent::Profile(_) => Tag::Profile,
-            PathComponent::Scenario(_) => Tag::Scenario,
-            PathComponent::Metric(_) => Tag::Metric,
-            PathComponent::QueryLabel(_) => Tag::QueryLabel,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct QueryComponent {
-    pub tag: Tag,
-    pub raw: Selector<String>,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Selector<T> {
     All,
@@ -210,7 +125,7 @@ impl<T> Selector<T> {
             Selector::One(o) => Selector::One(f(o)),
         }
     }
-    fn try_map<U, E>(self, mut f: impl FnMut(T) -> Result<U, E>) -> Result<Selector<U>, E> {
+    pub fn try_map<U, E>(self, mut f: impl FnMut(T) -> Result<U, E>) -> Result<Selector<U>, E> {
         Ok(match self {
             Selector::All => Selector::All,
             Selector::Subset(subset) => {
@@ -245,14 +160,14 @@ impl<T> Selector<T> {
 
 #[derive(Debug)]
 pub struct SeriesResponse<T> {
-    pub path: Path,
+    pub key: CompileBenchmarkKey,
     pub series: T,
 }
 
 impl<T> SeriesResponse<T> {
     pub fn map<U>(self, m: impl FnOnce(T) -> U) -> SeriesResponse<U> {
         SeriesResponse {
-            path: self.path,
+            key: self.key,
             series: m(self.series),
         }
     }
@@ -266,119 +181,70 @@ impl<T> SeriesResponse<T> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Path {
-    path: Vec<PathComponent>,
+#[derive(Clone, Hash, Eq, PartialEq, Debug)]
+pub struct CompileBenchmarkQuery {
+    benchmark: Selector<String>,
+    scenario: Selector<Scenario>,
+    profile: Selector<Profile>,
+    metric: Selector<database::Metric>,
 }
 
-impl Path {
-    pub fn new() -> Self {
-        Self { path: vec![] }
-    }
-
-    pub fn set(mut self, component: PathComponent) -> Self {
-        if let Some(idx) = self
-            .path
-            .iter()
-            .position(|c| c.as_tag() == component.as_tag())
-        {
-            self.path[idx] = component;
-        } else {
-            self.path.push(component);
-        }
+impl CompileBenchmarkQuery {
+    pub fn benchmark(mut self, selector: Selector<String>) -> Self {
+        self.benchmark = selector;
         self
     }
 
-    pub fn get<V: 'static + GetValue>(&self) -> Result<&V, String> {
-        self.path
-            .iter()
-            .find_map(V::value)
-            .ok_or_else(|| format!("query must have {:?} selector", std::any::type_name::<V>()))
-    }
-}
-
-#[derive(Clone, Hash, Eq, PartialEq)]
-pub struct Query {
-    path: Vec<QueryComponent>,
-}
-
-impl fmt::Debug for Query {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Query {{")?;
-        for (idx, qc) in self.path.iter().enumerate() {
-            if idx != 0 {
-                write!(f, ", ")?;
-            }
-            write!(f, "{:?}={:?}", qc.tag, qc.raw)?;
-        }
-        write!(f, " }}")?;
-        Ok(())
-    }
-}
-
-impl Query {
-    pub fn new() -> Self {
-        Self { path: vec![] }
-    }
-
-    pub fn set<T>(mut self, tag: Tag, selector: Selector<T>) -> Self
-    where
-        T: fmt::Display,
-    {
-        if let Some(idx) = self.path.iter().position(|c| c.tag == tag) {
-            self.path[idx].raw = selector.map(|s| s.to_string());
-        } else {
-            self.path.push(QueryComponent {
-                tag,
-                raw: selector.map(|s| s.to_string()),
-            });
-        }
+    pub fn profile(mut self, selector: Selector<Profile>) -> Self {
+        self.profile = selector;
         self
     }
 
-    pub fn get(&self, tag: Tag) -> Result<&QueryComponent, String> {
-        if let Some(idx) = self.path.iter().position(|pc| pc.tag == tag) {
-            Ok(&self.path[idx])
-        } else {
-            Err(format!("query must have {:?} selector", tag))
-        }
+    pub fn scenario(mut self, selector: Selector<Scenario>) -> Self {
+        self.scenario = selector;
+        self
     }
 
-    fn extract(&mut self, tag: Tag) -> Result<QueryComponent, String> {
-        if let Some(idx) = self.path.iter().position(|pc| pc.tag == tag) {
-            Ok(self.path.swap_remove(idx))
-        } else {
-            Err(format!("query must have {:?} selector", tag))
-        }
+    pub fn metric(mut self, selector: Selector<Metric>) -> Self {
+        self.metric = selector.map(|v| v.as_str().into());
+        self
     }
 
-    fn extract_as<T>(&mut self, tag: Tag) -> Result<Selector<T>, String>
-    where
-        T: FromStr,
-        <T as FromStr>::Err: fmt::Display,
-    {
-        Ok(self.extract(tag)?.raw.try_map(|p| {
-            p.parse::<T>()
-                .map_err(|e| format!("failed to parse query tag {:?}: {}", tag, e))
-        })?)
-    }
-
-    fn assert_empty(&self) -> Result<(), String> {
-        if self.path.is_empty() {
-            Ok(())
-        } else {
-            Err(format!("Extra components: {:?}", self.path))
+    pub fn all_for_metric(metric: Metric) -> Self {
+        Self {
+            benchmark: Selector::All,
+            profile: Selector::All,
+            scenario: Selector::All,
+            metric: Selector::One(metric.as_str().into()),
         }
     }
+}
+
+impl Default for CompileBenchmarkQuery {
+    fn default() -> Self {
+        Self {
+            benchmark: Selector::All,
+            scenario: Selector::All,
+            profile: Selector::All,
+            metric: Selector::All,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct CompileBenchmarkKey {
+    pub benchmark: Benchmark,
+    pub profile: Profile,
+    pub scenario: Scenario,
 }
 
 impl SiteCtxt {
-    pub async fn statistic_series(
+    pub async fn compile_statistic_series(
         &self,
-        query: Query,
+        query: CompileBenchmarkQuery,
         artifact_ids: Arc<Vec<ArtifactId>>,
     ) -> Result<Vec<SeriesResponse<StatisticSeries>>, String> {
-        StatisticSeries::execute_query(artifact_ids.clone(), self, query.clone()).await
+        StatisticSeries::execute_compile_query(artifact_ids, self, query).await
     }
 }
 
@@ -388,26 +254,21 @@ pub struct StatisticSeries {
 }
 
 impl StatisticSeries {
-    async fn execute_query(
+    async fn execute_compile_query(
         artifact_ids: Arc<Vec<ArtifactId>>,
         ctxt: &SiteCtxt,
-        mut query: Query,
+        query: CompileBenchmarkQuery,
     ) -> Result<Vec<SeriesResponse<Self>>, String> {
         let dumped = format!("{:?}", query);
-        let benchmark = query.extract_as::<String>(Tag::Benchmark)?;
-        let profile = query.extract_as::<Profile>(Tag::Profile)?;
-        let scenario = query.extract_as::<Scenario>(Tag::Scenario)?;
-        let metric = query.extract_as::<Metric>(Tag::Metric)?;
-        query.assert_empty()?;
 
         let index = ctxt.index.load();
         let mut statistic_descriptions = index
             .all_statistic_descriptions()
             .filter(|&&(b, p, s, m)| {
-                benchmark.matches(b)
-                    && profile.matches(p)
-                    && scenario.matches(s)
-                    && metric.matches(m)
+                query.benchmark.matches(b)
+                    && query.profile.matches(p)
+                    && query.scenario.matches(s)
+                    && query.metric.matches(m)
             })
             .collect::<Vec<_>>();
 
@@ -457,11 +318,11 @@ impl StatisticSeries {
                             points.into_iter()
                         },
                     },
-                    path: Path::new()
-                        .set(PathComponent::Benchmark(benchmark))
-                        .set(PathComponent::Profile(profile))
-                        .set(PathComponent::Scenario(scenario))
-                        .set(PathComponent::Metric(metric)),
+                    key: CompileBenchmarkKey {
+                        benchmark,
+                        profile,
+                        scenario,
+                    },
                 }
             })
             .collect::<Vec<_>>();

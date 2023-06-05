@@ -46,7 +46,7 @@ pub async fn unroll_rollup(
                     let head = format_commit(&c.rolled_up_head, true);
                     format!("❌ conflicts merging '{head}' into previous master ❌")
                 });
-            write!(&mut string, "|#{pr}|{commit}|\n", pr = c.original_pr_number).unwrap();
+            writeln!(&mut string, "|#{pr}|{commit}|", pr = c.original_pr_number).unwrap();
             string
         });
     let previous_master = format_commit(previous_master, true);
@@ -176,7 +176,7 @@ pub async fn rollup_pr_number(
     }
 
     let number = ROLLUP_PR_NUMBER
-        .captures(&message)
+        .captures(message)
         .and_then(|c| c.get(1))
         .map(|m| m.as_str().parse::<u64>())
         .transpose()
@@ -196,7 +196,7 @@ pub async fn rollup_pr_number(
         .labels
         .iter()
         .any(|l| l.name == "rollup")
-        .then(|| issue.number))
+        .then_some(issue.number))
 }
 
 pub async fn enqueue_shas(
@@ -209,7 +209,7 @@ pub async fn enqueue_shas(
     let mut msg = String::new();
     for commit in commits {
         let mut commit_response = ci_client
-            .get_commit(&commit)
+            .get_commit(commit)
             .await
             .map_err(|e| e.to_string())?;
         if commit_response.parents.len() != 2 {
@@ -335,7 +335,7 @@ fn github_request(url: &str) -> reqwest::RequestBuilder {
         .get(url)
         .header("Content-Type", "application/json")
         .header("User-Agent", "rustc-perf");
-    if let Some(token) = std::env::var("GITHUB_TOKEN").ok() {
+    if let Ok(token) = std::env::var("GITHUB_TOKEN") {
         let mut value =
             reqwest::header::HeaderValue::from_str(&format!("token {}", token)).unwrap();
         value.set_sensitive(true);
