@@ -61,7 +61,7 @@ const after = computed(() =>
 </script>
 
 <template>
-  <h2>
+  <h2 style="text-align: center">
     Comparing <span id="stat-header">{{ selector.stat }}</span> between
     <span id="before">{{ before }}</span> and
     <span id="after">{{ after }}</span>
