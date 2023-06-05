@@ -1,7 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::ops::RangeInclusive;
-use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -151,18 +150,6 @@ impl SiteCtxt {
 
     /// Initialize `SiteCtxt` from database url
     pub async fn from_db_url(db_url: &str) -> anyhow::Result<Self> {
-        if Path::new(db_url).join("times").exists() {
-            eprintln!("It looks like you're running the site off of the old data format");
-            eprintln!(
-                "Please utilize the ingest-json script to convert the data into the new database format."
-            );
-            eprintln!("This is intended to be a one-time operation; you can delete the JSON fiels once it is complete.");
-            eprintln!(
-                "    find rustc-timing/times/ -type f | xargs ./target/release/ingest perf-rlo.db finished-files/"
-            );
-            std::process::exit(1);
-        }
-
         let pool = Pool::open(db_url);
 
         let mut conn = pool.connection().await;
