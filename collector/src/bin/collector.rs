@@ -13,6 +13,7 @@ use collector::benchmark::{
 use collector::{runtime, utils, CollectorCtx, CollectorStepBuilder};
 use database::{ArtifactId, Commit, CommitType, Connection, Pool};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use std::cmp::Ordering;
 use std::ffi::OsStr;
 use std::fs;
 use std::fs::File;
@@ -57,6 +58,7 @@ impl BenchmarkErrors {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn bench(
     rt: &mut Runtime,
     mut conn: Box<dyn Connection>,
@@ -326,6 +328,7 @@ fn cg_annotate(cgout: &Path, path: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn profile(
     compiler: Compiler,
     id: &str,
@@ -710,7 +713,7 @@ fn main_result() -> anyhow::Result<i32> {
             let pool = Pool::open(&db.db);
 
             let suite = runtime::discover_benchmarks(&toolchain, &runtime_benchmark_dir)?;
-            let artifact_id = ArtifactId::Tag(toolchain.id.clone());
+            let artifact_id = ArtifactId::Tag(toolchain.id);
             let (conn, collector) = rt.block_on(async {
                 let mut conn = pool.connection().await;
                 let collector = CollectorStepBuilder::default()
@@ -770,8 +773,8 @@ fn main_result() -> anyhow::Result<i32> {
             let res = bench(
                 &mut rt,
                 conn,
-                &profiles,
-                &scenarios,
+                profiles,
+                scenarios,
                 Compiler::from_toolchain(&toolchain, &target_triple),
                 &benchmarks,
                 Some(iterations),
@@ -953,16 +956,19 @@ fn main_result() -> anyhow::Result<i32> {
                         scenarios,
                         &mut errors,
                     );
-                    if diffs.len() > 1 {
-                        eprintln!("Diffs:");
-                        for diff in diffs {
-                            eprintln!("{}", diff.to_string_lossy());
+                    match diffs.len().cmp(&1) {
+                        Ordering::Equal => {
+                            let short = out_dir.join("cgann-diff-latest");
+                            std::fs::copy(&diffs[0], &short).expect("copy to short path");
+                            eprintln!("Original diff at: {}", diffs[0].to_string_lossy());
+                            eprintln!("Short path: {}", short.to_string_lossy());
                         }
-                    } else if diffs.len() == 1 {
-                        let short = out_dir.join("cgann-diff-latest");
-                        std::fs::copy(&diffs[0], &short).expect("copy to short path");
-                        eprintln!("Original diff at: {}", diffs[0].to_string_lossy());
-                        eprintln!("Short path: {}", short.to_string_lossy());
+                        _ => {
+                            eprintln!("Diffs:");
+                            for diff in diffs {
+                                eprintln!("{}", diff.to_string_lossy());
+                            }
+                        }
                     }
                 }
             } else {
@@ -1020,7 +1026,7 @@ async fn init_compile_collector(
 ) -> (Box<dyn Connection>, CollectorCtx) {
     let mut conn = pool.connection().await;
     let collector = CollectorStepBuilder::default()
-        .record_compile_benchmarks(&benchmarks, bench_rustc)
+        .record_compile_benchmarks(benchmarks, bench_rustc)
         .start_collection(conn.as_mut(), artifact_id)
         .await;
     (conn, collector)

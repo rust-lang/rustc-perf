@@ -84,7 +84,7 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
         static ref STABLE_BENCHMARKS: Vec<String> = get_stable_benchmarks();
     }
 
-    let query = selector::CompileBenchmarkQuery::new()
+    let query = selector::CompileBenchmarkQuery::default()
         .benchmark(selector::Selector::Subset(STABLE_BENCHMARKS.clone()))
         .metric(selector::Selector::One(Metric::WallTime));
 

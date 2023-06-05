@@ -583,7 +583,7 @@ pub async fn handle_self_profile(
         .ok()
         .ok_or("sort_idx needs to be i32".to_string())?;
 
-    let query = selector::CompileBenchmarkQuery::new()
+    let query = selector::CompileBenchmarkQuery::default()
         .benchmark(selector::Selector::One(bench_name.to_string()))
         .profile(selector::Selector::One(profile.parse().unwrap()))
         .scenario(selector::Selector::One(scenario))

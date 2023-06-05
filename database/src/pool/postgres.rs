@@ -238,8 +238,11 @@ impl ConnectionManager for Postgres {
                 .await
                 .unwrap();
             let version: Option<i32> = version.get(0);
-            for mid in (version.unwrap_or(0) as usize + 1)..MIGRATIONS.len() {
-                let sql = MIGRATIONS[mid];
+            for (mid, sql) in MIGRATIONS
+                .iter()
+                .enumerate()
+                .skip(version.unwrap_or(0) as usize + 1)
+            {
                 let tx = client.transaction().await.unwrap();
                 tx.batch_execute(sql).await.unwrap();
                 tx.execute(

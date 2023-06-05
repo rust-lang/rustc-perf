@@ -1,4 +1,3 @@
-use std::future::Future;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -91,25 +90,23 @@ async fn record_stats(
     rustc_perf_version: &str,
     result: BenchmarkResult,
 ) {
-    fn record<'a>(
+    async fn record<'a>(
         conn: &'a dyn Connection,
         artifact_id: ArtifactIdNumber,
         collection_id: CollectionId,
         result: &'a BenchmarkResult,
         value: Option<u64>,
         metric: &'a str,
-    ) -> impl Future<Output = ()> + 'a {
-        async move {
-            if let Some(value) = value {
-                conn.record_runtime_statistic(
-                    collection_id,
-                    artifact_id,
-                    &result.name,
-                    metric,
-                    value as f64,
-                )
-                .await;
-            }
+    ) {
+        if let Some(value) = value {
+            conn.record_runtime_statistic(
+                collection_id,
+                artifact_id,
+                &result.name,
+                metric,
+                value as f64,
+            )
+            .await;
         }
     }
 

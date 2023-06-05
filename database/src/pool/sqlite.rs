@@ -361,8 +361,8 @@ impl ConnectionManager for Sqlite {
                     |row| row.get(0),
                 )
                 .unwrap();
-            for mid in (version as usize + 1)..MIGRATIONS.len() {
-                MIGRATIONS[mid].execute(&mut conn, mid as i32);
+            for (mid, migration) in MIGRATIONS.iter().enumerate().skip(version as usize + 1) {
+                migration.execute(&mut conn, mid as i32);
             }
         });
 

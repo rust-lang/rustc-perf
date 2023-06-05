@@ -58,7 +58,7 @@ async fn create_graph(
     let artifact_ids = artifact_ids_for_range(&ctxt, request.start, request.end);
     let mut series_iterator = ctxt
         .compile_statistic_series(
-            CompileBenchmarkQuery::new()
+            CompileBenchmarkQuery::default()
                 .benchmark(Selector::One(request.benchmark))
                 .profile(Selector::One(request.profile.parse()?))
                 .scenario(Selector::One(request.scenario.parse()?))
@@ -101,7 +101,7 @@ async fn create_graphs(
 
     let interpolated_responses: Vec<_> = ctxt
         .compile_statistic_series(
-            CompileBenchmarkQuery::new()
+            CompileBenchmarkQuery::default()
                 .benchmark(benchmark_selector)
                 .profile(profile_selector)
                 .scenario(scenario_selector)

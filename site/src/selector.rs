@@ -190,15 +190,6 @@ pub struct CompileBenchmarkQuery {
 }
 
 impl CompileBenchmarkQuery {
-    pub fn new() -> Self {
-        Self {
-            benchmark: Selector::All,
-            scenario: Selector::All,
-            profile: Selector::All,
-            metric: Selector::All,
-        }
-    }
-
     pub fn benchmark(mut self, selector: Selector<String>) -> Self {
         self.benchmark = selector;
         self
@@ -225,6 +216,17 @@ impl CompileBenchmarkQuery {
             profile: Selector::All,
             scenario: Selector::All,
             metric: Selector::One(metric.as_str().into()),
+        }
+    }
+}
+
+impl Default for CompileBenchmarkQuery {
+    fn default() -> Self {
+        Self {
+            benchmark: Selector::All,
+            scenario: Selector::All,
+            profile: Selector::All,
+            metric: Selector::All,
         }
     }
 }
