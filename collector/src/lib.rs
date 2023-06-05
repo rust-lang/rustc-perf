@@ -12,6 +12,9 @@ pub mod runtime;
 pub mod toolchain;
 pub mod utils;
 
+use crate::benchmark::{Benchmark, BenchmarkName};
+use crate::runtime::{BenchmarkGroup, BenchmarkSuite};
+use database::{ArtifactId, ArtifactIdNumber, Connection};
 use process::Stdio;
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Deserialize)]
@@ -243,4 +246,101 @@ pub struct MasterCommit {
 pub async fn master_commits() -> anyhow::Result<Vec<MasterCommit>> {
     let response = reqwest::get("https://triage.rust-lang.org/bors-commit-list").await?;
     Ok(response.json().await?)
+}
+
+/// Collects information about steps that will be benchmarked during a single artifact run.
+#[derive(Default)]
+pub struct CollectorStepBuilder {
+    steps: Vec<String>,
+    bench_rustc: bool,
+}
+
+impl CollectorStepBuilder {
+    pub fn record_compile_benchmarks(
+        mut self,
+        benchmarks: &[Benchmark],
+        bench_rustc: bool,
+    ) -> Self {
+        self.steps
+            .extend(benchmarks.iter().map(|b| b.name.to_string()));
+        if bench_rustc {
+            self.steps.push("rustc".to_string());
+            self.bench_rustc = true;
+        }
+        self
+    }
+
+    pub fn record_runtime_benchmarks(mut self, suite: &BenchmarkSuite) -> Self {
+        self.steps
+            .extend(suite.groups.iter().map(runtime_group_step_name));
+        self
+    }
+
+    pub async fn start_collection(
+        self,
+        conn: &mut dyn Connection,
+        artifact_id: ArtifactId,
+    ) -> CollectorCtx {
+        // Make sure there is no observable time when the artifact ID is available
+        // but the in-progress steps are not.
+        let artifact_row_id = {
+            let mut tx = conn.transaction().await;
+            let artifact_row_id = tx.conn().artifact_id(&artifact_id).await;
+            tx.conn()
+                .collector_start(artifact_row_id, &self.steps)
+                .await;
+            tx.commit().await.unwrap();
+            artifact_row_id
+        };
+        CollectorCtx {
+            artifact_id,
+            artifact_row_id,
+            bench_rustc: self.bench_rustc,
+        }
+    }
+}
+
+/// Represents an in-progress run for a given artifact.
+pub struct CollectorCtx {
+    pub artifact_id: ArtifactId,
+    pub artifact_row_id: ArtifactIdNumber,
+    pub bench_rustc: bool,
+}
+
+impl CollectorCtx {
+    pub async fn start_compile_step(
+        &mut self,
+        conn: &mut dyn Connection,
+        benchmark_name: &BenchmarkName,
+    ) -> bool {
+        conn.collector_start_step(self.artifact_row_id, &benchmark_name.0)
+            .await
+    }
+
+    pub async fn end_compile_step(
+        &mut self,
+        conn: &mut dyn Connection,
+        benchmark_name: &BenchmarkName,
+    ) {
+        conn.collector_end_step(self.artifact_row_id, &benchmark_name.0)
+            .await
+    }
+
+    pub async fn start_runtime_step(
+        &mut self,
+        conn: &mut dyn Connection,
+        group: &BenchmarkGroup,
+    ) -> bool {
+        conn.collector_start_step(self.artifact_row_id, &runtime_group_step_name(group))
+            .await
+    }
+
+    pub async fn end_runtime_step(&mut self, conn: &mut dyn Connection, group: &BenchmarkGroup) {
+        conn.collector_end_step(self.artifact_row_id, &runtime_group_step_name(group))
+            .await
+    }
+}
+
+fn runtime_group_step_name(group: &BenchmarkGroup) -> String {
+    format!("runtime:{}", group.name())
 }
