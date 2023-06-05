@@ -411,6 +411,8 @@ pub struct Index {
     /// Id lookup of compile stat description ids
     /// For legacy reasons called `pstat_series` in the database, and so the name is kept here.
     pstat_series: Indexed<(Benchmark, Profile, Scenario, Metric)>,
+    /// Id lookup of runtime stat description ids
+    runtime_pstat_series: Indexed<(Benchmark, Metric)>,
 }
 
 /// An index lookup
@@ -622,6 +624,15 @@ impl Index {
         ),
     > + '_ {
         self.pstat_series
+            .map
+            .iter()
+            .map(|(test_case, &row_id)| (test_case, row_id))
+    }
+
+    pub fn runtime_statistic_descriptions(
+        &self,
+    ) -> impl Iterator<Item = (&(Benchmark, Metric), StatisticalDescriptionId)> + '_ {
+        self.runtime_pstat_series
             .map
             .iter()
             .map(|(test_case, &row_id)| (test_case, row_id))

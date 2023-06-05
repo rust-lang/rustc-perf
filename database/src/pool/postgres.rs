@@ -556,6 +556,25 @@ where
                     )
                 })
                 .collect(),
+            runtime_pstat_series: self
+                .conn()
+                .query(
+                    "select id, benchmark, metric from runtime_pstat_series;",
+                    &[],
+                )
+                .await
+                .unwrap()
+                .into_iter()
+                .map(|row| {
+                    (
+                        row.get::<_, i32>(0) as u32,
+                        (
+                            row.get::<_, String>(1).as_str().into(),
+                            row.get::<_, String>(2).as_str().into(),
+                        ),
+                    )
+                })
+                .collect(),
         }
     }
     async fn get_compile_benchmarks(&self) -> Vec<CompileBenchmark> {

@@ -189,6 +189,7 @@ pub trait BenchmarkQuery: Debug {
     ) -> Vec<(Self::TestCase, database::Metric, u32)>;
 }
 
+// Compile benchmarks querying
 #[derive(Clone, Hash, Eq, PartialEq, Debug)]
 pub struct CompileBenchmarkQuery {
     benchmark: Selector<String>,
@@ -277,6 +278,63 @@ pub struct CompileTestCase {
 }
 
 impl TestCase for CompileTestCase {}
+
+// Runtime benchmarks querying
+#[derive(Clone, Hash, Eq, PartialEq, Debug)]
+pub struct RuntimeBenchmarkQuery {
+    benchmark: Selector<String>,
+    metric: Selector<database::Metric>,
+}
+
+impl RuntimeBenchmarkQuery {
+    pub fn benchmark(mut self, selector: Selector<String>) -> Self {
+        self.benchmark = selector;
+        self
+    }
+
+    pub fn metric(mut self, selector: Selector<Metric>) -> Self {
+        self.metric = selector.map(|v| v.as_str().into());
+        self
+    }
+
+    pub fn all_for_metric(metric: Metric) -> Self {
+        Self {
+            benchmark: Selector::All,
+            metric: Selector::One(metric.as_str().into()),
+        }
+    }
+}
+
+impl Default for RuntimeBenchmarkQuery {
+    fn default() -> Self {
+        Self {
+            benchmark: Selector::All,
+            metric: Selector::All,
+        }
+    }
+}
+
+impl BenchmarkQuery for RuntimeBenchmarkQuery {
+    type TestCase = RuntimeTestCase;
+
+    fn get_statistic_descriptions(
+        &self,
+        index: &Index,
+    ) -> Vec<(Self::TestCase, database::Metric, u32)> {
+        index
+            .runtime_statistic_descriptions()
+            .filter(|(&(b, m), _)| self.benchmark.matches(b) && self.metric.matches(m))
+            .map(|(&(benchmark, metric), sid)| (RuntimeTestCase { benchmark }, metric, sid))
+            .collect()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RuntimeTestCase {
+    pub benchmark: Benchmark,
+}
+
+impl TestCase for RuntimeTestCase {}
 
 impl SiteCtxt {
     pub async fn statistic_series<Q: BenchmarkQuery>(
