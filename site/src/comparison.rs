@@ -6,7 +6,7 @@ use crate::api;
 use crate::db::{ArtifactId, Benchmark, Lookup, Profile, Scenario};
 use crate::github;
 use crate::load::SiteCtxt;
-use crate::selector::{self, CompileBenchmarkQuery, CompileTestCase, TestCase};
+use crate::selector::{self, BenchmarkQuery, CompileBenchmarkQuery, TestCase};
 
 use collector::benchmark::category::Category;
 use collector::Bound;
@@ -802,15 +802,19 @@ async fn compare_given_commits(
 
     // `responses` contains series iterators. The first element in the iterator is the data
     // for `a` and the second is the data for `b`
-    let mut responses = ctxt.compile_statistic_series(query.clone(), aids).await?;
+    let mut responses = ctxt.statistic_series(query.clone(), aids).await?;
 
     let conn = ctxt.conn().await;
     let statistics_for_a = statistics_from_series(&mut responses);
     let statistics_for_b = statistics_from_series(&mut responses);
 
-    let mut historical_data =
-        HistoricalDataMap::<CompileTestCase>::calculate(ctxt, a.clone(), master_commits, query)
-            .await?;
+    let mut historical_data = HistoricalDataMap::<CompileBenchmarkQuery>::calculate(
+        ctxt,
+        a.clone(),
+        master_commits,
+        query,
+    )
+    .await?;
     let comparisons = statistics_for_a
         .into_iter()
         .filter_map(|(test_case, a)| {
@@ -1048,19 +1052,19 @@ impl ArtifactComparison {
 }
 
 /// The historical data for a certain benchmark
-pub struct HistoricalDataMap<TestCase> {
+pub struct HistoricalDataMap<Query: BenchmarkQuery> {
     /// Historical data on a per test case basis
-    pub data: HashMap<TestCase, HistoricalData>,
+    pub data: HashMap<Query::TestCase, HistoricalData>,
 }
 
-impl HistoricalDataMap<CompileTestCase> {
+impl<Query: BenchmarkQuery> HistoricalDataMap<Query> {
     const NUM_PREVIOUS_COMMITS: usize = 30;
 
     async fn calculate(
         ctxt: &SiteCtxt,
         from: ArtifactId,
         master_commits: &[collector::MasterCommit],
-        query: CompileBenchmarkQuery,
+        query: Query,
     ) -> Result<Self, BoxedError> {
         let mut historical_data = HashMap::new();
 
@@ -1078,7 +1082,7 @@ impl HistoricalDataMap<CompileTestCase> {
         }
 
         let mut previous_commit_series = ctxt
-            .compile_statistic_series(query, previous_commits.clone())
+            .statistic_series(query, previous_commits.clone())
             .await?;
 
         for _ in previous_commits.iter() {

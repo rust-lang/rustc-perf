@@ -408,7 +408,7 @@ pub struct Index {
     artifacts: Indexed<Box<str>>,
     /// Id lookup of the errors for a crate
     errors: Indexed<Benchmark>,
-    /// Id lookup of stat description ids
+    /// Id lookup of compile stat description ids
     /// For legacy reasons called `pstat_series` in the database, and so the name is kept here.
     pstat_series: Indexed<(Benchmark, Profile, Scenario, Metric)>,
 }
@@ -613,7 +613,7 @@ impl Index {
     // millions of queries and labels and iterating all of them is eventually
     // going to be impractical. But for now it performs quite well, so we'll go
     // for it as keeping indices around would be annoying.
-    pub fn all_statistic_descriptions(
+    pub fn compile_statistic_descriptions(
         &self,
     ) -> impl Iterator<
         Item = (

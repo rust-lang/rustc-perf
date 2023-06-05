@@ -29,7 +29,7 @@ use collector::Bound;
 use database::{Benchmark, Commit, Index, Lookup};
 
 use crate::comparison::Metric;
-use std::fmt;
+use std::fmt::Debug;
 use std::hash::Hash;
 use std::ops::RangeInclusive;
 use std::sync::Arc;
@@ -146,21 +146,10 @@ impl<T> Selector<T> {
             Selector::All => true,
         }
     }
-
-    pub fn assert_one(&self) -> &T
-    where
-        T: fmt::Debug,
-    {
-        if let Selector::One(one) = self {
-            one
-        } else {
-            panic!("{:?} != One", self)
-        }
-    }
 }
 
 /// Represents the parameters of a single benchmark execution that collects a set of statistics.
-pub trait TestCase: std::fmt::Debug + Clone + Hash + Eq + PartialEq {}
+pub trait TestCase: Debug + Clone + Hash + PartialEq + Eq + PartialOrd + Ord {}
 
 #[derive(Debug)]
 pub struct SeriesResponse<Case, T> {
@@ -187,6 +176,17 @@ impl<TestCase, T> SeriesResponse<TestCase, T> {
     {
         self.map(|s| Interpolate::new(s))
     }
+}
+
+pub trait BenchmarkQuery: Debug {
+    type TestCase: TestCase;
+
+    /// Returns all known statistic descriptions (test cases + metrics) and their corresponding
+    /// row IDs.
+    fn get_statistic_descriptions(
+        &self,
+        index: &Index,
+    ) -> Vec<(Self::TestCase, database::Metric, u32)>;
 }
 
 #[derive(Clone, Hash, Eq, PartialEq, Debug)]
@@ -239,7 +239,37 @@ impl Default for CompileBenchmarkQuery {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+impl BenchmarkQuery for CompileBenchmarkQuery {
+    type TestCase = CompileTestCase;
+
+    fn get_statistic_descriptions(
+        &self,
+        index: &Index,
+    ) -> Vec<(Self::TestCase, database::Metric, u32)> {
+        index
+            .compile_statistic_descriptions()
+            .filter(|(&(b, p, s, m), _)| {
+                self.benchmark.matches(b)
+                    && self.profile.matches(p)
+                    && self.scenario.matches(s)
+                    && self.metric.matches(m)
+            })
+            .map(|(&(benchmark, profile, scenario, metric), sid)| {
+                (
+                    CompileTestCase {
+                        benchmark,
+                        profile,
+                        scenario,
+                    },
+                    metric,
+                    sid,
+                )
+            })
+            .collect()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CompileTestCase {
     pub benchmark: Benchmark,
     pub profile: Profile,
@@ -249,11 +279,11 @@ pub struct CompileTestCase {
 impl TestCase for CompileTestCase {}
 
 impl SiteCtxt {
-    pub async fn compile_statistic_series(
+    pub async fn statistic_series<Q: BenchmarkQuery>(
         &self,
-        query: CompileBenchmarkQuery,
+        query: Q,
         artifact_ids: Arc<Vec<ArtifactId>>,
-    ) -> Result<Vec<SeriesResponse<CompileTestCase, StatisticSeries>>, String> {
+    ) -> Result<Vec<SeriesResponse<Q::TestCase, StatisticSeries>>, String> {
         StatisticSeries::execute_compile_query(artifact_ids, self, query).await
     }
 }
@@ -264,27 +294,23 @@ pub struct StatisticSeries {
 }
 
 impl StatisticSeries {
-    async fn execute_compile_query(
+    async fn execute_compile_query<Q: BenchmarkQuery>(
         artifact_ids: Arc<Vec<ArtifactId>>,
         ctxt: &SiteCtxt,
-        query: CompileBenchmarkQuery,
-    ) -> Result<Vec<SeriesResponse<CompileTestCase, Self>>, String> {
+        query: Q,
+    ) -> Result<Vec<SeriesResponse<Q::TestCase, Self>>, String> {
         let dumped = format!("{:?}", query);
 
         let index = ctxt.index.load();
-        let mut statistic_descriptions = index
-            .all_statistic_descriptions()
-            .filter(|(&(b, p, s, m), _)| {
-                query.benchmark.matches(b)
-                    && query.profile.matches(p)
-                    && query.scenario.matches(s)
-                    && query.metric.matches(m)
-            })
-            .collect::<Vec<_>>();
+        let mut statistic_descriptions = query.get_statistic_descriptions(&index);
 
         statistic_descriptions.sort_unstable();
+        let descriptions_count = statistic_descriptions.len();
 
-        let sids: Vec<_> = statistic_descriptions.iter().map(|(_, sid)| *sid).collect();
+        let sids: Vec<_> = statistic_descriptions
+            .iter()
+            .map(|(_, _, sid)| *sid)
+            .collect();
         let aids = artifact_ids
             .iter()
             .map(|aid| aid.lookup(&index))
@@ -299,13 +325,13 @@ impl StatisticSeries {
             .get_pstats(&sids, &aids)
             .await
             .into_iter()
-            .zip(&statistic_descriptions)
+            .zip(statistic_descriptions)
             .filter(|(points, _)| points.iter().any(|value| value.is_some()))
-            .map(|(points, (&(benchmark, profile, scenario, metric), _))| {
+            .map(|(points, (test_case, metric, _))| {
                 SeriesResponse {
                     series: StatisticSeries {
                         artifact_ids: ArtifactIdIter::new(artifact_ids.clone()),
-                        points: if metric == *"cpu-clock" || metric == *"task-clock" {
+                        points: if *metric == *"cpu-clock" || *metric == *"task-clock" {
                             // Convert to seconds -- perf reports these measurements in
                             // milliseconds
                             points
@@ -317,18 +343,14 @@ impl StatisticSeries {
                             points.into_iter()
                         },
                     },
-                    test_case: CompileTestCase {
-                        benchmark,
-                        profile,
-                        scenario,
-                    },
+                    test_case,
                 }
             })
             .collect::<Vec<_>>();
         log::trace!(
             "{:?}: run {} from {}",
             start.elapsed(),
-            statistic_descriptions.len(),
+            descriptions_count,
             dumped
         );
         Ok(res)
