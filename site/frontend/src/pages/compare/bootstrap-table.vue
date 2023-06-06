@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import {CompareResponse} from "./types";
-import {percentClass} from "./shared";
+import {diffClass, percentClass} from "./shared";
 
 const props = defineProps<{data: CompareResponse}>();
 
@@ -44,16 +44,6 @@ const bootstraps = Object.entries(props.data.a.bootstrap)
       return a.name.localeCompare(b.name);
     }
   });
-
-function diffClass(diff: number): string {
-  let klass = "";
-  if (diff > 1) {
-    klass = "positive";
-  } else if (diff < -1) {
-    klass = "negative";
-  }
-  return klass;
-}
 </script>
 
 <template>

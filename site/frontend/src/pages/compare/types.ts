@@ -66,3 +66,8 @@ export interface CompareResponse {
   new_errors: Array<[string, string]>;
   compile_benchmark_data: [CompileBenchmarkDescription];
 }
+
+export enum Tab {
+  CompileTime,
+  Bootstrap,
+}
