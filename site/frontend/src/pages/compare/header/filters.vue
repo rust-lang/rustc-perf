@@ -33,7 +33,7 @@ watch(
 
 <template>
   <fieldset class="collapsible-section">
-    <Toggle :defaultOpened="true">
+    <Toggle :defaultOpened="false">
       <template #label>Filters</template>
       <template #content>
         <div>
