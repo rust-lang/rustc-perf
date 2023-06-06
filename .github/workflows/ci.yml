@@ -20,11 +20,28 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Install toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.70.0
+          override: true
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: linux
+
+      - name: Run unit tests
+        run: cargo test --all
+
+      - name: Lint check
+        run: cargo clippy --all -- -D warnings
+
       - name: Formatting check
         run: cargo fmt --all -- --check
 
       - uses: docker/setup-buildx-action@v2
-      - name: Build and push
+      - name: Build Docker image
         uses: docker/build-push-action@v4
         with:
           context: .
