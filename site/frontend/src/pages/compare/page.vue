@@ -2,7 +2,7 @@
 import {loadBenchmarkInfo} from "../../api";
 import AsOf from "../../components/as-of.vue";
 import {
-  createUrlFromParams,
+  changeUrl,
   createUrlWithAppendedParams,
   getUrlParams,
   navigateToUrlParams,
@@ -39,6 +39,21 @@ function loadSelectorFromUrl(urlParams: Dict<string>): CompareSelector {
     end,
     stat,
   };
+}
+
+function loadTabFromUrl(urlParams: Dict<string>): Tab | null {
+  const tab = urlParams["tab"] ?? "";
+  if (tab == Tab.CompileTime) {
+    return Tab.CompileTime;
+  } else if (tab == Tab.Bootstrap) {
+    return Tab.Bootstrap;
+  }
+  return null;
+}
+
+function storeTabToUrl(urlParams: Dict<string>, tab: Tab) {
+  urlParams["tab"] = tab as string;
+  changeUrl(urlParams);
 }
 
 function loadFilterFromUrl(
@@ -141,10 +156,7 @@ function storeFilterToUrl(
     defaultFilter.category.secondary
   );
 
-  // Change URL without creating a history entry
-  if (history.replaceState) {
-    history.replaceState({}, null, createUrlFromParams(urlParams).toString());
-  }
+  changeUrl(urlParams);
 }
 
 async function loadCompareData(
@@ -246,10 +258,12 @@ const info = await loadBenchmarkInfo();
 const selector = loadSelectorFromUrl(urlParams);
 const filter = ref(loadFilterFromUrl(urlParams, defaultFilter));
 
-const tab: Ref<Tab> = ref(Tab.CompileTime);
+const initialTab: Tab = loadTabFromUrl(urlParams) ?? Tab.CompileTime;
+const tab: Ref<Tab> = ref(initialTab);
 
 function changeTab(newTab: Tab) {
   tab.value = newTab;
+  storeTabToUrl(getUrlParams(), newTab);
 }
 
 const data: Ref<CompareResponse | null> = ref(null);
@@ -273,6 +287,7 @@ loadCompareData(selector, loading);
       <Tabs
         @change-tab="changeTab"
         :data="data"
+        :initial-tab="initialTab"
         :compile-time-summary="totalSummary"
       />
       <template v-if="tab === Tab.CompileTime">
