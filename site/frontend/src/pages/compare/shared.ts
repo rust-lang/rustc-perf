@@ -29,11 +29,8 @@ export function percentClass(pct: number): string {
 }
 
 export function diffClass(diff: number): string {
-  let klass = "";
-  if (diff > 1) {
-    klass = "positive";
-  } else if (diff < -1) {
-    klass = "negative";
+  if (diff >= 0) {
+    return "positive";
   }
-  return klass;
+  return "negative";
 }

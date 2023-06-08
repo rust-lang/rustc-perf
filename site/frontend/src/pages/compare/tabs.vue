@@ -6,6 +6,7 @@ import {CompareResponse, Tab} from "./types";
 import {diffClass, percentClass} from "./shared";
 import {SummaryGroup} from "./data";
 import SummaryPercentValue from "./summary/percent-value.vue";
+import SummaryRange from "./summary/range.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -55,24 +56,14 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
           <table>
             <thead>
               <tr>
-                <th>min</th>
-                <th>max</th>
-                <th>avg</th>
+                <th>Range</th>
+                <th>Mean</th>
               </tr>
             </thead>
             <thead>
               <tr>
                 <td>
-                  <SummaryPercentValue
-                    :class="percentClass(compileTimeSummary.all.range[0])"
-                    :value="compileTimeSummary.all.range[0]"
-                  />
-                </td>
-                <td>
-                  <SummaryPercentValue
-                    :class="percentClass(compileTimeSummary.all.range[1])"
-                    :value="compileTimeSummary.all.range[1]"
-                  />
+                  <SummaryRange :range="compileTimeSummary.all.range" />
                 </td>
                 <td>
                   <SummaryPercentValue
@@ -94,15 +85,15 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
       @click="changeTab(Tab.Bootstrap)"
     >
       <div class="title">Bootstrap</div>
-      <div
-        :class="{[diffClass(bootstrapB - bootstrapA)]: bootstrapValid}"
-        class="summary"
-      >
+      <div class="summary">
         <div>
           {{ formatBootstrap(bootstrapA) }} ->
           {{ formatBootstrap(bootstrapB) }}
         </div>
-        <div v-if="bootstrapValid">
+        <div
+          v-if="bootstrapValid"
+          :class="{[diffClass(bootstrapB - bootstrapA)]: bootstrapValid}"
+        >
           {{ ((bootstrapB - bootstrapA) / 10e8).toFixed(1) }}s ({{
             (((bootstrapB - bootstrapA) / bootstrapA) * 100).toFixed(3)
           }}%)
@@ -161,7 +152,8 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
 
 .title {
   font-weight: bold;
-  margin-bottom: 4px;
+  font-size: 1.1em;
+  margin-bottom: 5px;
 }
 
 .selected {
