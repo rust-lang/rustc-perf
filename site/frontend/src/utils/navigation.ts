@@ -42,3 +42,13 @@ export function getUrlParams(): Dict<string> {
 export function navigateToUrlParams(params: URLSearchParams) {
   window.location.search = params.toString();
 }
+
+/**
+ * Changes the current URL without navigating away from the page and without
+ * creating a history entry.
+ */
+export function changeUrl(params: Dict<string>) {
+  if (history.replaceState) {
+    history.replaceState({}, null, createUrlFromParams(params).toString());
+  }
+}

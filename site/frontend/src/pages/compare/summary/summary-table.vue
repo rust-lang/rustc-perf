@@ -39,7 +39,7 @@ const summary = computed(() => props.summary);
       </tr>
     </thead>
     <tbody>
-      <tr class="positive">
+      <tr>
         <td title="Regressions" v-if="withLegend">❌</td>
         <template v-if="summary.regressions.count !== 0">
           <td>
@@ -48,7 +48,7 @@ const summary = computed(() => props.summary);
           <td>
             <SummaryPercentValue :value="summary.regressions.average" />
           </td>
-          <td>
+          <td class="positive">
             <SummaryCount
               :cases="summary.regressions.count"
               :benchmarks="summary.regressions.benchmarks"
@@ -59,7 +59,7 @@ const summary = computed(() => props.summary);
           <td colspan="3" style="text-align: center">No regressions</td>
         </template>
       </tr>
-      <tr class="negative">
+      <tr>
         <td title="Improvements" v-if="withLegend">✅</td>
         <template v-if="summary.improvements.count !== 0">
           <td>
@@ -68,7 +68,7 @@ const summary = computed(() => props.summary);
           <td>
             <SummaryPercentValue :value="summary.improvements.average" />
           </td>
-          <td>
+          <td class="negative">
             <SummaryCount
               :cases="summary.improvements.count"
               :benchmarks="summary.improvements.benchmarks"

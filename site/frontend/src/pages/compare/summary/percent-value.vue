@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import {computed} from "vue";
-import {signIfPositive} from "../shared";
+import {percentClass, signIfPositive} from "../shared";
 
 const props = withDefaults(
   defineProps<{
@@ -23,5 +23,7 @@ const padSpaces = computed((): string => {
 </script>
 
 <template>
-  <span><span v-html="padSpaces" />{{ formattedValue }}%</span>
+  <span :class="percentClass(props.value)"
+    ><span v-html="padSpaces" />{{ formattedValue }}%</span
+  >
 </template>

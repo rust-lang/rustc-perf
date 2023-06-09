@@ -39,7 +39,7 @@ const metrics = [
 
 <template>
   <div class="quick-links">
-    <div>Quick links:</div>
+    <div class="label">Quick links:</div>
     <div
       v-for="metric in metrics"
       :class="{active: props.stat === metric.stat}"
@@ -63,5 +63,13 @@ const metrics = [
 
 .quick-links .active {
   font-weight: bold;
+}
+
+.quick-links .label {
+  display: none;
+
+  @media (min-width: 600px) {
+    display: block;
+  }
 }
 </style>

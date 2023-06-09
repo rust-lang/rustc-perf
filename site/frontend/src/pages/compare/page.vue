@@ -2,7 +2,7 @@
 import {loadBenchmarkInfo} from "../../api";
 import AsOf from "../../components/as-of.vue";
 import {
-  createUrlFromParams,
+  changeUrl,
   createUrlWithAppendedParams,
   getUrlParams,
   navigateToUrlParams,
@@ -11,7 +11,7 @@ import {computed, Ref, ref} from "vue";
 import {withLoading} from "../../utils/loading";
 import {postMsgpack} from "../../utils/requests";
 import {COMPARE_DATA_URL} from "../../urls";
-import {CompareResponse, CompareSelector, DataFilter} from "./types";
+import {CompareResponse, CompareSelector, DataFilter, Tab} from "./types";
 import BootstrapTable from "./bootstrap-table.vue";
 import Header from "./header/header.vue";
 import DataSelector, {SelectionParams} from "./header/data-selector.vue";
@@ -23,10 +23,12 @@ import {
   computeSummary,
   computeTestCasesWithNonRelevant,
   filterNonRelevant,
+  SummaryGroup,
 } from "./data";
 import OverallTable from "./summary/overall-table.vue";
 import Aggregations from "./summary/aggregations.vue";
 import Benchmarks from "./benchmarks/benchmarks.vue";
+import Tabs from "./tabs.vue";
 
 function loadSelectorFromUrl(urlParams: Dict<string>): CompareSelector {
   const start = urlParams["start"] ?? "";
@@ -37,6 +39,21 @@ function loadSelectorFromUrl(urlParams: Dict<string>): CompareSelector {
     end,
     stat,
   };
+}
+
+function loadTabFromUrl(urlParams: Dict<string>): Tab | null {
+  const tab = urlParams["tab"] ?? "";
+  if (tab == Tab.CompileTime) {
+    return Tab.CompileTime;
+  } else if (tab == Tab.Bootstrap) {
+    return Tab.Bootstrap;
+  }
+  return null;
+}
+
+function storeTabToUrl(urlParams: Dict<string>, tab: Tab) {
+  urlParams["tab"] = tab as string;
+  changeUrl(urlParams);
 }
 
 function loadFilterFromUrl(
@@ -139,10 +156,7 @@ function storeFilterToUrl(
     defaultFilter.category.secondary
   );
 
-  // Change URL without creating a history entry
-  if (history.replaceState) {
-    history.replaceState({}, null, createUrlFromParams(urlParams).toString());
-  }
+  changeUrl(urlParams);
 }
 
 async function loadCompareData(
@@ -158,6 +172,16 @@ async function loadCompareData(
     return await postMsgpack<CompareResponse>(COMPARE_DATA_URL, params);
   });
   data.value = response;
+  totalSummary.value = computeSummary(
+    filterNonRelevant(
+      defaultFilter,
+      computeTestCasesWithNonRelevant(
+        defaultFilter,
+        data.value,
+        benchmarkMap.value
+      )
+    )
+  );
 }
 
 function updateSelection(params: SelectionParams) {
@@ -222,12 +246,25 @@ const testCases = computed(() =>
 );
 const filteredSummary = computed(() => computeSummary(testCases.value));
 
+// Include all relevant changes in the compile-time tab summary
+// We do not wrap it in computed, because it should be loaded only once, after
+// the data is downloaded.
+const totalSummary: Ref<SummaryGroup | null> = ref(null);
+
 const loading = ref(false);
 
 const quickLinksKey = ref(0);
 const info = await loadBenchmarkInfo();
 const selector = loadSelectorFromUrl(urlParams);
 const filter = ref(loadFilterFromUrl(urlParams, defaultFilter));
+
+const initialTab: Tab = loadTabFromUrl(urlParams) ?? Tab.CompileTime;
+const tab: Ref<Tab> = ref(initialTab);
+
+function changeTab(newTab: Tab) {
+  tab.value = newTab;
+  storeTabToUrl(getUrlParams(), newTab);
+}
 
 const data: Ref<CompareResponse | null> = ref(null);
 loadCompareData(selector, loading);
@@ -247,23 +284,31 @@ loadCompareData(selector, loading);
       <p>Loading ...</p>
     </div>
     <div v-if="data !== null">
-      <QuickLinks :stat="selector.stat" :key="quickLinksKey" />
-      <Filters
-        :defaultFilter="defaultFilter"
-        :initialFilter="filter"
-        @change="updateFilter"
-        @export="exportData"
-      />
-      <OverallTable :summary="filteredSummary" />
-      <Aggregations :cases="testCases" />
-      <Benchmarks
+      <Tabs
+        @change-tab="changeTab"
         :data="data"
-        :test-cases="testCases"
-        :all-test-cases="allTestCases"
-        :filter="filter"
-        :stat="selector.stat"
-      ></Benchmarks>
-      <BootstrapTable :data="data" />
+        :initial-tab="initialTab"
+        :compile-time-summary="totalSummary"
+      />
+      <template v-if="tab === Tab.CompileTime">
+        <QuickLinks :stat="selector.stat" :key="quickLinksKey" />
+        <Filters
+          :defaultFilter="defaultFilter"
+          :initialFilter="filter"
+          @change="updateFilter"
+          @export="exportData"
+        />
+        <OverallTable :summary="filteredSummary" />
+        <Aggregations :cases="testCases" />
+        <Benchmarks
+          :data="data"
+          :test-cases="testCases"
+          :all-test-cases="allTestCases"
+          :filter="filter"
+          :stat="selector.stat"
+        ></Benchmarks>
+      </template>
+      <BootstrapTable v-if="tab === Tab.Bootstrap" :data="data" />
     </div>
   </div>
   <br />

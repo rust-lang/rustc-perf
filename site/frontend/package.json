@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "watch": "parcel watch",
+    "watch": "parcel watch --no-hmr",
     "build": "parcel build",
     "fmt": "prettier --write src",
     "check": "tsc -p tsconfig.json --noEmit && prettier --check src"
