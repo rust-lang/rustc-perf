@@ -117,29 +117,41 @@ function prettifyRawNumber(number: number): string {
             </td>
             <td>{{ testCase.scenario }}</td>
             <td>
-              <a
-                v-bind:href="
-                  detailedQueryPercentLink(commitB, commitA, testCase)
-                "
-              >
-                <span v-bind:class="percentClass(testCase.percent)">
-                  {{ testCase.percent.toFixed(2) }}%
-                </span>
-              </a>
+              <div class="numeric-aligned">
+                <div>
+                  <a
+                    v-bind:href="
+                      detailedQueryPercentLink(commitB, commitA, testCase)
+                    "
+                  >
+                    <span v-bind:class="percentClass(testCase.percent)">
+                      {{ testCase.percent.toFixed(2) }}%
+                    </span>
+                  </a>
+                </div>
+              </div>
             </td>
             <td>
-              {{
-                testCase.significanceThreshold
-                  ? testCase.significanceThreshold.toFixed(2) + "%"
-                  : "-"
-              }}
+              <div class="numeric-aligned">
+                <div>
+                  {{
+                    testCase.significanceThreshold
+                      ? testCase.significanceThreshold.toFixed(2) + "%"
+                      : "-"
+                  }}
+                </div>
+              </div>
             </td>
             <td>
-              {{
-                testCase.significanceFactor
-                  ? testCase.significanceFactor.toFixed(2) + "x"
-                  : "-"
-              }}
+              <div class="numeric-aligned">
+                <div>
+                  {{
+                    testCase.significanceFactor
+                      ? testCase.significanceFactor.toFixed(2) + "x"
+                      : "-"
+                  }}
+                </div>
+              </div>
             </td>
             <td v-if="showRawData" class="numeric">
               <a v-bind:href="detailedQueryRawDataLink(commitA, testCase)">
@@ -189,17 +201,27 @@ function prettifyRawNumber(number: number): string {
 
 .benches th {
   text-align: center;
-  width: 25%;
   min-width: 50px;
 }
 
 .benches td {
   text-align: center;
   width: 25%;
-}
 
-.benches td.numeric {
-  text-align: right;
+  & > .numeric-aligned {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: right;
+
+    & > div {
+      width: 70px;
+    }
+  }
+
+  &.numeric {
+    text-align: right;
+  }
 }
 
 .bench-table {
