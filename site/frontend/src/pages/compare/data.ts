@@ -90,7 +90,22 @@ export function computeTestCasesWithNonRelevant(
     .map((c: CompileBenchmarkComparison): TestCase => {
       const datumA = c.statistics[0];
       const datumB = c.statistics[1];
-      const percent = 100 * ((datumB - datumA) / datumA);
+
+      // In the vast majority of cases, we can do the proportional change calculation. However, some
+      // metrics can be zero. If the initial value is 0, we can't compute the new value as a
+      // percentage change of the old one. If both values are 0, we can say the change is also 0%.
+      // If the new value is not 0, the percentage is not really meaningful, but we can say it's 100%.
+      let percent;
+      if (datumA === 0) {
+        if (datumB === 0) {
+          percent = 0;
+        } else {
+          percent = 100;
+        }
+      } else {
+        percent = 100 * ((datumB - datumA) / datumA);
+      }
+
       return {
         benchmark: c.benchmark,
         profile: c.profile,
