@@ -859,8 +859,9 @@ impl Connection for SqliteConnection {
         series: &[u32],
         artifact_row_ids: &[Option<ArtifactIdNumber>],
     ) -> Vec<Vec<Option<f64>>> {
-        let conn = self.raw_ref();
-        let mut query = conn
+        let mut conn = self.raw_ref();
+        let tx = conn.transaction().unwrap();
+        let mut query = tx
             .prepare_cached("select min(value) from pstat where series = ? and aid = ?;")
             .unwrap();
         series

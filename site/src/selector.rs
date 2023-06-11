@@ -374,12 +374,10 @@ impl StatisticSeries {
             .map(|aid| aid.lookup(&index))
             .collect::<Vec<_>>();
 
-        let mut conn = ctxt.conn().await;
-        let mut tx = conn.transaction().await;
+        let conn = ctxt.conn().await;
 
         let start = std::time::Instant::now();
-        let res = tx
-            .conn()
+        let res = conn
             .get_pstats(&sids, &aids)
             .await
             .into_iter()
