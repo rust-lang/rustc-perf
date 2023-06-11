@@ -215,6 +215,21 @@ static MIGRATIONS: &[&str] = &[
     r#"
     alter table pull_request_build add column commit_date timestamptz;
     "#,
+    r#"
+    create table runtime_pstat_series(
+        id integer primary key generated always as identity,
+        benchmark text not null,
+        metric text not null,
+        UNIQUE(benchmark, metric)
+    );
+    create table runtime_pstat(
+        series integer references runtime_pstat_series(id) on delete cascade on update cascade,
+        aid integer references artifact(id) on delete cascade on update cascade,
+        cid integer references collection(id) on delete cascade on update cascade,
+        value double precision not null,
+        PRIMARY KEY(series, aid, cid)
+    );
+"#,
 ];
 
 #[async_trait::async_trait]
@@ -293,6 +308,10 @@ pub struct CachedStatements {
     record_duration: Statement,
     in_progress_steps: Statement,
     get_benchmarks: Statement,
+    insert_runtime_pstat_series: Statement,
+    select_runtime_pstat_series: Statement,
+    insert_runtime_pstat: Statement,
+    get_runtime_pstat: Statement,
 }
 
 pub struct PostgresTransaction<'a> {
@@ -449,7 +468,36 @@ impl PostgresConnection {
                 get_benchmarks: conn.prepare("
                     select name, category
                     from benchmark
-                ").await.unwrap()
+                ").await.unwrap(),
+                insert_runtime_pstat_series: conn.prepare("insert into runtime_pstat_series (benchmark, metric) VALUES ($1, $2) ON CONFLICT DO NOTHING RETURNING id").await.unwrap(),
+                select_runtime_pstat_series: conn.prepare("select id from runtime_pstat_series where benchmark = $1 and metric = $2").await.unwrap(),
+                insert_runtime_pstat: conn
+                    .prepare("insert into runtime_pstat (series, aid, cid, value) VALUES ($1, $2, $3, $4)")
+                    .await
+                    .unwrap(),
+                get_runtime_pstat: conn
+                    .prepare("
+                         WITH aids AS (
+                             select aid, num from unnest($2::int[]) with ordinality aids(aid, num)
+                         ),
+                         sids AS (
+                             select sid, idx from unnest($1::int[]) with ordinality sids(sid, idx)
+                         )
+                         select ARRAY(
+                             (
+                                 select min(runtime_pstat.value) from aids
+                                     left outer join runtime_pstat
+                                     on (aids.aid = runtime_pstat.aid and runtime_pstat.series = sids.sid)
+                                     group by aids.num
+                                     order by aids.num
+                             )
+                         ) from
+                         sids
+                         group by (sids.idx, sids.sid)
+                         order by sids.idx
+                     ")
+                    .await
+                    .unwrap()
             }),
             conn,
         }
@@ -616,6 +664,31 @@ where
             .map(|row| row.get::<_, Vec<Option<f64>>>(0))
             .collect()
     }
+    async fn get_runtime_pstats(
+        &self,
+        runtime_pstat_series_row_ids: &[u32],
+        artifact_row_ids: &[Option<crate::ArtifactIdNumber>],
+    ) -> Vec<Vec<Option<f64>>> {
+        let runtime_pstat_series_row_ids = runtime_pstat_series_row_ids
+            .iter()
+            .map(|sid| *sid as i32)
+            .collect::<Vec<_>>();
+        let artifact_row_ids = artifact_row_ids
+            .iter()
+            .map(|id| id.map(|id| id.0 as i32))
+            .collect::<Vec<_>>();
+        let rows = self
+            .conn()
+            .query(
+                &self.statements().get_runtime_pstat,
+                &[&runtime_pstat_series_row_ids, &artifact_row_ids],
+            )
+            .await
+            .unwrap();
+        rows.into_iter()
+            .map(|row| row.get::<_, Vec<Option<f64>>>(0))
+            .collect()
+    }
     async fn get_error(&self, artifact_row_id: crate::ArtifactIdNumber) -> HashMap<String, String> {
         let rows = self
             .conn()
@@ -763,13 +836,47 @@ where
     }
     async fn record_runtime_statistic(
         &self,
-        _collection: CollectionId,
-        _artifact: ArtifactIdNumber,
-        _benchmark: &str,
-        _metric: &str,
-        _value: f64,
+        collection: CollectionId,
+        artifact: ArtifactIdNumber,
+        benchmark: &str,
+        metric: &str,
+        value: f64,
     ) {
-        unimplemented!()
+        let sid = self
+            .conn()
+            .query_opt(
+                &self.statements().select_runtime_pstat_series,
+                &[&benchmark, &metric],
+            )
+            .await
+            .unwrap();
+        let sid: i32 = match sid {
+            Some(id) => id.get(0),
+            None => {
+                self.conn()
+                    .query_opt(
+                        &self.statements().insert_runtime_pstat_series,
+                        &[&benchmark, &metric],
+                    )
+                    .await
+                    .unwrap();
+                self.conn()
+                    .query_one(
+                        &self.statements().select_runtime_pstat_series,
+                        &[&benchmark, &metric],
+                    )
+                    .await
+                    .unwrap()
+                    .get(0)
+            }
+        };
+        self.conn()
+            .execute(
+                &self.statements().insert_runtime_pstat,
+                &[&sid, &(artifact.0 as i32), &{ collection.0 }, &value],
+            )
+            .await
+            .unwrap();
     }
 
     async fn record_rustc_crate(
@@ -953,9 +1060,6 @@ where
                 .await
                 .unwrap();
         }
-    }
-    async fn record_runtime_benchmark(&self, _name: &str) {
-        unimplemented!()
     }
 
     async fn collector_start(&self, aid: ArtifactIdNumber, steps: &[String]) {
