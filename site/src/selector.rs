@@ -181,7 +181,7 @@ impl<TestCase, T> SeriesResponse<TestCase, T> {
 }
 
 #[async_trait]
-pub trait BenchmarkQuery: Debug {
+pub trait BenchmarkQuery: Debug + Clone {
     type TestCase: TestCase;
 
     async fn execute(
@@ -283,7 +283,7 @@ impl BenchmarkQuery for CompileBenchmarkQuery {
 
         let aids = artifact_ids
             .iter()
-            .map(|aid| aid.lookup(&index))
+            .map(|aid| aid.lookup(index))
             .collect::<Vec<_>>();
 
         Ok(conn
@@ -332,16 +332,6 @@ pub struct RuntimeBenchmarkQuery {
 }
 
 impl RuntimeBenchmarkQuery {
-    pub fn benchmark(mut self, selector: Selector<String>) -> Self {
-        self.benchmark = selector;
-        self
-    }
-
-    pub fn metric(mut self, selector: Selector<Metric>) -> Self {
-        self.metric = selector.map(|v| v.as_str().into());
-        self
-    }
-
     pub fn all_for_metric(metric: Metric) -> Self {
         Self {
             benchmark: Selector::All,
@@ -381,7 +371,7 @@ impl BenchmarkQuery for RuntimeBenchmarkQuery {
 
         let aids = artifact_ids
             .iter()
-            .map(|aid| aid.lookup(&index))
+            .map(|aid| aid.lookup(index))
             .collect::<Vec<_>>();
 
         Ok(conn
