@@ -406,8 +406,6 @@ pub struct Index {
     commits: Indexed<Commit>,
     /// Id lookup of published release artifacts
     artifacts: Indexed<Box<str>>,
-    /// Id lookup of the errors for a crate
-    errors: Indexed<Benchmark>,
     /// Id lookup of compile stat description ids
     /// For legacy reasons called `pstat_series` in the database, and so the name is kept here.
     pstat_series: Indexed<(Benchmark, Profile, Scenario, Metric)>,
@@ -605,10 +603,6 @@ impl Index {
             .into_iter()
             .map(|s| s.to_string())
             .collect()
-    }
-
-    pub fn all_errors(&self) -> impl Iterator<Item = Benchmark> + '_ {
-        self.errors.map.keys().copied()
     }
 
     // FIXME: in theory this won't scale indefinitely as there's potentially

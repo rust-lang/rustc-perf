@@ -570,19 +570,6 @@ where
                     )
                 })
                 .collect(),
-            errors: self
-                .conn()
-                .query("select id, crate from error_series", &[])
-                .await
-                .unwrap()
-                .into_iter()
-                .map(|row| {
-                    (
-                        row.get::<_, i32>(0) as u32,
-                        row.get::<_, String>(1).as_str().into(),
-                    )
-                })
-                .collect(),
             pstat_series: self
                 .conn()
                 .query(

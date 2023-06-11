@@ -449,19 +449,6 @@ impl Connection for SqliteConnection {
             .unwrap()
             .map(|r| r.unwrap())
             .collect();
-        let errors = self
-            .raw()
-            .prepare("select id, crate from error_series")
-            .unwrap()
-            .query_map(params![], |row| {
-                Ok((
-                    row.get::<_, i32>(0)? as u32,
-                    row.get::<_, String>(1)?.as_str().into(),
-                ))
-            })
-            .unwrap()
-            .map(|r| r.unwrap())
-            .collect();
         let pstat_series = self
             .raw()
             .prepare("select id, crate, profile, cache, statistic from pstat_series;")
@@ -499,7 +486,6 @@ impl Connection for SqliteConnection {
         Index {
             commits,
             artifacts,
-            errors,
             pstat_series,
             runtime_pstat_series,
         }
