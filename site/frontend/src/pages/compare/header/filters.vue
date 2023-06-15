@@ -29,11 +29,17 @@ watch(
   },
   {deep: true}
 );
+
+function updateOpened(opened: boolean) {
+  filterOpened.value = opened;
+}
+
+const filterOpened = ref(false);
 </script>
 
 <template>
   <fieldset class="collapsible-section">
-    <Toggle :defaultOpened="false">
+    <Toggle :opened="filterOpened" @change="updateOpened">
       <template #label>Filters</template>
       <template #content>
         <div>
@@ -46,9 +52,8 @@ watch(
               <div style="width: 160px">
                 <span>Profiles</span>
                 <Tooltip
-                  >The different compilation profiles (check, debug, opt,
-                  doc).</Tooltip
-                >
+                  >The different compilation profiles (check, debug, opt, doc).
+                </Tooltip>
               </div>
             </div>
             <ul class="states-list">
@@ -84,9 +89,8 @@ watch(
                   <span class="cache-label">opt</span>
                 </label>
                 <Tooltip
-                  >Release build that produces as optimized code as
-                  possible.</Tooltip
-                >
+                  >Release build that produces as optimized code as possible.
+                </Tooltip>
               </li>
               <li>
                 <label>
@@ -125,9 +129,8 @@ watch(
                   <span class="cache-label">full</span>
                 </label>
                 <Tooltip
-                  >A non-incremental full build starting with empty
-                  cache.</Tooltip
-                >
+                  >A non-incremental full build starting with empty cache.
+                </Tooltip>
               </li>
               <li>
                 <label>
@@ -139,8 +142,8 @@ watch(
                   <span class="cache-label">incr-full</span>
                 </label>
                 <Tooltip
-                  >An incremental build starting with empty cache.</Tooltip
-                >
+                  >An incremental build starting with empty cache.
+                </Tooltip>
               </li>
               <li>
                 <label>
@@ -181,8 +184,8 @@ watch(
                 <span>Categories</span>
                 <Tooltip
                   >Select benchmarks based on their category (primary or
-                  secondary).</Tooltip
-                >
+                  secondary).
+                </Tooltip>
               </div>
             </div>
             <ul class="states-list">

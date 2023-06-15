@@ -2,6 +2,7 @@
 import {computeSummary, SummaryGroup, TestCase} from "../data";
 import Toggle from "../toggle.vue";
 import SummaryTable from "./summary-table.vue";
+import {ref} from "vue";
 
 const props = defineProps<{
   cases: TestCase[];
@@ -19,11 +20,13 @@ function calculateSummary(
   }
   return computeSummary(benchmarks);
 }
+
+const opened = ref(false);
 </script>
 
 <template>
   <fieldset class="collapsible-section">
-    <Toggle>
+    <Toggle :opened="opened" @change="(value) => (opened = value)">
       <template #label>Aggregations</template>
       <template #content>
         <div>
