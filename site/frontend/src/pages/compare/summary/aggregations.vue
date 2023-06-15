@@ -2,6 +2,8 @@
 import {computeSummary, SummaryGroup, TestCase} from "../data";
 import Toggle from "../toggle.vue";
 import SummaryTable from "./summary-table.vue";
+import {createPersistedRef} from "../../../storage";
+import {PREF_AGGREGATIONS_OPENED} from "../prefs";
 
 const props = defineProps<{
   cases: TestCase[];
@@ -19,11 +21,13 @@ function calculateSummary(
   }
   return computeSummary(benchmarks);
 }
+
+const opened = createPersistedRef(PREF_AGGREGATIONS_OPENED);
 </script>
 
 <template>
   <fieldset class="collapsible-section">
-    <Toggle>
+    <Toggle :opened="opened" @change="(value) => (opened = value)">
       <template #label>Aggregations</template>
       <template #content>
         <div>

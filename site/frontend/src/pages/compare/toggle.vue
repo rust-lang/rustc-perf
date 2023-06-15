@@ -1,24 +1,24 @@
 <script setup lang="ts">
-import {ref} from "vue";
-
 const props = withDefaults(
   defineProps<{
-    defaultOpened?: boolean;
+    opened?: boolean;
   }>(),
   {
-    defaultOpened: false,
+    opened: false,
   }
 );
 
-const opened = ref(props.defaultOpened);
+const emit = defineEmits<{
+  (e: "change", opened: boolean): void;
+}>();
 </script>
 
 <template>
-  <legend class="toggle section-heading" @click="opened = !opened">
+  <legend class="toggle section-heading" @click="emit('change', !props.opened)">
     <slot name="label"></slot>
-    <span>{{ opened ? " ▼" : " ▶" }}</span>
+    <span>{{ props.opened ? " ▼" : " ▶" }}</span>
   </legend>
-  <div v-show="opened">
+  <div v-show="props.opened">
     <slot name="content"></slot>
   </div>
 </template>

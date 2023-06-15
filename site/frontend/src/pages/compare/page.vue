@@ -163,7 +163,7 @@ async function loadCompareData(
   selector: CompareSelector,
   loading: Ref<boolean>
 ) {
-  const response: CompareResponse = await withLoading(loading, async () => {
+  data.value = await withLoading(loading, async () => {
     const params = {
       start: selector.start,
       end: selector.end,
@@ -171,7 +171,6 @@ async function loadCompareData(
     };
     return await postMsgpack<CompareResponse>(COMPARE_DATA_URL, params);
   });
-  data.value = response;
   totalSummary.value = computeSummary(
     filterNonRelevant(
       defaultFilter,

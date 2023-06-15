@@ -37,11 +37,13 @@ function submitSettings() {
   const params = {start, end, stat};
   emit("change", params);
 }
+
+const opened = ref(false);
 </script>
 
 <template>
   <fieldset class="settings">
-    <Toggle>
+    <Toggle :opened="opened" @change="(value) => (opened = value)">
       <template #label>Do another comparison</template>
       <template #content>
         <div class="commits section">
