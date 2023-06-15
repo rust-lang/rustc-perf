@@ -4,6 +4,8 @@ import {DataFilter} from "../types";
 import Tooltip from "../tooltip.vue";
 import {ref, toRaw, watch} from "vue";
 import {deepCopy} from "../../../utils/copy";
+import {PREF_FILTERS_OPENED} from "../prefs";
+import {createPersistedRef} from "../../../storage";
 
 const props = defineProps<{
   // When reset, set filter to this value
@@ -30,16 +32,12 @@ watch(
   {deep: true}
 );
 
-function updateOpened(opened: boolean) {
-  filterOpened.value = opened;
-}
-
-const filterOpened = ref(false);
+const opened = createPersistedRef(PREF_FILTERS_OPENED);
 </script>
 
 <template>
   <fieldset class="collapsible-section">
-    <Toggle :opened="filterOpened" @change="updateOpened">
+    <Toggle :opened="opened" @change="(value) => (opened = value)">
       <template #label>Filters</template>
       <template #content>
         <div>

@@ -2,7 +2,8 @@
 import {computeSummary, SummaryGroup, TestCase} from "../data";
 import Toggle from "../toggle.vue";
 import SummaryTable from "./summary-table.vue";
-import {ref} from "vue";
+import {createPersistedRef} from "../../../storage";
+import {PREF_AGGREGATIONS_OPENED} from "../prefs";
 
 const props = defineProps<{
   cases: TestCase[];
@@ -21,7 +22,7 @@ function calculateSummary(
   return computeSummary(benchmarks);
 }
 
-const opened = ref(false);
+const opened = createPersistedRef(PREF_AGGREGATIONS_OPENED);
 </script>
 
 <template>
