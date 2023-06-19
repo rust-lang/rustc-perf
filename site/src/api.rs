@@ -167,6 +167,7 @@ pub mod comparison {
         pub a: ArtifactDescription,
         pub b: ArtifactDescription,
         pub compile_comparisons: Vec<CompileBenchmarkComparison>,
+        pub runtime_comparisons: Vec<RuntimeBenchmarkComparison>,
 
         pub new_errors: Vec<(String, String)>,
 
@@ -188,12 +189,22 @@ pub mod comparison {
         pub bootstrap_total: u64,
     }
 
-    /// A serializable wrapper for `comparison::ArtifactData`.
+    /// A serializable wrapper for a comparison between two compile-time test results.
     #[derive(Debug, Clone, Serialize)]
     pub struct CompileBenchmarkComparison {
         pub benchmark: String,
         pub profile: String,
         pub scenario: String,
+        pub is_relevant: bool,
+        pub significance_threshold: f64,
+        pub significance_factor: f64,
+        pub statistics: (f64, f64),
+    }
+
+    /// A serializable wrapper for a comparison between two runtime test results.
+    #[derive(Debug, Clone, Serialize)]
+    pub struct RuntimeBenchmarkComparison {
+        pub benchmark: String,
         pub is_relevant: bool,
         pub significance_threshold: f64,
         pub significance_factor: f64,

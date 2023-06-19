@@ -406,11 +406,11 @@ pub struct Index {
     commits: Indexed<Commit>,
     /// Id lookup of published release artifacts
     artifacts: Indexed<Box<str>>,
-    /// Id lookup of the errors for a crate
-    errors: Indexed<Benchmark>,
-    /// Id lookup of stat description ids
+    /// Id lookup of compile stat description ids
     /// For legacy reasons called `pstat_series` in the database, and so the name is kept here.
     pstat_series: Indexed<(Benchmark, Profile, Scenario, Metric)>,
+    /// Id lookup of runtime stat description ids
+    runtime_pstat_series: Indexed<(Benchmark, Metric)>,
 }
 
 /// An index lookup
@@ -524,9 +524,6 @@ mod index_serde {
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum DbLabel {
-    Errors {
-        benchmark: Benchmark,
-    },
     StatisticDescription {
         benchmark: Benchmark,
         profile: Profile,
@@ -544,7 +541,6 @@ impl Lookup for DbLabel {
     type Id = u32;
     fn lookup(&self, index: &Index) -> Option<Self::Id> {
         match self {
-            DbLabel::Errors { benchmark } => index.errors.get(benchmark),
             DbLabel::StatisticDescription {
                 benchmark,
                 profile,
@@ -566,6 +562,8 @@ impl Lookup for ArtifactId {
         })
     }
 }
+
+pub type StatisticalDescriptionId = u32;
 
 impl Index {
     pub async fn load(conn: &mut dyn pool::Connection) -> Index {
@@ -607,18 +605,31 @@ impl Index {
             .collect()
     }
 
-    pub fn all_errors(&self) -> impl Iterator<Item = Benchmark> + '_ {
-        self.errors.map.keys().copied()
-    }
-
     // FIXME: in theory this won't scale indefinitely as there's potentially
     // millions of queries and labels and iterating all of them is eventually
     // going to be impractical. But for now it performs quite well, so we'll go
     // for it as keeping indices around would be annoying.
-    pub fn all_statistic_descriptions(
+    pub fn compile_statistic_descriptions(
         &self,
-    ) -> impl Iterator<Item = &'_ (Benchmark, Profile, Scenario, Metric)> + '_ {
-        self.pstat_series.map.keys()
+    ) -> impl Iterator<
+        Item = (
+            &(Benchmark, Profile, Scenario, Metric),
+            StatisticalDescriptionId,
+        ),
+    > + '_ {
+        self.pstat_series
+            .map
+            .iter()
+            .map(|(test_case, &row_id)| (test_case, row_id))
+    }
+
+    pub fn runtime_statistic_descriptions(
+        &self,
+    ) -> impl Iterator<Item = (&(Benchmark, Metric), StatisticalDescriptionId)> + '_ {
+        self.runtime_pstat_series
+            .map
+            .iter()
+            .map(|(test_case, &row_id)| (test_case, row_id))
     }
 
     pub fn artifact_id_for_commit(&self, commit: &str) -> Option<ArtifactId> {

@@ -26,12 +26,15 @@ use crate::interpolate::Interpolate;
 use crate::load::SiteCtxt;
 
 use collector::Bound;
-use database::{Benchmark, Commit, Index, Lookup};
+use database::{Benchmark, Commit, Connection, Index, Lookup};
 
 use crate::comparison::Metric;
-use std::fmt;
+use async_trait::async_trait;
+use std::fmt::Debug;
+use std::hash::Hash;
 use std::ops::RangeInclusive;
 use std::sync::Arc;
+use std::time::Instant;
 
 /// Finds the most appropriate `ArtifactId` for a given bound.
 ///
@@ -145,34 +148,30 @@ impl<T> Selector<T> {
             Selector::All => true,
         }
     }
-
-    pub fn assert_one(&self) -> &T
-    where
-        T: fmt::Debug,
-    {
-        if let Selector::One(one) = self {
-            one
-        } else {
-            panic!("{:?} != One", self)
-        }
-    }
 }
 
+/// Represents the parameters of a single benchmark execution that collects a set of statistics.
+pub trait TestCase: Debug + Clone + Hash + PartialEq + Eq + PartialOrd + Ord {}
+
 #[derive(Debug)]
-pub struct SeriesResponse<T> {
-    pub key: CompileBenchmarkKey,
+pub struct SeriesResponse<Case, T> {
+    pub test_case: Case,
     pub series: T,
 }
 
-impl<T> SeriesResponse<T> {
-    pub fn map<U>(self, m: impl FnOnce(T) -> U) -> SeriesResponse<U> {
+impl<TestCase, T> SeriesResponse<TestCase, T> {
+    pub fn map<U>(self, m: impl FnOnce(T) -> U) -> SeriesResponse<TestCase, U> {
+        let SeriesResponse {
+            test_case: key,
+            series,
+        } = self;
         SeriesResponse {
-            key: self.key,
-            series: m(self.series),
+            test_case: key,
+            series: m(series),
         }
     }
 
-    pub fn interpolate(self) -> SeriesResponse<Interpolate<T>>
+    pub fn interpolate(self) -> SeriesResponse<TestCase, Interpolate<T>>
     where
         T: Iterator,
         T::Item: crate::db::Point,
@@ -181,6 +180,19 @@ impl<T> SeriesResponse<T> {
     }
 }
 
+#[async_trait]
+pub trait BenchmarkQuery: Debug + Clone {
+    type TestCase: TestCase;
+
+    async fn execute(
+        &self,
+        connection: &mut dyn Connection,
+        index: &Index,
+        artifact_ids: Arc<Vec<ArtifactId>>,
+    ) -> Result<Vec<SeriesResponse<Self::TestCase, StatisticSeries>>, String>;
+}
+
+// Compile benchmarks querying
 #[derive(Clone, Hash, Eq, PartialEq, Debug)]
 pub struct CompileBenchmarkQuery {
     benchmark: Selector<String>,
@@ -231,82 +243,60 @@ impl Default for CompileBenchmarkQuery {
     }
 }
 
-#[derive(Debug)]
-pub struct CompileBenchmarkKey {
-    pub benchmark: Benchmark,
-    pub profile: Profile,
-    pub scenario: Scenario,
-}
+#[async_trait]
+impl BenchmarkQuery for CompileBenchmarkQuery {
+    type TestCase = CompileTestCase;
 
-impl SiteCtxt {
-    pub async fn compile_statistic_series(
+    async fn execute(
         &self,
-        query: CompileBenchmarkQuery,
+        conn: &mut dyn Connection,
+        index: &Index,
         artifact_ids: Arc<Vec<ArtifactId>>,
-    ) -> Result<Vec<SeriesResponse<StatisticSeries>>, String> {
-        StatisticSeries::execute_compile_query(artifact_ids, self, query).await
-    }
-}
-
-pub struct StatisticSeries {
-    artifact_ids: ArtifactIdIter,
-    points: std::vec::IntoIter<Option<f64>>,
-}
-
-impl StatisticSeries {
-    async fn execute_compile_query(
-        artifact_ids: Arc<Vec<ArtifactId>>,
-        ctxt: &SiteCtxt,
-        query: CompileBenchmarkQuery,
-    ) -> Result<Vec<SeriesResponse<Self>>, String> {
-        let dumped = format!("{:?}", query);
-
-        let index = ctxt.index.load();
-        let mut statistic_descriptions = index
-            .all_statistic_descriptions()
-            .filter(|&&(b, p, s, m)| {
-                query.benchmark.matches(b)
-                    && query.profile.matches(p)
-                    && query.scenario.matches(s)
-                    && query.metric.matches(m)
+    ) -> Result<Vec<SeriesResponse<Self::TestCase, StatisticSeries>>, String> {
+        let mut statistic_descriptions: Vec<_> = index
+            .compile_statistic_descriptions()
+            .filter(|(&(b, p, s, m), _)| {
+                self.benchmark.matches(b)
+                    && self.profile.matches(p)
+                    && self.scenario.matches(s)
+                    && self.metric.matches(m)
             })
-            .collect::<Vec<_>>();
+            .map(|(&(benchmark, profile, scenario, metric), sid)| {
+                (
+                    CompileTestCase {
+                        benchmark,
+                        profile,
+                        scenario,
+                    },
+                    metric,
+                    sid,
+                )
+            })
+            .collect();
 
         statistic_descriptions.sort_unstable();
 
-        let sids = statistic_descriptions
+        let sids: Vec<_> = statistic_descriptions
             .iter()
-            .map(|&&(b, p, s, m)| {
-                let query = crate::db::DbLabel::StatisticDescription {
-                    benchmark: b,
-                    profile: p,
-                    scenario: s,
-                    metric: m,
-                };
-                query.lookup(&index).unwrap()
-            })
-            .collect::<Vec<_>>();
+            .map(|(_, _, sid)| *sid)
+            .collect();
+
         let aids = artifact_ids
             .iter()
-            .map(|aid| aid.lookup(&index))
+            .map(|aid| aid.lookup(index))
             .collect::<Vec<_>>();
 
-        let mut conn = ctxt.conn().await;
-        let mut tx = conn.transaction().await;
-
-        let start = std::time::Instant::now();
-        let res = tx
-            .conn()
+        Ok(conn
             .get_pstats(&sids, &aids)
             .await
             .into_iter()
-            .zip(&statistic_descriptions)
+            .zip(statistic_descriptions)
             .filter(|(points, _)| points.iter().any(|value| value.is_some()))
-            .map(|(points, &&(benchmark, profile, scenario, metric))| {
+            .map(|(points, (test_case, metric, _))| {
                 SeriesResponse {
                     series: StatisticSeries {
                         artifact_ids: ArtifactIdIter::new(artifact_ids.clone()),
-                        points: if metric == *"cpu-clock" || metric == *"task-clock" {
+                        points: if *metric == *"cpu-clock" || *metric == *"task-clock" {
                             // Convert to seconds -- perf reports these measurements in
                             // milliseconds
                             points
@@ -318,21 +308,131 @@ impl StatisticSeries {
                             points.into_iter()
                         },
                     },
-                    key: CompileBenchmarkKey {
-                        benchmark,
-                        profile,
-                        scenario,
-                    },
+                    test_case,
                 }
             })
+            .collect::<Vec<_>>())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct CompileTestCase {
+    pub benchmark: Benchmark,
+    pub profile: Profile,
+    pub scenario: Scenario,
+}
+
+impl TestCase for CompileTestCase {}
+
+// Runtime benchmarks querying
+#[derive(Clone, Hash, Eq, PartialEq, Debug)]
+pub struct RuntimeBenchmarkQuery {
+    benchmark: Selector<String>,
+    metric: Selector<database::Metric>,
+}
+
+impl RuntimeBenchmarkQuery {
+    pub fn all_for_metric(metric: Metric) -> Self {
+        Self {
+            benchmark: Selector::All,
+            metric: Selector::One(metric.as_str().into()),
+        }
+    }
+}
+
+impl Default for RuntimeBenchmarkQuery {
+    fn default() -> Self {
+        Self {
+            benchmark: Selector::All,
+            metric: Selector::All,
+        }
+    }
+}
+
+#[async_trait]
+impl BenchmarkQuery for RuntimeBenchmarkQuery {
+    type TestCase = RuntimeTestCase;
+
+    async fn execute(
+        &self,
+        conn: &mut dyn Connection,
+        index: &Index,
+        artifact_ids: Arc<Vec<ArtifactId>>,
+    ) -> Result<Vec<SeriesResponse<Self::TestCase, StatisticSeries>>, String> {
+        let mut statistic_descriptions: Vec<_> = index
+            .runtime_statistic_descriptions()
+            .filter(|(&(b, m), _)| self.benchmark.matches(b) && self.metric.matches(m))
+            .map(|(&(benchmark, _), sid)| (RuntimeTestCase { benchmark }, sid))
+            .collect();
+
+        statistic_descriptions.sort_unstable();
+
+        let sids: Vec<_> = statistic_descriptions.iter().map(|(_, sid)| *sid).collect();
+
+        let aids = artifact_ids
+            .iter()
+            .map(|aid| aid.lookup(index))
             .collect::<Vec<_>>();
+
+        Ok(conn
+            .get_runtime_pstats(&sids, &aids)
+            .await
+            .into_iter()
+            .zip(statistic_descriptions)
+            .filter(|(points, _)| points.iter().any(|value| value.is_some()))
+            .map(|(points, (test_case, _))| SeriesResponse {
+                series: StatisticSeries {
+                    artifact_ids: ArtifactIdIter::new(artifact_ids.clone()),
+                    points: points.into_iter(),
+                },
+                test_case,
+            })
+            .collect::<Vec<_>>())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RuntimeTestCase {
+    pub benchmark: Benchmark,
+}
+
+impl TestCase for RuntimeTestCase {}
+
+impl SiteCtxt {
+    pub async fn statistic_series<Q: BenchmarkQuery>(
+        &self,
+        query: Q,
+        artifact_ids: Arc<Vec<ArtifactId>>,
+    ) -> Result<Vec<SeriesResponse<Q::TestCase, StatisticSeries>>, String> {
+        StatisticSeries::execute_query(artifact_ids, self, query).await
+    }
+}
+
+pub struct StatisticSeries {
+    artifact_ids: ArtifactIdIter,
+    points: std::vec::IntoIter<Option<f64>>,
+}
+
+impl StatisticSeries {
+    async fn execute_query<Q: BenchmarkQuery>(
+        artifact_ids: Arc<Vec<ArtifactId>>,
+        ctxt: &SiteCtxt,
+        query: Q,
+    ) -> Result<Vec<SeriesResponse<Q::TestCase, Self>>, String> {
+        let dumped = format!("{:?}", query);
+
+        let index = ctxt.index.load();
+        let mut conn = ctxt.conn().await;
+
+        let start = Instant::now();
+        let result = query.execute(conn.as_mut(), &index, artifact_ids).await?;
         log::trace!(
             "{:?}: run {} from {}",
             start.elapsed(),
-            statistic_descriptions.len(),
+            result.len(),
             dumped
         );
-        Ok(res)
+        Ok(result)
     }
 }
 

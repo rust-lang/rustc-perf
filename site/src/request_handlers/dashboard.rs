@@ -98,7 +98,7 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
             let mut cases = dashboard::Cases::default();
             for scenario in summary_scenarios.iter() {
                 let responses = ctxt
-                    .compile_statistic_series(
+                    .statistic_series(
                         query
                             .clone()
                             .profile(selector::Selector::One(profile))

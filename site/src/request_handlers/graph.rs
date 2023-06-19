@@ -7,7 +7,7 @@ use crate::api::{graph, graphs, ServerResult};
 use crate::db::{self, ArtifactId, Profile, Scenario};
 use crate::interpolate::IsInterpolated;
 use crate::load::SiteCtxt;
-use crate::selector::{CompileBenchmarkQuery, Selector, SeriesResponse};
+use crate::selector::{CompileBenchmarkQuery, CompileTestCase, Selector, SeriesResponse};
 
 pub async fn handle_graph(
     request: graph::Request,
@@ -57,7 +57,7 @@ async fn create_graph(
 ) -> ServerResult<graph::Response> {
     let artifact_ids = artifact_ids_for_range(&ctxt, request.start, request.end);
     let mut series_iterator = ctxt
-        .compile_statistic_series(
+        .statistic_series(
             CompileBenchmarkQuery::default()
                 .benchmark(Selector::One(request.benchmark))
                 .profile(Selector::One(request.profile.parse()?))
@@ -100,7 +100,7 @@ async fn create_graphs(
         create_selector(&request.scenario).try_map(|v| v.parse::<Scenario>())?;
 
     let interpolated_responses: Vec<_> = ctxt
-        .compile_statistic_series(
+        .statistic_series(
             CompileBenchmarkQuery::default()
                 .benchmark(benchmark_selector)
                 .profile(profile_selector)
@@ -119,9 +119,9 @@ async fn create_graphs(
     }
 
     for response in interpolated_responses {
-        let benchmark = response.key.benchmark.to_string();
-        let profile = response.key.profile;
-        let scenario = response.key.scenario.to_string();
+        let benchmark = response.test_case.benchmark.to_string();
+        let profile = response.test_case.profile;
+        let scenario = response.test_case.scenario.to_string();
         let graph_series = graph_series(response.series.into_iter(), request.kind);
 
         benchmarks
@@ -172,7 +172,10 @@ fn master_artifact_ids_for_range(ctxt: &SiteCtxt, start: Bound, end: Bound) -> V
 /// test cases per profile type
 fn create_summary(
     ctxt: &SiteCtxt,
-    interpolated_responses: &[SeriesResponse<Vec<((ArtifactId, Option<f64>), IsInterpolated)>>],
+    interpolated_responses: &[SeriesResponse<
+        CompileTestCase,
+        Vec<((ArtifactId, Option<f64>), IsInterpolated)>,
+    >],
     graph_kind: GraphKind,
 ) -> ServerResult<HashMap<Profile, HashMap<String, graphs::Series>>> {
     let mut baselines = HashMap::new();
@@ -188,8 +191,8 @@ fn create_summary(
                 let baseline_responses = interpolated_responses
                     .iter()
                     .filter(|sr| {
-                        let p = sr.key.profile;
-                        let s = sr.key.scenario;
+                        let p = sr.test_case.profile;
+                        let s = sr.test_case.scenario;
                         p == profile && s == Scenario::Empty
                     })
                     .map(|sr| sr.series.iter().cloned())
@@ -205,8 +208,8 @@ fn create_summary(
         let summary_case_responses = interpolated_responses
             .iter()
             .filter(|sr| {
-                let p = sr.key.profile;
-                let s = sr.key.scenario;
+                let p = sr.test_case.profile;
+                let s = sr.test_case.scenario;
                 p == profile && s == scenario
             })
             .map(|sr| sr.series.iter().cloned())

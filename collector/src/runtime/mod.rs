@@ -26,10 +26,6 @@ pub async fn bench_runtime(
     filter: BenchmarkFilter,
     iterations: u32,
 ) -> anyhow::Result<()> {
-    for benchmark in suite.benchmark_names() {
-        conn.record_runtime_benchmark(benchmark).await;
-    }
-
     let total_benchmark_count = suite.total_benchmark_count();
     let filtered = suite.filtered_benchmark_count(&filter);
     println!(

@@ -602,9 +602,7 @@ pub async fn handle_self_profile(
     }
     let commits = Arc::new(commits);
 
-    let mut cpu_responses = ctxt
-        .compile_statistic_series(query, commits.clone())
-        .await?;
+    let mut cpu_responses = ctxt.statistic_series(query, commits.clone()).await?;
     assert_eq!(cpu_responses.len(), 1, "all selectors are exact");
     let mut cpu_response = cpu_responses.remove(0).series;
 

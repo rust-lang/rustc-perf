@@ -6,7 +6,9 @@ use crate::api;
 use crate::db::{ArtifactId, Benchmark, Lookup, Profile, Scenario};
 use crate::github;
 use crate::load::SiteCtxt;
-use crate::selector::{self};
+use crate::selector::{
+    self, BenchmarkQuery, CompileBenchmarkQuery, RuntimeBenchmarkQuery, TestCase,
+};
 
 use collector::benchmark::category::Category;
 use collector::Bound;
@@ -153,6 +155,18 @@ pub async fn handle_compare(
         })
         .collect();
 
+    let runtime_comparisons = comparison
+        .runtime_comparisons
+        .into_iter()
+        .map(|comparison| api::comparison::RuntimeBenchmarkComparison {
+            benchmark: comparison.benchmark.to_string(),
+            is_relevant: comparison.is_relevant(),
+            significance_threshold: comparison.significance_threshold(),
+            significance_factor: comparison.significance_factor(),
+            statistics: comparison.results,
+        })
+        .collect();
+
     let mut new_errors = comparison
         .newly_failed_benchmarks
         .into_iter()
@@ -163,6 +177,7 @@ pub async fn handle_compare(
         a: comparison.a.into(),
         b: comparison.b.into(),
         compile_comparisons,
+        runtime_comparisons,
         new_errors,
         next,
         is_contiguous,
@@ -798,36 +813,38 @@ async fn compare_given_commits(
     let aids = Arc::new(vec![a.clone(), b.clone()]);
 
     // get all crates, cache, and profile combinations for the given metric
-    let query = selector::CompileBenchmarkQuery::all_for_metric(metric);
+    let compile_comparisons = get_comparison::<CompileTestResultComparison, _, _>(
+        ctxt,
+        CompileBenchmarkQuery::all_for_metric(metric),
+        a.clone(),
+        aids.clone(),
+        metric,
+        master_commits,
+        |test_case, comparison| CompileTestResultComparison {
+            profile: test_case.profile,
+            scenario: test_case.scenario,
+            benchmark: test_case.benchmark,
+            comparison,
+        },
+    )
+    .await?;
 
-    // `responses` contains series iterators. The first element in the iterator is the data
-    // for `a` and the second is the data for `b`
-    let mut responses = ctxt.compile_statistic_series(query, aids).await?;
+    // get all crates, cache, and profile combinations for the given metric
+    let runtime_comparisons = get_comparison::<RuntimeTestResultComparison, _, _>(
+        ctxt,
+        RuntimeBenchmarkQuery::all_for_metric(metric),
+        a.clone(),
+        aids,
+        metric,
+        master_commits,
+        |test_case, comparison| RuntimeTestResultComparison {
+            benchmark: test_case.benchmark,
+            comparison,
+        },
+    )
+    .await?;
 
     let conn = ctxt.conn().await;
-    let statistics_for_a = statistics_from_series(&mut responses);
-    let statistics_for_b = statistics_from_series(&mut responses);
-
-    let mut historical_data =
-        HistoricalDataMap::calculate(ctxt, a.clone(), master_commits, metric).await?;
-    let comparisons = statistics_for_a
-        .into_iter()
-        .filter_map(|(test_case, a)| {
-            statistics_for_b
-                .get(&test_case)
-                .map(|&b| CompileTestResultComparison {
-                    benchmark: test_case.0,
-                    profile: test_case.1,
-                    scenario: test_case.2,
-                    comparison: TestResultComparison {
-                        metric,
-                        historical_data: historical_data.data.remove(&test_case),
-                        results: (a, b),
-                    },
-                })
-        })
-        .collect();
-
     let mut errors_in_b = conn.get_error(b.lookup(&idx).unwrap()).await;
     let errors_in_a = conn.get_error(a.lookup(&idx).unwrap()).await;
     for (name, _) in errors_in_a {
@@ -837,9 +854,47 @@ async fn compare_given_commits(
     Ok(Some(ArtifactComparison {
         a: ArtifactDescription::for_artifact(&*conn, a.clone(), master_commits).await,
         b: ArtifactDescription::for_artifact(&*conn, b.clone(), master_commits).await,
-        compile_comparisons: comparisons,
+        compile_comparisons,
+        runtime_comparisons,
         newly_failed_benchmarks: errors_in_b.into_iter().collect(),
     }))
+}
+
+async fn get_comparison<
+    Comparison: Eq + Hash,
+    Query: BenchmarkQuery,
+    F: Fn(Query::TestCase, TestResultComparison) -> Comparison,
+>(
+    ctxt: &SiteCtxt,
+    query: Query,
+    start_artifact: ArtifactId,
+    aids: Arc<Vec<ArtifactId>>,
+    metric: Metric,
+    master_commits: &[collector::MasterCommit],
+    func: F,
+) -> Result<HashSet<Comparison>, BoxedError> {
+    // `responses` contains series iterators. The first element in the iterator is the data
+    // for `a` and the second is the data for `b`
+    let mut responses = ctxt.statistic_series(query.clone(), aids).await?;
+
+    let statistics_for_a = statistics_from_series(&mut responses);
+    let statistics_for_b = statistics_from_series(&mut responses);
+
+    let mut historical_data =
+        HistoricalDataMap::<Query>::calculate(ctxt, start_artifact, master_commits, query).await?;
+    Ok(statistics_for_a
+        .into_iter()
+        .filter_map(|(test_case, a)| {
+            statistics_for_b.get(&test_case).map(|&b| {
+                let comparison = TestResultComparison {
+                    metric,
+                    historical_data: historical_data.data.remove(&test_case),
+                    results: (a, b),
+                };
+                func(test_case, comparison)
+            })
+        })
+        .collect())
 }
 
 fn previous_commits(
@@ -877,8 +932,7 @@ pub struct ArtifactDescription {
     pub bootstrap_total: u64,
 }
 
-type StatisticsMap = HashMap<TestCase, f64>;
-type TestCase = (Benchmark, Profile, Scenario);
+type StatisticsMap<TestCase> = HashMap<TestCase, f64>;
 
 impl ArtifactDescription {
     /// For the given `ArtifactId`, consume the first datapoint in each of the given `SeriesResponse`
@@ -939,11 +993,13 @@ impl ArtifactDescription {
     }
 }
 
-fn statistics_from_series<T>(series: &mut [selector::SeriesResponse<T>]) -> StatisticsMap
+fn statistics_from_series<Case: TestCase, T>(
+    series: &mut [selector::SeriesResponse<Case, T>],
+) -> StatisticsMap<Case>
 where
     T: Iterator<Item = (ArtifactId, Option<f64>)>,
 {
-    let mut stats: StatisticsMap = HashMap::new();
+    let mut stats: StatisticsMap<Case> = HashMap::new();
     for response in series {
         let (_, point) = response.series.next().expect("must have element");
 
@@ -952,14 +1008,7 @@ where
         } else {
             continue;
         };
-        stats.insert(
-            (
-                response.key.benchmark,
-                response.key.profile,
-                response.key.scenario,
-            ),
-            value,
-        );
+        stats.insert(response.test_case.clone(), value);
     }
     stats
 }
@@ -990,6 +1039,8 @@ pub struct ArtifactComparison {
     pub b: ArtifactDescription,
     /// Compile test result comparisons between the two artifacts
     pub compile_comparisons: HashSet<CompileTestResultComparison>,
+    /// Runtime test result copmarisons between the two artifacts
+    pub runtime_comparisons: HashSet<RuntimeTestResultComparison>,
     /// A map from benchmark name to an error which occured when building `b` but not `a`.
     pub newly_failed_benchmarks: HashMap<String, String>,
 }
@@ -1053,19 +1104,19 @@ impl ArtifactComparison {
 }
 
 /// The historical data for a certain benchmark
-pub struct HistoricalDataMap {
+pub struct HistoricalDataMap<Query: BenchmarkQuery> {
     /// Historical data on a per test case basis
-    pub data: HashMap<(Benchmark, Profile, Scenario), HistoricalData>,
+    pub data: HashMap<Query::TestCase, HistoricalData>,
 }
 
-impl HistoricalDataMap {
+impl<Query: BenchmarkQuery> HistoricalDataMap<Query> {
     const NUM_PREVIOUS_COMMITS: usize = 30;
 
     async fn calculate(
         ctxt: &SiteCtxt,
         from: ArtifactId,
         master_commits: &[collector::MasterCommit],
-        metric: Metric,
+        query: Query,
     ) -> Result<Self, BoxedError> {
         let mut historical_data = HashMap::new();
 
@@ -1082,16 +1133,13 @@ impl HistoricalDataMap {
             });
         }
 
-        // get all crates, cache, and profile combinations for the given metric
-        let query = selector::CompileBenchmarkQuery::all_for_metric(metric);
-
         let mut previous_commit_series = ctxt
-            .compile_statistic_series(query, previous_commits.clone())
+            .statistic_series(query, previous_commits.clone())
             .await?;
 
         for _ in previous_commits.iter() {
-            for (test_case, stat) in statistics_from_series(&mut previous_commit_series) {
-                historical_data.entry(test_case).or_default().push(stat);
+            for (key, stat) in statistics_from_series(&mut previous_commit_series) {
+                historical_data.entry(key).or_default().push(stat);
             }
         }
 
@@ -1356,6 +1404,34 @@ impl std::hash::Hash for CompileTestResultComparison {
         self.benchmark.hash(state);
         self.profile.hash(state);
         self.scenario.hash(state);
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RuntimeTestResultComparison {
+    benchmark: Benchmark,
+    comparison: TestResultComparison,
+}
+
+impl Deref for RuntimeTestResultComparison {
+    type Target = TestResultComparison;
+
+    fn deref(&self) -> &Self::Target {
+        &self.comparison
+    }
+}
+
+impl cmp::PartialEq for RuntimeTestResultComparison {
+    fn eq(&self, other: &Self) -> bool {
+        self.benchmark == other.benchmark
+    }
+}
+
+impl cmp::Eq for RuntimeTestResultComparison {}
+
+impl std::hash::Hash for RuntimeTestResultComparison {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.benchmark.hash(state);
     }
 }
 

@@ -26,8 +26,6 @@ pub trait Connection: Send + Sync {
     );
     async fn get_compile_benchmarks(&self) -> Vec<CompileBenchmark>;
 
-    async fn record_runtime_benchmark(&self, name: &str);
-
     async fn artifact_by_name(&self, artifact: &str) -> Option<ArtifactId>;
 
     /// This records the duration of a collection run, i.e., collecting all of
@@ -110,6 +108,11 @@ pub trait Connection: Send + Sync {
     async fn get_pstats(
         &self,
         pstat_series_row_ids: &[u32],
+        artifact_row_id: &[Option<ArtifactIdNumber>],
+    ) -> Vec<Vec<Option<f64>>>;
+    async fn get_runtime_pstats(
+        &self,
+        runtime_pstat_series_row_ids: &[u32],
         artifact_row_id: &[Option<ArtifactIdNumber>],
     ) -> Vec<Vec<Option<f64>>>;
     async fn get_error(&self, artifact_row_id: ArtifactIdNumber) -> HashMap<String, String>;
