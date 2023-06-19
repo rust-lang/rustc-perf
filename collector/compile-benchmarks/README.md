@@ -23,7 +23,7 @@ They mostly consist of real-world crates.
 - **clap-3.1.6**: A command line argument parser library. A crate used by many
   Rust programs.
 - **cranelift-codegen-0.82.1**: The largest crate from a code generator. Used by
-  wasmtime. Stresses obligation processing, but less than `keccak`.
+  wasmtime. Stresses obligation processing.
 - **diesel-1.4.8**: A type safe SQL query builder. Utilizes the type system to
   ensure a lot of invariants. Stresses anything related to resolving
   trait bounds, by having a lot of trait impls for a large number of different
@@ -91,8 +91,6 @@ compiler in interesting ways.
 - **issue-88862**: A MCVE of a program that had a
   [severe performance regression](https://github.com/rust-lang/rust/issues/88862)
   when trying to normalize large opaque types with late-bound regions.
-- **keccak**: A cryptography algorithm. Contains a huge function with a very
-  high number of locals and basic blocks, which stresses obligation processing.
 - **many-assoc-items**: Contains a struct with many associated items, which
   caused [quadratic behavior](https://github.com/rust-lang/rust/issues/68957)
   in the past.
@@ -151,8 +149,8 @@ Rust code being written today.
   This is why there is no futures crate among the primary benchmarks.
 - **html5ever**: See above. This is an older version (v0.5.4) of the crate.
 - **inflate**: An old implementation of the DEFLATE algorithm. Contains
-  a very large function containing many locals and basic blocks, similar to
-  `keccak` but less extreme.
+  a very large function containing many locals and basic blocks, which stresses
+  obligation processing.
 - **regex**: See above. This is an older version of the crate.
 - **piston-image**: See above. This is an older version of the `image` crate.
 - **style-servo**: An old version of Servo's `style` crate. A large crate, and
