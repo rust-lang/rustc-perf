@@ -6,12 +6,21 @@ The following is a glossary of domain specific terminology. Although benchmarks 
 
 * **metric**: a name of a quantifiable metric being measured (e.g., instruction count).
 * **artifact**: a specific rustc binary labeled by some identifier tag (usually a commit sha or some sort of human readable id like "1.51.0" or "test").
+* **benchmark suite**: an entire collection of benchmarks, either compile-time or runtime.
 
 ## Compile-time benchmark terms
 
 * **benchmark**: the source of a crate which will be used to benchmark rustc. For example, ["hello world"](https://github.com/rust-lang/rustc-perf/tree/master/collector/compile-benchmarks/helloworld).
-* **profile**: a [cargo profile](https://doc.rust-lang.org/cargo/reference/profiles.html). Note: the database uses "opt" whereas cargo uses "release". 
-* **scenario**: The scenario under which a user is compiling their code. Currently, this is the incremental cache state and an optional change in the source since last compilation (e.g., full incremental cache and a `println!` statement is added).  
+* **profile**: a compilation configuration.
+  - `check` corresponds to running `cargo check`.
+  - `debug` corresponds to running `cargo build`.
+  - `opt` corresponds to running `cargo build --release`.
+  - `doc` corresponds to running rustdoc. 
+* **scenario**: describes the incremental cache state and an optional change in the source since last compilation.
+  - `full`: incremental compilation is not used.
+  - `incr-full`: incremental compilation is used, with an empty incremental cache.
+  - `incr-unchanged`: incremental compilation is used, with a full incremental cache and no code changes made.
+  - `incr-patched`: incremental compilation is used, with a full incremental cache and some code changes made.
 * **category**: a high-level group of benchmarks. Currently, there are three categories, primary (mostly real-world crates), secondary (mostly stress tests), and stable (old real-world crates, only used for the dashboard).
 
 ### Types of compile-time benchmarks

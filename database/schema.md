@@ -104,8 +104,8 @@ aid         date_recorded  duration
 
 The different types of compile-time benchmarks that are run. 
 
-The table stores the name of the benchmark as well as whether it is capable of being run using the stable compiler and what is its category.
-The benchmark name is used as a foreign key in many of the other tables.
+The table stores the name of the benchmark, whether it is capable of being run using the stable compiler,
+and its category. The benchmark name is used as a foreign key in many of the other tables.
 
 Category is either `primary` (real-world benchmark) or `secondary` (stress test).
 Stable benchmarks have `category` set to `primary` and `stabilized` set to `1`.
