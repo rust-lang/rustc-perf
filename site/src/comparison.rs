@@ -14,6 +14,7 @@ use collector::benchmark::category::Category;
 use collector::Bound;
 use serde::{Deserialize, Serialize};
 
+use crate::server::comparison::StatComparison;
 use database::CommitType;
 use serde::de::IntoDeserializer;
 use std::cmp;
@@ -148,10 +149,7 @@ pub async fn handle_compare(
             benchmark: comparison.benchmark.to_string(),
             profile: comparison.profile.to_string(),
             scenario: comparison.scenario.to_string(),
-            is_relevant: comparison.is_relevant(),
-            significance_threshold: comparison.significance_threshold(),
-            significance_factor: comparison.significance_factor(),
-            statistics: comparison.results,
+            comparison: comparison.comparison.into(),
         })
         .collect();
 
@@ -160,10 +158,7 @@ pub async fn handle_compare(
         .into_iter()
         .map(|comparison| api::comparison::RuntimeBenchmarkComparison {
             benchmark: comparison.benchmark.to_string(),
-            is_relevant: comparison.is_relevant(),
-            significance_threshold: comparison.significance_threshold(),
-            significance_factor: comparison.significance_factor(),
-            statistics: comparison.results,
+            comparison: comparison.comparison.into(),
         })
         .collect();
 
@@ -1367,6 +1362,17 @@ impl TestResultComparison {
     }
 }
 
+impl From<TestResultComparison> for StatComparison {
+    fn from(comparison: TestResultComparison) -> Self {
+        Self {
+            is_relevant: comparison.is_relevant(),
+            significance_threshold: comparison.significance_threshold(),
+            significance_factor: comparison.significance_factor(),
+            statistics: comparison.results,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct CompileTestResultComparison {
     benchmark: Benchmark,
@@ -1378,14 +1384,6 @@ pub struct CompileTestResultComparison {
 impl CompileTestResultComparison {
     pub fn benchmark(&self) -> Benchmark {
         self.benchmark
-    }
-}
-
-impl Deref for CompileTestResultComparison {
-    type Target = TestResultComparison;
-
-    fn deref(&self) -> &Self::Target {
-        &self.comparison
     }
 }
 

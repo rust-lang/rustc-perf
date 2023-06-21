@@ -44,14 +44,18 @@ export interface ArtifactDescription {
   bootstrap_total: number;
 }
 
-export interface CompileBenchmarkComparison {
-  benchmark: string;
-  profile: Profile;
-  scenario: string;
+export interface StatComparison {
   is_relevant: boolean;
   significance_threshold: number;
   significance_factor: number;
   statistics: [number, number];
+}
+
+export interface CompileBenchmarkComparison {
+  benchmark: string;
+  profile: Profile;
+  scenario: string;
+  comparison: StatComparison;
 }
 
 export interface CompareResponse {
@@ -62,8 +66,9 @@ export interface CompareResponse {
   a: ArtifactDescription;
   b: ArtifactDescription;
 
-  compile_comparisons: [CompileBenchmarkComparison];
   new_errors: Array<[string, string]>;
+
+  compile_comparisons: [CompileBenchmarkComparison];
   compile_benchmark_data: [CompileBenchmarkDescription];
 }
 

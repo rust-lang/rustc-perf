@@ -88,8 +88,8 @@ export function computeTestCasesWithNonRelevant(
 
   let testCases = data.compile_comparisons
     .map((c: CompileBenchmarkComparison): TestCase => {
-      const datumA = c.statistics[0];
-      const datumB = c.statistics[1];
+      const datumA = c.comparison.statistics[0];
+      const datumB = c.comparison.statistics[1];
 
       // In the vast majority of cases, we can do the proportional change calculation. However, some
       // metrics can be zero. If the initial value is 0, we can't compute the new value as a
@@ -111,9 +111,9 @@ export function computeTestCasesWithNonRelevant(
         profile: c.profile,
         scenario: c.scenario,
         category: (benchmarkMap[c.benchmark] || {}).category || "secondary",
-        isRelevant: c.is_relevant,
-        significanceFactor: c.significance_factor,
-        significanceThreshold: c.significance_threshold * 100.0, // ensure the threshold is in %
+        isRelevant: c.comparison.is_relevant,
+        significanceFactor: c.comparison.significance_factor,
+        significanceThreshold: c.comparison.significance_threshold * 100.0, // ensure the threshold is in %
         datumA,
         datumB,
         percent,
