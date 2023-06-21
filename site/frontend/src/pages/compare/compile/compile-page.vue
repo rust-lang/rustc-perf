@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import QuickLinks from "./quick-links.vue";
 import Filters from "./filters.vue";
-import OverallTable from "../summary/overall-table.vue";
+import OverallSummary from "../summary/overall-summary.vue";
 import Aggregations from "../summary/aggregations.vue";
 import Benchmarks from "../benchmarks/benchmarks.vue";
 import {CompareResponse, CompareSelector} from "../types";
@@ -171,7 +171,7 @@ const filteredSummary = computed(() => computeSummary(testCases.value));
     @change="updateFilter"
     @export="exportData"
   />
-  <OverallTable :summary="filteredSummary" />
+  <OverallSummary :summary="filteredSummary" />
   <Aggregations :cases="testCases" />
   <Benchmarks
     :data="data"
