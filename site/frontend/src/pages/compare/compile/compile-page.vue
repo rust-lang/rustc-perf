@@ -141,7 +141,7 @@ function updateFilter(newFilter: CompileBenchmarkFilter) {
 }
 
 function exportData() {
-  exportToMarkdown(testCases.value);
+  exportToMarkdown(comparisons.value);
 }
 
 const urlParams = getUrlParams();
@@ -150,17 +150,17 @@ const quickLinksKey = ref(0);
 const filter = ref(loadFilterFromUrl(urlParams, defaultCompileFilter));
 
 const benchmarkMap = createCompileBenchmarkMap(props.data);
-const allTestCases = computed(() =>
+const allComparisons = computed(() =>
   computeCompileComparisonsWithNonRelevant(
     filter.value,
     props.data.compile_comparisons,
     benchmarkMap
   )
 );
-const testCases = computed(() =>
-  filterNonRelevant(filter.value, allTestCases.value)
+const comparisons = computed(() =>
+  filterNonRelevant(filter.value, allComparisons.value)
 );
-const filteredSummary = computed(() => computeSummary(testCases.value));
+const filteredSummary = computed(() => computeSummary(comparisons.value));
 </script>
 
 <template>
@@ -172,11 +172,11 @@ const filteredSummary = computed(() => computeSummary(testCases.value));
     @export="exportData"
   />
   <OverallSummary :summary="filteredSummary" />
-  <Aggregations :cases="testCases" />
+  <Aggregations :cases="comparisons" />
   <Benchmarks
     :data="data"
-    :test-cases="testCases"
-    :all-test-cases="allTestCases"
+    :test-cases="comparisons"
+    :all-test-cases="allComparisons"
     :filter="filter"
     :stat="selector.stat"
   ></Benchmarks>
