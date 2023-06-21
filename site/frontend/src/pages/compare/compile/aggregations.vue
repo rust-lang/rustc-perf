@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import {computeSummary, SummaryGroup, TestCaseComparison} from "../data";
 import Toggle from "../toggle.vue";
-import SummaryTable from "./summary-table.vue";
+import SummaryTable from "../summary/summary-table.vue";
 import {createPersistedRef} from "../../../storage";
 import {PREF_AGGREGATIONS_OPENED} from "../prefs";
-import {CompileTestCase} from "../compile/common";
+import {CompileTestCase} from "./common";
 
 const props = defineProps<{
   cases: TestCaseComparison<CompileTestCase>[];

@@ -1,5 +1,5 @@
-import {BenchmarkFilter, CompareResponse, StatComparison} from "../types";
-import {calculateComparison, computeSummary, TestCaseComparison} from "../data";
+import {BenchmarkFilter, StatComparison} from "../types";
+import {calculateComparison, TestCaseComparison} from "../data";
 
 export interface RuntimeTestCase {
   benchmark: string;
