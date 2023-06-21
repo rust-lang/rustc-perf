@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import {TestCase} from "../data";
+import {CompileTestCase, TestCaseComparison} from "../data";
 import Tooltip from "../tooltip.vue";
 import {ArtifactDescription} from "../types";
 import {percentClass} from "../shared";
 
 const props = defineProps<{
   id: string;
-  cases: TestCase[];
+  cases: TestCaseComparison<CompileTestCase>[];
   hasNonRelevant: boolean;
   showRawData: boolean;
   commitA: ArtifactDescription;
@@ -21,7 +21,7 @@ function benchmarkLink(benchmark: string): string {
 function graphLink(
   commit: ArtifactDescription,
   stat: string,
-  testCase: TestCase
+  comparison: TestCaseComparison<CompileTestCase>
 ): string {
   let date = new Date(commit.date);
   // Move to `30 days ago` to display history of the test case
@@ -32,22 +32,22 @@ function graphLink(
   let start = `${year}-${month}-${day}`;
 
   let end = commit.commit;
-  return `/index.html?start=${start}&end=${end}&benchmark=${testCase.benchmark}&profile=${testCase.profile}&scenario=${testCase.scenario}&stat=${stat}`;
+  return `/index.html?start=${start}&end=${end}&benchmark=${comparison.testCase.benchmark}&profile=${comparison.testCase.profile}&scenario=${comparison.testCase.scenario}&stat=${stat}`;
 }
 
 function detailedQueryPercentLink(
   commit: ArtifactDescription,
   baseCommit: ArtifactDescription,
-  testCase: TestCase
+  comparison: TestCaseComparison<CompileTestCase>
 ): string {
-  return `/detailed-query.html?commit=${commit.commit}&base_commit=${baseCommit.commit}&benchmark=${testCase.benchmark}-${testCase.profile}&scenario=${testCase.scenario}`;
+  return `/detailed-query.html?commit=${commit.commit}&base_commit=${baseCommit.commit}&benchmark=${comparison.testCase.benchmark}-${comparison.testCase.profile}&scenario=${comparison.testCase.scenario}`;
 }
 
 function detailedQueryRawDataLink(
   commit: ArtifactDescription,
-  testCase: TestCase
+  comparison: TestCaseComparison<CompileTestCase>
 ) {
-  return `/detailed-query.html?commit=${commit.commit}&benchmark=${testCase.benchmark}-${testCase.profile}&scenario=${testCase.scenario}`;
+  return `/detailed-query.html?commit=${commit.commit}&benchmark=${comparison.testCase.benchmark}-${comparison.testCase.profile}&scenario=${comparison.testCase.scenario}`;
 }
 
 function prettifyRawNumber(number: number): string {
@@ -95,37 +95,37 @@ function prettifyRawNumber(number: number): string {
         </tr>
       </thead>
       <tbody>
-        <template v-for="testCase in cases">
+        <template v-for="comparison in cases">
           <tr>
             <td>
               <a
-                v-bind:href="benchmarkLink(testCase.benchmark)"
+                v-bind:href="benchmarkLink(comparison.testCase.benchmark)"
                 class="silent-link"
                 target="_blank"
               >
-                {{ testCase.benchmark }}
+                {{ comparison.testCase.benchmark }}
               </a>
             </td>
             <td>
               <a
-                v-bind:href="graphLink(commitB, stat, testCase)"
+                v-bind:href="graphLink(commitB, stat, comparison)"
                 target="_blank"
                 class="silent-link"
               >
-                {{ testCase.profile }}
+                {{ comparison.testCase.profile }}
               </a>
             </td>
-            <td>{{ testCase.scenario }}</td>
+            <td>{{ comparison.testCase.scenario }}</td>
             <td>
               <div class="numeric-aligned">
                 <div>
                   <a
                     v-bind:href="
-                      detailedQueryPercentLink(commitB, commitA, testCase)
+                      detailedQueryPercentLink(commitB, commitA, comparison)
                     "
                   >
-                    <span v-bind:class="percentClass(testCase.percent)">
-                      {{ testCase.percent.toFixed(2) }}%
+                    <span v-bind:class="percentClass(comparison.percent)">
+                      {{ comparison.percent.toFixed(2) }}%
                     </span>
                   </a>
                 </div>
@@ -135,8 +135,8 @@ function prettifyRawNumber(number: number): string {
               <div class="numeric-aligned">
                 <div>
                   {{
-                    testCase.significanceThreshold
-                      ? testCase.significanceThreshold.toFixed(2) + "%"
+                    comparison.significanceThreshold
+                      ? comparison.significanceThreshold.toFixed(2) + "%"
                       : "-"
                   }}
                 </div>
@@ -146,24 +146,24 @@ function prettifyRawNumber(number: number): string {
               <div class="numeric-aligned">
                 <div>
                   {{
-                    testCase.significanceFactor
-                      ? testCase.significanceFactor.toFixed(2) + "x"
+                    comparison.significanceFactor
+                      ? comparison.significanceFactor.toFixed(2) + "x"
                       : "-"
                   }}
                 </div>
               </div>
             </td>
             <td v-if="showRawData" class="numeric">
-              <a v-bind:href="detailedQueryRawDataLink(commitA, testCase)">
-                <abbr :title="testCase.datumA">{{
-                  prettifyRawNumber(testCase.datumA)
+              <a v-bind:href="detailedQueryRawDataLink(commitA, comparison)">
+                <abbr :title="comparison.datumA">{{
+                  prettifyRawNumber(comparison.datumA)
                 }}</abbr>
               </a>
             </td>
             <td v-if="showRawData" class="numeric">
-              <a v-bind:href="detailedQueryRawDataLink(commitB, testCase)">
-                <abbr :title="testCase.datumB">{{
-                  prettifyRawNumber(testCase.datumB)
+              <a v-bind:href="detailedQueryRawDataLink(commitB, comparison)">
+                <abbr :title="comparison.datumB">{{
+                  prettifyRawNumber(comparison.datumB)
                 }}</abbr>
               </a>
             </td>

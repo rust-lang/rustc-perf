@@ -1,21 +1,26 @@
 <script setup lang="ts">
-import {computeSummary, SummaryGroup, TestCase} from "../data";
+import {
+  CompileTestCase,
+  computeSummary,
+  SummaryGroup,
+  TestCaseComparison,
+} from "../data";
 import Toggle from "../toggle.vue";
 import SummaryTable from "./summary-table.vue";
 import {createPersistedRef} from "../../../storage";
 import {PREF_AGGREGATIONS_OPENED} from "../prefs";
 
 const props = defineProps<{
-  cases: TestCase[];
+  cases: TestCaseComparison<CompileTestCase>[];
 }>();
 
 function calculateSummary(
-  keyAttribute: string,
+  keyAttribute: keyof CompileTestCase,
   keyValue: string
 ): SummaryGroup {
   const benchmarks = [];
   for (const benchmark of props.cases) {
-    if (benchmark[keyAttribute].startsWith(keyValue)) {
+    if (benchmark.testCase[keyAttribute].startsWith(keyValue)) {
       benchmarks.push(benchmark);
     }
   }

@@ -1,13 +1,13 @@
 <script setup lang="tsx">
 import {computed, h} from "vue";
 import TestCasesTable from "./test-cases-table.vue";
-import {TestCase} from "../data";
+import {CompileTestCase, TestCaseComparison} from "../data";
 import {CompareResponse, CompileBenchmarkFilter} from "../types";
 
 export interface BenchmarkProps {
   data: CompareResponse;
-  testCases: TestCase[];
-  allTestCases: TestCase[];
+  testCases: TestCaseComparison<CompileTestCase>[];
+  allTestCases: TestCaseComparison<CompileTestCase>[];
   filter: CompileBenchmarkFilter;
   stat: string;
 }
@@ -35,16 +35,20 @@ function Section({
 }
 
 const primaryCases = computed(() =>
-  props.testCases.filter((c) => c.category === "primary")
+  props.testCases.filter((c) => c.testCase.category === "primary")
 );
 const secondaryCases = computed(() =>
-  props.testCases.filter((c) => c.category === "secondary")
+  props.testCases.filter((c) => c.testCase.category === "secondary")
 );
 const primaryHasNonRelevant = computed(
-  () => props.allTestCases.filter((c) => c.category === "primary").length > 0
+  () =>
+    props.allTestCases.filter((c) => c.testCase.category === "primary").length >
+    0
 );
 const secondaryHasNonRelevant = computed(
-  () => props.allTestCases.filter((c) => c.category === "secondary").length > 0
+  () =>
+    props.allTestCases.filter((c) => c.testCase.category === "secondary")
+      .length > 0
 );
 </script>
 
