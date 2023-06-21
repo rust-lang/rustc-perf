@@ -24,6 +24,10 @@ import {
   defaultCompileFilter as defaultCompileFilter,
 } from "./compile/common";
 import RuntimeBenchmarksPage from "./runtime/page.vue";
+import {
+  computeRuntimeComparisonsWithNonRelevant,
+  defaultRuntimeFilter,
+} from "./runtime/common";
 
 function loadSelectorFromUrl(urlParams: Dict<string>): CompareSelector {
   const start = urlParams["start"] ?? "";
@@ -70,8 +74,17 @@ async function loadCompareData(
       defaultCompileFilter,
       computeCompileComparisonsWithNonRelevant(
         defaultCompileFilter,
-        response,
+        response.compile_comparisons,
         createCompileBenchmarkMap(response)
+      )
+    )
+  );
+  runtimeSummary.value = computeSummary(
+    filterNonRelevant(
+      defaultRuntimeFilter,
+      computeRuntimeComparisonsWithNonRelevant(
+        defaultRuntimeFilter,
+        response.runtime_comparisons
       )
     )
   );
@@ -90,10 +103,11 @@ function updateSelection(params: SelectionParams) {
 
 const urlParams = getUrlParams();
 
-// Include all relevant changes in the compile-time tab summary.
-// We do not wrap it in computed, because it should be loaded only once, after
-// the data is downloaded.
+// Include all relevant changes in the compile-time and runtime tab summaries.
+// We do not wrap these summaries in `computed`, because they should be loaded
+// only once, after the compare data is downloaded.
 const compileSummary: Ref<SummaryGroup | null> = ref(null);
+const runtimeSummary: Ref<SummaryGroup | null> = ref(null);
 
 const loading = ref(false);
 
@@ -139,13 +153,14 @@ loadCompareData(selector, loading);
         :data="data"
         :initial-tab="initialTab"
         :compile-time-summary="compileSummary"
+        :runtime-summary="runtimeSummary"
       />
       <template v-if="activeTab === Tab.CompileTime">
         <CompileBenchmarksPage :data="data" :selector="selector" />
       </template>
       <BootstrapTable v-if="activeTab === Tab.Bootstrap" :data="data" />
       <template v-if="runtimeDataAvailable && activeTab === Tab.Runtime">
-        Runtime data
+        <RuntimeBenchmarksPage :data="data" />
       </template>
     </div>
   </div>

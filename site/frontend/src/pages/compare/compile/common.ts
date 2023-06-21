@@ -1,5 +1,5 @@
 import {BenchmarkFilter, CompareResponse, StatComparison} from "../types";
-import {TestCaseComparison} from "../data";
+import {calculateComparison, TestCaseComparison} from "../data";
 
 export type CompileBenchmarkFilter = {
   profile: {
@@ -67,7 +67,7 @@ export interface CompileTestCase {
 
 export function computeCompileComparisonsWithNonRelevant(
   filter: CompileBenchmarkFilter,
-  data: CompareResponse,
+  comparisons: [CompileBenchmarkComparison],
   benchmarkMap: CompileBenchmarkMap
 ): TestCaseComparison<CompileTestCase>[] {
   function profileFilter(profile: Profile): boolean {
@@ -118,41 +118,16 @@ export function computeCompileComparisonsWithNonRelevant(
     );
   }
 
-  let testCases = data.compile_comparisons
+  let filteredComparisons = comparisons
     .map(
       (c: CompileBenchmarkComparison): TestCaseComparison<CompileTestCase> => {
-        const datumA = c.comparison.statistics[0];
-        const datumB = c.comparison.statistics[1];
-
-        // In the vast majority of cases, we can do the proportional change calculation. However, some
-        // metrics can be zero. If the initial value is 0, we can't compute the new value as a
-        // percentage change of the old one. If both values are 0, we can say the change is also 0%.
-        // If the new value is not 0, the percentage is not really meaningful, but we can say it's 100%.
-        let percent;
-        if (datumA === 0) {
-          if (datumB === 0) {
-            percent = 0;
-          } else {
-            percent = 100;
-          }
-        } else {
-          percent = 100 * ((datumB - datumA) / datumA);
-        }
-
-        return {
-          testCase: {
-            benchmark: c.benchmark,
-            profile: c.profile,
-            scenario: c.scenario,
-            category: (benchmarkMap[c.benchmark] || {}).category || "secondary",
-          },
-          isRelevant: c.comparison.is_relevant,
-          significanceFactor: c.comparison.significance_factor,
-          significanceThreshold: c.comparison.significance_threshold * 100.0, // ensure the threshold is in %
-          datumA,
-          datumB,
-          percent,
+        let testCase = {
+          benchmark: c.benchmark,
+          profile: c.profile,
+          scenario: c.scenario,
+          category: (benchmarkMap[c.benchmark] || {}).category || "secondary",
         };
+        return calculateComparison(c.comparison, testCase);
       }
     )
     .filter((tc) => shouldShowTestCase(tc));
@@ -160,12 +135,12 @@ export function computeCompileComparisonsWithNonRelevant(
   // Sort by name first, so that there is a canonical ordering
   // of test cases. This ensures the overall order is stable, even if
   // individual benchmarks have the same largestChange value.
-  testCases.sort((a, b) =>
+  filteredComparisons.sort((a, b) =>
     a.testCase.benchmark.localeCompare(b.testCase.benchmark)
   );
-  testCases.sort((a, b) => Math.abs(b.percent) - Math.abs(a.percent));
+  filteredComparisons.sort((a, b) => Math.abs(b.percent) - Math.abs(a.percent));
 
-  return testCases;
+  return filteredComparisons;
 }
 
 export function createCompileBenchmarkMap(

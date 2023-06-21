@@ -153,7 +153,7 @@ const benchmarkMap = createCompileBenchmarkMap(props.data);
 const allTestCases = computed(() =>
   computeCompileComparisonsWithNonRelevant(
     filter.value,
-    props.data,
+    props.data.compile_comparisons,
     benchmarkMap
   )
 );
