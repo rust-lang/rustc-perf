@@ -28,7 +28,7 @@ export async function getJson<T>(
   return await response.json();
 }
 
-export async function postMsgpack(path: string, body: any) {
+export async function postMsgpack<T>(path: string, body: any): Promise<T> {
   const response = await fetch(path, {
     method: "POST",
     body: JSON.stringify(body),

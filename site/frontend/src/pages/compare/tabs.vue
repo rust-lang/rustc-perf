@@ -46,7 +46,7 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
   <div class="wrapper">
     <div
       class="tab"
-      title="Compilation time benchmarks"
+      title="Compilation time benchmarks: measure how long does it take to compile various crates using the compared rustc."
       :class="{selected: activeTab === Tab.CompileTime}"
       @click="changeTab(Tab.CompileTime)"
     >
@@ -80,7 +80,16 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
     </div>
     <div
       class="tab"
-      title="Bootstrap duration"
+      title="Runtime benchmarks: measure how long does it take to execute (i.e. how fast are) programs compiled by the compared rustc."
+      :class="{selected: activeTab === Tab.Runtime}"
+      @click="changeTab(Tab.Runtime)"
+    >
+      <div class="title">Runtime</div>
+      <div class="summary runtime"></div>
+    </div>
+    <div
+      class="tab"
+      title="Bootstrap duration: measures how long does it take to compile rustc by itself."
       :class="{selected: activeTab === Tab.Bootstrap}"
       @click="changeTab(Tab.Bootstrap)"
     >

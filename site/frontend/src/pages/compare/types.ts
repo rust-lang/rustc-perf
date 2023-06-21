@@ -74,5 +74,6 @@ export interface CompareResponse {
 
 export enum Tab {
   CompileTime = "compile",
+  Runtime = "runtime",
   Bootstrap = "bootstrap",
 }
