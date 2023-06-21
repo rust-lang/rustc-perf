@@ -1,4 +1,4 @@
-import {computeSummary, TestCase} from "./data";
+import {computeSummary, TestCase} from "../data";
 
 export function exportToMarkdown(testCases: TestCase[]) {
   function changesTable(cases) {

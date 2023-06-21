@@ -12,12 +12,12 @@ import {withLoading} from "../../utils/loading";
 import {postMsgpack} from "../../utils/requests";
 import {COMPARE_DATA_URL} from "../../urls";
 import {CompareResponse, CompareSelector, DataFilter, Tab} from "./types";
-import BootstrapTable from "./bootstrap-table.vue";
+import BootstrapTable from "./bootstrap/bootstrap-table.vue";
 import Header from "./header/header.vue";
 import DataSelector, {SelectionParams} from "./header/data-selector.vue";
-import QuickLinks from "./header/quick-links.vue";
-import Filters from "./header/filters.vue";
-import {exportToMarkdown} from "./export";
+import QuickLinks from "./compile/quick-links.vue";
+import Filters from "./compile/filters.vue";
+import {exportToMarkdown} from "./compile/export";
 import {
   computeBenchmarkMap,
   computeSummary,
