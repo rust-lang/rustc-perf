@@ -17,13 +17,13 @@ import Header from "./header/header.vue";
 import DataSelector, {SelectionParams} from "./header/data-selector.vue";
 import {computeSummary, filterNonRelevant, SummaryGroup} from "./data";
 import Tabs from "./tabs.vue";
-import CompileBenchmarksPage from "./compile/page.vue";
+import CompileBenchmarksPage from "./compile/compile-page.vue";
 import {
   computeCompileComparisonsWithNonRelevant,
   createCompileBenchmarkMap,
   defaultCompileFilter as defaultCompileFilter,
 } from "./compile/common";
-import RuntimeBenchmarksPage from "./runtime/page.vue";
+import RuntimeBenchmarksPage from "./runtime/runtime-page.vue";
 import {
   computeRuntimeComparisonsWithNonRelevant,
   defaultRuntimeFilter,
