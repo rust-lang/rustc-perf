@@ -2,13 +2,13 @@
 import {computed, h} from "vue";
 import TestCasesTable from "./test-cases-table.vue";
 import {TestCase} from "../data";
-import {CompareResponse, DataFilter} from "../types";
+import {CompareResponse, CompileBenchmarkFilter} from "../types";
 
 export interface BenchmarkProps {
   data: CompareResponse;
   testCases: TestCase[];
   allTestCases: TestCase[];
-  filter: DataFilter;
+  filter: CompileBenchmarkFilter;
   stat: string;
 }
 

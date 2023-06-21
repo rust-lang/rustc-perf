@@ -1,4 +1,4 @@
-export interface DataFilter {
+export interface CompileBenchmarkFilter {
   name: string | null;
   nonRelevant: boolean;
   showRawData: boolean;
@@ -23,7 +23,7 @@ export interface DataFilter {
 export type Profile = "check" | "debug" | "opt" | "doc";
 export type Category = "primary" | "secondary";
 
-export type BenchmarkMap = Dict<{category: Category}>;
+export type CompileBenchmarkMap = Dict<{category: Category}>;
 
 export interface CompareSelector {
   start: string;

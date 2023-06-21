@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import Toggle from "../toggle.vue";
-import {DataFilter} from "../types";
+import {CompileBenchmarkFilter} from "../types";
 import Tooltip from "../tooltip.vue";
 import {ref, toRaw, watch} from "vue";
 import {deepCopy} from "../../../utils/copy";
@@ -9,12 +9,12 @@ import {createPersistedRef} from "../../../storage";
 
 const props = defineProps<{
   // When reset, set filter to this value
-  defaultFilter: DataFilter;
+  defaultFilter: CompileBenchmarkFilter;
   // Initialize the filter with this value
-  initialFilter: DataFilter;
+  initialFilter: CompileBenchmarkFilter;
 }>();
 const emit = defineEmits<{
-  (e: "change", filter: DataFilter): void;
+  (e: "change", filter: CompileBenchmarkFilter): void;
   (e: "export"): void;
 }>();
 

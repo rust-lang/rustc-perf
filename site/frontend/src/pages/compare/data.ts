@@ -1,9 +1,9 @@
 import {
-  BenchmarkMap,
+  CompileBenchmarkMap,
   Category,
   CompareResponse,
   CompileBenchmarkComparison,
-  DataFilter,
+  CompileBenchmarkFilter,
   Profile,
 } from "./types";
 
@@ -34,9 +34,9 @@ export interface TestCase {
 }
 
 export function computeTestCasesWithNonRelevant(
-  filter: DataFilter,
+  filter: CompileBenchmarkFilter,
   data: CompareResponse,
-  benchmarkMap: BenchmarkMap
+  benchmarkMap: CompileBenchmarkMap
 ): TestCase[] {
   function profileFilter(profile: Profile): boolean {
     if (profile === "check") {
@@ -131,7 +131,7 @@ export function computeTestCasesWithNonRelevant(
 }
 
 export function filterNonRelevant(
-  filter: DataFilter,
+  filter: CompileBenchmarkFilter,
   cases: TestCase[]
 ): TestCase[] {
   if (filter.nonRelevant) {
@@ -200,11 +200,9 @@ export function computeSummary(testCases: TestCase[]): SummaryGroup {
   };
 }
 
-export function computeBenchmarkMap(
-  data: CompareResponse | null
-): BenchmarkMap {
-  if (data === null) return {};
-
+export function createCompileBenchmarkMap(
+  data: CompareResponse
+): CompileBenchmarkMap {
   const benchmarks = {};
   for (const benchmark of data.compile_benchmark_data) {
     benchmarks[benchmark.name] = {
