@@ -4,21 +4,17 @@ import Filters from "./filters.vue";
 import OverallTable from "../summary/overall-table.vue";
 import Aggregations from "../summary/aggregations.vue";
 import Benchmarks from "../benchmarks/benchmarks.vue";
-import {
-  CompareResponse,
-  CompareSelector,
-  CompileBenchmarkFilter,
-} from "../types";
+import {CompareResponse, CompareSelector} from "../types";
 import {computed, ref} from "vue";
 import {changeUrl, getUrlParams} from "../../../utils/navigation";
 import {exportToMarkdown} from "./export";
+import {computeSummary, filterNonRelevant} from "../data";
 import {
+  CompileBenchmarkFilter,
+  computeCompileComparisonsWithNonRelevant,
   createCompileBenchmarkMap,
-  computeSummary,
-  computeTestCasesWithNonRelevant,
-  filterNonRelevant,
-} from "../data";
-import {defaultFilter} from "./common";
+  defaultCompileFilter,
+} from "./common";
 
 const props = defineProps<{
   data: CompareResponse;
@@ -139,7 +135,7 @@ function refreshQuickLinks() {
 }
 
 function updateFilter(newFilter: CompileBenchmarkFilter) {
-  storeFilterToUrl(newFilter, defaultFilter, getUrlParams());
+  storeFilterToUrl(newFilter, defaultCompileFilter, getUrlParams());
   filter.value = newFilter;
   refreshQuickLinks();
 }
@@ -151,11 +147,15 @@ function exportData() {
 const urlParams = getUrlParams();
 
 const quickLinksKey = ref(0);
-const filter = ref(loadFilterFromUrl(urlParams, defaultFilter));
+const filter = ref(loadFilterFromUrl(urlParams, defaultCompileFilter));
 
 const benchmarkMap = createCompileBenchmarkMap(props.data);
 const allTestCases = computed(() =>
-  computeTestCasesWithNonRelevant(filter.value, props.data, benchmarkMap)
+  computeCompileComparisonsWithNonRelevant(
+    filter.value,
+    props.data,
+    benchmarkMap
+  )
 );
 const testCases = computed(() =>
   filterNonRelevant(filter.value, allTestCases.value)
@@ -166,7 +166,7 @@ const filteredSummary = computed(() => computeSummary(testCases.value));
 <template>
   <QuickLinks :stat="selector.stat" :key="quickLinksKey" />
   <Filters
-    :defaultFilter="defaultFilter"
+    :defaultFilter="defaultCompileFilter"
     :initialFilter="filter"
     @change="updateFilter"
     @export="exportData"

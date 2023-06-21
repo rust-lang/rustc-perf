@@ -1,5 +1,3 @@
-<script lang="ts"></script>
-
 <script setup lang="ts">
 import {Ref, ref} from "vue";
 import {CompareResponse, Tab} from "./types";

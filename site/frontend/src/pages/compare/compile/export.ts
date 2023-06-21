@@ -1,4 +1,5 @@
-import {CompileTestCase, computeSummary, TestCaseComparison} from "../data";
+import {computeSummary, TestCaseComparison} from "../data";
+import {CompileTestCase} from "./common";
 
 export function exportToMarkdown(
   comparisons: TestCaseComparison<CompileTestCase>[]

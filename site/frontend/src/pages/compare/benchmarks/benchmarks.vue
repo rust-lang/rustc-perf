@@ -1,8 +1,9 @@
 <script setup lang="tsx">
 import {computed, h} from "vue";
 import TestCasesTable from "./test-cases-table.vue";
-import {CompileTestCase, TestCaseComparison} from "../data";
-import {CompareResponse, CompileBenchmarkFilter} from "../types";
+import {TestCaseComparison} from "../data";
+import {CompareResponse} from "../types";
+import {CompileBenchmarkFilter, CompileTestCase} from "../compile/common";
 
 export interface BenchmarkProps {
   data: CompareResponse;

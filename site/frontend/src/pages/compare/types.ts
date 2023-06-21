@@ -1,39 +1,19 @@
-export interface CompileBenchmarkFilter {
+import {
+  CompileBenchmarkComparison,
+  CompileBenchmarkDescription,
+} from "./compile/common";
+import {RuntimeBenchmarkComparison} from "./runtime/common";
+
+export interface BenchmarkFilter {
   name: string | null;
   nonRelevant: boolean;
   showRawData: boolean;
-  profile: {
-    check: boolean;
-    debug: boolean;
-    opt: boolean;
-    doc: boolean;
-  };
-  scenario: {
-    full: boolean;
-    incrFull: boolean;
-    incrUnchanged: boolean;
-    incrPatched: boolean;
-  };
-  category: {
-    primary: boolean;
-    secondary: boolean;
-  };
 }
-
-export type Profile = "check" | "debug" | "opt" | "doc";
-export type Category = "primary" | "secondary";
-
-export type CompileBenchmarkMap = Dict<{category: Category}>;
 
 export interface CompareSelector {
   start: string;
   end: string;
   stat: string;
-}
-
-export interface CompileBenchmarkDescription {
-  name: string;
-  category: Category;
 }
 
 export interface ArtifactDescription {
@@ -51,13 +31,6 @@ export interface StatComparison {
   statistics: [number, number];
 }
 
-export interface CompileBenchmarkComparison {
-  benchmark: string;
-  profile: Profile;
-  scenario: string;
-  comparison: StatComparison;
-}
-
 export interface CompareResponse {
   prev: string | null;
   next: string | null;
@@ -70,6 +43,8 @@ export interface CompareResponse {
 
   compile_comparisons: [CompileBenchmarkComparison];
   compile_benchmark_data: [CompileBenchmarkDescription];
+
+  runtime_comparisons: [RuntimeBenchmarkComparison];
 }
 
 export enum Tab {

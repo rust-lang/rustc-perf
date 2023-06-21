@@ -15,16 +15,15 @@ import {CompareResponse, CompareSelector, Tab} from "./types";
 import BootstrapTable from "./bootstrap/bootstrap-table.vue";
 import Header from "./header/header.vue";
 import DataSelector, {SelectionParams} from "./header/data-selector.vue";
-import {
-  computeSummary,
-  computeTestCasesWithNonRelevant,
-  createCompileBenchmarkMap,
-  filterNonRelevant,
-  SummaryGroup,
-} from "./data";
+import {computeSummary, filterNonRelevant, SummaryGroup} from "./data";
 import Tabs from "./tabs.vue";
 import CompileBenchmarksPage from "./compile/page.vue";
-import {defaultFilter as defaultCompileFilter} from "./compile/common";
+import {
+  computeCompileComparisonsWithNonRelevant,
+  createCompileBenchmarkMap,
+  defaultCompileFilter as defaultCompileFilter,
+} from "./compile/common";
+import RuntimeBenchmarksPage from "./runtime/page.vue";
 
 function loadSelectorFromUrl(urlParams: Dict<string>): CompareSelector {
   const start = urlParams["start"] ?? "";
@@ -69,7 +68,7 @@ async function loadCompareData(
   compileSummary.value = computeSummary(
     filterNonRelevant(
       defaultCompileFilter,
-      computeTestCasesWithNonRelevant(
+      computeCompileComparisonsWithNonRelevant(
         defaultCompileFilter,
         response,
         createCompileBenchmarkMap(response)

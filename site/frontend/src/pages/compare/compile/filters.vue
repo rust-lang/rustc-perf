@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import Toggle from "../toggle.vue";
-import {CompileBenchmarkFilter} from "../types";
 import Tooltip from "../tooltip.vue";
 import {ref, toRaw, watch} from "vue";
 import {deepCopy} from "../../../utils/copy";
 import {PREF_FILTERS_OPENED} from "../prefs";
 import {createPersistedRef} from "../../../storage";
+import {CompileBenchmarkFilter} from "./common";
 
 const props = defineProps<{
   // When reset, set filter to this value
