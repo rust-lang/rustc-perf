@@ -126,20 +126,9 @@ function storeFilterToUrl(
   changeUrl(urlParams);
 }
 
-/**
- * When the filter changes, the URL is updated.
- * After that happens, we want to re-render the quick links component, because
- * it contains links that are "relative" to the current URL. Changing this
- * key ref will cause it to be re-rendered.
- */
-function refreshQuickLinks() {
-  quickLinksKey.value += 1;
-}
-
 function updateFilter(newFilter: CompileBenchmarkFilter) {
   storeFilterToUrl(newFilter, defaultCompileFilter, getUrlParams());
   filter.value = newFilter;
-  refreshQuickLinks();
 }
 
 function exportData() {
@@ -148,7 +137,6 @@ function exportData() {
 
 const urlParams = getUrlParams();
 
-const quickLinksKey = ref(0);
 const filter = ref(loadFilterFromUrl(urlParams, defaultCompileFilter));
 
 const benchmarkMap = createCompileBenchmarkMap(props.data);
@@ -166,11 +154,7 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
 </script>
 
 <template>
-  <MetricSelector
-    :metric="selector.stat"
-    :key="quickLinksKey"
-    :benchmark-info="benchmarkInfo"
-  />
+  <MetricSelector :metric="selector.stat" :benchmark-info="benchmarkInfo" />
   <Filters
     :defaultFilter="defaultCompileFilter"
     :initialFilter="filter"
