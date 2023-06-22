@@ -11,6 +11,7 @@ import {deepCopy} from "../../../utils/copy";
 import MetricSelector from "../metric-selector.vue";
 import {BenchmarkInfo} from "../../../api";
 import {importantRuntimeMetrics} from "../metrics";
+import ComparisonsTable from "./comparisons-table.vue";
 
 const props = defineProps<{
   data: CompareResponse;
@@ -38,4 +39,9 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
     :quick-links="importantRuntimeMetrics"
   />
   <OverallSummary :summary="filteredSummary" />
+  <ComparisonsTable
+    :comparisons="comparisons"
+    :has-non-relevant="allComparisons.length > 0"
+    :show-raw-data="filter.showRawData"
+  />
 </template>
