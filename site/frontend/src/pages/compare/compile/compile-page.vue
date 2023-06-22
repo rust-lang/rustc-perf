@@ -3,7 +3,7 @@ import QuickLinks from "./quick-links.vue";
 import Filters from "./filters.vue";
 import OverallSummary from "../summary/overall-summary.vue";
 import Aggregations from "./aggregations.vue";
-import Benchmarks from "../benchmarks/benchmarks.vue";
+import Benchmarks from "./benchmarks.vue";
 import {CompareResponse, CompareSelector} from "../types";
 import {computed, ref} from "vue";
 import {changeUrl, getUrlParams} from "../../../utils/navigation";

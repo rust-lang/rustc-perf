@@ -3,7 +3,7 @@ import {computed, h} from "vue";
 import TestCasesTable from "./test-cases-table.vue";
 import {TestCaseComparison} from "../data";
 import {CompareResponse} from "../types";
-import {CompileBenchmarkFilter, CompileTestCase} from "../compile/common";
+import {CompileBenchmarkFilter, CompileTestCase} from "./common";
 
 export interface BenchmarkProps {
   data: CompareResponse;
