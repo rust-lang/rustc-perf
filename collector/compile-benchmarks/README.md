@@ -28,6 +28,8 @@ They mostly consist of real-world crates.
   ensure a lot of invariants. Stresses anything related to resolving
   trait bounds, by having a lot of trait impls for a large number of different
   types.
+- **exa-0.10.1**: An `ls` replacement. A widely-used utility, and a binary
+  crate.
 - **helloworld**: A trivial program. Gives a lower bound on compile time.
 - **html5ever-0.26.0**: An HTML parser. Stresses macro parsing code.
 - **hyper-0.14.18**: A fairly large crate. Utilizes async/await, and used by

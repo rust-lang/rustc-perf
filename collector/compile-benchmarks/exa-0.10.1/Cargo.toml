@@ -98,3 +98,5 @@ default-features = false
 default = ["git"]
 git = ["git2"]
 vendored-openssl = ["git2/vendored-openssl"]
+
+[workspace]
