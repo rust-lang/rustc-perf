@@ -67,7 +67,7 @@ export interface CompileTestCase {
 
 export function computeCompileComparisonsWithNonRelevant(
   filter: CompileBenchmarkFilter,
-  comparisons: [CompileBenchmarkComparison],
+  comparisons: CompileBenchmarkComparison[],
   benchmarkMap: CompileBenchmarkMap
 ): TestCaseComparison<CompileTestCase>[] {
   function profileFilter(profile: Profile): boolean {

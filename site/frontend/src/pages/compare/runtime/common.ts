@@ -20,7 +20,7 @@ export interface RuntimeBenchmarkComparison {
 
 export function computeRuntimeComparisonsWithNonRelevant(
   filter: RuntimeBenchmarkFilter,
-  comparisons: [RuntimeBenchmarkComparison]
+  comparisons: RuntimeBenchmarkComparison[]
 ): TestCaseComparison<RuntimeTestCase>[] {
   function shouldShowTestCase(comparison: TestCaseComparison<RuntimeTestCase>) {
     const name = comparison.testCase.benchmark;

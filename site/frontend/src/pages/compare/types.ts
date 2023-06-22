@@ -41,10 +41,10 @@ export interface CompareResponse {
 
   new_errors: Array<[string, string]>;
 
-  compile_comparisons: [CompileBenchmarkComparison];
-  compile_benchmark_data: [CompileBenchmarkDescription];
+  compile_comparisons: CompileBenchmarkComparison[];
+  compile_benchmark_data: CompileBenchmarkDescription[];
 
-  runtime_comparisons: [RuntimeBenchmarkComparison];
+  runtime_comparisons: RuntimeBenchmarkComparison[];
 }
 
 export enum Tab {
