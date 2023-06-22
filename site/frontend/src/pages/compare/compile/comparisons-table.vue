@@ -7,7 +7,7 @@ import {CompileTestCase} from "./common";
 
 const props = defineProps<{
   id: string;
-  cases: TestCaseComparison<CompileTestCase>[];
+  comparisons: TestCaseComparison<CompileTestCase>[];
   hasNonRelevant: boolean;
   showRawData: boolean;
   commitA: ArtifactDescription;
@@ -59,7 +59,7 @@ function prettifyRawNumber(number: number): string {
 <template>
   <div class="bench-table" :id="id">
     <slot name="header"></slot>
-    <div v-if="cases.length === 0" style="text-align: center">
+    <div v-if="comparisons.length === 0" style="text-align: center">
       {{ hasNonRelevant ? "No relevant results" : "No results" }}
     </div>
     <table v-else class="benches compare">
@@ -96,7 +96,7 @@ function prettifyRawNumber(number: number): string {
         </tr>
       </thead>
       <tbody>
-        <template v-for="comparison in cases">
+        <template v-for="comparison in comparisons">
           <tr>
             <td>
               <a

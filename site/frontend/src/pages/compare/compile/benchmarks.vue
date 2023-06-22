@@ -1,6 +1,6 @@
 <script setup lang="tsx">
 import {computed, h} from "vue";
-import TestCasesTable from "./test-cases-table.vue";
+import ComparisonsTable from "./comparisons-table.vue";
 import {TestCaseComparison} from "../data";
 import {CompareResponse} from "../types";
 import {CompileBenchmarkFilter, CompileTestCase} from "./common";
@@ -63,9 +63,9 @@ const secondaryHasNonRelevant = computed(
       </details>
       <hr />
     </div>
-    <TestCasesTable
+    <ComparisonsTable
       id="primary-benchmarks"
-      :cases="primaryCases"
+      :comparisons="primaryCases"
       :has-non-relevant="primaryHasNonRelevant"
       :show-raw-data="filter.showRawData"
       :commit-a="data.a"
@@ -75,11 +75,11 @@ const secondaryHasNonRelevant = computed(
       <template #header>
         <Section title="Primary" link="secondary" :linkUp="false"></Section>
       </template>
-    </TestCasesTable>
+    </ComparisonsTable>
     <hr />
-    <TestCasesTable
+    <ComparisonsTable
       id="secondary-benchmarks"
-      :cases="secondaryCases"
+      :comparisons="secondaryCases"
       :has-non-relevant="secondaryHasNonRelevant"
       :show-raw-data="filter.showRawData"
       :commit-a="data.a"
@@ -89,7 +89,7 @@ const secondaryHasNonRelevant = computed(
       <template #header>
         <Section title="Secondary" link="primary" :linkUp="true"></Section>
       </template>
-    </TestCasesTable>
+    </ComparisonsTable>
     <br />
     <hr />
   </div>
