@@ -8,6 +8,6 @@ export interface BenchmarkInfo {
   as_of: string | null;
 }
 
-export async function loadBenchmarkInfo() {
+export async function loadBenchmarkInfo(): Promise<BenchmarkInfo> {
   return await getJson<BenchmarkInfo>(INFO_URL);
 }

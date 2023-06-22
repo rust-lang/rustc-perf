@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import QuickLinks from "./quick-links.vue";
+import MetricSelector from "../metric-selector.vue";
 import Filters from "./filters.vue";
 import OverallSummary from "../summary/overall-summary.vue";
 import Aggregations from "./aggregations.vue";
@@ -15,10 +15,12 @@ import {
   createCompileBenchmarkMap,
   defaultCompileFilter,
 } from "./common";
+import {BenchmarkInfo} from "../../../api";
 
 const props = defineProps<{
   data: CompareResponse;
   selector: CompareSelector;
+  benchmarkInfo: BenchmarkInfo;
 }>();
 
 function loadFilterFromUrl(
@@ -164,7 +166,11 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
 </script>
 
 <template>
-  <QuickLinks :stat="selector.stat" :key="quickLinksKey" />
+  <MetricSelector
+    :metric="selector.stat"
+    :key="quickLinksKey"
+    :benchmark-info="benchmarkInfo"
+  />
   <Filters
     :defaultFilter="defaultCompileFilter"
     :initialFilter="filter"

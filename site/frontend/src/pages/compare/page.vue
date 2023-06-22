@@ -156,7 +156,11 @@ loadCompareData(selector, loading);
         :runtime-summary="runtimeSummary"
       />
       <template v-if="activeTab === Tab.CompileTime">
-        <CompileBenchmarksPage :data="data" :selector="selector" />
+        <CompileBenchmarksPage
+          :data="data"
+          :selector="selector"
+          :benchmark-info="info"
+        />
       </template>
       <BootstrapTable v-if="activeTab === Tab.Bootstrap" :data="data" />
       <template v-if="runtimeDataAvailable && activeTab === Tab.Runtime">
