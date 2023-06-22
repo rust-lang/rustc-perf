@@ -10,6 +10,7 @@ import {
 import {deepCopy} from "../../../utils/copy";
 import MetricSelector from "../metric-selector.vue";
 import {BenchmarkInfo} from "../../../api";
+import {importantRuntimeMetrics} from "../metrics";
 
 const props = defineProps<{
   data: CompareResponse;
@@ -31,6 +32,10 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
 </script>
 
 <template>
-  <MetricSelector :metric="selector.stat" :benchmark-info="benchmarkInfo" />
+  <MetricSelector
+    :selected-metric="selector.stat"
+    :benchmark-info="benchmarkInfo"
+    :quick-links="importantRuntimeMetrics"
+  />
   <OverallSummary :summary="filteredSummary" />
 </template>

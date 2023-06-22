@@ -4,23 +4,13 @@ import {
   navigateToUrlParams,
 } from "../../utils/navigation";
 import {BenchmarkInfo} from "../../api";
+import {MetricDescription} from "./metrics";
 
 const props = defineProps<{
-  metric: string;
+  quickLinks: MetricDescription[];
+  selectedMetric: string;
   benchmarkInfo: BenchmarkInfo;
 }>();
-
-function createMetric(
-  label: string,
-  metric: string,
-  description: string
-): {
-  label: string;
-  metric: string;
-  description: string;
-} {
-  return {label, metric, description};
-}
 
 function navigateToMetric(metric: string) {
   const params = {stat: metric};
@@ -33,30 +23,14 @@ function changeMetric(e: Event) {
   const metric = target.value;
   navigateToMetric(metric);
 }
-
-const metrics = [
-  createMetric(
-    "Instructions",
-    "instructions:u",
-    "Number of executed instructions"
-  ),
-  createMetric("Cycles", "cycles:u", "Number of executed cycles"),
-  createMetric("Wall time", "wall-time", "Wall time"),
-  createMetric("Max RSS", "max-rss", "Peak memory usage (resident set size)"),
-  createMetric(
-    "Binary size",
-    "size:linked_artifact",
-    "Size of the generated binary artifact"
-  ),
-];
 </script>
 
 <template>
   <div class="wrapper">
     <div class="label">Select metric:</div>
     <div
-      v-for="metric in metrics"
-      :class="{active: props.metric === metric.metric}"
+      v-for="metric in quickLinks"
+      :class="{active: props.selectedMetric === metric.metric}"
       :title="metric.description"
     >
       <a href="#" @click.prevent="() => navigateToMetric(metric.metric)">{{
@@ -67,7 +41,7 @@ const metrics = [
       <option
         v-for="value in benchmarkInfo.stats"
         :value="value"
-        :selected="value === metric"
+        :selected="value === selectedMetric"
       >
         {{ value }}
       </option>

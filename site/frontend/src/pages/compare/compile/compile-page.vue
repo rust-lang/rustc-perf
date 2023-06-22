@@ -16,6 +16,7 @@ import {
   defaultCompileFilter,
 } from "./common";
 import {BenchmarkInfo} from "../../../api";
+import {importantCompileMetrics} from "../metrics";
 
 const props = defineProps<{
   data: CompareResponse;
@@ -154,7 +155,11 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
 </script>
 
 <template>
-  <MetricSelector :metric="selector.stat" :benchmark-info="benchmarkInfo" />
+  <MetricSelector
+    :quick-links="importantCompileMetrics"
+    :selected-metric="selector.stat"
+    :benchmark-info="benchmarkInfo"
+  />
   <Filters
     :defaultFilter="defaultCompileFilter"
     :initialFilter="filter"
