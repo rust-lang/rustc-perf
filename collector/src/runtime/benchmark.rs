@@ -5,7 +5,7 @@ use cargo_metadata::Message;
 use core::option::Option;
 use core::option::Option::Some;
 use core::result::Result::Ok;
-use std::io::BufReader;
+use std::io::{BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 
@@ -87,16 +87,23 @@ pub fn discover_benchmarks(
 ) -> anyhow::Result<BenchmarkSuite> {
     let benchmark_crates = get_runtime_benchmark_groups(benchmark_dir)?;
 
-    println!(
-        "Compiling {} runtime benchmark groups",
-        benchmark_crates.len()
-    );
+    let group_count = benchmark_crates.len();
+    println!("Compiling {group_count} runtime benchmark groups");
 
     let mut groups = Vec::new();
-    for benchmark_crate in benchmark_crates {
+    for (index, benchmark_crate) in benchmark_crates.into_iter().enumerate() {
         let benchmark_target_dir =
             target_dir.map(|dir| dir.join(&benchmark_crate.name).join("target"));
-        log::info!("Starting compilation of {}", benchmark_crate.name);
+
+        // Show incremental progress
+        print!(
+            "\r{}\rCompiling `{}` ({}/{group_count})",
+            " ".repeat(80),
+            benchmark_crate.name,
+            index + 1
+        );
+        std::io::stdout().flush().unwrap();
+
         let cargo_process = start_cargo_build(
             toolchain,
             &benchmark_crate.path,
@@ -109,6 +116,7 @@ pub fn discover_benchmarks(
             anyhow::anyhow!("Cannot compile runtime benchmark {}", benchmark_crate.name)
         })?;
     }
+    println!();
 
     groups.sort_unstable_by(|a, b| a.binary.cmp(&b.binary));
     log::debug!("Found binaries: {:?}", groups);
