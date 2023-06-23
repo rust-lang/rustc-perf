@@ -712,7 +712,7 @@ fn main_result() -> anyhow::Result<i32> {
             )?;
             let pool = Pool::open(&db.db);
 
-            let suite = runtime::discover_benchmarks(&toolchain, &runtime_benchmark_dir)?;
+            let suite = runtime::discover_benchmarks(&toolchain, &runtime_benchmark_dir, None)?;
             let artifact_id = ArtifactId::Tag(toolchain.id);
             let (conn, collector) = rt.block_on(async {
                 let mut conn = pool.connection().await;

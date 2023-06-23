@@ -9,3 +9,5 @@ edition = "2021"
 benchlib = { path = "../../benchlib" }
 hashbrown = "0.12.3"
 fxhash = "0.2.1"
+
+[workspace]
