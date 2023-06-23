@@ -1,9 +1,9 @@
 //! Execute benchmarks.
 
-use crate::benchmark::patch::Patch;
-use crate::benchmark::profile::Profile;
-use crate::benchmark::scenario::Scenario;
-use crate::benchmark::BenchmarkName;
+use crate::compile::benchmark::patch::Patch;
+use crate::compile::benchmark::profile::Profile;
+use crate::compile::benchmark::scenario::Scenario;
+use crate::compile::benchmark::BenchmarkName;
 use crate::toolchain::Compiler;
 use crate::{command_output, utils};
 use anyhow::Context;

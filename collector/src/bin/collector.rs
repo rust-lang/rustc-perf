@@ -4,11 +4,11 @@ use anyhow::Context;
 use clap::builder::{PossibleValue, TypedValueParser};
 use clap::{Arg, Parser, ValueEnum};
 use collector::api::next_artifact::NextArtifact;
-use collector::benchmark::category::Category;
-use collector::benchmark::profile::Profile;
-use collector::benchmark::scenario::Scenario;
-use collector::benchmark::{
-    compile_benchmark_dir, get_compile_benchmarks, runtime_benchmark_dir, Benchmark, BenchmarkName,
+use collector::compile::benchmark::category::Category;
+use collector::compile::benchmark::profile::Profile;
+use collector::compile::benchmark::scenario::Scenario;
+use collector::compile::benchmark::{
+    compile_benchmark_dir, get_compile_benchmarks, Benchmark, BenchmarkName,
 };
 use collector::{runtime, utils, CollectorCtx, CollectorStepBuilder};
 use database::{ArtifactId, Commit, CommitType, Connection, Pool};
@@ -25,9 +25,9 @@ use std::process::{Command, Stdio};
 use std::{str, time::Instant};
 use tokio::runtime::Runtime;
 
-use collector::execute::bencher::BenchProcessor;
-use collector::execute::profiler::{ProfileProcessor, Profiler};
-use collector::runtime::{bench_runtime, BenchmarkFilter};
+use collector::compile::execute::bencher::BenchProcessor;
+use collector::compile::execute::profiler::{ProfileProcessor, Profiler};
+use collector::runtime::{bench_runtime, runtime_benchmark_dir, BenchmarkFilter};
 use collector::toolchain::{get_local_toolchain, Compiler, Sysroot};
 
 fn n_normal_benchmarks_remaining(n: usize) -> String {

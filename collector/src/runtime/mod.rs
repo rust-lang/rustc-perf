@@ -7,7 +7,7 @@ use thousands::Separable;
 use benchlib::comm::messages::{BenchmarkMessage, BenchmarkResult, BenchmarkStats};
 pub use benchmark::discover_benchmarks;
 pub use benchmark::BenchmarkFilter;
-pub use benchmark::{BenchmarkGroup, BenchmarkSuite};
+pub use benchmark::{runtime_benchmark_dir, BenchmarkGroup, BenchmarkSuite};
 use database::{ArtifactIdNumber, CollectionId, Connection};
 
 use crate::utils::git::get_rustc_perf_commit;

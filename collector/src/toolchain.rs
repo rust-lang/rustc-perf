@@ -1,4 +1,4 @@
-use crate::benchmark::profile::Profile;
+use crate::compile::benchmark::profile::Profile;
 use anyhow::{anyhow, Context};
 use log::debug;
 use std::fs::{self, File};
