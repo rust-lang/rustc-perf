@@ -39,7 +39,7 @@ pub async fn bench_runtime(
     let mut benchmark_index = 0;
     for group in suite.groups {
         if !collector.start_runtime_step(conn.as_mut(), &group).await {
-            eprintln!("skipping {} -- already benchmarked", group.name());
+            eprintln!("skipping {} -- already benchmarked", group.name);
             continue;
         }
 
@@ -55,10 +55,7 @@ pub async fn bench_runtime(
                     benchmark_index += 1;
                     println!(
                         "Finished {}/{} ({}/{})",
-                        group.name(),
-                        result.name,
-                        benchmark_index,
-                        filtered
+                        group.name, result.name, benchmark_index, filtered
                     );
 
                     print_stats(&result);

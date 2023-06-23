@@ -5,6 +5,7 @@ use cargo_metadata::Message;
 use core::option::Option;
 use core::option::Option::Some;
 use core::result::Result::Ok;
+use std::collections::HashMap;
 use std::io::{BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -21,13 +22,8 @@ pub fn runtime_benchmark_dir() -> PathBuf {
 #[derive(Debug)]
 pub struct BenchmarkGroup {
     pub binary: PathBuf,
+    pub name: String,
     pub benchmark_names: Vec<String>,
-}
-
-impl BenchmarkGroup {
-    pub fn name(&self) -> &str {
-        self.binary.file_name().unwrap().to_str().unwrap()
-    }
 }
 
 /// A collection of benchmark suites gathered from a directory.
@@ -112,24 +108,51 @@ pub fn discover_benchmarks(
         .with_context(|| {
             anyhow::anyhow!("Cannot not start compilation of {}", benchmark_crate.name)
         })?;
-        discover_benchmark_groups(cargo_process, &mut groups).with_context(|| {
-            anyhow::anyhow!("Cannot compile runtime benchmark {}", benchmark_crate.name)
-        })?;
+        let group =
+            parse_benchmark_group(cargo_process, &benchmark_crate.name).with_context(|| {
+                anyhow::anyhow!("Cannot compile runtime benchmark {}", benchmark_crate.name)
+            })?;
+        groups.push(group);
     }
     println!();
 
     groups.sort_unstable_by(|a, b| a.binary.cmp(&b.binary));
     log::debug!("Found binaries: {:?}", groups);
 
+    check_duplicates(&groups)?;
+
     Ok(BenchmarkSuite { groups })
 }
 
-/// Locates benchmark binaries compiled by cargo, and then executes them to find out what benchmarks
-/// do they contain.
-fn discover_benchmark_groups(
+/// Checks if there are no duplicate runtime benchmark names.
+fn check_duplicates(groups: &[BenchmarkGroup]) -> anyhow::Result<()> {
+    let mut benchmark_to_group_name: HashMap<&str, &str> = HashMap::new();
+    for group in groups {
+        for benchmark in &group.benchmark_names {
+            let benchmark_name = benchmark.as_str();
+            let group_name = group.name.as_str();
+            if let Some(previous_group) = benchmark_to_group_name.get(benchmark_name) {
+                return Err(anyhow::anyhow!(
+                    "Duplicated benchmark name: runtime benchmark `{benchmark_name}` defined both in `{}` and in `{}`",
+                    previous_group,
+                    group_name
+                ));
+            }
+
+            benchmark_to_group_name.insert(benchmark_name, group_name);
+        }
+    }
+    Ok(())
+}
+
+/// Locates the benchmark binary of a runtime benchmark crate compiled by cargo, and then executes it
+/// to find out what benchmarks do they contain.
+fn parse_benchmark_group(
     mut cargo_process: Child,
-    groups: &mut Vec<BenchmarkGroup>,
-) -> anyhow::Result<()> {
+    group_name: &str,
+) -> anyhow::Result<BenchmarkGroup> {
+    let mut group: Option<BenchmarkGroup> = None;
+
     let stream = BufReader::new(cargo_process.stdout.take().unwrap());
     for message in Message::parse_stream(stream) {
         let message = message?;
@@ -139,6 +162,10 @@ fn discover_benchmark_groups(
                     // Found a binary compiled by a runtime benchmark crate.
                     // Execute it so that we find all the benchmarks it contains.
                     if artifact.target.kind.iter().any(|k| k == "bin") {
+                        if group.is_some() {
+                            return Err(anyhow::anyhow!("Runtime benchmark group `{group_name}` has produced multiple binaries"));
+                        }
+
                         let path = executable.as_std_path().to_path_buf();
                         let benchmarks = gather_benchmarks(&path).map_err(|err| {
                             anyhow::anyhow!(
@@ -147,8 +174,10 @@ fn discover_benchmark_groups(
                             )
                         })?;
                         log::info!("Compiled {}", path.display());
-                        groups.push(BenchmarkGroup {
+
+                        group = Some(BenchmarkGroup {
                             binary: path,
+                            name: group_name.to_string(),
                             benchmark_names: benchmarks,
                         });
                     }
@@ -161,6 +190,11 @@ fn discover_benchmark_groups(
             _ => {}
         }
     }
+
+    let group = group.ok_or_else(|| {
+        anyhow::anyhow!("Runtime benchmark group `{group_name}` has not produced any binary")
+    })?;
+
     let output = cargo_process.wait()?;
     if !output.success() {
         Err(anyhow::anyhow!(
@@ -168,7 +202,7 @@ fn discover_benchmark_groups(
             output.code().unwrap_or(1)
         ))
     } else {
-        Ok(())
+        Ok(group)
     }
 }
 

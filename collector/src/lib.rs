@@ -341,5 +341,5 @@ impl CollectorCtx {
 }
 
 fn runtime_group_step_name(group: &BenchmarkGroup) -> String {
-    format!("runtime:{}", group.name())
+    format!("runtime:{}", group.name)
 }
