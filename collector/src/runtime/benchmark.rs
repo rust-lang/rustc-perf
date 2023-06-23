@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::io::{BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use tempfile::TempDir;
 
 /// Directory containing runtime benchmarks.
 /// We measure how long does it take to execute these crates, which is a proxy of the quality
@@ -30,6 +31,9 @@ pub struct BenchmarkGroup {
 #[derive(Debug)]
 pub struct BenchmarkSuite {
     pub groups: Vec<BenchmarkGroup>,
+    /// This field holds onto a temporary directory containing the compiled binaries with the
+    /// runtime benchmarks. It is only stored here in order not to be dropped too soon.
+    _tmp_artifacts_dir: Option<TempDir>,
 }
 
 impl BenchmarkSuite {
@@ -72,25 +76,44 @@ struct BenchmarkGroupCrate {
     path: PathBuf,
 }
 
+/// Determines whether runtime benchmarks will be recompiled from scratch in a temporary directory
+///
+pub enum CargoIsolationMode {
+    Cached,
+    Isolated,
+}
+
 /// Find all runtime benchmark crates in `benchmark_dir` and compile them.
 /// We assume that each binary defines a benchmark suite using `benchlib`.
 /// We then execute each benchmark suite with the `list-benchmarks` command to find out its
 /// benchmark names.
-pub fn discover_benchmarks(
+pub fn create_runtime_benchmark_suite(
     toolchain: &LocalToolchain,
     benchmark_dir: &Path,
-    target_dir: Option<&Path>,
+    isolation_mode: CargoIsolationMode,
 ) -> anyhow::Result<BenchmarkSuite> {
     let benchmark_crates = get_runtime_benchmark_groups(benchmark_dir)?;
+
+    let temp_dir: Option<TempDir> = match isolation_mode {
+        CargoIsolationMode::Cached => None,
+        CargoIsolationMode::Isolated => {
+            Some(
+                tempfile::Builder::new()
+                    // Make sure that we will always generate a directory with the same length.
+                    // As history shows us (https://users.cs.northwestern.edu/~robby/courses/322-2013-spring/mytkowicz-wrong-data.pdf),
+                    // even such small details can have unintended consequences.
+                    .rand_bytes(8)
+                    .tempdir()
+                    .context("Cannot create temporary directory")?,
+            )
+        }
+    };
 
     let group_count = benchmark_crates.len();
     println!("Compiling {group_count} runtime benchmark groups");
 
     let mut groups = Vec::new();
     for (index, benchmark_crate) in benchmark_crates.into_iter().enumerate() {
-        let benchmark_target_dir =
-            target_dir.map(|dir| dir.join(&benchmark_crate.name).join("target"));
-
         // Show incremental progress
         print!(
             "\r{}\rCompiling `{}` ({}/{group_count})",
@@ -100,14 +123,12 @@ pub fn discover_benchmarks(
         );
         std::io::stdout().flush().unwrap();
 
-        let cargo_process = start_cargo_build(
-            toolchain,
-            &benchmark_crate.path,
-            benchmark_target_dir.as_deref(),
-        )
-        .with_context(|| {
-            anyhow::anyhow!("Cannot not start compilation of {}", benchmark_crate.name)
-        })?;
+        let target_dir = temp_dir.as_ref().map(|d| d.path());
+
+        let cargo_process = start_cargo_build(toolchain, &benchmark_crate.path, target_dir)
+            .with_context(|| {
+                anyhow::anyhow!("Cannot not start compilation of {}", benchmark_crate.name)
+            })?;
         let group =
             parse_benchmark_group(cargo_process, &benchmark_crate.name).with_context(|| {
                 anyhow::anyhow!("Cannot compile runtime benchmark {}", benchmark_crate.name)
@@ -121,7 +142,10 @@ pub fn discover_benchmarks(
 
     check_duplicates(&groups)?;
 
-    Ok(BenchmarkSuite { groups })
+    Ok(BenchmarkSuite {
+        groups,
+        _tmp_artifacts_dir: temp_dir,
+    })
 }
 
 /// Checks if there are no duplicate runtime benchmark names.

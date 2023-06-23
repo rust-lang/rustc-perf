@@ -27,7 +27,9 @@ use tokio::runtime::Runtime;
 
 use collector::compile::execute::bencher::BenchProcessor;
 use collector::compile::execute::profiler::{ProfileProcessor, Profiler};
-use collector::runtime::{bench_runtime, runtime_benchmark_dir, BenchmarkFilter};
+use collector::runtime::{
+    bench_runtime, runtime_benchmark_dir, BenchmarkFilter, CargoIsolationMode,
+};
 use collector::toolchain::{get_local_toolchain, Compiler, Sysroot};
 
 fn n_normal_benchmarks_remaining(n: usize) -> String {
@@ -565,6 +567,11 @@ enum Commands {
 
         #[command(flatten)]
         db: DbOption,
+
+        /// Compile runtime benchmarks directly in their crate directory, to make local experiments
+        /// faster.
+        #[arg(long = "no-isolate")]
+        no_isolate: bool,
     },
     /// Benchmarks a local rustc
     BenchLocal {
@@ -701,6 +708,7 @@ fn main_result() -> anyhow::Result<i32> {
             local,
             iterations,
             db,
+            no_isolate,
         } => {
             let toolchain = get_local_toolchain(
                 &[Profile::Opt],
@@ -712,7 +720,16 @@ fn main_result() -> anyhow::Result<i32> {
             )?;
             let pool = Pool::open(&db.db);
 
-            let suite = runtime::discover_benchmarks(&toolchain, &runtime_benchmark_dir, None)?;
+            let isolation_mode = if no_isolate {
+                CargoIsolationMode::Cached
+            } else {
+                CargoIsolationMode::Isolated
+            };
+            let suite = runtime::create_runtime_benchmark_suite(
+                &toolchain,
+                &runtime_benchmark_dir,
+                isolation_mode,
+            )?;
             let artifact_id = ArtifactId::Tag(toolchain.id);
             let (conn, collector) = rt.block_on(async {
                 let mut conn = pool.connection().await;
