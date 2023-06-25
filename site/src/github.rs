@@ -29,9 +29,11 @@ pub async fn unroll_rollup(
     previous_master: &str,
     rollup_pr_number: u32,
 ) -> Result<(), String> {
+    let commit_link = |sha: &str| format!("https://github.com/rust-lang-ci/rust/commit/{sha}");
+
     let format_commit = |s: &str, truncate: bool| {
         let display = truncate.then(|| s.split_at(10).0).unwrap_or(s);
-        format!("[{display}](https://github.com/rust-lang-ci/rust/commit/{s})")
+        format!("[{display}]({})", commit_link(s))
     };
 
     // Sort rolled up commits by their PR number in ascending order, so that they have the
@@ -49,7 +51,11 @@ pub async fn unroll_rollup(
             let commit = c
                 .sha
                 .as_deref()
-                .map(|s| format_commit(s, false))
+                .map(|s| {
+                    // Format the SHA as a code block to make it easy to copy-paste verbatim
+                    let link = commit_link(s);
+                    format!("`{s}` ([link]({link}))")
+                })
                 .unwrap_or_else(|| {
                     let head = format_commit(&c.rolled_up_head, true);
                     format!("❌ conflicts merging '{head}' into previous master ❌")
