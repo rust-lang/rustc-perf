@@ -141,7 +141,7 @@ async fn enqueue_unrolled_try_builds<'a>(
             .merge_branch(
                 "perf-tmp",
                 &rolled_up_head,
-                &format!("Unrolled build for #{original_pr_number}"),
+                &format!("Unrolled build for #{original_pr_number}\n{}", rollup_merge.message),
             )
             .await
             .map_err(|e| {
