@@ -54,13 +54,32 @@ pub async fn unroll_rollup(
                     let head = format_commit(&c.rolled_up_head, true);
                     format!("❌ conflicts merging '{head}' into previous master ❌")
                 });
-            writeln!(&mut string, "|#{pr}|{commit}|", pr = c.original_pr_number).unwrap();
+            let message = c
+                .rollup_merge
+                .message
+                .split('\n')
+                // Skip over "Rollup merge of ..." and an empty line
+                .nth(2)
+                .map(|m| {
+                    if m.len() <= 60 {
+                        m.to_string()
+                    } else {
+                        format!("{}…", m.split_at(59).0)
+                    }
+                })
+                .unwrap_or_else(|| format!("#{}", c.original_pr_number));
+            writeln!(
+                &mut string,
+                "|#{pr}|{message}|{commit}|",
+                pr = c.original_pr_number
+            )
+            .unwrap();
             string
         });
     let previous_master = format_commit(previous_master, true);
     let msg =
         format!("📌 Perf builds for each rolled up PR:\n\n\
-        |PR# | Perf Build Sha|\n|----|:-----:|\n\
+        |PR# | Message | Perf Build Sha|\n|----|:-----:|\n\
         {mapping}\n\n*previous master*: {previous_master}\n\nIn the case of a perf regression, \
         run the following command for each PR you suspect might be the cause: `@rust-timer build $SHA`\n\
         {COMMENT_MARK_ROLLUP}");
