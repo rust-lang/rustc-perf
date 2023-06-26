@@ -85,7 +85,7 @@ pub async fn unroll_rollup(
     let previous_master = format_commit(previous_master, true);
     let msg =
         format!("📌 Perf builds for each rolled up PR:\n\n\
-        |PR# | Message | Perf Build Sha|\n|----|:-----:|\n\
+        | PR# | Message | Perf Build Sha |\n|----|----|:-----:|\n\
         {mapping}\n\n*previous master*: {previous_master}\n\nIn the case of a perf regression, \
         run the following command for each PR you suspect might be the cause: `@rust-timer build $SHA`\n\
         {COMMENT_MARK_ROLLUP}");
