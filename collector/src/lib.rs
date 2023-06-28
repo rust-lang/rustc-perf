@@ -6,13 +6,12 @@ use std::fmt;
 use std::process::{self, Command};
 
 pub mod api;
-pub mod benchmark;
-pub mod execute;
+pub mod compile;
 pub mod runtime;
 pub mod toolchain;
 pub mod utils;
 
-use crate::benchmark::{Benchmark, BenchmarkName};
+use crate::compile::benchmark::{Benchmark, BenchmarkName};
 use crate::runtime::{BenchmarkGroup, BenchmarkSuite};
 use database::{ArtifactId, ArtifactIdNumber, Connection};
 use process::Stdio;
@@ -342,5 +341,5 @@ impl CollectorCtx {
 }
 
 fn runtime_group_step_name(group: &BenchmarkGroup) -> String {
-    format!("runtime:{}", group.name())
+    format!("runtime:{}", group.name)
 }

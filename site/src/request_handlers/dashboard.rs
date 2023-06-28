@@ -1,5 +1,5 @@
-use collector::benchmark::category::Category;
-use collector::benchmark::BenchmarkConfig;
+use collector::compile::benchmark::category::Category;
+use collector::compile::benchmark::BenchmarkConfig;
 use lazy_static::lazy_static;
 use rust_embed::RustEmbed;
 use std::path::Path;

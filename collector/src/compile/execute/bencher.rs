@@ -1,8 +1,8 @@
-use crate::benchmark::profile::Profile;
-use crate::benchmark::scenario::Scenario;
-use crate::benchmark::BenchmarkName;
-use crate::execute;
-use crate::execute::{
+use crate::compile::benchmark::profile::Profile;
+use crate::compile::benchmark::scenario::Scenario;
+use crate::compile::benchmark::BenchmarkName;
+use crate::compile::execute;
+use crate::compile::execute::{
     rustc, DeserializeStatError, PerfTool, ProcessOutputData, Processor, Retry, SelfProfile,
     SelfProfileFiles, Stats, Upload,
 };

@@ -10,7 +10,7 @@ use crate::selector::{
     self, BenchmarkQuery, CompileBenchmarkQuery, RuntimeBenchmarkQuery, TestCase,
 };
 
-use collector::benchmark::category::Category;
+use collector::compile::benchmark::category::Category;
 use collector::Bound;
 use serde::{Deserialize, Serialize};
 
@@ -1587,7 +1587,7 @@ fn compare_link(start: &ArtifactId, end: &ArtifactId) -> String {
 mod tests {
     use super::*;
 
-    use collector::benchmark::category::Category;
+    use collector::compile::benchmark::category::Category;
 
     #[test]
     fn summary_table_only_regressions_primary() {

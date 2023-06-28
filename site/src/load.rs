@@ -12,7 +12,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use crate::db;
-use collector::benchmark::category::Category;
+use collector::compile::benchmark::category::Category;
 use collector::{Bound, MasterCommit};
 use database::Pool;
 pub use database::{ArtifactId, Benchmark, Commit};

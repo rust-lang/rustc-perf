@@ -5,9 +5,10 @@ use std::process::{Command, Stdio};
 use thousands::Separable;
 
 use benchlib::comm::messages::{BenchmarkMessage, BenchmarkResult, BenchmarkStats};
-pub use benchmark::discover_benchmarks;
-pub use benchmark::BenchmarkFilter;
-pub use benchmark::{BenchmarkGroup, BenchmarkSuite};
+pub use benchmark::{
+    create_runtime_benchmark_suite, runtime_benchmark_dir, BenchmarkFilter, BenchmarkGroup,
+    BenchmarkSuite, CargoIsolationMode,
+};
 use database::{ArtifactIdNumber, CollectionId, Connection};
 
 use crate::utils::git::get_rustc_perf_commit;
@@ -39,7 +40,7 @@ pub async fn bench_runtime(
     let mut benchmark_index = 0;
     for group in suite.groups {
         if !collector.start_runtime_step(conn.as_mut(), &group).await {
-            eprintln!("skipping {} -- already benchmarked", group.name());
+            eprintln!("skipping {} -- already benchmarked", group.name);
             continue;
         }
 
@@ -55,10 +56,7 @@ pub async fn bench_runtime(
                     benchmark_index += 1;
                     println!(
                         "Finished {}/{} ({}/{})",
-                        group.name(),
-                        result.name,
-                        benchmark_index,
-                        filtered
+                        group.name, result.name, benchmark_index, filtered
                     );
 
                     print_stats(&result);

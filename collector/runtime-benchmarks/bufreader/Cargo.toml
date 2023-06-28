@@ -8,3 +8,5 @@ edition = "2021"
 [dependencies]
 benchlib = { path = "../../benchlib" }
 snap = "1.0.5"
+
+[workspace]
