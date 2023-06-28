@@ -1,5 +1,5 @@
 <script setup lang="tsx">
-import {h, ref, Ref} from "vue";
+import {computed, h, ref, Ref} from "vue";
 import {CompareResponse, Tab} from "./types";
 import {diffClass, percentClass} from "./shared";
 import {SummaryGroup} from "./data";
@@ -10,7 +10,7 @@ const props = withDefaults(
   defineProps<{
     data: CompareResponse;
     compileTimeSummary: SummaryGroup;
-    runtimeSummary: SummaryGroup;
+    runtimeSummary: SummaryGroup | null;
     initialTab?: Tab;
   }>(),
   {
@@ -67,6 +67,8 @@ const bootstrapA = props.data.a.bootstrap_total;
 const bootstrapB = props.data.b.bootstrap_total;
 const bootstrapValid = bootstrapA > 0.0 && bootstrapB > 0.0;
 
+const runtimeAvailable = computed(() => props.runtimeSummary !== null);
+
 const activeTab: Ref<Tab> = ref(props.initialTab);
 </script>
 
@@ -84,6 +86,7 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
       </div>
     </div>
     <div
+      v-if="runtimeAvailable"
       class="tab"
       title="Runtime benchmarks: measure how long does it take to execute (i.e. how fast are) programs compiled by the compared rustc."
       :class="{selected: activeTab === Tab.Runtime}"

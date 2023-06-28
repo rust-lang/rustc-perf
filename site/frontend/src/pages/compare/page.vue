@@ -79,16 +79,17 @@ async function loadCompareData(
       )
     )
   );
-  runtimeSummary.value = computeSummary(
-    filterNonRelevant(
-      defaultRuntimeFilter,
-      computeRuntimeComparisonsWithNonRelevant(
+  if (response.runtime_comparisons.length > 0) {
+    runtimeSummary.value = computeSummary(
+      filterNonRelevant(
         defaultRuntimeFilter,
-        response.runtime_comparisons
+        computeRuntimeComparisonsWithNonRelevant(
+          defaultRuntimeFilter,
+          response.runtime_comparisons
+        )
       )
-    )
-  );
-  runtimeDataAvailable.value = response.runtime_comparisons.length > 0;
+    );
+  }
 }
 
 function updateSelection(params: SelectionParams) {
@@ -123,7 +124,7 @@ const activeTab = computed((): Tab => {
   return tab.value;
 });
 
-const runtimeDataAvailable = ref(false);
+const runtimeDataAvailable = computed(() => runtimeSummary.value !== null);
 
 function changeTab(newTab: Tab) {
   tab.value = newTab;
