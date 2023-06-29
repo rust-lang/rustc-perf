@@ -1,6 +1,6 @@
 import {
   CompileBenchmarkComparison,
-  CompileBenchmarkDescription,
+  CompileBenchmarkMetadata,
 } from "./compile/common";
 import {RuntimeBenchmarkComparison} from "./runtime/common";
 
@@ -42,7 +42,7 @@ export interface CompareResponse {
   new_errors: Array<[string, string]>;
 
   compile_comparisons: CompileBenchmarkComparison[];
-  compile_benchmark_data: CompileBenchmarkDescription[];
+  compile_benchmark_metadata: CompileBenchmarkMetadata[];
 
   runtime_comparisons: RuntimeBenchmarkComparison[];
 }

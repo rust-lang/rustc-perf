@@ -133,7 +133,7 @@ pub mod bootstrap {
 pub mod comparison {
     use crate::comparison::Metric;
     use collector::Bound;
-    use database::{CompileBenchmark, Date};
+    use database::Date;
     use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
 
@@ -145,18 +145,14 @@ pub mod comparison {
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct BenchmarkInfo {
+    pub struct CompileBenchmarkMetadata {
         pub name: String,
         pub category: String,
-    }
-
-    impl From<CompileBenchmark> for BenchmarkInfo {
-        fn from(data: CompileBenchmark) -> Self {
-            Self {
-                name: data.name,
-                category: data.category,
-            }
-        }
+        // We need to keep the data below as optional, because we get the data from information
+        // gathered from the actual state of the compile benchmarks. But if we remove a compile
+        // benchmark, the metadata for it will no longer be available, so we might not always have
+        // access to the metadata.
+        pub binary: Option<bool>,
     }
 
     #[derive(Debug, Clone, Serialize)]
@@ -174,10 +170,10 @@ pub mod comparison {
         /// The names for the next artifact after `b`, if any.
         pub next: Option<String>,
 
-        /// If `a` and `b` are adjacent artifacts (i.e., `a` is the parent of
-        /// `b`).
+        /// If `a` and `b` are adjacent artifacts (i.e., `a` is the parent of `b`).
         pub is_contiguous: bool,
-        pub compile_benchmark_data: Vec<BenchmarkInfo>,
+
+        pub compile_benchmark_metadata: Vec<CompileBenchmarkMetadata>,
     }
 
     #[derive(Debug, Clone, Serialize)]
