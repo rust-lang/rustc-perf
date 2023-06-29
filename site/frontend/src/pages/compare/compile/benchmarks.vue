@@ -1,14 +1,15 @@
 <script setup lang="tsx">
 import {computed, h} from "vue";
-import TestCasesTable from "./test-cases-table.vue";
-import {TestCase} from "../data";
-import {CompareResponse, DataFilter} from "../types";
+import ComparisonsTable from "./comparisons-table.vue";
+import {TestCaseComparison} from "../data";
+import {CompareResponse} from "../types";
+import {CompileBenchmarkFilter, CompileTestCase} from "./common";
 
 export interface BenchmarkProps {
   data: CompareResponse;
-  testCases: TestCase[];
-  allTestCases: TestCase[];
-  filter: DataFilter;
+  testCases: TestCaseComparison<CompileTestCase>[];
+  allTestCases: TestCaseComparison<CompileTestCase>[];
+  filter: CompileBenchmarkFilter;
   stat: string;
 }
 
@@ -35,16 +36,20 @@ function Section({
 }
 
 const primaryCases = computed(() =>
-  props.testCases.filter((c) => c.category === "primary")
+  props.testCases.filter((c) => c.testCase.category === "primary")
 );
 const secondaryCases = computed(() =>
-  props.testCases.filter((c) => c.category === "secondary")
+  props.testCases.filter((c) => c.testCase.category === "secondary")
 );
 const primaryHasNonRelevant = computed(
-  () => props.allTestCases.filter((c) => c.category === "primary").length > 0
+  () =>
+    props.allTestCases.filter((c) => c.testCase.category === "primary").length >
+    0
 );
 const secondaryHasNonRelevant = computed(
-  () => props.allTestCases.filter((c) => c.category === "secondary").length > 0
+  () =>
+    props.allTestCases.filter((c) => c.testCase.category === "secondary")
+      .length > 0
 );
 </script>
 
@@ -58,9 +63,9 @@ const secondaryHasNonRelevant = computed(
       </details>
       <hr />
     </div>
-    <TestCasesTable
+    <ComparisonsTable
       id="primary-benchmarks"
-      :cases="primaryCases"
+      :comparisons="primaryCases"
       :has-non-relevant="primaryHasNonRelevant"
       :show-raw-data="filter.showRawData"
       :commit-a="data.a"
@@ -70,11 +75,11 @@ const secondaryHasNonRelevant = computed(
       <template #header>
         <Section title="Primary" link="secondary" :linkUp="false"></Section>
       </template>
-    </TestCasesTable>
+    </ComparisonsTable>
     <hr />
-    <TestCasesTable
+    <ComparisonsTable
       id="secondary-benchmarks"
-      :cases="secondaryCases"
+      :comparisons="secondaryCases"
       :has-non-relevant="secondaryHasNonRelevant"
       :show-raw-data="filter.showRawData"
       :commit-a="data.a"
@@ -84,7 +89,7 @@ const secondaryHasNonRelevant = computed(
       <template #header>
         <Section title="Secondary" link="primary" :linkUp="true"></Section>
       </template>
-    </TestCasesTable>
+    </ComparisonsTable>
     <br />
     <hr />
   </div>

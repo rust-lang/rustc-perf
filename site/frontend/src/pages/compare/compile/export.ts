@@ -1,22 +1,25 @@
-import {computeSummary, TestCase} from "./data";
+import {computeSummary, TestCaseComparison} from "../data";
+import {CompileTestCase} from "./common";
 
-export function exportToMarkdown(testCases: TestCase[]) {
-  function changesTable(cases) {
+export function exportToMarkdown(
+  comparisons: TestCaseComparison<CompileTestCase>[]
+) {
+  function changesTable(comparisons: TestCaseComparison<CompileTestCase>[]) {
     let data =
       "| Benchmark | Profile | Scenario | % Change | Significance Factor |\n";
     data += "|:---:|:---:|:---:|:---:|:---:|\n";
 
-    for (const testCase of cases) {
-      data += `| ${testCase.benchmark} | ${testCase.profile} | ${testCase.scenario} `;
-      data += `| ${testCase.percent.toFixed(
+    for (const comparison of comparisons) {
+      data += `| ${comparison.testCase.benchmark} | ${comparison.testCase.profile} | ${comparison.testCase.scenario} `;
+      data += `| ${comparison.percent.toFixed(
         2
-      )}% | ${testCase.significanceFactor.toFixed(2)}x\n`;
+      )}% | ${comparison.significanceFactor.toFixed(2)}x\n`;
     }
 
     return data;
   }
 
-  const summary = computeSummary(testCases);
+  const summary = computeSummary(comparisons);
   const regressions = summary.regressions;
   const improvements = summary.improvements;
   const all = summary.all;
@@ -43,12 +46,12 @@ export function exportToMarkdown(testCases: TestCase[]) {
 
   content += "# Primary benchmarks\n";
   content += changesTable(
-    testCases.filter((testCase) => testCase.category === "primary")
+    comparisons.filter((testCase) => testCase.testCase.category === "primary")
   );
 
   content += "\n# Secondary benchmarks\n";
   content += changesTable(
-    testCases.filter((testCase) => testCase.category === "secondary")
+    comparisons.filter((testCase) => testCase.testCase.category === "secondary")
   );
 
   downloadFile(content, "perf-summary.md");

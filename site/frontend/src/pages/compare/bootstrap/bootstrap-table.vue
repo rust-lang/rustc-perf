@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import {CompareResponse} from "./types";
-import {diffClass, percentClass} from "./shared";
+import {CompareResponse} from "../types";
+import {diffClass, percentClass} from "../shared";
 
 const props = defineProps<{data: CompareResponse}>();
 

@@ -1,7 +1,5 @@
-<script lang="ts"></script>
-
-<script setup lang="ts">
-import {Ref, ref} from "vue";
+<script setup lang="tsx">
+import {computed, h, ref, Ref} from "vue";
 import {CompareResponse, Tab} from "./types";
 import {diffClass, percentClass} from "./shared";
 import {SummaryGroup} from "./data";
@@ -12,6 +10,7 @@ const props = withDefaults(
   defineProps<{
     data: CompareResponse;
     compileTimeSummary: SummaryGroup;
+    runtimeSummary: SummaryGroup | null;
     initialTab?: Tab;
   }>(),
   {
@@ -34,10 +33,41 @@ function formatBootstrap(value: number): string {
   return "???";
 }
 
+function SummaryTable({summary}: {summary: SummaryGroup}) {
+  const valid = summary.all.count > 0;
+  if (valid) {
+    return (
+      <table>
+        <thead>
+          <tr>
+            <th>Range</th>
+            <th>Mean</th>
+          </tr>
+        </thead>
+        <thead>
+          <tr>
+            <td>
+              <SummaryRange range={summary.all.range} />
+            </td>
+            <td>
+              <SummaryPercentValue
+                className={percentClass(summary.all.average)}
+                value={summary.all.average}
+              />
+            </td>
+          </tr>
+        </thead>
+      </table>
+    );
+  }
+  return <div>No relevant results</div>;
+}
+
 const bootstrapA = props.data.a.bootstrap_total;
 const bootstrapB = props.data.b.bootstrap_total;
 const bootstrapValid = bootstrapA > 0.0 && bootstrapB > 0.0;
-const compileTimeValid = props.compileTimeSummary.all.count > 0;
+
+const runtimeAvailable = computed(() => props.runtimeSummary !== null);
 
 const activeTab: Ref<Tab> = ref(props.initialTab);
 </script>
@@ -46,41 +76,30 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
   <div class="wrapper">
     <div
       class="tab"
-      title="Compilation time benchmarks"
+      title="Compilation time benchmarks: measure how long does it take to compile various crates using the compared rustc."
       :class="{selected: activeTab === Tab.CompileTime}"
       @click="changeTab(Tab.CompileTime)"
     >
       <div class="title">Compile-time</div>
-      <div class="summary compile-time">
-        <template v-if="compileTimeValid">
-          <table>
-            <thead>
-              <tr>
-                <th>Range</th>
-                <th>Mean</th>
-              </tr>
-            </thead>
-            <thead>
-              <tr>
-                <td>
-                  <SummaryRange :range="compileTimeSummary.all.range" />
-                </td>
-                <td>
-                  <SummaryPercentValue
-                    :class="percentClass(compileTimeSummary.all.average)"
-                    :value="compileTimeSummary.all.average"
-                  />
-                </td>
-              </tr>
-            </thead>
-          </table>
-        </template>
-        <template v-else>No relevant results</template>
+      <div class="summary table-wrapper">
+        <SummaryTable :summary="compileTimeSummary" />
+      </div>
+    </div>
+    <div
+      v-if="runtimeAvailable"
+      class="tab"
+      title="Runtime benchmarks: measure how long does it take to execute (i.e. how fast are) programs compiled by the compared rustc."
+      :class="{selected: activeTab === Tab.Runtime}"
+      @click="changeTab(Tab.Runtime)"
+    >
+      <div class="title">Runtime</div>
+      <div class="summary table-wrapper">
+        <SummaryTable :summary="runtimeSummary" />
       </div>
     </div>
     <div
       class="tab"
-      title="Bootstrap duration"
+      title="Bootstrap duration: measures how long does it take to compile rustc by itself."
       :class="{selected: activeTab === Tab.Bootstrap}"
       @click="changeTab(Tab.Bootstrap)"
     >
@@ -137,6 +156,7 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
     &:not(:first-child) {
       margin-left: 30px;
     }
+
     &:not(:last-child) {
       :after {
         content: "";
@@ -161,7 +181,7 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
   border-color: black;
 }
 
-.compile-time {
+.table-wrapper {
   table {
     width: 100%;
     table-layout: auto;

@@ -27,13 +27,13 @@ interface Step {
  */
 interface CurrentState {
   artifact: any;
-  progress: [Step];
+  progress: Step[];
 }
 
 interface StatusResponse {
   last_commit: Commit | null;
-  benchmarks: [BenchmarkStatus];
-  missing: [[Commit, any]];
+  benchmarks: BenchmarkStatus[];
+  missing: Array<[Commit, any]>;
   current: CurrentState | null;
   most_recent_end: number | null;
 }

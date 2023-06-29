@@ -1,39 +1,19 @@
-export interface DataFilter {
+import {
+  CompileBenchmarkComparison,
+  CompileBenchmarkDescription,
+} from "./compile/common";
+import {RuntimeBenchmarkComparison} from "./runtime/common";
+
+export interface BenchmarkFilter {
   name: string | null;
   nonRelevant: boolean;
   showRawData: boolean;
-  profile: {
-    check: boolean;
-    debug: boolean;
-    opt: boolean;
-    doc: boolean;
-  };
-  scenario: {
-    full: boolean;
-    incrFull: boolean;
-    incrUnchanged: boolean;
-    incrPatched: boolean;
-  };
-  category: {
-    primary: boolean;
-    secondary: boolean;
-  };
 }
-
-export type Profile = "check" | "debug" | "opt" | "doc";
-export type Category = "primary" | "secondary";
-
-export type BenchmarkMap = Dict<{category: Category}>;
 
 export interface CompareSelector {
   start: string;
   end: string;
   stat: string;
-}
-
-export interface CompileBenchmarkDescription {
-  name: string;
-  category: Category;
 }
 
 export interface ArtifactDescription {
@@ -44,10 +24,7 @@ export interface ArtifactDescription {
   bootstrap_total: number;
 }
 
-export interface CompileBenchmarkComparison {
-  benchmark: string;
-  profile: Profile;
-  scenario: string;
+export interface StatComparison {
   is_relevant: boolean;
   significance_threshold: number;
   significance_factor: number;
@@ -62,12 +39,16 @@ export interface CompareResponse {
   a: ArtifactDescription;
   b: ArtifactDescription;
 
-  compile_comparisons: [CompileBenchmarkComparison];
   new_errors: Array<[string, string]>;
-  compile_benchmark_data: [CompileBenchmarkDescription];
+
+  compile_comparisons: CompileBenchmarkComparison[];
+  compile_benchmark_data: CompileBenchmarkDescription[];
+
+  runtime_comparisons: RuntimeBenchmarkComparison[];
 }
 
 export enum Tab {
   CompileTime = "compile",
+  Runtime = "runtime",
   Bootstrap = "bootstrap",
 }
