@@ -6,7 +6,7 @@
     "watch": "parcel watch --no-hmr",
     "build": "parcel build",
     "fmt": "prettier --write src",
-    "check": "tsc -p tsconfig.json --noEmit && prettier --check src"
+    "check": "vue-tsc -p tsconfig.json --noEmit && prettier --check src"
   },
   "author": "",
   "license": "MIT",
@@ -16,7 +16,8 @@
     "@types/highcharts": "^7.0.0",
     "@types/msgpack-lite": "^0.1.8",
     "prettier": "2.8.8",
-    "typescript": "^5.0.2"
+    "typescript": "^5.0.2",
+    "vue-tsc": "^1.8.3"
   },
   "dependencies": {
     "highcharts": "6.0.7",

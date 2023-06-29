@@ -15,8 +15,8 @@ const formattedValue = computed((): string => {
 });
 const padSpaces = computed((): string => {
   const value = formattedValue.value;
-  if (value.length < this.padWidth) {
-    return "&nbsp;".repeat(this.padWidth - value.length);
+  if (value.length < props.padWidth) {
+    return "&nbsp;".repeat(props.padWidth - value.length);
   }
   return "";
 });

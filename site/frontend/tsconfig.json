@@ -2,6 +2,7 @@
   "compilerOptions": {
     "lib": ["es2020", "dom"],
     "target": "es2017",
+    "module": "es2022",
     "moduleResolution": "node",
     "rootDir": "src",
     "esModuleInterop": true,

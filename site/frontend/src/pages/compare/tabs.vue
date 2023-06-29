@@ -51,7 +51,7 @@ function SummaryTable({summary}: {summary: SummaryGroup}) {
             </td>
             <td>
               <SummaryPercentValue
-                className={percentClass(summary.all.average)}
+                class={percentClass(summary.all.average)}
                 value={summary.all.average}
               />
             </td>

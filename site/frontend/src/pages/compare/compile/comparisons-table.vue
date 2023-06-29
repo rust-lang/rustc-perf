@@ -159,14 +159,14 @@ function prettifyRawNumber(number: number): string {
             </td>
             <td v-if="showRawData" class="numeric">
               <a v-bind:href="detailedQueryRawDataLink(commitA, comparison)">
-                <abbr :title="comparison.datumA">{{
+                <abbr :title="comparison.datumA.toString()">{{
                   prettifyRawNumber(comparison.datumA)
                 }}</abbr>
               </a>
             </td>
             <td v-if="showRawData" class="numeric">
               <a v-bind:href="detailedQueryRawDataLink(commitB, comparison)">
-                <abbr :title="comparison.datumB">{{
+                <abbr :title="comparison.datumB.toString()">{{
                   prettifyRawNumber(comparison.datumB)
                 }}</abbr>
               </a>

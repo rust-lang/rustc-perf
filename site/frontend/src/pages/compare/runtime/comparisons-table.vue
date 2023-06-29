@@ -90,12 +90,12 @@ function prettifyRawNumber(number: number): string {
               </div>
             </td>
             <td v-if="showRawData" class="numeric">
-              <abbr :title="comparison.datumA">{{
+              <abbr :title="comparison.datumA.toString()">{{
                 prettifyRawNumber(comparison.datumA)
               }}</abbr>
             </td>
             <td v-if="showRawData" class="numeric">
-              <abbr :title="comparison.datumB">{{
+              <abbr :title="comparison.datumB.toString()">{{
                 prettifyRawNumber(comparison.datumB)
               }}</abbr>
             </td>
