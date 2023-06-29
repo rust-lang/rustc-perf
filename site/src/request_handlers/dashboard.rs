@@ -1,11 +1,9 @@
-use collector::compile::benchmark::category::Category;
-use collector::compile::benchmark::BenchmarkConfig;
-use lazy_static::lazy_static;
-use rust_embed::RustEmbed;
-use std::path::Path;
 use std::sync::Arc;
 
+use lazy_static::lazy_static;
+
 use crate::api::{dashboard, ServerResult};
+use crate::benchmark_metadata::get_stable_benchmark_names;
 use crate::comparison::Metric;
 use crate::db::{self, ArtifactId, Profile, Scenario};
 use crate::load::SiteCtxt;
@@ -81,7 +79,7 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
     );
 
     lazy_static! {
-        static ref STABLE_BENCHMARKS: Vec<String> = get_stable_benchmarks();
+        static ref STABLE_BENCHMARKS: Vec<String> = get_stable_benchmark_names();
     }
 
     let query = selector::CompileBenchmarkQuery::default()
@@ -145,44 +143,6 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
         opt: by_profile.opt,
         doc: by_profile.doc,
     })
-}
-
-#[derive(RustEmbed)]
-#[folder = "../collector/compile-benchmarks"]
-#[include = "*/perf-config.json"]
-struct EmbeddedBenchmarks;
-
-/// The configurations of compile-time benchmarks are embedded directly within the binary using
-/// the `Benchmarks` struct.
-///
-/// Here we parse the benchmarks configurations and return only stable benchmarks.
-fn get_stable_benchmarks() -> Vec<String> {
-    EmbeddedBenchmarks::iter()
-        .filter_map(|path| EmbeddedBenchmarks::get(&path).map(|file| (file, path)))
-        .filter_map(|(file, path)| {
-            let config: BenchmarkConfig = match serde_json::from_slice(&file.data) {
-                Ok(config) => config,
-                Err(error) => {
-                    log::error!(
-                        "Cannot deserialized stored perf-config.json from {path}: {error:?}"
-                    );
-                    return None;
-                }
-            };
-            if config.category() == Category::Stable {
-                Some(
-                    Path::new(path.as_ref())
-                        .parent()
-                        .unwrap()
-                        .to_str()
-                        .unwrap()
-                        .to_string(),
-                )
-            } else {
-                None
-            }
-        })
-        .collect()
 }
 
 pub struct ByProfile<T> {

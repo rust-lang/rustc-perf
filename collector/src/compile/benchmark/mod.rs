@@ -22,7 +22,7 @@ fn default_runs() -> usize {
     3
 }
 
-#[derive(Debug, Default, Clone, serde::Deserialize)]
+#[derive(Debug, Default, PartialEq, Copy, Clone, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ArtifactType {
     Binary,
@@ -67,6 +67,10 @@ pub struct BenchmarkConfig {
 impl BenchmarkConfig {
     pub fn category(&self) -> Category {
         self.category
+    }
+
+    pub fn artifact(&self) -> ArtifactType {
+        self.artifact
     }
 }
 
