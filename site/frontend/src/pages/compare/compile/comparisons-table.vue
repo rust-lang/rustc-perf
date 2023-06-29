@@ -33,7 +33,8 @@ function graphLink(
   let start = `${year}-${month}-${day}`;
 
   let end = commit.commit;
-  return `/index.html?start=${start}&end=${end}&benchmark=${comparison.testCase.benchmark}&profile=${comparison.testCase.profile}&scenario=${comparison.testCase.scenario}&stat=${stat}`;
+  const {benchmark, profile, scenario} = comparison.testCase;
+  return `/index.html?start=${start}&end=${end}&benchmark=${benchmark}&profile=${profile}&scenario=${scenario}&stat=${stat}`;
 }
 
 function detailedQueryPercentLink(
@@ -41,14 +42,16 @@ function detailedQueryPercentLink(
   baseCommit: ArtifactDescription,
   comparison: TestCaseComparison<CompileTestCase>
 ): string {
-  return `/detailed-query.html?commit=${commit.commit}&base_commit=${baseCommit.commit}&benchmark=${comparison.testCase.benchmark}-${comparison.testCase.profile}&scenario=${comparison.testCase.scenario}`;
+  const {benchmark, profile, scenario} = comparison.testCase;
+  return `/detailed-query.html?commit=${commit.commit}&base_commit=${baseCommit.commit}&benchmark=${benchmark}-${profile}&scenario=${scenario}`;
 }
 
 function detailedQueryRawDataLink(
   commit: ArtifactDescription,
   comparison: TestCaseComparison<CompileTestCase>
 ) {
-  return `/detailed-query.html?commit=${commit.commit}&benchmark=${comparison.testCase.benchmark}-${comparison.testCase.profile}&scenario=${comparison.testCase.scenario}`;
+  const {benchmark, profile, scenario} = comparison.testCase;
+  return `/detailed-query.html?commit=${commit.commit}&benchmark=${benchmark}-${profile}&scenario=${scenario}`;
 }
 
 function prettifyRawNumber(number: number): string {
