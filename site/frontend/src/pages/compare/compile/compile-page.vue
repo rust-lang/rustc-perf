@@ -184,5 +184,6 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
     :all-test-cases="allComparisons"
     :filter="filter"
     :stat="selector.stat"
+    :benchmark-map="benchmarkMap"
   ></Benchmarks>
 </template>

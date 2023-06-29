@@ -131,6 +131,7 @@ pub mod bootstrap {
 }
 
 pub mod comparison {
+    use crate::benchmark_metadata::ProfileMetadata;
     use crate::comparison::Metric;
     use collector::Bound;
     use database::Date;
@@ -153,6 +154,8 @@ pub mod comparison {
         // benchmark, the metadata for it will no longer be available, so we might not always have
         // access to the metadata.
         pub binary: Option<bool>,
+        pub iterations: Option<u32>,
+        pub release_profile: Option<ProfileMetadata>,
     }
 
     #[derive(Debug, Clone, Serialize)]

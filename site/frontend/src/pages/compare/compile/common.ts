@@ -54,10 +54,18 @@ export type Category = "primary" | "secondary";
 
 export type CompileBenchmarkMap = Dict<CompileBenchmarkMetadata>;
 
+export interface CargoProfileMetadata {
+  debug: string | null;
+  lto: string | null;
+  codegen_units: number | null;
+}
+
 export interface CompileBenchmarkMetadata {
   name: string;
   category: Category;
   binary: boolean | null;
+  iterations: number | null;
+  release_profile: CargoProfileMetadata;
 }
 
 export interface CompileBenchmarkComparison {

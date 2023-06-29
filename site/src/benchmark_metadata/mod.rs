@@ -4,9 +4,10 @@ use rust_embed::RustEmbed;
 use collector::compile::benchmark::category::Category;
 use collector::compile::benchmark::BenchmarkConfig;
 
-use crate::benchmark_metadata::metadata::{ProfileMetadata, SERIALIZED_SUITE_NAME};
+use crate::benchmark_metadata::metadata::SERIALIZED_SUITE_NAME;
 
 mod metadata;
+pub use metadata::ProfileMetadata;
 
 #[derive(Debug, Clone)]
 pub struct CompileBenchmarkMetadata {

@@ -183,6 +183,8 @@ pub async fn handle_compare(
                 name,
                 category,
                 binary: metadata.map(|m| m.perf_config.artifact() == ArtifactType::Binary),
+                iterations: metadata.map(|m| m.perf_config.iterations() as u32),
+                release_profile: metadata.map(|m| m.release_metadata.clone()),
             }
         })
         .collect();

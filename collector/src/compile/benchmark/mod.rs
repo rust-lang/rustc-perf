@@ -72,6 +72,10 @@ impl BenchmarkConfig {
     pub fn artifact(&self) -> ArtifactType {
         self.artifact
     }
+
+    pub fn iterations(&self) -> usize {
+        self.runs
+    }
 }
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Hash)]

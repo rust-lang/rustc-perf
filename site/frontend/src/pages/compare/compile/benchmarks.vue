@@ -3,12 +3,17 @@ import {computed, h} from "vue";
 import ComparisonsTable from "./comparisons-table.vue";
 import {TestCaseComparison} from "../data";
 import {CompareResponse} from "../types";
-import {CompileBenchmarkFilter, CompileTestCase} from "./common";
+import {
+  CompileBenchmarkFilter,
+  CompileBenchmarkMap,
+  CompileTestCase,
+} from "./common";
 
 export interface BenchmarkProps {
   data: CompareResponse;
   testCases: TestCaseComparison<CompileTestCase>[];
   allTestCases: TestCaseComparison<CompileTestCase>[];
+  benchmarkMap: CompileBenchmarkMap;
   filter: CompileBenchmarkFilter;
   stat: string;
 }
@@ -71,6 +76,7 @@ const secondaryHasNonRelevant = computed(
       :commit-a="data.a"
       :commit-b="data.b"
       :stat="stat"
+      :benchmark-map="benchmarkMap"
     >
       <template #header>
         <Section title="Primary" link="secondary" :linkUp="false"></Section>
@@ -85,6 +91,7 @@ const secondaryHasNonRelevant = computed(
       :commit-a="data.a"
       :commit-b="data.b"
       :stat="stat"
+      :benchmark-map="benchmarkMap"
     >
       <template #header>
         <Section title="Secondary" link="primary" :linkUp="true"></Section>
