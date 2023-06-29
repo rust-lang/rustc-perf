@@ -1,4 +1,5 @@
 {
     "touch_file": "src/lib.rs",
-    "category": "secondary"
+    "category": "secondary",
+    "artifact": "library"
 }

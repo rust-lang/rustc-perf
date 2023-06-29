@@ -1,4 +1,5 @@
 {
     "touch_file": "src/main.rs",
-    "category": "secondary"
+    "category": "secondary",
+    "artifact": "binary"
 }

@@ -22,6 +22,14 @@ fn default_runs() -> usize {
     3
 }
 
+#[derive(Debug, Default, Clone, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ArtifactType {
+    Binary,
+    #[default]
+    Library,
+}
+
 /// This is the internal representation of an individual benchmark's
 /// perf-config.json file.
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -52,6 +60,8 @@ pub struct BenchmarkConfig {
     /// They will be ignored during benchmarking.
     #[serde(default)]
     excluded_scenarios: HashSet<Scenario>,
+
+    artifact: ArtifactType,
 }
 
 impl BenchmarkConfig {
