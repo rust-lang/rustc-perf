@@ -65,7 +65,7 @@ impl BenchmarkErrors {
 #[allow(clippy::too_many_arguments)]
 fn bench(
     rt: &mut Runtime,
-    mut conn: Box<dyn Connection>,
+    conn: &mut dyn Connection,
     profiles: &[Profile],
     scenarios: &[Scenario],
     toolchain: &Toolchain,
@@ -96,7 +96,7 @@ fn bench(
          category: Category,
          print_intro: &dyn Fn(),
          measure: &dyn Fn(&mut BenchProcessor) -> anyhow::Result<()>| {
-            let is_fresh = rt.block_on(collector.start_compile_step(conn.as_mut(), benchmark_name));
+            let is_fresh = rt.block_on(collector.start_compile_step(conn, benchmark_name));
             if !is_fresh {
                 skipped = true;
                 eprintln!("skipping {} -- already benchmarked", benchmark_name);
@@ -783,7 +783,7 @@ fn main_result() -> anyhow::Result<i32> {
             benchmarks.retain(|b| b.category().is_primary_or_secondary());
 
             let artifact_id = ArtifactId::Tag(toolchain.id.clone());
-            let (conn, collector) = rt.block_on(init_compile_collector(
+            let (mut conn, collector) = rt.block_on(init_compile_collector(
                 &pool,
                 &benchmarks,
                 bench_rustc.bench_rustc,
@@ -792,7 +792,7 @@ fn main_result() -> anyhow::Result<i32> {
 
             let res = bench(
                 &mut rt,
-                conn,
+                conn.as_mut(),
                 profiles,
                 scenarios,
                 &toolchain,
@@ -853,7 +853,7 @@ fn main_result() -> anyhow::Result<i32> {
                     benchmarks.retain(|b| b.category().is_primary_or_secondary());
 
                     let artifact_id = ArtifactId::Commit(commit);
-                    let (conn, collector) = rt.block_on(init_compile_collector(
+                    let (mut conn, collector) = rt.block_on(init_compile_collector(
                         &pool,
                         &benchmarks,
                         bench_rustc.bench_rustc,
@@ -861,7 +861,7 @@ fn main_result() -> anyhow::Result<i32> {
                     ));
                     let res = bench(
                         &mut rt,
-                        conn,
+                        conn.as_mut(),
                         &Profile::all(),
                         &Scenario::all(),
                         &Toolchain::from_sysroot(&sysroot, sha),
@@ -1065,7 +1065,7 @@ fn bench_published_artifact(
     benchmarks.retain(|b| b.category().is_stable());
 
     let artifact_id = ArtifactId::Tag(toolchain.id.clone());
-    let (conn, collector) = rt.block_on(init_compile_collector(
+    let (mut conn, collector) = rt.block_on(init_compile_collector(
         &pool,
         &benchmarks,
         /* bench_rustc */ false,
@@ -1073,7 +1073,7 @@ fn bench_published_artifact(
     ));
     let res = bench(
         rt,
-        conn,
+        conn.as_mut(),
         &profiles,
         &scenarios,
         toolchain,
