@@ -382,3 +382,45 @@ pub fn get_local_toolchain(
         triple: target_triple,
     })
 }
+
+/// Creates a toolchain from a *published* toolchain downloaded by rustup.
+pub fn create_toolchain_from_published_version(
+    toolchain: &str,
+    target_triple: &str,
+) -> anyhow::Result<Toolchain> {
+    let status = Command::new("rustup")
+        .args(["install", "--profile=minimal", toolchain])
+        .status()
+        .context("rustup install")?;
+    if !status.success() {
+        return Err(anyhow::anyhow!(
+            "failed to install toolchain for {toolchain}",
+        ));
+    }
+
+    let which = |tool| -> anyhow::Result<PathBuf> {
+        let path = String::from_utf8(
+            Command::new("rustup")
+                .arg("which")
+                .arg("--toolchain")
+                .arg(toolchain)
+                .arg(tool)
+                .output()
+                .context(format!("rustup which {tool}"))?
+                .stdout,
+        )
+        .context("utf8")?;
+        Ok(PathBuf::from(path.trim()))
+    };
+    let rustc = which("rustc")?;
+    let rustdoc = which("rustdoc")?;
+    let cargo = which("cargo")?;
+
+    Ok(Toolchain {
+        rustc,
+        rustdoc: Some(rustdoc),
+        cargo,
+        id: toolchain.to_string(),
+        triple: target_triple.to_string(),
+    })
+}

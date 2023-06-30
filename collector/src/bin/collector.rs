@@ -30,7 +30,9 @@ use collector::compile::execute::profiler::{ProfileProcessor, Profiler};
 use collector::runtime::{
     bench_runtime, runtime_benchmark_dir, BenchmarkFilter, CargoIsolationMode,
 };
-use collector::toolchain::{get_local_toolchain, Sysroot, Toolchain};
+use collector::toolchain::{
+    create_toolchain_from_published_version, get_local_toolchain, Sysroot, Toolchain,
+};
 
 fn n_normal_benchmarks_remaining(n: usize) -> String {
     let suffix = if n == 1 { "" } else { "s" };
@@ -827,13 +829,8 @@ fn main_result() -> anyhow::Result<i32> {
 
             match next {
                 NextArtifact::Release(tag) => {
-                    bench_published_artifact(
-                        tag,
-                        pool,
-                        &mut rt,
-                        &target_triple,
-                        &compile_benchmark_dir,
-                    )?;
+                    let toolchain = create_toolchain_from_published_version(&tag, &target_triple)?;
+                    bench_published_artifact(&toolchain, pool, &mut rt, &compile_benchmark_dir)?;
 
                     client.post(format!("{}/perf/onpush", site_url)).send()?;
                 }
@@ -885,13 +882,8 @@ fn main_result() -> anyhow::Result<i32> {
 
         Commands::BenchPublished { toolchain, db } => {
             let pool = database::Pool::open(&db.db);
-            bench_published_artifact(
-                toolchain,
-                pool,
-                &mut rt,
-                &target_triple,
-                &compile_benchmark_dir,
-            )?;
+            let toolchain = create_toolchain_from_published_version(&toolchain, &target_triple)?;
+            bench_published_artifact(&toolchain, pool, &mut rt, &compile_benchmark_dir)?;
             Ok(0)
         }
 
@@ -1052,53 +1044,27 @@ async fn init_compile_collector(
 }
 
 fn bench_published_artifact(
-    toolchain: String,
+    toolchain: &Toolchain,
     pool: Pool,
     rt: &mut Runtime,
-    target_triple: &str,
     benchmark_dir: &Path,
 ) -> anyhow::Result<()> {
-    let status = Command::new("rustup")
-        .args(["install", "--profile=minimal", &toolchain])
-        .status()
-        .context("rustup install")?;
-    if !status.success() {
-        anyhow::bail!("failed to install toolchain for {}", toolchain);
-    }
-
-    let profiles = if collector::version_supports_doc(&toolchain) {
+    let profiles = if collector::version_supports_doc(&toolchain.id) {
         Profile::all()
     } else {
         Profile::all_non_doc()
     };
-    let scenarios = if collector::version_supports_incremental(&toolchain) {
+    let scenarios = if collector::version_supports_incremental(&toolchain.id) {
         Scenario::all()
     } else {
         Scenario::all_non_incr()
     };
 
-    let which = |tool| {
-        String::from_utf8(
-            Command::new("rustup")
-                .arg("which")
-                .arg("--toolchain")
-                .arg(&toolchain)
-                .arg(tool)
-                .output()
-                .context(format!("rustup which {}", tool))?
-                .stdout,
-        )
-        .context("utf8")
-    };
-    let rustc = which("rustc")?;
-    let rustdoc = which("rustdoc")?;
-    let cargo = which("cargo")?;
-
     // Exclude benchmarks that don't work with a stable compiler.
     let mut benchmarks = get_compile_benchmarks(benchmark_dir, None, None, None)?;
     benchmarks.retain(|b| b.category().is_stable());
 
-    let artifact_id = ArtifactId::Tag(toolchain.clone());
+    let artifact_id = ArtifactId::Tag(toolchain.id.clone());
     let (conn, collector) = rt.block_on(init_compile_collector(
         &pool,
         &benchmarks,
@@ -1110,13 +1076,7 @@ fn bench_published_artifact(
         conn,
         &profiles,
         &scenarios,
-        &Toolchain {
-            rustc: PathBuf::from(rustc.trim()),
-            rustdoc: Some(PathBuf::from(rustdoc.trim())),
-            cargo: PathBuf::from(cargo.trim()),
-            id: toolchain,
-            triple: target_triple.to_string(),
-        },
+        toolchain,
         &benchmarks,
         Some(3),
         /* is_self_profile */ false,
