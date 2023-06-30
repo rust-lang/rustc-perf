@@ -416,6 +416,10 @@ pub fn create_toolchain_from_published_version(
     let rustdoc = which("rustdoc")?;
     let cargo = which("cargo")?;
 
+    debug!("Found rustc: {}", rustc.display());
+    debug!("Found rustdoc: {}", rustdoc.display());
+    debug!("Found cargo: {}", cargo.display());
+
     Ok(Toolchain {
         rustc,
         rustdoc: Some(rustdoc),

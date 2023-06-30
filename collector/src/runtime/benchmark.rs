@@ -66,7 +66,14 @@ pub struct BenchmarkFilter {
 }
 
 impl BenchmarkFilter {
-    pub fn new(exclude: Option<String>, include: Option<String>) -> BenchmarkFilter {
+    pub fn keep_all() -> Self {
+        Self {
+            exclude: None,
+            include: None,
+        }
+    }
+
+    pub fn new(exclude: Option<String>, include: Option<String>) -> Self {
         Self { exclude, include }
     }
 }
@@ -87,7 +94,7 @@ pub enum CargoIsolationMode {
 /// We assume that each binary defines a benchmark suite using `benchlib`.
 /// We then execute each benchmark suite with the `list-benchmarks` command to find out its
 /// benchmark names.
-pub fn create_runtime_benchmark_suite(
+pub fn prepare_runtime_benchmark_suite(
     toolchain: &Toolchain,
     benchmark_dir: &Path,
     isolation_mode: CargoIsolationMode,
@@ -124,7 +131,7 @@ pub fn create_runtime_benchmark_suite(
 
         let cargo_process = start_cargo_build(toolchain, &benchmark_crate.path, target_dir)
             .with_context(|| {
-                anyhow::anyhow!("Cannot not start compilation of {}", benchmark_crate.name)
+                anyhow::anyhow!("Cannot start compilation of {}", benchmark_crate.name)
             })?;
         let group =
             parse_benchmark_group(cargo_process, &benchmark_crate.name).with_context(|| {
