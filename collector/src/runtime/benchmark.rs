@@ -1,4 +1,4 @@
-use crate::toolchain::LocalToolchain;
+use crate::toolchain::Toolchain;
 use anyhow::Context;
 use benchlib::benchmark::passes_filter;
 use cargo_metadata::Message;
@@ -88,7 +88,7 @@ pub enum CargoIsolationMode {
 /// We then execute each benchmark suite with the `list-benchmarks` command to find out its
 /// benchmark names.
 pub fn create_runtime_benchmark_suite(
-    toolchain: &LocalToolchain,
+    toolchain: &Toolchain,
     benchmark_dir: &Path,
     isolation_mode: CargoIsolationMode,
 ) -> anyhow::Result<BenchmarkSuite> {
@@ -233,7 +233,7 @@ fn parse_benchmark_group(
 /// Starts the compilation of a single runtime benchmark crate.
 /// Returns the stdout output stream of Cargo.
 fn start_cargo_build(
-    toolchain: &LocalToolchain,
+    toolchain: &Toolchain,
     benchmark_dir: &Path,
     target_dir: Option<&Path>,
 ) -> anyhow::Result<Child> {

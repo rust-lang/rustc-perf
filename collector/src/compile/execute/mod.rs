@@ -4,7 +4,7 @@ use crate::compile::benchmark::patch::Patch;
 use crate::compile::benchmark::profile::Profile;
 use crate::compile::benchmark::scenario::Scenario;
 use crate::compile::benchmark::BenchmarkName;
-use crate::toolchain::Compiler;
+use crate::toolchain::Toolchain;
 use crate::{command_output, utils};
 use anyhow::Context;
 use bencher::Bencher;
@@ -113,7 +113,7 @@ impl PerfTool {
 }
 
 pub struct CargoProcess<'a> {
-    pub compiler: Compiler<'a>,
+    pub toolchain: &'a Toolchain,
     pub cwd: &'a Path,
     pub profile: Profile,
     pub incremental: bool,
@@ -144,12 +144,12 @@ impl<'a> CargoProcess<'a> {
     }
 
     fn base_command(&self, cwd: &Path, subcommand: &str) -> Command {
-        let mut cmd = Command::new(Path::new(self.compiler.cargo));
+        let mut cmd = Command::new(Path::new(&self.toolchain.cargo));
         cmd
             // Not all cargo invocations (e.g. `cargo clean`) need all of these
             // env vars set, but it doesn't hurt to have them.
             .env("RUSTC", &*FAKE_RUSTC)
-            .env("RUSTC_REAL", self.compiler.rustc)
+            .env("RUSTC_REAL", &self.toolchain.rustc)
             // We separately pass -Cincremental to the leaf crate --
             // CARGO_INCREMENTAL is cached separately for both the leaf crate
             // and any in-tree dependencies, and we don't want that; it wastes
@@ -164,7 +164,7 @@ impl<'a> CargoProcess<'a> {
             .arg("--manifest-path")
             .arg(&self.manifest_path);
 
-        if let Some(r) = &self.compiler.rustdoc {
+        if let Some(r) = &self.toolchain.rustdoc {
             cmd.env("RUSTDOC", &*FAKE_RUSTDOC).env("RUSTDOC_REAL", r);
         }
         cmd

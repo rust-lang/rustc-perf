@@ -6,7 +6,7 @@ use crate::compile::execute::{
     rustc, DeserializeStatError, PerfTool, ProcessOutputData, Processor, Retry, SelfProfile,
     SelfProfileFiles, Stats, Upload,
 };
-use crate::toolchain::Compiler;
+use crate::toolchain::Toolchain;
 use crate::utils::git::get_rustc_perf_commit;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
@@ -160,11 +160,11 @@ impl<'a> BenchProcessor<'a> {
             .block_on(async move { while let Some(()) = buf.next().await {} });
     }
 
-    pub fn measure_rustc(&mut self, compiler: Compiler<'_>) -> anyhow::Result<()> {
+    pub fn measure_rustc(&mut self, toolchain: &Toolchain) -> anyhow::Result<()> {
         rustc::measure(
             self.rt,
             self.conn,
-            compiler,
+            toolchain,
             self.artifact,
             self.artifact_row_id,
         )

@@ -3,7 +3,7 @@ use crate::compile::benchmark::patch::Patch;
 use crate::compile::benchmark::profile::Profile;
 use crate::compile::benchmark::scenario::Scenario;
 use crate::compile::execute::{CargoProcess, Processor};
-use crate::toolchain::Compiler;
+use crate::toolchain::Toolchain;
 use anyhow::{bail, Context};
 use log::debug;
 use std::collections::{HashMap, HashSet};
@@ -143,7 +143,7 @@ impl Benchmark {
 
     fn mk_cargo_process<'a>(
         &'a self,
-        compiler: Compiler<'a>,
+        toolchain: &'a Toolchain,
         cwd: &'a Path,
         profile: Profile,
     ) -> CargoProcess<'a> {
@@ -163,7 +163,7 @@ impl Benchmark {
         }
 
         CargoProcess {
-            compiler,
+            toolchain,
             processor_name: self.name.clone(),
             cwd,
             profile,
@@ -194,7 +194,7 @@ impl Benchmark {
         processor: &mut dyn Processor,
         profiles: &[Profile],
         scenarios: &[Scenario],
-        compiler: Compiler<'_>,
+        toolchain: &Toolchain,
         iterations: Option<usize>,
     ) -> anyhow::Result<()> {
         if self.config.disabled {
@@ -261,7 +261,7 @@ impl Benchmark {
             for (profile, prep_dir) in &profile_dirs {
                 let server = server.clone();
                 let thread = s.spawn::<_, anyhow::Result<()>>(move || {
-                    self.mk_cargo_process(compiler, prep_dir.path(), *profile)
+                    self.mk_cargo_process(toolchain, prep_dir.path(), *profile)
                         .jobserver(server)
                         .run_rustc(false)?;
                     Ok(())
@@ -308,7 +308,7 @@ impl Benchmark {
 
                 // A full non-incremental build.
                 if scenarios.contains(&Scenario::Full) {
-                    self.mk_cargo_process(compiler, cwd, profile)
+                    self.mk_cargo_process(toolchain, cwd, profile)
                         .processor(processor, Scenario::Full, "Full", None)
                         .run_rustc(true)?;
                 }
@@ -318,7 +318,7 @@ impl Benchmark {
                     // An incremental  from scratch (slowest incremental case).
                     // This is required for any subsequent incremental builds.
                     if scenarios.iter().any(|s| s.is_incr()) {
-                        self.mk_cargo_process(compiler, cwd, profile)
+                        self.mk_cargo_process(toolchain, cwd, profile)
                             .incremental(true)
                             .processor(processor, Scenario::IncrFull, "IncrFull", None)
                             .run_rustc(true)?;
@@ -326,7 +326,7 @@ impl Benchmark {
 
                     // An incremental build with no changes (fastest incremental case).
                     if scenarios.contains(&Scenario::IncrUnchanged) {
-                        self.mk_cargo_process(compiler, cwd, profile)
+                        self.mk_cargo_process(toolchain, cwd, profile)
                             .incremental(true)
                             .processor(processor, Scenario::IncrUnchanged, "IncrUnchanged", None)
                             .run_rustc(true)?;
@@ -340,7 +340,7 @@ impl Benchmark {
                             // An incremental build with some changes (realistic
                             // incremental case).
                             let scenario_str = format!("IncrPatched{}", i);
-                            self.mk_cargo_process(compiler, cwd, profile)
+                            self.mk_cargo_process(toolchain, cwd, profile)
                                 .incremental(true)
                                 .processor(
                                     processor,
