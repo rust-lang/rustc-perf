@@ -6,7 +6,7 @@ use core::option::Option;
 use core::option::Option::Some;
 use core::result::Result::Ok;
 use std::collections::HashMap;
-use std::io::{BufReader, Write};
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use tempfile::TempDir;
@@ -114,14 +114,11 @@ pub fn create_runtime_benchmark_suite(
 
     let mut groups = Vec::new();
     for (index, benchmark_crate) in benchmark_crates.into_iter().enumerate() {
-        // Show incremental progress
-        print!(
-            "\r{}\rCompiling `{}` ({}/{group_count})",
-            " ".repeat(80),
-            benchmark_crate.name,
+        println!(
+            "Compiling {:<22} ({}/{group_count})",
+            format!("`{}`", benchmark_crate.name),
             index + 1
         );
-        std::io::stdout().flush().unwrap();
 
         let target_dir = temp_dir.as_ref().map(|d| d.path());
 
@@ -135,7 +132,6 @@ pub fn create_runtime_benchmark_suite(
             })?;
         groups.push(group);
     }
-    println!();
 
     groups.sort_unstable_by(|a, b| a.binary.cmp(&b.binary));
     log::debug!("Found binaries: {:?}", groups);
