@@ -843,14 +843,16 @@ fn main_result() -> anyhow::Result<i32> {
             match next {
                 NextArtifact::Release(tag) => {
                     let toolchain = create_toolchain_from_published_version(&tag, &target_triple)?;
-                    bench_published_artifact(
+                    let res = bench_published_artifact(
                         &toolchain,
                         rt.block_on(pool.connection()),
                         &mut rt,
                         &benchmark_dirs,
-                    )?;
+                    );
 
                     client.post(format!("{}/perf/onpush", site_url)).send()?;
+
+                    res?;
                 }
                 NextArtifact::Commit {
                     commit,
