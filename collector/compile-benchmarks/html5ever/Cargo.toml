@@ -20,7 +20,12 @@ log = "0"
 phf = "0.7"
 string_cache = "0.2.0"
 mac = "0"
-tendril = { path = "tendril-0.2.4" }
+
+# Tendril 0.2.4 stopped compiling on stable as of Rust 1.69, because of UB caused by unaligned
+# references to packed structs fields.
+# The `tendril-0.2.4-patched` directory contains a patched version of tendril 0.2.4, which removes
+# the #[packed] attribute from several structs, thus making this benchmark compilable.
+tendril = { path = "tendril-0.2.4-patched" }
 heapsize = { version = ">=0.1.1, <0.4", optional = true }
 heapsize_plugin = { version = "0.1.0", optional = true }
 
