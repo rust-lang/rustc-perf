@@ -9,6 +9,7 @@ use std::{fmt, str};
 use tar::Archive;
 use xz2::bufread::XzDecoder;
 
+/// Sysroot downloaded from CI.
 pub struct Sysroot {
     pub sha: String,
     pub rustc: PathBuf,
@@ -214,42 +215,26 @@ impl SysrootDownload {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-pub struct Compiler<'a> {
-    pub rustc: &'a Path,
-    pub rustdoc: Option<&'a Path>,
-    pub cargo: &'a Path,
-    pub triple: &'a str,
-    pub is_nightly: bool,
-}
-
-impl<'a> Compiler<'a> {
-    pub fn from_sysroot(sysroot: &'a Sysroot) -> Compiler<'a> {
-        Compiler {
-            rustc: &sysroot.rustc,
-            rustdoc: Some(&sysroot.rustdoc),
-            cargo: &sysroot.cargo,
-            triple: &sysroot.triple,
-            is_nightly: true,
-        }
-    }
-    pub fn from_toolchain(toolchain: &'a LocalToolchain, target_triple: &'a str) -> Compiler<'a> {
-        Compiler {
-            rustc: &toolchain.rustc,
-            rustdoc: toolchain.rustdoc.as_deref(),
-            cargo: &toolchain.cargo,
-            triple: target_triple,
-            is_nightly: true,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct LocalToolchain {
+/// Representation of a toolchain that can be used to compile Rust programs.
+#[derive(Debug, Clone)]
+pub struct Toolchain {
     pub rustc: PathBuf,
     pub rustdoc: Option<PathBuf>,
     pub cargo: PathBuf,
     pub id: String,
+    pub triple: String,
+}
+
+impl Toolchain {
+    pub fn from_sysroot(sysroot: &Sysroot, id: String) -> Self {
+        Self {
+            rustc: sysroot.rustc.clone(),
+            rustdoc: Some(sysroot.rustdoc.clone()),
+            cargo: sysroot.cargo.clone(),
+            id,
+            triple: sysroot.triple.clone(),
+        }
+    }
 }
 
 /// Get a toolchain from the input.
@@ -265,7 +250,8 @@ pub fn get_local_toolchain(
     cargo: Option<&Path>,
     id: Option<&str>,
     id_suffix: &str,
-) -> anyhow::Result<LocalToolchain> {
+    target_triple: String,
+) -> anyhow::Result<Toolchain> {
     // `+`-prefixed rustc is an indicator to fetch the rustc of the toolchain
     // specified. This follows the similar pattern used by rustup's binaries
     // (e.g., `rustc +stage1`).
@@ -388,10 +374,57 @@ pub fn get_local_toolchain(
         cargo
     };
 
-    Ok(LocalToolchain {
+    Ok(Toolchain {
         rustc,
         rustdoc,
         cargo,
         id,
+        triple: target_triple,
+    })
+}
+
+/// Creates a toolchain from a *published* toolchain downloaded by rustup.
+pub fn create_toolchain_from_published_version(
+    toolchain: &str,
+    target_triple: &str,
+) -> anyhow::Result<Toolchain> {
+    let status = Command::new("rustup")
+        .args(["install", "--profile=minimal", toolchain])
+        .status()
+        .context("rustup install")?;
+    if !status.success() {
+        return Err(anyhow::anyhow!(
+            "failed to install toolchain for {toolchain}",
+        ));
+    }
+
+    let which = |tool| -> anyhow::Result<PathBuf> {
+        let path = String::from_utf8(
+            Command::new("rustup")
+                .arg("which")
+                .arg("--toolchain")
+                .arg(toolchain)
+                .arg(tool)
+                .output()
+                .context(format!("rustup which {tool}"))?
+                .stdout,
+        )
+        .context("utf8")?;
+        Ok(PathBuf::from(path.trim()))
+    };
+    let rustc = which("rustc")?;
+    let rustdoc = which("rustdoc")?;
+    let cargo = which("cargo")?;
+
+    debug!("Found rustc: {}", rustc.display());
+    debug!("Found rustdoc: {}", rustdoc.display());
+    debug!("Found cargo: {}", cargo.display());
+
+    Ok(Toolchain {
+        rustc,
+        rustdoc: Some(rustdoc),
+        cargo,
+        id: toolchain.to_string(),
+        triple: target_triple.to_string(),
     })
 }

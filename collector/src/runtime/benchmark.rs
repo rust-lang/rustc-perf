@@ -1,4 +1,4 @@
-use crate::toolchain::LocalToolchain;
+use crate::toolchain::Toolchain;
 use anyhow::Context;
 use benchlib::benchmark::passes_filter;
 use cargo_metadata::Message;
@@ -6,7 +6,7 @@ use core::option::Option;
 use core::option::Option::Some;
 use core::result::Result::Ok;
 use std::collections::HashMap;
-use std::io::{BufReader, Write};
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use tempfile::TempDir;
@@ -66,7 +66,14 @@ pub struct BenchmarkFilter {
 }
 
 impl BenchmarkFilter {
-    pub fn new(exclude: Option<String>, include: Option<String>) -> BenchmarkFilter {
+    pub fn keep_all() -> Self {
+        Self {
+            exclude: None,
+            include: None,
+        }
+    }
+
+    pub fn new(exclude: Option<String>, include: Option<String>) -> Self {
         Self { exclude, include }
     }
 }
@@ -87,8 +94,8 @@ pub enum CargoIsolationMode {
 /// We assume that each binary defines a benchmark suite using `benchlib`.
 /// We then execute each benchmark suite with the `list-benchmarks` command to find out its
 /// benchmark names.
-pub fn create_runtime_benchmark_suite(
-    toolchain: &LocalToolchain,
+pub fn prepare_runtime_benchmark_suite(
+    toolchain: &Toolchain,
     benchmark_dir: &Path,
     isolation_mode: CargoIsolationMode,
 ) -> anyhow::Result<BenchmarkSuite> {
@@ -114,20 +121,17 @@ pub fn create_runtime_benchmark_suite(
 
     let mut groups = Vec::new();
     for (index, benchmark_crate) in benchmark_crates.into_iter().enumerate() {
-        // Show incremental progress
-        print!(
-            "\r{}\rCompiling `{}` ({}/{group_count})",
-            " ".repeat(80),
-            benchmark_crate.name,
+        println!(
+            "Compiling {:<22} ({}/{group_count})",
+            format!("`{}`", benchmark_crate.name),
             index + 1
         );
-        std::io::stdout().flush().unwrap();
 
         let target_dir = temp_dir.as_ref().map(|d| d.path());
 
         let cargo_process = start_cargo_build(toolchain, &benchmark_crate.path, target_dir)
             .with_context(|| {
-                anyhow::anyhow!("Cannot not start compilation of {}", benchmark_crate.name)
+                anyhow::anyhow!("Cannot start compilation of {}", benchmark_crate.name)
             })?;
         let group =
             parse_benchmark_group(cargo_process, &benchmark_crate.name).with_context(|| {
@@ -135,7 +139,6 @@ pub fn create_runtime_benchmark_suite(
             })?;
         groups.push(group);
     }
-    println!();
 
     groups.sort_unstable_by(|a, b| a.binary.cmp(&b.binary));
     log::debug!("Found binaries: {:?}", groups);
@@ -233,7 +236,7 @@ fn parse_benchmark_group(
 /// Starts the compilation of a single runtime benchmark crate.
 /// Returns the stdout output stream of Cargo.
 fn start_cargo_build(
-    toolchain: &LocalToolchain,
+    toolchain: &Toolchain,
     benchmark_dir: &Path,
     target_dir: Option<&Path>,
 ) -> anyhow::Result<Child> {

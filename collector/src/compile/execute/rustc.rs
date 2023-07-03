@@ -7,7 +7,7 @@
 //! no real reason for us to compile the standard library twice, and it avoids
 //! having to think about how to deduplicate results.
 
-use crate::toolchain::Compiler;
+use crate::toolchain::Toolchain;
 use crate::utils::git::get_rustc_perf_commit;
 use anyhow::Context;
 use database::ArtifactId;
@@ -20,7 +20,7 @@ use tokio::runtime::Runtime;
 pub fn measure(
     rt: &mut Runtime,
     conn: &mut dyn database::Connection,
-    compiler: Compiler<'_>,
+    toolchain: &Toolchain,
     artifact: &database::ArtifactId,
     aid: database::ArtifactIdNumber,
 ) -> anyhow::Result<()> {
@@ -28,7 +28,7 @@ pub fn measure(
 
     checkout(artifact).context("checking out rust-lang/rust")?;
 
-    record(rt, conn, compiler, artifact, aid)?;
+    record(rt, conn, toolchain, artifact, aid)?;
 
     Ok(())
 }
@@ -36,7 +36,7 @@ pub fn measure(
 fn record(
     rt: &mut Runtime,
     conn: &mut dyn database::Connection,
-    compiler: Compiler<'_>,
+    toolchain: &Toolchain,
     artifact: &database::ArtifactId,
     aid: database::ArtifactIdNumber,
 ) -> anyhow::Result<()> {
@@ -95,9 +95,12 @@ fn record(
     .arg("rust.deny-warnings=false")
     .arg("--set")
     .arg(&format!("build.rustc={}", fake_rustc.to_str().unwrap()))
-    .env("RUSTC_PERF_REAL_RUSTC", compiler.rustc)
+    .env("RUSTC_PERF_REAL_RUSTC", &toolchain.rustc)
     .arg("--set")
-    .arg(&format!("build.cargo={}", compiler.cargo.to_str().unwrap()))
+    .arg(&format!(
+        "build.cargo={}",
+        toolchain.cargo.to_str().unwrap()
+    ))
     .status()
     .context("configuring")?;
     assert!(status.success(), "configure successful");
@@ -111,7 +114,7 @@ fn record(
                     .context("x.py script canonicalize")?,
             )
             .current_dir(checkout)
-            .env("RUSTC_PERF_REAL_RUSTC", compiler.rustc)
+            .env("RUSTC_PERF_REAL_RUSTC", &toolchain.rustc)
             .arg("build")
             .arg("--stage")
             .arg("0")
