@@ -25,7 +25,7 @@ pub const DEFAULT_RUNTIME_ITERATIONS: u32 = 5;
 pub async fn bench_runtime(
     mut conn: Box<dyn Connection>,
     suite: BenchmarkSuite,
-    mut collector: CollectorCtx,
+    collector: &CollectorCtx,
     filter: BenchmarkFilter,
     iterations: u32,
 ) -> anyhow::Result<()> {

@@ -308,33 +308,25 @@ pub struct CollectorCtx {
 
 impl CollectorCtx {
     pub async fn start_compile_step(
-        &mut self,
-        conn: &mut dyn Connection,
+        &self,
+        conn: &dyn Connection,
         benchmark_name: &BenchmarkName,
     ) -> bool {
         conn.collector_start_step(self.artifact_row_id, &benchmark_name.0)
             .await
     }
 
-    pub async fn end_compile_step(
-        &mut self,
-        conn: &mut dyn Connection,
-        benchmark_name: &BenchmarkName,
-    ) {
+    pub async fn end_compile_step(&self, conn: &dyn Connection, benchmark_name: &BenchmarkName) {
         conn.collector_end_step(self.artifact_row_id, &benchmark_name.0)
             .await
     }
 
-    pub async fn start_runtime_step(
-        &mut self,
-        conn: &mut dyn Connection,
-        group: &BenchmarkGroup,
-    ) -> bool {
+    pub async fn start_runtime_step(&self, conn: &dyn Connection, group: &BenchmarkGroup) -> bool {
         conn.collector_start_step(self.artifact_row_id, &runtime_group_step_name(group))
             .await
     }
 
-    pub async fn end_runtime_step(&mut self, conn: &mut dyn Connection, group: &BenchmarkGroup) {
+    pub async fn end_runtime_step(&self, conn: &dyn Connection, group: &BenchmarkGroup) {
         conn.collector_end_step(self.artifact_row_id, &runtime_group_step_name(group))
             .await
     }
