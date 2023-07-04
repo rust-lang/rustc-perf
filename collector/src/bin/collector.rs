@@ -28,7 +28,7 @@ use tokio::runtime::Runtime;
 use collector::compile::execute::bencher::BenchProcessor;
 use collector::compile::execute::profiler::{ProfileProcessor, Profiler};
 use collector::runtime::{
-    bench_runtime, runtime_benchmark_dir, BenchmarkFilter, BenchmarkSuite, CargoIsolationMode,
+    bench_runtime, runtime_benchmark_dir, BenchmarkFilter, CargoIsolationMode,
     DEFAULT_RUNTIME_ITERATIONS,
 };
 use collector::toolchain::{
@@ -79,7 +79,7 @@ fn bench(
     benchmarks: &[Benchmark],
     iterations: Option<usize>,
     is_self_profile: bool,
-    mut collector: CollectorCtx,
+    collector: &CollectorCtx,
 ) -> BenchmarkErrors {
     let mut errors = BenchmarkErrors::new();
     eprintln!(
@@ -756,7 +756,7 @@ fn main_result() -> anyhow::Result<i32> {
             let fut = bench_runtime(
                 conn,
                 suite,
-                collector,
+                &collector,
                 BenchmarkFilter::new(local.exclude, local.include),
                 iterations,
             );
@@ -812,7 +812,7 @@ fn main_result() -> anyhow::Result<i32> {
                 &benchmarks,
                 Some(iterations),
                 self_profile.self_profile,
-                collector,
+                &collector,
             );
             res.fail_if_nonzero()?;
             Ok(0)
@@ -889,7 +889,7 @@ fn main_result() -> anyhow::Result<i32> {
                         &benchmarks,
                         runs.map(|v| v as usize),
                         self_profile.self_profile,
-                        collector,
+                        &collector,
                     );
 
                     client.post(format!("{}/perf/onpush", site_url)).send()?;
@@ -1063,17 +1063,6 @@ async fn init_compile_collector(
         .await
 }
 
-async fn init_runtime_collector(
-    connection: &mut dyn Connection,
-    suite: &BenchmarkSuite,
-    artifact_id: ArtifactId,
-) -> CollectorCtx {
-    CollectorStepBuilder::default()
-        .record_runtime_benchmarks(suite)
-        .start_collection(connection, artifact_id)
-        .await
-}
-
 fn bench_published_artifact(
     toolchain: &Toolchain,
     mut connection: Box<dyn Connection>,
@@ -1096,13 +1085,19 @@ fn bench_published_artifact(
     let mut compile_benchmarks = get_compile_benchmarks(dirs.compile, None, None, None)?;
     compile_benchmarks.retain(|b| b.category().is_stable());
 
+    let runtime_suite = runtime::prepare_runtime_benchmark_suite(
+        toolchain,
+        dirs.runtime,
+        CargoIsolationMode::Isolated,
+    )?;
+
     let artifact_id = ArtifactId::Tag(toolchain.id.clone());
-    let collector = rt.block_on(init_compile_collector(
-        connection.as_mut(),
-        &compile_benchmarks,
-        /* bench_rustc */ false,
-        artifact_id.clone(),
-    ));
+    let collector = rt.block_on(
+        CollectorStepBuilder::default()
+            .record_compile_benchmarks(&compile_benchmarks, false)
+            .record_runtime_benchmarks(&runtime_suite)
+            .start_collection(connection.as_mut(), artifact_id),
+    );
     let res = bench(
         rt,
         connection.as_mut(),
@@ -1112,26 +1107,16 @@ fn bench_published_artifact(
         &compile_benchmarks,
         Some(3),
         /* is_self_profile */ false,
-        collector,
+        &collector,
     );
     let compile_result = res.fail_if_nonzero().context("Compile benchmarks failed");
 
     // Runtime benchmarks
-    let runtime_suite = runtime::prepare_runtime_benchmark_suite(
-        toolchain,
-        dirs.runtime,
-        CargoIsolationMode::Isolated,
-    )?;
-    let collector = rt.block_on(init_runtime_collector(
-        connection.as_mut(),
-        &runtime_suite,
-        artifact_id,
-    ));
     let runtime_result = rt
         .block_on(bench_runtime(
             connection,
             runtime_suite,
-            collector,
+            &collector,
             BenchmarkFilter::keep_all(),
             DEFAULT_RUNTIME_ITERATIONS,
         ))

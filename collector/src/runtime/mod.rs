@@ -25,7 +25,7 @@ pub const DEFAULT_RUNTIME_ITERATIONS: u32 = 5;
 pub async fn bench_runtime(
     mut conn: Box<dyn Connection>,
     suite: BenchmarkSuite,
-    mut collector: CollectorCtx,
+    collector: &CollectorCtx,
     filter: BenchmarkFilter,
     iterations: u32,
 ) -> anyhow::Result<()> {
@@ -46,6 +46,7 @@ pub async fn bench_runtime(
             continue;
         }
 
+        let mut tx = conn.transaction().await;
         for message in execute_runtime_benchmark_binary(&group.binary, &filter, iterations)? {
             let message = message.map_err(|err| {
                 anyhow::anyhow!(
@@ -63,7 +64,7 @@ pub async fn bench_runtime(
 
                     print_stats(&result);
                     record_stats(
-                        conn.as_ref(),
+                        tx.conn(),
                         collector.artifact_row_id,
                         &rustc_perf_version,
                         result,
@@ -73,7 +74,10 @@ pub async fn bench_runtime(
             }
         }
 
-        collector.end_runtime_step(conn.as_mut(), &group).await;
+        collector.end_runtime_step(tx.conn(), &group).await;
+        tx.commit()
+            .await
+            .expect("Cannot commit runtime benchmark group results");
     }
 
     Ok(())
