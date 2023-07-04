@@ -23,7 +23,7 @@ pub const DEFAULT_RUNTIME_ITERATIONS: u32 = 5;
 /// to a Cargo crate. All binaries built by that crate are expected to be runtime benchmark
 /// groups that use `benchlib`.
 pub async fn bench_runtime(
-    mut conn: Box<dyn Connection>,
+    conn: &mut dyn Connection,
     suite: BenchmarkSuite,
     collector: &CollectorCtx,
     filter: BenchmarkFilter,
@@ -41,7 +41,7 @@ pub async fn bench_runtime(
 
     let mut benchmark_index = 0;
     for group in suite.groups {
-        if !collector.start_runtime_step(conn.as_mut(), &group).await {
+        if !collector.start_runtime_step(conn, &group).await {
             eprintln!("skipping {} -- already benchmarked", group.name);
             continue;
         }

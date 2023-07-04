@@ -640,28 +640,24 @@ fn main_result() -> anyhow::Result<i32> {
             } else {
                 CargoIsolationMode::Isolated
             };
-            let suite = runtime::prepare_runtime_benchmark_suite(
+            let runtime_suite = runtime::prepare_runtime_benchmark_suite(
                 &toolchain,
                 &runtime_benchmark_dir,
                 isolation_mode,
             )?;
-            let artifact_id = ArtifactId::Tag(toolchain.id);
-            let (conn, collector) = rt.block_on(async {
-                let mut conn = pool.connection().await;
-                let collector = CollectorStepBuilder::default()
-                    .record_runtime_benchmarks(&suite)
-                    .start_collection(conn.as_mut(), &artifact_id)
-                    .await;
-                (conn, collector)
-            });
-            let fut = bench_runtime(
-                conn,
-                suite,
-                &collector,
-                BenchmarkFilter::new(local.exclude, local.include),
+            let artifact_id = ArtifactId::Tag(toolchain.id.clone());
+
+            let shared = SharedBenchmarkConfig {
+                artifact_id,
+                toolchain,
+            };
+            let config = RuntimeBenchmarkConfig {
+                runtime_suite,
+                filter: BenchmarkFilter::new(local.exclude, local.include),
                 iterations,
-            );
-            rt.block_on(fut)?;
+            };
+            let conn = rt.block_on(pool.connection());
+            run_benchmarks(&mut rt, conn, shared, None, Some(config))?;
             Ok(0)
         }
         Commands::BenchLocal {
@@ -696,7 +692,7 @@ fn main_result() -> anyhow::Result<i32> {
             benchmarks.retain(|b| b.category().is_primary_or_secondary());
 
             let artifact_id = ArtifactId::Tag(toolchain.id.clone());
-            let mut conn = rt.block_on(pool.connection());
+            let conn = rt.block_on(pool.connection());
             let shared = SharedBenchmarkConfig {
                 toolchain,
                 artifact_id,
@@ -709,10 +705,8 @@ fn main_result() -> anyhow::Result<i32> {
                 is_self_profile: self_profile.self_profile,
                 bench_rustc: bench_rustc.bench_rustc,
             };
-            let collector =
-                rt.block_on(init_collection(conn.as_mut(), &shared, Some(&config), None));
 
-            bench_compile(&mut rt, conn.as_mut(), &shared, config, &collector).fail_if_nonzero()?;
+            run_benchmarks(&mut rt, conn, shared, Some(config), None)?;
             Ok(0)
         }
 
@@ -771,7 +765,7 @@ fn main_result() -> anyhow::Result<i32> {
                     benchmarks.retain(|b| b.category().is_primary_or_secondary());
 
                     let artifact_id = ArtifactId::Commit(commit);
-                    let mut conn = rt.block_on(pool.connection());
+                    let conn = rt.block_on(pool.connection());
                     let toolchain = Toolchain::from_sysroot(&sysroot, sha);
 
                     let shared = SharedBenchmarkConfig {
@@ -787,13 +781,11 @@ fn main_result() -> anyhow::Result<i32> {
                         bench_rustc: bench_rustc.bench_rustc,
                     };
 
-                    let collector =
-                        rt.block_on(init_collection(conn.as_mut(), &shared, Some(&config), None));
-                    let res = bench_compile(&mut rt, conn.as_mut(), &shared, config, &collector);
+                    let res = run_benchmarks(&mut rt, conn, shared, Some(config), None);
 
                     client.post(format!("{}/perf/onpush", site_url)).send()?;
 
-                    res.fail_if_nonzero()?;
+                    res?;
                 }
             }
 
@@ -972,8 +964,8 @@ async fn init_collection(
 
 /// Execute all benchmarks specified by the given configurations.
 fn run_benchmarks(
-    mut connection: Box<dyn Connection>,
     rt: &mut Runtime,
+    mut connection: Box<dyn Connection>,
     shared: SharedBenchmarkConfig,
     compile: Option<CompileBenchmarkConfig>,
     runtime: Option<RuntimeBenchmarkConfig>,
@@ -984,6 +976,8 @@ fn run_benchmarks(
         compile.as_ref(),
         runtime.as_ref(),
     ));
+
+    let start = Instant::now();
 
     // Compile benchmarks
     let compile_result = if let Some(compile) = compile {
@@ -998,7 +992,7 @@ fn run_benchmarks(
     // Runtime benchmarks
     let runtime_result = if let Some(runtime) = runtime {
         rt.block_on(bench_runtime(
-            connection,
+            connection.as_mut(),
             runtime.runtime_suite,
             &collector,
             runtime.filter,
@@ -1008,6 +1002,9 @@ fn run_benchmarks(
     } else {
         Ok(())
     };
+
+    let end = start.elapsed();
+    rt.block_on(connection.record_duration(collector.artifact_row_id, end));
 
     compile_result.or(runtime_result)
 }
@@ -1047,8 +1044,8 @@ fn bench_published_artifact(
         toolchain,
     };
     run_benchmarks(
-        connection,
         rt,
+        connection,
         shared,
         Some(CompileBenchmarkConfig {
             benchmarks: compile_benchmarks,
@@ -1089,7 +1086,6 @@ fn bench_compile(
     let bench_rustc = config.bench_rustc;
 
     let start = Instant::now();
-    let mut skipped = false;
 
     let mut measure_and_record =
         |benchmark_name: &BenchmarkName,
@@ -1098,7 +1094,6 @@ fn bench_compile(
          measure: &dyn Fn(&mut BenchProcessor) -> anyhow::Result<()>| {
             let is_fresh = rt.block_on(collector.start_compile_step(conn, benchmark_name));
             if !is_fresh {
-                skipped = true;
                 eprintln!("skipping {} -- already benchmarked", benchmark_name);
                 return;
             }
@@ -1179,12 +1174,6 @@ fn bench_compile(
         "collection took {:?} with {} failed benchmarks",
         end, errors.0
     );
-
-    if skipped {
-        log::info!("skipping duration record -- skipped parts of run");
-    } else {
-        rt.block_on(conn.record_duration(collector.artifact_row_id, end));
-    }
 
     rt.block_on(async move {
         // This ensures that we're good to go with the just updated data.
