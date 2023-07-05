@@ -1,0 +1,11 @@
+[package]
+name = "raytrace"
+version = "0.1.0"
+authors = ["Jason Orendorff <jason.orendorff@gmail.com>"]
+edition = "2021"
+
+[dependencies]
+lodepng = "0.10"
+benchlib = { path = "../../benchlib" }
+
+[workspace]
