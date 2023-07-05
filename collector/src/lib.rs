@@ -251,7 +251,6 @@ pub async fn master_commits() -> anyhow::Result<Vec<MasterCommit>> {
 #[derive(Default)]
 pub struct CollectorStepBuilder {
     steps: Vec<String>,
-    bench_rustc: bool,
 }
 
 impl CollectorStepBuilder {
@@ -264,7 +263,6 @@ impl CollectorStepBuilder {
             .extend(benchmarks.iter().map(|b| b.name.to_string()));
         if bench_rustc {
             self.steps.push("rustc".to_string());
-            self.bench_rustc = true;
         }
         self
     }
@@ -278,32 +276,26 @@ impl CollectorStepBuilder {
     pub async fn start_collection(
         self,
         conn: &mut dyn Connection,
-        artifact_id: ArtifactId,
+        artifact_id: &ArtifactId,
     ) -> CollectorCtx {
         // Make sure there is no observable time when the artifact ID is available
         // but the in-progress steps are not.
         let artifact_row_id = {
             let mut tx = conn.transaction().await;
-            let artifact_row_id = tx.conn().artifact_id(&artifact_id).await;
+            let artifact_row_id = tx.conn().artifact_id(artifact_id).await;
             tx.conn()
                 .collector_start(artifact_row_id, &self.steps)
                 .await;
             tx.commit().await.unwrap();
             artifact_row_id
         };
-        CollectorCtx {
-            artifact_id,
-            artifact_row_id,
-            bench_rustc: self.bench_rustc,
-        }
+        CollectorCtx { artifact_row_id }
     }
 }
 
 /// Represents an in-progress run for a given artifact.
 pub struct CollectorCtx {
-    pub artifact_id: ArtifactId,
     pub artifact_row_id: ArtifactIdNumber,
-    pub bench_rustc: bool,
 }
 
 impl CollectorCtx {
