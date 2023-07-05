@@ -80,6 +80,13 @@ impl BenchmarkGroup {
 
         for (name, benchmark_fn) in items {
             let mut stats: Vec<BenchmarkStats> = Vec::with_capacity(args.iterations as usize);
+            // Warm-up
+            for _ in 0..3 {
+                let benchmark_stats = benchmark_fn()?;
+                black_box(benchmark_stats);
+            }
+
+            // Actual measurement
             for i in 0..args.iterations {
                 let benchmark_stats = benchmark_fn()?;
                 log::info!("Benchmark (run {i}) `{name}` completed: {benchmark_stats:?}");
