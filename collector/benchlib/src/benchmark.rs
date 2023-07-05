@@ -120,7 +120,7 @@ pub fn passes_filter(name: &str, exclude: Option<&str>, include: Option<&str>) -
     }
 }
 
-/// Copied from `iai`, so that we don't have to use unstable features.
+/// Copied from `iai`, so that it works on Rustc older than 1.66.
 pub fn black_box<T>(dummy: T) -> T {
     unsafe {
         let ret = std::ptr::read_volatile(&dummy);
