@@ -221,9 +221,11 @@ fn print_stats(result: &BenchmarkResult) {
                     .map(|v| (v as f64 - mean).powf(2.0)),
             )
             .sqrt();
+            let min = result.stats.iter().map(&f).min().unwrap_or(0);
 
             println!(
-                "{name:>18}: {:>16} (+/- {:>11})",
+                "{name:>18}: min:{:>16}    mean: {:>16}    stddev: {:>11}",
+                min.separate_with_commas(),
                 (mean as u64).separate_with_commas(),
                 (stddev as u64).separate_with_commas()
             );
