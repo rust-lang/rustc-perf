@@ -7,30 +7,26 @@ use std::collections::HashMap;
 
 /// Create and run a new benchmark group. Use the closure argument to register
 /// the individual benchmarks.
-pub fn run_benchmark_group<F>(register: F)
+pub fn run_benchmark_group<'a, F>(register: F)
 where
-    F: FnOnce(&mut BenchmarkGroup),
+    F: FnOnce(&mut BenchmarkGroup<'a>),
 {
     env_logger::init();
 
-    let mut group = BenchmarkGroup::new();
+    let mut group: BenchmarkGroup<'a> = BenchmarkGroup::default();
     register(&mut group);
     group.run().expect("Benchmark group execution has failed");
 }
 
 /// Type-erased function that executes a single benchmark.
-type BenchmarkFn = Box<dyn Fn() -> anyhow::Result<BenchmarkStats>>;
+type BenchmarkFn<'a> = Box<dyn Fn() -> anyhow::Result<BenchmarkStats> + 'a>;
 
 #[derive(Default)]
-pub struct BenchmarkGroup {
-    benchmarks: HashMap<&'static str, BenchmarkFn>,
+pub struct BenchmarkGroup<'a> {
+    benchmarks: HashMap<&'static str, BenchmarkFn<'a>>,
 }
 
-impl BenchmarkGroup {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
+impl<'a> BenchmarkGroup<'a> {
     /// Registers a single benchmark.
     ///
     /// `constructor` returns a closure that will be benchmarked. This means
@@ -40,11 +36,11 @@ impl BenchmarkGroup {
     /// closure it produces each time will only be called once.
     pub fn register_benchmark<Ctor, Bench, R>(&mut self, name: &'static str, constructor: Ctor)
     where
-        Ctor: Fn() -> Bench + Clone + 'static,
-        Bench: FnOnce() -> R + 'static,
+        Ctor: Fn() -> Bench + 'a,
+        Bench: FnOnce() -> R,
     {
         // We want to type-erase the target `func` by wrapping it in a Box.
-        let benchmark_fn = Box::new(move || benchmark_function(constructor.clone()));
+        let benchmark_fn = Box::new(move || benchmark_function(&constructor));
         if self.benchmarks.insert(name, benchmark_fn).is_some() {
             panic!("Benchmark '{}' was registered twice", name);
         }
@@ -52,7 +48,7 @@ impl BenchmarkGroup {
 
     /// Execute the benchmark group. It will parse CLI arguments and decide what to do based on
     /// them.
-    pub fn run(self) -> anyhow::Result<()> {
+    fn run(self) -> anyhow::Result<()> {
         raise_process_priority();
 
         let args = parse_cli()?;
