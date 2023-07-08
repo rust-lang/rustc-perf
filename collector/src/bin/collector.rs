@@ -552,6 +552,15 @@ enum Commands {
 
     /// Download a crate into collector/benchmarks.
     Download(DownloadCommand),
+
+    /// Removes all data associated with artifact(s) with the given name.
+    PurgeArtifact {
+        /// Name of the artifact.
+        name: String,
+
+        #[command(flatten)]
+        db: DbOption,
+    },
 }
 
 #[derive(Debug, clap::Parser)]
@@ -1055,6 +1064,14 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
                 cmd.artifact,
                 dir = target_dir.display(),
             );
+            Ok(0)
+        }
+        Commands::PurgeArtifact { name, db } => {
+            let pool = Pool::open(&db.db);
+            let conn = rt.block_on(pool.connection());
+            rt.block_on(conn.purge_artifact(&ArtifactId::Tag(name.clone())));
+
+            println!("Data of artifact {name} were removed");
             Ok(0)
         }
     }
