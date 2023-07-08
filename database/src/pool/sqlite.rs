@@ -624,26 +624,19 @@ impl Connection for SqliteConnection {
         )
     }
     async fn artifact_id(&self, artifact: &crate::ArtifactId) -> ArtifactIdNumber {
-        let (name, date, ty) = match artifact {
-            crate::ArtifactId::Commit(commit) => (
-                commit.sha.to_string(),
-                Some(commit.date.0),
-                if commit.is_try() { "try" } else { "master" },
-            ),
-            crate::ArtifactId::Tag(a) => (a.clone(), None, "release"),
-        };
+        let info = artifact.info();
 
         self.raw_ref()
             .execute(
                 "insert or ignore into artifact (name, date, type) VALUES (?, ?, ?)",
-                params![&name, &date.map(|d| d.timestamp()), &ty,],
+                params![&info.name, &info.date.map(|d| d.timestamp()), &info.kind,],
             )
             .unwrap();
         ArtifactIdNumber(
             self.raw_ref()
                 .query_row(
                     "select id from artifact where name = $1",
-                    params![&name],
+                    params![&info.name],
                     |r| r.get::<_, i32>(0),
                 )
                 .unwrap() as u32,

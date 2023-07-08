@@ -948,17 +948,10 @@ where
     }
 
     async fn artifact_id(&self, artifact: &ArtifactId) -> ArtifactIdNumber {
-        let (name, date, ty) = match artifact {
-            ArtifactId::Commit(commit) => (
-                commit.sha.to_string(),
-                Some(commit.date.0),
-                if commit.is_try() { "try" } else { "master" },
-            ),
-            ArtifactId::Tag(a) => (a.clone(), None, "release"),
-        };
+        let info = artifact.info();
         let aid = self
             .conn()
-            .query_opt("select id from artifact where name = $1", &[&name])
+            .query_opt("select id from artifact where name = $1", &[&info.name])
             .await
             .unwrap();
 
@@ -966,15 +959,15 @@ where
             Some(aid) => aid.get::<_, i32>(0) as u32,
             None => {
                 self.conn()
-                    .query_opt("insert into artifact (name, date, type) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING RETURNING id", &[
-                        &name,
-                        &date,
-                        &ty,
-                    ])
-                    .await
-                    .unwrap();
+            .query_opt("insert into artifact (name, date, type) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING RETURNING id", &[
+                &info.name,
+                &info.date,
+                &info.kind,
+            ])
+            .await
+            .unwrap();
                 self.conn()
-                    .query_one("select id from artifact where name = $1", &[&name])
+                    .query_one("select id from artifact where name = $1", &[&info.name])
                     .await
                     .unwrap()
                     .get::<_, i32>(0) as u32
