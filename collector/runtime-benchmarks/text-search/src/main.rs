@@ -2,7 +2,7 @@ use regex::Regex;
 
 use benchlib::benchmark::run_benchmark_group;
 
-const TEXT_SHERLOCK: &str = include_str!("data/sherlock.txt");
+const TEXT_SHERLOCK: &str = include_str!("../../data/sherlock.txt");
 
 fn main() {
     let regex1 = Regex::new(r"[a-zA-Z]+ing").unwrap();
