@@ -1134,6 +1134,16 @@ where
             log::error!("did not end {} for {:?}", step, aid);
         }
     }
+    async fn collector_remove_step(&self, aid: ArtifactIdNumber, step: &str) {
+        self.conn()
+            .execute(
+                "delete from collector_progress \
+                where aid = $1 and step = $2;",
+                &[&(aid.0 as i32), &step],
+            )
+            .await
+            .unwrap();
+    }
     async fn in_progress_artifacts(&self) -> Vec<ArtifactId> {
         let rows = self
             .conn()

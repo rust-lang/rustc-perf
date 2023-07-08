@@ -152,6 +152,8 @@ pub trait Connection: Send + Sync {
     async fn collector_start_step(&self, aid: ArtifactIdNumber, step: &str) -> bool;
     async fn collector_end_step(&self, aid: ArtifactIdNumber, step: &str);
 
+    async fn collector_remove_step(&self, aid: ArtifactIdNumber, step: &str);
+
     async fn in_progress_artifacts(&self) -> Vec<ArtifactId>;
 
     async fn in_progress_steps(&self, aid: &ArtifactId) -> Vec<Step>;

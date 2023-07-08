@@ -1074,6 +1074,17 @@ impl Connection for SqliteConnection {
             log::error!("did not end {} for {:?}", step, aid);
         }
     }
+
+    async fn collector_remove_step(&self, aid: ArtifactIdNumber, step: &str) {
+        self.raw_ref()
+            .execute(
+                "delete from collector_progress \
+                where aid = ? and step = ?",
+                params![&aid.0, &step],
+            )
+            .unwrap();
+    }
+
     async fn in_progress_artifacts(&self) -> Vec<ArtifactId> {
         let conn = self.raw_ref();
         let mut aids = conn
