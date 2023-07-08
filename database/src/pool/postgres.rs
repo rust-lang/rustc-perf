@@ -1380,4 +1380,14 @@ where
             _ => panic!("unknown artifact type: {:?}", ty),
         }
     }
+
+    async fn purge_artifact(&self, aid: &ArtifactId) {
+        // Once we delete the artifact, all data associated with it should also be deleted
+        // thanks to ON DELETE CASCADE.
+        let info = aid.info();
+        self.conn()
+            .execute("delete from artifact where name = $1", &[&info.name])
+            .await
+            .unwrap();
+    }
 }

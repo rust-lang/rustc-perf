@@ -179,6 +179,9 @@ pub trait Connection: Send + Sync {
         profile: &str,
         cache: &str,
     ) -> Vec<(ArtifactIdNumber, i32)>;
+
+    /// Removes all data associated with the given artifact.
+    async fn purge_artifact(&self, aid: &ArtifactId);
 }
 
 #[async_trait::async_trait]
