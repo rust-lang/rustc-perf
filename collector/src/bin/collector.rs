@@ -624,6 +624,7 @@ fn main_result() -> anyhow::Result<i32> {
             db,
             no_isolate,
         } => {
+            log_db(&db);
             let toolchain = get_local_toolchain(
                 &[Profile::Opt],
                 &local.rustc,
@@ -668,6 +669,7 @@ fn main_result() -> anyhow::Result<i32> {
             iterations,
             self_profile,
         } => {
+            log_db(&db);
             let profiles = opts.profiles.0;
             let scenarios = opts.scenarios.0;
 
@@ -716,6 +718,7 @@ fn main_result() -> anyhow::Result<i32> {
             bench_rustc,
             self_profile,
         } => {
+            log_db(&db);
             println!("processing artifacts");
             let client = reqwest::blocking::Client::new();
             let response: collector::api::next_artifact::Response = client
@@ -793,6 +796,7 @@ fn main_result() -> anyhow::Result<i32> {
         }
 
         Commands::BenchPublished { toolchain, db } => {
+            log_db(&db);
             let pool = database::Pool::open(&db.db);
             let conn = rt.block_on(pool.connection());
             let toolchain = create_toolchain_from_published_version(&toolchain, &target_triple)?;
@@ -940,6 +944,10 @@ fn main_result() -> anyhow::Result<i32> {
             Ok(0)
         }
     }
+}
+
+fn log_db(db_option: &DbOption) {
+    println!("Using database `{}`", db_option.db);
 }
 
 /// Record a collection entry into the database, specifying which benchmark steps will be executed.
