@@ -445,6 +445,7 @@ impl PostgresConnection {
                         date_recorded,
                         duration
                     ) VALUES ($1, CURRENT_TIMESTAMP, $2)
+                    ON CONFLICT DO NOTHING
                 ").await.unwrap(),
                 in_progress_steps: conn.prepare("
                 select step,
