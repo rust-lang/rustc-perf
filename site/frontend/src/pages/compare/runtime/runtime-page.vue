@@ -13,7 +13,8 @@ import {BenchmarkInfo} from "../../../api";
 import {importantRuntimeMetrics} from "../metrics";
 import ComparisonsTable from "./comparisons-table.vue";
 import {getBoolOrDefault} from "../shared";
-import {getUrlParams} from "../../../utils/navigation";
+import {changeUrl, getUrlParams} from "../../../utils/navigation";
+import Filters from "./filters.vue";
 
 const props = defineProps<{
   data: CompareResponse;
@@ -40,6 +41,40 @@ function loadFilterFromUrl(
   };
 }
 
+/**
+ * Stores the given filter parameters into URL, so that the current "view" can be shared with
+ * others easily.
+ */
+function storeFilterToUrl(
+  filter: RuntimeBenchmarkFilter,
+  defaultFilter: RuntimeBenchmarkFilter,
+  urlParams: Dict<string>
+) {
+  function storeOrReset<T extends boolean | string>(
+    name: string,
+    value: T,
+    defaultValue: T
+  ) {
+    if (value === defaultValue) {
+      if (urlParams.hasOwnProperty(name)) {
+        delete urlParams[name];
+      }
+    } else {
+      urlParams[name] = value.toString();
+    }
+  }
+
+  storeOrReset("name", filter.name || null, defaultFilter.name);
+  storeOrReset("nonRelevant", filter.nonRelevant, defaultFilter.nonRelevant);
+  storeOrReset("showRawData", filter.showRawData, defaultFilter.showRawData);
+  changeUrl(urlParams);
+}
+
+function updateFilter(newFilter: RuntimeBenchmarkFilter) {
+  storeFilterToUrl(newFilter, defaultRuntimeFilter, getUrlParams());
+  filter.value = newFilter;
+}
+
 const urlParams = getUrlParams();
 const filter = ref(loadFilterFromUrl(urlParams, defaultRuntimeFilter));
 
@@ -60,6 +95,11 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
     :selected-metric="selector.stat"
     :benchmark-info="benchmarkInfo"
     :quick-links="importantRuntimeMetrics"
+  />
+  <Filters
+    :defaultFilter="defaultRuntimeFilter"
+    :initialFilter="filter"
+    @change="updateFilter"
   />
   <OverallSummary :summary="filteredSummary" />
   <ComparisonsTable
