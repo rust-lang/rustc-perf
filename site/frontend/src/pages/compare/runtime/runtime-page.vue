@@ -6,12 +6,14 @@ import {computeSummary, filterNonRelevant} from "../data";
 import {
   computeRuntimeComparisonsWithNonRelevant,
   defaultRuntimeFilter,
+  RuntimeBenchmarkFilter,
 } from "./common";
-import {deepCopy} from "../../../utils/copy";
 import MetricSelector from "../metric-selector.vue";
 import {BenchmarkInfo} from "../../../api";
 import {importantRuntimeMetrics} from "../metrics";
 import ComparisonsTable from "./comparisons-table.vue";
+import {getBoolOrDefault} from "../shared";
+import {getUrlParams} from "../../../utils/navigation";
 
 const props = defineProps<{
   data: CompareResponse;
@@ -19,7 +21,28 @@ const props = defineProps<{
   benchmarkInfo: BenchmarkInfo;
 }>();
 
-const filter = ref(deepCopy(defaultRuntimeFilter));
+function loadFilterFromUrl(
+  urlParams: Dict<string>,
+  defaultFilter: RuntimeBenchmarkFilter
+): RuntimeBenchmarkFilter {
+  return {
+    name: urlParams["name"] ?? defaultFilter.name,
+    nonRelevant: getBoolOrDefault(
+      urlParams,
+      "nonRelevant",
+      defaultFilter.nonRelevant
+    ),
+    showRawData: getBoolOrDefault(
+      urlParams,
+      "showRawData",
+      defaultFilter.showRawData
+    ),
+  };
+}
+
+const urlParams = getUrlParams();
+const filter = ref(loadFilterFromUrl(urlParams, defaultRuntimeFilter));
+
 const allComparisons = computed(() =>
   computeRuntimeComparisonsWithNonRelevant(
     filter.value,

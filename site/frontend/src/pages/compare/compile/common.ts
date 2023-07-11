@@ -23,6 +23,7 @@ export type CompileBenchmarkFilter = {
     library: boolean;
   };
 } & BenchmarkFilter;
+
 export const defaultCompileFilter: CompileBenchmarkFilter = {
   name: null,
   nonRelevant: false,
