@@ -27,7 +27,7 @@ function loadFilterFromUrl(
   defaultFilter: RuntimeBenchmarkFilter
 ): RuntimeBenchmarkFilter {
   return {
-    name: urlParams["name"] ?? defaultFilter.name,
+    name: urlParams["runtimeName"] ?? defaultFilter.name,
     nonRelevant: getBoolOrDefault(
       urlParams,
       "nonRelevant",
@@ -64,7 +64,7 @@ function storeFilterToUrl(
     }
   }
 
-  storeOrReset("name", filter.name || null, defaultFilter.name);
+  storeOrReset("runtimeName", filter.name || null, defaultFilter.name);
   storeOrReset("nonRelevant", filter.nonRelevant, defaultFilter.nonRelevant);
   storeOrReset("showRawData", filter.showRawData, defaultFilter.showRawData);
   changeUrl(urlParams);
