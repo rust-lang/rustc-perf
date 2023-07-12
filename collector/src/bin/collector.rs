@@ -14,6 +14,7 @@ use collector::{runtime, utils, CollectorCtx, CollectorStepBuilder};
 use database::{ArtifactId, ArtifactIdNumber, Commit, CommitType, Connection, Pool};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs;
 use std::fs::File;
@@ -30,8 +31,8 @@ use tokio::runtime::Runtime;
 use collector::compile::execute::bencher::BenchProcessor;
 use collector::compile::execute::profiler::{ProfileProcessor, Profiler};
 use collector::runtime::{
-    bench_runtime, runtime_benchmark_dir, BenchmarkFilter, BenchmarkSuite, CargoIsolationMode,
-    DEFAULT_RUNTIME_ITERATIONS,
+    bench_runtime, runtime_benchmark_dir, BenchmarkFilter, BenchmarkSuite,
+    BenchmarkSuiteCompilation, CargoIsolationMode, DEFAULT_RUNTIME_ITERATIONS,
 };
 use collector::toolchain::{
     create_toolchain_from_published_version, get_local_toolchain, Sysroot, Toolchain,
@@ -655,12 +656,16 @@ fn main_result() -> anyhow::Result<i32> {
             } else {
                 CargoIsolationMode::Isolated
             };
-            let runtime_suite = runtime::prepare_runtime_benchmark_suite(
-                &toolchain,
+
+            let mut conn = rt.block_on(pool.connection());
+            let artifact_id = ArtifactId::Tag(toolchain.id.clone());
+            let runtime_suite = rt.block_on(load_runtime_benchmarks(
+                conn.as_mut(),
                 &runtime_benchmark_dir,
                 isolation_mode,
-            )?;
-            let artifact_id = ArtifactId::Tag(toolchain.id.clone());
+                &toolchain,
+                &artifact_id,
+            ))?;
 
             let shared = SharedBenchmarkConfig {
                 artifact_id,
@@ -671,7 +676,6 @@ fn main_result() -> anyhow::Result<i32> {
                 filter: BenchmarkFilter::new(local.exclude, local.include),
                 iterations,
             };
-            let conn = rt.block_on(pool.connection());
             run_benchmarks(&mut rt, conn, shared, None, Some(config))?;
             Ok(0)
         }
@@ -966,6 +970,35 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
     }
 }
 
+async fn load_runtime_benchmarks(
+    conn: &mut dyn Connection,
+    benchmark_dir: &Path,
+    isolation_mode: CargoIsolationMode,
+    toolchain: &Toolchain,
+    artifact_id: &ArtifactId,
+) -> anyhow::Result<BenchmarkSuite> {
+    let BenchmarkSuiteCompilation {
+        suite,
+        failed_to_compile,
+    } = runtime::prepare_runtime_benchmark_suite(toolchain, benchmark_dir, isolation_mode)?;
+
+    record_runtime_compilation_errors(conn, artifact_id, failed_to_compile).await;
+    Ok(suite)
+}
+
+async fn record_runtime_compilation_errors(
+    connection: &mut dyn Connection,
+    artifact_id: &ArtifactId,
+    errors: HashMap<String, String>,
+) {
+    let artifact_row_number = connection.artifact_id(artifact_id).await;
+    for (krate, error) in errors {
+        connection
+            .record_error(artifact_row_number, &krate, &error)
+            .await;
+    }
+}
+
 fn log_db(db_option: &DbOption) {
     println!("Using database `{}`", db_option.db);
 }
@@ -1045,7 +1078,7 @@ fn run_benchmarks(
 
 /// Perform benchmarks on a published artifact.
 fn bench_published_artifact(
-    connection: Box<dyn Connection>,
+    mut connection: Box<dyn Connection>,
     rt: &mut Runtime,
     toolchain: Toolchain,
     dirs: &BenchmarkDirs,
@@ -1067,11 +1100,13 @@ fn bench_published_artifact(
     let mut compile_benchmarks = get_compile_benchmarks(dirs.compile, None, None, None)?;
     compile_benchmarks.retain(|b| b.category().is_stable());
 
-    let runtime_suite = runtime::prepare_runtime_benchmark_suite(
-        &toolchain,
+    let runtime_suite = rt.block_on(load_runtime_benchmarks(
+        connection.as_mut(),
         dirs.runtime,
         CargoIsolationMode::Isolated,
-    )?;
+        &toolchain,
+        &artifact_id,
+    ))?;
 
     let shared = SharedBenchmarkConfig {
         artifact_id,

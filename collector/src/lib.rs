@@ -299,8 +299,12 @@ impl CollectorStepBuilder {
     }
 
     pub fn record_runtime_benchmarks(mut self, suite: &BenchmarkSuite) -> Self {
-        self.steps
-            .extend(suite.groups.iter().map(runtime_group_step_name));
+        self.steps.extend(
+            suite
+                .groups
+                .iter()
+                .map(|group| runtime_group_step_name(&group.name)),
+        );
         self
     }
 
@@ -352,18 +356,18 @@ impl CollectorCtx {
         conn: &dyn Connection,
         group: &BenchmarkGroup,
     ) -> Option<String> {
-        let step_name = runtime_group_step_name(group);
+        let step_name = runtime_group_step_name(&group.name);
         conn.collector_start_step(self.artifact_row_id, &step_name)
             .await
             .then_some(step_name)
     }
 
     pub async fn end_runtime_step(&self, conn: &dyn Connection, group: &BenchmarkGroup) {
-        conn.collector_end_step(self.artifact_row_id, &runtime_group_step_name(group))
+        conn.collector_end_step(self.artifact_row_id, &runtime_group_step_name(&group.name))
             .await
     }
 }
 
-fn runtime_group_step_name(group: &BenchmarkGroup) -> String {
-    format!("runtime:{}", group.name)
+pub fn runtime_group_step_name(benchmark_name: &str) -> String {
+    format!("runtime:{}", benchmark_name)
 }
