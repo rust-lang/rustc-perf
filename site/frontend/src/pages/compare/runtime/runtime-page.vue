@@ -11,7 +11,7 @@ import {
 import MetricSelector from "../metric-selector.vue";
 import {BenchmarkInfo} from "../../../api";
 import {importantRuntimeMetrics} from "../metrics";
-import ComparisonsTable from "./comparisons-table.vue";
+import ComparisonsTable from "../comparisons-table.vue";
 import {getBoolOrDefault} from "../shared";
 import {changeUrl, getUrlParams} from "../../../utils/navigation";
 import Filters from "./filters.vue";
@@ -117,8 +117,21 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
   />
   <OverallSummary :summary="filteredSummary" />
   <ComparisonsTable
-    :comparisons="comparisons"
+    id="runtime-benchmarks"
     :has-non-relevant="allComparisons.length > 0"
+    :comparisons="comparisons"
     :show-raw-data="filter.showRawData"
-  />
+  >
+    <template #header>
+      <div class="category-title">Runtime benchmarks</div>
+    </template>
+    <template #case-header>
+      <th>Benchmark</th>
+    </template>
+    <template #case-row="{testCase}">
+      <td>
+        {{ testCase.benchmark }}
+      </td>
+    </template>
+  </ComparisonsTable>
 </template>
