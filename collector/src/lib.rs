@@ -344,9 +344,18 @@ impl CollectorCtx {
             .await
     }
 
-    pub async fn start_runtime_step(&self, conn: &dyn Connection, group: &BenchmarkGroup) -> bool {
-        conn.collector_start_step(self.artifact_row_id, &runtime_group_step_name(group))
+    /// Starts a new runtime benchmark collector step.
+    /// If this step was already computed, returns None.
+    /// Otherwise returns Some(<name of step>).
+    pub async fn start_runtime_step(
+        &self,
+        conn: &dyn Connection,
+        group: &BenchmarkGroup,
+    ) -> Option<String> {
+        let step_name = runtime_group_step_name(group);
+        conn.collector_start_step(self.artifact_row_id, &step_name)
             .await
+            .then_some(step_name)
     }
 
     pub async fn end_runtime_step(&self, conn: &dyn Connection, group: &BenchmarkGroup) {
