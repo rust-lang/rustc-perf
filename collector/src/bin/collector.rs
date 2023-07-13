@@ -1185,6 +1185,7 @@ fn bench_compile(
                     &shared.toolchain,
                     config.iterations,
                 )))
+                .with_context(|| anyhow::anyhow!("Cannot compile {}", benchmark.name))
             },
         )
     }
