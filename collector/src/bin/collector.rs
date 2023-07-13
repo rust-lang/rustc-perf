@@ -17,11 +17,13 @@ use std::cmp::Ordering;
 use std::ffi::OsStr;
 use std::fs;
 use std::fs::File;
+use std::future::Future;
 use std::io::BufWriter;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::process::{Command, Stdio};
+use std::time::Duration;
 use std::{str, time::Instant};
 use tokio::runtime::Runtime;
 
@@ -618,6 +620,7 @@ fn main_result() -> anyhow::Result<i32> {
     builder
         .worker_threads(1)
         .max_blocking_threads(1)
+        .enable_time()
         .enable_io();
     let mut rt = builder.build().expect("built runtime");
 
@@ -1084,6 +1087,18 @@ fn bench_published_artifact(
     )
 }
 
+const COMPILE_BENCHMARK_TIMEOUT: Duration = Duration::from_secs(60 * 30);
+
+async fn with_timeout<F: Future<Output = anyhow::Result<()>>>(fut: F) -> anyhow::Result<()> {
+    match tokio::time::timeout(COMPILE_BENCHMARK_TIMEOUT, fut).await {
+        Ok(res) => res,
+        Err(_) => Err(anyhow::anyhow!(
+            "Benchmark timeouted in {} seconds",
+            COMPILE_BENCHMARK_TIMEOUT.as_secs()
+        )),
+    }
+}
+
 /// Perform compile benchmarks.
 fn bench_compile(
     rt: &mut Runtime,
@@ -1163,13 +1178,13 @@ fn bench_compile(
                 )
             },
             &|processor| {
-                rt.block_on(benchmark.measure(
+                rt.block_on(with_timeout(benchmark.measure(
                     processor,
                     &config.profiles,
                     &config.scenarios,
                     &shared.toolchain,
                     config.iterations,
-                ))
+                )))
             },
         )
     }
@@ -1181,7 +1196,7 @@ fn bench_compile(
             Category::Primary,
             &|| eprintln!("Special benchmark commencing (due to `--bench-rustc`)"),
             &|processor| {
-                rt.block_on(processor.measure_rustc(&shared.toolchain))
+                rt.block_on(with_timeout(processor.measure_rustc(&shared.toolchain)))
                     .context("measure rustc")
             },
         );
