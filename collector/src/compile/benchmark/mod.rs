@@ -4,6 +4,7 @@ use crate::compile::benchmark::profile::Profile;
 use crate::compile::benchmark::scenario::Scenario;
 use crate::compile::execute::{CargoProcess, Processor};
 use crate::toolchain::Toolchain;
+use crate::utils::wait_for_future;
 use anyhow::{bail, Context};
 use log::debug;
 use std::collections::{HashMap, HashSet};
@@ -189,7 +190,7 @@ impl Benchmark {
     }
 
     /// Run a specific benchmark under a processor + profiler combination.
-    pub fn measure(
+    pub async fn measure(
         &self,
         processor: &mut dyn Processor,
         profiles: &[Profile],
@@ -261,9 +262,11 @@ impl Benchmark {
             for (profile, prep_dir) in &profile_dirs {
                 let server = server.clone();
                 let thread = s.spawn::<_, anyhow::Result<()>>(move || {
-                    self.mk_cargo_process(toolchain, prep_dir.path(), *profile)
-                        .jobserver(server)
-                        .run_rustc(false)?;
+                    wait_for_future(
+                        self.mk_cargo_process(toolchain, prep_dir.path(), *profile)
+                            .jobserver(server)
+                            .run_rustc(false),
+                    )?;
                     Ok(())
                 });
                 threads.push(thread);
@@ -310,7 +313,8 @@ impl Benchmark {
                 if scenarios.contains(&Scenario::Full) {
                     self.mk_cargo_process(toolchain, cwd, profile)
                         .processor(processor, Scenario::Full, "Full", None)
-                        .run_rustc(true)?;
+                        .run_rustc(true)
+                        .await?;
                 }
 
                 // Rustdoc does not support incremental compilation
@@ -321,7 +325,8 @@ impl Benchmark {
                         self.mk_cargo_process(toolchain, cwd, profile)
                             .incremental(true)
                             .processor(processor, Scenario::IncrFull, "IncrFull", None)
-                            .run_rustc(true)?;
+                            .run_rustc(true)
+                            .await?;
                     }
 
                     // An incremental build with no changes (fastest incremental case).
@@ -329,7 +334,8 @@ impl Benchmark {
                         self.mk_cargo_process(toolchain, cwd, profile)
                             .incremental(true)
                             .processor(processor, Scenario::IncrUnchanged, "IncrUnchanged", None)
-                            .run_rustc(true)?;
+                            .run_rustc(true)
+                            .await?;
                     }
 
                     if scenarios.contains(&Scenario::IncrPatched) {
@@ -348,7 +354,8 @@ impl Benchmark {
                                     &scenario_str,
                                     Some(patch),
                                 )
-                                .run_rustc(true)?;
+                                .run_rustc(true)
+                                .await?;
                         }
                     }
                 }

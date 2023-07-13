@@ -34,6 +34,7 @@ use collector::runtime::{
 use collector::toolchain::{
     create_toolchain_from_published_version, get_local_toolchain, Sysroot, Toolchain,
 };
+use collector::utils::wait_for_future;
 
 fn n_normal_benchmarks_remaining(n: usize) -> String {
     let suffix = if n == 1 { "" } else { "s" };
@@ -262,7 +263,13 @@ fn profile(
             let benchmark_id = format!("{} ({}/{})", benchmark.name, i + 1, benchmarks.len());
             eprintln!("Executing benchmark {benchmark_id}");
             let mut processor = ProfileProcessor::new(profiler, out_dir, &toolchain.id);
-            let result = benchmark.measure(&mut processor, profiles, scenarios, toolchain, Some(1));
+            let result = wait_for_future(benchmark.measure(
+                &mut processor,
+                profiles,
+                scenarios,
+                toolchain,
+                Some(1),
+            ));
             eprintln!("Finished benchmark {benchmark_id}");
 
             if let Err(ref s) = result {
@@ -1121,7 +1128,6 @@ fn bench_compile(
             print_intro();
 
             let mut processor = BenchProcessor::new(
-                rt,
                 tx.conn(),
                 benchmark_name,
                 &shared.artifact_id,
@@ -1157,13 +1163,13 @@ fn bench_compile(
                 )
             },
             &|processor| {
-                benchmark.measure(
+                rt.block_on(benchmark.measure(
                     processor,
                     &config.profiles,
                     &config.scenarios,
                     &shared.toolchain,
                     config.iterations,
-                )
+                ))
             },
         )
     }
@@ -1175,8 +1181,7 @@ fn bench_compile(
             Category::Primary,
             &|| eprintln!("Special benchmark commencing (due to `--bench-rustc`)"),
             &|processor| {
-                processor
-                    .measure_rustc(&shared.toolchain)
+                rt.block_on(processor.measure_rustc(&shared.toolchain))
                     .context("measure rustc")
             },
         );
