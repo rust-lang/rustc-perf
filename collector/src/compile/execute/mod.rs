@@ -5,7 +5,7 @@ use crate::compile::benchmark::profile::Profile;
 use crate::compile::benchmark::scenario::Scenario;
 use crate::compile::benchmark::BenchmarkName;
 use crate::toolchain::Toolchain;
-use crate::{command_output, utils};
+use crate::{async_command_output, command_output, utils};
 use anyhow::Context;
 use bencher::Bencher;
 use database::QueryLabel;
@@ -309,7 +309,8 @@ impl<'a> CargoProcess<'a> {
 
             log::debug!("{:?}", cmd);
 
-            let output = command_output(&mut cmd)?;
+            let cmd = tokio::process::Command::from(cmd);
+            let output = async_command_output(cmd).await?;
             if let Some((ref mut processor, scenario, scenario_str, patch)) = self.processor_etc {
                 let data = ProcessOutputData {
                     name: self.processor_name.clone(),
