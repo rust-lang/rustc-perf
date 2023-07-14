@@ -34,9 +34,7 @@ pub async fn handle_status_page(ctxt: Arc<SiteCtxt>) -> status::Response {
     };
 
     let errors = if let Some(last) = &last_commit {
-        ctxt.conn()
-            .await
-            .get_error(ArtifactId::from(last.clone()).lookup(&idx).unwrap())
+        conn.get_error(ArtifactId::from(last.clone()).lookup(&idx).unwrap())
             .await
     } else {
         Default::default()
