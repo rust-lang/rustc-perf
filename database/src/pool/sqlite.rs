@@ -1153,7 +1153,7 @@ impl Connection for SqliteConnection {
     async fn last_artifact_collection(&self) -> Option<ArtifactCollection> {
         self.raw_ref()
             .query_row(
-                "select date_recorded + duration, duration \
+                "select date_recorded, duration \
                 from artifact_collection_duration \
                 order by date_recorded desc \
                 limit 1;",
