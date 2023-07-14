@@ -61,6 +61,22 @@ id          name        date        type
 1           LOCAL_TEST              release
 ```
 
+### artifact size
+
+Records the size of individual components (like `librustc_driver.so` or `libLLVM.so`) of a single
+artifact.
+
+This description includes:
+* component: normalized name of the component (hashes are removed)
+* size: size of the component in bytes
+
+```
+sqlite> select * from artifact_size limit 1;
+aid         component   size
+----------  ----------  ----------
+1           libLLVM.so  177892352
+```
+
 ### collection
 
 A "collection" of benchmarks tied only differing by the statistic collected.

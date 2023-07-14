@@ -8,7 +8,7 @@ use chrono::{DateTime, TimeZone, Utc};
 use hashbrown::HashMap;
 use native_tls::{Certificate, TlsConnector};
 use postgres_native_tls::MakeTlsConnector;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -246,6 +246,14 @@ static MIGRATIONS: &[&str] = &[
     drop table error_series;
     alter table error_new rename to error;
 "#,
+    r#"
+    create table artifact_size(
+        aid integer references artifact(id) on delete cascade on update cascade,
+        component text not null,
+        size integer not null,
+        UNIQUE(aid, component)
+    );
+    "#,
 ];
 
 #[async_trait::async_trait]
@@ -328,6 +336,7 @@ pub struct CachedStatements {
     select_runtime_pstat_series: Statement,
     insert_runtime_pstat: Statement,
     get_runtime_pstat: Statement,
+    record_artifact_size: Statement,
 }
 
 pub struct PostgresTransaction<'a> {
@@ -513,7 +522,14 @@ impl PostgresConnection {
                          order by sids.idx
                      ")
                     .await
-                    .unwrap()
+                    .unwrap(),
+                record_artifact_size: conn.prepare("
+                    insert into artifact_size (aid, component, size)
+                    values ($1, $2, $3)
+                    on conflict (aid, component)
+                    do update
+                    set size = excluded.size
+                ").await.unwrap(),
             }),
             conn,
         }
@@ -898,6 +914,17 @@ where
                     &krate,
                     &(value.as_nanos() as i64),
                 ],
+            )
+            .await
+            .unwrap();
+    }
+
+    async fn record_artifact_size(&self, artifact: ArtifactIdNumber, component: &str, size: u64) {
+        let size: i32 = size.try_into().expect("Too large artifact");
+        self.conn()
+            .execute(
+                &self.statements().record_artifact_size,
+                &[&(artifact.0 as i32), &component, &size],
             )
             .await
             .unwrap();
