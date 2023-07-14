@@ -3,6 +3,7 @@ pub mod comparison_summary;
 
 use crate::api::github::Commit;
 use crate::load::{SiteCtxt, TryCommit};
+use std::time::Duration;
 
 use serde::Deserialize;
 
@@ -257,22 +258,44 @@ pub async fn enqueue_shas(
             sha: commit_response.sha,
             parent_sha: commit_response.parents.remove(0).sha,
         };
-        let queued = {
-            let conn = ctxt.conn().await;
-            conn.pr_attach_commit(
+        let conn = ctxt.conn().await;
+        let queued = conn
+            .pr_attach_commit(
                 pr_number,
                 &try_commit.sha,
                 &try_commit.parent_sha,
                 Some(commit_response.commit.committer.date),
             )
-            .await
-        };
+            .await;
         if queued {
             if !msg.is_empty() {
                 msg.push('\n');
             }
+
+            let artifacts_in_queue = ctxt.missing_commits().await.len();
+            let last_duration = conn
+                .last_artifact_collection()
+                .await
+                .map(|collection| collection.duration)
+                .unwrap_or(Duration::ZERO);
+
+            // "Guess" that the duration will take about an hour if we don't have data or it's
+            // suspiciously fast.
+            let last_duration = last_duration.max(Duration::from_secs(3600));
+
+            let expected_duration = (last_duration.as_secs() * artifacts_in_queue as u64) as f64;
+
+            // At this point, the queue should also contain the commit that we're mentioning below.
+            let other_artifact_count = artifacts_in_queue.saturating_sub(1);
+            let suffix = if other_artifact_count == 1 { "" } else { "s" };
+            let queue_msg = format!(
+                r#"There are currently {other_artifact_count} other artifact{suffix} in the [queue](https://perf.rust-lang.org/status.html).
+It will probably take at least ~{:.2} hours until the benchmark run finishes."#,
+                (expected_duration / 3600.0)
+            );
+
             msg.push_str(&format!(
-                "Queued {} with parent {}, future [comparison URL]({}).",
+                "Queued {} with parent {}, future [comparison URL]({}).\n{queue_msg}",
                 try_commit.sha,
                 try_commit.parent_sha,
                 try_commit.comparison_url(),
