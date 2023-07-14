@@ -1,6 +1,7 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{
-    ArtifactId, Benchmark, CollectionId, Commit, CommitType, CompileBenchmark, Date, Profile,
+    ArtifactCollection, ArtifactId, Benchmark, CollectionId, Commit, CommitType, CompileBenchmark,
+    Date, Profile,
 };
 use crate::{ArtifactIdNumber, Index, QueryDatum, QueuedCommit};
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
@@ -1149,18 +1150,24 @@ impl Connection for SqliteConnection {
             .collect()
     }
 
-    async fn last_end_time(&self) -> Option<DateTime<Utc>> {
+    async fn last_artifact_collection(&self) -> Option<ArtifactCollection> {
         self.raw_ref()
             .query_row(
-                "select date_recorded + duration \
+                "select date_recorded + duration, duration \
                 from artifact_collection_duration \
                 order by date_recorded desc \
                 limit 1;",
                 params![],
-                |r| Ok(Utc.timestamp_opt(r.get(0)?, 0).unwrap()),
+                |r| {
+                    Ok((
+                        Utc.timestamp_opt(r.get(0)?, 0).unwrap(),
+                        Duration::from_secs(r.get(1)?),
+                    ))
+                },
             )
             .optional()
             .unwrap()
+            .map(|(end_time, duration)| ArtifactCollection { end_time, duration })
     }
 
     async fn parent_of(&self, sha: &str) -> Option<String> {

@@ -1,7 +1,7 @@
 use crate::pool::{Connection, ConnectionManager, ManagedConnection, Transaction};
 use crate::{
-    ArtifactId, ArtifactIdNumber, Benchmark, CollectionId, Commit, CommitType, CompileBenchmark,
-    Date, Index, Profile, QueuedCommit, Scenario,
+    ArtifactCollection, ArtifactId, ArtifactIdNumber, Benchmark, CollectionId, Commit, CommitType,
+    CompileBenchmark, Date, Index, Profile, QueuedCommit, Scenario,
 };
 use anyhow::Context as _;
 use chrono::{DateTime, TimeZone, Utc};
@@ -1194,10 +1194,10 @@ where
             })
             .collect()
     }
-    async fn last_end_time(&self) -> Option<DateTime<Utc>> {
+    async fn last_artifact_collection(&self) -> Option<ArtifactCollection> {
         self.conn()
             .query_opt(
-                "select date_recorded \
+                "select date_recorded, duration \
                 from artifact_collection_duration \
                 order by date_recorded desc \
                 limit 1;",
@@ -1205,7 +1205,10 @@ where
             )
             .await
             .unwrap()
-            .map(|r| r.get(0))
+            .map(|r| ArtifactCollection {
+                end_time: r.get(0),
+                duration: Duration::from_secs(r.get::<_, i32>(1) as u64),
+            })
     }
     async fn parent_of(&self, sha: &str) -> Option<String> {
         self.conn()
