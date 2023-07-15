@@ -11,7 +11,7 @@ use collector::compile::benchmark::{
     compile_benchmark_dir, get_compile_benchmarks, Benchmark, BenchmarkName,
 };
 use collector::{runtime, utils, CollectorCtx, CollectorStepBuilder};
-use database::{ArtifactId, Commit, CommitType, Connection, Pool};
+use database::{ArtifactId, ArtifactIdNumber, Commit, CommitType, Connection, Pool};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::cmp::Ordering;
 use std::ffi::OsStr;
@@ -978,6 +978,12 @@ fn run_benchmarks(
     compile: Option<CompileBenchmarkConfig>,
     runtime: Option<RuntimeBenchmarkConfig>,
 ) -> anyhow::Result<()> {
+    rt.block_on(record_toolchain_sizes(
+        connection.as_mut(),
+        &shared.artifact_id,
+        &shared.toolchain,
+    ));
+
     let collector = rt.block_on(init_collection(
         connection.as_mut(),
         &shared,
@@ -1188,6 +1194,38 @@ fn bench_compile(
         conn.maybe_create_indices().await;
     });
     errors
+}
+
+/// Records the sizes of individual components (rustc, libLLVM, etc.) for the given toolchain
+/// and artifact id into the database.
+async fn record_toolchain_sizes(
+    conn: &mut dyn Connection,
+    artifact_id: &ArtifactId,
+    toolchain: &Toolchain,
+) {
+    let aid = conn.artifact_id(artifact_id).await;
+
+    async fn record(
+        conn: &mut dyn Connection,
+        aid: ArtifactIdNumber,
+        component: &str,
+        path: Option<&Path>,
+    ) {
+        if let Some(path) = path {
+            if let Ok(size) = fs::metadata(path).map(|m| m.len()) {
+                conn.record_artifact_size(aid, component, size).await;
+            }
+        }
+    }
+
+    let paths = &toolchain.components;
+    record(conn, aid, "rustc", Some(&paths.rustc)).await;
+    record(conn, aid, "rustdoc", paths.rustdoc.as_deref()).await;
+    record(conn, aid, "cargo", Some(&paths.cargo)).await;
+    record(conn, aid, "librustc_driver", paths.lib_rustc.as_deref()).await;
+    record(conn, aid, "libstd", paths.lib_std.as_deref()).await;
+    record(conn, aid, "libtest", paths.lib_test.as_deref()).await;
+    record(conn, aid, "libLLVM", paths.lib_llvm.as_deref()).await;
 }
 
 fn add_perf_config(directory: &Path, category: Category) {
