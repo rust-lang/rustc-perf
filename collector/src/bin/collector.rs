@@ -921,8 +921,8 @@ fn main_result() -> anyhow::Result<i32> {
             sysroot.preserve(); // don't delete it
 
             // Print the directory containing the toolchain.
-            sysroot.rustc.pop();
-            let s = format!("{:?}", sysroot.rustc);
+            sysroot.components.rustc.pop();
+            let s = format!("{:?}", sysroot.components.rustc);
             println!("{}", &s[1..s.len() - 1]);
 
             Ok(0)

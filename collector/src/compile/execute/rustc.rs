@@ -95,11 +95,11 @@ fn record(
     .arg("rust.deny-warnings=false")
     .arg("--set")
     .arg(&format!("build.rustc={}", fake_rustc.to_str().unwrap()))
-    .env("RUSTC_PERF_REAL_RUSTC", &toolchain.rustc)
+    .env("RUSTC_PERF_REAL_RUSTC", &toolchain.components.rustc)
     .arg("--set")
     .arg(&format!(
         "build.cargo={}",
-        toolchain.cargo.to_str().unwrap()
+        toolchain.components.cargo.to_str().unwrap()
     ))
     .status()
     .context("configuring")?;
@@ -114,7 +114,7 @@ fn record(
                     .context("x.py script canonicalize")?,
             )
             .current_dir(checkout)
-            .env("RUSTC_PERF_REAL_RUSTC", &toolchain.rustc)
+            .env("RUSTC_PERF_REAL_RUSTC", &toolchain.components.rustc)
             .arg("build")
             .arg("--stage")
             .arg("0")

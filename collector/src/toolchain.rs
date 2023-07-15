@@ -1,6 +1,7 @@
 use crate::compile::benchmark::profile::Profile;
 use anyhow::{anyhow, Context};
 use log::debug;
+use std::ffi::OsStr;
 use std::fs::{self, File};
 use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
@@ -12,9 +13,7 @@ use xz2::bufread::XzDecoder;
 /// Sysroot downloaded from CI.
 pub struct Sysroot {
     pub sha: String,
-    pub rustc: PathBuf,
-    pub rustdoc: PathBuf,
-    pub cargo: PathBuf,
+    pub components: ToolchainComponents,
     pub triple: String,
     pub preserve: bool,
 }
@@ -121,10 +120,15 @@ impl SysrootDownload {
             })
         };
 
+        let components = ToolchainComponents::from_binaries_and_libdir(
+            sysroot_bin("rustc")?,
+            Some(sysroot_bin("rustdoc")?),
+            sysroot_bin("cargo")?,
+            &self.directory.join(&self.rust_sha).join("lib"),
+        )?;
+
         Ok(Sysroot {
-            rustc: sysroot_bin("rustc")?,
-            rustdoc: sysroot_bin("rustdoc")?,
-            cargo: sysroot_bin("cargo")?,
+            components,
             sha: self.rust_sha,
             triple: self.triple,
             preserve: false,
@@ -218,9 +222,7 @@ impl SysrootDownload {
 /// Representation of a toolchain that can be used to compile Rust programs.
 #[derive(Debug, Clone)]
 pub struct Toolchain {
-    pub rustc: PathBuf,
-    pub rustdoc: Option<PathBuf>,
-    pub cargo: PathBuf,
+    pub components: ToolchainComponents,
     pub id: String,
     pub triple: String,
 }
@@ -228,12 +230,61 @@ pub struct Toolchain {
 impl Toolchain {
     pub fn from_sysroot(sysroot: &Sysroot, id: String) -> Self {
         Self {
-            rustc: sysroot.rustc.clone(),
-            rustdoc: Some(sysroot.rustdoc.clone()),
-            cargo: sysroot.cargo.clone(),
+            components: sysroot.components.clone(),
             id,
             triple: sysroot.triple.clone(),
         }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ToolchainComponents {
+    pub rustc: PathBuf,
+    pub rustdoc: Option<PathBuf>,
+    pub cargo: PathBuf,
+    pub lib_rustc: Option<PathBuf>,
+    pub lib_std: Option<PathBuf>,
+    pub lib_test: Option<PathBuf>,
+    pub lib_llvm: Option<PathBuf>,
+}
+
+impl ToolchainComponents {
+    fn from_binaries_and_libdir(
+        rustc: PathBuf,
+        rustdoc: Option<PathBuf>,
+        cargo: PathBuf,
+        libdir: &Path,
+    ) -> anyhow::Result<Self> {
+        let mut component = ToolchainComponents {
+            rustc,
+            rustdoc,
+            cargo,
+            ..Default::default()
+        };
+        component.fill_libraries(libdir)?;
+        Ok(component)
+    }
+
+    /// Finds known library components in the given `dir` and stores them in `self`.
+    fn fill_libraries(&mut self, dir: &Path) -> anyhow::Result<()> {
+        for entry in fs::read_dir(dir).context("Cannot read lib dir to find components")? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_file() && path.extension() == Some(OsStr::new("so")) {
+                if let Some(filename) = path.file_name().and_then(|s| s.to_str()) {
+                    if filename.starts_with("libLLVM") {
+                        self.lib_llvm = Some(path);
+                    } else if filename.starts_with("librustc_driver") {
+                        self.lib_rustc = Some(path);
+                    } else if filename.starts_with("libstd") {
+                        self.lib_std = Some(path);
+                    } else if filename.starts_with("libtest") {
+                        self.lib_test = Some(path);
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -374,10 +425,10 @@ pub fn get_local_toolchain(
         cargo
     };
 
+    let lib_dir = get_lib_dir_from_rustc(&rustc).context("Cannot find libdir for rustc")?;
+
     Ok(Toolchain {
-        rustc,
-        rustdoc,
-        cargo,
+        components: ToolchainComponents::from_binaries_and_libdir(rustc, rustdoc, cargo, &lib_dir)?,
         id,
         triple: target_triple,
     })
@@ -420,11 +471,25 @@ pub fn create_toolchain_from_published_version(
     debug!("Found rustdoc: {}", rustdoc.display());
     debug!("Found cargo: {}", cargo.display());
 
+    let lib_dir = get_lib_dir_from_rustc(&rustc)?;
+
+    let components =
+        ToolchainComponents::from_binaries_and_libdir(rustc, Some(rustdoc), cargo, &lib_dir)?;
+
     Ok(Toolchain {
-        rustc,
-        rustdoc: Some(rustdoc),
-        cargo,
+        components,
         id: toolchain.to_string(),
         triple: target_triple.to_string(),
     })
+}
+
+fn get_lib_dir_from_rustc(rustc: &Path) -> anyhow::Result<PathBuf> {
+    let sysroot = Command::new(rustc)
+        .arg("--print")
+        .arg("sysroot")
+        .output()?
+        .stdout;
+    let sysroot_path = String::from_utf8_lossy(&sysroot);
+
+    Ok(Path::new(sysroot_path.as_ref().trim()).join("lib"))
 }
