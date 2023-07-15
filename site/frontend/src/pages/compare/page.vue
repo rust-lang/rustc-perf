@@ -163,7 +163,6 @@ loadCompareData(selector, loading);
           :benchmark-info="info"
         />
       </template>
-      <BootstrapTable v-if="activeTab === Tab.Bootstrap" :data="data" />
       <template v-if="runtimeDataAvailable && activeTab === Tab.Runtime">
         <RuntimeBenchmarksPage
           :data="data"
@@ -171,6 +170,7 @@ loadCompareData(selector, loading);
           :benchmark-info="info"
         />
       </template>
+      <BootstrapTable v-if="activeTab === Tab.Bootstrap" :data="data" />
     </div>
   </div>
   <br />
