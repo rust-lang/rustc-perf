@@ -22,6 +22,7 @@ export interface ArtifactDescription {
   pr: number | null;
   bootstrap: Dict<number>;
   bootstrap_total: number;
+  component_sizes: Dict<number>;
 }
 
 export interface StatComparison {

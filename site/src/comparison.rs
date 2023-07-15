@@ -925,6 +925,7 @@ pub struct ArtifactDescription {
     /// Bootstrap data in the form "$crate" -> nanoseconds
     pub bootstrap: HashMap<String, u64>,
     pub bootstrap_total: u64,
+    pub component_sizes: HashMap<String, u64>,
 }
 
 type StatisticsMap<TestCase> = HashMap<TestCase, f64>;
@@ -939,9 +940,8 @@ impl ArtifactDescription {
         artifact: ArtifactId,
         master_commits: &[collector::MasterCommit],
     ) -> Self {
-        let bootstrap = conn
-            .get_bootstrap_by_crate(&[conn.artifact_id(&artifact).await])
-            .await;
+        let aid = conn.artifact_id(&artifact).await;
+        let bootstrap = conn.get_bootstrap_by_crate(&[aid]).await;
         let bootstrap_total = bootstrap
             .values()
             .filter_map(|v| {
@@ -979,11 +979,14 @@ impl ArtifactDescription {
             None
         };
 
+        let component_sizes = conn.get_artifact_size(aid).await.into_iter().collect();
+
         Self {
             pr,
             artifact,
             bootstrap,
             bootstrap_total,
+            component_sizes,
         }
     }
 }
@@ -1023,6 +1026,7 @@ impl From<ArtifactDescription> for api::comparison::ArtifactDescription {
             pr: data.pr,
             bootstrap: data.bootstrap,
             bootstrap_total: data.bootstrap_total,
+            component_sizes: data.component_sizes,
         }
     }
 }

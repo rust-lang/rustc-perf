@@ -812,6 +812,18 @@ impl Connection for SqliteConnection {
             .unwrap();
     }
 
+    async fn get_artifact_size(&self, aid: ArtifactIdNumber) -> HashMap<String, u64> {
+        self.raw_ref()
+            .prepare("select component, size from artifact_size where aid = ?")
+            .unwrap()
+            .query_map(params![&aid.0], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, u64>(1)?))
+            })
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect()
+    }
+
     async fn get_bootstrap(&self, aids: &[ArtifactIdNumber]) -> Vec<Option<Duration>> {
         aids.iter()
             .map(|aid| {
