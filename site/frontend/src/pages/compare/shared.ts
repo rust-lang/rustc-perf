@@ -7,6 +7,7 @@ export function formatDate(dateString: string): string {
     date.getUTCDate()
   )} `;
 }
+
 export function signIfPositive(pct: number): string {
   if (pct >= 0) {
     return "+";
@@ -33,4 +34,19 @@ export function diffClass(diff: number): string {
     return "positive";
   }
   return "negative";
+}
+
+const KiB = 1024;
+const MiB = KiB * 1024;
+const GiB = MiB * 1024;
+
+export function formatSize(size: number): string {
+  if (size >= GiB) {
+    return `${(size / GiB).toFixed(2)} GiB`;
+  } else if (size >= MiB) {
+    return `${(size / MiB).toFixed(2)} MiB`;
+  } else if (size >= KiB) {
+    return `${(size / KiB).toFixed(2)} KiB`;
+  }
+  return `${size} B`;
 }

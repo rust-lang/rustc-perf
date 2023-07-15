@@ -52,4 +52,5 @@ export enum Tab {
   CompileTime = "compile",
   Runtime = "runtime",
   Bootstrap = "bootstrap",
+  ArtifactSize = "artifact-size",
 }
