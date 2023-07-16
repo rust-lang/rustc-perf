@@ -218,7 +218,7 @@ struct Error;
 
 #[derive(Serialize)]
 struct ErrorRow<'a> {
-    series: i32,
+    benchmark: &'a str,
     aid: i32,
     error: Nullable<&'a str>,
 }
@@ -229,7 +229,7 @@ impl Table for Error {
     }
 
     fn sqlite_attributes() -> &'static str {
-        "series, aid, error"
+        "benchmark, aid, error"
     }
 
     fn postgres_generated_id_attribute() -> Option<&'static str> {
@@ -239,40 +239,9 @@ impl Table for Error {
     fn write_postgres_csv_row<W: Write>(writer: &mut csv::Writer<W>, row: &rusqlite::Row) {
         writer
             .serialize(ErrorRow {
-                series: row.get(0).unwrap(),
+                benchmark: row.get_ref(0).unwrap().as_str().unwrap(),
                 aid: row.get(1).unwrap(),
                 error: row.get_ref(2).unwrap().try_into().unwrap(),
-            })
-            .unwrap();
-    }
-}
-
-struct ErrorSeries;
-
-#[derive(Serialize)]
-struct ErrorSeriesRow<'a> {
-    id: i32,
-    krate: &'a str,
-}
-
-impl Table for ErrorSeries {
-    fn name() -> &'static str {
-        "error_series"
-    }
-
-    fn sqlite_attributes() -> &'static str {
-        "id, crate"
-    }
-
-    fn postgres_generated_id_attribute() -> Option<&'static str> {
-        Some("id")
-    }
-
-    fn write_postgres_csv_row<W: Write>(writer: &mut csv::Writer<W>, row: &rusqlite::Row) {
-        writer
-            .serialize(ErrorSeriesRow {
-                id: row.get(0).unwrap(),
-                krate: row.get_ref(1).unwrap().as_str().unwrap(),
             })
             .unwrap();
     }
@@ -664,7 +633,6 @@ async fn main() -> anyhow::Result<()> {
     copy::<Benchmark>(&sqlite_tx, &postgres_tx).await;
     copy::<Collection>(&sqlite_tx, &postgres_tx).await;
     copy::<CollectorProgress>(&sqlite_tx, &postgres_tx).await;
-    copy::<ErrorSeries>(&sqlite_tx, &postgres_tx).await;
     copy::<Error>(&sqlite_tx, &postgres_tx).await;
     copy::<PstatSeries>(&sqlite_tx, &postgres_tx).await;
     copy::<Pstat>(&sqlite_tx, &postgres_tx).await;

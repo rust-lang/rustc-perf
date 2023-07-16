@@ -191,12 +191,12 @@ impl Table for Error {
     }
 
     fn postgres_select_statement(&self, since_weeks_ago: Option<u32>) -> String {
-        let s = "select series, aid, error from ".to_string() + self.name();
+        let s = "select benchmark, aid, error from ".to_string() + self.name();
         with_filter_clause_maybe(s, ARTIFACT_JOIN_AND_WHERE, since_weeks_ago)
     }
 
     fn sqlite_insert_statement(&self) -> &'static str {
-        "insert into error (series, aid, error) VALUES (?, ?, ?)"
+        "insert into error (benchmark, aid, error) VALUES (?, ?, ?)"
     }
 
     fn sqlite_execute_insert(&self, statement: &mut rusqlite::Statement, row: tokio_postgres::Row) {
@@ -206,28 +206,6 @@ impl Table for Error {
                 row.get::<_, i32>(1),
                 row.get::<_, Option<&str>>(2),
             ])
-            .unwrap();
-    }
-}
-
-struct ErrorSeries;
-
-impl Table for ErrorSeries {
-    fn name(&self) -> &'static str {
-        "error_series"
-    }
-
-    fn postgres_select_statement(&self, _since_weeks_ago: Option<u32>) -> String {
-        "select id, crate from ".to_string() + self.name()
-    }
-
-    fn sqlite_insert_statement(&self) -> &'static str {
-        "insert into error_series (id, crate) VALUES (?, ?)"
-    }
-
-    fn sqlite_execute_insert(&self, statement: &mut rusqlite::Statement, row: tokio_postgres::Row) {
-        statement
-            .execute(params![row.get::<_, i32>(0), row.get::<_, &str>(1)])
             .unwrap();
     }
 }
@@ -450,7 +428,6 @@ async fn main() -> anyhow::Result<()> {
         &Benchmark,
         &Collection,
         &CollectorProgress,
-        &ErrorSeries,
         &Error,
         &PstatSeries,
         &Pstat,

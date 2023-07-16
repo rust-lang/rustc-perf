@@ -230,6 +230,22 @@ static MIGRATIONS: &[&str] = &[
         PRIMARY KEY(series, aid, cid)
     );
 "#,
+    r#"
+    create table error_new(
+        aid integer not null references artifact(id) on delete cascade on update cascade,
+        benchmark text not null,
+        error text not null,
+        primary key(aid, benchmark)
+    );
+    insert into error_new(aid, benchmark, error)
+    select aid, crate, error
+    from error
+    join error_series es on error.series = es.id;
+
+    drop table error;
+    drop table error_series;
+    alter table error_new rename to error;
+"#,
 ];
 
 #[async_trait::async_trait]
@@ -368,7 +384,7 @@ impl PostgresConnection {
         PostgresConnection {
             statements: Arc::new(CachedStatements {
                 get_pstat: conn
-                     .prepare("
+                    .prepare("
                          WITH aids AS (
                              select aid, num from unnest($2::int[]) with ordinality aids(aid, num)
                          ),
@@ -432,8 +448,7 @@ impl PostgresConnection {
                     )
                     .await
                     .unwrap(),
-                get_error: conn.prepare("select crate, error from error_series
-                    inner join error on error.series = error_series.id and aid = $1").await.unwrap(),
+                get_error: conn.prepare("select benchmark, error from error where aid = $1").await.unwrap(),
                 select_self_query_series: conn.prepare("select id from self_profile_query_series where crate = $1 and profile = $2 and cache = $3 and query = $4").await.unwrap(),
                 insert_self_query_series: conn.prepare("insert into self_profile_query_series (crate, profile, cache, query) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING RETURNING id").await.unwrap(),
                 insert_pstat_series: conn.prepare("insert into pstat_series (crate, profile, cache, statistic) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING RETURNING id").await.unwrap(),
@@ -700,7 +715,7 @@ where
                 &[&(pr as i32), &include, &exclude, &runs],
             )
             .await {
-                log::error!("failed to queue_pr({}, {:?}, {:?}, {:?}): {:?}", pr, include, exclude, runs, e);
+            log::error!("failed to queue_pr({}, {:?}, {:?}, {:?}): {:?}", pr, include, exclude, runs, e);
         }
     }
     async fn pr_attach_commit(
@@ -907,13 +922,13 @@ where
             Some(aid) => aid.get::<_, i32>(0) as u32,
             None => {
                 self.conn()
-            .query_opt("insert into artifact (name, date, type) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING RETURNING id", &[
-                &name,
-                &date,
-                &ty,
-            ])
-            .await
-            .unwrap();
+                    .query_opt("insert into artifact (name, date, type) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING RETURNING id", &[
+                        &name,
+                        &date,
+                        &ty,
+                    ])
+                    .await
+                    .unwrap();
                 self.conn()
                     .query_one("select id from artifact where name = $1", &[&name])
                     .await
@@ -984,27 +999,10 @@ where
     }
 
     async fn record_error(&self, artifact: ArtifactIdNumber, krate: &str, error: &str) {
-        let sid = self
-            .conn()
-            .query_opt(
-                "insert into error_series (crate) VALUES ($1) ON CONFLICT DO NOTHING RETURNING id",
-                &[&krate],
-            )
-            .await
-            .unwrap();
-        let sid: i32 = match sid {
-            Some(id) => id.get(0),
-            None => self
-                .conn()
-                .query_one("select id from error_series where crate = $1", &[&krate])
-                .await
-                .unwrap()
-                .get(0),
-        };
         self.conn()
             .execute(
-                "insert into error (series, aid, error) VALUES ($1, $2, $3)",
-                &[&sid, &(artifact.0 as i32), &error],
+                "insert into error (benchmark, aid, error) VALUES ($1, $2, $3)",
+                &[&krate, &(artifact.0 as i32), &error],
             )
             .await
             .unwrap();

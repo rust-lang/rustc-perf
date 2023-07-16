@@ -339,6 +339,24 @@ static MIGRATIONS: &[Migration] = &[
         );
         "#,
     ),
+    Migration::new(
+        r#"
+        create table error_new(
+            aid integer references artifact(id) on delete cascade on update cascade,
+            benchmark text not null,
+            error text not null,
+            primary key(aid, benchmark)
+        );
+        insert into error_new(aid, benchmark, error)
+        select aid, crate, error
+        from error
+        join error_series es on error.series = es.id;
+
+        drop table error;
+        drop table error_series;
+        alter table error_new rename to error;
+    "#,
+    ),
 ];
 
 #[async_trait::async_trait]
@@ -748,22 +766,8 @@ impl Connection for SqliteConnection {
     async fn record_error(&self, artifact: ArtifactIdNumber, krate: &str, error: &str) {
         self.raw_ref()
             .execute(
-                "insert or ignore into error_series (crate) VALUES (?)",
-                params![&krate,],
-            )
-            .unwrap();
-        let sid: i32 = self
-            .raw_ref()
-            .query_row(
-                "select id from error_series where crate = ?",
-                params![&krate,],
-                |r| r.get(0),
-            )
-            .unwrap();
-        self.raw_ref()
-            .execute(
-                "insert into error (series, aid, error) VALUES (?, ?, ?)",
-                params![&sid, &artifact.0, &error],
+                "insert into error (benchmark, aid, error) VALUES (?, ?, ?)",
+                params![krate, &artifact.0, &error],
             )
             .unwrap();
     }
@@ -907,10 +911,7 @@ impl Connection for SqliteConnection {
     }
     async fn get_error(&self, aid: crate::ArtifactIdNumber) -> HashMap<String, String> {
         self.raw_ref()
-            .prepare_cached(
-                "select crate, error from error_series
-                    inner join error on error.series = error_series.id and aid = ?",
-            )
+            .prepare_cached("select benchmark, error from error where aid = ?")
             .unwrap()
             .query_map(params![&aid.0], |row| Ok((row.get(0)?, row.get(1)?)))
             .unwrap()
