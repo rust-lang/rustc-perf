@@ -283,26 +283,13 @@ bors_sha    pr  parent_sha  complete  requested    include  exclude  runs  commi
 1w0p83...   42  fq24xq...   true      <timestamp>                    3     <timestamp>
 ```
 
-### error_series
-
-Records a compile-time benchmark that caused an error.
-
-This table exists to avoid duplicating benchmarks many times in the `error` table.
-
-```
-sqlite> select * from error_series limit 1;
-id          crate
-----------  -----------
-1           hello-world
-```
-
 ### error
 
-Records a compilation error for an artifact and an entry in `error_series`.
+Records a compilation or runtime error for an artifact and a benchmark.
 
 ```
 sqlite> select * from error limit 1;
-series      aid  error
-----------  ---  -----
-1           42   Failed to compile...
+aid         benchmark   error
+----------  ---         -----
+1           syn-1.0.89  Failed to compile...
 ```
