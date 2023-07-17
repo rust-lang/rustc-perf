@@ -514,3 +514,24 @@ fn substring_matches(
     }
     false
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::compile::benchmark::get_compile_benchmarks;
+    use std::path::Path;
+
+    #[test]
+    fn check_compile_benchmarks() {
+        // Check that we can deserialize all perf-config.json files in the compile benchmark
+        // directory.
+        let root = env!("CARGO_MANIFEST_DIR");
+        let benchmarks = get_compile_benchmarks(
+            &Path::new(root).join("compile-benchmarks"),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        assert!(benchmarks.len() > 0);
+    }
+}
