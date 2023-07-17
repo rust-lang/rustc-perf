@@ -8,6 +8,7 @@ use crate::utils::wait_for_future;
 use anyhow::{bail, Context};
 use log::debug;
 use std::collections::{HashMap, HashSet};
+use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::mem::ManuallyDrop;
 use std::path::{Path, PathBuf};
@@ -22,12 +23,23 @@ fn default_runs() -> usize {
     3
 }
 
-#[derive(Debug, Default, PartialEq, Copy, Clone, serde::Deserialize)]
+#[derive(
+    Debug, Default, PartialEq, Copy, Clone, serde::Serialize, serde::Deserialize, clap::ValueEnum,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum ArtifactType {
     Binary,
     #[default]
     Library,
+}
+
+impl Display for ArtifactType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ArtifactType::Binary => f.write_str("binary"),
+            ArtifactType::Library => f.write_str("library"),
+        }
+    }
 }
 
 /// This is the internal representation of an individual benchmark's
