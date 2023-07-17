@@ -34,9 +34,7 @@ pub async fn handle_status_page(ctxt: Arc<SiteCtxt>) -> status::Response {
     };
 
     let errors = if let Some(last) = &last_commit {
-        ctxt.conn()
-            .await
-            .get_error(ArtifactId::from(last.clone()).lookup(&idx).unwrap())
+        conn.get_error(ArtifactId::from(last.clone()).lookup(&idx).unwrap())
             .await
     } else {
         Default::default()
@@ -54,7 +52,10 @@ pub async fn handle_status_page(ctxt: Arc<SiteCtxt>) -> status::Response {
         benchmarks: benchmark_state,
         missing,
         current,
-        most_recent_end: conn.last_end_time().await.map(|d| d.timestamp()),
+        most_recent_end: conn
+            .last_artifact_collection()
+            .await
+            .map(|d| d.end_time.timestamp()),
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::{ArtifactId, ArtifactIdNumber, CompileBenchmark};
+use crate::{ArtifactCollection, ArtifactId, ArtifactIdNumber, CompileBenchmark};
 use crate::{CollectionId, Index, Profile, QueuedCommit, Scenario, Step};
 use chrono::{DateTime, Utc};
 use hashbrown::HashMap;
@@ -153,7 +153,7 @@ pub trait Connection: Send + Sync {
 
     async fn in_progress_steps(&self, aid: &ArtifactId) -> Vec<Step>;
 
-    async fn last_end_time(&self) -> Option<DateTime<Utc>>;
+    async fn last_artifact_collection(&self) -> Option<ArtifactCollection>;
 
     /// Returns the sha of the parent commit, if available.
     ///

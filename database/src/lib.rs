@@ -668,3 +668,9 @@ pub struct CompileBenchmark {
     pub name: String,
     pub category: String,
 }
+
+#[derive(Debug)]
+pub struct ArtifactCollection {
+    pub duration: Duration,
+    pub end_time: DateTime<Utc>,
+}
