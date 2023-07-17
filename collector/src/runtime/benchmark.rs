@@ -240,9 +240,9 @@ fn start_cargo_build(
     benchmark_dir: &Path,
     target_dir: Option<&Path>,
 ) -> anyhow::Result<Child> {
-    let mut command = Command::new(&toolchain.cargo);
+    let mut command = Command::new(&toolchain.components.cargo);
     command
-        .env("RUSTC", &toolchain.rustc)
+        .env("RUSTC", &toolchain.components.rustc)
         .arg("build")
         .arg("--release")
         .arg("--message-format")

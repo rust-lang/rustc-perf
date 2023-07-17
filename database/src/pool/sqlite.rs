@@ -357,6 +357,16 @@ static MIGRATIONS: &[Migration] = &[
         alter table error_new rename to error;
     "#,
     ),
+    Migration::new(
+        r#"
+        create table artifact_size(
+            aid integer references artifact(id) on delete cascade on update cascade,
+            component text not null,
+            size integer not null,
+            UNIQUE(aid, component)
+        );
+    "#,
+    ),
 ];
 
 #[async_trait::async_trait]
@@ -787,6 +797,16 @@ impl Connection for SqliteConnection {
                     &krate,
                     &(value.as_nanos() as i64)
                 ],
+            )
+            .unwrap();
+    }
+
+    async fn record_artifact_size(&self, artifact: ArtifactIdNumber, component: &str, size: u64) {
+        self.raw_ref()
+            .execute(
+                "insert or replace into artifact_size (aid, component, size)\
+                values (?, ?, ?)",
+                params![&artifact.0, &component, &size],
             )
             .unwrap();
     }

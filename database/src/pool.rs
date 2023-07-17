@@ -86,6 +86,11 @@ pub trait Connection: Send + Sync {
         krate: &str,
         value: Duration,
     );
+
+    /// Records the size of an artifact component (like `librustc_driver.so` or `libLLVM.so`) in
+    /// bytes.
+    async fn record_artifact_size(&self, artifact: ArtifactIdNumber, component: &str, size: u64);
+
     /// Returns vector of bootstrap build times for the given artifacts. The kth
     /// element is the minimum build time for the kth artifact in `aids`, across
     /// all collections for the artifact, or none if there is no bootstrap data

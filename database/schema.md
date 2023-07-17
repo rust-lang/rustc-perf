@@ -61,6 +61,22 @@ id          name        date        type
 1           LOCAL_TEST              release
 ```
 
+### artifact size
+
+Records the size of individual components (like `librustc_driver.so` or `libLLVM.so`) of a single
+artifact.
+
+This description includes:
+* component: normalized name of the component (hashes are removed)
+* size: size of the component in bytes
+
+```
+sqlite> select * from artifact_size limit 1;
+aid         component   size
+----------  ----------  ----------
+1           libLLVM.so  177892352
+```
+
 ### collection
 
 A "collection" of benchmarks tied only differing by the statistic collected.
@@ -267,26 +283,13 @@ bors_sha    pr  parent_sha  complete  requested    include  exclude  runs  commi
 1w0p83...   42  fq24xq...   true      <timestamp>                    3     <timestamp>
 ```
 
-### error_series
-
-Records a compile-time benchmark that caused an error.
-
-This table exists to avoid duplicating benchmarks many times in the `error` table.
-
-```
-sqlite> select * from error_series limit 1;
-id          crate
-----------  -----------
-1           hello-world
-```
-
 ### error
 
-Records a compilation error for an artifact and an entry in `error_series`.
+Records a compilation or runtime error for an artifact and a benchmark.
 
 ```
 sqlite> select * from error limit 1;
-series      aid  error
-----------  ---  -----
-1           42   Failed to compile...
+aid         benchmark   error
+----------  ---         -----
+1           syn-1.0.89  Failed to compile...
 ```
