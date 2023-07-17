@@ -5,15 +5,17 @@ use crate::compile::benchmark::profile::Profile;
 use crate::compile::benchmark::scenario::Scenario;
 use crate::compile::benchmark::BenchmarkName;
 use crate::toolchain::Toolchain;
-use crate::{command_output, utils};
+use crate::{async_command_output, command_output, utils};
 use anyhow::Context;
 use bencher::Bencher;
 use database::QueryLabel;
 use std::collections::HashMap;
 use std::env;
 use std::fs;
+use std::future::Future;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::process::{self, Command};
 use std::str;
 use std::time::Duration;
@@ -187,7 +189,7 @@ impl<'a> CargoProcess<'a> {
     // FIXME: the needs_final and processor_etc interactions aren't ideal; we
     // would like to "auto know" when we need final but currently we don't
     // really.
-    pub fn run_rustc(&mut self, needs_final: bool) -> anyhow::Result<()> {
+    pub async fn run_rustc(&mut self, needs_final: bool) -> anyhow::Result<()> {
         log::info!(
             "run_rustc with incremental={}, profile={:?}, scenario={:?}, patch={:?}",
             self.incremental,
@@ -307,7 +309,8 @@ impl<'a> CargoProcess<'a> {
 
             log::debug!("{:?}", cmd);
 
-            let output = command_output(&mut cmd)?;
+            let cmd = tokio::process::Command::from(cmd);
+            let output = async_command_output(cmd).await?;
             if let Some((ref mut processor, scenario, scenario_str, patch)) = self.processor_etc {
                 let data = ProcessOutputData {
                     name: self.processor_name.clone(),
@@ -317,7 +320,7 @@ impl<'a> CargoProcess<'a> {
                     scenario_str,
                     patch,
                 };
-                match processor.process_output(&data, output) {
+                match processor.process_output(&data, output).await {
                     Ok(Retry::No) => return Ok(()),
                     Ok(Retry::Yes) => {}
                     Err(e) => return Err(e),
@@ -375,11 +378,11 @@ pub trait Processor {
     fn perf_tool(&self) -> PerfTool;
 
     /// Process the output produced by the particular `Profiler` being used.
-    fn process_output(
-        &mut self,
-        data: &ProcessOutputData<'_>,
+    fn process_output<'a>(
+        &'a mut self,
+        data: &'a ProcessOutputData<'_>,
         output: process::Output,
-    ) -> anyhow::Result<Retry>;
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Retry>> + 'a>>;
 
     /// Provided to permit switching on more expensive profiling if it's needed
     /// for the "first" run for any given benchmark (we reuse the processor),

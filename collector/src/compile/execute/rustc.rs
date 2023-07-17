@@ -14,11 +14,9 @@ use database::ArtifactId;
 use std::env;
 use std::{collections::HashMap, process::Command};
 use std::{path::Path, time::Duration};
-use tokio::runtime::Runtime;
 
 /// Measure the special rustc benchmark.
-pub fn measure(
-    rt: &mut Runtime,
+pub async fn measure(
     conn: &mut dyn database::Connection,
     toolchain: &Toolchain,
     artifact: &database::ArtifactId,
@@ -28,13 +26,12 @@ pub fn measure(
 
     checkout(artifact).context("checking out rust-lang/rust")?;
 
-    record(rt, conn, toolchain, artifact, aid)?;
+    record(conn, toolchain, artifact, aid).await?;
 
     Ok(())
 }
 
-fn record(
-    rt: &mut Runtime,
+async fn record(
     conn: &mut dyn database::Connection,
     toolchain: &Toolchain,
     artifact: &database::ArtifactId,
@@ -145,10 +142,11 @@ fn record(
     }
 
     let version = get_rustc_perf_commit();
-    let collection = rt.block_on(conn.collection_id(&version));
+    let collection = conn.collection_id(&version).await;
 
     for (krate, timing) in timing_data {
-        rt.block_on(conn.record_rustc_crate(collection, aid, krate, timing));
+        conn.record_rustc_crate(collection, aid, krate, timing)
+            .await;
     }
 
     Ok(())

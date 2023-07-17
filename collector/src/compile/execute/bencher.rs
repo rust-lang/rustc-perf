@@ -10,10 +10,11 @@ use crate::toolchain::Toolchain;
 use crate::utils::git::get_rustc_perf_commit;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
+use std::future::Future;
 use std::path::PathBuf;
+use std::pin::Pin;
 use std::process::Command;
 use std::{env, process};
-use tokio::runtime::Runtime;
 
 // Tools usable with the benchmarking subcommands.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -25,7 +26,6 @@ pub enum Bencher {
 }
 
 pub struct BenchProcessor<'a> {
-    rt: &'a mut Runtime,
     benchmark: &'a BenchmarkName,
     conn: &'a mut dyn database::Connection,
     artifact: &'a database::ArtifactId,
@@ -38,7 +38,6 @@ pub struct BenchProcessor<'a> {
 
 impl<'a> BenchProcessor<'a> {
     pub fn new(
-        rt: &'a mut Runtime,
         conn: &'a mut dyn database::Connection,
         benchmark: &'a BenchmarkName,
         artifact: &'a database::ArtifactId,
@@ -63,7 +62,6 @@ impl<'a> BenchProcessor<'a> {
         }
 
         BenchProcessor {
-            rt,
             upload: None,
             conn,
             benchmark,
@@ -75,7 +73,7 @@ impl<'a> BenchProcessor<'a> {
         }
     }
 
-    fn insert_stats(
+    async fn insert_stats(
         &mut self,
         scenario: database::Scenario,
         profile: Profile,
@@ -83,7 +81,7 @@ impl<'a> BenchProcessor<'a> {
     ) {
         let version = get_rustc_perf_commit();
 
-        let collection = self.rt.block_on(self.conn.collection_id(&version));
+        let collection = self.conn.collection_id(&version).await;
         let profile = match profile {
             Profile::Check => database::Profile::Check,
             Profile::Debug => database::Profile::Debug,
@@ -110,13 +108,15 @@ impl<'a> BenchProcessor<'a> {
                     .join(profile.to_string())
                     .join(scenario.to_id());
                 self.upload = Some(Upload::new(prefix, collection, files));
-                self.rt.block_on(self.conn.record_raw_self_profile(
-                    collection,
-                    self.artifact_row_id,
-                    self.benchmark.0.as_str(),
-                    profile,
-                    scenario,
-                ));
+                self.conn
+                    .record_raw_self_profile(
+                        collection,
+                        self.artifact_row_id,
+                        self.benchmark.0.as_str(),
+                        profile,
+                        scenario,
+                    )
+                    .await;
             }
         }
 
@@ -156,18 +156,11 @@ impl<'a> BenchProcessor<'a> {
             }
         }
 
-        self.rt
-            .block_on(async move { while let Some(()) = buf.next().await {} });
+        while let Some(()) = buf.next().await {}
     }
 
-    pub fn measure_rustc(&mut self, toolchain: &Toolchain) -> anyhow::Result<()> {
-        rustc::measure(
-            self.rt,
-            self.conn,
-            toolchain,
-            self.artifact,
-            self.artifact_row_id,
-        )
+    pub async fn measure_rustc(&mut self, toolchain: &Toolchain) -> anyhow::Result<()> {
+        rustc::measure(self.conn, toolchain, self.artifact, self.artifact_row_id).await
     }
 }
 
@@ -197,63 +190,70 @@ impl<'a> Processor for BenchProcessor<'a> {
         self.perf_tool() != original
     }
 
-    fn process_output(
-        &mut self,
-        data: &ProcessOutputData<'_>,
+    fn process_output<'b>(
+        &'b mut self,
+        data: &'b ProcessOutputData<'_>,
         output: process::Output,
-    ) -> anyhow::Result<Retry> {
-        match execute::process_stat_output(output) {
-            Ok(mut res) => {
-                if let Some(ref profile) = res.1 {
-                    execute::store_artifact_sizes_into_stats(&mut res.0, profile);
-                }
-                if let Profile::Doc = data.profile {
-                    let doc_dir = data.cwd.join("target/doc");
-                    if doc_dir.is_dir() {
-                        execute::store_documentation_size_into_stats(&mut res.0, &doc_dir);
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Retry>> + 'b>> {
+        Box::pin(async move {
+            match execute::process_stat_output(output) {
+                Ok(mut res) => {
+                    if let Some(ref profile) = res.1 {
+                        execute::store_artifact_sizes_into_stats(&mut res.0, profile);
                     }
-                }
+                    if let Profile::Doc = data.profile {
+                        let doc_dir = data.cwd.join("target/doc");
+                        if doc_dir.is_dir() {
+                            execute::store_documentation_size_into_stats(&mut res.0, &doc_dir);
+                        }
+                    }
 
-                match data.scenario {
-                    Scenario::Full => {
-                        self.insert_stats(database::Scenario::Empty, data.profile, res);
-                    }
-                    Scenario::IncrFull => {
-                        self.insert_stats(database::Scenario::IncrementalEmpty, data.profile, res);
-                    }
-                    Scenario::IncrUnchanged => {
-                        self.insert_stats(database::Scenario::IncrementalFresh, data.profile, res);
-                    }
-                    Scenario::IncrPatched => {
-                        let patch = data.patch.unwrap();
-                        self.insert_stats(
-                            database::Scenario::IncrementalPatch(patch.name),
+                    let fut = match data.scenario {
+                        Scenario::Full => {
+                            self.insert_stats(database::Scenario::Empty, data.profile, res)
+                        }
+                        Scenario::IncrFull => self.insert_stats(
+                            database::Scenario::IncrementalEmpty,
                             data.profile,
                             res,
+                        ),
+                        Scenario::IncrUnchanged => self.insert_stats(
+                            database::Scenario::IncrementalFresh,
+                            data.profile,
+                            res,
+                        ),
+                        Scenario::IncrPatched => {
+                            let patch = data.patch.unwrap();
+                            self.insert_stats(
+                                database::Scenario::IncrementalPatch(patch.name),
+                                data.profile,
+                                res,
+                            )
+                        }
+                    };
+                    fut.await;
+                    Ok(Retry::No)
+                }
+                Err(DeserializeStatError::NoOutput(output)) => {
+                    if self.tries < 5 {
+                        log::warn!(
+                            "failed to deserialize stats, retrying (try {}); output: {:?}",
+                            self.tries,
+                            output
                         );
+                        self.tries += 1;
+                        Ok(Retry::Yes)
+                    } else {
+                        panic!("failed to collect statistics after 5 tries");
                     }
                 }
-                Ok(Retry::No)
-            }
-            Err(DeserializeStatError::NoOutput(output)) => {
-                if self.tries < 5 {
-                    log::warn!(
-                        "failed to deserialize stats, retrying (try {}); output: {:?}",
-                        self.tries,
-                        output
-                    );
-                    self.tries += 1;
-                    Ok(Retry::Yes)
-                } else {
-                    panic!("failed to collect statistics after 5 tries");
+                Err(
+                    e @ (DeserializeStatError::ParseError { .. }
+                    | DeserializeStatError::XperfError(..)),
+                ) => {
+                    panic!("process_perf_stat_output failed: {:?}", e);
                 }
             }
-            Err(
-                e
-                @ (DeserializeStatError::ParseError { .. } | DeserializeStatError::XperfError(..)),
-            ) => {
-                panic!("process_perf_stat_output failed: {:?}", e);
-            }
-        }
+        })
     }
 }

@@ -17,11 +17,13 @@ use std::cmp::Ordering;
 use std::ffi::OsStr;
 use std::fs;
 use std::fs::File;
+use std::future::Future;
 use std::io::BufWriter;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::process::{Command, Stdio};
+use std::time::Duration;
 use std::{str, time::Instant};
 use tokio::runtime::Runtime;
 
@@ -34,6 +36,7 @@ use collector::runtime::{
 use collector::toolchain::{
     create_toolchain_from_published_version, get_local_toolchain, Sysroot, Toolchain,
 };
+use collector::utils::wait_for_future;
 
 fn n_normal_benchmarks_remaining(n: usize) -> String {
     let suffix = if n == 1 { "" } else { "s" };
@@ -262,7 +265,13 @@ fn profile(
             let benchmark_id = format!("{} ({}/{})", benchmark.name, i + 1, benchmarks.len());
             eprintln!("Executing benchmark {benchmark_id}");
             let mut processor = ProfileProcessor::new(profiler, out_dir, &toolchain.id);
-            let result = benchmark.measure(&mut processor, profiles, scenarios, toolchain, Some(1));
+            let result = wait_for_future(benchmark.measure(
+                &mut processor,
+                profiles,
+                scenarios,
+                toolchain,
+                Some(1),
+            ));
             eprintln!("Finished benchmark {benchmark_id}");
 
             if let Err(ref s) = result {
@@ -611,6 +620,7 @@ fn main_result() -> anyhow::Result<i32> {
     builder
         .worker_threads(1)
         .max_blocking_threads(1)
+        .enable_time()
         .enable_io();
     let mut rt = builder.build().expect("built runtime");
 
@@ -1077,6 +1087,18 @@ fn bench_published_artifact(
     )
 }
 
+const COMPILE_BENCHMARK_TIMEOUT: Duration = Duration::from_secs(60 * 30);
+
+async fn with_timeout<F: Future<Output = anyhow::Result<()>>>(fut: F) -> anyhow::Result<()> {
+    match tokio::time::timeout(COMPILE_BENCHMARK_TIMEOUT, fut).await {
+        Ok(res) => res,
+        Err(_) => Err(anyhow::anyhow!(
+            "Benchmark timeouted in {} seconds",
+            COMPILE_BENCHMARK_TIMEOUT.as_secs()
+        )),
+    }
+}
+
 /// Perform compile benchmarks.
 fn bench_compile(
     rt: &mut Runtime,
@@ -1121,7 +1143,6 @@ fn bench_compile(
             print_intro();
 
             let mut processor = BenchProcessor::new(
-                rt,
                 tx.conn(),
                 benchmark_name,
                 &shared.artifact_id,
@@ -1157,13 +1178,14 @@ fn bench_compile(
                 )
             },
             &|processor| {
-                benchmark.measure(
+                rt.block_on(with_timeout(benchmark.measure(
                     processor,
                     &config.profiles,
                     &config.scenarios,
                     &shared.toolchain,
                     config.iterations,
-                )
+                )))
+                .with_context(|| anyhow::anyhow!("Cannot compile {}", benchmark.name))
             },
         )
     }
@@ -1175,8 +1197,7 @@ fn bench_compile(
             Category::Primary,
             &|| eprintln!("Special benchmark commencing (due to `--bench-rustc`)"),
             &|processor| {
-                processor
-                    .measure_rustc(&shared.toolchain)
+                rt.block_on(with_timeout(processor.measure_rustc(&shared.toolchain)))
                     .context("measure rustc")
             },
         );

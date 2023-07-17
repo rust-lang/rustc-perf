@@ -221,6 +221,30 @@ pub fn command_output(cmd: &mut Command) -> anyhow::Result<process::Output> {
     Ok(output)
 }
 
+pub async fn async_command_output(
+    mut cmd: tokio::process::Command,
+) -> anyhow::Result<process::Output> {
+    use anyhow::Context;
+
+    let child = cmd
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .with_context(|| format!("failed to spawn process for cmd: {:?}", cmd))?;
+    let output = child.wait_with_output().await?;
+
+    if !output.status.success() {
+        return Err(anyhow::anyhow!(
+            "expected success, got {}\n\nstderr={}\n\n stdout={}\n",
+            output.status,
+            String::from_utf8_lossy(&output.stderr),
+            String::from_utf8_lossy(&output.stdout)
+        ));
+    }
+
+    Ok(output)
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct MasterCommit {
     pub sha: String,
