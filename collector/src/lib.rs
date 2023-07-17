@@ -15,6 +15,7 @@ use crate::compile::benchmark::{Benchmark, BenchmarkName};
 use crate::runtime::{BenchmarkGroup, BenchmarkSuite};
 use database::{ArtifactId, ArtifactIdNumber, Connection};
 use process::Stdio;
+use std::time::Duration;
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Deserialize)]
 pub struct DeltaTime(#[serde(with = "round_float")] pub f64);
@@ -267,7 +268,13 @@ pub struct MasterCommit {
 /// to validate hashes or expand them generally speaking. This may also change
 /// in the future.
 pub async fn master_commits() -> anyhow::Result<Vec<MasterCommit>> {
-    let response = reqwest::get("https://triage.rust-lang.org/bors-commit-list").await?;
+    let response = reqwest::ClientBuilder::new()
+        .connect_timeout(Duration::from_secs(60))
+        .timeout(Duration::from_secs(60))
+        .build()?
+        .get("https://triage.rust-lang.org/bors-commit-list")
+        .send()
+        .await?;
     Ok(response.json().await?)
 }
 
