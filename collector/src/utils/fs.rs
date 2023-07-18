@@ -1,7 +1,9 @@
 use anyhow::Context;
+use std::collections::hash_map::DefaultHasher;
 use std::ffi::OsStr;
 use std::fs;
-use std::path::{Component, Path};
+use std::hash::{Hash, Hasher};
+use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
 #[cfg(windows)]
@@ -140,6 +142,46 @@ pub fn robocopy(
     }
 
     Ok(())
+}
+
+/// Loads contents of a file and hashes it when it is created.
+/// It then asserts that when it is dropped, the file still has the same contents.
+#[must_use = "EnsureImmutableFile acts like a guard, consider keeping it alive until something can happen with the file"]
+pub struct EnsureImmutableFile {
+    path: PathBuf,
+    hash: u64,
+    name: String,
+}
+
+impl EnsureImmutableFile {
+    pub fn new(path: &Path, name: String) -> anyhow::Result<Self> {
+        let hash = Self::hash(path)?;
+        Ok(Self {
+            path: path.to_path_buf(),
+            hash,
+            name,
+        })
+    }
+
+    fn hash(path: &Path) -> anyhow::Result<u64> {
+        let contents = fs::read(path)?;
+        let mut hasher = DefaultHasher::new();
+        contents.hash(&mut hasher);
+        Ok(hasher.finish())
+    }
+}
+
+impl Drop for EnsureImmutableFile {
+    fn drop(&mut self) {
+        let hash = Self::hash(&self.path).expect("Cannot hash file");
+        assert_eq!(
+            self.hash,
+            hash,
+            "{} ({}) has changed during a build",
+            self.path.display(),
+            self.name
+        );
+    }
 }
 
 #[cfg(test)]
