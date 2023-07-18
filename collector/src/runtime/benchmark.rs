@@ -1,5 +1,6 @@
 use crate::runtime_group_step_name;
 use crate::toolchain::Toolchain;
+use crate::utils::fs::EnsureImmutableFile;
 use anyhow::Context;
 use benchlib::benchmark::passes_filter;
 use cargo_metadata::Message;
@@ -195,6 +196,14 @@ pub fn prepare_runtime_benchmark_suite(
 
         let target_dir = temp_dir.as_ref().map(|d| d.path());
 
+        // Make sure that Cargo.lock isn't changed by the build if we're running in isolated mode
+        let _guard = match isolation_mode {
+            CargoIsolationMode::Cached => None,
+            CargoIsolationMode::Isolated => Some(EnsureImmutableFile::new(
+                &benchmark_crate.path.join("Cargo.lock"),
+                benchmark_crate.name.clone(),
+            )?),
+        };
         let result = start_cargo_build(toolchain, &benchmark_crate.path, target_dir, &opts)
             .with_context(|| {
                 anyhow::anyhow!("Cannot start compilation of {}", benchmark_crate.name)
