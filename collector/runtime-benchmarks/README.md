@@ -22,3 +22,15 @@ not print anything to `stdout`!
 Note that each benchmark group binary will be thus invoked twice per benchmarking collection. Keep this
 in mind so that the `main` function of the group doesn't perform too much work, which will be thrown
 away when it is invoked with the `list` argument.
+
+## Benchmark input files
+Some benchmarks will need input files. Ideally, these should be stored directly inside this repository,
+e.g. in a `data` directory under the benchmark group workspace root. If some files are shared between
+multiple groups, you can put them in the `runtime-benchmarks/data` directory. To keep benchmarks
+self-contained, consider including the input files directly into the binary using the `include_bytes!`
+or `include_str!` macros.
+
+Try to keep the sizes of input files reasonable. If you want to increase their size for the benchmark,
+you can repeat their contents at the beginning of the benchmark run (in `main`). If the file has a
+format that is not easily repeatable it is large (e.g. larger than 1 MiB), consider compressing it
+using `gzip <file>` and them decompressing it in `main` using `benchlib::decompress_file`.
