@@ -6,7 +6,7 @@ authors = ["Keegan McAllister <mcallister.keegan@gmail.com>",
            "Chris Morgan <me@chrismorgan.info>"]
 repository = "https://github.com/servo/tendril"
 readme = "README.md"
-license = "MIT/Apache-2.0"
+license = "MIT OR Apache-2.0"
 description = "Compact buffer/string type for zero-copy parsing"
 
 [dependencies]

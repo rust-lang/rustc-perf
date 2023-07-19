@@ -18,7 +18,7 @@ description = "Device support crates for STM32F4 devices"
 readme = "README.md"
 keywords = ["stm32", "svd2rust", "no_std", "embedded"]
 categories = ["embedded", "no-std"]
-license = "MIT/Apache-2.0"
+license = "MIT OR Apache-2.0"
 repository = "https://github.com/stm32-rs/stm32-rs"
 [package.metadata.docs.rs]
 default-target = "thumbv7em-none-eabihf"

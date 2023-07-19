@@ -21,7 +21,7 @@ homepage = "https://github.com/unicode-rs/unicode-normalization"
 documentation = "https://docs.rs/unicode-normalization/"
 readme = "README.md"
 keywords = ["text", "unicode", "normalization", "decomposition", "recomposition"]
-license = "MIT/Apache-2.0"
+license = "MIT OR Apache-2.0"
 repository = "https://github.com/unicode-rs/unicode-normalization"
 [dependencies.tinyvec]
 version = "1"
