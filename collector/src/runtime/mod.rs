@@ -1,18 +1,19 @@
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Cursor};
 use std::path::Path;
 use std::process::{Command, Stdio};
 
+use anyhow::Context;
 use thousands::Separable;
 
 use benchlib::comm::messages::{BenchmarkMessage, BenchmarkResult, BenchmarkStats};
 pub use benchmark::{
     prepare_runtime_benchmark_suite, runtime_benchmark_dir, BenchmarkFilter, BenchmarkGroup,
-    BenchmarkSuite, CargoIsolationMode,
+    BenchmarkSuite, BenchmarkSuiteCompilation, CargoIsolationMode,
 };
 use database::{ArtifactIdNumber, CollectionId, Connection};
 
 use crate::utils::git::get_rustc_perf_commit;
-use crate::CollectorCtx;
+use crate::{run_command_with_output, CollectorCtx};
 
 mod benchmark;
 
@@ -38,41 +39,62 @@ pub async fn bench_runtime(
     );
 
     let rustc_perf_version = get_rustc_perf_commit();
-
     let mut benchmark_index = 0;
     for group in suite.groups {
-        if !collector.start_runtime_step(conn, &group).await {
+        let Some(step_name) = collector.start_runtime_step(conn, &group).await else {
             eprintln!("skipping {} -- already benchmarked", group.name);
             continue;
-        }
+        };
 
         let mut tx = conn.transaction().await;
-        for message in execute_runtime_benchmark_binary(&group.binary, &filter, iterations)? {
-            let message = message.map_err(|err| {
-                anyhow::anyhow!(
-                    "Cannot parse BenchmarkMessage from benchmark {}: {err:?}",
-                    group.binary.display()
-                )
-            })?;
-            match message {
-                BenchmarkMessage::Result(result) => {
-                    benchmark_index += 1;
-                    println!(
-                        "Finished {}/{} ({}/{})",
-                        group.name, result.name, benchmark_index, filtered
-                    );
 
-                    print_stats(&result);
-                    record_stats(
-                        tx.conn(),
-                        collector.artifact_row_id,
-                        &rustc_perf_version,
-                        result,
+        // Async block is used to easily capture all results, it basically simulates a `try` block.
+        // Extracting this into a separate function would be annoying, as there would be many
+        // parameters.
+        let result = async {
+            let messages = execute_runtime_benchmark_binary(&group.binary, &filter, iterations)?;
+            for message in messages {
+                let message = message.map_err(|err| {
+                    anyhow::anyhow!(
+                        "Cannot parse BenchmarkMessage from benchmark {}: {err:?}",
+                        group.binary.display()
                     )
-                    .await;
+                })?;
+                match message {
+                    BenchmarkMessage::Result(result) => {
+                        benchmark_index += 1;
+                        println!(
+                            "Finished {}/{} ({}/{})",
+                            group.name, result.name, benchmark_index, filtered
+                        );
+
+                        print_stats(&result);
+                        record_stats(
+                            tx.conn(),
+                            collector.artifact_row_id,
+                            &rustc_perf_version,
+                            result,
+                        )
+                        .await;
+                    }
                 }
             }
+
+            Ok::<_, anyhow::Error>(())
         }
+        .await
+        .with_context(|| format!("Failed to execute runtime benchmark group {}", group.name));
+
+        if let Err(error) = result {
+            eprintln!("collector error: {:#}", error);
+            tx.conn()
+                .record_error(
+                    collector.artifact_row_id,
+                    &step_name,
+                    &format!("{:?}", error),
+                )
+                .await;
+        };
 
         collector.end_runtime_step(tx.conn(), &group).await;
         tx.commit()
@@ -178,6 +200,9 @@ fn execute_runtime_benchmark_binary(
     command.arg("--iterations");
     command.arg(&iterations.to_string());
 
+    // We want to see a backtrace if the benchmark panics
+    command.env("RUST_BACKTRACE", "1");
+
     if let Some(ref exclude) = filter.exclude {
         command.args(["--exclude", exclude]);
     }
@@ -186,14 +211,21 @@ fn execute_runtime_benchmark_binary(
     }
 
     command.stdout(Stdio::piped());
-    let mut child = command.spawn()?;
-    let stdout = child.stdout.take().unwrap();
+    command.stderr(Stdio::piped());
 
-    let reader = BufReader::new(stdout);
-    let iterator = reader.lines().map(|line| {
+    let output = run_command_with_output(&mut command)?;
+    if !output.status.success() {
+        return Err(anyhow::anyhow!(
+            "Process finished with exit code {}\n{}",
+            output.status.code().unwrap_or(-1),
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    let reader = BufReader::new(Cursor::new(output.stdout));
+    Ok(reader.lines().map(|line| {
         Ok(line.and_then(|line| Ok(serde_json::from_str::<BenchmarkMessage>(&line)?))?)
-    });
-    Ok(iterator)
+    }))
 }
 
 fn calculate_mean<I: Iterator<Item = f64> + Clone>(iter: I) -> f64 {

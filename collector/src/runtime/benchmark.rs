@@ -1,3 +1,4 @@
+use crate::runtime_group_step_name;
 use crate::toolchain::Toolchain;
 use anyhow::Context;
 use benchlib::benchmark::passes_filter;
@@ -90,6 +91,12 @@ pub enum CargoIsolationMode {
     Isolated,
 }
 
+pub struct BenchmarkSuiteCompilation {
+    pub suite: BenchmarkSuite,
+    // Maps benchmark group name to compilation error
+    pub failed_to_compile: HashMap<String, String>,
+}
+
 /// Find all runtime benchmark crates in `benchmark_dir` and compile them.
 /// We assume that each binary defines a benchmark suite using `benchlib`.
 /// We then execute each benchmark suite with the `list-benchmarks` command to find out its
@@ -98,7 +105,7 @@ pub fn prepare_runtime_benchmark_suite(
     toolchain: &Toolchain,
     benchmark_dir: &Path,
     isolation_mode: CargoIsolationMode,
-) -> anyhow::Result<BenchmarkSuite> {
+) -> anyhow::Result<BenchmarkSuiteCompilation> {
     let benchmark_crates = get_runtime_benchmark_groups(benchmark_dir)?;
 
     let temp_dir: Option<TempDir> = match isolation_mode {
@@ -120,6 +127,7 @@ pub fn prepare_runtime_benchmark_suite(
     println!("Compiling {group_count} runtime benchmark groups");
 
     let mut groups = Vec::new();
+    let mut failed_to_compile = HashMap::new();
     for (index, benchmark_crate) in benchmark_crates.into_iter().enumerate() {
         println!(
             "Compiling {:<22} ({}/{group_count})",
@@ -129,15 +137,28 @@ pub fn prepare_runtime_benchmark_suite(
 
         let target_dir = temp_dir.as_ref().map(|d| d.path());
 
-        let cargo_process = start_cargo_build(toolchain, &benchmark_crate.path, target_dir)
+        let result = start_cargo_build(toolchain, &benchmark_crate.path, target_dir)
             .with_context(|| {
                 anyhow::anyhow!("Cannot start compilation of {}", benchmark_crate.name)
-            })?;
-        let group =
-            parse_benchmark_group(cargo_process, &benchmark_crate.name).with_context(|| {
-                anyhow::anyhow!("Cannot compile runtime benchmark {}", benchmark_crate.name)
-            })?;
-        groups.push(group);
+            })
+            .and_then(|process| {
+                parse_benchmark_group(process, &benchmark_crate.name).with_context(|| {
+                    anyhow::anyhow!("Cannot compile runtime benchmark {}", benchmark_crate.name)
+                })
+            });
+        match result {
+            Ok(group) => groups.push(group),
+            Err(error) => {
+                log::error!(
+                    "Cannot compile runtime benchmark group `{}`",
+                    benchmark_crate.name
+                );
+                failed_to_compile.insert(
+                    runtime_group_step_name(&benchmark_crate.name),
+                    format!("{error:?}"),
+                );
+            }
+        }
     }
 
     groups.sort_unstable_by(|a, b| a.binary.cmp(&b.binary));
@@ -145,9 +166,12 @@ pub fn prepare_runtime_benchmark_suite(
 
     check_duplicates(&groups)?;
 
-    Ok(BenchmarkSuite {
-        groups,
-        _tmp_artifacts_dir: temp_dir,
+    Ok(BenchmarkSuiteCompilation {
+        suite: BenchmarkSuite {
+            groups,
+            _tmp_artifacts_dir: temp_dir,
+        },
+        failed_to_compile,
     })
 }
 
@@ -181,6 +205,7 @@ fn parse_benchmark_group(
     let mut group: Option<BenchmarkGroup> = None;
 
     let stream = BufReader::new(cargo_process.stdout.take().unwrap());
+    let mut messages = String::new();
     for message in Message::parse_stream(stream) {
         let message = message?;
         match message {
@@ -210,25 +235,28 @@ fn parse_benchmark_group(
                     }
                 }
             }
-            Message::TextLine(line) => println!("{}", line),
+            Message::TextLine(line) => {
+                println!("{line}")
+            }
             Message::CompilerMessage(msg) => {
-                print!("{}", msg.message.rendered.unwrap_or(msg.message.message))
+                let message = msg.message.rendered.unwrap_or(msg.message.message);
+                messages.push_str(&message);
+                print!("{message}");
             }
             _ => {}
         }
     }
 
-    let group = group.ok_or_else(|| {
-        anyhow::anyhow!("Runtime benchmark group `{group_name}` has not produced any binary")
-    })?;
-
     let output = cargo_process.wait()?;
     if !output.success() {
         Err(anyhow::anyhow!(
-            "Failed to compile runtime benchmark, exit code {}",
-            output.code().unwrap_or(1)
+            "Failed to compile runtime benchmark, exit code {}\n{messages}",
+            output.code().unwrap_or(1),
         ))
     } else {
+        let group = group.ok_or_else(|| {
+            anyhow::anyhow!("Runtime benchmark group `{group_name}` has not produced any binary")
+        })?;
         Ok(group)
     }
 }
@@ -246,7 +274,7 @@ fn start_cargo_build(
         .arg("build")
         .arg("--release")
         .arg("--message-format")
-        .arg("json-diagnostic-rendered-ansi")
+        .arg("json-diagnostic-short")
         .current_dir(benchmark_dir)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
