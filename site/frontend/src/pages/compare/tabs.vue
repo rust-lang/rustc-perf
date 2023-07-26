@@ -141,7 +141,7 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
   flex-direction: column;
   position: relative;
   width: 200px;
-  height: 60px;
+  min-height: 60px;
   padding: 5px;
   text-align: center;
   border: 2px dotted #cccccc;
