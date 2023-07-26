@@ -18,3 +18,7 @@ mod cli;
 pub mod comm;
 pub mod measure;
 pub mod process;
+mod utils;
+
+#[cfg(feature = "compression")]
+pub use utils::decompress_file;

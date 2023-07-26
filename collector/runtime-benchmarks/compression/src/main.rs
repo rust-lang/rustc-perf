@@ -3,8 +3,9 @@ use std::io::Write;
 use brotli::enc::BrotliEncoderParams;
 
 use benchlib::benchmark::run_benchmark_group;
+use benchlib::decompress_file;
 
-const TEXT_SHERLOCK: &str = include_str!("../../data/sherlock.txt");
+const TEXT_SHERLOCK: &[u8] = include_bytes!("../../data/sherlock.txt.gz");
 
 fn compress(data: &str) -> Vec<u8> {
     let mut target: Vec<u8> = Vec::with_capacity(1024 * 1024);
@@ -18,8 +19,9 @@ fn compress(data: &str) -> Vec<u8> {
 }
 
 fn main() {
+    let sherlock_text = String::from_utf8(decompress_file(TEXT_SHERLOCK)).expect("Invalid UTF-8");
     // Decompression is much faster than compression, so inflate the data a bit
-    let compressed_text = compress(&TEXT_SHERLOCK.repeat(20));
+    let compressed_text = compress(&sherlock_text.repeat(20));
 
     run_benchmark_group(|group| {
         group.register_benchmark("brotli-compress", || {
@@ -27,10 +29,12 @@ fn main() {
             let mut params = BrotliEncoderParams::default();
             params.quality = 10;
 
+            let mut text = sherlock_text.as_bytes();
+
             move || {
                 let mut writer =
                     brotli::CompressorWriter::with_params(&mut target_buffer, 4096, &params);
-                std::io::copy(&mut TEXT_SHERLOCK.as_bytes(), &mut writer).unwrap();
+                std::io::copy(&mut text, &mut writer).unwrap();
                 writer.flush().unwrap();
                 drop(writer);
                 target_buffer
