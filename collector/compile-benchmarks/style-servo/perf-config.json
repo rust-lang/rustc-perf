@@ -4,5 +4,6 @@
     "cargo_toml": "components/style/Cargo.toml",
     "runs": 1,
     "touch_file": "components/style/lib.rs",
-    "category": "stable"
+    "category": "stable",
+    "artifact": "library"
 }

@@ -16,6 +16,7 @@ pub mod load;
 pub mod server;
 
 mod average;
+mod benchmark_metadata;
 mod comparison;
 mod interpolate;
 mod request_handlers;

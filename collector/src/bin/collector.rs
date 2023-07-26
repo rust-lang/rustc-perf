@@ -8,7 +8,7 @@ use collector::compile::benchmark::category::Category;
 use collector::compile::benchmark::profile::Profile;
 use collector::compile::benchmark::scenario::Scenario;
 use collector::compile::benchmark::{
-    compile_benchmark_dir, get_compile_benchmarks, Benchmark, BenchmarkName,
+    compile_benchmark_dir, get_compile_benchmarks, ArtifactType, Benchmark, BenchmarkName,
 };
 use collector::{runtime, utils, CollectorCtx, CollectorStepBuilder};
 use database::{ArtifactId, ArtifactIdNumber, Commit, CommitType, Connection, Pool};
@@ -586,6 +586,10 @@ struct DownloadCommand {
     #[arg(long, short('c'), value_enum, global = true, default_value = "primary")]
     category: Category,
 
+    /// What artifact type (library or binary) does the benchmark build.
+    #[arg(long, short('a'), value_enum, global = true, default_value = "library")]
+    artifact: ArtifactType,
+
     #[command(subcommand)]
     command: DownloadSubcommand,
 }
@@ -948,9 +952,15 @@ fn main_result() -> anyhow::Result<i32> {
                 }
             };
 
-            add_perf_config(&target_dir, cmd.category);
+            add_perf_config(&target_dir, cmd.category, cmd.artifact);
 
-            println!("Benchmark stored at {}", target_dir.display());
+            println!(
+                r#"Benchmark stored at {dir} using category `{}` and artifact type `{}`.
+Make sure to modify `{dir}/perf-config.json` if the category/artifact don't match your expectations."#,
+                cmd.category,
+                cmd.artifact,
+                dir = target_dir.display(),
+            );
             Ok(0)
         }
     }
@@ -1249,9 +1259,10 @@ async fn record_toolchain_sizes(
     record(conn, aid, "libLLVM", paths.lib_llvm.as_deref()).await;
 }
 
-fn add_perf_config(directory: &Path, category: Category) {
+fn add_perf_config(directory: &Path, category: Category, artifact: ArtifactType) {
     let data = serde_json::json!({
-        "category": category.to_string()
+        "category": category,
+        "artifact": artifact
     });
 
     let mut file = BufWriter::new(

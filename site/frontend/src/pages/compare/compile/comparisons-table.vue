@@ -3,11 +3,12 @@ import {TestCaseComparison} from "../data";
 import Tooltip from "../tooltip.vue";
 import {ArtifactDescription} from "../types";
 import {percentClass} from "../shared";
-import {CompileTestCase} from "./common";
+import {CompileBenchmarkMap, CompileTestCase} from "./common";
 
 const props = defineProps<{
   id: string;
   comparisons: TestCaseComparison<CompileTestCase>[];
+  benchmarkMap: CompileBenchmarkMap;
   hasNonRelevant: boolean;
   showRawData: boolean;
   commitA: ArtifactDescription;
@@ -57,6 +58,36 @@ function detailedQueryRawDataLink(
 function prettifyRawNumber(number: number): string {
   return number.toLocaleString();
 }
+
+function generateBenchmarkTooltip(testCase: CompileTestCase): string {
+  const metadata = props.benchmarkMap[testCase.benchmark] ?? null;
+  if (metadata === null) {
+    return "<No metadata found>";
+  }
+  let tooltip = `Benchmark: ${testCase.benchmark}
+Category: ${metadata.category}
+`;
+  if (metadata.binary !== null) {
+    tooltip += `Artifact: ${metadata.binary ? "binary" : "library"}\n`;
+  }
+  if (metadata.iterations !== null) {
+    tooltip += `Iterations: ${metadata.iterations}\n`;
+  }
+  if (testCase.profile === "opt" && metadata.release_profile !== null) {
+    const {lto, debug, codegen_units} = metadata.release_profile;
+    if (lto !== null) {
+      tooltip += `LTO: ${lto}\n`;
+    }
+    if (debug !== null) {
+      tooltip += `Debuginfo: ${debug}\n`;
+    }
+    if (codegen_units !== null) {
+      tooltip += `Codegen units: ${codegen_units}\n`;
+    }
+  }
+
+  return tooltip;
+}
 </script>
 
 <template>
@@ -101,7 +132,7 @@ function prettifyRawNumber(number: number): string {
       <tbody>
         <template v-for="comparison in comparisons">
           <tr>
-            <td>
+            <td :title="generateBenchmarkTooltip(comparison.testCase)">
               <a
                 v-bind:href="benchmarkLink(comparison.testCase.benchmark)"
                 class="silent-link"

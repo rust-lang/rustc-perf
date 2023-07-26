@@ -64,6 +64,10 @@ function loadFilterFromUrl(
         defaultFilter.category.secondary
       ),
     },
+    artifact: {
+      binary: getBoolOrDefault("binary", defaultFilter.artifact.binary),
+      library: getBoolOrDefault("library", defaultFilter.artifact.library),
+    },
   };
 }
 
@@ -123,6 +127,12 @@ function storeFilterToUrl(
     filter.category.secondary,
     defaultFilter.category.secondary
   );
+  storeOrReset("binary", filter.artifact.binary, defaultFilter.artifact.binary);
+  storeOrReset(
+    "library",
+    filter.artifact.library,
+    defaultFilter.artifact.library
+  );
 
   changeUrl(urlParams);
 }
@@ -174,5 +184,6 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
     :all-test-cases="allComparisons"
     :filter="filter"
     :stat="selector.stat"
+    :benchmark-map="benchmarkMap"
   ></Benchmarks>
 </template>

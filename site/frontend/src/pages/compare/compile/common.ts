@@ -18,6 +18,10 @@ export type CompileBenchmarkFilter = {
     primary: boolean;
     secondary: boolean;
   };
+  artifact: {
+    binary: boolean;
+    library: boolean;
+  };
 } & BenchmarkFilter;
 export const defaultCompileFilter: CompileBenchmarkFilter = {
   name: null,
@@ -39,16 +43,29 @@ export const defaultCompileFilter: CompileBenchmarkFilter = {
     primary: true,
     secondary: true,
   },
+  artifact: {
+    binary: true,
+    library: true,
+  },
 };
 
 export type Profile = "check" | "debug" | "opt" | "doc";
 export type Category = "primary" | "secondary";
 
-export type CompileBenchmarkMap = Dict<{category: Category}>;
+export type CompileBenchmarkMap = Dict<CompileBenchmarkMetadata>;
 
-export interface CompileBenchmarkDescription {
+export interface CargoProfileMetadata {
+  debug: string | null;
+  lto: string | null;
+  codegen_units: number | null;
+}
+
+export interface CompileBenchmarkMetadata {
   name: string;
   category: Category;
+  binary: boolean | null;
+  iterations: number | null;
+  release_profile: CargoProfileMetadata;
 }
 
 export interface CompileBenchmarkComparison {
@@ -99,6 +116,17 @@ export function computeCompileComparisonsWithNonRelevant(
     }
   }
 
+  function artifactFilter(metadata: CompileBenchmarkMetadata | null): boolean {
+    if (metadata?.binary === null) return true;
+
+    const isBinary = metadata.binary;
+    const isLibrary = !isBinary;
+    if (isBinary && !filter.artifact.binary) return false;
+    if (isLibrary && !filter.artifact.library) return false;
+
+    return true;
+  }
+
   function categoryFilter(category: Category) {
     if (category === "primary" && !filter.category.primary) return false;
     if (category === "secondary" && !filter.category.secondary) return false;
@@ -114,6 +142,7 @@ export function computeCompileComparisonsWithNonRelevant(
       profileFilter(comparison.testCase.profile) &&
       scenarioFilter(comparison.testCase.scenario) &&
       categoryFilter(comparison.testCase.category) &&
+      artifactFilter(benchmarkMap[comparison.testCase.benchmark] ?? null) &&
       nameFiltered
     );
   }
@@ -147,10 +176,8 @@ export function createCompileBenchmarkMap(
   data: CompareResponse
 ): CompileBenchmarkMap {
   const benchmarks = {};
-  for (const benchmark of data.compile_benchmark_data) {
-    benchmarks[benchmark.name] = {
-      category: benchmark.category,
-    };
+  for (const benchmark of data.compile_benchmark_metadata) {
+    benchmarks[benchmark.name] = {...benchmark};
   }
   return benchmarks;
 }

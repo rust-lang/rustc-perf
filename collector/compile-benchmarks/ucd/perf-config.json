@@ -1,4 +1,5 @@
 {
     "runs": 1,
-    "category": "secondary"
+    "category": "secondary",
+    "artifact": "library"
 }
