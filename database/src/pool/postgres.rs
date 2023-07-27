@@ -938,12 +938,12 @@ where
     async fn get_artifact_size(&self, aid: ArtifactIdNumber) -> HashMap<String, u64> {
         let rows = self
             .conn()
-            .query(&self.statements().get_artifact_size, &[&aid.0])
+            .query(&self.statements().get_artifact_size, &[&(aid.0 as i32)])
             .await
             .unwrap();
 
         rows.into_iter()
-            .map(|row| (row.get::<_, String>(0), row.get::<_, u32>(1) as u64))
+            .map(|row| (row.get::<_, String>(0), row.get::<_, i32>(1) as u64))
             .collect()
     }
 
