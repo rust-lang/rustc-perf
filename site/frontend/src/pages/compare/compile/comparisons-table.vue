@@ -73,8 +73,7 @@ Category: ${metadata.category}
   if (metadata.iterations !== null) {
     tooltip += `Iterations: ${metadata.iterations}\n`;
   }
-  if (testCase.profile === "opt" && metadata.release_profile !== null) {
-    const {lto, debug, codegen_units} = metadata.release_profile;
+  const addMetadata = ({lto, debug, codegen_units}) => {
     if (lto !== null) {
       tooltip += `LTO: ${lto}\n`;
     }
@@ -84,6 +83,9 @@ Category: ${metadata.category}
     if (codegen_units !== null) {
       tooltip += `Codegen units: ${codegen_units}\n`;
     }
+  };
+  if (testCase.profile === "opt" && metadata.release_profile !== null) {
+    addMetadata(metadata.release_profile);
   }
 
   return tooltip;
