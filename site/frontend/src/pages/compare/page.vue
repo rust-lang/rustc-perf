@@ -28,6 +28,7 @@ import {
   computeRuntimeComparisonsWithNonRelevant,
   defaultRuntimeFilter,
 } from "./runtime/common";
+import ArtifactSizeTable from "./artifact-size/artifact-size-table.vue";
 
 function loadSelectorFromUrl(urlParams: Dict<string>): CompareSelector {
   const start = urlParams["start"] ?? "";
@@ -46,6 +47,7 @@ function loadTabFromUrl(urlParams: Dict<string>): Tab | null {
     compile: Tab.CompileTime,
     runtime: Tab.Runtime,
     bootstrap: Tab.Bootstrap,
+    ["artifact-size"]: Tab.ArtifactSize,
   };
   return tabs[tab] ?? null;
 }
@@ -121,10 +123,19 @@ const activeTab = computed((): Tab => {
   if (tab.value === Tab.Runtime && !runtimeDataAvailable.value) {
     return Tab.CompileTime;
   }
+  if (tab.value === Tab.ArtifactSize && !artifactSizeAvailable.value) {
+    return Tab.CompileTime;
+  }
   return tab.value;
 });
 
 const runtimeDataAvailable = computed(() => runtimeSummary.value !== null);
+const artifactSizeAvailable = computed(
+  () =>
+    data.value != null &&
+    (Object.keys(data.value.a.component_sizes).length > 0 ||
+      Object.keys(data.value.b.component_sizes).length > 0)
+);
 
 function changeTab(newTab: Tab) {
   tab.value = newTab;
@@ -163,13 +174,16 @@ loadCompareData(selector, loading);
           :benchmark-info="info"
         />
       </template>
-      <BootstrapTable v-if="activeTab === Tab.Bootstrap" :data="data" />
       <template v-if="runtimeDataAvailable && activeTab === Tab.Runtime">
         <RuntimeBenchmarksPage
           :data="data"
           :selector="selector"
           :benchmark-info="info"
         />
+      </template>
+      <BootstrapTable v-if="activeTab === Tab.Bootstrap" :data="data" />
+      <template v-if="artifactSizeAvailable && activeTab === Tab.ArtifactSize">
+        <ArtifactSizeTable :a="data.a" :b="data.b" />
       </template>
     </div>
   </div>

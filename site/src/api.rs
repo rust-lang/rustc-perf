@@ -186,6 +186,7 @@ pub mod comparison {
         pub pr: Option<u32>,
         pub bootstrap: HashMap<String, u64>,
         pub bootstrap_total: u64,
+        pub component_sizes: HashMap<String, u64>,
     }
 
     #[derive(Debug, Clone, Serialize)]

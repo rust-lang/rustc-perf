@@ -337,6 +337,7 @@ pub struct CachedStatements {
     insert_runtime_pstat: Statement,
     get_runtime_pstat: Statement,
     record_artifact_size: Statement,
+    get_artifact_size: Statement,
 }
 
 pub struct PostgresTransaction<'a> {
@@ -530,6 +531,10 @@ impl PostgresConnection {
                     do update
                     set size = excluded.size
                 ").await.unwrap(),
+                get_artifact_size: conn.prepare("
+                    select component, size from artifact_size
+                    where aid = $1
+                ").await.unwrap()
             }),
             conn,
         }
@@ -928,6 +933,18 @@ where
             )
             .await
             .unwrap();
+    }
+
+    async fn get_artifact_size(&self, aid: ArtifactIdNumber) -> HashMap<String, u64> {
+        let rows = self
+            .conn()
+            .query(&self.statements().get_artifact_size, &[&aid.0])
+            .await
+            .unwrap();
+
+        rows.into_iter()
+            .map(|row| (row.get::<_, String>(0), row.get::<_, u32>(1) as u64))
+            .collect()
     }
 
     async fn artifact_id(&self, artifact: &ArtifactId) -> ArtifactIdNumber {

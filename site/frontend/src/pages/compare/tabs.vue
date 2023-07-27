@@ -1,7 +1,12 @@
 <script setup lang="tsx">
 import {computed, h, ref, Ref} from "vue";
 import {CompareResponse, Tab} from "./types";
-import {diffClass, percentClass} from "./shared";
+import {
+  diffClass,
+  formatPercentChange,
+  formatSize,
+  percentClass,
+} from "./shared";
 import {SummaryGroup} from "./data";
 import SummaryPercentValue from "./summary/percent-value.vue";
 import SummaryRange from "./summary/range.vue";
@@ -63,11 +68,29 @@ function SummaryTable({summary}: {summary: SummaryGroup}) {
   return <div>No relevant results</div>;
 }
 
+function formatArtifactSize(size: number): string {
+  if (size === 0) {
+    return "???";
+  }
+  return formatSize(size);
+}
+
 const bootstrapA = props.data.a.bootstrap_total;
 const bootstrapB = props.data.b.bootstrap_total;
 const bootstrapValid = bootstrapA > 0.0 && bootstrapB > 0.0;
 
 const runtimeAvailable = computed(() => props.runtimeSummary !== null);
+
+const totalSizeA = Object.values(props.data.a.component_sizes).reduce(
+  (a, b) => a + b,
+  0
+);
+const totalSizeB = Object.values(props.data.b.component_sizes).reduce(
+  (a, b) => a + b,
+  0
+);
+const sizesAvailable = totalSizeA > 0 || totalSizeB > 0;
+const bothSizesAvailable = totalSizeA > 0 && totalSizeB > 0;
 
 const activeTab: Ref<Tab> = ref(props.initialTab);
 </script>
@@ -115,6 +138,30 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
         >
           {{ ((bootstrapB - bootstrapA) / 10e8).toFixed(1) }}s ({{
             (((bootstrapB - bootstrapA) / bootstrapA) * 100).toFixed(3)
+          }}%)
+        </div>
+      </div>
+    </div>
+    <div
+      class="tab"
+      title="Artifact size: sizes of individual components of the two artifacts."
+      v-if="sizesAvailable"
+      :class="{selected: activeTab === Tab.ArtifactSize}"
+      @click="changeTab(Tab.ArtifactSize)"
+    >
+      <div class="title">Artifact size</div>
+      <div class="summary">
+        <div>
+          {{ formatArtifactSize(totalSizeA) }} ->
+          {{ formatArtifactSize(totalSizeB) }}
+        </div>
+        <div
+          v-if="bothSizesAvailable"
+          :class="diffClass(totalSizeB - totalSizeA)"
+        >
+          {{ totalSizeB < totalSizeA ? "-" : ""
+          }}{{ formatSize(Math.abs(totalSizeB - totalSizeA)) }} ({{
+            formatPercentChange(totalSizeA, totalSizeB)
           }}%)
         </div>
       </div>
