@@ -86,6 +86,8 @@ Category: ${metadata.category}
   };
   if (testCase.profile === "opt" && metadata.release_profile !== null) {
     addMetadata(metadata.release_profile);
+  } else if (testCase.profile === "debug" && metadata.dev_profile !== null) {
+    addMetadata(metadata.dev_profile);
   }
 
   return tooltip;
