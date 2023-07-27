@@ -73,9 +73,22 @@ function storeFilterToUrl(
 function updateFilter(newFilter: RuntimeBenchmarkFilter) {
   storeFilterToUrl(newFilter, defaultRuntimeFilter, getUrlParams());
   filter.value = newFilter;
+  refreshQuickLinks();
+}
+
+/**
+ * When the filter changes, the URL is updated.
+ * After that happens, we want to re-render the quick links component, because
+ * it contains links that are "relative" to the current URL. Changing this
+ * key ref will cause it to be re-rendered.
+ */
+function refreshQuickLinks() {
+  quickLinksKey.value += 1;
 }
 
 const urlParams = getUrlParams();
+
+const quickLinksKey = ref(0);
 const filter = ref(loadFilterFromUrl(urlParams, defaultRuntimeFilter));
 
 const allComparisons = computed(() =>
@@ -92,6 +105,7 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
 
 <template>
   <MetricSelector
+    :key="quickLinksKey"
     :quick-links="importantRuntimeMetrics"
     :selected-metric="selector.stat"
     :metrics="benchmarkInfo.runtime_metrics"

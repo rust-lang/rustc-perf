@@ -12,16 +12,15 @@ const props = defineProps<{
   metrics: string[];
 }>();
 
-function navigateToMetric(metric: string) {
+function createUrlForMetric(metric: string): URL {
   const params = {stat: metric};
-  const url = createUrlWithAppendedParams(params);
-  navigateToUrlParams(url.searchParams);
+  return createUrlWithAppendedParams(params);
 }
 
 function changeMetric(e: Event) {
   const target = e.target as HTMLSelectElement;
   const metric = target.value;
-  navigateToMetric(metric);
+  navigateToUrlParams(createUrlForMetric(metric).searchParams);
 }
 </script>
 
@@ -33,7 +32,7 @@ function changeMetric(e: Event) {
       :class="{active: props.selectedMetric === metric.metric}"
       :title="metric.description"
     >
-      <a href="#" @click.prevent="() => navigateToMetric(metric.metric)">{{
+      <a :href="createUrlForMetric(metric.metric).toString()">{{
         metric.label
       }}</a>
     </div>
