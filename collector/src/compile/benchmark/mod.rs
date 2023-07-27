@@ -532,6 +532,6 @@ mod tests {
             None,
         )
         .unwrap();
-        assert!(benchmarks.len() > 0);
+        assert!(!benchmarks.is_empty());
     }
 }
