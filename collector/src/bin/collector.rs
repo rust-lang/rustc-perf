@@ -88,6 +88,16 @@ struct RuntimeBenchmarkConfig {
     iterations: u32,
 }
 
+impl RuntimeBenchmarkConfig {
+    fn new(suite: BenchmarkSuite, filter: BenchmarkFilter, iterations: u32) -> Self {
+        Self {
+            runtime_suite: suite.filter(&filter),
+            filter,
+            iterations,
+        }
+    }
+}
+
 struct SharedBenchmarkConfig {
     artifact_id: ArtifactId,
     toolchain: Toolchain,
@@ -671,11 +681,11 @@ fn main_result() -> anyhow::Result<i32> {
                 artifact_id,
                 toolchain,
             };
-            let config = RuntimeBenchmarkConfig {
+            let config = RuntimeBenchmarkConfig::new(
                 runtime_suite,
-                filter: BenchmarkFilter::new(local.exclude, local.include),
+                BenchmarkFilter::new(local.exclude, local.include),
                 iterations,
-            };
+            );
             run_benchmarks(&mut rt, conn, shared, None, Some(config))?;
             Ok(0)
         }
@@ -1124,11 +1134,11 @@ fn bench_published_artifact(
             is_self_profile: false,
             bench_rustc: false,
         }),
-        Some(RuntimeBenchmarkConfig {
+        Some(RuntimeBenchmarkConfig::new(
             runtime_suite,
-            filter: BenchmarkFilter::keep_all(),
-            iterations: DEFAULT_RUNTIME_ITERATIONS,
-        }),
+            BenchmarkFilter::keep_all(),
+            DEFAULT_RUNTIME_ITERATIONS,
+        )),
     )
 }
 
