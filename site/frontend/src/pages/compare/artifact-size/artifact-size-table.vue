@@ -44,6 +44,16 @@ function formatValue(value: number | undefined): string {
   return formatSize(value);
 }
 
+function formatChangeTitle(
+  a: number | undefined,
+  b: number | undefined
+): string {
+  if (!isValidValue(a) || !isValidValue(b)) {
+    return "";
+  }
+  return (b - a).toLocaleString();
+}
+
 function formatChange(a: number | undefined, b: number | undefined): string {
   if (!isValidValue(a) || !isValidValue(b)) {
     return "-";
@@ -108,12 +118,18 @@ function generateTitle(component: string): string {
             {{ isLibrary(component) ? "Library" : "Binary" }}
           </td>
           <td>
-            <div class="aligned">
+            <div
+              class="aligned"
+              :title="a.component_sizes[component].toLocaleString()"
+            >
               {{ formatValue(a.component_sizes[component]) }}
             </div>
           </td>
           <td>
-            <div class="aligned">
+            <div
+              class="aligned"
+              :title="b.component_sizes[component].toLocaleString()"
+            >
               {{ formatValue(b.component_sizes[component]) }}
             </div>
           </td>
@@ -125,7 +141,15 @@ function generateTitle(component: string): string {
               )
             "
           >
-            <div class="aligned">
+            <div
+              class="aligned"
+              :title="
+                formatChangeTitle(
+                  a.component_sizes[component],
+                  b.component_sizes[component]
+                )
+              "
+            >
               {{
                 formatChange(
                   a.component_sizes[component],
