@@ -64,22 +64,19 @@ function getClass(a: number | undefined, b: number | undefined): string {
 
 function generateTitle(component: string): string {
   if (component === "rustc") {
-    return `Main binary of the Rust compiler. It is a small shim that links to librustc_driver.so,
- which contains most of the compiler logic.`;
+    return `Executable of the Rust compiler. A small wrapper that links to librustc_driver.so, which provides most of the compiler logic.`;
   } else if (component === "rustdoc") {
-    return `Tool that generates documentation of Rust crates. Links to librustc_driver.so, which provides
- most of the compiler logic.`;
+    return `Executable of rustdoc. Links to librustc_driver.so, which provides most of the compiler logic.`;
   } else if (component === "cargo") {
-    return "Build tool that compiles crates and their dependencies.";
+    return "Executable of cargo.";
   } else if (component === "librustc_driver") {
-    return `Shared library which contains the core implementation of the compiler. It is used by several
- other tools and binaries.`;
+    return `Shared library containing the core implementation of the compiler. It is used by several other tools and binaries.`;
   } else if (component === "libLLVM") {
-    return `LLVM codegen backend that is used by librustc_driver.so to emit optimized assembly.`;
+    return `Shared library of the LLVM codegen backend. It is used by librustc_driver.so.`;
   } else if (component === "libstd") {
-    return `The Rust standard library.`;
+    return `Shared library containing the Rust standard library. It is used by librustc_driver.so.`;
   } else if (component === "libtest") {
-    return `Library that contains implementation of the default test harness used by Rust programs.`;
+    return `Shared library containing the Rust test harness.`;
   } else {
     return ""; // Unknown component
   }
@@ -102,6 +99,7 @@ function generateTitle(component: string): string {
       <tr v-for="component in components">
         <td class="component" :title="generateTitle(component)">
           {{ formatName(component) }}
+          <Tooltip>{{ generateTitle(component) }}</Tooltip>
         </td>
         <td>
           <div class="aligned">
