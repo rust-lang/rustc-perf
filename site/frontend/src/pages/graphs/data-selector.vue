@@ -53,7 +53,7 @@ function submitSettings() {
       <option value="percentrelative">Percent Delta from Previous</option>
     </select>
     <select ref="statRef">
-      <option v-for="value in info.stats" :value="value">
+      <option v-for="value in info.compile_metrics" :value="value">
         {{ value }}
       </option></select
     >&nbsp;<a href="#" @click.prevent="submitSettings">Submit</a>

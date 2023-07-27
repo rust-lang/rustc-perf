@@ -67,3 +67,14 @@ export function formatPercentChange(
 export function isValidValue(size: number | undefined): boolean {
   return size !== undefined && size !== 0;
 }
+
+export function getBoolOrDefault(
+  params: Dict<string>,
+  name: string,
+  defaultValue: boolean
+): boolean {
+  if (params.hasOwnProperty(name)) {
+    return params[name] === "true";
+  }
+  return defaultValue;
+}

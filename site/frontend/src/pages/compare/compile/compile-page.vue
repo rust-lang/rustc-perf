@@ -17,6 +17,7 @@ import {
 } from "./common";
 import {BenchmarkInfo} from "../../../api";
 import {importantCompileMetrics} from "../metrics";
+import {getBoolOrDefault} from "../shared";
 
 const props = defineProps<{
   data: CompareResponse;
@@ -28,45 +29,65 @@ function loadFilterFromUrl(
   urlParams: Dict<string>,
   defaultFilter: CompileBenchmarkFilter
 ): CompileBenchmarkFilter {
-  function getBoolOrDefault(name: string, defaultValue: boolean): boolean {
-    if (urlParams.hasOwnProperty(name)) {
-      return urlParams[name] === "true";
-    }
-    return defaultValue;
-  }
-
   return {
     name: urlParams["name"] ?? defaultFilter.name,
-    nonRelevant: getBoolOrDefault("nonRelevant", defaultFilter.nonRelevant),
-    showRawData: getBoolOrDefault("showRawData", defaultFilter.showRawData),
+    nonRelevant: getBoolOrDefault(
+      urlParams,
+      "nonRelevant",
+      defaultFilter.nonRelevant
+    ),
+    showRawData: getBoolOrDefault(
+      urlParams,
+      "showRawData",
+      defaultFilter.showRawData
+    ),
     profile: {
-      check: getBoolOrDefault("check", defaultFilter.profile.check),
-      debug: getBoolOrDefault("debug", defaultFilter.profile.debug),
-      opt: getBoolOrDefault("opt", defaultFilter.profile.opt),
-      doc: getBoolOrDefault("doc", defaultFilter.profile.doc),
+      check: getBoolOrDefault(urlParams, "check", defaultFilter.profile.check),
+      debug: getBoolOrDefault(urlParams, "debug", defaultFilter.profile.debug),
+      opt: getBoolOrDefault(urlParams, "opt", defaultFilter.profile.opt),
+      doc: getBoolOrDefault(urlParams, "doc", defaultFilter.profile.doc),
     },
     scenario: {
-      full: getBoolOrDefault("full", defaultFilter.scenario.full),
-      incrFull: getBoolOrDefault("incrFull", defaultFilter.scenario.incrFull),
+      full: getBoolOrDefault(urlParams, "full", defaultFilter.scenario.full),
+      incrFull: getBoolOrDefault(
+        urlParams,
+        "incrFull",
+        defaultFilter.scenario.incrFull
+      ),
       incrUnchanged: getBoolOrDefault(
+        urlParams,
         "incrUnchanged",
         defaultFilter.scenario.incrUnchanged
       ),
       incrPatched: getBoolOrDefault(
+        urlParams,
         "incrPatched",
         defaultFilter.scenario.incrPatched
       ),
     },
     category: {
-      primary: getBoolOrDefault("primary", defaultFilter.category.primary),
+      primary: getBoolOrDefault(
+        urlParams,
+        "primary",
+        defaultFilter.category.primary
+      ),
       secondary: getBoolOrDefault(
+        urlParams,
         "secondary",
         defaultFilter.category.secondary
       ),
     },
     artifact: {
-      binary: getBoolOrDefault("binary", defaultFilter.artifact.binary),
-      library: getBoolOrDefault("library", defaultFilter.artifact.library),
+      binary: getBoolOrDefault(
+        urlParams,
+        "binary",
+        defaultFilter.artifact.binary
+      ),
+      library: getBoolOrDefault(
+        urlParams,
+        "library",
+        defaultFilter.artifact.library
+      ),
     },
   };
 }
@@ -140,6 +161,17 @@ function storeFilterToUrl(
 function updateFilter(newFilter: CompileBenchmarkFilter) {
   storeFilterToUrl(newFilter, defaultCompileFilter, getUrlParams());
   filter.value = newFilter;
+  refreshQuickLinks();
+}
+
+/**
+ * When the filter changes, the URL is updated.
+ * After that happens, we want to re-render the quick links component, because
+ * it contains links that are "relative" to the current URL. Changing this
+ * key ref will cause it to be re-rendered.
+ */
+function refreshQuickLinks() {
+  quickLinksKey.value += 1;
 }
 
 function exportData() {
@@ -148,6 +180,7 @@ function exportData() {
 
 const urlParams = getUrlParams();
 
+const quickLinksKey = ref(0);
 const filter = ref(loadFilterFromUrl(urlParams, defaultCompileFilter));
 
 const benchmarkMap = createCompileBenchmarkMap(props.data);
@@ -166,9 +199,10 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
 
 <template>
   <MetricSelector
+    :key="quickLinksKey"
     :quick-links="importantCompileMetrics"
     :selected-metric="selector.stat"
-    :benchmark-info="benchmarkInfo"
+    :metrics="benchmarkInfo.compile_metrics"
   />
   <Filters
     :defaultFilter="defaultCompileFilter"
