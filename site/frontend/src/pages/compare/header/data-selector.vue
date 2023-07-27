@@ -79,7 +79,10 @@ const opened = ref(false);
             "
           >
             <select class="stats" ref="statRef">
-              <option v-for="value in props.info.stats" :value="value">
+              <option
+                v-for="value in props.info.compile_metrics"
+                :value="value"
+              >
                 {{ value }}
               </option>
             </select>

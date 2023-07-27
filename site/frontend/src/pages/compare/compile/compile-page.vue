@@ -189,7 +189,7 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
   <MetricSelector
     :quick-links="importantCompileMetrics"
     :selected-metric="selector.stat"
-    :benchmark-info="benchmarkInfo"
+    :metrics="benchmarkInfo.compile_metrics"
   />
   <Filters
     :defaultFilter="defaultCompileFilter"

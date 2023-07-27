@@ -14,8 +14,11 @@ pub mod info {
 
     #[derive(Debug, Clone, PartialEq, Serialize)]
     pub struct Response {
-        /// Sorted list of statistic names known
-        pub stats: Vec<String>,
+        /// Sorted list of known compile metrics
+        pub compile_metrics: Vec<String>,
+
+        /// Sorted list of known runtime metrics
+        pub runtime_metrics: Vec<String>,
 
         /// Chronologically last loaded run date.
         pub as_of: Option<Date>,

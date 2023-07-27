@@ -92,9 +92,9 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
 
 <template>
   <MetricSelector
-    :selected-metric="selector.stat"
-    :benchmark-info="benchmarkInfo"
     :quick-links="importantRuntimeMetrics"
+    :selected-metric="selector.stat"
+    :metrics="benchmarkInfo.runtime_metrics"
   />
   <Filters
     :defaultFilter="defaultRuntimeFilter"

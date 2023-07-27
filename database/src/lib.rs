@@ -594,11 +594,22 @@ impl Index {
     // millions of queries and labels and iterating all of them is eventually
     // going to be impractical. But for now it performs quite well, so we'll go
     // for it as keeping indices around would be annoying.
-    pub fn metrics(&self) -> Vec<String> {
+    pub fn compile_metrics(&self) -> Vec<String> {
         self.pstat_series
             .map
             .keys()
             .map(|(_, _, _, metric)| metric)
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect()
+    }
+
+    pub fn runtime_metrics(&self) -> Vec<String> {
+        self.runtime_pstat_series
+            .map
+            .keys()
+            .map(|(_, metric)| metric)
             .collect::<std::collections::HashSet<_>>()
             .into_iter()
             .map(|s| s.to_string())

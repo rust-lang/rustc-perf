@@ -9,7 +9,7 @@ import {MetricDescription} from "./metrics";
 const props = defineProps<{
   quickLinks: MetricDescription[];
   selectedMetric: string;
-  benchmarkInfo: BenchmarkInfo;
+  metrics: string[];
 }>();
 
 function navigateToMetric(metric: string) {
@@ -37,9 +37,9 @@ function changeMetric(e: Event) {
         metric.label
       }}</a>
     </div>
-    <select class="stats" @change="changeMetric">
+    <select class="stats" @change="changeMetric" v-if="metrics.length > 0">
       <option
-        v-for="value in benchmarkInfo.stats"
+        v-for="value in metrics"
         :value="value"
         :selected="value === selectedMetric"
       >
