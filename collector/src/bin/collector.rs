@@ -786,14 +786,10 @@ fn main_result() -> anyhow::Result<i32> {
                     benchmarks.retain(|b| b.category().is_primary_or_secondary());
 
                     let artifact_id = ArtifactId::Commit(commit);
-                    let conn = rt.block_on(pool.connection());
+                    let mut conn = rt.block_on(pool.connection());
                     let toolchain = Toolchain::from_sysroot(&sysroot, sha);
 
-                    let shared = SharedBenchmarkConfig {
-                        artifact_id,
-                        toolchain,
-                    };
-                    let config = CompileBenchmarkConfig {
+                    let compile_config = CompileBenchmarkConfig {
                         benchmarks,
                         profiles: Profile::all(),
                         scenarios: Scenario::all(),
@@ -801,8 +797,31 @@ fn main_result() -> anyhow::Result<i32> {
                         is_self_profile: self_profile.self_profile,
                         bench_rustc: bench_rustc.bench_rustc,
                     };
+                    let runtime_suite = rt.block_on(load_runtime_benchmarks(
+                        conn.as_mut(),
+                        &runtime_benchmark_dir,
+                        CargoIsolationMode::Isolated,
+                        &toolchain,
+                        &artifact_id,
+                    ))?;
 
-                    let res = run_benchmarks(&mut rt, conn, shared, Some(config), None);
+                    let runtime_config = RuntimeBenchmarkConfig {
+                        runtime_suite,
+                        filter: BenchmarkFilter::keep_all(),
+                        iterations: DEFAULT_RUNTIME_ITERATIONS,
+                    };
+                    let shared = SharedBenchmarkConfig {
+                        artifact_id,
+                        toolchain,
+                    };
+
+                    let res = run_benchmarks(
+                        &mut rt,
+                        conn,
+                        shared,
+                        Some(compile_config),
+                        Some(runtime_config),
+                    );
 
                     client.post(format!("{}/perf/onpush", site_url)).send()?;
 
