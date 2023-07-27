@@ -1,25 +1,9 @@
 {% extends "layout.html" %}
 {% block head %}
-<style>
-    #missing-commits th {
-        text-align: center;
-    }
-
-    #missing-commits td {
-        text-align: left;
-        padding: 0 0.5em;
-    }
-</style>
+<link rel="stylesheet" type="text/css" href="scripts/status.css">
 {% endblock %}
 {% block content %}
-<div>
-    <div id="data">
-        <div id="data-insert-js"></div>
-        Benchmarking errors for last commit:
-        <div id="benchmark-state"></div>
-    </div>
-    <div id="as-of"></div>
-</div>
+<div id="app"></div>
 {% endblock %}
 {% block script %}
 <script src="scripts/status.js"></script>
