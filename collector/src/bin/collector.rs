@@ -747,6 +747,12 @@ fn main_result() -> anyhow::Result<i32> {
                 c
             } else {
                 println!("no artifact to benchmark");
+
+                // Sleep for a bit to avoid spamming the perf server too much
+                // This sleep serves to remove a needless sleep in `collector/collect.sh` when
+                // a benchmark was actually executed.
+                std::thread::sleep(Duration::from_secs(60 * 2));
+
                 // no missing artifacts
                 return Ok(0);
             };
