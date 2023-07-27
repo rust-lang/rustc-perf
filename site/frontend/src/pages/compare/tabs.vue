@@ -1,7 +1,12 @@
 <script setup lang="tsx">
 import {computed, h, ref, Ref} from "vue";
 import {CompareResponse, Tab} from "./types";
-import {diffClass, formatSize, percentClass} from "./shared";
+import {
+  diffClass,
+  formatPercentChange,
+  formatSize,
+  percentClass,
+} from "./shared";
 import {SummaryGroup} from "./data";
 import SummaryPercentValue from "./summary/percent-value.vue";
 import SummaryRange from "./summary/range.vue";
@@ -156,7 +161,7 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
         >
           {{ totalSizeB < totalSizeA ? "-" : ""
           }}{{ formatSize(Math.abs(totalSizeB - totalSizeA)) }} ({{
-            (((totalSizeB - totalSizeA) / totalSizeA) * 100).toFixed(3)
+            formatPercentChange(totalSizeA, totalSizeB)
           }}%)
         </div>
       </div>

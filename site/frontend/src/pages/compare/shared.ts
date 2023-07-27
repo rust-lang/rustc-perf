@@ -50,3 +50,20 @@ export function formatSize(size: number): string {
   }
   return `${size} B`;
 }
+
+// Formats a percentual change between two values
+export function formatPercentChange(
+  before: number | undefined,
+  after: number | undefined,
+  invalidPlaceholder: string = "-"
+): string {
+  if (!isValidValue(before) || !isValidValue(after)) {
+    return invalidPlaceholder;
+  }
+  return `${(((after - before) / before) * 100).toFixed(3)}%`;
+}
+
+// Checks if the value is not undefined and not zero
+export function isValidValue(size: number | undefined): boolean {
+  return size !== undefined && size !== 0;
+}

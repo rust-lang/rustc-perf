@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import {ArtifactDescription} from "../types";
-import {diffClass, formatSize} from "../shared";
+import {
+  diffClass,
+  formatPercentChange,
+  formatSize,
+  isValidValue,
+} from "../shared";
+import Tooltip from "../tooltip.vue";
 
 const props = defineProps<{
   a: ArtifactDescription;
@@ -31,14 +37,14 @@ function formatName(component: string): string {
 }
 
 function formatValue(value: number | undefined): string {
-  if (value === undefined) {
+  if (!isValidValue(value)) {
     return "-";
   }
   return formatSize(value);
 }
 
 function formatChange(a: number | undefined, b: number | undefined): string {
-  if (a === undefined || b === undefined) {
+  if (!isValidValue(a) || !isValidValue(b)) {
     return "-";
   }
   const diff = b - a;
@@ -49,18 +55,8 @@ function formatChange(a: number | undefined, b: number | undefined): string {
   return formatted;
 }
 
-function formatPercentChange(
-  a: number | undefined,
-  b: number | undefined
-): string {
-  if (a === undefined || b === undefined) {
-    return "-";
-  }
-  return `${(((b - a) / a) * 100).toFixed(3)}%`;
-}
-
 function getClass(a: number | undefined, b: number | undefined): string {
-  if (a === undefined || b === undefined || a == b) {
+  if (!isValidValue(a) || !isValidValue(b) || a == b) {
     return "";
   }
   return diffClass(b - a);
