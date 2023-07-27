@@ -6,8 +6,11 @@ Hardware and software details of the machine that executes the CI details can be
 
 ## The benchmarks
 
-The individual compile time benchmarks are described in the `README` file in the
+Compile time benchmarks are described in the `README` file in the
 `collector/compile-benchmarks` directory.
+
+Runtime benchmarks are described in the `README` file in the
+`collector/runtime-benchmarks` directory.
 
 ## How to build
 
@@ -65,7 +68,8 @@ marked with a '?' in the `compare` page.
 
 ### How to benchmark a change on your own machine
 
-The following command runs the benchmark suite using a local rustc:
+The following command runs the compile benchmark suite (which measures how long does it take to compile
+various crates with rustc) using a local rustc:
 ```
 ./target/release/collector bench_local <RUSTC>
 ```
@@ -166,6 +170,22 @@ something like this:
 
 where `$RUST_ORIGINAL` and `$RUST_MODIFIED` are paths (relative or absolute) to
 the relevant rustc executables.
+
+#### Runtime benchmarks
+There is also a runtime benchmark suite, which measures the performance of Rust programs compiled
+by a selected version of rustc. You can run it using the following command:
+```bash
+./target/release/collector bench_runtime_local <RUSTC>
+```
+
+### Benchmarking options
+
+The following options alter the behaviour of the `bench_runtime_local` subcommand.
+- `--no-isolate`: you can use this flag to make repeated local benchmarks faster. It will cause the
+  `collector` to reuse compiled artifacts of the runtime benchmark groups.
+
+The `bench_runtime_local` command also shares some options with the `bench_local` command, notably
+`--id`, `--db`, `--cargo`, `--include`, `--exclude` and `--iterations`. 
 
 ### How to view the measurements on your own machine
 
