@@ -63,10 +63,6 @@ impl BenchmarkSuite {
         }
     }
 
-    pub fn total_benchmark_count(&self) -> u64 {
-        self.benchmark_names().count() as u64
-    }
-
     pub fn filtered_benchmark_count(&self, filter: &BenchmarkFilter) -> u64 {
         self.benchmark_names()
             .filter(|benchmark| {
