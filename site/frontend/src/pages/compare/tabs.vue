@@ -162,7 +162,7 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
           {{ totalSizeB < totalSizeA ? "-" : ""
           }}{{ formatSize(Math.abs(totalSizeB - totalSizeA)) }} ({{
             formatPercentChange(totalSizeA, totalSizeB)
-          }}%)
+          }})
         </div>
       </div>
     </div>
