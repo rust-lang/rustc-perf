@@ -159,6 +159,7 @@ pub mod comparison {
         pub binary: Option<bool>,
         pub iterations: Option<u32>,
         pub release_profile: Option<ProfileMetadata>,
+        pub dev_profile: Option<ProfileMetadata>,
     }
 
     #[derive(Debug, Clone, Serialize)]

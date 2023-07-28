@@ -67,6 +67,7 @@ export interface CompileBenchmarkMetadata {
   binary: boolean | null;
   iterations: number | null;
   release_profile: CargoProfileMetadata;
+  dev_profile: CargoProfileMetadata;
 }
 
 export interface CompileBenchmarkComparison {

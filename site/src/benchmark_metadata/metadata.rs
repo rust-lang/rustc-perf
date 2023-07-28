@@ -22,6 +22,7 @@ pub struct ProfileMetadata {
 pub struct CompileBenchmarkMetadata {
     pub perf_config: serde_json::Value,
     pub release_metadata: ProfileMetadata,
+    pub dev_metadata: ProfileMetadata,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]

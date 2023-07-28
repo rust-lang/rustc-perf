@@ -55,22 +55,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         let manifest: toml::Value = toml::from_str(&manifest_contents)?;
 
         let table = manifest.as_table().unwrap();
-        let profile = table.get("profile");
-        let release = profile
-            .and_then(|p| p.as_table())
-            .and_then(|t| t.get("release"))
-            .and_then(|t| t.as_table());
-        let debug = release.and_then(|t| t.get("debug"));
-        let lto = release.and_then(|t| t.get("lto"));
-        let codegen_units = release.and_then(|t| t.get("codegen-units"));
-
+        let profiles = table.get("profile");
         let metadata = CompileBenchmarkMetadata {
             perf_config: config,
-            release_metadata: ProfileMetadata {
-                debug: debug.map(|v| v.to_string()),
-                lto: lto.map(|v| v.to_string()),
-                codegen_units: codegen_units.and_then(|v| v.as_integer().map(|v| v as u32)),
-            },
+            release_metadata: read_profile_metadata(profiles, "release"),
+            dev_metadata: read_profile_metadata(profiles, "dev"),
         };
         suite.insert(benchmark_name, metadata);
     }
@@ -81,4 +70,24 @@ fn main() -> Result<(), Box<dyn Error>> {
     std::fs::write(out_dir.join(SERIALIZED_SUITE_NAME), serialized)?;
 
     Ok(())
+}
+
+/// If the manifest has `profile.*` entries, read some of the compilation metadata from a built-in
+/// profile with the given `profile` name, if it exists (for example, the options for cargo's
+/// optimized profile is named `release`).
+/// Note that some, or all, of the metadata that we want to display may be missing from the
+/// manifest: it just won't be shown in the UI in that case.
+fn read_profile_metadata(profiles: Option<&toml::Value>, profile: &str) -> ProfileMetadata {
+    let profile = profiles
+        .and_then(|p| p.as_table())
+        .and_then(|t| t.get(profile))
+        .and_then(|t| t.as_table());
+    let debug = profile.and_then(|t| t.get("debug"));
+    let lto = profile.and_then(|t| t.get("lto"));
+    let codegen_units = profile.and_then(|t| t.get("codegen-units"));
+    ProfileMetadata {
+        debug: debug.map(|v| v.to_string()),
+        lto: lto.map(|v| v.to_string()),
+        codegen_units: codegen_units.and_then(|v| v.as_integer().map(|v| v as u32)),
+    }
 }

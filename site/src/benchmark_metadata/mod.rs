@@ -13,6 +13,7 @@ pub use metadata::ProfileMetadata;
 pub struct CompileBenchmarkMetadata {
     pub perf_config: BenchmarkConfig,
     pub release_metadata: ProfileMetadata,
+    pub dev_metadata: ProfileMetadata,
 }
 
 /// The metadata of compile-time benchmarks is embedded directly within the binary using
@@ -50,6 +51,7 @@ fn load_compile_benchmark_metadata() -> HashMap<String, CompileBenchmarkMetadata
             let metadata::CompileBenchmarkMetadata {
                 perf_config,
                 release_metadata,
+                dev_metadata,
             } = metadata;
             let perf_config: BenchmarkConfig =
                 serde_json::from_value(perf_config).unwrap_or_else(|error| {
@@ -62,6 +64,7 @@ fn load_compile_benchmark_metadata() -> HashMap<String, CompileBenchmarkMetadata
             let metadata = CompileBenchmarkMetadata {
                 perf_config,
                 release_metadata,
+                dev_metadata,
             };
             (name, metadata)
         })
