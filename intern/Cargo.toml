@@ -2,7 +2,7 @@
 name = "intern"
 version = "0.1.0"
 authors = ["Mark Rousskov <mark.simulacrum@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 bumpalo = "3.2"

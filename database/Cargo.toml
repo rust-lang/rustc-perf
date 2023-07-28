@@ -2,7 +2,7 @@
 name = "database"
 version = "0.1.0"
 authors = ["Mark Rousskov <mark.simulacrum@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 hashbrown = { version = "0.13", features = ["serde"] }
