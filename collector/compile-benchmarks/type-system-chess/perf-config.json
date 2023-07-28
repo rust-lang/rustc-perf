@@ -1,4 +1,5 @@
 {
     "category": "secondary",
-    "artifact": "library"
+    "artifact": "library",
+    "excluded_profiles": ["Debug", "Opt", "Doc"]
 }
