@@ -272,7 +272,7 @@ pub async fn enqueue_shas(
                 msg.push('\n');
             }
 
-            let artifacts_in_queue = ctxt.missing_commits().await.len();
+            let preceding_artifacts = count_preceding_in_queue(ctxt, &try_commit).await;
             let last_duration = conn
                 .last_artifact_collection()
                 .await
@@ -282,20 +282,17 @@ pub async fn enqueue_shas(
             // "Guess" that the duration will take about an hour if we don't have data or it's
             // suspiciously fast.
             let last_duration = last_duration.max(Duration::from_secs(3600));
+            // Also add the currently queued artifact to the duration
+            let expected_duration = (last_duration.as_secs() * (preceding_artifacts + 1)) as f64;
 
-            let expected_duration = (last_duration.as_secs() * artifacts_in_queue as u64) as f64;
-
-            // At this point, the queue should also contain the commit that we're mentioning below.
-            let other_artifact_count = artifacts_in_queue.saturating_sub(1);
-
-            let verb = if other_artifact_count == 1 {
+            let verb = if preceding_artifacts == 1 {
                 "is"
             } else {
                 "are"
             };
-            let suffix = if other_artifact_count == 1 { "" } else { "s" };
+            let suffix = if preceding_artifacts == 1 { "" } else { "s" };
             let queue_msg = format!(
-                r#"There {verb} currently {other_artifact_count} other artifact{suffix} in the [queue](https://perf.rust-lang.org/status.html).
+                r#"There {verb} currently {preceding_artifacts} other artifact{suffix} in the [queue](https://perf.rust-lang.org/status.html).
 It will probably take at least ~{:.1} hours until the benchmark run finishes."#,
                 (expected_duration / 3600.0)
             );
@@ -315,6 +312,15 @@ It will probably take at least ~{:.1} hours until the benchmark run finishes."#,
     }
 
     Ok(())
+}
+
+/// Counts how many artifacts are in the queue before the specified commit.
+async fn count_preceding_in_queue(ctxt: &SiteCtxt, commit: &TryCommit) -> u64 {
+    let queue = ctxt.missing_commits().await;
+    queue
+        .iter()
+        .position(|(c, _)| c.sha == commit.sha())
+        .unwrap_or(queue.len()) as u64
 }
 
 #[derive(Debug, Deserialize)]
