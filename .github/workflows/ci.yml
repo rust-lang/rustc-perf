@@ -282,3 +282,59 @@ jobs:
 
       - name: Export empty SQLite DB to Postgres
         run: ./target/debug/sqlite-to-postgres "$(mktemp)" 'postgresql://postgres:postgres@localhost:5432/postgres'
+
+  site-endpoint:
+    name: Compare page endpoint test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v2
+
+      - name: Install stable
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Install nightly
+        run: rustup install nightly
+
+      - name: Configure environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y linux-tools-common linux-tools-generic linux-tools-`uname -r`
+          echo -1 | sudo tee /proc/sys/kernel/perf_event_paranoid
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build collector
+        run: cargo build -p collector
+
+      - name: Gather data
+        run: |
+          cargo run --bin collector bench_local `which rustc` --include syn --id version1 --db postgresql://postgres:postgres@127.0.0.1:5432/postgres
+          cargo run --bin collector bench_local `rustup +nightly which rustc` --include syn --id version2 --db postgresql://postgres:postgres@127.0.0.1:5432/postgres
+
+      - name: Build site
+        run: cargo build --bin site
+
+      # Check that data from the /get endpoint can be successfully queried.
+      - name: Query compare page data
+        run: |
+          DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/postgres cargo run --bin site &
+          curl http://localhost:2346/perf/get \
+            -H 'Content-Type:application/json' \
+            -d '{"start": "version1", "end": "version2", "stat": "instructions:u" }' \
+            --output out.msgpack \
+            --retry-connrefused \
+            --connect-timeout 5 \
+            --max-time 10 \
+            --retry 3 \
+            --retry-delay 5
