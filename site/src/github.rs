@@ -2,7 +2,7 @@ pub mod client;
 pub mod comparison_summary;
 
 use crate::api::github::Commit;
-use crate::load::{SiteCtxt, TryCommit};
+use crate::load::{MissingReason, SiteCtxt, TryCommit};
 use std::time::Duration;
 
 use serde::Deserialize;
@@ -21,6 +21,7 @@ pub const COMMENT_MARK_TEMPORARY: &str = "<!-- rust-timer: temporary -->";
 pub const COMMENT_MARK_ROLLUP: &str = "<!-- rust-timer: rollup -->";
 
 pub use comparison_summary::post_finished;
+use database::Connection;
 
 /// Enqueues try build artifacts and posts a message about them on the original rollup PR
 pub async fn unroll_rollup(
@@ -272,18 +273,8 @@ pub async fn enqueue_shas(
                 msg.push('\n');
             }
 
-            let preceding_artifacts = count_preceding_in_queue(ctxt, &try_commit).await;
-            let last_duration = conn
-                .last_artifact_collection()
-                .await
-                .map(|collection| collection.duration)
-                .unwrap_or(Duration::ZERO);
-
-            // "Guess" that the duration will take about an hour if we don't have data or it's
-            // suspiciously fast.
-            let last_duration = last_duration.max(Duration::from_secs(3600));
-            // Also add the currently queued artifact to the duration
-            let expected_duration = (last_duration.as_secs() * (preceding_artifacts + 1)) as f64;
+            let (preceding_artifacts, expected_duration) =
+                estimate_queue_info(ctxt, conn.as_ref(), &try_commit).await;
 
             let verb = if preceding_artifacts == 1 {
                 "is"
@@ -294,7 +285,7 @@ pub async fn enqueue_shas(
             let queue_msg = format!(
                 r#"There {verb} currently {preceding_artifacts} other artifact{suffix} in the [queue](https://perf.rust-lang.org/status.html).
 It will probably take at least ~{:.1} hours until the benchmark run finishes."#,
-                (expected_duration / 3600.0)
+                (expected_duration.as_secs_f64() / 3600.0)
             );
 
             msg.push_str(&format!(
@@ -314,13 +305,56 @@ It will probably take at least ~{:.1} hours until the benchmark run finishes."#,
     Ok(())
 }
 
-/// Counts how many artifacts are in the queue before the specified commit.
-async fn count_preceding_in_queue(ctxt: &SiteCtxt, commit: &TryCommit) -> u64 {
+/// Counts how many artifacts are in the queue before the specified commit, and what is the expected
+/// duration until the specified commit will be finished.
+async fn estimate_queue_info(
+    ctxt: &SiteCtxt,
+    conn: &dyn Connection,
+    commit: &TryCommit,
+) -> (u64, Duration) {
     let queue = ctxt.missing_commits().await;
-    queue
+
+    // Queue without in-progress artifacts
+    let queue_waiting: Vec<_> = queue
+        .into_iter()
+        .filter_map(|(c, reason)| match reason {
+            MissingReason::InProgress(_) if c.sha != commit.sha => None,
+            _ => Some(c),
+        })
+        .collect();
+
+    // Measure expected duration of waiting artifacts
+    // How many commits are waiting (i.e. not running) in the queue before the specified commit?
+    let preceding_waiting = queue_waiting
         .iter()
-        .position(|(c, _)| c.sha == commit.sha())
-        .unwrap_or(queue.len()) as u64
+        .position(|c| c.sha == commit.sha())
+        .unwrap_or(queue_waiting.len().saturating_sub(1)) as u64;
+
+    // Guess the expected full run duration of a waiting commit
+    let last_duration = conn
+        .last_artifact_collection()
+        .await
+        .map(|collection| collection.duration)
+        .unwrap_or(Duration::ZERO);
+
+    // Guess that the duration will take about an hour if we don't have data or it's
+    // suspiciously fast.
+    let last_duration = last_duration.max(Duration::from_secs(3600));
+
+    let mut expected_duration = last_duration * (preceding_waiting + 1) as u32;
+    let mut preceding = preceding_waiting;
+
+    // Add in-progress artifact duration and count (if any)
+    if let Some(aid) = conn.in_progress_artifacts().await.pop() {
+        preceding += 1;
+        expected_duration += conn
+            .in_progress_steps(&aid)
+            .await
+            .into_iter()
+            .map(|s| s.expected.saturating_sub(s.duration))
+            .sum();
+    }
+    (preceding, expected_duration)
 }
 
 #[derive(Debug, Deserialize)]
