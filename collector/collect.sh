@@ -22,9 +22,12 @@ while : ; do
         # Install measureme tooling
         cargo install --git https://github.com/rust-lang/measureme --branch stable flamegraph crox summarize
 
-        target/release/collector bench_next $SITE_URL --self-profile --bench-rustc --db $DATABASE;
-        echo finished run at `date`;
+        target/release/collector bench_next $SITE_URL --self-profile --bench-rustc --db $DATABASE
+        STATUS=$?
+        echo finished run at `date` with exit code $STATUS
 
-        # Wait a little bit before the next run starts.
-        sleep 120
+        # Wait a bit if the command has failed.
+        if [ $STATUS -ne 0 ]; then
+            sleep 120
+        fi
 done
