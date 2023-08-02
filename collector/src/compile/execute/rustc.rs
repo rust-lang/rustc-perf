@@ -165,19 +165,23 @@ fn checkout(artifact: &ArtifactId) -> anyhow::Result<()> {
             .status()
             .context("git fetch origin")?;
 
-        if !status.success() && matches!(artifact, ArtifactId::Tag(_)) {
+        if !status.success() {
             log::warn!(
-                "git fetch origin {} failed - trying default branch",
+                "git fetch origin {} failed, this will likely break the build",
                 artifact
             );
-            status = Command::new("git")
-                .current_dir("rust")
-                .arg("fetch")
-                .arg("origin")
-                .arg("HEAD")
-                .status()
-                .context("git fetch origin HEAD")?;
         }
+
+        // Regardless, we fetch the default branch. Upstream Rust started using `git merge-base`
+        // recently, which (reasonably) finds the wrong base if we think e.g. origin/master
+        // diverged thousands of commits ago.
+        status = Command::new("git")
+            .current_dir("rust")
+            .arg("fetch")
+            .arg("origin")
+            .arg("HEAD")
+            .status()
+            .context("git fetch origin HEAD")?;
         assert!(status.success(), "git fetch successful");
     } else {
         let status = Command::new("git")
