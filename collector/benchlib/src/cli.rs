@@ -4,6 +4,8 @@ use clap::{CommandFactory, FromArgMatches};
 pub enum Args {
     /// Benchmark all benchmarks in this benchmark group and print the results as JSON.
     Run(BenchmarkArgs),
+    /// Profile a single benchmark execution.
+    Profile(ProfileArgs),
     /// List benchmarks that are defined in the current group as a JSON array.
     List,
 }
@@ -21,6 +23,12 @@ pub struct BenchmarkArgs {
     /// Include only benchmarks matching a prefix in this comma-separated list
     #[arg(long)]
     pub include: Option<String>,
+}
+
+#[derive(clap::Parser, Debug)]
+pub struct ProfileArgs {
+    /// Name of the benchmark that should be profiled.
+    pub benchmark: String,
 }
 
 #[test]
