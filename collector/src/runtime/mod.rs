@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::io::{BufRead, BufReader, Cursor};
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -13,7 +14,7 @@ pub use benchmark::{
 use database::{ArtifactIdNumber, CollectionId, Connection};
 
 use crate::utils::git::get_rustc_perf_commit;
-use crate::{run_command_with_output, CollectorCtx};
+use crate::{run_command, run_command_with_output, CollectorCtx};
 
 mod benchmark;
 
@@ -105,6 +106,30 @@ pub async fn bench_runtime(
     Ok(())
 }
 
+pub fn profile_runtime(suite: BenchmarkSuite, benchmark: &str) -> anyhow::Result<()> {
+    let Some(group) = suite.get_group_by_benchmark(benchmark) else {
+        return Err(anyhow::anyhow!("Benchmark `{benchmark}` not found"));
+    };
+    let mut cmd = prepare_command(&group.binary);
+    cmd.arg("profile").arg(benchmark);
+    run_command(&mut cmd)?;
+    Ok(())
+}
+
+/// Prepares a command for execution, adding some shared flags.
+fn prepare_command<S: AsRef<OsStr>>(binary: S) -> Command {
+    // Turn off ASLR
+    let mut command = Command::new("setarch");
+    command.arg(std::env::consts::ARCH).arg("-R").arg(binary);
+
+    // We want to see a backtrace if the program panics
+    command.env("RUST_BACKTRACE", "1");
+
+    command.stdout(Stdio::piped());
+    command.stderr(Stdio::piped());
+    command
+}
+
 /// Records the results (stats) of a benchmark into the database.
 async fn record_stats(
     conn: &dyn Connection,
@@ -191,17 +216,10 @@ fn execute_runtime_benchmark_binary(
     filter: &BenchmarkFilter,
     iterations: u32,
 ) -> anyhow::Result<impl Iterator<Item = anyhow::Result<BenchmarkMessage>>> {
-    // Turn off ASLR
-    let mut command = Command::new("setarch");
-    command.arg(std::env::consts::ARCH);
-    command.arg("-R");
-    command.arg(binary);
+    let mut command = prepare_command(binary);
     command.arg("run");
     command.arg("--iterations");
     command.arg(&iterations.to_string());
-
-    // We want to see a backtrace if the benchmark panics
-    command.env("RUST_BACKTRACE", "1");
 
     if let Some(ref exclude) = filter.exclude {
         command.args(["--exclude", exclude]);
@@ -209,9 +227,6 @@ fn execute_runtime_benchmark_binary(
     if let Some(ref include) = filter.include {
         command.args(["--include", include]);
     }
-
-    command.stdout(Stdio::piped());
-    command.stderr(Stdio::piped());
 
     let output = run_command_with_output(&mut command)?;
     if !output.status.success() {

@@ -59,6 +59,15 @@ impl BenchmarkSuite {
             .iter()
             .flat_map(|suite| suite.benchmark_names.iter().map(|n| n.as_ref()))
     }
+
+    pub fn get_group_by_benchmark(&self, benchmark: &str) -> Option<&BenchmarkGroup> {
+        self.groups.iter().find(|group| {
+            group
+                .benchmark_names
+                .iter()
+                .any(|b| b.as_str() == benchmark)
+        })
+    }
 }
 
 pub struct BenchmarkFilter {
