@@ -116,9 +116,21 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
     @change="updateFilter"
   />
   <OverallSummary :summary="filteredSummary" />
+  <div class="warning">
+    Runtime benchmarks are currently experimental and the results might be quite
+    unstable/noisy. Please take this into account!
+  </div>
   <ComparisonsTable
     :comparisons="comparisons"
     :has-non-relevant="allComparisons.length > 0"
     :show-raw-data="filter.showRawData"
   />
 </template>
+
+<style scoped lang="scss">
+.warning {
+  margin: 5px 0;
+  text-align: center;
+  font-weight: bold;
+}
+</style>
