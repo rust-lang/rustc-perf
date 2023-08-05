@@ -3,16 +3,28 @@ import {TestCaseComparison} from "../data";
 import Tooltip from "../tooltip.vue";
 import {percentClass} from "../shared";
 import {RuntimeTestCase} from "./common";
+import {computed} from "vue";
 
 const props = defineProps<{
   comparisons: TestCaseComparison<RuntimeTestCase>[];
   hasNonRelevant: boolean;
   showRawData: boolean;
+  metric: string;
 }>();
 
 function prettifyRawNumber(number: number): string {
   return number.toLocaleString();
 }
+
+const unit = computed(() => {
+  // The DB stored wall-time data in nanoseconds for runtime benchmarks, so it is
+  // hardcoded here
+  if (props.metric == "wall-time") {
+    return "ns";
+  } else {
+    return null;
+  }
+});
 </script>
 
 <template>
@@ -90,14 +102,14 @@ function prettifyRawNumber(number: number): string {
               </div>
             </td>
             <td v-if="showRawData" class="numeric">
-              <abbr :title="comparison.datumA.toString()">{{
-                prettifyRawNumber(comparison.datumA)
-              }}</abbr>
+              <abbr :title="comparison.datumA.toString()"
+                >{{ prettifyRawNumber(comparison.datumA) }}{{ unit }}</abbr
+              >
             </td>
             <td v-if="showRawData" class="numeric">
-              <abbr :title="comparison.datumB.toString()">{{
-                prettifyRawNumber(comparison.datumB)
-              }}</abbr>
+              <abbr :title="comparison.datumB.toString()"
+                >{{ prettifyRawNumber(comparison.datumB) }}{{ unit }}</abbr
+              >
             </td>
           </tr>
         </template>
