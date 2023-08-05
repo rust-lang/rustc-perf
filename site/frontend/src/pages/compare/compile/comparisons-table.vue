@@ -4,6 +4,7 @@ import Tooltip from "../tooltip.vue";
 import {ArtifactDescription} from "../types";
 import {percentClass} from "../shared";
 import {CompileBenchmarkMap, CompileTestCase} from "./common";
+import {computed} from "vue";
 
 const props = defineProps<{
   id: string;
@@ -92,6 +93,16 @@ Category: ${metadata.category}
 
   return tooltip;
 }
+
+const unit = computed(() => {
+  // The DB stored wall-time data in seconds for compile benchmarks, so it is
+  // hardcoded here
+  if (props.stat == "wall-time") {
+    return "s";
+  } else {
+    return null;
+  }
+});
 </script>
 
 <template>
@@ -194,16 +205,16 @@ Category: ${metadata.category}
             </td>
             <td v-if="showRawData" class="numeric">
               <a v-bind:href="detailedQueryRawDataLink(commitA, comparison)">
-                <abbr :title="comparison.datumA.toString()">{{
-                  prettifyRawNumber(comparison.datumA)
-                }}</abbr>
+                <abbr :title="comparison.datumA.toString()"
+                  >{{ prettifyRawNumber(comparison.datumA) }}{{ unit }}</abbr
+                >
               </a>
             </td>
             <td v-if="showRawData" class="numeric">
               <a v-bind:href="detailedQueryRawDataLink(commitB, comparison)">
-                <abbr :title="comparison.datumB.toString()">{{
-                  prettifyRawNumber(comparison.datumB)
-                }}</abbr>
+                <abbr :title="comparison.datumB.toString()"
+                  >{{ prettifyRawNumber(comparison.datumB) }}{{ unit }}</abbr
+                >
               </a>
             </td>
           </tr>
