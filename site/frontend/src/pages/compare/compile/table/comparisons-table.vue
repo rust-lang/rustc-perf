@@ -5,6 +5,8 @@ import {ArtifactDescription} from "../../types";
 import {percentClass} from "../../shared";
 import {CompileBenchmarkMap, CompileTestCase} from "../common";
 import {computed} from "vue";
+import {useExpandedStore} from "./expansion";
+import BenchmarkDetail from "./benchmark-detail.vue";
 
 const props = defineProps<{
   id: string;
@@ -94,6 +96,13 @@ Category: ${metadata.category}
   return tooltip;
 }
 
+const columnCount = computed(() => {
+  const base = 7;
+  if (props.showRawData) {
+    return base + 2;
+  }
+  return base;
+});
 const unit = computed(() => {
   // The DB stored wall-time data in seconds for compile benchmarks, so it is
   // hardcoded here
@@ -103,6 +112,7 @@ const unit = computed(() => {
     return null;
   }
 });
+const {toggleExpanded, isExpanded} = useExpandedStore();
 </script>
 
 <template>
@@ -114,6 +124,7 @@ const unit = computed(() => {
     <table v-else class="benches compare">
       <thead>
         <tr>
+          <th></th>
           <th>Benchmark</th>
           <th>Profile</th>
           <th>Scenario</th>
@@ -147,6 +158,9 @@ const unit = computed(() => {
       <tbody>
         <template v-for="comparison in comparisons">
           <tr>
+            <td @click="toggleExpanded(comparison.testCase)">
+              {{ isExpanded(comparison.testCase) ? "▼" : "▶" }}
+            </td>
             <td :title="generateBenchmarkTooltip(comparison.testCase)">
               <a
                 v-bind:href="benchmarkLink(comparison.testCase.benchmark)"
@@ -216,6 +230,11 @@ const unit = computed(() => {
                   >{{ prettifyRawNumber(comparison.datumB) }}{{ unit }}</abbr
                 >
               </a>
+            </td>
+          </tr>
+          <tr v-if="isExpanded(comparison.testCase)">
+            <td :colspan="columnCount">
+              <BenchmarkDetail :test-case="comparison.testCase" />
             </td>
           </tr>
         </template>
