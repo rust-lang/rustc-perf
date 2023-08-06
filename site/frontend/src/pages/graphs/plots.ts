@@ -285,7 +285,7 @@ function normalizeData(data: GraphData) {
 export function renderPlots(
   data: GraphData,
   selector: GraphsSelector,
-  elementSelector: string
+  plotElement: HTMLElement
 ) {
   normalizeData(data);
 
@@ -377,11 +377,7 @@ export function renderPlots(
         absoluteMode: selector.kind == "raw",
       });
 
-      new uPlot(
-        plotOpts,
-        plotData as any as TypedArray[],
-        document.querySelector<HTMLElement>(elementSelector)
-      );
+      new uPlot(plotOpts, plotData as any as TypedArray[], plotElement);
 
       i++;
     }
