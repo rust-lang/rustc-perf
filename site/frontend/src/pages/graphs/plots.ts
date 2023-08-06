@@ -1,5 +1,5 @@
 import uPlot, {TypedArray} from "uplot";
-import {GraphData, GraphsSelector} from "./state";
+import {GraphData, GraphsSelector} from "../../graph/data";
 
 const commonCacheStateColors = {
   full: "#7cb5ec",

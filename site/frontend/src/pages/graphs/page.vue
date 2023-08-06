@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {nextTick, Ref, ref} from "vue";
 import {withLoading} from "../../utils/loading";
-import {GraphData, GraphKind, GraphsSelector} from "./state";
+import {GraphData, GraphKind, GraphsSelector} from "../../graph/data";
 import {GRAPH_DATA_URL} from "../../urls";
 import DataSelector, {SelectionParams} from "./data-selector.vue";
 import {
