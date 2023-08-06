@@ -57,56 +57,65 @@ const chartElement: Ref<HTMLElement | null> = ref(null);
 
 onMounted(() => renderGraph());
 </script>
+
 <template>
-  <table>
-    <tbody>
-      <tr>
-        <td>Benchmark</td>
-        <td>{{ testCase.benchmark }}</td>
-      </tr>
-      <tr>
-        <td>Profile</td>
-        <td>{{ testCase.profile }}</td>
-      </tr>
-      <tr>
-        <td>Scenario</td>
-        <td>{{ testCase.scenario }}</td>
-      </tr>
-      <tr>
-        <td>Category</td>
-        <td>{{ testCase.category }}</td>
-      </tr>
-      <tr v-if="(metadata?.binary ?? null) !== null">
-        <td>Artifact</td>
-        <td>{{ metadata.binary ? "binary" : "library" }}</td>
-      </tr>
-      <tr v-if="(metadata?.iterations ?? null) !== null">
-        <td>
-          Iterations<Tooltip>
-            How many times is the benchmark executed?
-          </Tooltip>
-        </td>
-        <td>{{ metadata.iterations }}</td>
-      </tr>
-      <tr v-if="(cargoProfile?.lto ?? null) !== null">
-        <td>LTO</td>
-        <td>{{ cargoProfile.lto }}</td>
-      </tr>
-      <tr v-if="(cargoProfile?.debug ?? null) !== null">
-        <td>Debuginfo</td>
-        <td>{{ cargoProfile.debug }}</td>
-      </tr>
-      <tr v-if="(cargoProfile?.codegen_units ?? null) !== null">
-        <td>Codegen units</td>
-        <td>{{ cargoProfile.codegen_units }}</td>
-      </tr>
-    </tbody>
-  </table>
-  <div ref="chartElement"></div>
+  <div class="wrapper">
+    <table>
+      <tbody>
+        <tr>
+          <td>Benchmark</td>
+          <td>{{ testCase.benchmark }}</td>
+        </tr>
+        <tr>
+          <td>Profile</td>
+          <td>{{ testCase.profile }}</td>
+        </tr>
+        <tr>
+          <td>Scenario</td>
+          <td>{{ testCase.scenario }}</td>
+        </tr>
+        <tr>
+          <td>Category</td>
+          <td>{{ testCase.category }}</td>
+        </tr>
+        <tr v-if="(metadata?.binary ?? null) !== null">
+          <td>Artifact</td>
+          <td>{{ metadata.binary ? "binary" : "library" }}</td>
+        </tr>
+        <tr v-if="(metadata?.iterations ?? null) !== null">
+          <td>
+            Iterations<Tooltip>
+              How many times is the benchmark executed?
+            </Tooltip>
+          </td>
+          <td>{{ metadata.iterations }}</td>
+        </tr>
+        <tr v-if="(cargoProfile?.lto ?? null) !== null">
+          <td>LTO</td>
+          <td>{{ cargoProfile.lto }}</td>
+        </tr>
+        <tr v-if="(cargoProfile?.debug ?? null) !== null">
+          <td>Debuginfo</td>
+          <td>{{ cargoProfile.debug }}</td>
+        </tr>
+        <tr v-if="(cargoProfile?.codegen_units ?? null) !== null">
+          <td>Codegen units</td>
+          <td>{{ cargoProfile.codegen_units }}</td>
+        </tr>
+      </tbody>
+    </table>
+    <div ref="chartElement"></div>
+  </div>
 </template>
 
 <style scoped lang="scss">
+.wrapper {
+  display: flex;
+}
 table {
+  align-self: center;
+  margin-right: 20px;
+
   td {
     text-align: left;
 
@@ -117,6 +126,7 @@ table {
   }
 }
 </style>
+
 <style>
 .u-tooltip {
   font-size: 10pt;
