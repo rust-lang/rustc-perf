@@ -5,13 +5,34 @@ import {
   CompileBenchmarkMetadata,
   CompileTestCase,
 } from "../common";
-import {computed} from "vue";
+import {computed, onMounted, Ref, ref} from "vue";
 import Tooltip from "../../tooltip.vue";
+import {loadGraphs} from "../../../../graph/api";
+import {ArtifactDescription} from "../../types";
+import {getDateInPast} from "./utils";
+import {renderPlots} from "../../../../graph/render";
 
 const props = defineProps<{
   testCase: CompileTestCase;
+  metric: string;
+  artifact: ArtifactDescription;
   benchmarkMap: CompileBenchmarkMap;
 }>();
+
+async function renderGraph() {
+  const selector = {
+    benchmark: props.testCase.benchmark,
+    profile: props.testCase.profile,
+    scenario: props.testCase.scenario,
+    stat: props.metric,
+    start: getDateInPast(props.artifact),
+    end: props.artifact.commit,
+    kind: "raw",
+  };
+  const graphData = await loadGraphs(selector);
+  renderPlots(graphData, selector, chartElement.value);
+}
+
 const metadata = computed(
   (): CompileBenchmarkMetadata =>
     props.benchmarkMap[props.testCase.benchmark] ?? null
@@ -29,6 +50,10 @@ const cargoProfile = computed((): CargoProfileMetadata => {
     return metadata?.value.dev_profile;
   }
 });
+
+const chartElement: Ref<HTMLElement | null> = ref(null);
+
+onMounted(() => renderGraph());
 </script>
 <template>
   <table>
@@ -75,6 +100,7 @@ const cargoProfile = computed((): CargoProfileMetadata => {
       </tr>
     </tbody>
   </table>
+  <div ref="chartElement"></div>
 </template>
 
 <style scoped lang="scss">
@@ -87,5 +113,19 @@ table {
       padding-right: 10px;
     }
   }
+}
+</style>
+<style>
+.u-tooltip {
+  font-size: 10pt;
+  position: absolute;
+  background: #fff;
+  display: none;
+  border: 2px solid black;
+  padding: 4px;
+  pointer-events: none;
+  z-index: 100;
+  white-space: pre;
+  font-family: monospace;
 }
 </style>

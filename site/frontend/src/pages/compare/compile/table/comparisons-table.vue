@@ -7,6 +7,7 @@ import {CompileBenchmarkMap, CompileTestCase} from "../common";
 import {computed} from "vue";
 import {useExpandedStore} from "./expansion";
 import BenchmarkDetail from "./benchmark-detail.vue";
+import {getDateInPast} from "./utils";
 
 const props = defineProps<{
   id: string;
@@ -28,15 +29,8 @@ function graphLink(
   stat: string,
   comparison: TestCaseComparison<CompileTestCase>
 ): string {
-  let date = new Date(commit.date);
-  // Move to `30 days ago` to display history of the test case
-  date.setUTCDate(date.getUTCDate() - 30);
-  let year = date.getUTCFullYear();
-  let month = (date.getUTCMonth() + 1).toString().padStart(2, "0");
-  let day = date.getUTCDate().toString().padStart(2, "0");
-  let start = `${year}-${month}-${day}`;
-
-  let end = commit.commit;
+  const start = getDateInPast(commit);
+  const end = commit.commit;
   const {benchmark, profile, scenario} = comparison.testCase;
   return `/index.html?start=${start}&end=${end}&benchmark=${benchmark}&profile=${profile}&scenario=${scenario}&stat=${stat}`;
 }
@@ -202,6 +196,8 @@ const {toggleExpanded, isExpanded} = useExpandedStore();
             <td :colspan="columnCount">
               <BenchmarkDetail
                 :test-case="comparison.testCase"
+                :artifact="commitB"
+                :metric="stat"
                 :benchmark-map="benchmarkMap"
               />
             </td>
