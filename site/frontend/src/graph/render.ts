@@ -148,7 +148,6 @@ function tooltipPlugin({
 }
 
 function genPlotOpts({
-  title,
   width,
   height,
   yAxisLabel,
@@ -161,7 +160,6 @@ function genPlotOpts({
   absoluteMode,
 }) {
   return {
-    title,
     width,
     height,
     series,
@@ -280,13 +278,20 @@ function normalizeData(data: GraphData) {
   }
 }
 
-// Renders the plots data with the given parameters from the `selector`, into a DOM node optionally
-// selected by the `elementSelector` query.
+export type GraphRenderOpts = {
+  renderTitle?: boolean;
+};
+
+// Renders the plots data with the given parameters from the `selector` into
+// the passed DOM element.
 export function renderPlots(
   data: GraphData,
   selector: GraphsSelector,
-  plotElement: HTMLElement
+  plotElement: HTMLElement,
+  opts?: GraphRenderOpts
 ) {
+  const renderTitle = opts?.renderTitle ?? true;
+
   normalizeData(data);
 
   const names = Object.keys(data.benchmarks).sort();
@@ -364,7 +369,6 @@ export function renderPlots(
         cacheStates[Object.keys(cacheStates)[0]].interpolated_indices;
 
       let plotOpts = genPlotOpts({
-        title: benchName + "-" + benchKind,
         width: Math.floor(window.innerWidth / 4) - 40,
         height: 300,
         yAxisLabel,
@@ -376,6 +380,9 @@ export function renderPlots(
         },
         absoluteMode: selector.kind == "raw",
       });
+      if (renderTitle) {
+        plotOpts["title"] = `${benchName}-${benchKind}`;
+      }
 
       new uPlot(plotOpts, plotData as any as TypedArray[], plotElement);
 

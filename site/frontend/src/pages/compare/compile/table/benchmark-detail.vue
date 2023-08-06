@@ -30,7 +30,9 @@ async function renderGraph() {
     kind: "raw",
   };
   const graphData = await loadGraphs(selector);
-  renderPlots(graphData, selector, chartElement.value);
+  renderPlots(graphData, selector, chartElement.value, {
+    renderTitle: false,
+  });
 }
 
 const metadata = computed(
