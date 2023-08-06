@@ -90,12 +90,12 @@ const {toggleExpanded, isExpanded} = useExpandedStore();
     <table v-else class="benches compare">
       <thead>
         <tr>
-          <th></th>
+          <th class="toggle"></th>
           <th>Benchmark</th>
           <th>Profile</th>
           <th>Scenario</th>
           <th>% Change</th>
-          <th>
+          <th class="narrow">
             Significance Threshold
             <Tooltip>
               The minimum % change that is considered significant. The higher
@@ -109,7 +109,7 @@ const {toggleExpanded, isExpanded} = useExpandedStore();
               how the significance threshold is calculated.
             </Tooltip>
           </th>
-          <th>
+          <th class="narrow">
             Significance Factor
             <Tooltip>
               How much a particular result is over the significance threshold. A
@@ -124,7 +124,7 @@ const {toggleExpanded, isExpanded} = useExpandedStore();
       <tbody>
         <template v-for="comparison in comparisons">
           <tr>
-            <td @click="toggleExpanded(comparison.testCase)">
+            <td @click="toggleExpanded(comparison.testCase)" class="toggle">
               {{ isExpanded(comparison.testCase) ? "▼" : "▶" }}
             </td>
             <td>
@@ -161,7 +161,7 @@ const {toggleExpanded, isExpanded} = useExpandedStore();
                 </div>
               </div>
             </td>
-            <td>
+            <td class="narrow">
               <div class="numeric-aligned">
                 <div>
                   {{
@@ -172,7 +172,7 @@ const {toggleExpanded, isExpanded} = useExpandedStore();
                 </div>
               </div>
             </td>
-            <td>
+            <td class="narrow">
               <div class="numeric-aligned">
                 <div>
                   {{
@@ -214,8 +214,9 @@ const {toggleExpanded, isExpanded} = useExpandedStore();
 
 <style scoped lang="scss">
 .benches {
+  width: 100%;
+  table-layout: auto;
   font-size: medium;
-  table-layout: fixed;
 
   td,
   th {
@@ -237,15 +238,22 @@ const {toggleExpanded, isExpanded} = useExpandedStore();
   border-right: dotted 1px;
 }
 
-.benches th {
-  text-align: center;
-  min-width: 50px;
+.benches {
+  td,
+  th {
+    text-align: center;
+
+    &.toggle {
+      padding-right: 5px;
+      cursor: pointer;
+    }
+    &.narrow {
+      max-width: 100px;
+    }
+  }
 }
 
 .benches td {
-  text-align: center;
-  width: 25%;
-
   & > .numeric-aligned {
     display: flex;
     flex-direction: column;
