@@ -124,6 +124,7 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
     :comparisons="comparisons"
     :has-non-relevant="allComparisons.length > 0"
     :show-raw-data="filter.showRawData"
+    :metric="selector.stat"
   />
 </template>
 
