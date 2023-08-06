@@ -62,40 +62,6 @@ function prettifyRawNumber(number: number): string {
   return number.toLocaleString();
 }
 
-function generateBenchmarkTooltip(testCase: CompileTestCase): string {
-  const metadata = props.benchmarkMap[testCase.benchmark] ?? null;
-  if (metadata === null) {
-    return "<No metadata found>";
-  }
-  let tooltip = `Benchmark: ${testCase.benchmark}
-Category: ${metadata.category}
-`;
-  if (metadata.binary !== null) {
-    tooltip += `Artifact: ${metadata.binary ? "binary" : "library"}\n`;
-  }
-  if (metadata.iterations !== null) {
-    tooltip += `Iterations: ${metadata.iterations}\n`;
-  }
-  const addMetadata = ({lto, debug, codegen_units}) => {
-    if (lto !== null) {
-      tooltip += `LTO: ${lto}\n`;
-    }
-    if (debug !== null) {
-      tooltip += `Debuginfo: ${debug}\n`;
-    }
-    if (codegen_units !== null) {
-      tooltip += `Codegen units: ${codegen_units}\n`;
-    }
-  };
-  if (testCase.profile === "opt" && metadata.release_profile !== null) {
-    addMetadata(metadata.release_profile);
-  } else if (testCase.profile === "debug" && metadata.dev_profile !== null) {
-    addMetadata(metadata.dev_profile);
-  }
-
-  return tooltip;
-}
-
 const columnCount = computed(() => {
   const base = 7;
   if (props.showRawData) {
@@ -161,7 +127,7 @@ const {toggleExpanded, isExpanded} = useExpandedStore();
             <td @click="toggleExpanded(comparison.testCase)">
               {{ isExpanded(comparison.testCase) ? "▼" : "▶" }}
             </td>
-            <td :title="generateBenchmarkTooltip(comparison.testCase)">
+            <td>
               <a
                 v-bind:href="benchmarkLink(comparison.testCase.benchmark)"
                 class="silent-link"
@@ -234,7 +200,10 @@ const {toggleExpanded, isExpanded} = useExpandedStore();
           </tr>
           <tr v-if="isExpanded(comparison.testCase)">
             <td :colspan="columnCount">
-              <BenchmarkDetail :test-case="comparison.testCase" />
+              <BenchmarkDetail
+                :test-case="comparison.testCase"
+                :benchmark-map="benchmarkMap"
+              />
             </td>
           </tr>
         </template>
