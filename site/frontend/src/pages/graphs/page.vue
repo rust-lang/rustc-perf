@@ -2,7 +2,6 @@
 import {nextTick, Ref, ref} from "vue";
 import {withLoading} from "../../utils/loading";
 import {GraphData, GraphKind, GraphsSelector} from "../../graph/data";
-import {GRAPH_DATA_URL} from "../../urls";
 import DataSelector, {SelectionParams} from "./data-selector.vue";
 import {
   createUrlWithAppendedParams,
@@ -10,9 +9,9 @@ import {
   navigateToUrlParams,
 } from "../../utils/navigation";
 import {renderPlots} from "./plots";
-import {getJson} from "../../utils/requests";
 import {BenchmarkInfo, loadBenchmarkInfo} from "../../api";
 import AsOf from "../../components/as-of.vue";
+import {loadGraphs} from "../../graph/api";
 
 function loadSelectorFromUrl(urlParams: Dict<string>): GraphsSelector {
   const start = urlParams["start"] ?? "";
@@ -60,18 +59,10 @@ function hasSpecificSelection(selector: GraphsSelector): boolean {
 }
 
 async function loadGraphData(selector: GraphsSelector, loading: Ref<boolean>) {
-  const graphData: GraphData = await withLoading(loading, async () => {
-    const params = {
-      start: selector.start,
-      end: selector.end,
-      kind: selector.kind as string,
-      stat: selector.stat,
-      benchmark: selector.benchmark,
-      scenario: selector.scenario,
-      profile: selector.profile,
-    };
-    return await getJson<GraphData>(GRAPH_DATA_URL, params);
-  });
+  const graphData: GraphData = await withLoading(
+    loading,
+    async () => await loadGraphs(selector)
+  );
 
   // Wait for the UI to be updated, which also resets the plot HTML elements.
   // Then draw the plots.
