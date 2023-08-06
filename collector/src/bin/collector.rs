@@ -30,9 +30,10 @@ use tokio::runtime::Runtime;
 
 use collector::compile::execute::bencher::BenchProcessor;
 use collector::compile::execute::profiler::{ProfileProcessor, Profiler};
+use collector::runtime::profile_runtime;
 use collector::runtime::{
-    bench_runtime, prepare_runtime_benchmark_suite, profile_runtime, runtime_benchmark_dir,
-    BenchmarkFilter, BenchmarkSuite, BenchmarkSuiteCompilation, CargoIsolationMode,
+    bench_runtime, prepare_runtime_benchmark_suite, runtime_benchmark_dir, BenchmarkFilter,
+    BenchmarkSuite, BenchmarkSuiteCompilation, CargoIsolationMode, RuntimeProfiler,
     DEFAULT_RUNTIME_ITERATIONS,
 };
 use collector::toolchain::{
@@ -496,8 +497,11 @@ enum Commands {
 
     /// Profiles a runtime benchmark.
     ProfileRuntime {
-        #[command(flatten)]
-        local: LocalOptions,
+        /// Profiler to use
+        profiler: RuntimeProfiler,
+
+        /// The path to the local rustc used to compile the runtime benchmark
+        rustc: String,
 
         /// Name of the benchmark that should be profiled
         benchmark: String,
@@ -682,15 +686,20 @@ fn main_result() -> anyhow::Result<i32> {
             run_benchmarks(&mut rt, conn, shared, None, Some(config))?;
             Ok(0)
         }
-        Commands::ProfileRuntime { local, benchmark } => {
-            let toolchain = get_local_toolchain_for_runtime_benchmarks(&local, &target_triple)?;
+        Commands::ProfileRuntime {
+            profiler,
+            rustc,
+            benchmark,
+        } => {
+            let toolchain =
+                get_local_toolchain(&[Profile::Opt], &rustc, None, None, None, "", target_triple)?;
             let suite = prepare_runtime_benchmark_suite(
                 &toolchain,
                 &runtime_benchmark_dir,
                 CargoIsolationMode::Cached,
             )?
             .suite;
-            profile_runtime(suite, &benchmark)?;
+            profile_runtime(profiler, suite, &benchmark)?;
             Ok(0)
         }
         Commands::BenchLocal {

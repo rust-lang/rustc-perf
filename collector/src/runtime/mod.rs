@@ -14,9 +14,12 @@ pub use benchmark::{
 use database::{ArtifactIdNumber, CollectionId, Connection};
 
 use crate::utils::git::get_rustc_perf_commit;
-use crate::{run_command, run_command_with_output, CollectorCtx};
+use crate::{run_command_with_output, CollectorCtx};
 
 mod benchmark;
+mod profile;
+
+pub use profile::{profile_runtime, RuntimeProfiler};
 
 pub const DEFAULT_RUNTIME_ITERATIONS: u32 = 5;
 
@@ -103,16 +106,6 @@ pub async fn bench_runtime(
             .expect("Cannot commit runtime benchmark group results");
     }
 
-    Ok(())
-}
-
-pub fn profile_runtime(suite: BenchmarkSuite, benchmark: &str) -> anyhow::Result<()> {
-    let Some(group) = suite.get_group_by_benchmark(benchmark) else {
-        return Err(anyhow::anyhow!("Benchmark `{benchmark}` not found"));
-    };
-    let mut cmd = prepare_command(&group.binary);
-    cmd.arg("profile").arg(benchmark);
-    run_command(&mut cmd)?;
     Ok(())
 }
 
