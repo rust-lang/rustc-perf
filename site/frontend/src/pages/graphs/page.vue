@@ -8,7 +8,7 @@ import {
   getUrlParams,
   navigateToUrlParams,
 } from "../../utils/navigation";
-import {renderPlots} from "./plots";
+import {renderPlots} from "../../graph/render";
 import {BenchmarkInfo, loadBenchmarkInfo} from "../../api";
 import AsOf from "../../components/as-of.vue";
 import {loadGraphs} from "../../graph/api";
