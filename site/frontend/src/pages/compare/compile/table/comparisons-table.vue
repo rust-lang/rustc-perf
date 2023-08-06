@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import {TestCaseComparison} from "../data";
-import Tooltip from "../tooltip.vue";
-import {ArtifactDescription} from "../types";
-import {percentClass} from "../shared";
-import {CompileBenchmarkMap, CompileTestCase} from "./common";
+import {TestCaseComparison} from "../../data";
+import Tooltip from "../../tooltip.vue";
+import {ArtifactDescription} from "../../types";
+import {percentClass} from "../../shared";
+import {CompileBenchmarkMap, CompileTestCase} from "../common";
 import {computed} from "vue";
 
 const props = defineProps<{

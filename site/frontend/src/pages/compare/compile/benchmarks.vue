@@ -1,6 +1,6 @@
 <script setup lang="tsx">
 import {computed, h} from "vue";
-import ComparisonsTable from "./comparisons-table.vue";
+import ComparisonsTable from "./table/comparisons-table.vue";
 import {TestCaseComparison} from "../data";
 import {CompareResponse} from "../types";
 import {
