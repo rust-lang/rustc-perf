@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import {TestCaseComparison} from "../data";
-import Tooltip from "../tooltip.vue";
-import {ArtifactDescription} from "../types";
-import {percentClass} from "../shared";
-import {CompileBenchmarkMap, CompileTestCase} from "./common";
+import {TestCaseComparison} from "../../data";
+import Tooltip from "../../tooltip.vue";
+import {ArtifactDescription} from "../../types";
+import {percentClass} from "../../shared";
+import {CompileBenchmarkMap, CompileTestCase} from "../common";
 import {computed} from "vue";
+import {useExpandedStore} from "./expansion";
+import BenchmarkDetail from "./benchmark-detail.vue";
 
 const props = defineProps<{
   id: string;
@@ -60,40 +62,13 @@ function prettifyRawNumber(number: number): string {
   return number.toLocaleString();
 }
 
-function generateBenchmarkTooltip(testCase: CompileTestCase): string {
-  const metadata = props.benchmarkMap[testCase.benchmark] ?? null;
-  if (metadata === null) {
-    return "<No metadata found>";
+const columnCount = computed(() => {
+  const base = 7;
+  if (props.showRawData) {
+    return base + 2;
   }
-  let tooltip = `Benchmark: ${testCase.benchmark}
-Category: ${metadata.category}
-`;
-  if (metadata.binary !== null) {
-    tooltip += `Artifact: ${metadata.binary ? "binary" : "library"}\n`;
-  }
-  if (metadata.iterations !== null) {
-    tooltip += `Iterations: ${metadata.iterations}\n`;
-  }
-  const addMetadata = ({lto, debug, codegen_units}) => {
-    if (lto !== null) {
-      tooltip += `LTO: ${lto}\n`;
-    }
-    if (debug !== null) {
-      tooltip += `Debuginfo: ${debug}\n`;
-    }
-    if (codegen_units !== null) {
-      tooltip += `Codegen units: ${codegen_units}\n`;
-    }
-  };
-  if (testCase.profile === "opt" && metadata.release_profile !== null) {
-    addMetadata(metadata.release_profile);
-  } else if (testCase.profile === "debug" && metadata.dev_profile !== null) {
-    addMetadata(metadata.dev_profile);
-  }
-
-  return tooltip;
-}
-
+  return base;
+});
 const unit = computed(() => {
   // The DB stored wall-time data in seconds for compile benchmarks, so it is
   // hardcoded here
@@ -103,6 +78,7 @@ const unit = computed(() => {
     return null;
   }
 });
+const {toggleExpanded, isExpanded} = useExpandedStore();
 </script>
 
 <template>
@@ -114,11 +90,12 @@ const unit = computed(() => {
     <table v-else class="benches compare">
       <thead>
         <tr>
+          <th class="toggle"></th>
           <th>Benchmark</th>
           <th>Profile</th>
           <th>Scenario</th>
           <th>% Change</th>
-          <th>
+          <th class="narrow">
             Significance Threshold
             <Tooltip>
               The minimum % change that is considered significant. The higher
@@ -132,7 +109,7 @@ const unit = computed(() => {
               how the significance threshold is calculated.
             </Tooltip>
           </th>
-          <th>
+          <th class="narrow">
             Significance Factor
             <Tooltip>
               How much a particular result is over the significance threshold. A
@@ -147,7 +124,10 @@ const unit = computed(() => {
       <tbody>
         <template v-for="comparison in comparisons">
           <tr>
-            <td :title="generateBenchmarkTooltip(comparison.testCase)">
+            <td @click="toggleExpanded(comparison.testCase)" class="toggle">
+              {{ isExpanded(comparison.testCase) ? "▼" : "▶" }}
+            </td>
+            <td>
               <a
                 v-bind:href="benchmarkLink(comparison.testCase.benchmark)"
                 class="silent-link"
@@ -181,7 +161,7 @@ const unit = computed(() => {
                 </div>
               </div>
             </td>
-            <td>
+            <td class="narrow">
               <div class="numeric-aligned">
                 <div>
                   {{
@@ -192,7 +172,7 @@ const unit = computed(() => {
                 </div>
               </div>
             </td>
-            <td>
+            <td class="narrow">
               <div class="numeric-aligned">
                 <div>
                   {{
@@ -218,6 +198,14 @@ const unit = computed(() => {
               </a>
             </td>
           </tr>
+          <tr v-if="isExpanded(comparison.testCase)">
+            <td :colspan="columnCount">
+              <BenchmarkDetail
+                :test-case="comparison.testCase"
+                :benchmark-map="benchmarkMap"
+              />
+            </td>
+          </tr>
         </template>
       </tbody>
     </table>
@@ -226,8 +214,9 @@ const unit = computed(() => {
 
 <style scoped lang="scss">
 .benches {
+  width: 100%;
+  table-layout: auto;
   font-size: medium;
-  table-layout: fixed;
 
   td,
   th {
@@ -249,15 +238,22 @@ const unit = computed(() => {
   border-right: dotted 1px;
 }
 
-.benches th {
-  text-align: center;
-  min-width: 50px;
+.benches {
+  td,
+  th {
+    text-align: center;
+
+    &.toggle {
+      padding-right: 5px;
+      cursor: pointer;
+    }
+    &.narrow {
+      max-width: 100px;
+    }
+  }
 }
 
 .benches td {
-  text-align: center;
-  width: 25%;
-
   & > .numeric-aligned {
     display: flex;
     flex-direction: column;
