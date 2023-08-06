@@ -10,6 +10,8 @@ export function createUrlWithAppendedParams(params: Dict<any>): URL {
       const stringified = value.toString();
       if (stringified !== "") {
         url.searchParams.set(key, stringified);
+      } else {
+        url.searchParams.delete(key);
       }
     }
   }
