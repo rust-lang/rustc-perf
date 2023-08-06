@@ -7,10 +7,11 @@ import {
 } from "../common";
 import {computed, onMounted, Ref, ref} from "vue";
 import Tooltip from "../../tooltip.vue";
-import {loadGraphs} from "../../../../graph/api";
 import {ArtifactDescription} from "../../types";
 import {getDateInPast} from "./utils";
 import {renderPlots} from "../../../../graph/render";
+import {GRAPH_RESOLVER} from "../../../../graph/resolver";
+import {GraphKind} from "../../../../graph/data";
 
 const props = defineProps<{
   testCase: CompileTestCase;
@@ -27,9 +28,9 @@ async function renderGraph() {
     stat: props.metric,
     start: getDateInPast(props.artifact),
     end: props.artifact.commit,
-    kind: "raw",
+    kind: "raw" as GraphKind,
   };
-  const graphData = await loadGraphs(selector);
+  const graphData = await GRAPH_RESOLVER.loadGraph(selector);
   renderPlots(graphData, selector, chartElement.value, {
     renderTitle: false,
   });
