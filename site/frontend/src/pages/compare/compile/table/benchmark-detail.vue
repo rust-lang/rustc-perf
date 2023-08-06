@@ -61,60 +61,81 @@ onMounted(() => renderGraph());
 
 <template>
   <div class="wrapper">
-    <table>
-      <tbody>
-        <tr>
-          <td>Benchmark</td>
-          <td>{{ testCase.benchmark }}</td>
-        </tr>
-        <tr>
-          <td>Profile</td>
-          <td>{{ testCase.profile }}</td>
-        </tr>
-        <tr>
-          <td>Scenario</td>
-          <td>{{ testCase.scenario }}</td>
-        </tr>
-        <tr>
-          <td>Category</td>
-          <td>{{ testCase.category }}</td>
-        </tr>
-        <tr v-if="(metadata?.binary ?? null) !== null">
-          <td>Artifact</td>
-          <td>{{ metadata.binary ? "binary" : "library" }}</td>
-        </tr>
-        <tr v-if="(metadata?.iterations ?? null) !== null">
-          <td>
-            Iterations<Tooltip>
-              How many times is the benchmark executed?
-            </Tooltip>
-          </td>
-          <td>{{ metadata.iterations }}</td>
-        </tr>
-        <tr v-if="(cargoProfile?.lto ?? null) !== null">
-          <td>LTO</td>
-          <td>{{ cargoProfile.lto }}</td>
-        </tr>
-        <tr v-if="(cargoProfile?.debug ?? null) !== null">
-          <td>Debuginfo</td>
-          <td>{{ cargoProfile.debug }}</td>
-        </tr>
-        <tr v-if="(cargoProfile?.codegen_units ?? null) !== null">
-          <td>Codegen units</td>
-          <td>{{ cargoProfile.codegen_units }}</td>
-        </tr>
-      </tbody>
-    </table>
-    <div ref="chartElement"></div>
+    <div>
+      <div class="title info bold">Benchmark info</div>
+      <table>
+        <tbody>
+          <tr>
+            <td>Benchmark</td>
+            <td>{{ testCase.benchmark }}</td>
+          </tr>
+          <tr>
+            <td>Profile</td>
+            <td>{{ testCase.profile }}</td>
+          </tr>
+          <tr>
+            <td>Scenario</td>
+            <td>{{ testCase.scenario }}</td>
+          </tr>
+          <tr>
+            <td>Category</td>
+            <td>{{ testCase.category }}</td>
+          </tr>
+          <tr v-if="(metadata?.binary ?? null) !== null">
+            <td>Artifact</td>
+            <td>{{ metadata.binary ? "binary" : "library" }}</td>
+          </tr>
+          <tr v-if="(metadata?.iterations ?? null) !== null">
+            <td>
+              Iterations<Tooltip>
+                How many times is the benchmark executed?
+              </Tooltip>
+            </td>
+            <td>{{ metadata.iterations }}</td>
+          </tr>
+          <tr v-if="(cargoProfile?.lto ?? null) !== null">
+            <td>LTO</td>
+            <td>{{ cargoProfile.lto }}</td>
+          </tr>
+          <tr v-if="(cargoProfile?.debug ?? null) !== null">
+            <td>Debuginfo</td>
+            <td>{{ cargoProfile.debug }}</td>
+          </tr>
+          <tr v-if="(cargoProfile?.codegen_units ?? null) !== null">
+            <td>Codegen units</td>
+            <td>{{ cargoProfile.codegen_units }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <div class="title">
+        <div class="bold">30 day history (up to benchmarked commit)</div>
+        <div style="font-size: 0.8em">
+          Each plotted value is relative to its previous commit
+        </div>
+      </div>
+      <div ref="chartElement"></div>
+    </div>
   </div>
 </template>
 
 <style scoped lang="scss">
 .wrapper {
   display: flex;
+  margin: 10px 0;
+}
+.title {
+  &.bold,
+  .bold {
+    font-weight: bold;
+  }
+  &.info {
+    margin-bottom: 15px;
+  }
 }
 table {
-  align-self: center;
+  align-self: flex-start;
   margin-right: 20px;
 
   td {
