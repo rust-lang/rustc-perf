@@ -19,6 +19,7 @@ use crate::{run_command_with_output, CollectorCtx};
 mod benchmark;
 mod profile;
 
+pub use benchmark::RuntimeCompilationOpts;
 pub use profile::{profile_runtime, RuntimeProfiler};
 
 pub const DEFAULT_RUNTIME_ITERATIONS: u32 = 5;

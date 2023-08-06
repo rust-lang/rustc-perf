@@ -106,6 +106,18 @@ pub struct BenchmarkSuiteCompilation {
     pub failed_to_compile: HashMap<String, String>,
 }
 
+#[derive(Default)]
+pub struct RuntimeCompilationOpts {
+    debug_info: Option<String>,
+}
+
+impl RuntimeCompilationOpts {
+    pub fn debug_info(mut self, debug_info: &str) -> Self {
+        self.debug_info = Some(debug_info.to_string());
+        self
+    }
+}
+
 /// Find all runtime benchmark crates in `benchmark_dir` and compile them.
 /// We assume that each binary defines a benchmark suite using `benchlib`.
 /// We then execute each benchmark suite with the `list-benchmarks` command to find out its
@@ -114,6 +126,7 @@ pub fn prepare_runtime_benchmark_suite(
     toolchain: &Toolchain,
     benchmark_dir: &Path,
     isolation_mode: CargoIsolationMode,
+    opts: RuntimeCompilationOpts,
 ) -> anyhow::Result<BenchmarkSuiteCompilation> {
     let benchmark_crates = get_runtime_benchmark_groups(benchmark_dir)?;
 
@@ -146,7 +159,7 @@ pub fn prepare_runtime_benchmark_suite(
 
         let target_dir = temp_dir.as_ref().map(|d| d.path());
 
-        let result = start_cargo_build(toolchain, &benchmark_crate.path, target_dir)
+        let result = start_cargo_build(toolchain, &benchmark_crate.path, target_dir, &opts)
             .with_context(|| {
                 anyhow::anyhow!("Cannot start compilation of {}", benchmark_crate.name)
             })
@@ -276,6 +289,7 @@ fn start_cargo_build(
     toolchain: &Toolchain,
     benchmark_dir: &Path,
     target_dir: Option<&Path>,
+    opts: &RuntimeCompilationOpts,
 ) -> anyhow::Result<Child> {
     let mut command = Command::new(&toolchain.components.cargo);
     command
@@ -288,6 +302,10 @@ fn start_cargo_build(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
+
+    if let Some(ref debug_info) = opts.debug_info {
+        command.env("CARGO_PROFILE_RELEASE_DEBUG", debug_info);
+    }
 
     if let Some(target_dir) = target_dir {
         command.arg("--target-dir");

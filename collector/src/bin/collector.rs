@@ -10,7 +10,7 @@ use collector::compile::benchmark::scenario::Scenario;
 use collector::compile::benchmark::{
     compile_benchmark_dir, get_compile_benchmarks, ArtifactType, Benchmark, BenchmarkName,
 };
-use collector::{runtime, utils, CollectorCtx, CollectorStepBuilder};
+use collector::{utils, CollectorCtx, CollectorStepBuilder};
 use database::{ArtifactId, ArtifactIdNumber, Commit, CommitType, Connection, Pool};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::cmp::Ordering;
@@ -30,12 +30,12 @@ use tokio::runtime::Runtime;
 
 use collector::compile::execute::bencher::BenchProcessor;
 use collector::compile::execute::profiler::{ProfileProcessor, Profiler};
-use collector::runtime::profile_runtime;
 use collector::runtime::{
     bench_runtime, prepare_runtime_benchmark_suite, runtime_benchmark_dir, BenchmarkFilter,
     BenchmarkSuite, BenchmarkSuiteCompilation, CargoIsolationMode, RuntimeProfiler,
     DEFAULT_RUNTIME_ITERATIONS,
 };
+use collector::runtime::{profile_runtime, RuntimeCompilationOpts};
 use collector::toolchain::{
     create_toolchain_from_published_version, get_local_toolchain, Sysroot, Toolchain,
 };
@@ -697,6 +697,9 @@ fn main_result() -> anyhow::Result<i32> {
                 &toolchain,
                 &runtime_benchmark_dir,
                 CargoIsolationMode::Cached,
+                // Compile with debuginfo to have filenames and line numbers available in the
+                // generated profiles.
+                RuntimeCompilationOpts::default().debug_info("1"),
             )?
             .suite;
             profile_runtime(profiler, suite, &benchmark)?;
@@ -1043,7 +1046,12 @@ async fn load_runtime_benchmarks(
     let BenchmarkSuiteCompilation {
         suite,
         failed_to_compile,
-    } = runtime::prepare_runtime_benchmark_suite(toolchain, benchmark_dir, isolation_mode)?;
+    } = prepare_runtime_benchmark_suite(
+        toolchain,
+        benchmark_dir,
+        isolation_mode,
+        RuntimeCompilationOpts::default(),
+    )?;
 
     record_runtime_compilation_errors(conn, artifact_id, failed_to_compile).await;
     Ok(suite)
