@@ -143,13 +143,16 @@ impl RuntimeCompilationOpts {
 /// We assume that each binary defines a benchmark suite using `benchlib`.
 /// We then execute each benchmark suite with the `list-benchmarks` command to find out its
 /// benchmark names.
+///
+/// If `group` is not `None`, only the benchmark group with the given name will be compiled.
 pub fn prepare_runtime_benchmark_suite(
     toolchain: &Toolchain,
     benchmark_dir: &Path,
     isolation_mode: CargoIsolationMode,
+    group: Option<String>,
     opts: RuntimeCompilationOpts,
 ) -> anyhow::Result<BenchmarkSuiteCompilation> {
-    let benchmark_crates = get_runtime_benchmark_groups(benchmark_dir)?;
+    let benchmark_crates = get_runtime_benchmark_groups(benchmark_dir, group)?;
 
     let temp_dir: Option<TempDir> = match isolation_mode {
         CargoIsolationMode::Cached => None,
@@ -167,7 +170,7 @@ pub fn prepare_runtime_benchmark_suite(
     };
 
     let group_count = benchmark_crates.len();
-    println!("Compiling {group_count} runtime benchmark groups");
+    println!("Compiling {group_count} runtime benchmark group(s)");
 
     let mut groups = Vec::new();
     let mut failed_to_compile = HashMap::new();
@@ -347,7 +350,10 @@ fn gather_benchmarks(binary: &Path) -> anyhow::Result<Vec<String>> {
 }
 
 /// Finds all runtime benchmarks (crates) in the given directory.
-fn get_runtime_benchmark_groups(directory: &Path) -> anyhow::Result<Vec<BenchmarkGroupCrate>> {
+fn get_runtime_benchmark_groups(
+    directory: &Path,
+    group: Option<String>,
+) -> anyhow::Result<Vec<BenchmarkGroupCrate>> {
     let mut groups = Vec::new();
     for entry in std::fs::read_dir(directory).with_context(|| {
         anyhow::anyhow!("Failed to list benchmark dir '{}'", directory.display())
@@ -362,6 +368,12 @@ fn get_runtime_benchmark_groups(directory: &Path) -> anyhow::Result<Vec<Benchmar
             .and_then(|v| v.to_str())
             .ok_or_else(|| anyhow::anyhow!("Cannot get filename of {}", path.display()))?
             .to_string();
+
+        if let Some(ref group) = group {
+            if group != &name {
+                continue;
+            }
+        }
 
         groups.push(BenchmarkGroupCrate { name, path });
     }
