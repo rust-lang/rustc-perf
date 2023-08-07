@@ -38,8 +38,29 @@ pub struct BenchmarkSuite {
 }
 
 impl BenchmarkSuite {
-    pub fn total_benchmark_count(&self) -> u64 {
-        self.benchmark_names().count() as u64
+    /// Returns a new suite containing only groups that contains at least a single benchmark
+    /// that matches the filter.
+    pub fn filter(self, filter: &BenchmarkFilter) -> Self {
+        let BenchmarkSuite {
+            groups,
+            _tmp_artifacts_dir,
+        } = self;
+
+        Self {
+            groups: groups
+                .into_iter()
+                .filter(|group| {
+                    group.benchmark_names.iter().any(|benchmark| {
+                        passes_filter(
+                            benchmark,
+                            filter.exclude.as_deref(),
+                            filter.include.as_deref(),
+                        )
+                    })
+                })
+                .collect(),
+            _tmp_artifacts_dir,
+        }
     }
 
     pub fn filtered_benchmark_count(&self, filter: &BenchmarkFilter) -> u64 {

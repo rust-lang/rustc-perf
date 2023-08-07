@@ -30,13 +30,8 @@ pub async fn bench_runtime(
     filter: BenchmarkFilter,
     iterations: u32,
 ) -> anyhow::Result<()> {
-    let total_benchmark_count = suite.total_benchmark_count();
     let filtered = suite.filtered_benchmark_count(&filter);
-    println!(
-        "Executing {} benchmarks ({} filtered out)\n",
-        filtered,
-        total_benchmark_count - filtered
-    );
+    println!("Executing {} benchmarks\n", filtered);
 
     let rustc_perf_version = get_rustc_perf_commit();
     let mut benchmark_index = 0;
