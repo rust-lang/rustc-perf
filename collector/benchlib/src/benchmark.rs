@@ -1,9 +1,11 @@
-use crate::cli::{parse_cli, Args, BenchmarkArgs};
+use crate::cli::{parse_cli, Args, BenchmarkArgs, ProfileArgs};
 use crate::comm::messages::{BenchmarkMessage, BenchmarkResult, BenchmarkStats};
 use crate::comm::output_message;
 use crate::measure::benchmark_function;
 use crate::process::raise_process_priority;
+use crate::profile::profile_function;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 /// Create and run a new benchmark group. Use the closure argument to register
 /// the individual benchmarks.
@@ -18,12 +20,21 @@ where
     group.run().expect("Benchmark group execution has failed");
 }
 
-/// Type-erased function that executes a single benchmark.
+/// Type-erased function that executes a single benchmark and measures counter and wall-time
+/// metrics.
 type BenchmarkFn<'a> = Box<dyn Fn() -> anyhow::Result<BenchmarkStats> + 'a>;
+
+/// Type-erased function that executes a single benchmark once.
+type ProfileFn<'a> = Box<dyn Fn() + 'a>;
+
+struct BenchmarkProfileFns<'a> {
+    benchmark_fn: BenchmarkFn<'a>,
+    profile_fn: ProfileFn<'a>,
+}
 
 #[derive(Default)]
 pub struct BenchmarkGroup<'a> {
-    benchmarks: HashMap<&'static str, BenchmarkFn<'a>>,
+    benchmarks: HashMap<&'static str, BenchmarkProfileFns<'a>>,
 }
 
 impl<'a> BenchmarkGroup<'a> {
@@ -40,8 +51,13 @@ impl<'a> BenchmarkGroup<'a> {
         Bench: FnOnce() -> R,
     {
         // We want to type-erase the target `func` by wrapping it in a Box.
-        let benchmark_fn = Box::new(move || benchmark_function(&constructor));
-        if self.benchmarks.insert(name, benchmark_fn).is_some() {
+        let constructor = Rc::new(constructor);
+        let constructor2 = constructor.clone();
+        let benchmark_fns = BenchmarkProfileFns {
+            benchmark_fn: Box::new(move || benchmark_function(constructor.as_ref())),
+            profile_fn: Box::new(move || profile_function(constructor2.as_ref())),
+        };
+        if self.benchmarks.insert(name, benchmark_fns).is_some() {
             panic!("Benchmark '{}' was registered twice", name);
         }
     }
@@ -56,6 +72,7 @@ impl<'a> BenchmarkGroup<'a> {
             Args::Run(args) => {
                 self.run_benchmarks(args)?;
             }
+            Args::Profile(args) => self.profile_benchmark(args)?,
             Args::List => self.list_benchmarks()?,
         }
 
@@ -63,7 +80,7 @@ impl<'a> BenchmarkGroup<'a> {
     }
 
     fn run_benchmarks(self, args: BenchmarkArgs) -> anyhow::Result<()> {
-        let mut items: Vec<(&'static str, BenchmarkFn)> = self
+        let mut items: Vec<(&'static str, BenchmarkProfileFns)> = self
             .benchmarks
             .into_iter()
             .filter(|(name, _)| {
@@ -74,17 +91,17 @@ impl<'a> BenchmarkGroup<'a> {
 
         let mut stdout = std::io::stdout().lock();
 
-        for (name, benchmark_fn) in items {
+        for (name, benchmark_fns) in items {
             let mut stats: Vec<BenchmarkStats> = Vec::with_capacity(args.iterations as usize);
             // Warm-up
             for _ in 0..3 {
-                let benchmark_stats = benchmark_fn()?;
+                let benchmark_stats = (benchmark_fns.benchmark_fn)()?;
                 black_box(benchmark_stats);
             }
 
             // Actual measurement
             for i in 0..args.iterations {
-                let benchmark_stats = benchmark_fn()?;
+                let benchmark_stats = (benchmark_fns.benchmark_fn)()?;
                 log::info!("Benchmark (run {i}) `{name}` completed: {benchmark_stats:?}");
                 stats.push(benchmark_stats);
             }
@@ -96,6 +113,16 @@ impl<'a> BenchmarkGroup<'a> {
                 }),
             )?;
         }
+
+        Ok(())
+    }
+
+    fn profile_benchmark(self, args: ProfileArgs) -> anyhow::Result<()> {
+        let Some(benchmark) = self.benchmarks.get(args.benchmark.as_str()) else {
+            return Err(anyhow::anyhow!("Benchmark `{}` not found. Available benchmarks: {}", args.benchmark,
+                self.benchmarks.keys().map(|s| s.to_string()).collect::<Vec<_>>().join(", ")));
+        };
+        (benchmark.profile_fn)();
 
         Ok(())
     }

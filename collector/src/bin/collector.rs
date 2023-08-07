@@ -10,7 +10,7 @@ use collector::compile::benchmark::scenario::Scenario;
 use collector::compile::benchmark::{
     compile_benchmark_dir, get_compile_benchmarks, ArtifactType, Benchmark, BenchmarkName,
 };
-use collector::{runtime, utils, CollectorCtx, CollectorStepBuilder};
+use collector::{utils, CollectorCtx, CollectorStepBuilder};
 use database::{ArtifactId, ArtifactIdNumber, Commit, CommitType, Connection, Pool};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::cmp::Ordering;
@@ -31,9 +31,11 @@ use tokio::runtime::Runtime;
 use collector::compile::execute::bencher::BenchProcessor;
 use collector::compile::execute::profiler::{ProfileProcessor, Profiler};
 use collector::runtime::{
-    bench_runtime, runtime_benchmark_dir, BenchmarkFilter, BenchmarkSuite,
-    BenchmarkSuiteCompilation, CargoIsolationMode, DEFAULT_RUNTIME_ITERATIONS,
+    bench_runtime, prepare_runtime_benchmark_suite, runtime_benchmark_dir, BenchmarkFilter,
+    BenchmarkSuite, BenchmarkSuiteCompilation, CargoIsolationMode, RuntimeProfiler,
+    DEFAULT_RUNTIME_ITERATIONS,
 };
+use collector::runtime::{profile_runtime, RuntimeCompilationOpts};
 use collector::toolchain::{
     create_toolchain_from_published_version, get_local_toolchain, Sysroot, Toolchain,
 };
@@ -255,7 +257,7 @@ fn cg_annotate(cgout: &Path, path: &Path) -> anyhow::Result<()> {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn profile(
+fn profile_compile(
     toolchain: &Toolchain,
     profiler: Profiler,
     out_dir: &Path,
@@ -502,6 +504,19 @@ enum Commands {
         #[arg(long = "no-isolate")]
         no_isolate: bool,
     },
+
+    /// Profiles a runtime benchmark.
+    ProfileRuntime {
+        /// Profiler to use
+        profiler: RuntimeProfiler,
+
+        /// The path to the local rustc used to compile the runtime benchmark
+        rustc: String,
+
+        /// Name of the benchmark that should be profiled
+        benchmark: String,
+    },
+
     /// Benchmarks a local rustc
     BenchLocal {
         #[command(flatten)]
@@ -650,15 +665,7 @@ fn main_result() -> anyhow::Result<i32> {
             no_isolate,
         } => {
             log_db(&db);
-            let toolchain = get_local_toolchain(
-                &[Profile::Opt],
-                &local.rustc,
-                None,
-                local.cargo.as_deref(),
-                local.id.as_deref(),
-                "",
-                target_triple,
-            )?;
+            let toolchain = get_local_toolchain_for_runtime_benchmarks(&local, &target_triple)?;
             let pool = Pool::open(&db.db);
 
             let isolation_mode = if no_isolate {
@@ -687,6 +694,25 @@ fn main_result() -> anyhow::Result<i32> {
                 iterations,
             );
             run_benchmarks(&mut rt, conn, shared, None, Some(config))?;
+            Ok(0)
+        }
+        Commands::ProfileRuntime {
+            profiler,
+            rustc,
+            benchmark,
+        } => {
+            let toolchain =
+                get_local_toolchain(&[Profile::Opt], &rustc, None, None, None, "", target_triple)?;
+            let suite = prepare_runtime_benchmark_suite(
+                &toolchain,
+                &runtime_benchmark_dir,
+                CargoIsolationMode::Cached,
+                // Compile with debuginfo to have filenames and line numbers available in the
+                // generated profiles.
+                RuntimeCompilationOpts::default().debug_info("1"),
+            )?
+            .suite;
+            profile_runtime(profiler, suite, &benchmark)?;
             Ok(0)
         }
         Commands::BenchLocal {
@@ -904,7 +930,7 @@ fn main_result() -> anyhow::Result<i32> {
                         target_triple.clone(),
                     )?;
                     let id = toolchain.id.clone();
-                    profile(
+                    profile_compile(
                         &toolchain,
                         profiler,
                         &out_dir,
@@ -1005,6 +1031,21 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
     }
 }
 
+fn get_local_toolchain_for_runtime_benchmarks(
+    local: &LocalOptions,
+    target_triple: &str,
+) -> anyhow::Result<Toolchain> {
+    get_local_toolchain(
+        &[Profile::Opt],
+        &local.rustc,
+        None,
+        local.cargo.as_deref(),
+        local.id.as_deref(),
+        "",
+        target_triple.to_string(),
+    )
+}
+
 async fn load_runtime_benchmarks(
     conn: &mut dyn Connection,
     benchmark_dir: &Path,
@@ -1015,7 +1056,12 @@ async fn load_runtime_benchmarks(
     let BenchmarkSuiteCompilation {
         suite,
         failed_to_compile,
-    } = runtime::prepare_runtime_benchmark_suite(toolchain, benchmark_dir, isolation_mode)?;
+    } = prepare_runtime_benchmark_suite(
+        toolchain,
+        benchmark_dir,
+        isolation_mode,
+        RuntimeCompilationOpts::default(),
+    )?;
 
     record_runtime_compilation_errors(conn, artifact_id, failed_to_compile).await;
     Ok(suite)

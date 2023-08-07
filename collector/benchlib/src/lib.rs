@@ -18,6 +18,7 @@ mod cli;
 pub mod comm;
 pub mod measure;
 pub mod process;
+mod profile;
 mod utils;
 
 #[cfg(feature = "compression")]

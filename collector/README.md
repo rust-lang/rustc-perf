@@ -475,6 +475,15 @@ profilers whose results are not affected by system noise (e.g. `callgrind` or `e
 `RUST_LOG=debug` can be specified to enable verbose logging, which is useful
 for debugging `collector` itself.
 
+## Profiling runtime benchmarks
+It is also possible to profile runtime benchmarks using the following command:
+
+```
+./target/release/collector profile_runtime <PROFILER> <RUSTC> <BENCHMARK_NAME>
+```
+
+Currently, a `<PROFILER>` can be `cachegrind`, which will run the runtime benchmark under
+`Cachegrind`.
 
 ## How `rustc` wrapping works
 When a crate is benchmarked or profiled, the real `rustc` is replaced with the `rustc-fake` binary,
