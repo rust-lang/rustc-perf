@@ -28,7 +28,10 @@ async function renderGraph() {
     stat: props.metric,
     start: getDateInPast(props.artifact),
     end: props.artifact.commit,
-    kind: "raw" as GraphKind,
+    // We want to be able to see noise "blips" vs. a previous artifact.
+    // The "percent relative from previous commit" graph should be the best to
+    // see these kinds of changes.
+    kind: "percentrelative" as GraphKind,
   };
   const graphData = await GRAPH_RESOLVER.loadGraph(selector);
   renderPlots(graphData, selector, chartElement.value, {
