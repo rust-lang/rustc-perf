@@ -460,6 +460,14 @@ struct CompileTimeOptions {
 }
 
 #[derive(Debug, clap::Args)]
+struct RuntimeOptions {
+    /// Select a runtime benchmark group that should be compiled and used. If not specified, all
+    /// found groups will be compiled.
+    #[arg(long)]
+    group: Option<String>,
+}
+
+#[derive(Debug, clap::Args)]
 struct SelfProfileOption {
     /// Collect self-profile data
     #[arg(long = "self-profile")]
@@ -492,6 +500,9 @@ enum Commands {
         #[command(flatten)]
         local: LocalOptions,
 
+        #[command(flatten)]
+        runtime: RuntimeOptions,
+
         /// How many iterations of each benchmark should be executed.
         #[arg(long, default_value_t = DEFAULT_RUNTIME_ITERATIONS)]
         iterations: u32,
@@ -507,6 +518,9 @@ enum Commands {
 
     /// Profiles a runtime benchmark.
     ProfileRuntime {
+        #[command(flatten)]
+        runtime: RuntimeOptions,
+
         /// Profiler to use
         profiler: RuntimeProfiler,
 
@@ -660,6 +674,7 @@ fn main_result() -> anyhow::Result<i32> {
     match args.command {
         Commands::BenchRuntimeLocal {
             local,
+            runtime,
             iterations,
             db,
             no_isolate,
@@ -680,6 +695,7 @@ fn main_result() -> anyhow::Result<i32> {
                 conn.as_mut(),
                 &runtime_benchmark_dir,
                 isolation_mode,
+                runtime.group,
                 &toolchain,
                 &artifact_id,
             ))?;
@@ -697,6 +713,7 @@ fn main_result() -> anyhow::Result<i32> {
             Ok(0)
         }
         Commands::ProfileRuntime {
+            runtime,
             profiler,
             rustc,
             benchmark,
@@ -707,6 +724,7 @@ fn main_result() -> anyhow::Result<i32> {
                 &toolchain,
                 &runtime_benchmark_dir,
                 CargoIsolationMode::Cached,
+                runtime.group,
                 // Compile with debuginfo to have filenames and line numbers available in the
                 // generated profiles.
                 RuntimeCompilationOpts::default().debug_info("1"),
@@ -843,6 +861,7 @@ fn main_result() -> anyhow::Result<i32> {
                         conn.as_mut(),
                         &runtime_benchmark_dir,
                         CargoIsolationMode::Isolated,
+                        None,
                         &toolchain,
                         &artifact_id,
                     ))?;
@@ -1050,6 +1069,7 @@ async fn load_runtime_benchmarks(
     conn: &mut dyn Connection,
     benchmark_dir: &Path,
     isolation_mode: CargoIsolationMode,
+    group: Option<String>,
     toolchain: &Toolchain,
     artifact_id: &ArtifactId,
 ) -> anyhow::Result<BenchmarkSuite> {
@@ -1060,6 +1080,7 @@ async fn load_runtime_benchmarks(
         toolchain,
         benchmark_dir,
         isolation_mode,
+        group,
         RuntimeCompilationOpts::default(),
     )?;
 
@@ -1185,6 +1206,7 @@ fn bench_published_artifact(
         connection.as_mut(),
         dirs.runtime,
         CargoIsolationMode::Isolated,
+        None,
         &toolchain,
         &artifact_id,
     ))?;

@@ -183,6 +183,11 @@ by a selected version of rustc. You can run it using the following command:
 The following options alter the behaviour of the `bench_runtime_local` subcommand.
 - `--no-isolate`: you can use this flag to make repeated local benchmarks faster. It will cause the
   `collector` to reuse compiled artifacts of the runtime benchmark groups.
+- `--group`: Compile only the selected runtime benchmark group (i.e. only compile a crate inside the
+directory `collector/runtime-benchmarks/<group>`). This can be used to speed up local runtime benchmark
+experiments. Even with `--no-isolate`, it can take a few seconds to recompile all runtime benchmarks
+and discover all benchmarks within them. If you only want to run benchmark(s) from a single crate,
+you can use this to speed up the runtime benchmarking or profiling commands.
 
 The `bench_runtime_local` command also shares some options with the `bench_local` command, notably
 `--id`, `--db`, `--cargo`, `--include`, `--exclude` and `--iterations`. 
