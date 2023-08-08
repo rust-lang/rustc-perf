@@ -7,7 +7,7 @@ import {CompileBenchmarkMap, CompileTestCase} from "../common";
 import {computed} from "vue";
 import {useExpandedStore} from "./expansion";
 import BenchmarkDetail from "./benchmark-detail.vue";
-import {getDateInPast} from "./utils";
+import {getPastDate} from "./utils";
 
 const props = defineProps<{
   id: string;
@@ -29,7 +29,8 @@ function graphLink(
   stat: string,
   comparison: TestCaseComparison<CompileTestCase>
 ): string {
-  const start = getDateInPast(commit);
+  // Move to `30 days ago` to display history of the test case
+  const start = getPastDate(new Date(commit.date), 30);
   const end = commit.commit;
   const {benchmark, profile, scenario} = comparison.testCase;
   return `/index.html?start=${start}&end=${end}&benchmark=${benchmark}&profile=${profile}&scenario=${scenario}&stat=${stat}`;

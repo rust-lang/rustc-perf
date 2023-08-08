@@ -158,6 +158,7 @@ function genPlotOpts({
   alpha = 0.3,
   prox = 5,
   absoluteMode,
+  hooks,
 }) {
   return {
     width,
@@ -237,6 +238,7 @@ function genPlotOpts({
               ctx.stroke();
             },
           ],
+          ...hooks,
         },
       },
       tooltipPlugin({
@@ -280,6 +282,7 @@ function normalizeData(data: GraphData) {
 
 export type GraphRenderOpts = {
   renderTitle?: boolean;
+  hooks?: {drawSeries: (uPlot, number) => void};
 };
 
 // Renders the plots data with the given parameters from the `selector` into
@@ -291,6 +294,7 @@ export function renderPlots(
   opts?: GraphRenderOpts
 ) {
   const renderTitle = opts?.renderTitle ?? true;
+  const hooks = opts?.hooks ?? {};
 
   normalizeData(data);
 
@@ -379,6 +383,7 @@ export function renderPlots(
           return indices.has(dataIdx);
         },
         absoluteMode: selector.kind == "raw",
+        hooks,
       });
       if (renderTitle) {
         plotOpts["title"] = `${benchName}-${benchKind}`;
