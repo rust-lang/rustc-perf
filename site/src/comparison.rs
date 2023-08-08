@@ -1038,6 +1038,13 @@ impl From<ArtifactDescription> for api::comparison::ArtifactDescription {
                 ArtifactId::Commit(c) => c.sha,
                 ArtifactId::Tag(t) => t,
             },
+            r#type: match &data.artifact {
+                ArtifactId::Commit(c) => match c.r#type {
+                    CommitType::Master => api::comparison::CommitType::Master,
+                    CommitType::Try => api::comparison::CommitType::Try,
+                },
+                ArtifactId::Tag(_) => api::comparison::CommitType::Master,
+            },
             date: if let ArtifactId::Commit(c) = &data.artifact {
                 Some(c.date)
             } else {

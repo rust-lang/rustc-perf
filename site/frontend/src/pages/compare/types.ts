@@ -16,10 +16,13 @@ export interface CompareSelector {
   stat: string;
 }
 
+export type CommitType = "try" | "master";
+
 export interface ArtifactDescription {
   commit: string;
   date: string | null;
   pr: number | null;
+  type: CommitType;
   bootstrap: Dict<number>;
   bootstrap_total: number;
   component_sizes: Dict<number>;

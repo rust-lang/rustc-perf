@@ -184,10 +184,18 @@ pub mod comparison {
     }
 
     #[derive(Debug, Clone, Serialize)]
+    #[serde(rename_all = "lowercase")]
+    pub enum CommitType {
+        Master,
+        Try,
+    }
+
+    #[derive(Debug, Clone, Serialize)]
     pub struct ArtifactDescription {
         pub commit: String,
         pub date: Option<Date>,
         pub pr: Option<u32>,
+        pub r#type: CommitType,
         pub bootstrap: HashMap<String, u64>,
         pub bootstrap_total: u64,
         pub component_sizes: HashMap<String, u64>,
