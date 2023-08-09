@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import {onMounted, ref} from "vue";
-import {GraphKind} from "./state";
+import {GraphKind} from "../../graph/data";
 import {BenchmarkInfo} from "../../api";
 
 export interface SelectionParams {

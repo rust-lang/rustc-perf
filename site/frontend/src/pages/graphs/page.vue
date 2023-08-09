@@ -1,18 +1,17 @@
 <script setup lang="ts">
 import {nextTick, Ref, ref} from "vue";
 import {withLoading} from "../../utils/loading";
-import {GraphData, GraphKind, GraphsSelector} from "./state";
-import {GRAPH_DATA_URL} from "../../urls";
+import {GraphData, GraphKind, GraphsSelector} from "../../graph/data";
 import DataSelector, {SelectionParams} from "./data-selector.vue";
 import {
   createUrlWithAppendedParams,
   getUrlParams,
   navigateToUrlParams,
 } from "../../utils/navigation";
-import {renderPlots} from "./plots";
-import {getJson} from "../../utils/requests";
+import {renderPlots} from "../../graph/render";
 import {BenchmarkInfo, loadBenchmarkInfo} from "../../api";
 import AsOf from "../../components/as-of.vue";
+import {loadGraphs} from "../../graph/api";
 
 function loadSelectorFromUrl(urlParams: Dict<string>): GraphsSelector {
   const start = urlParams["start"] ?? "";
@@ -60,18 +59,10 @@ function hasSpecificSelection(selector: GraphsSelector): boolean {
 }
 
 async function loadGraphData(selector: GraphsSelector, loading: Ref<boolean>) {
-  const graphData: GraphData = await withLoading(loading, async () => {
-    const params = {
-      start: selector.start,
-      end: selector.end,
-      kind: selector.kind as string,
-      stat: selector.stat,
-      benchmark: selector.benchmark,
-      scenario: selector.scenario,
-      profile: selector.profile,
-    };
-    return await getJson<GraphData>(GRAPH_DATA_URL, params);
-  });
+  const graphData: GraphData = await withLoading(
+    loading,
+    async () => await loadGraphs(selector)
+  );
 
   // Wait for the UI to be updated, which also resets the plot HTML elements.
   // Then draw the plots.
@@ -79,7 +70,7 @@ async function loadGraphData(selector: GraphsSelector, loading: Ref<boolean>) {
 
   // If we select a smaller subset of benchmarks, then just show them.
   if (hasSpecificSelection(selector)) {
-    renderPlots(graphData, selector, "#charts");
+    renderPlots(graphData, selector, document.getElementById("charts"));
   } else {
     // If we select all of them, we expect that there will be a regular grid.
 
@@ -90,7 +81,7 @@ async function loadGraphData(selector: GraphsSelector, loading: Ref<boolean>) {
       graphData,
       (benchName) => !benchName.endsWith("-tiny")
     );
-    renderPlots(withoutTiny, selector, "#charts");
+    renderPlots(withoutTiny, selector, document.getElementById("charts"));
 
     // Then, render only the size-related ones in their own dedicated section as they are less
     // important than having the better grouping. So, we only include the benchmarks ending in
@@ -98,7 +89,7 @@ async function loadGraphData(selector: GraphsSelector, loading: Ref<boolean>) {
     const onlyTiny = filterBenchmarks(graphData, (benchName) =>
       benchName.endsWith("-tiny")
     );
-    renderPlots(onlyTiny, selector, "#size-charts");
+    renderPlots(onlyTiny, selector, document.getElementById("size-charts"));
   }
 }
 

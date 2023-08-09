@@ -1,5 +1,5 @@
 import uPlot, {TypedArray} from "uplot";
-import {GraphData, GraphsSelector} from "./state";
+import {GraphData, GraphsSelector} from "./data";
 
 const commonCacheStateColors = {
   full: "#7cb5ec",
@@ -148,7 +148,6 @@ function tooltipPlugin({
 }
 
 function genPlotOpts({
-  title,
   width,
   height,
   yAxisLabel,
@@ -159,9 +158,9 @@ function genPlotOpts({
   alpha = 0.3,
   prox = 5,
   absoluteMode,
+  hooks,
 }) {
   return {
-    title,
     width,
     height,
     series,
@@ -239,6 +238,7 @@ function genPlotOpts({
               ctx.stroke();
             },
           ],
+          ...hooks,
         },
       },
       tooltipPlugin({
@@ -280,13 +280,22 @@ function normalizeData(data: GraphData) {
   }
 }
 
-// Renders the plots data with the given parameters from the `selector`, into a DOM node optionally
-// selected by the `elementSelector` query.
+export type GraphRenderOpts = {
+  renderTitle?: boolean;
+  hooks?: {drawSeries: (uPlot, number) => void};
+};
+
+// Renders the plots data with the given parameters from the `selector` into
+// the passed DOM element.
 export function renderPlots(
   data: GraphData,
   selector: GraphsSelector,
-  elementSelector: string
+  plotElement: HTMLElement,
+  opts?: GraphRenderOpts
 ) {
+  const renderTitle = opts?.renderTitle ?? true;
+  const hooks = opts?.hooks ?? {};
+
   normalizeData(data);
 
   const names = Object.keys(data.benchmarks).sort();
@@ -364,7 +373,6 @@ export function renderPlots(
         cacheStates[Object.keys(cacheStates)[0]].interpolated_indices;
 
       let plotOpts = genPlotOpts({
-        title: benchName + "-" + benchKind,
         width: Math.floor(window.innerWidth / 4) - 40,
         height: 300,
         yAxisLabel,
@@ -375,13 +383,13 @@ export function renderPlots(
           return indices.has(dataIdx);
         },
         absoluteMode: selector.kind == "raw",
+        hooks,
       });
+      if (renderTitle) {
+        plotOpts["title"] = `${benchName}-${benchKind}`;
+      }
 
-      new uPlot(
-        plotOpts,
-        plotData as any as TypedArray[],
-        document.querySelector<HTMLElement>(elementSelector)
-      );
+      new uPlot(plotOpts, plotData as any as TypedArray[], plotElement);
 
       i++;
     }
