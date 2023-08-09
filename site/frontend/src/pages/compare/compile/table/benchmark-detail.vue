@@ -18,6 +18,7 @@ const props = defineProps<{
   testCase: CompileTestCase;
   metric: string;
   artifact: ArtifactDescription;
+  baseArtifact: ArtifactDescription;
   benchmarkMap: CompileBenchmarkMap;
 }>();
 
@@ -128,6 +129,34 @@ function getGraphTitle() {
   }
 }
 
+function benchmarkLink(benchmark: string): string {
+  return `https://github.com/rust-lang/rustc-perf/tree/master/collector/compile-benchmarks/${benchmark}`;
+}
+
+function detailedQueryLink(
+  commit: ArtifactDescription,
+  baseCommit?: ArtifactDescription
+): string {
+  const {benchmark, profile, scenario} = props.testCase;
+  let link = `/detailed-query.html?commit=${commit.commit}&benchmark=${benchmark}-${profile}&scenario=${scenario}`;
+  if (baseCommit !== undefined) {
+    link += `&base_commit=${baseCommit.commit}`;
+  }
+  return link;
+}
+
+function graphLink(
+  commit: ArtifactDescription,
+  metric: string,
+  testCase: CompileTestCase
+): string {
+  // Move to `30 days ago` to display history of the test case
+  const start = getPastDate(new Date(commit.date), 30);
+  const end = commit.commit;
+  const {benchmark, profile, scenario} = testCase;
+  return `/index.html?start=${start}&end=${end}&benchmark=${benchmark}&profile=${profile}&scenario=${scenario}&stat=${metric}`;
+}
+
 const metadata = computed(
   (): CompileBenchmarkMetadata =>
     props.benchmarkMap[props.testCase.benchmark] ?? null
@@ -180,9 +209,8 @@ onMounted(() => renderGraph());
           </tr>
           <tr v-if="(metadata?.iterations ?? null) !== null">
             <td>
-              Iterations<Tooltip>
-                How many times is the benchmark executed?
-              </Tooltip>
+              Iterations
+              <Tooltip> How many times is the benchmark executed? </Tooltip>
             </td>
             <td>{{ metadata.iterations }}</td>
           </tr>
@@ -214,6 +242,42 @@ onMounted(() => renderGraph());
       </div>
       <div ref="chartElement"></div>
     </div>
+    <div class="links">
+      <div class="title bold">Links</div>
+      <ul>
+        <li>
+          <a
+            :href="graphLink(props.artifact, props.metric, props.testCase)"
+            target="_blank"
+          >
+            History graph
+          </a>
+        </li>
+        <li>
+          <a
+            :href="detailedQueryLink(props.artifact, props.baseArtifact)"
+            target="_blank"
+          >
+            Self profile (diff)
+          </a>
+        </li>
+        <li>
+          <a :href="detailedQueryLink(props.baseArtifact)" target="_blank">
+            Self profile (before)
+          </a>
+        </li>
+        <li>
+          <a :href="detailedQueryLink(props.artifact)" target="_blank">
+            Self profile (after)
+          </a>
+        </li>
+        <li>
+          <a :href="benchmarkLink(testCase.benchmark)" target="_blank">
+            Benchmark source code
+          </a>
+        </li>
+      </ul>
+    </div>
   </div>
 </template>
 
@@ -222,15 +286,18 @@ onMounted(() => renderGraph());
   display: flex;
   margin: 10px 0;
 }
+
 .title {
   &.bold,
   .bold {
     font-weight: bold;
   }
+
   &.info {
     margin-bottom: 15px;
   }
 }
+
 table {
   align-self: flex-start;
   margin-right: 20px;
@@ -242,6 +309,12 @@ table {
       font-weight: bold;
       padding-right: 10px;
     }
+  }
+}
+
+.links {
+  li {
+    text-align: left;
   }
 }
 </style>
