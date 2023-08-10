@@ -19,8 +19,8 @@ use std::ffi::OsStr;
 use std::fs;
 use std::fs::File;
 use std::future::Future;
+use std::io::BufWriter;
 use std::io::Write;
-use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 use std::process;
 use std::process::{Command, Stdio};
@@ -39,6 +39,7 @@ use collector::runtime::{profile_runtime, RuntimeCompilationOpts};
 use collector::toolchain::{
     create_toolchain_from_published_version, get_local_toolchain, Sysroot, Toolchain,
 };
+use collector::utils::mangling::demangle_file;
 use collector::utils::wait_for_future;
 
 fn n_normal_benchmarks_remaining(n: usize) -> String {
@@ -192,20 +193,6 @@ fn generate_cachegrind_diffs(
         }
     }
     annotated_diffs
-}
-
-/// Demangles symbols in a file and writes result to path.
-fn demangle_file(file: &Path, path: &Path) -> anyhow::Result<()> {
-    let mut file =
-        BufReader::new(File::open(file).context("Cannot open file containing Rust symbols")?);
-    let mut output = BufWriter::new(
-        File::create(path).context("Cannot create file with demangled Rust symbols")?,
-    );
-
-    rustc_demangle::demangle_stream(&mut file, &mut output, false)
-        .context("Cannot demangle symbols")?;
-
-    Ok(())
 }
 
 /// Compares two Cachegrind output files using cg_diff and writes result to path.

@@ -3,6 +3,7 @@ use std::future::Future;
 pub mod cachegrind;
 pub mod fs;
 pub mod git;
+pub mod mangling;
 pub mod read2;
 
 pub fn wait_for_future<F: Future<Output = R>, R>(f: F) -> R {
