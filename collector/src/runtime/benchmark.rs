@@ -31,6 +31,8 @@ pub struct BenchmarkGroup {
 /// A collection of benchmark suites gathered from a directory.
 #[derive(Debug)]
 pub struct BenchmarkSuite {
+    /// Toolchain used to compile this suite.
+    pub toolchain: Toolchain,
     pub groups: Vec<BenchmarkGroup>,
     /// This field holds onto a temporary directory containing the compiled binaries with the
     /// runtime benchmarks. It is only stored here in order not to be dropped too soon.
@@ -42,11 +44,13 @@ impl BenchmarkSuite {
     /// that matches the filter.
     pub fn filter(self, filter: &BenchmarkFilter) -> Self {
         let BenchmarkSuite {
+            toolchain,
             groups,
             _tmp_artifacts_dir,
         } = self;
 
         Self {
+            toolchain,
             groups: groups
                 .into_iter()
                 .filter(|group| {
@@ -214,6 +218,7 @@ pub fn prepare_runtime_benchmark_suite(
 
     Ok(BenchmarkSuiteCompilation {
         suite: BenchmarkSuite {
+            toolchain: toolchain.clone(),
             groups,
             _tmp_artifacts_dir: temp_dir,
         },
