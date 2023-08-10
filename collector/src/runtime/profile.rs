@@ -17,7 +17,7 @@ pub enum RuntimeProfiler {
 /// Profiles a single runtime benchmark and returns a path to the result.
 pub fn profile_runtime(
     profiler: RuntimeProfiler,
-    toolchain: Toolchain,
+    toolchain: &Toolchain,
     suite: BenchmarkSuite,
     benchmark: &str,
 ) -> anyhow::Result<PathBuf> {

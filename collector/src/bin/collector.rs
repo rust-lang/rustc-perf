@@ -665,14 +665,22 @@ fn main_result() -> anyhow::Result<i32> {
 
             println!("Profiling {rustc}");
             let (toolchain1, suite1) = get_suite(&rustc, "1")?;
-            let profile1 = profile_runtime(profiler.clone(), toolchain1, suite1, &benchmark)?;
+            let profile1 = profile_runtime(profiler.clone(), &toolchain1, suite1, &benchmark)?;
 
             if let Some(rustc2) = rustc2 {
                 match profiler {
                     RuntimeProfiler::Cachegrind => {
                         println!("Profiling {rustc2}");
                         let (toolchain2, suite2) = get_suite(&rustc2, "2")?;
-                        let profile2 = profile_runtime(profiler, toolchain2, suite2, &benchmark)?;
+                        let profile2 = profile_runtime(profiler, &toolchain2, suite2, &benchmark)?;
+
+                        let output = profile1.parent().unwrap().join(format!(
+                            "cgann-diff-{}-{}-{benchmark}",
+                            toolchain1.id, toolchain2.id
+                        ));
+                        cachegrind_diff(&profile1, &profile2, &output)
+                            .context("Cannot generate Cachegrind diff")?;
+                        println!("Cachegrind diff stored in `{}`", output.display());
                     }
                 }
             } else {
