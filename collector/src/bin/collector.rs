@@ -520,6 +520,10 @@ enum Commands {
         /// The path to the local rustc used to compile the runtime benchmark
         rustc: String,
 
+        /// The path to a second local rustc used to compare with the baseline rustc
+        #[arg(long)]
+        rustc2: Option<String>,
+
         /// Name of the benchmark that should be profiled
         benchmark: String,
     },
@@ -709,21 +713,51 @@ fn main_result() -> anyhow::Result<i32> {
             runtime,
             profiler,
             rustc,
+            rustc2,
             benchmark,
         } => {
-            let toolchain =
-                get_local_toolchain(&[Profile::Opt], &rustc, None, None, None, "", target_triple)?;
-            let suite = prepare_runtime_benchmark_suite(
-                &toolchain,
-                &runtime_benchmark_dir,
-                CargoIsolationMode::Cached,
-                runtime.group,
-                // Compile with debuginfo to have filenames and line numbers available in the
-                // generated profiles.
-                RuntimeCompilationOpts::default().debug_info("1"),
-            )?
-            .suite;
-            profile_runtime(profiler, suite, &benchmark)?;
+            let get_suite = |rustc: &str, id: &str| {
+                let toolchain = get_local_toolchain(
+                    &[Profile::Opt],
+                    rustc,
+                    None,
+                    None,
+                    None,
+                    id,
+                    target_triple.clone(),
+                )?;
+                let suite = prepare_runtime_benchmark_suite(
+                    &toolchain,
+                    &runtime_benchmark_dir,
+                    CargoIsolationMode::Cached,
+                    runtime.group.clone(),
+                    // Compile with debuginfo to have filenames and line numbers available in the
+                    // generated profiles.
+                    RuntimeCompilationOpts::default().debug_info("1"),
+                )?
+                .suite;
+                Ok::<_, anyhow::Error>((toolchain, suite))
+            };
+
+            println!("Profiling {rustc}");
+            let (toolchain1, suite1) = get_suite(&rustc, "1")?;
+            let profile1 = profile_runtime(profiler.clone(), toolchain1, suite1, &benchmark)?;
+
+            if let Some(rustc2) = rustc2 {
+                match profiler {
+                    RuntimeProfiler::Cachegrind => {
+                        println!("Profiling {rustc2}");
+                        let (toolchain2, suite2) = get_suite(&rustc2, "2")?;
+                        let profile2 = profile_runtime(profiler, toolchain2, suite2, &benchmark)?;
+                    }
+                }
+            } else {
+                println!(
+                    "Profiling complete, result can be found in `{}`",
+                    profile1.display()
+                );
+            }
+
             Ok(0)
         }
         Commands::BenchLocal {
