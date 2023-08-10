@@ -1,5 +1,6 @@
 use crate::compile::execute::{PerfTool, ProcessOutputData, Processor, Retry};
 use crate::utils;
+use crate::utils::cachegrind::cachegrind_annotate;
 use anyhow::Context;
 use std::collections::HashMap;
 use std::future::Future;
@@ -229,53 +230,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
                     let cgout_file = filepath(self.output_dir, &out_file("cgout"));
                     let cgann_file = filepath(self.output_dir, &out_file("cgann"));
 
-                    // It's useful to filter all `file:function` entries from
-                    // jemalloc into a single fake
-                    // `<all-jemalloc-files>:<all-jemalloc-functions>` entry. That
-                    // way the cost of all allocations is visible in one line,
-                    // rather than spread across many small entries.
-                    //
-                    // The downside is that we don't get any annotations within
-                    // jemalloc source files, but this is no real loss, given that
-                    // jemalloc is basically a black box whose code we never look
-                    // at anyway. DHAT is the best way to profile allocations.
-                    let reader = io::BufReader::new(fs::File::open(&tmp_cgout_file)?);
-                    let mut writer = io::BufWriter::new(fs::File::create(&cgout_file)?);
-                    let mut in_jemalloc_file = false;
-
-                    // A Cachegrind profile contains `fn=<function-name>` lines,
-                    // `fl=<filename>` lines, and everything else. We just need to
-                    // modify the `fn=` and `fl=` lines that refer to jemalloc
-                    // code.
-                    for line in reader.lines() {
-                        let line = line?;
-                        if line.starts_with("fl=") {
-                            // All jemalloc filenames have `/jemalloc/` or
-                            // something like `/jemalloc-sys-1e20251078fe5355/` in
-                            // them.
-                            in_jemalloc_file = line.contains("/jemalloc");
-                            if in_jemalloc_file {
-                                writeln!(writer, "fl=<all-jemalloc-files>")?;
-                                continue;
-                            }
-                        } else if line.starts_with("fn=") {
-                            // Any function within a jemalloc file is a jemalloc
-                            // function.
-                            if in_jemalloc_file {
-                                writeln!(writer, "fn=<all-jemalloc-functions>")?;
-                                continue;
-                            }
-                        }
-                        writeln!(writer, "{}", line)?;
-                    }
-                    writer.flush()?;
-
-                    let mut cg_annotate_cmd = Command::new("cg_annotate");
-                    cg_annotate_cmd
-                        .arg("--auto=yes")
-                        .arg("--show-percs=yes")
-                        .arg(&cgout_file);
-                    fs::write(cgann_file, cg_annotate_cmd.output()?.stdout)?;
+                    cachegrind_annotate(&tmp_cgout_file, &cgout_file, &cgann_file)?;
                 }
 
                 // Callgrind produces (via rustc-fake) a data file called `clgout`.

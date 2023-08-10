@@ -1,5 +1,6 @@
 use std::future::Future;
 
+pub mod cachegrind;
 pub mod fs;
 pub mod git;
 pub mod read2;

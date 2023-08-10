@@ -7,6 +7,7 @@ use anyhow::Context;
 use crate::command_output;
 use crate::runtime::BenchmarkSuite;
 use crate::toolchain::Toolchain;
+use crate::utils::cachegrind::cachegrind_annotate;
 
 #[derive(Clone, Debug, clap::ValueEnum)]
 pub enum RuntimeProfiler {
@@ -27,21 +28,26 @@ pub fn profile_runtime(
     let result_dir = Path::new("results-runtime");
     create_dir_all(result_dir)?;
 
-    let (mut cmd, out_file) = match profiler {
+    let out_file = match profiler {
         RuntimeProfiler::Cachegrind => {
-            let out_file = result_dir.join(format!("cgout-{}-{benchmark}", toolchain.id));
+            let cgout_tmp = tempfile::NamedTempFile::new()?.into_temp_path();
+            let cgout_file = result_dir.join(format!("cgout-{}-{benchmark}", toolchain.id));
+            let cgann_file = result_dir.join(format!("cgann-{}-{benchmark}", toolchain.id));
+
             let mut cmd = Command::new("valgrind");
             cmd.arg("--tool=cachegrind")
                 .arg("--branch-sim=no")
                 .arg("--cache-sim=no")
-                .arg(format!("--cachegrind-out-file={}", out_file.display()));
-            (cmd, out_file)
+                .arg(format!("--cachegrind-out-file={}", cgout_tmp.display()));
+            cmd.stdin(Stdio::null());
+            cmd.arg(&group.binary).arg("profile").arg(benchmark);
+            command_output(&mut cmd).context("Cannot run profiler")?;
+
+            cachegrind_annotate(&cgout_tmp, &cgout_file, &cgann_file)
+                .context("Cannot annotate result")?;
+            cgout_file
         }
     };
-    cmd.stdin(Stdio::null());
-
-    cmd.arg(&group.binary).arg("profile").arg(benchmark);
-    command_output(&mut cmd).context("Cannot run profiler")?;
 
     Ok(out_file)
 }
