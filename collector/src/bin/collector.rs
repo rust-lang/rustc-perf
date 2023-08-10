@@ -19,8 +19,8 @@ use std::ffi::OsStr;
 use std::fs;
 use std::fs::File;
 use std::future::Future;
-use std::io::BufWriter;
 use std::io::Write;
+use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 use std::process;
 use std::process::{Command, Stdio};
@@ -166,12 +166,12 @@ fn generate_cachegrind_diffs(
                 let cgfilt_diff = out_dir.join(filename("cgfilt-diff", &id_diff));
                 let cgann_diff = out_dir.join(filename("cgann-diff", &id_diff));
 
-                if let Err(e) = rustfilt(&cgout1, &cgfilt1) {
+                if let Err(e) = demangle_file(&cgout1, &cgfilt1) {
                     errors.incr();
                     eprintln!("collector error: {:?}", e);
                     continue;
                 }
-                if let Err(e) = rustfilt(&cgout2, &cgfilt2) {
+                if let Err(e) = demangle_file(&cgout2, &cgfilt2) {
                     errors.incr();
                     eprintln!("collector error: {:?}", e);
                     continue;
@@ -194,23 +194,16 @@ fn generate_cachegrind_diffs(
     annotated_diffs
 }
 
-/// Demangles symbols in a file using rustfilt and writes result to path.
-fn rustfilt(cgout: &Path, path: &Path) -> anyhow::Result<()> {
-    if !is_installed("rustfilt") {
-        anyhow::bail!("`rustfilt` not installed.");
-    }
-    let output = Command::new("rustfilt")
-        .arg("-i")
-        .arg(cgout)
-        .stderr(Stdio::inherit())
-        .output()
-        .context("failed to run `rustfilt`")?;
+/// Demangles symbols in a file and writes result to path.
+fn demangle_file(file: &Path, path: &Path) -> anyhow::Result<()> {
+    let mut file =
+        BufReader::new(File::open(file).context("Cannot open file containing Rust symbols")?);
+    let mut output = BufWriter::new(
+        File::create(path).context("Cannot create file with demangled Rust symbols")?,
+    );
 
-    if !output.status.success() {
-        anyhow::bail!("failed to process output with rustfilt");
-    }
-
-    fs::write(path, output.stdout).context("failed to write `rustfilt` output")?;
+    rustc_demangle::demangle_stream(&mut file, &mut output, false)
+        .context("Cannot demangle symbols")?;
 
     Ok(())
 }
@@ -971,7 +964,6 @@ fn main_result() -> anyhow::Result<i32> {
                 if profiler == Profiler::Cachegrind {
                     check_installed("valgrind")?;
                     check_installed("cg_annotate")?;
-                    check_installed("rustfilt")?;
 
                     let diffs = generate_cachegrind_diffs(
                         &id1,
