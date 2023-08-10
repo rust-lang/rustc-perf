@@ -39,7 +39,6 @@ use collector::runtime::{profile_runtime, RuntimeCompilationOpts};
 use collector::toolchain::{
     create_toolchain_from_published_version, get_local_toolchain, Sysroot, Toolchain,
 };
-use collector::utils::mangling::demangle_file;
 use collector::utils::wait_for_future;
 
 fn n_normal_benchmarks_remaining(n: usize) -> String {
@@ -162,22 +161,10 @@ fn generate_cachegrind_diffs(
                 let id_diff = format!("{}-{}", id1, id2);
                 let cgout1 = out_dir.join(filename("cgout", id1));
                 let cgout2 = out_dir.join(filename("cgout", id2));
-                let cgfilt1 = out_dir.join(filename("cgfilt", id1));
-                let cgfilt2 = out_dir.join(filename("cgfilt", id2));
                 let cgfilt_diff = out_dir.join(filename("cgfilt-diff", &id_diff));
                 let cgann_diff = out_dir.join(filename("cgann-diff", &id_diff));
 
-                if let Err(e) = demangle_file(&cgout1, &cgfilt1) {
-                    errors.incr();
-                    eprintln!("collector error: {:?}", e);
-                    continue;
-                }
-                if let Err(e) = demangle_file(&cgout2, &cgfilt2) {
-                    errors.incr();
-                    eprintln!("collector error: {:?}", e);
-                    continue;
-                }
-                if let Err(e) = cg_diff(&cgfilt1, &cgfilt2, &cgfilt_diff) {
+                if let Err(e) = cg_diff(&cgout1, &cgout2, &cgfilt_diff) {
                     errors.incr();
                     eprintln!("collector error: {:?}", e);
                     continue;

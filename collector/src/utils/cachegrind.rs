@@ -1,14 +1,18 @@
+use crate::utils::mangling::demangle_file;
+use anyhow::Context;
 use std::io::{BufRead, Write};
 use std::path::Path;
 use std::process::Command;
 use std::{fs, io};
 
-/// Annotate the output of Cachegrind using the `cg_annotate` tool.
+/// Annotate and demangle the output of Cachegrind using the `cg_annotate` tool.
 pub fn cachegrind_annotate(
     input: &Path,
     cgout_output: &Path,
     cgann_output: &Path,
 ) -> anyhow::Result<()> {
+    let tmp_cgout = tempfile::NamedTempFile::new()?.into_temp_path();
+
     // It's useful to filter all `file:function` entries from
     // jemalloc into a single fake
     // `<all-jemalloc-files>:<all-jemalloc-functions>` entry. That
@@ -20,7 +24,7 @@ pub fn cachegrind_annotate(
     // jemalloc is basically a black box whose code we never look
     // at anyway. DHAT is the best way to profile allocations.
     let reader = io::BufReader::new(fs::File::open(input)?);
-    let mut writer = io::BufWriter::new(fs::File::create(cgout_output)?);
+    let mut writer = io::BufWriter::new(fs::File::create(&tmp_cgout)?);
     let mut in_jemalloc_file = false;
 
     // A Cachegrind profile contains `fn=<function-name>` lines,
@@ -49,6 +53,8 @@ pub fn cachegrind_annotate(
         writeln!(writer, "{}", line)?;
     }
     writer.flush()?;
+
+    demangle_file(&tmp_cgout, cgout_output).context("Cannot demangle cgout file")?;
 
     let mut cg_annotate_cmd = Command::new("cg_annotate");
     cg_annotate_cmd
