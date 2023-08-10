@@ -23,7 +23,7 @@ use std::io::BufWriter;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process;
-use std::process::{Command, Stdio};
+use std::process::Command;
 use std::time::Duration;
 use std::{str, time::Instant};
 use tokio::runtime::Runtime;
@@ -39,7 +39,8 @@ use collector::runtime::{profile_runtime, RuntimeCompilationOpts};
 use collector::toolchain::{
     create_toolchain_from_published_version, get_local_toolchain, Sysroot, Toolchain,
 };
-use collector::utils::wait_for_future;
+use collector::utils::cachegrind::cachegrind_diff;
+use collector::utils::{is_installed, wait_for_future};
 
 fn n_normal_benchmarks_remaining(n: usize) -> String {
     let suffix = if n == 1 { "" } else { "s" };
@@ -123,10 +124,6 @@ fn check_installed(name: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn is_installed(name: &str) -> bool {
-    Command::new(name).output().is_ok()
-}
-
 fn generate_cachegrind_diffs(
     id1: &str,
     id2: &str,
@@ -161,15 +158,9 @@ fn generate_cachegrind_diffs(
                 let id_diff = format!("{}-{}", id1, id2);
                 let cgout1 = out_dir.join(filename("cgout", id1));
                 let cgout2 = out_dir.join(filename("cgout", id2));
-                let cgfilt_diff = out_dir.join(filename("cgfilt-diff", &id_diff));
                 let cgann_diff = out_dir.join(filename("cgann-diff", &id_diff));
 
-                if let Err(e) = cg_diff(&cgout1, &cgout2, &cgfilt_diff) {
-                    errors.incr();
-                    eprintln!("collector error: {:?}", e);
-                    continue;
-                }
-                if let Err(e) = cg_annotate(&cgfilt_diff, &cgann_diff) {
+                if let Err(e) = cachegrind_diff(&cgout1, &cgout2, &cgann_diff) {
                     errors.incr();
                     eprintln!("collector error: {:?}", e);
                     continue;
@@ -180,47 +171,6 @@ fn generate_cachegrind_diffs(
         }
     }
     annotated_diffs
-}
-
-/// Compares two Cachegrind output files using cg_diff and writes result to path.
-fn cg_diff(cgout1: &Path, cgout2: &Path, path: &Path) -> anyhow::Result<()> {
-    if !is_installed("cg_diff") {
-        anyhow::bail!("`cg_diff` not installed.");
-    }
-    let output = Command::new("cg_diff")
-        .arg(r"--mod-filename=s/\/rustc\/[^\/]*\///")
-        .arg("--mod-funcname=s/[.]llvm[.].*//")
-        .arg(cgout1)
-        .arg(cgout2)
-        .stderr(Stdio::inherit())
-        .output()
-        .context("failed to run `cg_diff`")?;
-
-    if !output.status.success() {
-        anyhow::bail!("failed to generate cachegrind diff");
-    }
-
-    fs::write(path, output.stdout).context("failed to write `cg_diff` output")?;
-
-    Ok(())
-}
-
-/// Post process Cachegrind output file and writes resutl to path.
-fn cg_annotate(cgout: &Path, path: &Path) -> anyhow::Result<()> {
-    let output = Command::new("cg_annotate")
-        .arg("--show-percs=no")
-        .arg(cgout)
-        .stderr(Stdio::inherit())
-        .output()
-        .context("failed to run `cg_annotate`")?;
-
-    if !output.status.success() {
-        anyhow::bail!("failed to annotate cachegrind output");
-    }
-
-    fs::write(path, output.stdout).context("failed to write `cg_annotate` output")?;
-
-    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
