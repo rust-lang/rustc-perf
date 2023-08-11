@@ -23,7 +23,7 @@ use std::io::BufWriter;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process;
-use std::process::{Command, Stdio};
+use std::process::Command;
 use std::time::Duration;
 use std::{str, time::Instant};
 use tokio::runtime::Runtime;
@@ -39,7 +39,8 @@ use collector::runtime::{profile_runtime, RuntimeCompilationOpts};
 use collector::toolchain::{
     create_toolchain_from_published_version, get_local_toolchain, Sysroot, Toolchain,
 };
-use collector::utils::wait_for_future;
+use collector::utils::cachegrind::cachegrind_diff;
+use collector::utils::{is_installed, wait_for_future};
 
 fn n_normal_benchmarks_remaining(n: usize) -> String {
     let suffix = if n == 1 { "" } else { "s" };
@@ -123,10 +124,6 @@ fn check_installed(name: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn is_installed(name: &str) -> bool {
-    Command::new(name).output().is_ok()
-}
-
 fn generate_cachegrind_diffs(
     id1: &str,
     id2: &str,
@@ -161,27 +158,9 @@ fn generate_cachegrind_diffs(
                 let id_diff = format!("{}-{}", id1, id2);
                 let cgout1 = out_dir.join(filename("cgout", id1));
                 let cgout2 = out_dir.join(filename("cgout", id2));
-                let cgfilt1 = out_dir.join(filename("cgfilt", id1));
-                let cgfilt2 = out_dir.join(filename("cgfilt", id2));
-                let cgfilt_diff = out_dir.join(filename("cgfilt-diff", &id_diff));
                 let cgann_diff = out_dir.join(filename("cgann-diff", &id_diff));
 
-                if let Err(e) = rustfilt(&cgout1, &cgfilt1) {
-                    errors.incr();
-                    eprintln!("collector error: {:?}", e);
-                    continue;
-                }
-                if let Err(e) = rustfilt(&cgout2, &cgfilt2) {
-                    errors.incr();
-                    eprintln!("collector error: {:?}", e);
-                    continue;
-                }
-                if let Err(e) = cg_diff(&cgfilt1, &cgfilt2, &cgfilt_diff) {
-                    errors.incr();
-                    eprintln!("collector error: {:?}", e);
-                    continue;
-                }
-                if let Err(e) = cg_annotate(&cgfilt_diff, &cgann_diff) {
+                if let Err(e) = cachegrind_diff(&cgout1, &cgout2, &cgann_diff) {
                     errors.incr();
                     eprintln!("collector error: {:?}", e);
                     continue;
@@ -192,68 +171,6 @@ fn generate_cachegrind_diffs(
         }
     }
     annotated_diffs
-}
-
-/// Demangles symbols in a file using rustfilt and writes result to path.
-fn rustfilt(cgout: &Path, path: &Path) -> anyhow::Result<()> {
-    if !is_installed("rustfilt") {
-        anyhow::bail!("`rustfilt` not installed.");
-    }
-    let output = Command::new("rustfilt")
-        .arg("-i")
-        .arg(cgout)
-        .stderr(Stdio::inherit())
-        .output()
-        .context("failed to run `rustfilt`")?;
-
-    if !output.status.success() {
-        anyhow::bail!("failed to process output with rustfilt");
-    }
-
-    fs::write(path, output.stdout).context("failed to write `rustfilt` output")?;
-
-    Ok(())
-}
-
-/// Compares two Cachegrind output files using cg_diff and writes result to path.
-fn cg_diff(cgout1: &Path, cgout2: &Path, path: &Path) -> anyhow::Result<()> {
-    if !is_installed("cg_diff") {
-        anyhow::bail!("`cg_diff` not installed.");
-    }
-    let output = Command::new("cg_diff")
-        .arg(r"--mod-filename=s/\/rustc\/[^\/]*\///")
-        .arg("--mod-funcname=s/[.]llvm[.].*//")
-        .arg(cgout1)
-        .arg(cgout2)
-        .stderr(Stdio::inherit())
-        .output()
-        .context("failed to run `cg_diff`")?;
-
-    if !output.status.success() {
-        anyhow::bail!("failed to generate cachegrind diff");
-    }
-
-    fs::write(path, output.stdout).context("failed to write `cg_diff` output")?;
-
-    Ok(())
-}
-
-/// Post process Cachegrind output file and writes resutl to path.
-fn cg_annotate(cgout: &Path, path: &Path) -> anyhow::Result<()> {
-    let output = Command::new("cg_annotate")
-        .arg("--show-percs=no")
-        .arg(cgout)
-        .stderr(Stdio::inherit())
-        .output()
-        .context("failed to run `cg_annotate`")?;
-
-    if !output.status.success() {
-        anyhow::bail!("failed to annotate cachegrind output");
-    }
-
-    fs::write(path, output.stdout).context("failed to write `cg_annotate` output")?;
-
-    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -527,6 +444,10 @@ enum Commands {
         /// The path to the local rustc used to compile the runtime benchmark
         rustc: String,
 
+        /// The path to a second local rustc used to compare with the baseline rustc
+        #[arg(long)]
+        rustc2: Option<String>,
+
         /// Name of the benchmark that should be profiled
         benchmark: String,
     },
@@ -716,21 +637,59 @@ fn main_result() -> anyhow::Result<i32> {
             runtime,
             profiler,
             rustc,
+            rustc2,
             benchmark,
         } => {
-            let toolchain =
-                get_local_toolchain(&[Profile::Opt], &rustc, None, None, None, "", target_triple)?;
-            let suite = prepare_runtime_benchmark_suite(
-                &toolchain,
-                &runtime_benchmark_dir,
-                CargoIsolationMode::Cached,
-                runtime.group,
-                // Compile with debuginfo to have filenames and line numbers available in the
-                // generated profiles.
-                RuntimeCompilationOpts::default().debug_info("1"),
-            )?
-            .suite;
-            profile_runtime(profiler, suite, &benchmark)?;
+            let get_suite = |rustc: &str, id: &str| {
+                let toolchain = get_local_toolchain(
+                    &[Profile::Opt],
+                    rustc,
+                    None,
+                    None,
+                    None,
+                    id,
+                    target_triple.clone(),
+                )?;
+                let suite = prepare_runtime_benchmark_suite(
+                    &toolchain,
+                    &runtime_benchmark_dir,
+                    CargoIsolationMode::Cached,
+                    runtime.group.clone(),
+                    // Compile with debuginfo to have filenames and line numbers available in the
+                    // generated profiles.
+                    RuntimeCompilationOpts::default().debug_info("1"),
+                )?
+                .suite;
+                Ok::<_, anyhow::Error>((toolchain, suite))
+            };
+
+            println!("Profiling {rustc}");
+            let (toolchain1, suite1) = get_suite(&rustc, "1")?;
+            let profile1 = profile_runtime(profiler.clone(), &toolchain1, suite1, &benchmark)?;
+
+            if let Some(rustc2) = rustc2 {
+                match profiler {
+                    RuntimeProfiler::Cachegrind => {
+                        println!("Profiling {rustc2}");
+                        let (toolchain2, suite2) = get_suite(&rustc2, "2")?;
+                        let profile2 = profile_runtime(profiler, &toolchain2, suite2, &benchmark)?;
+
+                        let output = profile1.parent().unwrap().join(format!(
+                            "cgann-diff-{}-{}-{benchmark}",
+                            toolchain1.id, toolchain2.id
+                        ));
+                        cachegrind_diff(&profile1, &profile2, &output)
+                            .context("Cannot generate Cachegrind diff")?;
+                        println!("Cachegrind diff stored in `{}`", output.display());
+                    }
+                }
+            } else {
+                println!(
+                    "Profiling complete, result can be found in `{}`",
+                    profile1.display()
+                );
+            }
+
             Ok(0)
         }
         Commands::BenchLocal {
@@ -971,7 +930,6 @@ fn main_result() -> anyhow::Result<i32> {
                 if profiler == Profiler::Cachegrind {
                     check_installed("valgrind")?;
                     check_installed("cg_annotate")?;
-                    check_installed("rustfilt")?;
 
                     let diffs = generate_cachegrind_diffs(
                         &id1,

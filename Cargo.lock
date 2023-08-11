@@ -374,6 +374,7 @@ dependencies = [
  "num_cpus",
  "rayon",
  "reqwest",
+ "rustc-demangle",
  "semver",
  "serde",
  "serde_json",
@@ -2167,6 +2168,12 @@ dependencies = [
  "indexmap",
  "serde",
 ]
+
+[[package]]
+name = "rustc-demangle"
+version = "0.1.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d626bb9dae77e28219937af045c257c28bfd3f69333c512553507f5f9798cb76"
 
 [[package]]
 name = "rustc-hash"
