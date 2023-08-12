@@ -283,7 +283,7 @@ pub async fn enqueue_shas(
             };
             let suffix = if preceding_artifacts == 1 { "" } else { "s" };
             let queue_msg = format!(
-                r#"There {verb} currently {preceding_artifacts} other artifact{suffix} in the [queue](https://perf.rust-lang.org/status.html).
+                r#"There {verb} currently {preceding_artifacts} preceding artifact{suffix} in the [queue](https://perf.rust-lang.org/status.html).
 It will probably take at least ~{:.1} hours until the benchmark run finishes."#,
                 (expected_duration.as_secs_f64() / 3600.0)
             );
