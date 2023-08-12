@@ -155,7 +155,7 @@ pub async fn handle_self_profile_processed_download(
 }
 
 fn get_self_profile_data(
-    cpu_clock: Option<f64>,
+    total_instructions: Option<f64>,
     profile: &analyzeme::AnalysisResults,
 ) -> ServerResult<self_profile::SelfProfile> {
     let total_time: Duration = profile.query_data.iter().map(|qd| qd.self_time).sum();
@@ -180,7 +180,7 @@ fn get_self_profile_data(
         label: "Totals".into(),
         self_time: total_time.as_nanos() as u64,
         // TODO: check against wall-time from perf stats
-        percent_total_time: cpu_clock
+        percent_total_time: total_instructions
             .map(|w| ((total_time.as_secs_f64() / w) * 100.0) as f32)
             // sentinel "we couldn't compute this time"
             .unwrap_or(-100.0),
@@ -587,7 +587,7 @@ pub async fn handle_self_profile(
         .benchmark(selector::Selector::One(bench_name.to_string()))
         .profile(selector::Selector::One(profile.parse().unwrap()))
         .scenario(selector::Selector::One(scenario))
-        .metric(selector::Selector::One(Metric::CpuClock));
+        .metric(selector::Selector::One(Metric::InstructionsUser));
 
     // Helper for finding an `ArtifactId` based on a commit sha
     let find_aid = |commit: &str| {
@@ -602,9 +602,9 @@ pub async fn handle_self_profile(
     }
     let commits = Arc::new(commits);
 
-    let mut cpu_responses = ctxt.statistic_series(query, commits.clone()).await?;
-    assert_eq!(cpu_responses.len(), 1, "all selectors are exact");
-    let mut cpu_response = cpu_responses.remove(0).series;
+    let mut instructions_responses = ctxt.statistic_series(query, commits.clone()).await?;
+    assert_eq!(instructions_responses.len(), 1, "all selectors are exact");
+    let mut instructions_response = instructions_responses.remove(0).series;
 
     let mut self_profile_data = Vec::new();
     let conn = ctxt.conn().await;
@@ -623,12 +623,16 @@ pub async fn handle_self_profile(
         }
     }
     let profiling_data = self_profile_data.remove(0).perform_analysis();
-    let mut profile = get_self_profile_data(cpu_response.next().unwrap().1, &profiling_data)
-        .map_err(|e| format!("{}: {}", body.commit, e))?;
+    let mut profile =
+        get_self_profile_data(instructions_response.next().unwrap().1, &profiling_data)
+            .map_err(|e| format!("{}: {}", body.commit, e))?;
     let (base_profile, base_raw_data) = if body.base_commit.is_some() {
         let base_profiling_data = self_profile_data.remove(0).perform_analysis();
-        let profile = get_self_profile_data(cpu_response.next().unwrap().1, &base_profiling_data)
-            .map_err(|e| format!("{}: {}", body.base_commit.as_ref().unwrap(), e))?;
+        let profile = get_self_profile_data(
+            instructions_response.next().unwrap().1,
+            &base_profiling_data,
+        )
+        .map_err(|e| format!("{}: {}", body.base_commit.as_ref().unwrap(), e))?;
         (Some(profile), Some(base_profiling_data))
     } else {
         (None, None)

@@ -2,8 +2,8 @@ import {createUrlWithAppendedParams, getUrlParams} from "../utils/navigation";
 import {postMsgpack} from "../utils/requests";
 import {SELF_PROFILE_DATA_URL} from "../urls";
 
-function to_seconds(time) {
-  return time / 1000000000;
+function normalize_value(value) {
+  return value;
 }
 
 function fmt_delta(to, delta, is_integral_delta) {
@@ -267,14 +267,14 @@ function populate_data(data, state: Selector) {
         t.setAttribute("title", "% of cpu-time stat");
       }
     }
-    td(row, to_seconds(cur.self_time).toFixed(3));
+    td(row, normalize_value(cur.self_time));
     if (delta) {
       td(
         row,
         fmt_delta(
-          to_seconds(cur.self_time),
-          to_seconds(delta.self_time),
-          false
+          normalize_value(cur.self_time),
+          normalize_value(delta.self_time),
+          true
         ),
         true
       );
@@ -291,16 +291,14 @@ function populate_data(data, state: Selector) {
     } else {
       td(row, "-", true);
     }
-    td(row, to_seconds(cur.incremental_load_time).toFixed(3)).classList.add(
-      "incr"
-    );
+    td(row, normalize_value(cur.incremental_load_time)).classList.add("incr");
     if (delta) {
       td(
         row,
         fmt_delta(
-          to_seconds(cur.incremental_load_time),
-          to_seconds(delta.incremental_load_time),
-          false
+          normalize_value(cur.incremental_load_time),
+          normalize_value(delta.incremental_load_time),
+          true
         ),
         true
       ).classList.add("incr");
