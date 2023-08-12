@@ -8,8 +8,9 @@ use thousands::Separable;
 
 use benchlib::comm::messages::{BenchmarkMessage, BenchmarkResult, BenchmarkStats};
 pub use benchmark::{
-    prepare_runtime_benchmark_suite, runtime_benchmark_dir, BenchmarkFilter, BenchmarkGroup,
-    BenchmarkSuite, BenchmarkSuiteCompilation, CargoIsolationMode,
+    get_runtime_benchmark_groups, prepare_runtime_benchmark_suite, runtime_benchmark_dir,
+    BenchmarkFilter, BenchmarkGroup, BenchmarkGroupCrate, BenchmarkSuite,
+    BenchmarkSuiteCompilation, CargoIsolationMode,
 };
 use database::{ArtifactIdNumber, CollectionId, Connection};
 

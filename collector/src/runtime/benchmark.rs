@@ -113,9 +113,10 @@ impl BenchmarkFilter {
     }
 }
 
-struct BenchmarkGroupCrate {
-    name: String,
-    path: PathBuf,
+/// A single crate located in the runtime benchmark directory.
+pub struct BenchmarkGroupCrate {
+    pub name: String,
+    pub path: PathBuf,
 }
 
 /// Determines whether runtime benchmarks will be recompiled from scratch in a temporary directory
@@ -129,6 +130,13 @@ pub struct BenchmarkSuiteCompilation {
     pub suite: BenchmarkSuite,
     // Maps benchmark group name to compilation error
     pub failed_to_compile: HashMap<String, String>,
+}
+
+impl BenchmarkSuiteCompilation {
+    pub fn extract_suite(self) -> BenchmarkSuite {
+        assert!(self.failed_to_compile.is_empty());
+        self.suite
+    }
 }
 
 #[derive(Default)]
@@ -355,7 +363,7 @@ fn gather_benchmarks(binary: &Path) -> anyhow::Result<Vec<String>> {
 }
 
 /// Finds all runtime benchmarks (crates) in the given directory.
-fn get_runtime_benchmark_groups(
+pub fn get_runtime_benchmark_groups(
     directory: &Path,
     group: Option<String>,
 ) -> anyhow::Result<Vec<BenchmarkGroupCrate>> {

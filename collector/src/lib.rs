@@ -6,6 +6,7 @@ use std::fmt;
 use std::process::{self, Command};
 
 pub mod api;
+pub mod codegen;
 pub mod compile;
 pub mod runtime;
 pub mod toolchain;

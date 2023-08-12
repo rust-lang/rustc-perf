@@ -35,6 +35,8 @@ rayon = "1.5.2"
 cargo_metadata = "0.15.0"
 thousands = "0.2.0"
 rustc-demangle = { version = "0.1", features = ["std"] }
+similar = "2.2"
+console = "0.15"
 
 benchlib = { path = "benchlib" }
 

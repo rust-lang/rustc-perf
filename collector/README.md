@@ -490,6 +490,16 @@ It is also possible to profile runtime benchmarks using the following command:
 Currently, a `<PROFILER>` can be `cachegrind`, which will run the runtime benchmark under
 `Cachegrind`.
 
+## Codegen diff
+You can use the `codegen_diff` command to display the assembly, LLVM IR or MIR difference between two
+versions of `rustc` for individual functions of a single runtime benchmark group:
+
+```
+./target/release/collector codegen_diff <asm|asm-source|llvm|mir> <benchmark-name> <rustc> <rustc2>
+```
+
+Codegen diff is currently only implemented for runtime benchmarks.
+
 ## How `rustc` wrapping works
 When a crate is benchmarked or profiled, the real `rustc` is replaced with the `rustc-fake` binary,
 which parses commands passed from the `collector` and invokes the actual profiling or benchmarking
