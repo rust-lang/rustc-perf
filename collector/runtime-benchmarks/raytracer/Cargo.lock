@@ -299,7 +299,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "raytrace"
+name = "raytracer-bench"
 version = "0.1.0"
 dependencies = [
  "benchlib",
