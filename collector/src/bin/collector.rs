@@ -4,6 +4,7 @@ use anyhow::Context;
 use clap::builder::{PossibleValue, TypedValueParser};
 use clap::{Arg, Parser, ValueEnum};
 use collector::api::next_artifact::NextArtifact;
+use collector::codegen::{codegen_diff, CodegenType};
 use collector::compile::benchmark::category::Category;
 use collector::compile::benchmark::profile::Profile;
 use collector::compile::benchmark::scenario::Scenario;
@@ -31,9 +32,9 @@ use tokio::runtime::Runtime;
 use collector::compile::execute::bencher::BenchProcessor;
 use collector::compile::execute::profiler::{ProfileProcessor, Profiler};
 use collector::runtime::{
-    bench_runtime, prepare_runtime_benchmark_suite, runtime_benchmark_dir, BenchmarkFilter,
-    BenchmarkSuite, BenchmarkSuiteCompilation, CargoIsolationMode, RuntimeProfiler,
-    DEFAULT_RUNTIME_ITERATIONS,
+    bench_runtime, get_runtime_benchmark_groups, prepare_runtime_benchmark_suite,
+    runtime_benchmark_dir, BenchmarkFilter, BenchmarkSuite, BenchmarkSuiteCompilation,
+    CargoIsolationMode, RuntimeProfiler, DEFAULT_RUNTIME_ITERATIONS,
 };
 use collector::runtime::{profile_runtime, RuntimeCompilationOpts};
 use collector::toolchain::{
@@ -452,6 +453,21 @@ enum Commands {
         benchmark: String,
     },
 
+    /// Displays the diff between assembly, LLVM or MIR for a runtime benchmark group.
+    CodegenDiff {
+        /// Profiler to use
+        codegen_type: CodegenType,
+
+        /// Runtime benchmark group to diff (name of a directory in `collector/runtime-benchmarks`)
+        group: String,
+
+        /// The path to the local rustc used to compile the runtime benchmark
+        rustc1: String,
+
+        /// The path to a second rustc used to compile with the baseline
+        rustc2: String,
+    },
+
     /// Benchmarks a local rustc
     BenchLocal {
         #[command(flatten)]
@@ -659,7 +675,7 @@ fn main_result() -> anyhow::Result<i32> {
                     // generated profiles.
                     RuntimeCompilationOpts::default().debug_info("1"),
                 )?
-                .suite;
+                .extract_suite();
                 Ok::<_, anyhow::Error>((toolchain, suite))
             };
 
@@ -692,6 +708,37 @@ fn main_result() -> anyhow::Result<i32> {
 
             Ok(0)
         }
+        Commands::CodegenDiff {
+            codegen_type,
+            group,
+            rustc1: rustc,
+            rustc2,
+        } => {
+            let get_toolchain = |rustc: &str, id: &str| {
+                let toolchain = get_local_toolchain(
+                    &[Profile::Opt],
+                    rustc,
+                    None,
+                    None,
+                    None,
+                    id,
+                    target_triple.clone(),
+                )?;
+                Ok::<_, anyhow::Error>(toolchain)
+            };
+
+            let toolchain1 = get_toolchain(&rustc, "1")?;
+            let toolchain2 = get_toolchain(&rustc2, "2")?;
+
+            let mut benchmark_groups =
+                get_runtime_benchmark_groups(&runtime_benchmark_dir, Some(group))?;
+            let group = benchmark_groups.pop().unwrap();
+            assert!(benchmark_groups.is_empty());
+
+            codegen_diff(codegen_type, toolchain1, toolchain2, group)?;
+            Ok(0)
+        }
+
         Commands::BenchLocal {
             local,
             opts,
