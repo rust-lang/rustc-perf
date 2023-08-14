@@ -7,6 +7,7 @@ use crate::load::SiteCtxt;
 use database::{ArtifactId, QueuedCommit};
 
 use crate::github::{COMMENT_MARK_ROLLUP, COMMENT_MARK_TEMPORARY, RUST_REPO_GITHUB_API_URL};
+use humansize::BINARY;
 use std::collections::HashSet;
 use std::fmt::Write;
 
@@ -228,6 +229,7 @@ async fn summarize_run(
     }
 
     let bootstrap = summarize_bootstrap(&inst_comparison);
+    let artifact_size = summarize_artifact_size(&inst_comparison);
 
     let metrics = vec![
         (
@@ -267,8 +269,26 @@ async fn summarize_run(
     }
 
     write!(&mut message, "\n{bootstrap}").unwrap();
+    write!(&mut message, "\n{artifact_size}").unwrap();
 
     Ok(message)
+}
+
+fn summarize_artifact_size(comparison: &ArtifactComparison) -> String {
+    let size_prev = comparison.a.component_sizes.values().sum::<u64>();
+    let size_current = comparison.b.component_sizes.values().sum::<u64>();
+    if size_prev == 0 || size_current == 0 {
+        return "**Artifact size**: missing data".to_string();
+    }
+
+    let change = (size_current as f64 / size_prev as f64) - 1.0;
+    let change = change * 100.0;
+
+    format!(
+        "**Artifact size**: {} -> {} ({change:.2}%)",
+        humansize::format_size(size_prev, BINARY),
+        humansize::format_size(size_current, BINARY)
+    )
 }
 
 fn summarize_bootstrap(comparison: &ArtifactComparison) -> String {
