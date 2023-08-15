@@ -74,26 +74,21 @@ function getGraphRange(artifact: ArtifactDescription): GraphRange {
 }
 
 /**
- * Hook into the uPlot drawing machinery to draw a vertical line at the
- * position of the given `date`.
+ * Hook into the uPlot drawing machinery to draw a rectangle from the `date` to
+ * the end of the plot, representing the region that is the date's future.
  */
 function drawCurrentDate(opts: GraphRenderOpts, date: Date) {
   opts.hooks = {
     drawSeries: (u: uPlot) => {
       let ctx = u.ctx;
-      ctx.save();
-
-      const y0 = u.bbox.top;
-      const y1 = y0 + u.bbox.height;
       const x = u.valToPos(date.getTime() / 1000, "x", true);
 
-      ctx.beginPath();
-      ctx.moveTo(x, y0);
-      ctx.strokeStyle = "red";
-      ctx.setLineDash([5, 5]);
-      ctx.lineTo(x, y1);
-      ctx.stroke();
-
+      // Draw a translucent rectangle representing the region that is more
+      // recent than `date`.
+      ctx.save();
+      ctx.fillStyle = "rgba(0, 0, 0, 0.03)";
+      ctx.rect(x, u.bbox.top, u.bbox.width - x + u.bbox.left, u.bbox.height);
+      ctx.fill();
       ctx.restore();
     },
   };
