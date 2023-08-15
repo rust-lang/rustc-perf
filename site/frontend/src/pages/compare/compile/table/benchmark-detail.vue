@@ -122,7 +122,7 @@ function getGraphTitle() {
   const {start, end, date} = graphRange.value;
   const msg = `${DAY_RANGE} day history`;
   if (date !== null) {
-    return `${msg} (${start} - ${end})`;
+    return `${msg} (${start} → ${end})`;
   } else {
     return `${msg} (up to benchmarked commit)`;
   }
