@@ -207,6 +207,10 @@ onMounted(() => renderGraph());
         <div style="font-size: 0.8em">
           Each plotted value is relative to its previous commit
         </div>
+        <div style="font-size: 0.8em">
+          The shaded region shows values that are more recent than the
+          benchmarked commit
+        </div>
       </div>
       <div ref="chartElement"></div>
     </div>
