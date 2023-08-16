@@ -86,7 +86,7 @@ function drawCurrentDate(opts: GraphRenderOpts, date: Date) {
       // Draw a translucent rectangle representing the region that is more
       // recent than `date`.
       ctx.save();
-      ctx.fillStyle = "rgba(0, 0, 0, 0.03)";
+      ctx.fillStyle = "rgba(0, 0, 0, 0.07)";
       ctx.rect(x, u.bbox.top, u.bbox.width - x + u.bbox.left, u.bbox.height);
       ctx.fill();
       ctx.restore();
