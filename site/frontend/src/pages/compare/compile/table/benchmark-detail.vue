@@ -74,26 +74,21 @@ function getGraphRange(artifact: ArtifactDescription): GraphRange {
 }
 
 /**
- * Hook into the uPlot drawing machinery to draw a vertical line at the
- * position of the given `date`.
+ * Hook into the uPlot drawing machinery to draw a rectangle from the `date` to
+ * the end of the plot, representing the region that is the date's future.
  */
 function drawCurrentDate(opts: GraphRenderOpts, date: Date) {
   opts.hooks = {
     drawSeries: (u: uPlot) => {
       let ctx = u.ctx;
-      ctx.save();
-
-      const y0 = u.bbox.top;
-      const y1 = y0 + u.bbox.height;
       const x = u.valToPos(date.getTime() / 1000, "x", true);
 
-      ctx.beginPath();
-      ctx.moveTo(x, y0);
-      ctx.strokeStyle = "red";
-      ctx.setLineDash([5, 5]);
-      ctx.lineTo(x, y1);
-      ctx.stroke();
-
+      // Draw a translucent rectangle representing the region that is more
+      // recent than `date`.
+      ctx.save();
+      ctx.fillStyle = "rgba(0, 0, 0, 0.07)";
+      ctx.rect(x, u.bbox.top, u.bbox.width - x + u.bbox.left, u.bbox.height);
+      ctx.fill();
       ctx.restore();
     },
   };
@@ -127,7 +122,7 @@ function getGraphTitle() {
   const {start, end, date} = graphRange.value;
   const msg = `${DAY_RANGE} day history`;
   if (date !== null) {
-    return `${msg} (${start} - ${end})`;
+    return `${msg} (${start} → ${end})`;
   } else {
     return `${msg} (up to benchmarked commit)`;
   }
@@ -211,6 +206,10 @@ onMounted(() => renderGraph());
         <div class="bold">{{ getGraphTitle() }}</div>
         <div style="font-size: 0.8em">
           Each plotted value is relative to its previous commit
+        </div>
+        <div style="font-size: 0.8em">
+          The shaded region shows values that are more recent than the
+          benchmarked commit
         </div>
       </div>
       <div ref="chartElement"></div>
