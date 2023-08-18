@@ -5,12 +5,12 @@ import {computed} from "vue";
 const props = defineProps<{
   commit: string;
   testCase: CompileTestCase;
-  baseline_commit?: string;
+  baselineCommit?: string;
 }>();
 
 const firstCommit = computed(() => {
-  if (props.baseline_commit !== undefined) {
-    return props.baseline_commit;
+  if (props.baselineCommit !== undefined) {
+    return props.baselineCommit;
   } else {
     return props.commit;
   }
@@ -44,7 +44,7 @@ function normalizeScenario(scenario: string): string {
 
 <template>
   <pre><code>cargo run --bin collector --release profile_local cachegrind \
-    +{{ firstCommit }} \<template v-if="props.baseline_commit !== undefined">
+    +{{ firstCommit }} \<template v-if="props.baselineCommit !== undefined">
     --rustc2 +{{ props.commit }} \</template>
     --include {{ testCase.benchmark }} \
     --profiles {{ normalizeProfile(testCase.profile) }} \

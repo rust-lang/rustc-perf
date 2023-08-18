@@ -179,6 +179,31 @@ const cargoProfile = computed((): CargoProfileMetadata => {
 const chartElement: Ref<HTMLElement | null> = ref(null);
 const graphRange = computed(() => getGraphRange(props.artifact));
 
+enum ProfileCommand {
+  Before = "before",
+  After = "after",
+  Diff = "diff",
+}
+
+const profileCommand: Ref<ProfileCommand> = ref(ProfileCommand.Diff);
+const profileCommit = computed(() => {
+  if (profileCommand.value === ProfileCommand.Before) {
+    return props.baseArtifact.commit;
+  }
+  return props.artifact.commit;
+});
+const profileBaselineCommit = computed(() => {
+  if (profileCommand.value === ProfileCommand.Diff) {
+    return props.baseArtifact.commit;
+  }
+  return undefined;
+});
+
+function changeProfileCommand(event: Event) {
+  const target = event.target as HTMLSelectElement;
+  profileCommand.value = target.value as ProfileCommand;
+}
+
 onMounted(() => renderGraph());
 </script>
 
@@ -288,12 +313,34 @@ onMounted(() => renderGraph());
         Local profiling command<Tooltip>
           Execute this command in a checkout of
           <a href="https://github.com/rust-lang/rustc-perf">rustc-perf</a>
-          to generate a Cachegrind diff between the two artifacts.
+          to generate a Cachegrind profile.
         </Tooltip>
       </div>
+
+      <select @change="changeProfileCommand">
+        <option
+          :value="ProfileCommand.Diff"
+          :selected="profileCommand === ProfileCommand.Diff"
+        >
+          Diff
+        </option>
+        <option
+          :value="ProfileCommand.Before"
+          :selected="profileCommand === ProfileCommand.Before"
+        >
+          Baseline commit
+        </option>
+        <option
+          :value="ProfileCommand.After"
+          :selected="profileCommand === ProfileCommand.After"
+        >
+          Benchmarked commit
+        </option>
+      </select>
+
       <CachegrindCmd
-        :commit="artifact.commit"
-        :baseline_commit="baseArtifact.commit"
+        :commit="profileCommit"
+        :baseline-commit="profileBaselineCommit"
         :test-case="testCase"
       />
     </div>
