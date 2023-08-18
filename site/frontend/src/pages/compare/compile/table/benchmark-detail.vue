@@ -13,6 +13,7 @@ import {GraphRenderOpts, renderPlots} from "../../../../graph/render";
 import {GRAPH_RESOLVER} from "../../../../graph/resolver";
 import {GraphKind} from "../../../../graph/data";
 import uPlot from "uplot";
+import CachegrindCmd from "../../../../components/cachegrind-cmd.vue";
 
 const props = defineProps<{
   testCase: CompileTestCase;
@@ -182,109 +183,145 @@ onMounted(() => renderGraph());
 </script>
 
 <template>
-  <div class="wrapper">
-    <div>
-      <div class="title info bold">Benchmark info</div>
-      <table>
-        <tbody>
-          <tr>
-            <td>Benchmark</td>
-            <td>{{ testCase.benchmark }}</td>
-          </tr>
-          <tr>
-            <td>Profile</td>
-            <td>{{ testCase.profile }}</td>
-          </tr>
-          <tr>
-            <td>Scenario</td>
-            <td>{{ testCase.scenario }}</td>
-          </tr>
-          <tr>
-            <td>Category</td>
-            <td>{{ testCase.category }}</td>
-          </tr>
-          <tr v-if="(metadata?.binary ?? null) !== null">
-            <td>Artifact</td>
-            <td>{{ metadata.binary ? "binary" : "library" }}</td>
-          </tr>
-          <tr v-if="(metadata?.iterations ?? null) !== null">
-            <td>
-              Iterations
-              <Tooltip> How many times is the benchmark executed? </Tooltip>
-            </td>
-            <td>{{ metadata.iterations }}</td>
-          </tr>
-          <tr v-if="(cargoProfile?.lto ?? null) !== null">
-            <td>LTO</td>
-            <td>{{ cargoProfile.lto }}</td>
-          </tr>
-          <tr v-if="(cargoProfile?.debug ?? null) !== null">
-            <td>Debuginfo</td>
-            <td>{{ cargoProfile.debug }}</td>
-          </tr>
-          <tr v-if="(cargoProfile?.codegen_units ?? null) !== null">
-            <td>Codegen units</td>
-            <td>{{ cargoProfile.codegen_units }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    <div>
-      <div class="title">
-        <div class="bold">{{ getGraphTitle() }}</div>
-        <div style="font-size: 0.8em">
-          Each plotted value is relative to its previous commit
+  <div>
+    <div class="columns">
+      <div class="rows grow">
+        <div>
+          <div class="title info bold">Benchmark info</div>
+          <table>
+            <tbody>
+              <tr>
+                <td>Benchmark</td>
+                <td>{{ testCase.benchmark }}</td>
+              </tr>
+              <tr>
+                <td>Profile</td>
+                <td>{{ testCase.profile }}</td>
+              </tr>
+              <tr>
+                <td>Scenario</td>
+                <td>{{ testCase.scenario }}</td>
+              </tr>
+              <tr>
+                <td>Category</td>
+                <td>{{ testCase.category }}</td>
+              </tr>
+              <tr v-if="(metadata?.binary ?? null) !== null">
+                <td>Artifact</td>
+                <td>{{ metadata.binary ? "binary" : "library" }}</td>
+              </tr>
+              <tr v-if="(metadata?.iterations ?? null) !== null">
+                <td>
+                  Iterations
+                  <Tooltip> How many times is the benchmark executed? </Tooltip>
+                </td>
+                <td>{{ metadata.iterations }}</td>
+              </tr>
+              <tr v-if="(cargoProfile?.lto ?? null) !== null">
+                <td>LTO</td>
+                <td>{{ cargoProfile.lto }}</td>
+              </tr>
+              <tr v-if="(cargoProfile?.debug ?? null) !== null">
+                <td>Debuginfo</td>
+                <td>{{ cargoProfile.debug }}</td>
+              </tr>
+              <tr v-if="(cargoProfile?.codegen_units ?? null) !== null">
+                <td>Codegen units</td>
+                <td>{{ cargoProfile.codegen_units }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-        <div style="font-size: 0.8em">
-          The shaded region shows values that are more recent than the
-          benchmarked commit
+        <div class="links">
+          <div class="title bold">Links</div>
+          <ul>
+            <li>
+              <a
+                :href="graphLink(props.artifact, props.metric, props.testCase)"
+                target="_blank"
+              >
+                History graph
+              </a>
+            </li>
+            <li>
+              <a
+                :href="detailedQueryLink(props.artifact, props.baseArtifact)"
+                target="_blank"
+              >
+                Self profile (diff)
+              </a>
+            </li>
+            <li>
+              <a :href="detailedQueryLink(props.baseArtifact)" target="_blank">
+                Self profile (before)
+              </a>
+            </li>
+            <li>
+              <a :href="detailedQueryLink(props.artifact)" target="_blank">
+                Self profile (after)
+              </a>
+            </li>
+            <li>
+              <a :href="benchmarkLink(testCase.benchmark)" target="_blank">
+                Benchmark source code
+              </a>
+            </li>
+          </ul>
         </div>
       </div>
-      <div ref="chartElement"></div>
+      <div class="rows center-items grow">
+        <div class="title">
+          <div class="bold">{{ getGraphTitle() }}</div>
+          <div style="font-size: 0.8em">
+            Each plotted value is relative to its previous commit
+          </div>
+          <div style="font-size: 0.8em">
+            The shaded region shows values that are more recent than the
+            benchmarked commit
+          </div>
+        </div>
+        <div ref="chartElement"></div>
+      </div>
     </div>
-    <div class="links">
-      <div class="title bold">Links</div>
-      <ul>
-        <li>
-          <a
-            :href="graphLink(props.artifact, props.metric, props.testCase)"
-            target="_blank"
-          >
-            History graph
-          </a>
-        </li>
-        <li>
-          <a
-            :href="detailedQueryLink(props.artifact, props.baseArtifact)"
-            target="_blank"
-          >
-            Self profile (diff)
-          </a>
-        </li>
-        <li>
-          <a :href="detailedQueryLink(props.baseArtifact)" target="_blank">
-            Self profile (before)
-          </a>
-        </li>
-        <li>
-          <a :href="detailedQueryLink(props.artifact)" target="_blank">
-            Self profile (after)
-          </a>
-        </li>
-        <li>
-          <a :href="benchmarkLink(testCase.benchmark)" target="_blank">
-            Benchmark source code
-          </a>
-        </li>
-      </ul>
+    <div class="command">
+      <div class="title bold">
+        Local profiling command<Tooltip>
+          Execute this command in a checkout of
+          <a href="https://github.com/rust-lang/rustc-perf">rustc-perf</a>
+          to generate a Cachegrind diff between the two artifacts.
+        </Tooltip>
+      </div>
+      <CachegrindCmd
+        :commit="artifact.commit"
+        :baseline_commit="baseArtifact.commit"
+        :test-case="testCase"
+      />
     </div>
   </div>
 </template>
 
 <style scoped lang="scss">
-.wrapper {
+.columns {
   display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
   margin: 10px 0;
+
+  .grow {
+    flex-grow: 1;
+  }
+}
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+
+  &.center-items {
+    align-items: center;
+  }
+}
+.command {
+  text-align: left;
 }
 
 .title {
