@@ -20,39 +20,6 @@ const props = defineProps<{
   stat: string;
 }>();
 
-function benchmarkLink(benchmark: string): string {
-  return `https://github.com/rust-lang/rustc-perf/tree/master/collector/compile-benchmarks/${benchmark}`;
-}
-
-function graphLink(
-  commit: ArtifactDescription,
-  stat: string,
-  comparison: TestCaseComparison<CompileTestCase>
-): string {
-  // Move to `30 days ago` to display history of the test case
-  const start = getPastDate(new Date(commit.date), 30);
-  const end = commit.commit;
-  const {benchmark, profile, scenario} = comparison.testCase;
-  return `/index.html?start=${start}&end=${end}&benchmark=${benchmark}&profile=${profile}&scenario=${scenario}&stat=${stat}`;
-}
-
-function detailedQueryPercentLink(
-  commit: ArtifactDescription,
-  baseCommit: ArtifactDescription,
-  comparison: TestCaseComparison<CompileTestCase>
-): string {
-  const {benchmark, profile, scenario} = comparison.testCase;
-  return `/detailed-query.html?commit=${commit.commit}&base_commit=${baseCommit.commit}&benchmark=${benchmark}-${profile}&scenario=${scenario}`;
-}
-
-function detailedQueryRawDataLink(
-  commit: ArtifactDescription,
-  comparison: TestCaseComparison<CompileTestCase>
-) {
-  const {benchmark, profile, scenario} = comparison.testCase;
-  return `/detailed-query.html?commit=${commit.commit}&benchmark=${benchmark}-${profile}&scenario=${scenario}`;
-}
-
 function prettifyRawNumber(number: number): string {
   return number.toLocaleString();
 }
@@ -85,7 +52,7 @@ const {toggleExpanded, isExpanded} = useExpandedStore();
     <table v-else class="benches compare">
       <thead>
         <tr>
-          <th class="toggle"></th>
+          <th class="toggle-arrow"></th>
           <th>Benchmark</th>
           <th>Profile</th>
           <th>Scenario</th>
@@ -118,42 +85,25 @@ const {toggleExpanded, isExpanded} = useExpandedStore();
       </thead>
       <tbody>
         <template v-for="comparison in comparisons">
-          <tr>
-            <td @click="toggleExpanded(comparison.testCase)" class="toggle">
+          <tr
+            @click="toggleExpanded(comparison.testCase)"
+            :class="{toggle: true, toggled: isExpanded(comparison.testCase)}"
+          >
+            <td class="toggle-arrow">
               {{ isExpanded(comparison.testCase) ? "▼" : "▶" }}
             </td>
             <td>
-              <a
-                v-bind:href="benchmarkLink(comparison.testCase.benchmark)"
-                class="silent-link"
-                target="_blank"
-              >
-                {{ comparison.testCase.benchmark }}
-              </a>
+              {{ comparison.testCase.benchmark }}
             </td>
             <td>
-              <a
-                v-bind:href="graphLink(commitB, stat, comparison)"
-                target="_blank"
-                class="silent-link"
-              >
-                {{ comparison.testCase.profile }}
-              </a>
+              {{ comparison.testCase.profile }}
             </td>
             <td>{{ comparison.testCase.scenario }}</td>
             <td>
               <div class="numeric-aligned">
-                <div>
-                  <a
-                    v-bind:href="
-                      detailedQueryPercentLink(commitB, commitA, comparison)
-                    "
-                  >
-                    <span v-bind:class="percentClass(comparison.percent)">
-                      {{ comparison.percent.toFixed(2) }}%
-                    </span>
-                  </a>
-                </div>
+                <span v-bind:class="percentClass(comparison.percent)">
+                  {{ comparison.percent.toFixed(2) }}%
+                </span>
               </div>
             </td>
             <td class="narrow">
@@ -179,24 +129,21 @@ const {toggleExpanded, isExpanded} = useExpandedStore();
               </div>
             </td>
             <td v-if="showRawData" class="numeric">
-              <a v-bind:href="detailedQueryRawDataLink(commitA, comparison)">
-                <abbr :title="comparison.datumA.toString()"
-                  >{{ prettifyRawNumber(comparison.datumA) }}{{ unit }}</abbr
-                >
-              </a>
+              <abbr :title="comparison.datumA.toString()">
+                {{ prettifyRawNumber(comparison.datumA) }}{{ unit }}
+              </abbr>
             </td>
             <td v-if="showRawData" class="numeric">
-              <a v-bind:href="detailedQueryRawDataLink(commitB, comparison)">
-                <abbr :title="comparison.datumB.toString()"
-                  >{{ prettifyRawNumber(comparison.datumB) }}{{ unit }}</abbr
-                >
-              </a>
+              <abbr :title="comparison.datumB.toString()">
+                {{ prettifyRawNumber(comparison.datumB) }}{{ unit }}
+              </abbr>
             </td>
           </tr>
           <tr v-if="isExpanded(comparison.testCase)">
             <td :colspan="columnCount">
               <BenchmarkDetail
                 :test-case="comparison.testCase"
+                :base-artifact="commitA"
                 :artifact="commitB"
                 :metric="stat"
                 :benchmark-map="benchmarkMap"
@@ -214,6 +161,7 @@ const {toggleExpanded, isExpanded} = useExpandedStore();
   width: 100%;
   table-layout: auto;
   font-size: medium;
+  border-collapse: collapse;
 
   td,
   th {
@@ -240,12 +188,20 @@ const {toggleExpanded, isExpanded} = useExpandedStore();
   th {
     text-align: center;
 
-    &.toggle {
+    &.toggle-arrow {
       padding-right: 5px;
-      cursor: pointer;
     }
     &.narrow {
       max-width: 100px;
+    }
+  }
+
+  .toggle {
+    cursor: pointer;
+
+    &:hover,
+    &.toggled {
+      background-color: #d6d3d35c;
     }
   }
 }

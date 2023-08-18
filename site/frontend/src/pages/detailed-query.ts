@@ -131,6 +131,7 @@ function populate_data(data, state: Selector) {
                    state.scenario
                  )})
                 results for ${state.commit.substring(0, 10)} (new commit)`;
+  // TODO: use the Cachegrind Vue components once this page is refactored to Vue
   let profile = (b) =>
     b.endsWith("-opt")
       ? "Opt"
