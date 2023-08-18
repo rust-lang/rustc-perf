@@ -43,7 +43,7 @@ function normalizeScenario(scenario: string): string {
 </script>
 
 <template>
-  <pre><code>cargo run --bin collector --release profile_local cachegrind \
+  <pre><code>./target/release/collector profile_local cachegrind \
     +{{ firstCommit }} \<template v-if="props.baselineCommit !== undefined">
     --rustc2 +{{ props.commit }} \</template>
     --include {{ testCase.benchmark }} \

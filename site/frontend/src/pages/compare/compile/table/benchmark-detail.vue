@@ -312,8 +312,8 @@ onMounted(() => renderGraph());
       <div class="title bold">
         Local profiling command<Tooltip>
           Execute this command in a checkout of
-          <a href="https://github.com/rust-lang/rustc-perf">rustc-perf</a>
-          to generate a Cachegrind profile.
+          <a href="https://github.com/rust-lang/rustc-perf">rustc-perf</a>,
+          after a `cargo build --release`, to generate a Cachegrind profile.
         </Tooltip>
       </div>
 
