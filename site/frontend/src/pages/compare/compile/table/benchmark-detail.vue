@@ -237,6 +237,14 @@ onMounted(() => renderGraph());
           <ul>
             <li>
               <a
+                :href="detailedQueryLink(props.artifact, props.baseArtifact)"
+                target="_blank"
+              >
+                Detailed results
+              </a>
+            </li>
+            <li>
+              <a
                 :href="graphLink(props.artifact, props.metric, props.testCase)"
                 target="_blank"
               >
@@ -244,21 +252,13 @@ onMounted(() => renderGraph());
               </a>
             </li>
             <li>
-              <a
-                :href="detailedQueryLink(props.artifact, props.baseArtifact)"
-                target="_blank"
-              >
-                Self profile (diff)
-              </a>
-            </li>
-            <li>
               <a :href="detailedQueryLink(props.baseArtifact)" target="_blank">
-                Self profile (before)
+                Rustc self-profile: baseline commit
               </a>
             </li>
             <li>
               <a :href="detailedQueryLink(props.artifact)" target="_blank">
-                Self profile (after)
+                Rustc self-profile: benchmarked commit
               </a>
             </li>
             <li>
