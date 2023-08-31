@@ -181,7 +181,7 @@ fn checkout(artifact: &ArtifactId) -> anyhow::Result<()> {
             .arg("origin")
             .arg("master")
             .status()
-            .context("git fetch origin HEAD")?;
+            .context("git fetch origin master")?;
         assert!(status.success(), "git fetch successful");
     } else {
         let status = Command::new("git")
