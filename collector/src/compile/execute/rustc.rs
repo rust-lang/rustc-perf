@@ -179,7 +179,7 @@ fn checkout(artifact: &ArtifactId) -> anyhow::Result<()> {
             .current_dir("rust")
             .arg("fetch")
             .arg("origin")
-            .arg("HEAD")
+            .arg("master")
             .status()
             .context("git fetch origin HEAD")?;
         assert!(status.success(), "git fetch successful");
