@@ -1,5 +1,15 @@
 {% extends "layout.html" %}
 {% block content %}
+<details style="margin-top: 10px;">
+<summary>What data is in the dashboard?</summary>
+
+The dashboard shows performance results for all stable Rust releases going back to
+<code>1.28.0</code>, along with the latest <code>beta</code> release. The displayed
+duration is an arithmetic mean amongst all
+<a href="https://github.com/rust-lang/rustc-perf/tree/master/collector/compile-benchmarks#stable">stable</a>
+benchmarks.
+</details>
+
 <div id="check-average-times"></div>
 <div id="debug-average-times"></div>
 <div id="opt-average-times"></div>
