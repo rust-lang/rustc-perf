@@ -16,20 +16,43 @@ interface Step {
   current_progress: number;
 }
 
-/**
- * The `any` types in the interface below were chosen because the types are quite complex
- * on the Rust side (they are modeled with enums encoded in a way that is not so simple to model in
- * TS).
- */
+type Artifact =
+  | {
+      Commit: Commit;
+    }
+  | {
+      Tag: string;
+    };
+
+type MissingReason =
+  | {
+      Master: {
+        pr: number;
+        parent_sha: string;
+        is_try_parent: boolean;
+      };
+    }
+  | {
+      Try: {
+        parent_sha: string;
+        include: string | null;
+        exclude: string | null;
+        runs: number | null;
+      };
+    }
+  | {
+      InProgress: MissingReason;
+    };
+
 interface CurrentState {
-  artifact: any;
+  artifact: Artifact;
   progress: Step[];
 }
 
 export interface StatusResponse {
   last_commit: Commit | null;
   benchmarks: BenchmarkStatus[];
-  missing: Array<[Commit, any]>;
+  missing: Array<[Commit, MissingReason]>;
   current: CurrentState | null;
   most_recent_end: number | null;
 }
