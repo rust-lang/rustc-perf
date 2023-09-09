@@ -3,7 +3,7 @@ import {getJson} from "../../utils/requests";
 import {STATUS_DATA_URL} from "../../urls";
 import {withLoading} from "../../utils/loading";
 import {computed, ref, Ref} from "vue";
-import {StatusResponse} from "./data";
+import {Artifact, Commit, MissingReason, StatusResponse} from "./data";
 
 async function loadStatus(loading: Ref<boolean>) {
   data.value = await withLoading(loading, () =>
@@ -28,18 +28,45 @@ function formatDuration(seconds: number): string {
   return s;
 }
 
-function commitUrl(commit: {sha: string}): string {
-  return `<a href="https://github.com/rust-lang/rust/commit/${
-    commit.sha
-  }">${commit.sha.substring(0, 13)}</a>`;
+function getArtifactPr(reason: MissingReason): number {
+  if (reason.hasOwnProperty("InProgress")) {
+    return getArtifactPr(reason["InProgress"]);
+  } else if (reason.hasOwnProperty("Master")) {
+    return reason["Master"].pr;
+  } else if (reason.hasOwnProperty("Try")) {
+    return reason["Try"].pr;
+  } else {
+    throw new Error(`Unknown missing reason ${reason}`);
+  }
 }
 
-function formatArtifact(artifact: any): string {
-  if (artifact.Commit) {
-    return commitUrl(artifact.Commit);
+function getArtifactSha(artifact: Artifact): string {
+  if (artifact.hasOwnProperty("Commit")) {
+    return artifact["Commit"].sha;
+  } else if (artifact.hasOwnProperty("Tag")) {
+    return artifact["Tag"];
   } else {
-    return artifact.Tag;
+    throw new Error(`Unknown artifact ${artifact}`);
   }
+}
+
+function commitUrlAsHtml(sha: string): string {
+  return `<a href="https://github.com/rust-lang/rust/commit/${sha}">${sha.substring(
+    0,
+    13
+  )}</a>`;
+}
+
+function pullRequestUrlAsHtml(pr: number): string {
+  return `<a href="https://github.com/rust-lang/rust/pull/${pr}">#${pr}</a>`;
+}
+
+function formatCommitAsHtml(commit: Commit, reason: MissingReason): string {
+  const url = commitUrlAsHtml(commit.sha);
+  const type = commit.type === "Try" ? "try" : "master";
+  const pr = getArtifactPr(reason);
+
+  return `${pullRequestUrlAsHtml(pr)} (${type}): ${url}`;
 }
 
 function formatReason(reason: any): string {
@@ -81,6 +108,20 @@ const timeLeft = computed(() => {
 const recentEndDate = computed(() => {
   return new Date(data.value.most_recent_end * 1000);
 });
+const currentCommitAndReason: Ref<[Commit, MissingReason] | null> = computed(
+  () => {
+    const current = data.value?.current ?? null;
+    if (current === null) return null;
+    const sha = getArtifactSha(current.artifact);
+
+    for (const [commit, reason] of data.value.missing) {
+      if (commit.sha === sha && reason.hasOwnProperty("InProgress")) {
+        return [commit, reason["InProgress"]];
+      }
+    }
+    return null;
+  }
+);
 
 const loading = ref(true);
 
@@ -94,7 +135,15 @@ loadStatus(loading);
       <div v-if="data.current !== null">
         <p>
           Currently benchmarking:
-          <span v-html="formatArtifact(data.current.artifact)"></span>.<br />
+          <span
+            v-html="
+              formatCommitAsHtml(
+                currentCommitAndReason[0],
+                currentCommitAndReason[1]
+              )
+            "
+          ></span
+          >.<br />
           Time left: {{ formatDuration(timeLeft) }}
         </p>
         <table>
@@ -164,7 +213,7 @@ loadStatus(loading);
         <tbody>
           <tr v-for="[commit, reason] in data.missing">
             <td>{{ new Date(commit.date).toLocaleString() }}</td>
-            <td v-html="commitUrl(commit)"></td>
+            <td v-html="commitUrlAsHtml(commit.sha)"></td>
             <td v-html="formatReason(reason)"></td>
           </tr>
         </tbody>

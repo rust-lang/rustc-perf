@@ -1,4 +1,4 @@
-interface Commit {
+export interface Commit {
   sha: string;
   date: string;
   type: "Try" | "Master";
@@ -16,7 +16,7 @@ interface Step {
   current_progress: number;
 }
 
-type Artifact =
+export type Artifact =
   | {
       Commit: Commit;
     }
@@ -24,7 +24,7 @@ type Artifact =
       Tag: string;
     };
 
-type MissingReason =
+export type MissingReason =
   | {
       Master: {
         pr: number;
@@ -34,6 +34,7 @@ type MissingReason =
     }
   | {
       Try: {
+        pr: number;
         parent_sha: string;
         include: string | null;
         exclude: string | null;
