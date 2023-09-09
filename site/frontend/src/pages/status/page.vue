@@ -69,26 +69,15 @@ function formatCommitAsHtml(commit: Commit, reason: MissingReason): string {
   return `${pullRequestUrlAsHtml(pr)} (${type}): ${url}`;
 }
 
-function formatReason(reason: any): string {
-  if (typeof reason == "string") {
-    return reason;
-  } else if (reason.InProgress) {
-    return `${formatReason(reason.InProgress)} - in progress`;
-  } else if (reason["Master"] !== undefined && reason.Master.pr) {
-    return `<a href="https://github.com/rust-lang/rust/pull/${
-      reason["Master"].pr
-    }">
-                    #${reason["Master"].pr}</a>${
-      reason.Master.is_try_parent ? " - Try commit parent" : ""
+function formatMissingReason(reason: MissingReason): string {
+  if (reason.hasOwnProperty("InProgress")) {
+    return `${formatMissingReason(reason["InProgress"])} - in progress`;
+  } else if (reason.hasOwnProperty("Master")) {
+    return `${pullRequestUrlAsHtml(reason["Master"].pr)}${
+      reason["Master"].is_try_parent ? " - Try commit parent" : ""
     }`;
-  } else if (reason["Master"] !== undefined && reason.Master.pr == 0) {
-    return "Master";
-  } else if (reason["Try"] !== undefined && reason.Try.pr) {
-    return `
-                Try for
-                <a href="https://github.com/rust-lang/rust/pull/${reason["Try"].pr}">
-                    #${reason["Try"].pr}
-                </a>`;
+  } else if (reason.hasOwnProperty("Try")) {
+    return `Try for ${pullRequestUrlAsHtml(reason["Try"].pr)}`;
   } else {
     // Should never happen, but a reasonable fallback
     return JSON.stringify(reason);
@@ -214,7 +203,7 @@ loadStatus(loading);
           <tr v-for="[commit, reason] in data.missing">
             <td>{{ new Date(commit.date).toLocaleString() }}</td>
             <td v-html="commitUrlAsHtml(commit.sha)"></td>
-            <td v-html="formatReason(reason)"></td>
+            <td v-html="formatMissingReason(reason)"></td>
           </tr>
         </tbody>
       </table>
