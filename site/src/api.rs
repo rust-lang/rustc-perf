@@ -233,7 +233,7 @@ pub mod status {
     use serde::{Deserialize, Serialize};
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-    pub struct BenchmarkStatus {
+    pub struct BenchmarkError {
         pub name: String,
         pub error: String,
     }
@@ -255,13 +255,22 @@ pub mod status {
     }
 
     #[derive(Serialize, Debug)]
+    pub struct FinishedRun {
+        pub artifact: ArtifactId,
+        pub pr: Option<u32>,
+        pub errors: Vec<BenchmarkError>,
+        // In seconds
+        pub duration: u64,
+        // Unix timestamp
+        pub finished_at: u64,
+    }
+
+    #[derive(Serialize, Debug)]
     pub struct Response {
-        pub last_commit: Option<Commit>,
-        pub benchmarks: Vec<BenchmarkStatus>,
-        pub missing: Vec<(Commit, MissingReason)>,
+        // Ordered from newest to oldest
+        pub finished_runs: Vec<FinishedRun>,
         pub current: Option<CurrentState>,
-        // None if no recent end, otherwise seconds since epoch
-        pub most_recent_end: Option<i64>,
+        pub missing: Vec<(Commit, MissingReason)>,
     }
 }
 
