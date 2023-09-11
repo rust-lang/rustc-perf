@@ -395,7 +395,11 @@ function normalizeData(data: GraphData) {
 }
 
 export type GraphRenderOpts = {
+  // Width of the graph
+  width: number;
+  // Render a title above the graph
   renderTitle?: boolean;
+  // Function that can be used to hook into the rendering process
   hooks?: {drawSeries: (uPlot, number) => void};
 };
 
@@ -405,10 +409,11 @@ export function renderPlots(
   data: GraphData,
   selector: GraphsSelector,
   plotElement: HTMLElement,
-  opts?: GraphRenderOpts
+  opts: GraphRenderOpts
 ) {
-  const renderTitle = opts?.renderTitle ?? true;
-  const hooks = opts?.hooks ?? {};
+  const renderTitle = opts.renderTitle ?? true;
+  const hooks = opts.hooks ?? {};
+  const width = opts.width;
 
   normalizeData(data);
 
@@ -487,7 +492,7 @@ export function renderPlots(
         cacheStates[Object.keys(cacheStates)[0]].interpolated_indices;
 
       let plotOpts = genPlotOpts({
-        width: Math.floor(window.innerWidth / 4) - 40,
+        width,
         height: 300,
         yAxisLabel,
         series: seriesOpts,

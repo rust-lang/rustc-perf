@@ -112,6 +112,7 @@ async function renderGraph() {
   };
   const graphData = await GRAPH_RESOLVER.loadGraph(selector);
   const opts: GraphRenderOpts = {
+    width: Math.min(window.innerWidth - 40, 480),
     renderTitle: false,
   };
   if (date !== null) {

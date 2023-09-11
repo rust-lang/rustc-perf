@@ -68,9 +68,12 @@ async function loadGraphData(selector: GraphsSelector, loading: Ref<boolean>) {
   // Then draw the plots.
   await nextTick();
 
+  const width = Math.floor(window.innerWidth / 4) - 40;
+  const opts = {width};
+
   // If we select a smaller subset of benchmarks, then just show them.
   if (hasSpecificSelection(selector)) {
-    renderPlots(graphData, selector, document.getElementById("charts"));
+    renderPlots(graphData, selector, document.getElementById("charts"), opts);
   } else {
     // If we select all of them, we expect that there will be a regular grid.
 
@@ -81,7 +84,7 @@ async function loadGraphData(selector: GraphsSelector, loading: Ref<boolean>) {
       graphData,
       (benchName) => !benchName.endsWith("-tiny")
     );
-    renderPlots(withoutTiny, selector, document.getElementById("charts"));
+    renderPlots(withoutTiny, selector, document.getElementById("charts"), opts);
 
     // Then, render only the size-related ones in their own dedicated section as they are less
     // important than having the better grouping. So, we only include the benchmarks ending in
@@ -89,7 +92,12 @@ async function loadGraphData(selector: GraphsSelector, loading: Ref<boolean>) {
     const onlyTiny = filterBenchmarks(graphData, (benchName) =>
       benchName.endsWith("-tiny")
     );
-    renderPlots(onlyTiny, selector, document.getElementById("size-charts"));
+    renderPlots(
+      onlyTiny,
+      selector,
+      document.getElementById("size-charts"),
+      opts
+    );
   }
 }
 
