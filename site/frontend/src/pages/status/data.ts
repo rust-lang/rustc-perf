@@ -4,7 +4,7 @@ export interface Commit {
   type: "Try" | "Master";
 }
 
-interface BenchmarkStatus {
+export interface BenchmarkError {
   name: string;
   error: string;
 }
@@ -50,10 +50,16 @@ interface CurrentState {
   progress: Step[];
 }
 
+export interface FinishedRun {
+  artifact: Artifact;
+  pr: number | null;
+  errors: BenchmarkError[];
+  duration: number;
+  finished_at: number;
+}
+
 export interface StatusResponse {
-  last_commit: Commit | null;
-  benchmarks: BenchmarkStatus[];
-  missing: Array<[Commit, MissingReason]>;
+  finished_runs: FinishedRun[];
   current: CurrentState | null;
-  most_recent_end: number | null;
+  missing: Array<[Commit, MissingReason]>;
 }
