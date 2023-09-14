@@ -43,3 +43,9 @@ benchlib = { path = "benchlib" }
 [target.'cfg(windows)'.dependencies]
 miow = "0.3"
 windows-sys = { version = "0.36.1", features = ["Win32_Foundation"] }
+
+[features]
+# Enable more precise Cachegrind profiles for runtime benchmarks.
+# Requires a recent Valgrind to be installed.
+# Pass DEP_VALGRIND=<path-to-valgrind>/include environment variable when building.
+precise-cachegrind = []

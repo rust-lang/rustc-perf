@@ -15,9 +15,11 @@ env_logger = "0.10.0"
 clap = { version = "4.1", features = ["derive", "string"] }
 libc = "0.2"
 flate2 = { version = "1", optional = true }
+crabgrind = { version = "0.1.10", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 perf-event = "0.4.7"
 
 [features]
 compression = ["dep:flate2"]
+precise-cachegrind = ["dep:crabgrind"]

@@ -358,6 +358,10 @@ fn start_cargo_build(
         command.arg(target_dir);
     }
 
+    // Enable the precise-cachegrind feature for the benchlib dependency of the runtime group.
+    #[cfg(feature = "precise-cachegrind")]
+    command.arg("--features").arg("benchlib/precise-cachegrind");
+
     let child = command
         .spawn()
         .map_err(|error| anyhow::anyhow!("Failed to start cargo: {:?}", error))?;

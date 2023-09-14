@@ -488,7 +488,15 @@ It is also possible to profile runtime benchmarks using the following command:
 ```
 
 Currently, a `<PROFILER>` can be `cachegrind`, which will run the runtime benchmark under
-`Cachegrind`.
+`Cachegrind`. If you pass `--features precise-cachegrind`, you can get more precise profiling results.
+In this mode, Cachegrind will only record the instructions of the actual benchmark, and ignore any
+other code (e.g. benchmark initialization). To use this mode, you need to provide a path to a Valgrind
+build directory (at least Valgrind 3.22 is required), like this:
+
+```
+DEP_VALGRIND=<path-to-valgrind-install>/include cargo run --release --bin collector \
+  --features precise-cachegrind profile_runtime cachegrind <RUSTC> <BENCHMARK_NAME> 
+```
 
 ## Codegen diff
 You can use the `codegen_diff` command to display the assembly, LLVM IR or MIR difference between two
