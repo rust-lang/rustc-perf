@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::io::IsTerminal;
+use std::io::{IsTerminal, Write};
 use std::path::Path;
 use std::process::Command;
 
@@ -58,8 +58,9 @@ pub fn codegen_diff(
                             .context("Cannot generate codegen using compiler 1")?;
                     let codegen2 =
                         get_codegen(&toolchain2, &group.path, codegen_type, *toolchain2_index)
-                            .context("Cannot generate codegen using compiler 1")?;
+                            .context("Cannot generate codegen using compiler 2")?;
                     if codegen1.trim() != codegen2.trim() {
+                        log::debug!("Analysed function {}", function.name);
                         return Ok(Some(CodegenDiff::new(function, codegen1, codegen2)));
                     }
                 }
@@ -98,6 +99,7 @@ pub fn codegen_diff(
 
     let mut output = std::io::stdout().lock();
     let use_color = output.is_terminal();
+    write_stats(&mut output, &diffs).context("Cannot write stats")?;
     for diff in diffs {
         write_diff(&mut output, use_color, &diff).context("Cannot write diff")?;
     }
@@ -157,11 +159,30 @@ impl<'a> CodegenDiff<'a> {
     }
 }
 
-fn write_diff<W: std::io::Write>(
-    writer: &mut W,
-    use_color: bool,
-    diff: &CodegenDiff,
-) -> anyhow::Result<()> {
+fn write_stats<W: Write>(writer: &mut W, diffs: &[CodegenDiff]) -> anyhow::Result<()> {
+    writeln!(writer, "Function size stats:")?;
+    for diff in diffs {
+        let size_before = diff.codegen1.len();
+        let size_after = diff.codegen2.len();
+        if size_before == size_after {
+            continue;
+        }
+        let percent = (size_after as f64 / size_before as f64) - 1.0;
+        let percent = percent * 100.0;
+        writeln!(
+            writer,
+            "{}: {size_before} -> {size_after} ({}{:.2}%)",
+            diff.function.name,
+            if percent.is_sign_positive() { "+" } else { "-" },
+            percent.abs()
+        )?;
+    }
+    writer.write_all(b"\n")?;
+
+    Ok(())
+}
+
+fn write_diff<W: Write>(writer: &mut W, use_color: bool, diff: &CodegenDiff) -> anyhow::Result<()> {
     use console::Style;
 
     let text_diff = TextDiff::from_lines(&diff.codegen1, &diff.codegen2);

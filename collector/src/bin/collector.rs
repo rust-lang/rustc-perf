@@ -732,7 +732,7 @@ fn main_result() -> anyhow::Result<i32> {
 
             let mut benchmark_groups =
                 get_runtime_benchmark_groups(&runtime_benchmark_dir, Some(group))?;
-            let group = benchmark_groups.pop().unwrap();
+            let group = benchmark_groups.pop().expect("Benchmark group not found");
             assert!(benchmark_groups.is_empty());
 
             codegen_diff(codegen_type, toolchain1, toolchain2, group)?;
