@@ -150,6 +150,7 @@ pub struct ByProfile<T> {
     pub debug: T,
     pub doc: T,
     pub opt: T,
+    pub clippy: T
 }
 
 impl<T> ByProfile<T> {
@@ -163,6 +164,7 @@ impl<T> ByProfile<T> {
             debug: f(Profile::Debug).await?,
             doc: f(Profile::Doc).await?,
             opt: f(Profile::Opt).await?,
+            clippy: f(Profile::Clippy).await?,
         })
     }
 }
@@ -175,6 +177,7 @@ impl<T> std::ops::Index<Profile> for ByProfile<T> {
             Profile::Debug => &self.debug,
             Profile::Doc => &self.doc,
             Profile::Opt => &self.opt,
+            Profile::Clippy => &self.clippy
         }
     }
 }

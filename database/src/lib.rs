@@ -224,6 +224,8 @@ pub enum Profile {
     Doc,
     /// An optimized "release" build
     Opt,
+    /// A Clippy run
+    Clippy
 }
 
 impl Profile {
@@ -233,6 +235,7 @@ impl Profile {
             Profile::Opt => "opt",
             Profile::Debug => "debug",
             Profile::Doc => "doc",
+            Profile::Clippy => "clippy"
         }
     }
 }
@@ -245,6 +248,7 @@ impl std::str::FromStr for Profile {
             "debug" => Profile::Debug,
             "doc" => Profile::Doc,
             "opt" => Profile::Opt,
+            "clippy" => Profile::Clippy,
             _ => return Err(format!("{} is not a profile", s)),
         })
     }

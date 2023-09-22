@@ -375,6 +375,10 @@ struct CompileTimeOptions {
     /// The path to the local rustdoc to measure
     #[arg(long)]
     rustdoc: Option<PathBuf>,
+
+    /// The path to the local clippy to measure
+    #[arg(long)]
+    clippy: Option<PathBuf>
 }
 
 #[derive(Debug, clap::Args)]
@@ -663,6 +667,7 @@ fn main_result() -> anyhow::Result<i32> {
                     None,
                     None,
                     None,
+                    None,
                     id,
                     target_triple.clone(),
                 )?;
@@ -721,6 +726,7 @@ fn main_result() -> anyhow::Result<i32> {
                     None,
                     None,
                     None,
+                    None,
                     id,
                     target_triple.clone(),
                 )?;
@@ -757,6 +763,7 @@ fn main_result() -> anyhow::Result<i32> {
                 &profiles,
                 &local.rustc,
                 opts.rustdoc.as_deref(),
+                opts.clippy.as_deref(),
                 local.cargo.as_deref(),
                 local.id.as_deref(),
                 "",
@@ -949,6 +956,7 @@ fn main_result() -> anyhow::Result<i32> {
                         profiles,
                         rustc,
                         opts.rustdoc.as_deref(),
+                        opts.clippy.as_deref(),
                         local.cargo.as_deref(),
                         local.id.as_deref(),
                         suffix,
@@ -1062,6 +1070,7 @@ fn get_local_toolchain_for_runtime_benchmarks(
     get_local_toolchain(
         &[Profile::Opt],
         &local.rustc,
+        None,
         None,
         local.cargo.as_deref(),
         local.id.as_deref(),

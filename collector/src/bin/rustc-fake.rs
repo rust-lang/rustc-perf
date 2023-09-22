@@ -35,8 +35,11 @@ fn main() {
     let mut args = args_os.collect::<Vec<_>>();
     let rustc = env::var_os("RUSTC_REAL").unwrap();
     let actually_rustdoc = name.ends_with("rustdoc-fake");
+    let actually_clippy = name.ends_with("clippy-fake");
     let tool = if actually_rustdoc {
         env::var_os("RUSTDOC_REAL").unwrap()
+    } else if actually_clippy {
+        env::var_os("CLIPPY_REAL").unwrap()
     } else {
         rustc
     };
