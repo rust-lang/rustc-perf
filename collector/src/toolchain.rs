@@ -292,6 +292,45 @@ impl ToolchainComponents {
     }
 }
 
+#[derive(Clone, Copy)]
+pub struct ToolchainConfig<'a> {
+    rustdoc: Option<&'a Path>,
+    clippy: Option<&'a Path>,
+    cargo: Option<&'a Path>,
+    id: Option<&'a str>,
+}
+
+impl<'a> ToolchainConfig<'a> {
+    pub fn default() -> Self {
+        Self {
+            rustdoc: None,
+            clippy: None,
+            cargo: None,
+            id: None
+        }
+    }
+
+    pub fn rustdoc(&mut self, rustdoc: Option<&'a Path>) -> &mut Self {
+        self.rustdoc = rustdoc;
+        self
+    }
+
+    pub fn clippy(&mut self, clippy: Option<&'a Path>) -> &mut Self {
+        self.clippy = clippy;
+        self
+    }
+
+    pub fn cargo(&mut self, cargo: Option<&'a Path>) -> &mut Self {
+        self.cargo = cargo;
+        self
+    }
+
+    pub fn id(&mut self, id: Option<&'a str>) -> &mut Self {
+        self.id = id;
+        self
+    }
+}
+
 /// Get a toolchain from the input.
 /// - `rustc`: check if the given one is acceptable.
 /// - `rustdoc`: if one is given, check if it is acceptable. Otherwise, if
@@ -301,10 +340,7 @@ impl ToolchainComponents {
 pub fn get_local_toolchain(
     profiles: &[Profile],
     rustc: &str,
-    rustdoc: Option<&Path>,
-    clippy: Option<&Path>,
-    cargo: Option<&Path>,
-    id: Option<&str>,
+    toolchain_config: ToolchainConfig<'_>,
     id_suffix: &str,
     target_triple: String,
 ) -> anyhow::Result<Toolchain> {
@@ -359,7 +395,7 @@ pub fn get_local_toolchain(
         debug!("found rustc: {:?}", &rustc);
 
         // When the id comes from a +toolchain, the suffix is *not* added.
-        let id = if let Some(id) = id {
+        let id = if let Some(id) = toolchain_config.id {
             let mut id = id.to_owned();
             id.push_str(id_suffix);
             id
@@ -374,7 +410,7 @@ pub fn get_local_toolchain(
 
         // When specifying rustc via a path, the suffix is always added to the
         // id.
-        let mut id = if let Some(id) = id {
+        let mut id = if let Some(id) = toolchain_config.id {
             id.to_owned()
         } else {
             "Id".to_string()
@@ -385,7 +421,7 @@ pub fn get_local_toolchain(
     };
 
     let rustdoc =
-        if let Some(rustdoc) = &rustdoc {
+        if let Some(rustdoc) = &toolchain_config.rustdoc {
             Some(rustdoc.canonicalize().with_context(|| {
                 format!("failed to canonicalize rustdoc executable {:?}", rustdoc)
             })?)
@@ -406,7 +442,7 @@ pub fn get_local_toolchain(
         };
 
         let clippy =
-        if let Some(clippy) = &clippy {
+        if let Some(clippy) = &toolchain_config.clippy {
             Some(clippy.canonicalize().with_context(|| {
                 format!("failed to canonicalize clippy executable {:?}", clippy)
             })?)
@@ -425,7 +461,7 @@ pub fn get_local_toolchain(
             // No `clippy` provided, but none needed.
             None
         };
-    let cargo = if let Some(cargo) = &cargo {
+    let cargo = if let Some(cargo) = &toolchain_config.cargo {
         cargo
             .canonicalize()
             .with_context(|| format!("failed to canonicalize cargo executable {:?}", cargo))?
