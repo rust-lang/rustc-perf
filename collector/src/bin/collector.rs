@@ -38,7 +38,8 @@ use collector::runtime::{
 };
 use collector::runtime::{profile_runtime, RuntimeCompilationOpts};
 use collector::toolchain::{
-    create_toolchain_from_published_version, get_local_toolchain, Sysroot, Toolchain, ToolchainConfig,
+    create_toolchain_from_published_version, get_local_toolchain, Sysroot, Toolchain,
+    ToolchainConfig,
 };
 use collector::utils::cachegrind::cachegrind_diff;
 use collector::utils::{is_installed, wait_for_future};
@@ -378,7 +379,7 @@ struct CompileTimeOptions {
 
     /// The path to the local clippy to measure
     #[arg(long)]
-    clippy: Option<PathBuf>
+    clippy: Option<PathBuf>,
 }
 
 #[derive(Debug, clap::Args)]
@@ -1197,18 +1198,9 @@ fn bench_published_artifact(
     let artifact_id = ArtifactId::Tag(toolchain.id.clone());
 
     let profiles = if collector::version_supports_doc(&toolchain.id) {
-        vec![
-            Profile::Check,
-            Profile::Debug,
-            Profile::Doc,
-            Profile::Opt
-        ]
+        vec![Profile::Check, Profile::Debug, Profile::Doc, Profile::Opt]
     } else {
-        vec![
-            Profile::Check,
-            Profile::Debug,
-            Profile::Opt,
-        ]
+        vec![Profile::Check, Profile::Debug, Profile::Opt]
     };
     let scenarios = if collector::version_supports_incremental(&toolchain.id) {
         Scenario::all()

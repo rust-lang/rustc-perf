@@ -225,7 +225,7 @@ pub enum Profile {
     /// An optimized "release" build
     Opt,
     /// A Clippy run
-    Clippy
+    Clippy,
 }
 
 impl Profile {
@@ -235,7 +235,7 @@ impl Profile {
             Profile::Opt => "opt",
             Profile::Debug => "debug",
             Profile::Doc => "doc",
-            Profile::Clippy => "clippy"
+            Profile::Clippy => "clippy",
         }
     }
 }

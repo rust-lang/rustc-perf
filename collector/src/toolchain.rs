@@ -125,7 +125,7 @@ impl SysrootDownload {
             Some(sysroot_bin("rustdoc")?),
             match sysroot_bin("cargo-clippy") {
                 Err(_) => None,
-                Ok(path) => Some(path)
+                Ok(path) => Some(path),
             },
             sysroot_bin("cargo")?,
             &self.directory.join(&self.rust_sha).join("lib"),
@@ -435,26 +435,27 @@ pub fn get_local_toolchain(
             None
         };
 
-        let clippy =
-        if let Some(clippy) = &toolchain_config.clippy {
-            Some(clippy.canonicalize().with_context(|| {
+    let clippy = if let Some(clippy) = &toolchain_config.clippy {
+        Some(
+            clippy.canonicalize().with_context(|| {
                 format!("failed to canonicalize clippy executable {:?}", clippy)
-            })?)
-        } else if profiles.contains(&Profile::Clippy) {
-            // We need a `clippy`. Look for one next to `rustc`.
-            if let Ok(clippy) = rustc.with_file_name("cargo-clippy").canonicalize() {
-                debug!("found clippy: {:?}", &clippy);
-                Some(clippy)
-            } else {
-                anyhow::bail!(
+            })?,
+        )
+    } else if profiles.contains(&Profile::Clippy) {
+        // We need a `clippy`. Look for one next to `rustc`.
+        if let Ok(clippy) = rustc.with_file_name("cargo-clippy").canonicalize() {
+            debug!("found clippy: {:?}", &clippy);
+            Some(clippy)
+        } else {
+            anyhow::bail!(
                     "'Clippy' build specified but '--clippy' not specified and no 'cargo-clippy' found \
                     next to 'rustc'"
                 );
-            }
-        } else {
-            // No `clippy` provided, but none needed.
-            None
-        };
+        }
+    } else {
+        // No `clippy` provided, but none needed.
+        None
+    };
     let cargo = if let Some(cargo) = &toolchain_config.cargo {
         cargo
             .canonicalize()
@@ -483,7 +484,9 @@ pub fn get_local_toolchain(
     let lib_dir = get_lib_dir_from_rustc(&rustc).context("Cannot find libdir for rustc")?;
 
     Ok(Toolchain {
-        components: ToolchainComponents::from_binaries_and_libdir(rustc, rustdoc, clippy, cargo, &lib_dir)?,
+        components: ToolchainComponents::from_binaries_and_libdir(
+            rustc, rustdoc, clippy, cargo, &lib_dir,
+        )?,
         id,
         triple: target_triple,
     })
@@ -530,8 +533,13 @@ pub fn create_toolchain_from_published_version(
 
     let lib_dir = get_lib_dir_from_rustc(&rustc)?;
 
-    let components =
-        ToolchainComponents::from_binaries_and_libdir(rustc, Some(rustdoc), Some(clippy), cargo, &lib_dir)?;
+    let components = ToolchainComponents::from_binaries_and_libdir(
+        rustc,
+        Some(rustdoc),
+        Some(clippy),
+        cargo,
+        &lib_dir,
+    )?;
 
     Ok(Toolchain {
         components,
