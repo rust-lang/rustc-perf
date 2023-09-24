@@ -17,7 +17,7 @@ pub enum Profile {
 
 impl Profile {
     pub fn all() -> Vec<Self> {
-        vec![Profile::Check, Profile::Debug, Profile::Doc, Profile::Opt, Profile::Clippy]
+        vec![Profile::Check, Profile::Debug, Profile::Doc, Profile::Opt]
     }
 
     // This also leaves Clippy out

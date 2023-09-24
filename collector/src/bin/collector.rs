@@ -1197,9 +1197,18 @@ fn bench_published_artifact(
     let artifact_id = ArtifactId::Tag(toolchain.id.clone());
 
     let profiles = if collector::version_supports_doc(&toolchain.id) {
-        Profile::all()
+        vec![
+            Profile::Check,
+            Profile::Debug,
+            Profile::Doc,
+            Profile::Opt
+        ]
     } else {
-        Profile::all_non_doc()
+        vec![
+            Profile::Check,
+            Profile::Debug,
+            Profile::Opt,
+        ]
     };
     let scenarios = if collector::version_supports_incremental(&toolchain.id) {
         Scenario::all()

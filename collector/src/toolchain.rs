@@ -123,7 +123,10 @@ impl SysrootDownload {
         let components = ToolchainComponents::from_binaries_and_libdir(
             sysroot_bin("rustc")?,
             Some(sysroot_bin("rustdoc")?),
-            Some(sysroot_bin("clippy")?),
+            match sysroot_bin("cargo-clippy") {
+                Err(_) => None,
+                Ok(path) => Some(path)
+            },
             sysroot_bin("cargo")?,
             &self.directory.join(&self.rust_sha).join("lib"),
         )?;
@@ -292,7 +295,7 @@ impl ToolchainComponents {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct ToolchainConfig<'a> {
     rustdoc: Option<&'a Path>,
     clippy: Option<&'a Path>,
@@ -301,15 +304,6 @@ pub struct ToolchainConfig<'a> {
 }
 
 impl<'a> ToolchainConfig<'a> {
-    pub fn default() -> Self {
-        Self {
-            rustdoc: None,
-            clippy: None,
-            cargo: None,
-            id: None
-        }
-    }
-
     pub fn rustdoc(&mut self, rustdoc: Option<&'a Path>) -> &mut Self {
         self.rustdoc = rustdoc;
         self
