@@ -123,10 +123,7 @@ impl SysrootDownload {
         let components = ToolchainComponents::from_binaries_and_libdir(
             sysroot_bin("rustc")?,
             Some(sysroot_bin("rustdoc")?),
-            match sysroot_bin("cargo-clippy") {
-                Err(_) => None,
-                Ok(path) => Some(path),
-            },
+            sysroot_bin("cargo-clippy").ok(),
             sysroot_bin("cargo")?,
             &self.directory.join(&self.rust_sha).join("lib"),
         )?;
