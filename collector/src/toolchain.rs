@@ -448,7 +448,7 @@ pub fn get_local_toolchain(
             Some(clippy)
         } else {
             anyhow::bail!(
-                    "'Clippy' build specified but '--clippy' not specified and no 'cargo-clippy' found \
+                    "'Clippy' build specified but '--cargo-clippy' not specified and no 'cargo-clippy' found \
                     next to 'rustc'"
                 );
         }
