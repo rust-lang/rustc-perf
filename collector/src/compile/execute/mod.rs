@@ -72,7 +72,7 @@ impl PerfTool {
             }
             ProfileTool(LlvmLines) => match profile {
                 Profile::Debug | Profile::Opt => Some("llvm-lines"),
-                Profile::Check | Profile::Doc => None,
+                Profile::Check | Profile::Doc | Profile::Clippy => None,
             },
         }
     }
@@ -168,6 +168,10 @@ impl<'a> CargoProcess<'a> {
 
         if let Some(r) = &self.toolchain.components.rustdoc {
             cmd.env("RUSTDOC", &*FAKE_RUSTDOC).env("RUSTDOC_REAL", r);
+        };
+
+        if let Some(c) = &self.toolchain.components.clippy {
+            cmd.env("CLIPPY", &*FAKE_CLIPPY).env("CLIPPY_REAL", c);
         }
         cmd
     }
@@ -236,6 +240,7 @@ impl<'a> CargoProcess<'a> {
                 }
                 Profile::Debug => {}
                 Profile::Doc => {}
+                Profile::Clippy => {}
                 Profile::Opt => {
                     cmd.arg("--release");
                 }
@@ -353,6 +358,21 @@ lazy_static::lazy_static! {
             symlink(&*FAKE_RUSTC, &fake_rustdoc).expect("failed to make symbolic link");
         }
         fake_rustdoc
+    };
+    static ref FAKE_CLIPPY: PathBuf = {
+        let mut fake_clippy = env::current_exe().unwrap();
+        fake_clippy.pop();
+        fake_clippy.push("clippy-fake");
+        // link from rustc-fake to rustdoc-fake
+        if !fake_clippy.exists() {
+            #[cfg(unix)]
+            use std::os::unix::fs::symlink;
+            #[cfg(windows)]
+            use std::os::windows::fs::symlink_file as symlink;
+
+            symlink(&*FAKE_RUSTC, &fake_clippy).expect("failed to make symbolic link");
+        }
+        fake_clippy
     };
 }
 

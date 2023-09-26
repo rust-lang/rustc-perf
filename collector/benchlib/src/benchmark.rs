@@ -119,8 +119,15 @@ impl<'a> BenchmarkGroup<'a> {
 
     fn profile_benchmark(self, args: ProfileArgs) -> anyhow::Result<()> {
         let Some(benchmark) = self.benchmarks.get(args.benchmark.as_str()) else {
-            return Err(anyhow::anyhow!("Benchmark `{}` not found. Available benchmarks: {}", args.benchmark,
-                self.benchmarks.keys().map(|s| s.to_string()).collect::<Vec<_>>().join(", ")));
+            return Err(anyhow::anyhow!(
+                "Benchmark `{}` not found. Available benchmarks: {}",
+                args.benchmark,
+                self.benchmarks
+                    .keys()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
         };
         (benchmark.profile_fn)();
 

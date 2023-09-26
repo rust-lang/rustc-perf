@@ -87,6 +87,7 @@ impl<'a> BenchProcessor<'a> {
             Profile::Debug => database::Profile::Debug,
             Profile::Doc => database::Profile::Doc,
             Profile::Opt => database::Profile::Opt,
+            Profile::Clippy => database::Profile::Clippy,
         };
 
         if let Some(files) = stats.2 {

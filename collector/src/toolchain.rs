@@ -123,6 +123,7 @@ impl SysrootDownload {
         let components = ToolchainComponents::from_binaries_and_libdir(
             sysroot_bin("rustc")?,
             Some(sysroot_bin("rustdoc")?),
+            sysroot_bin("cargo-clippy").ok(),
             sysroot_bin("cargo")?,
             &self.directory.join(&self.rust_sha).join("lib"),
         )?;
@@ -241,6 +242,7 @@ impl Toolchain {
 pub struct ToolchainComponents {
     pub rustc: PathBuf,
     pub rustdoc: Option<PathBuf>,
+    pub clippy: Option<PathBuf>,
     pub cargo: PathBuf,
     pub lib_rustc: Option<PathBuf>,
     pub lib_std: Option<PathBuf>,
@@ -252,12 +254,14 @@ impl ToolchainComponents {
     fn from_binaries_and_libdir(
         rustc: PathBuf,
         rustdoc: Option<PathBuf>,
+        clippy: Option<PathBuf>,
         cargo: PathBuf,
         libdir: &Path,
     ) -> anyhow::Result<Self> {
         let mut component = ToolchainComponents {
             rustc,
             rustdoc,
+            clippy,
             cargo,
             ..Default::default()
         };
@@ -288,6 +292,36 @@ impl ToolchainComponents {
     }
 }
 
+#[derive(Clone, Copy, Default)]
+pub struct ToolchainConfig<'a> {
+    rustdoc: Option<&'a Path>,
+    clippy: Option<&'a Path>,
+    cargo: Option<&'a Path>,
+    id: Option<&'a str>,
+}
+
+impl<'a> ToolchainConfig<'a> {
+    pub fn rustdoc(&mut self, rustdoc: Option<&'a Path>) -> &mut Self {
+        self.rustdoc = rustdoc;
+        self
+    }
+
+    pub fn clippy(&mut self, clippy: Option<&'a Path>) -> &mut Self {
+        self.clippy = clippy;
+        self
+    }
+
+    pub fn cargo(&mut self, cargo: Option<&'a Path>) -> &mut Self {
+        self.cargo = cargo;
+        self
+    }
+
+    pub fn id(&mut self, id: Option<&'a str>) -> &mut Self {
+        self.id = id;
+        self
+    }
+}
+
 /// Get a toolchain from the input.
 /// - `rustc`: check if the given one is acceptable.
 /// - `rustdoc`: if one is given, check if it is acceptable. Otherwise, if
@@ -297,9 +331,7 @@ impl ToolchainComponents {
 pub fn get_local_toolchain(
     profiles: &[Profile],
     rustc: &str,
-    rustdoc: Option<&Path>,
-    cargo: Option<&Path>,
-    id: Option<&str>,
+    toolchain_config: ToolchainConfig<'_>,
     id_suffix: &str,
     target_triple: String,
 ) -> anyhow::Result<Toolchain> {
@@ -354,7 +386,7 @@ pub fn get_local_toolchain(
         debug!("found rustc: {:?}", &rustc);
 
         // When the id comes from a +toolchain, the suffix is *not* added.
-        let id = if let Some(id) = id {
+        let id = if let Some(id) = toolchain_config.id {
             let mut id = id.to_owned();
             id.push_str(id_suffix);
             id
@@ -369,7 +401,7 @@ pub fn get_local_toolchain(
 
         // When specifying rustc via a path, the suffix is always added to the
         // id.
-        let mut id = if let Some(id) = id {
+        let mut id = if let Some(id) = toolchain_config.id {
             id.to_owned()
         } else {
             "Id".to_string()
@@ -380,7 +412,7 @@ pub fn get_local_toolchain(
     };
 
     let rustdoc =
-        if let Some(rustdoc) = &rustdoc {
+        if let Some(rustdoc) = &toolchain_config.rustdoc {
             Some(rustdoc.canonicalize().with_context(|| {
                 format!("failed to canonicalize rustdoc executable {:?}", rustdoc)
             })?)
@@ -400,7 +432,28 @@ pub fn get_local_toolchain(
             None
         };
 
-    let cargo = if let Some(cargo) = &cargo {
+    let clippy = if let Some(clippy) = &toolchain_config.clippy {
+        Some(
+            clippy.canonicalize().with_context(|| {
+                format!("failed to canonicalize clippy executable {:?}", clippy)
+            })?,
+        )
+    } else if profiles.contains(&Profile::Clippy) {
+        // We need a `clippy`. Look for one next to `rustc`.
+        if let Ok(clippy) = rustc.with_file_name("cargo-clippy").canonicalize() {
+            debug!("found clippy: {:?}", &clippy);
+            Some(clippy)
+        } else {
+            anyhow::bail!(
+                    "'Clippy' build specified but '--cargo-clippy' not specified and no 'cargo-clippy' found \
+                    next to 'rustc'"
+                );
+        }
+    } else {
+        // No `clippy` provided, but none needed.
+        None
+    };
+    let cargo = if let Some(cargo) = &toolchain_config.cargo {
         cargo
             .canonicalize()
             .with_context(|| format!("failed to canonicalize cargo executable {:?}", cargo))?
@@ -428,7 +481,9 @@ pub fn get_local_toolchain(
     let lib_dir = get_lib_dir_from_rustc(&rustc).context("Cannot find libdir for rustc")?;
 
     Ok(Toolchain {
-        components: ToolchainComponents::from_binaries_and_libdir(rustc, rustdoc, cargo, &lib_dir)?,
+        components: ToolchainComponents::from_binaries_and_libdir(
+            rustc, rustdoc, clippy, cargo, &lib_dir,
+        )?,
         id,
         triple: target_triple,
     })
@@ -465,16 +520,23 @@ pub fn create_toolchain_from_published_version(
     };
     let rustc = which("rustc")?;
     let rustdoc = which("rustdoc")?;
+    let clippy = which("clippy")?;
     let cargo = which("cargo")?;
 
     debug!("Found rustc: {}", rustc.display());
     debug!("Found rustdoc: {}", rustdoc.display());
+    debug!("Found clippy: {}", clippy.display());
     debug!("Found cargo: {}", cargo.display());
 
     let lib_dir = get_lib_dir_from_rustc(&rustc)?;
 
-    let components =
-        ToolchainComponents::from_binaries_and_libdir(rustc, Some(rustdoc), cargo, &lib_dir)?;
+    let components = ToolchainComponents::from_binaries_and_libdir(
+        rustc,
+        Some(rustdoc),
+        Some(clippy),
+        cargo,
+        &lib_dir,
+    )?;
 
     Ok(Toolchain {
         components,

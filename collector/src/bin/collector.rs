@@ -39,6 +39,7 @@ use collector::runtime::{
 use collector::runtime::{profile_runtime, RuntimeCompilationOpts};
 use collector::toolchain::{
     create_toolchain_from_published_version, get_local_toolchain, Sysroot, Toolchain,
+    ToolchainConfig,
 };
 use collector::utils::cachegrind::cachegrind_diff;
 use collector::utils::{is_installed, wait_for_future};
@@ -375,6 +376,10 @@ struct CompileTimeOptions {
     /// The path to the local rustdoc to measure
     #[arg(long)]
     rustdoc: Option<PathBuf>,
+
+    /// The path to the local clippy to measure
+    #[arg(long)]
+    clippy: Option<PathBuf>,
 }
 
 #[derive(Debug, clap::Args)]
@@ -660,9 +665,7 @@ fn main_result() -> anyhow::Result<i32> {
                 let toolchain = get_local_toolchain(
                     &[Profile::Opt],
                     rustc,
-                    None,
-                    None,
-                    None,
+                    ToolchainConfig::default(),
                     id,
                     target_triple.clone(),
                 )?;
@@ -718,9 +721,7 @@ fn main_result() -> anyhow::Result<i32> {
                 let toolchain = get_local_toolchain(
                     &[Profile::Opt],
                     rustc,
-                    None,
-                    None,
-                    None,
+                    ToolchainConfig::default(),
                     id,
                     target_triple.clone(),
                 )?;
@@ -756,9 +757,11 @@ fn main_result() -> anyhow::Result<i32> {
             let toolchain = get_local_toolchain(
                 &profiles,
                 &local.rustc,
-                opts.rustdoc.as_deref(),
-                local.cargo.as_deref(),
-                local.id.as_deref(),
+                *ToolchainConfig::default()
+                    .rustdoc(opts.rustdoc.as_deref())
+                    .clippy(opts.clippy.as_deref())
+                    .cargo(local.cargo.as_deref())
+                    .id(local.id.as_deref()),
                 "",
                 target_triple,
             )?;
@@ -948,9 +951,11 @@ fn main_result() -> anyhow::Result<i32> {
                     let toolchain = get_local_toolchain(
                         profiles,
                         rustc,
-                        opts.rustdoc.as_deref(),
-                        local.cargo.as_deref(),
-                        local.id.as_deref(),
+                        *ToolchainConfig::default()
+                            .rustdoc(opts.rustdoc.as_deref())
+                            .clippy(opts.clippy.as_deref())
+                            .cargo(local.cargo.as_deref())
+                            .id(local.id.as_deref()),
                         suffix,
                         target_triple.clone(),
                     )?;
@@ -1062,9 +1067,9 @@ fn get_local_toolchain_for_runtime_benchmarks(
     get_local_toolchain(
         &[Profile::Opt],
         &local.rustc,
-        None,
-        local.cargo.as_deref(),
-        local.id.as_deref(),
+        *ToolchainConfig::default()
+            .cargo(local.cargo.as_deref())
+            .id(local.id.as_deref()),
         "",
         target_triple.to_string(),
     )
@@ -1193,9 +1198,9 @@ fn bench_published_artifact(
     let artifact_id = ArtifactId::Tag(toolchain.id.clone());
 
     let profiles = if collector::version_supports_doc(&toolchain.id) {
-        Profile::all()
+        vec![Profile::Check, Profile::Debug, Profile::Doc, Profile::Opt]
     } else {
-        Profile::all_non_doc()
+        vec![Profile::Check, Profile::Debug, Profile::Opt]
     };
     let scenarios = if collector::version_supports_incremental(&toolchain.id) {
         Scenario::all()

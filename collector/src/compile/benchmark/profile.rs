@@ -12,6 +12,7 @@ pub enum Profile {
     Debug,
     Doc,
     Opt,
+    Clippy,
 }
 
 impl Profile {
@@ -19,6 +20,7 @@ impl Profile {
         vec![Profile::Check, Profile::Debug, Profile::Doc, Profile::Opt]
     }
 
+    // This also leaves Clippy out
     pub fn all_non_doc() -> Vec<Self> {
         vec![Profile::Check, Profile::Debug, Profile::Opt]
     }
