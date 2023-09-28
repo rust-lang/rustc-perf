@@ -15,7 +15,7 @@ const props = withDefaults(
   defineProps<{
     data: CompareResponse;
     compileTimeSummary: SummaryGroup;
-    runtimeSummary: SummaryGroup | null;
+    runtimeSummary: SummaryGroup;
     initialTab?: Tab;
   }>(),
   {
@@ -65,7 +65,7 @@ function SummaryTable({summary}: {summary: SummaryGroup}) {
       </table>
     );
   }
-  return <div>No relevant results</div>;
+  return <div>No results</div>;
 }
 
 function formatArtifactSize(size: number): string {
@@ -78,8 +78,6 @@ function formatArtifactSize(size: number): string {
 const bootstrapA = props.data.a.bootstrap_total;
 const bootstrapB = props.data.b.bootstrap_total;
 const bootstrapValid = bootstrapA > 0.0 && bootstrapB > 0.0;
-
-const runtimeAvailable = computed(() => props.runtimeSummary !== null);
 
 const totalSizeA = Object.values(props.data.a.component_sizes).reduce(
   (a, b) => a + b,
@@ -109,7 +107,6 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
       </div>
     </div>
     <div
-      v-if="runtimeAvailable"
       class="tab"
       title="Runtime benchmarks: measure how long does it take to execute (i.e. how fast are) programs compiled by the compared rustc."
       :class="{selected: activeTab === Tab.Runtime}"

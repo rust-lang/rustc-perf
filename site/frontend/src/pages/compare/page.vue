@@ -81,17 +81,15 @@ async function loadCompareData(
       )
     )
   );
-  if (response.runtime_comparisons.length > 0) {
-    runtimeSummary.value = computeSummary(
-      filterNonRelevant(
+  runtimeSummary.value = computeSummary(
+    filterNonRelevant(
+      defaultRuntimeFilter,
+      computeRuntimeComparisonsWithNonRelevant(
         defaultRuntimeFilter,
-        computeRuntimeComparisonsWithNonRelevant(
-          defaultRuntimeFilter,
-          response.runtime_comparisons
-        )
+        response.runtime_comparisons
       )
-    );
-  }
+    )
+  );
 }
 
 function updateSelection(params: SelectionParams) {
@@ -120,16 +118,12 @@ const selector = loadSelectorFromUrl(urlParams);
 const initialTab: Tab = loadTabFromUrl(urlParams) ?? Tab.CompileTime;
 const tab: Ref<Tab> = ref(initialTab);
 const activeTab = computed((): Tab => {
-  if (tab.value === Tab.Runtime && !runtimeDataAvailable.value) {
-    return Tab.CompileTime;
-  }
   if (tab.value === Tab.ArtifactSize && !artifactSizeAvailable.value) {
     return Tab.CompileTime;
   }
   return tab.value;
 });
 
-const runtimeDataAvailable = computed(() => runtimeSummary.value !== null);
 const artifactSizeAvailable = computed(
   () =>
     data.value != null &&
@@ -174,7 +168,7 @@ loadCompareData(selector, loading);
           :benchmark-info="info"
         />
       </template>
-      <template v-if="runtimeDataAvailable && activeTab === Tab.Runtime">
+      <template v-if="activeTab === Tab.Runtime">
         <RuntimeBenchmarksPage
           :data="data"
           :selector="selector"
