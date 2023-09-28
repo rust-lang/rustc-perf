@@ -413,6 +413,21 @@ struct BenchRustcOption {
     bench_rustc: bool,
 }
 
+#[derive(Clone, Debug, clap::ValueEnum)]
+enum PurgeMode {
+    /// Purge all old data associated with the artifact
+    Old,
+    /// Purge old data of failed benchmarks associated with the artifact
+    Failed,
+}
+
+#[derive(Debug, clap::Args)]
+struct PurgeOption {
+    /// Removes old data for the specified artifact prior to running the benchmarks.
+    #[arg(long = "purge")]
+    purge: Option<PurgeMode>,
+}
+
 // For each subcommand we list the mandatory arguments in the required
 // order, followed by the options in alphabetical order.
 #[derive(Debug, clap::Subcommand)]
@@ -437,6 +452,9 @@ enum Commands {
         /// faster.
         #[arg(long = "no-isolate")]
         no_isolate: bool,
+
+        #[command(flatten)]
+        purge: PurgeOption,
     },
 
     /// Profiles a runtime benchmark.
@@ -493,6 +511,9 @@ enum Commands {
 
         #[command(flatten)]
         self_profile: SelfProfileOption,
+
+        #[command(flatten)]
+        purge: PurgeOption,
     },
 
     /// Benchmarks the next commit or release for perf.rust-lang.org
@@ -552,6 +573,15 @@ enum Commands {
 
     /// Download a crate into collector/benchmarks.
     Download(DownloadCommand),
+
+    /// Removes all data associated with artifact(s) with the given name.
+    PurgeArtifact {
+        /// Name of the artifact.
+        name: String,
+
+        #[command(flatten)]
+        db: DbOption,
+    },
 }
 
 #[derive(Debug, clap::Parser)]
@@ -620,6 +650,7 @@ fn main_result() -> anyhow::Result<i32> {
             iterations,
             db,
             no_isolate,
+            purge,
         } => {
             log_db(&db);
             let toolchain = get_local_toolchain_for_runtime_benchmarks(&local, &target_triple)?;
@@ -633,6 +664,8 @@ fn main_result() -> anyhow::Result<i32> {
 
             let mut conn = rt.block_on(pool.connection());
             let artifact_id = ArtifactId::Tag(toolchain.id.clone());
+            rt.block_on(purge_old_data(conn.as_mut(), &artifact_id, purge.purge));
+
             let runtime_suite = rt.block_on(load_runtime_benchmarks(
                 conn.as_mut(),
                 &runtime_benchmark_dir,
@@ -747,6 +780,7 @@ fn main_result() -> anyhow::Result<i32> {
             bench_rustc,
             iterations,
             self_profile,
+            purge,
         } => {
             log_db(&db);
             let profiles = opts.profiles.0;
@@ -775,7 +809,9 @@ fn main_result() -> anyhow::Result<i32> {
             benchmarks.retain(|b| b.category().is_primary_or_secondary());
 
             let artifact_id = ArtifactId::Tag(toolchain.id.clone());
-            let conn = rt.block_on(pool.connection());
+            let mut conn = rt.block_on(pool.connection());
+            rt.block_on(purge_old_data(conn.as_mut(), &artifact_id, purge.purge));
+
             let shared = SharedBenchmarkConfig {
                 toolchain,
                 artifact_id,
@@ -1057,6 +1093,14 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
             );
             Ok(0)
         }
+        Commands::PurgeArtifact { name, db } => {
+            let pool = Pool::open(&db.db);
+            let conn = rt.block_on(pool.connection());
+            rt.block_on(conn.purge_artifact(&ArtifactId::Tag(name.clone())));
+
+            println!("Data of artifact {name} were removed");
+            Ok(0)
+        }
     }
 }
 
@@ -1113,6 +1157,28 @@ async fn record_runtime_compilation_errors(
 
 fn log_db(db_option: &DbOption) {
     println!("Using database `{}`", db_option.db);
+}
+
+async fn purge_old_data(
+    conn: &mut dyn Connection,
+    artifact_id: &ArtifactId,
+    purge_mode: Option<PurgeMode>,
+) {
+    match purge_mode {
+        Some(PurgeMode::Old) => {
+            // Delete everything associated with the artifact
+            conn.purge_artifact(artifact_id).await;
+        }
+        Some(PurgeMode::Failed) => {
+            // Delete all benchmarks that have an error for the given artifact
+            let artifact_row_id = conn.artifact_id(artifact_id).await;
+            let errors = conn.get_error(artifact_row_id).await;
+            for krate in errors.keys() {
+                conn.collector_remove_step(artifact_row_id, krate).await;
+            }
+        }
+        None => {}
+    }
 }
 
 /// Record a collection entry into the database, specifying which benchmark steps will be executed.

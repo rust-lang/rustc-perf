@@ -1,5 +1,6 @@
-# Useful queries
-This document contains useful queries that should be performed manually in exceptional situations.
+# Useful queries and commands
+This document contains useful queries and commands that should be performed manually in exceptional
+situations.
 
 ## Remove data for a stable artifact from the DB
 This is important for situations where there is some compilation error for a stable benchmark,
@@ -8,9 +9,16 @@ of future incompatibility lints turning into errors.
 
 The benchmark should be fixed first, and then the DB should be altered (see below).
 
-The easiest solution is to simply completely remove the artifact from the DB. There are
-`ON DELETE CASCADE` clauses for `aid` (artifact ID) on tables that reference it, so it should be
-enough to just delete the artifact from the `artifact` table.
+The easiest solution is to simply completely remove the artifact from the DB.
+You can do that either using the following command:
+
+```bash
+$ cargo run --bin collector purge_artifact <artifact-name>
+# $ cargo run --bin collector purge_artifact 1.70.0 # Remove stable artifact 1.70.0
+```
+
+Or using SQL queries. There are `ON DELETE CASCADE` clauses for `aid` (artifact ID) on tables that
+reference it, so it should be enough to just delete the artifact from the `artifact` table.
 The set of queries below show an example of removing the measured data and errors for Rust `1.69`
 and `1.70`:
 ```sql

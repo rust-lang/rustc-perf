@@ -384,6 +384,30 @@ impl From<Commit> for ArtifactId {
     }
 }
 
+struct ArtifactInfo<'a> {
+    name: &'a str,
+    date: Option<DateTime<Utc>>,
+    kind: &'static str,
+}
+
+impl ArtifactId {
+    fn info(&self) -> ArtifactInfo {
+        let (name, date, ty) = match self {
+            Self::Commit(commit) => (
+                commit.sha.as_str(),
+                Some(commit.date.0),
+                if commit.is_try() { "try" } else { "master" },
+            ),
+            Self::Tag(a) => (a.as_str(), None, "release"),
+        };
+        ArtifactInfo {
+            name,
+            date,
+            kind: ty,
+        }
+    }
+}
+
 intern!(pub struct QueryLabel);
 
 #[derive(PartialEq, Eq, Clone, Debug)]

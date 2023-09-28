@@ -624,26 +624,19 @@ impl Connection for SqliteConnection {
         )
     }
     async fn artifact_id(&self, artifact: &crate::ArtifactId) -> ArtifactIdNumber {
-        let (name, date, ty) = match artifact {
-            crate::ArtifactId::Commit(commit) => (
-                commit.sha.to_string(),
-                Some(commit.date.0),
-                if commit.is_try() { "try" } else { "master" },
-            ),
-            crate::ArtifactId::Tag(a) => (a.clone(), None, "release"),
-        };
+        let info = artifact.info();
 
         self.raw_ref()
             .execute(
                 "insert or ignore into artifact (name, date, type) VALUES (?, ?, ?)",
-                params![&name, &date.map(|d| d.timestamp()), &ty,],
+                params![&info.name, &info.date.map(|d| d.timestamp()), &info.kind,],
             )
             .unwrap();
         ArtifactIdNumber(
             self.raw_ref()
                 .query_row(
                     "select id from artifact where name = $1",
-                    params![&name],
+                    params![&info.name],
                     |r| r.get::<_, i32>(0),
                 )
                 .unwrap() as u32,
@@ -1081,6 +1074,17 @@ impl Connection for SqliteConnection {
             log::error!("did not end {} for {:?}", step, aid);
         }
     }
+
+    async fn collector_remove_step(&self, aid: ArtifactIdNumber, step: &str) {
+        self.raw_ref()
+            .execute(
+                "delete from collector_progress \
+                where aid = ? and step = ?",
+                params![&aid.0, &step],
+            )
+            .unwrap();
+    }
+
     async fn in_progress_artifacts(&self) -> Vec<ArtifactId> {
         let conn = self.raw_ref();
         let mut aids = conn
@@ -1237,5 +1241,14 @@ impl Connection for SqliteConnection {
             .unwrap()
             .collect::<Result<_, _>>()
             .unwrap()
+    }
+
+    async fn purge_artifact(&self, aid: &ArtifactId) {
+        // Once we delete the artifact, all data associated with it should also be deleted
+        // thanks to ON DELETE CASCADE.
+        let info = aid.info();
+        self.raw_ref()
+            .execute("delete from artifact where name = ?1", [info.name])
+            .unwrap();
     }
 }
