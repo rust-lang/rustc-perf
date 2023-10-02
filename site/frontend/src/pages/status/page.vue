@@ -26,7 +26,6 @@ async function loadStatus(loading: Ref<boolean>) {
   data.value = await withLoading(loading, () =>
     getJson<StatusResponse>(STATUS_DATA_URL)
   );
-  console.log(data.value);
 }
 
 function formatDuration(seconds: number): string {
@@ -108,7 +107,7 @@ interface TimelineEntry {
   end_estimated: boolean;
   duration: number | null;
   errors: BenchmarkError[];
-  warning: boolean;
+  warning: string | null;
   current: boolean;
 }
 
@@ -154,7 +153,7 @@ const currentRun: Ref<CurrentRun | null> = computed(() => {
   return null;
 });
 const lastFinishedRun: Ref<FinishedRun | null> = computed(() => {
-  const finished = data?.value.finished_runs;
+  const finished = data.value?.finished_runs;
   if (finished.length === 0) return null;
   return finished[0];
 });
@@ -204,7 +203,7 @@ const timeline: Ref<TimelineEntry[]> = computed(() => {
       end_estimated: true,
       errors: [],
       duration: null,
-      warning: false,
+      warning: null,
       current: false,
     });
     queued_before -= 1;
@@ -220,7 +219,7 @@ const timeline: Ref<TimelineEntry[]> = computed(() => {
       end_estimated: true,
       errors: [],
       duration: null,
-      warning: false,
+      warning: null,
       current: true,
     });
   }
@@ -230,6 +229,10 @@ const timeline: Ref<TimelineEntry[]> = computed(() => {
       ? run.artifact["Tag"]
       : run.artifact["Commit"].type;
 
+    let warning = null;
+    if (kind !== "Try" && run.errors.length > 0) {
+      warning = "Master commit with errors";
+    }
     timeline.push({
       pr: run.pr,
       kind,
@@ -239,7 +242,7 @@ const timeline: Ref<TimelineEntry[]> = computed(() => {
       end_estimated: false,
       errors: run.errors,
       duration: run.duration,
-      warning: kind !== "Try" && run.errors.length > 0,
+      warning,
       current: false,
     });
   }
@@ -369,11 +372,17 @@ loadStatus(loading);
               <td colspan="7"><hr /></td>
             </tr>
             <tr :class="{active: item.sha === currentRun?.commit?.sha}">
-              <td class="centered" v-html="pullRequestUrlAsHtml(item.pr)"></td>
+              <td
+                class="right-align"
+                v-html="pullRequestUrlAsHtml(item.pr)"
+              ></td>
               <td class="centered">
-                {{ item.kind }}<template v-if="item.warning">❗</template>
+                {{ item.kind
+                }}<span v-if="item.warning !== null" :title="item.warning"
+                  >❗</span
+                >
               </td>
-              <td class="centered" v-html="commitUrlAsHtml(item.sha)"></td>
+              <td class="right-align" v-html="commitUrlAsHtml(item.sha)"></td>
               <td class="centered">{{ item.status }}</td>
               <td>
                 {{ item.end_time.toLocaleString()
@@ -382,7 +391,7 @@ loadStatus(loading);
               <td v-if="item.duration !== null">
                 {{ formatDuration(item.duration) }}
               </td>
-              <td v-else class="centered">?</td>
+              <td v-else class="centered">-</td>
               <td v-if="item.errors.length > 0">
                 <button @click="toggleExpandedErrors(item.sha)">
                   {{ hasExpandedErrors(item.sha) ? "Hide" : "Show" }}
@@ -437,6 +446,9 @@ loadStatus(loading);
 
       &.centered {
         text-align: center;
+      }
+      &.right-align {
+        text-align: right;
       }
     }
     tr.active {
