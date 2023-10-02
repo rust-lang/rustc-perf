@@ -96,7 +96,18 @@ function drawCurrentDate(opts: GraphRenderOpts, date: Date) {
   };
 }
 
-async function renderGraph() {
+// Render both relative and absolute graphs
+async function renderGraphs() {
+  // We want to be able to see noise "blips" vs. a previous artifact.
+  // The "percent relative from previous commit" graph should be the best to
+  // see these kinds of changes.
+  renderGraph("percentrelative" as GraphKind, relativeChartElement);
+  // We also want to see whether a change maintained its value or whether it was noise and has since
+  // returned to steady state. Here, an absolute graph ("raw") is best.
+  renderGraph("raw" as GraphKind, absoluteChartElement);
+}
+
+async function renderGraph(kind: GraphKind, chartRef: Ref<HTMLElement | null>) {
   const {start, end, date} = graphRange.value;
   const selector = {
     benchmark: props.testCase.benchmark,
@@ -105,20 +116,17 @@ async function renderGraph() {
     stat: props.metric,
     start,
     end,
-    // We want to be able to see noise "blips" vs. a previous artifact.
-    // The "percent relative from previous commit" graph should be the best to
-    // see these kinds of changes.
-    kind: "percentrelative" as GraphKind,
+    kind,
   };
   const graphData = await GRAPH_RESOLVER.loadGraph(selector);
   const opts: GraphRenderOpts = {
-    width: Math.min(window.innerWidth - 40, 480),
+    width: Math.min(window.innerWidth - 40, 465),
     renderTitle: false,
   };
   if (date !== null) {
     drawCurrentDate(opts, date);
   }
-  renderPlots(graphData, selector, chartElement.value, opts);
+  renderPlots(graphData, selector, chartRef.value, opts);
 }
 
 function getGraphTitle() {
@@ -177,7 +185,8 @@ const cargoProfile = computed((): CargoProfileMetadata => {
   }
 });
 
-const chartElement: Ref<HTMLElement | null> = ref(null);
+const relativeChartElement: Ref<HTMLElement | null> = ref(null);
+const absoluteChartElement: Ref<HTMLElement | null> = ref(null);
 const graphRange = computed(() => getGraphRange(props.artifact));
 
 enum ProfileCommand {
@@ -205,95 +214,108 @@ function changeProfileCommand(event: Event) {
   profileCommand.value = target.value as ProfileCommand;
 }
 
-onMounted(() => renderGraph());
+onMounted(() => renderGraphs());
 </script>
 
 <template>
   <div>
     <div class="columns">
       <div class="rows grow">
-        <div>
-          <div class="title info bold">Benchmark info</div>
-          <table>
-            <tbody>
-              <tr>
-                <td>Benchmark</td>
-                <td>{{ testCase.benchmark }}</td>
-              </tr>
-              <tr>
-                <td>Profile</td>
-                <td>{{ testCase.profile }}</td>
-              </tr>
-              <tr>
-                <td>Scenario</td>
-                <td>{{ testCase.scenario }}</td>
-              </tr>
-              <tr>
-                <td>Category</td>
-                <td>{{ testCase.category }}</td>
-              </tr>
-              <tr v-if="(metadata?.binary ?? null) !== null">
-                <td>Artifact</td>
-                <td>{{ metadata.binary ? "binary" : "library" }}</td>
-              </tr>
-              <tr v-if="(metadata?.iterations ?? null) !== null">
-                <td>
-                  Iterations
-                  <Tooltip> How many times is the benchmark executed? </Tooltip>
-                </td>
-                <td>{{ metadata.iterations }}</td>
-              </tr>
-              <tr v-if="(cargoProfile?.lto ?? null) !== null">
-                <td>LTO</td>
-                <td>{{ cargoProfile.lto }}</td>
-              </tr>
-              <tr v-if="(cargoProfile?.debug ?? null) !== null">
-                <td>Debuginfo</td>
-                <td>{{ cargoProfile.debug }}</td>
-              </tr>
-              <tr v-if="(cargoProfile?.codegen_units ?? null) !== null">
-                <td>Codegen units</td>
-                <td>{{ cargoProfile.codegen_units }}</td>
-              </tr>
-            </tbody>
-          </table>
+        <div class="title bold">Benchmark info</div>
+        <table>
+          <tbody>
+            <tr>
+              <td>Benchmark</td>
+              <td>{{ testCase.benchmark }}</td>
+            </tr>
+            <tr>
+              <td>Profile</td>
+              <td>{{ testCase.profile }}</td>
+            </tr>
+            <tr>
+              <td>Scenario</td>
+              <td>{{ testCase.scenario }}</td>
+            </tr>
+            <tr>
+              <td>Category</td>
+              <td>{{ testCase.category }}</td>
+            </tr>
+            <tr v-if="(metadata?.binary ?? null) !== null">
+              <td>Artifact</td>
+              <td>{{ metadata.binary ? "binary" : "library" }}</td>
+            </tr>
+            <tr v-if="(metadata?.iterations ?? null) !== null">
+              <td>
+                Iterations
+                <Tooltip> How many times is the benchmark executed? </Tooltip>
+              </td>
+              <td>{{ metadata.iterations }}</td>
+            </tr>
+            <tr v-if="(cargoProfile?.lto ?? null) !== null">
+              <td>LTO</td>
+              <td>{{ cargoProfile.lto }}</td>
+            </tr>
+            <tr v-if="(cargoProfile?.debug ?? null) !== null">
+              <td>Debuginfo</td>
+              <td>{{ cargoProfile.debug }}</td>
+            </tr>
+            <tr v-if="(cargoProfile?.codegen_units ?? null) !== null">
+              <td>Codegen units</td>
+              <td>{{ cargoProfile.codegen_units }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="rows grow links">
+        <div class="title bold">Links</div>
+        <ul>
+          <li>
+            <a
+              :href="detailedQueryLink(props.artifact, props.baseArtifact)"
+              target="_blank"
+            >
+              Detailed results
+            </a>
+          </li>
+          <li>
+            <a
+              :href="graphLink(props.artifact, props.metric, props.testCase)"
+              target="_blank"
+            >
+              History graph
+            </a>
+          </li>
+          <li>
+            <a :href="detailedQueryLink(props.baseArtifact)" target="_blank">
+              Rustc self-profile: baseline commit
+            </a>
+          </li>
+          <li>
+            <a :href="detailedQueryLink(props.artifact)" target="_blank">
+              Rustc self-profile: benchmarked commit
+            </a>
+          </li>
+          <li>
+            <a :href="benchmarkLink(testCase.benchmark)" target="_blank">
+              Benchmark source code
+            </a>
+          </li>
+        </ul>
+      </div>
+    </div>
+    <div class="columns graphs">
+      <div class="rows center-items grow">
+        <div class="title">
+          <div class="bold">{{ getGraphTitle() }}</div>
+          <div style="font-size: 0.8em">
+            Plot of the absolute values of the current metric
+          </div>
+          <div style="font-size: 0.8em">
+            The shaded region shows values that are more recent than the
+            benchmarked commit
+          </div>
         </div>
-        <div class="links">
-          <div class="title bold">Links</div>
-          <ul>
-            <li>
-              <a
-                :href="detailedQueryLink(props.artifact, props.baseArtifact)"
-                target="_blank"
-              >
-                Detailed results
-              </a>
-            </li>
-            <li>
-              <a
-                :href="graphLink(props.artifact, props.metric, props.testCase)"
-                target="_blank"
-              >
-                History graph
-              </a>
-            </li>
-            <li>
-              <a :href="detailedQueryLink(props.baseArtifact)" target="_blank">
-                Rustc self-profile: baseline commit
-              </a>
-            </li>
-            <li>
-              <a :href="detailedQueryLink(props.artifact)" target="_blank">
-                Rustc self-profile: benchmarked commit
-              </a>
-            </li>
-            <li>
-              <a :href="benchmarkLink(testCase.benchmark)" target="_blank">
-                Benchmark source code
-              </a>
-            </li>
-          </ul>
-        </div>
+        <div ref="absoluteChartElement"></div>
       </div>
       <div class="rows center-items grow">
         <div class="title">
@@ -306,7 +328,7 @@ onMounted(() => renderGraph());
             benchmarked commit
           </div>
         </div>
-        <div ref="chartElement"></div>
+        <div ref="relativeChartElement"></div>
       </div>
     </div>
     <div class="command">
@@ -358,17 +380,25 @@ onMounted(() => renderGraph());
   .grow {
     flex-grow: 1;
   }
+
+  &.graphs {
+    flex-wrap: nowrap;
+  }
+}
+.graphs {
+  margin-top: 15px;
 }
 .rows {
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  gap: 10px;
 
   &.center-items {
     align-items: center;
   }
 }
 .command {
+  margin-top: 15px;
   text-align: left;
 }
 
