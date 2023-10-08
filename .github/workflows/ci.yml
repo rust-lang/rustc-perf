@@ -136,6 +136,8 @@ jobs:
       - name: Install servo dependencies
         run: sudo apt-get install -y llvm-dev clang libx11-dev python2.7 autoconf2.13 libjemalloc-dev
 
+      - uses: Swatinem/rust-cache@v2
+
       - name: Build collector
         run: cargo build -p collector
 
@@ -167,6 +169,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y linux-tools-common linux-tools-generic linux-tools-`uname -r`
           echo -1 | sudo tee /proc/sys/kernel/perf_event_paranoid
+
+      - uses: Swatinem/rust-cache@v2
 
       - name: Build collector
         run: cargo build -p collector
@@ -204,6 +208,8 @@ jobs:
           make -j2
           make install
           echo "${PWD}/build/bin" >> $GITHUB_PATH
+
+      - uses: Swatinem/rust-cache@v2
 
       - name: Install profilers
         run: cargo install --version 0.4.12 cargo-llvm-lines
@@ -254,6 +260,8 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+
+      - uses: Swatinem/rust-cache@v2
 
       - name: Build site
         run: cargo build --bin site
