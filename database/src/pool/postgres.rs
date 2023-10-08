@@ -481,11 +481,13 @@ impl PostgresConnection {
                         epoch from interval '0 seconds'::interval +
                         (select cp.end_time - cp.start_time
                         from collector_progress as cp
+                        join artifact on artifact.id = cp.aid
                             where
                                 cp.aid != $1
                                 and cp.step = collector_progress.step
                                 and cp.start_time is not null
                                 and cp.end_time is not null
+                                and artifact.type = 'master'
                             order by start_time desc
                             limit 1
                         ))::int4
