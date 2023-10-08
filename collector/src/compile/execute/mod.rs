@@ -5,6 +5,7 @@ use crate::compile::benchmark::profile::Profile;
 use crate::compile::benchmark::scenario::Scenario;
 use crate::compile::benchmark::BenchmarkName;
 use crate::toolchain::Toolchain;
+use crate::utils::fs::EnsureImmutableFile;
 use crate::{async_command_output, command_output, utils};
 use anyhow::Context;
 use bencher::Bencher;
@@ -203,6 +204,12 @@ impl<'a> CargoProcess<'a> {
         );
 
         loop {
+            // Make sure that Cargo.lock isn't changed by the build
+            let _guard = EnsureImmutableFile::new(
+                &self.cwd.join("Cargo.lock"),
+                self.processor_name.0.clone(),
+            )?;
+
             // Get the subcommand. If it's not `rustc` it must should be a
             // subcommand that itself invokes `rustc` (so that the `FAKE_RUSTC`
             // machinery works).
@@ -316,6 +323,7 @@ impl<'a> CargoProcess<'a> {
 
             let cmd = tokio::process::Command::from(cmd);
             let output = async_command_output(cmd).await?;
+
             if let Some((ref mut processor, scenario, scenario_str, patch)) = self.processor_etc {
                 let data = ProcessOutputData {
                     name: self.processor_name.clone(),
