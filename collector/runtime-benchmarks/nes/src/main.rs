@@ -26,9 +26,6 @@ fn main() {
 
             nes.load_rom(ROM).unwrap();
 
-            let mut buffer: Vec<u32> = Vec::new();
-            buffer.resize(256 * 240, 0);
-
             move || {
                 // Trigger the autosolve mechanism in the ROM.
                 for _ in 0..4 {
@@ -50,11 +47,9 @@ fn main() {
                 // And then just let it run for a while.
                 for _ in 0..2 * 60 {
                     nes.execute_until_vblank().unwrap();
-                    nes.framebuffer()
-                        .convert_to_abgr(&nes::Palette::default(), &mut buffer);
                 }
 
-                buffer
+                nes
             }
         });
     });
