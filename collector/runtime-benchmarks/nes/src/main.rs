@@ -1,3 +1,6 @@
+//! This benchmark runs a simple game under a mostly cycle-accurate NES emulator,
+//! which under the hood is essentially just a fancy bytecode interpreter.
+
 struct Emulator {
     state: nes::State,
 }
@@ -27,19 +30,36 @@ fn main() {
             nes.load_rom(ROM).unwrap();
 
             move || {
-                // Trigger the autosolve mechanism in the ROM.
+                // By default the game which we're emulating stays on the main menu
+                // screen without anything happening on screen; it doesn't even try
+                // to play any music.
+                //
+                // Pressing any button on the gamepad actually starts the game, and
+                // once the game is started pressing the select button triggers
+                // an autosolve mechanism which makes the game automatically play itself.
+                //
+                // So let's trigger this here.
+
+                // We need to wait for four frames until the game accepts any input.
+                //
+                // I don't know why; I just started to empirically increase the number
+                // of frames until it worked.
                 for _ in 0..4 {
                     nes.execute_until_vblank().unwrap();
                 }
 
+                // Now we can press a button to start the game.
                 nes.press(nes::ControllerPort::First, nes::Button::Select);
                 nes.execute_until_vblank().unwrap();
                 nes.release(nes::ControllerPort::First, nes::Button::Select);
 
+                // We need to wait for at least three frames until we can trigger
+                // the autosolve mechanism.
                 for _ in 0..3 {
                     nes.execute_until_vblank().unwrap();
                 }
 
+                // Now we can press select to make the game start playing itself.
                 nes.press(nes::ControllerPort::First, nes::Button::Select);
                 nes.execute_until_vblank().unwrap();
                 nes.release(nes::ControllerPort::First, nes::Button::Select);
