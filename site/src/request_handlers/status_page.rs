@@ -2,16 +2,14 @@ use std::str;
 use std::sync::Arc;
 
 use crate::api::status;
-use crate::api::status::FinishedRun;
 use crate::db::{ArtifactId, Lookup};
 use crate::load::SiteCtxt;
 
-// How many historical (finished) runs should be returned from the status API.
-const FINISHED_RUN_COUNT: u64 = 5;
-
 pub async fn handle_status_page(ctxt: Arc<SiteCtxt>) -> status::Response {
-    let missing = ctxt.missing_commits().await;
+    let idx = ctxt.index.load();
+    let last_commit = idx.commits().last().cloned();
 
+    let missing = ctxt.missing_commits().await;
     // FIXME: no current builds
     let conn = ctxt.conn().await;
     let current = if let Some(artifact) = conn.in_progress_artifacts().await.pop() {
@@ -35,41 +33,29 @@ pub async fn handle_status_page(ctxt: Arc<SiteCtxt>) -> status::Response {
         None
     };
 
-    // FIXME: load at least one master commit with errors, if no master commit is in last N commits?
-    // FIXME: cache this whole thing, or write a specific SQL query for it
-    let mut finished_runs = Vec::new();
-    let idx = ctxt.index.load();
-
-    let recent_collections = conn
-        .last_n_artifact_collections(FINISHED_RUN_COUNT as u32)
-        .await;
-    for collection in recent_collections {
-        let errors = conn
-            .get_error(collection.artifact.lookup(&idx).unwrap())
-            .await;
-        let mut pr = None;
-        if let ArtifactId::Commit(ref commit) = collection.artifact {
-            pr = conn.pr_of(&commit.sha).await;
-        }
-        finished_runs.push(FinishedRun {
-            artifact: collection.artifact,
-            pr,
-            errors: errors
-                .into_iter()
-                .map(|(name, error)| {
-                    let error = prettify_log(&error).unwrap_or(error);
-                    status::BenchmarkError { name, error }
-                })
-                .collect::<Vec<_>>(),
-            duration: collection.duration.as_secs(),
-            finished_at: collection.end_time.timestamp() as u64,
-        });
-    }
+    let errors = if let Some(last) = &last_commit {
+        conn.get_error(ArtifactId::from(last.clone()).lookup(&idx).unwrap())
+            .await
+    } else {
+        Default::default()
+    };
+    let benchmark_state = errors
+        .into_iter()
+        .map(|(name, error)| {
+            let error = prettify_log(&error).unwrap_or(error);
+            status::BenchmarkStatus { name, error }
+        })
+        .collect::<Vec<_>>();
 
     status::Response {
-        finished_runs,
+        last_commit,
+        benchmarks: benchmark_state,
         missing,
         current,
+        most_recent_end: conn
+            .last_artifact_collection()
+            .await
+            .map(|d| d.end_time.timestamp()),
     }
 }
 

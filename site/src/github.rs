@@ -332,10 +332,8 @@ async fn estimate_queue_info(
 
     // Guess the expected full run duration of a waiting commit
     let last_duration = conn
-        .last_n_artifact_collections(1)
+        .last_artifact_collection()
         .await
-        .into_iter()
-        .next()
         .map(|collection| collection.duration)
         .unwrap_or(Duration::ZERO);
 
