@@ -577,25 +577,7 @@ impl Connection for SqliteConnection {
             .optional()
             .unwrap()?;
 
-        match ty.as_str() {
-            "master" => Some(ArtifactId::Commit(Commit {
-                sha: artifact.to_owned(),
-                date: Date(
-                    Utc.timestamp_opt(date.expect("master has date"), 0)
-                        .unwrap(),
-                ),
-                r#type: CommitType::Master,
-            })),
-            "try" => Some(ArtifactId::Commit(Commit {
-                sha: artifact.to_owned(),
-                date: date
-                    .map(|d| Date(Utc.timestamp_opt(d, 0).unwrap()))
-                    .unwrap_or_else(|| Date::ymd_hms(2000, 1, 1, 0, 0, 0)),
-                r#type: CommitType::Try,
-            })),
-            "release" => Some(ArtifactId::Tag(artifact.to_owned())),
-            _ => panic!("unknown artifact type: {:?}", ty),
-        }
+        Some(parse_artifact_id(ty.as_str(), artifact, date))
     }
 
     async fn record_duration(&self, artifact: ArtifactIdNumber, duration: Duration) {
@@ -1166,24 +1148,31 @@ impl Connection for SqliteConnection {
             .collect()
     }
 
-    async fn last_artifact_collection(&self) -> Option<ArtifactCollection> {
+    async fn last_n_artifact_collections(&self, n: u32) -> Vec<ArtifactCollection> {
         self.raw_ref()
-            .query_row(
-                "select date_recorded, duration \
-                from artifact_collection_duration \
+            .prepare_cached(
+                "select art.name, art.date, art.type, acd.date_recorded, acd.duration \
+                from artifact_collection_duration as acd \
+                join artifact as art on art.id = acd.aid \
                 order by date_recorded desc \
-                limit 1;",
-                params![],
-                |r| {
-                    Ok((
-                        Utc.timestamp_opt(r.get(0)?, 0).unwrap(),
-                        Duration::from_secs(r.get(1)?),
-                    ))
-                },
+                limit ?;",
             )
-            .optional()
             .unwrap()
-            .map(|(end_time, duration)| ArtifactCollection { end_time, duration })
+            .query(params![&n])
+            .unwrap()
+            .mapped(|r| {
+                let sha = r.get::<_, String>(0)?;
+                let date = r.get::<_, Option<i64>>(1)?;
+                let ty = r.get::<_, String>(2)?;
+
+                Ok(ArtifactCollection {
+                    artifact: parse_artifact_id(&ty, &sha, date),
+                    end_time: Utc.timestamp_opt(r.get(3)?, 0).unwrap(),
+                    duration: Duration::from_secs(r.get(4)?),
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
     }
 
     async fn parent_of(&self, sha: &str) -> Option<String> {
@@ -1250,5 +1239,27 @@ impl Connection for SqliteConnection {
         self.raw_ref()
             .execute("delete from artifact where name = ?1", [info.name])
             .unwrap();
+    }
+}
+
+fn parse_artifact_id(ty: &str, sha: &str, date: Option<i64>) -> ArtifactId {
+    match ty {
+        "master" => ArtifactId::Commit(Commit {
+            sha: sha.to_owned(),
+            date: Date(
+                Utc.timestamp_opt(date.expect("master has date"), 0)
+                    .unwrap(),
+            ),
+            r#type: CommitType::Master,
+        }),
+        "try" => ArtifactId::Commit(Commit {
+            sha: sha.to_owned(),
+            date: date
+                .map(|d| Date(Utc.timestamp_opt(d, 0).unwrap()))
+                .unwrap_or_else(|| Date::ymd_hms(2000, 1, 1, 0, 0, 0)),
+            r#type: CommitType::Try,
+        }),
+        "release" => ArtifactId::Tag(sha.to_owned()),
+        _ => panic!("unknown artifact type: {:?}", ty),
     }
 }
