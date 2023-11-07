@@ -1,10 +1,10 @@
-export interface Commit {
+interface Commit {
   sha: string;
   date: string;
   type: "Try" | "Master";
 }
 
-export interface BenchmarkError {
+interface BenchmarkStatus {
   name: string;
   error: string;
 }
@@ -16,50 +16,20 @@ interface Step {
   current_progress: number;
 }
 
-export type Artifact =
-  | {
-      Commit: Commit;
-    }
-  | {
-      Tag: string;
-    };
-
-export type MissingReason =
-  | {
-      Master: {
-        pr: number;
-        parent_sha: string;
-        is_try_parent: boolean;
-      };
-    }
-  | {
-      Try: {
-        pr: number;
-        parent_sha: string;
-        include: string | null;
-        exclude: string | null;
-        runs: number | null;
-      };
-    }
-  | {
-      InProgress: MissingReason;
-    };
-
+/**
+ * The `any` types in the interface below were chosen because the types are quite complex
+ * on the Rust side (they are modeled with enums encoded in a way that is not so simple to model in
+ * TS).
+ */
 interface CurrentState {
-  artifact: Artifact;
+  artifact: any;
   progress: Step[];
 }
 
-export interface FinishedRun {
-  artifact: Artifact;
-  pr: number | null;
-  errors: BenchmarkError[];
-  duration: number;
-  finished_at: number;
-}
-
 export interface StatusResponse {
-  finished_runs: FinishedRun[];
+  last_commit: Commit | null;
+  benchmarks: BenchmarkStatus[];
+  missing: Array<[Commit, any]>;
   current: CurrentState | null;
-  missing: Array<[Commit, MissingReason]>;
+  most_recent_end: number | null;
 }

@@ -1216,31 +1216,21 @@ where
             })
             .collect()
     }
-    async fn last_n_artifact_collections(&self, n: u32) -> Vec<ArtifactCollection> {
+    async fn last_artifact_collection(&self) -> Option<ArtifactCollection> {
         self.conn()
-            .query(
-                "select art.name, art.date, art.type, acd.date_recorded, acd.duration \
-                from artifact_collection_duration as acd \
-                join artifact as art on art.id = acd.aid \
+            .query_opt(
+                "select date_recorded, duration \
+                from artifact_collection_duration \
                 order by date_recorded desc \
-                limit $1;",
-                &[&n],
+                limit 1;",
+                &[],
             )
             .await
             .unwrap()
-            .into_iter()
-            .map(|r| {
-                let sha = r.get::<_, String>(0);
-                let date = r.get::<_, Option<DateTime<Utc>>>(1);
-                let ty = r.get::<_, String>(2);
-
-                ArtifactCollection {
-                    artifact: parse_artifact_id(&ty, &sha, date),
-                    end_time: r.get(3),
-                    duration: Duration::from_secs(r.get::<_, i32>(4) as u64),
-                }
+            .map(|r| ArtifactCollection {
+                end_time: r.get(0),
+                duration: Duration::from_secs(r.get::<_, i32>(1) as u64),
             })
-            .collect()
     }
     async fn parent_of(&self, sha: &str) -> Option<String> {
         self.conn()
@@ -1384,7 +1374,23 @@ where
             .unwrap()?;
         let date = row.get::<_, Option<DateTime<Utc>>>(0);
         let ty = row.get::<_, String>(1);
-        Some(parse_artifact_id(&ty, artifact, date))
+
+        match ty.as_str() {
+            "master" => Some(ArtifactId::Commit(Commit {
+                sha: artifact.to_owned(),
+                date: Date(date.expect("date present for master commits")),
+                r#type: CommitType::Master,
+            })),
+            "try" => Some(ArtifactId::Commit(Commit {
+                sha: artifact.to_owned(),
+                date: date
+                    .map(Date)
+                    .unwrap_or_else(|| Date::ymd_hms(2000, 1, 1, 0, 0, 0)),
+                r#type: CommitType::Try,
+            })),
+            "release" => Some(ArtifactId::Tag(artifact.to_owned())),
+            _ => panic!("unknown artifact type: {:?}", ty),
+        }
     }
 
     async fn purge_artifact(&self, aid: &ArtifactId) {
@@ -1395,24 +1401,5 @@ where
             .execute("delete from artifact where name = $1", &[&info.name])
             .await
             .unwrap();
-    }
-}
-
-fn parse_artifact_id(ty: &str, sha: &str, date: Option<DateTime<Utc>>) -> ArtifactId {
-    match ty {
-        "master" => ArtifactId::Commit(Commit {
-            sha: sha.to_owned(),
-            date: Date(date.expect("date present for master commits")),
-            r#type: CommitType::Master,
-        }),
-        "try" => ArtifactId::Commit(Commit {
-            sha: sha.to_owned(),
-            date: date
-                .map(Date)
-                .unwrap_or_else(|| Date::ymd_hms(2000, 1, 1, 0, 0, 0)),
-            r#type: CommitType::Try,
-        }),
-        "release" => ArtifactId::Tag(sha.to_owned()),
-        _ => panic!("unknown artifact type: {:?}", ty),
     }
 }
