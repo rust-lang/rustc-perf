@@ -1224,7 +1224,7 @@ where
                 join artifact as art on art.id = acd.aid \
                 order by date_recorded desc \
                 limit $1;",
-                &[&n],
+                &[&(n as i64)],
             )
             .await
             .unwrap()
