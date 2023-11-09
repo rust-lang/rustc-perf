@@ -1,8 +1,8 @@
 #![recursion_limit = "1024"]
 
 use anyhow::Context;
-use clap::builder::{PossibleValue, TypedValueParser};
-use clap::{Arg, Parser, ValueEnum};
+use clap::builder::TypedValueParser;
+use clap::{Arg, Parser};
 use collector::api::next_artifact::NextArtifact;
 use collector::codegen::{codegen_diff, CodegenType};
 use collector::compile::benchmark::category::Category;
@@ -22,6 +22,7 @@ use std::fs::File;
 use std::future::Future;
 use std::io::BufWriter;
 use std::io::Write;
+use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::process::Command;
@@ -230,55 +231,24 @@ fn main() {
     }
 }
 
-#[derive(Debug, Clone)]
-struct ProfileArg(Vec<Profile>);
+/// We need to have a separate wrapper over a Vec<T>, otherwise Clap would incorrectly
+/// assume that `EnumArgParser` parses a single item, rather than a list of items.
+#[derive(Clone, Debug)]
+struct MultiEnumValue<T>(Vec<T>);
 
+/// Parser for enums (like profile or scenario) which can be passed either as a comma-delimited
+/// string or as the "All" string, which selects all variants.
 #[derive(Clone)]
-struct ProfileArgParser;
+struct EnumArgParser<T>(PhantomData<T>);
 
-/// We need to use a TypedValueParser to provide possible values help.
-/// If we just use `FromStr` + `#[arg(possible_values = [...])]`, `clap` will not allow passing
-/// multiple values.
-impl TypedValueParser for ProfileArgParser {
-    type Value = ProfileArg;
-
-    fn parse_ref(
-        &self,
-        cmd: &clap::Command,
-        arg: Option<&Arg>,
-        value: &OsStr,
-    ) -> Result<Self::Value, clap::Error> {
-        if value == "All" {
-            Ok(ProfileArg(Profile::all()))
-        } else {
-            let profiles: Result<Vec<Profile>, _> = value
-                .to_str()
-                .unwrap()
-                .split(',')
-                .map(|item| clap::value_parser!(Profile).parse_ref(cmd, arg, OsStr::new(item)))
-                .collect();
-
-            Ok(ProfileArg(profiles?))
-        }
-    }
-
-    fn possible_values(&self) -> Option<Box<dyn Iterator<Item = PossibleValue> + '_>> {
-        let values = Profile::value_variants()
-            .iter()
-            .filter_map(|item| item.to_possible_value())
-            .chain([PossibleValue::new("All")]);
-        Some(Box::new(values))
+impl<T> Default for EnumArgParser<T> {
+    fn default() -> Self {
+        Self(Default::default())
     }
 }
 
-#[derive(Debug, Clone)]
-struct ScenarioArg(Vec<Scenario>);
-
-#[derive(Clone)]
-struct ScenarioArgParser;
-
-impl TypedValueParser for ScenarioArgParser {
-    type Value = ScenarioArg;
+impl<T: clap::ValueEnum + Sync + Send + 'static> TypedValueParser for EnumArgParser<T> {
+    type Value = MultiEnumValue<T>;
 
     fn parse_ref(
         &self,
@@ -287,25 +257,17 @@ impl TypedValueParser for ScenarioArgParser {
         value: &OsStr,
     ) -> Result<Self::Value, clap::Error> {
         if value == "All" {
-            Ok(ScenarioArg(Scenario::all()))
+            Ok(MultiEnumValue(T::value_variants().to_vec()))
         } else {
-            let scenarios: Result<Vec<Scenario>, _> = value
+            let values: Result<Vec<T>, _> = value
                 .to_str()
                 .unwrap()
                 .split(',')
-                .map(|item| clap::value_parser!(Scenario).parse_ref(cmd, arg, OsStr::new(item)))
+                .map(|item| clap::value_parser!(T).parse_ref(cmd, arg, OsStr::new(item)))
                 .collect();
 
-            Ok(ScenarioArg(scenarios?))
+            Ok(MultiEnumValue(values?))
         }
-    }
-
-    fn possible_values(&self) -> Option<Box<dyn Iterator<Item = PossibleValue> + '_>> {
-        let values = Scenario::value_variants()
-            .iter()
-            .filter_map(|item| item.to_possible_value())
-            .chain([PossibleValue::new("All")]);
-        Some(Box::new(values))
     }
 }
 
@@ -358,20 +320,20 @@ struct CompileTimeOptions {
     #[arg(
         long = "profiles",
         alias = "builds", // the old name, for backward compatibility
-        value_parser = ProfileArgParser,
+        value_parser = EnumArgParser::<Profile>::default(),
         // Don't run rustdoc by default
         default_value = "Check,Debug,Opt",
     )]
-    profiles: ProfileArg,
+    profiles: MultiEnumValue<Profile>,
 
     /// Measure the scenarios in this comma-separated list
     #[arg(
         long = "scenarios",
         alias = "runs", // the old name, for backward compatibility
-        value_parser = ScenarioArgParser,
+        value_parser = EnumArgParser::<Scenario>::default(),
         default_value = "All"
     )]
-    scenarios: ScenarioArg,
+    scenarios: MultiEnumValue<Scenario>,
 
     /// The path to the local rustdoc to measure
     #[arg(long)]
