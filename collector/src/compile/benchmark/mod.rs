@@ -1,4 +1,5 @@
 use crate::compile::benchmark::category::Category;
+use crate::compile::benchmark::codegen_backend::CodegenBackend;
 use crate::compile::benchmark::patch::Patch;
 use crate::compile::benchmark::profile::Profile;
 use crate::compile::benchmark::scenario::Scenario;
@@ -178,6 +179,7 @@ impl Benchmark {
         toolchain: &'a Toolchain,
         cwd: &'a Path,
         profile: Profile,
+        backend: CodegenBackend,
     ) -> CargoProcess<'a> {
         let mut cargo_args = self
             .config
@@ -199,6 +201,7 @@ impl Benchmark {
             processor_name: self.name.clone(),
             cwd,
             profile,
+            backend,
             incremental: false,
             processor_etc: None,
             manifest_path: self
@@ -226,6 +229,7 @@ impl Benchmark {
         processor: &mut dyn Processor,
         profiles: &[Profile],
         scenarios: &[Scenario],
+        backends: &[CodegenBackend],
         toolchain: &Toolchain,
         iterations: Option<usize>,
     ) -> anyhow::Result<()> {
@@ -293,11 +297,17 @@ impl Benchmark {
             for (profile, prep_dir) in &profile_dirs {
                 let server = server.clone();
                 let thread = s.spawn::<_, anyhow::Result<()>>(move || {
-                    wait_for_future(
-                        self.mk_cargo_process(toolchain, prep_dir.path(), *profile)
-                            .jobserver(server)
-                            .run_rustc(false),
-                    )?;
+                    wait_for_future(async move {
+                        // Prepare all backend artifacts into the same target directory
+                        for backend in backends {
+                            let server = server.clone();
+                            self.mk_cargo_process(toolchain, prep_dir.path(), *profile, *backend)
+                                .jobserver(server)
+                                .run_rustc(false)
+                                .await?;
+                        }
+                        Ok::<(), anyhow::Error>(())
+                    })?;
                     Ok(())
                 });
                 threads.push(thread);
@@ -320,77 +330,88 @@ impl Benchmark {
             preparation_start.elapsed().as_secs()
         );
 
-        for (profile, prep_dir) in profile_dirs {
-            eprintln!("Running {}: {:?} + {:?}", self.name, profile, scenarios);
+        for &backend in backends {
+            for (profile, prep_dir) in &profile_dirs {
+                let profile = *profile;
+                eprintln!(
+                    "Running {}: {:?} + {:?} + {:?}",
+                    self.name, profile, scenarios, backend
+                );
 
-            // We want at least two runs for all benchmarks (since we run
-            // self-profile separately).
-            processor.start_first_collection();
-            for i in 0..std::cmp::max(iterations, 2) {
-                if i == 1 {
-                    let different = processor.finished_first_collection();
-                    if iterations == 1 && !different {
-                        // Don't run twice if this processor doesn't need it and
-                        // we've only been asked to run once.
-                        break;
+                // We want at least two runs for all benchmarks (since we run
+                // self-profile separately).
+                processor.start_first_collection();
+                for i in 0..std::cmp::max(iterations, 2) {
+                    if i == 1 {
+                        let different = processor.finished_first_collection();
+                        if iterations == 1 && !different {
+                            // Don't run twice if this processor doesn't need it and
+                            // we've only been asked to run once.
+                            break;
+                        }
                     }
-                }
-                log::debug!("Benchmark iteration {}/{}", i + 1, iterations);
-                // Don't delete the directory on error.
-                let timing_dir = ManuallyDrop::new(self.make_temp_dir(prep_dir.path())?);
-                let cwd = timing_dir.path();
+                    log::debug!("Benchmark iteration {}/{}", i + 1, iterations);
+                    // Don't delete the directory on error.
+                    let timing_dir = ManuallyDrop::new(self.make_temp_dir(prep_dir.path())?);
+                    let cwd = timing_dir.path();
 
-                // A full non-incremental build.
-                if scenarios.contains(&Scenario::Full) {
-                    self.mk_cargo_process(toolchain, cwd, profile)
-                        .processor(processor, Scenario::Full, "Full", None)
-                        .run_rustc(true)
-                        .await?;
-                }
-
-                // Rustdoc does not support incremental compilation
-                if profile != Profile::Doc {
-                    // An incremental  from scratch (slowest incremental case).
-                    // This is required for any subsequent incremental builds.
-                    if scenarios.iter().any(|s| s.is_incr()) {
-                        self.mk_cargo_process(toolchain, cwd, profile)
-                            .incremental(true)
-                            .processor(processor, Scenario::IncrFull, "IncrFull", None)
+                    // A full non-incremental build.
+                    if scenarios.contains(&Scenario::Full) {
+                        self.mk_cargo_process(toolchain, cwd, profile, backend)
+                            .processor(processor, Scenario::Full, "Full", None)
                             .run_rustc(true)
                             .await?;
                     }
 
-                    // An incremental build with no changes (fastest incremental case).
-                    if scenarios.contains(&Scenario::IncrUnchanged) {
-                        self.mk_cargo_process(toolchain, cwd, profile)
-                            .incremental(true)
-                            .processor(processor, Scenario::IncrUnchanged, "IncrUnchanged", None)
-                            .run_rustc(true)
-                            .await?;
-                    }
+                    // Rustdoc does not support incremental compilation
+                    if profile != Profile::Doc {
+                        // An incremental  from scratch (slowest incremental case).
+                        // This is required for any subsequent incremental builds.
+                        if scenarios.iter().any(|s| s.is_incr()) {
+                            self.mk_cargo_process(toolchain, cwd, profile, backend)
+                                .incremental(true)
+                                .processor(processor, Scenario::IncrFull, "IncrFull", None)
+                                .run_rustc(true)
+                                .await?;
+                        }
 
-                    if scenarios.contains(&Scenario::IncrPatched) {
-                        for (i, patch) in self.patches.iter().enumerate() {
-                            log::debug!("applying patch {}", patch.name);
-                            patch.apply(cwd).map_err(|s| anyhow::anyhow!("{}", s))?;
-
-                            // An incremental build with some changes (realistic
-                            // incremental case).
-                            let scenario_str = format!("IncrPatched{}", i);
-                            self.mk_cargo_process(toolchain, cwd, profile)
+                        // An incremental build with no changes (fastest incremental case).
+                        if scenarios.contains(&Scenario::IncrUnchanged) {
+                            self.mk_cargo_process(toolchain, cwd, profile, backend)
                                 .incremental(true)
                                 .processor(
                                     processor,
-                                    Scenario::IncrPatched,
-                                    &scenario_str,
-                                    Some(patch),
+                                    Scenario::IncrUnchanged,
+                                    "IncrUnchanged",
+                                    None,
                                 )
                                 .run_rustc(true)
                                 .await?;
                         }
+
+                        if scenarios.contains(&Scenario::IncrPatched) {
+                            for (i, patch) in self.patches.iter().enumerate() {
+                                log::debug!("applying patch {}", patch.name);
+                                patch.apply(cwd).map_err(|s| anyhow::anyhow!("{}", s))?;
+
+                                // An incremental build with some changes (realistic
+                                // incremental case).
+                                let scenario_str = format!("IncrPatched{}", i);
+                                self.mk_cargo_process(toolchain, cwd, profile, backend)
+                                    .incremental(true)
+                                    .processor(
+                                        processor,
+                                        Scenario::IncrPatched,
+                                        &scenario_str,
+                                        Some(patch),
+                                    )
+                                    .run_rustc(true)
+                                    .await?;
+                            }
+                        }
                     }
+                    drop(ManuallyDrop::into_inner(timing_dir));
                 }
-                drop(ManuallyDrop::into_inner(timing_dir));
             }
         }
 

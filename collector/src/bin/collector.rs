@@ -84,6 +84,7 @@ struct CompileBenchmarkConfig {
     benchmarks: Vec<Benchmark>,
     profiles: Vec<Profile>,
     scenarios: Vec<Scenario>,
+    backends: Vec<CodegenBackend>,
     iterations: Option<usize>,
     is_self_profile: bool,
     bench_rustc: bool,
@@ -185,6 +186,7 @@ fn profile_compile(
     benchmarks: &[Benchmark],
     profiles: &[Profile],
     scenarios: &[Scenario],
+    backends: &[CodegenBackend],
     errors: &mut BenchmarkErrors,
 ) {
     eprintln!("Profiling {} with {:?}", toolchain.id, profiler);
@@ -203,6 +205,7 @@ fn profile_compile(
                 &mut processor,
                 profiles,
                 scenarios,
+                backends,
                 toolchain,
                 Some(1),
             ));
@@ -752,6 +755,7 @@ fn main_result() -> anyhow::Result<i32> {
             log_db(&db);
             let profiles = opts.profiles.0;
             let scenarios = opts.scenarios.0;
+            let backends = opts.codegen_backends.0;
 
             let pool = database::Pool::open(&db.db);
 
@@ -787,6 +791,7 @@ fn main_result() -> anyhow::Result<i32> {
                 benchmarks,
                 profiles,
                 scenarios,
+                backends,
                 iterations: Some(iterations),
                 is_self_profile: self_profile.self_profile,
                 bench_rustc: bench_rustc.bench_rustc,
@@ -865,6 +870,7 @@ fn main_result() -> anyhow::Result<i32> {
                         benchmarks,
                         profiles: vec![Profile::Check, Profile::Debug, Profile::Doc, Profile::Opt],
                         scenarios: Scenario::all(),
+                        backends: vec![CodegenBackend::Llvm],
                         iterations: runs.map(|v| v as usize),
                         is_self_profile: self_profile.self_profile,
                         bench_rustc: bench_rustc.bench_rustc,
@@ -932,6 +938,7 @@ fn main_result() -> anyhow::Result<i32> {
 
             let profiles = &opts.profiles.0;
             let scenarios = &opts.scenarios.0;
+            let backends = &opts.codegen_backends.0;
 
             let mut benchmarks = get_compile_benchmarks(
                 &compile_benchmark_dir,
@@ -970,6 +977,7 @@ fn main_result() -> anyhow::Result<i32> {
                         &benchmarks,
                         profiles,
                         scenarios,
+                        backends,
                         &mut errors,
                     );
                     Ok(id)
@@ -1266,6 +1274,7 @@ fn bench_published_artifact(
             benchmarks: compile_benchmarks,
             profiles,
             scenarios,
+            backends: vec![CodegenBackend::Llvm],
             iterations: Some(3),
             is_self_profile: false,
             bench_rustc: false,
@@ -1373,6 +1382,7 @@ fn bench_compile(
                     processor,
                     &config.profiles,
                     &config.scenarios,
+                    &config.backends,
                     &shared.toolchain,
                     config.iterations,
                 )))

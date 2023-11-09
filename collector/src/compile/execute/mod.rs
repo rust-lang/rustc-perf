@@ -1,5 +1,6 @@
 //! Execute benchmarks.
 
+use crate::compile::benchmark::codegen_backend::CodegenBackend;
 use crate::compile::benchmark::patch::Patch;
 use crate::compile::benchmark::profile::Profile;
 use crate::compile::benchmark::scenario::Scenario;
@@ -119,6 +120,7 @@ pub struct CargoProcess<'a> {
     pub toolchain: &'a Toolchain,
     pub cwd: &'a Path,
     pub profile: Profile,
+    pub backend: CodegenBackend,
     pub incremental: bool,
     pub processor_etc: Option<(&'a mut dyn Processor, Scenario, &'a str, Option<&'a Patch>)>,
     pub processor_name: BenchmarkName,
@@ -196,11 +198,12 @@ impl<'a> CargoProcess<'a> {
     // really.
     pub async fn run_rustc(&mut self, needs_final: bool) -> anyhow::Result<()> {
         log::info!(
-            "run_rustc with incremental={}, profile={:?}, scenario={:?}, patch={:?}",
+            "run_rustc with incremental={}, profile={:?}, scenario={:?}, patch={:?}, backend={:?}",
             self.incremental,
             self.profile,
             self.processor_etc.as_ref().map(|v| v.1),
-            self.processor_etc.as_ref().and_then(|v| v.3)
+            self.processor_etc.as_ref().and_then(|v| v.3),
+            self.backend
         );
 
         loop {
@@ -332,6 +335,7 @@ impl<'a> CargoProcess<'a> {
                     scenario,
                     scenario_str,
                     patch,
+                    backend: self.backend,
                 };
                 match processor.process_output(&data, output).await {
                     Ok(Retry::No) => return Ok(()),
@@ -397,6 +401,7 @@ pub struct ProcessOutputData<'a> {
     scenario: Scenario,
     scenario_str: &'a str,
     patch: Option<&'a Patch>,
+    backend: CodegenBackend,
 }
 
 /// Trait used by `Benchmark::measure()` to provide different kinds of

@@ -1,3 +1,4 @@
+use crate::compile::benchmark::codegen_backend::CodegenBackend;
 use crate::compile::benchmark::profile::Profile;
 use crate::compile::benchmark::scenario::Scenario;
 use crate::compile::benchmark::BenchmarkName;
@@ -77,6 +78,7 @@ impl<'a> BenchProcessor<'a> {
         &mut self,
         scenario: database::Scenario,
         profile: Profile,
+        backend: CodegenBackend,
         stats: (Stats, Option<SelfProfile>, Option<SelfProfileFiles>),
     ) {
         let version = get_rustc_perf_commit();
@@ -187,17 +189,22 @@ impl<'a> Processor for BenchProcessor<'a> {
                     }
 
                     let fut = match data.scenario {
-                        Scenario::Full => {
-                            self.insert_stats(database::Scenario::Empty, data.profile, res)
-                        }
+                        Scenario::Full => self.insert_stats(
+                            database::Scenario::Empty,
+                            data.profile,
+                            data.backend,
+                            res,
+                        ),
                         Scenario::IncrFull => self.insert_stats(
                             database::Scenario::IncrementalEmpty,
                             data.profile,
+                            data.backend,
                             res,
                         ),
                         Scenario::IncrUnchanged => self.insert_stats(
                             database::Scenario::IncrementalFresh,
                             data.profile,
+                            data.backend,
                             res,
                         ),
                         Scenario::IncrPatched => {
@@ -205,6 +212,7 @@ impl<'a> Processor for BenchProcessor<'a> {
                             self.insert_stats(
                                 database::Scenario::IncrementalPatch(patch.name),
                                 data.profile,
+                                data.backend,
                                 res,
                             )
                         }
