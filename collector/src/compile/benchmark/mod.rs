@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
 pub mod category;
+pub mod codegen_backend;
 pub(crate) mod patch;
 pub mod profile;
 pub mod scenario;

@@ -6,6 +6,7 @@ use clap::{Arg, Parser};
 use collector::api::next_artifact::NextArtifact;
 use collector::codegen::{codegen_diff, CodegenType};
 use collector::compile::benchmark::category::Category;
+use collector::compile::benchmark::codegen_backend::CodegenBackend;
 use collector::compile::benchmark::profile::Profile;
 use collector::compile::benchmark::scenario::Scenario;
 use collector::compile::benchmark::{
@@ -334,6 +335,10 @@ struct CompileTimeOptions {
         default_value = "All"
     )]
     scenarios: MultiEnumValue<Scenario>,
+
+    /// Measure the codegen backends in this comma-separated list
+    #[arg(long = "backends", value_parser = EnumArgParser::<CodegenBackend>::default(), default_value = "Llvm")]
+    codegen_backends: MultiEnumValue<CodegenBackend>,
 
     /// The path to the local rustdoc to measure
     #[arg(long)]
