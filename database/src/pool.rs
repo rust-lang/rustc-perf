@@ -158,7 +158,7 @@ pub trait Connection: Send + Sync {
 
     async fn in_progress_steps(&self, aid: &ArtifactId) -> Vec<Step>;
 
-    async fn last_artifact_collection(&self) -> Option<ArtifactCollection>;
+    async fn last_n_artifact_collections(&self, n: u32) -> Vec<ArtifactCollection>;
 
     /// Returns the sha of the parent commit, if available.
     ///

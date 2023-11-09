@@ -710,6 +710,7 @@ pub struct CompileBenchmark {
 
 #[derive(Debug)]
 pub struct ArtifactCollection {
+    pub artifact: ArtifactId,
     pub duration: Duration,
     pub end_time: DateTime<Utc>,
 }
