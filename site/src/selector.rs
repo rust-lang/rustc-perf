@@ -26,7 +26,7 @@ use crate::interpolate::Interpolate;
 use crate::load::SiteCtxt;
 
 use collector::Bound;
-use database::{Benchmark, Commit, Connection, Index, Lookup};
+use database::{Benchmark, CodegenBackend, Commit, Connection, Index, Lookup};
 
 use crate::comparison::Metric;
 use async_trait::async_trait;
@@ -198,6 +198,7 @@ pub struct CompileBenchmarkQuery {
     benchmark: Selector<String>,
     scenario: Selector<Scenario>,
     profile: Selector<Profile>,
+    backend: Selector<CodegenBackend>,
     metric: Selector<database::Metric>,
 }
 
@@ -227,6 +228,7 @@ impl CompileBenchmarkQuery {
             benchmark: Selector::All,
             profile: Selector::All,
             scenario: Selector::All,
+            backend: Selector::All,
             metric: Selector::One(metric.as_str().into()),
         }
     }
@@ -238,6 +240,7 @@ impl Default for CompileBenchmarkQuery {
             benchmark: Selector::All,
             scenario: Selector::All,
             profile: Selector::All,
+            backend: Selector::All,
             metric: Selector::All,
         }
     }
@@ -255,18 +258,20 @@ impl BenchmarkQuery for CompileBenchmarkQuery {
     ) -> Result<Vec<SeriesResponse<Self::TestCase, StatisticSeries>>, String> {
         let mut statistic_descriptions: Vec<_> = index
             .compile_statistic_descriptions()
-            .filter(|(&(b, p, s, m), _)| {
+            .filter(|(&(b, p, s, backend, m), _)| {
                 self.benchmark.matches(b)
                     && self.profile.matches(p)
                     && self.scenario.matches(s)
+                    && self.backend.matches(backend)
                     && self.metric.matches(m)
             })
-            .map(|(&(benchmark, profile, scenario, metric), sid)| {
+            .map(|(&(benchmark, profile, scenario, backend, metric), sid)| {
                 (
                     CompileTestCase {
                         benchmark,
                         profile,
                         scenario,
+                        backend,
                     },
                     metric,
                     sid,
@@ -320,6 +325,7 @@ pub struct CompileTestCase {
     pub benchmark: Benchmark,
     pub profile: Profile,
     pub scenario: Scenario,
+    pub backend: CodegenBackend,
 }
 
 impl TestCase for CompileTestCase {}

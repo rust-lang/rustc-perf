@@ -1,4 +1,4 @@
-use crate::{ArtifactCollection, ArtifactId, ArtifactIdNumber, CompileBenchmark};
+use crate::{ArtifactCollection, ArtifactId, ArtifactIdNumber, CodegenBackend, CompileBenchmark};
 use crate::{CollectionId, Index, Profile, QueuedCommit, Scenario, Step};
 use chrono::{DateTime, Utc};
 use hashbrown::HashMap;
@@ -44,6 +44,7 @@ pub trait Connection: Send + Sync {
         benchmark: &str,
         profile: Profile,
         scenario: Scenario,
+        backend: CodegenBackend,
         metric: &str,
         value: f64,
     );

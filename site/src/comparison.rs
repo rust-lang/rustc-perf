@@ -18,7 +18,7 @@ use crate::api::comparison::CompileBenchmarkMetadata;
 use crate::benchmark_metadata::get_compile_benchmarks_metadata;
 use crate::server::comparison::StatComparison;
 use collector::compile::benchmark::ArtifactType;
-use database::{CommitType, CompileBenchmark};
+use database::{CodegenBackend, CommitType, CompileBenchmark};
 use serde::de::IntoDeserializer;
 use std::cmp;
 use std::collections::{HashMap, HashSet};
@@ -839,6 +839,7 @@ async fn compare_given_commits(
             profile: test_case.profile,
             scenario: test_case.scenario,
             benchmark: test_case.benchmark,
+            backend: test_case.backend,
             comparison,
         },
     )
@@ -1409,6 +1410,7 @@ pub struct CompileTestResultComparison {
     benchmark: Benchmark,
     profile: Profile,
     scenario: Scenario,
+    backend: CodegenBackend,
     comparison: TestResultComparison,
 }
 
@@ -1423,6 +1425,7 @@ impl cmp::PartialEq for CompileTestResultComparison {
         self.benchmark == other.benchmark
             && self.profile == other.profile
             && self.scenario == other.scenario
+            && self.backend == other.backend
     }
 }
 
@@ -1433,6 +1436,7 @@ impl std::hash::Hash for CompileTestResultComparison {
         self.benchmark.hash(state);
         self.profile.hash(state);
         self.scenario.hash(state);
+        self.backend.hash(state);
     }
 }
 

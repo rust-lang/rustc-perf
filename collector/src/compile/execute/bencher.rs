@@ -92,8 +92,14 @@ impl<'a> BenchProcessor<'a> {
             Profile::Clippy => database::Profile::Clippy,
         };
 
+        let backend = match backend {
+            CodegenBackend::Llvm => database::CodegenBackend::Llvm,
+        };
+
         if let Some(files) = stats.2 {
             if env::var_os("RUSTC_PERF_UPLOAD_TO_S3").is_some() {
+                // FIXME: Record codegen backend in the self profile name
+
                 // We can afford to have the uploads run concurrently with
                 // rustc. Generally speaking, they take up almost no CPU time
                 // (just copying data into the network). Plus, during
@@ -131,6 +137,7 @@ impl<'a> BenchProcessor<'a> {
                 self.benchmark.0.as_str(),
                 profile,
                 scenario,
+                backend,
                 stat,
                 value,
             ));
