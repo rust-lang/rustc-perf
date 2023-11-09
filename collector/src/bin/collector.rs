@@ -896,7 +896,7 @@ fn main_result() -> anyhow::Result<i32> {
 
                     let compile_config = CompileBenchmarkConfig {
                         benchmarks,
-                        profiles: Profile::all(),
+                        profiles: vec![Profile::Check, Profile::Debug, Profile::Doc, Profile::Opt],
                         scenarios: Scenario::all(),
                         iterations: runs.map(|v| v as usize),
                         is_self_profile: self_profile.self_profile,
