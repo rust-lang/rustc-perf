@@ -289,8 +289,9 @@ struct PstatSeriesRow<'a> {
     id: i32,
     krate: &'a str,
     profile: &'a str,
-    cache: &'a str,
-    statistic: &'a str,
+    scenario: &'a str,
+    backend: &'a str,
+    metric: &'a str,
 }
 
 impl Table for PstatSeries {
@@ -299,7 +300,7 @@ impl Table for PstatSeries {
     }
 
     fn sqlite_attributes() -> &'static str {
-        "id, crate, profile, cache, statistic"
+        "id, crate, profile, scenario, backend, metric"
     }
 
     fn postgres_generated_id_attribute() -> Option<&'static str> {
@@ -312,8 +313,9 @@ impl Table for PstatSeries {
                 id: row.get(0).unwrap(),
                 krate: row.get_ref(1).unwrap().as_str().unwrap(),
                 profile: row.get_ref(2).unwrap().as_str().unwrap(),
-                cache: row.get_ref(3).unwrap().as_str().unwrap(),
-                statistic: row.get_ref(4).unwrap().as_str().unwrap(),
+                scenario: row.get_ref(3).unwrap().as_str().unwrap(),
+                backend: row.get_ref(4).unwrap().as_str().unwrap(),
+                metric: row.get_ref(5).unwrap().as_str().unwrap(),
             })
             .unwrap();
     }
