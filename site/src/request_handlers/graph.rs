@@ -3,11 +3,56 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::api::graphs::GraphKind;
-use crate::api::{graphs, ServerResult};
+use crate::api::{detail, graphs, ServerResult};
 use crate::db::{self, ArtifactId, Profile, Scenario};
 use crate::interpolate::IsInterpolated;
 use crate::load::SiteCtxt;
 use crate::selector::{CompileBenchmarkQuery, CompileTestCase, Selector, SeriesResponse};
+
+/// Returns data for a detailed information when comparing a single test result comparison
+/// for a compile-time benchmark.
+pub async fn handle_compile_detail(
+    request: detail::Request,
+    ctxt: Arc<SiteCtxt>,
+) -> ServerResult<detail::Response> {
+    log::info!("handle_compile_detail({:?})", request);
+
+    let artifact_ids = Arc::new(master_artifact_ids_for_range(
+        &ctxt,
+        request.start,
+        request.end,
+    ));
+
+    let interpolated_responses: Vec<_> = ctxt
+        .statistic_series(
+            CompileBenchmarkQuery::default()
+                .benchmark(Selector::One(request.benchmark))
+                .profile(Selector::One(request.profile.parse()?))
+                .scenario(Selector::One(request.scenario.parse()?))
+                .metric(Selector::One(request.stat.parse()?)),
+            artifact_ids.clone(),
+        )
+        .await?
+        .into_iter()
+        .map(|sr| sr.interpolate().map(|series| series.collect::<Vec<_>>()))
+        .collect();
+
+    let mut graphs = Vec::new();
+
+    let mut interpolated_responses = interpolated_responses.into_iter();
+    if let Some(response) = interpolated_responses.next() {
+        let series = response.series.into_iter().collect::<Vec<_>>();
+        for kind in request.kinds {
+            graphs.push(graph_series(series.clone().into_iter(), kind));
+        }
+    }
+    assert!(interpolated_responses.next().is_none());
+
+    Ok(detail::Response {
+        commits: artifact_ids_to_commits(artifact_ids),
+        graphs,
+    })
+}
 
 pub async fn handle_graphs(
     request: graphs::Request,
@@ -33,7 +78,7 @@ pub async fn handle_graphs(
         }
     }
 
-    let resp = create_graphs(request, &ctxt).await?;
+    let resp = Arc::new(create_graphs(request, &ctxt).await?);
 
     if is_default_query {
         ctxt.landing_page.store(Arc::new(Some(resp.clone())));
@@ -45,7 +90,7 @@ pub async fn handle_graphs(
 async fn create_graphs(
     request: graphs::Request,
     ctxt: &SiteCtxt,
-) -> ServerResult<Arc<graphs::Response>> {
+) -> ServerResult<graphs::Response> {
     let artifact_ids = Arc::new(master_artifact_ids_for_range(
         ctxt,
         request.start,
@@ -98,17 +143,21 @@ async fn create_graphs(
             .insert(scenario, graph_series);
     }
 
-    Ok(Arc::new(graphs::Response {
-        commits: Arc::try_unwrap(artifact_ids)
-            .unwrap()
-            .into_iter()
-            .map(|c| match c {
-                ArtifactId::Commit(c) => (c.date.0.timestamp(), c.sha),
-                ArtifactId::Tag(_) => unreachable!(),
-            })
-            .collect(),
+    Ok(graphs::Response {
+        commits: artifact_ids_to_commits(artifact_ids),
         benchmarks,
-    }))
+    })
+}
+
+fn artifact_ids_to_commits(artifact_ids: Arc<Vec<ArtifactId>>) -> Vec<(i64, String)> {
+    Arc::try_unwrap(artifact_ids)
+        .unwrap()
+        .into_iter()
+        .map(|c| match c {
+            ArtifactId::Commit(c) => (c.date.0.timestamp(), c.sha),
+            ArtifactId::Tag(_) => unreachable!(),
+        })
+        .collect()
 }
 
 /// Returns master commit artifact IDs for the given range.
