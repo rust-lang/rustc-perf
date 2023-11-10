@@ -3,20 +3,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::api::graphs::GraphKind;
-use crate::api::{graph, graphs, ServerResult};
+use crate::api::{graphs, ServerResult};
 use crate::db::{self, ArtifactId, Profile, Scenario};
 use crate::interpolate::IsInterpolated;
 use crate::load::SiteCtxt;
 use crate::selector::{CompileBenchmarkQuery, CompileTestCase, Selector, SeriesResponse};
-
-pub async fn handle_graph(
-    request: graph::Request,
-    ctxt: Arc<SiteCtxt>,
-) -> ServerResult<graph::Response> {
-    log::info!("handle_graph({:?})", request);
-
-    create_graph(request, ctxt).await
-}
 
 pub async fn handle_graphs(
     request: graphs::Request,
@@ -49,31 +40,6 @@ pub async fn handle_graphs(
     }
 
     Ok(resp)
-}
-
-async fn create_graph(
-    request: graph::Request,
-    ctxt: Arc<SiteCtxt>,
-) -> ServerResult<graph::Response> {
-    let artifact_ids = artifact_ids_for_range(&ctxt, request.start, request.end);
-    let mut series_iterator = ctxt
-        .statistic_series(
-            CompileBenchmarkQuery::default()
-                .benchmark(Selector::One(request.benchmark))
-                .profile(Selector::One(request.profile.parse()?))
-                .scenario(Selector::One(request.scenario.parse()?))
-                .metric(Selector::One(request.metric.parse()?)),
-            Arc::new(artifact_ids),
-        )
-        .await?
-        .into_iter()
-        .map(SeriesResponse::interpolate);
-
-    let result = series_iterator.next().unwrap();
-    let graph_series = graph_series(result.series, request.kind);
-    Ok(graph::Response {
-        series: graph_series,
-    })
 }
 
 async fn create_graphs(
@@ -143,19 +109,6 @@ async fn create_graphs(
             .collect(),
         benchmarks,
     }))
-}
-
-/// Returns artifact IDs for the given range.
-/// Inside of the range (not at the start/end), only master commits are kept.
-fn artifact_ids_for_range(ctxt: &SiteCtxt, start: Bound, end: Bound) -> Vec<ArtifactId> {
-    let range = ctxt.data_range(start..=end);
-    let count = range.len();
-    range
-        .into_iter()
-        .enumerate()
-        .filter(|(index, commit)| *index == 0 || *index == count - 1 || commit.is_master())
-        .map(|c| c.1.into())
-        .collect()
 }
 
 /// Returns master commit artifact IDs for the given range.

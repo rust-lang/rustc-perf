@@ -375,14 +375,6 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
                 crate::comparison::handle_triage(input, &ctxt).await,
             ));
         }
-        "/perf/graph" => {
-            let query = check!(parse_query_string(req.uri()));
-            return server
-                .handle_fallible_get_async(&req, &compression, |c| {
-                    request_handlers::handle_graph(query, c)
-                })
-                .await;
-        }
         "/perf/graphs" => {
             let query = check!(parse_query_string(req.uri()));
             return server
