@@ -39,6 +39,13 @@ pub fn profile_runtime(
                 .arg("--branch-sim=no")
                 .arg("--cache-sim=no")
                 .arg(format!("--cachegrind-out-file={}", cgout_tmp.display()));
+
+            // Disable cachegrind profile collection at start.
+            // It will be enabled only for the profiled function using
+            // Valgrind client requests (see `benchlib/src/profile.rs`).
+            #[cfg(feature = "precise-cachegrind")]
+            cmd.arg("--instr-at-start=no");
+
             cmd.stdin(Stdio::null());
             cmd.arg(&group.binary).arg("profile").arg(benchmark);
             command_output(&mut cmd).context("Cannot run profiler")?;

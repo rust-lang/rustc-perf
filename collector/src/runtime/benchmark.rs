@@ -135,7 +135,16 @@ pub struct BenchmarkSuiteCompilation {
 
 impl BenchmarkSuiteCompilation {
     pub fn extract_suite(self) -> BenchmarkSuite {
-        assert!(self.failed_to_compile.is_empty());
+        use std::fmt::Write;
+
+        if !self.failed_to_compile.is_empty() {
+            let mut message =
+                "Cannot extract runtime suite because of compilation errors:\n".to_string();
+            for (group, error) in self.failed_to_compile {
+                writeln!(message, "{group}\n{error}\n").unwrap();
+            }
+            panic!("{message}");
+        }
         self.suite
     }
 }
@@ -357,6 +366,10 @@ fn start_cargo_build(
         command.arg("--target-dir");
         command.arg(target_dir);
     }
+
+    // Enable the precise-cachegrind feature for the benchlib dependency of the runtime group.
+    #[cfg(feature = "precise-cachegrind")]
+    command.arg("--features").arg("benchlib/precise-cachegrind");
 
     let child = command
         .spawn()
