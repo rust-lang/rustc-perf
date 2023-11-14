@@ -193,11 +193,20 @@ impl Benchmark {
             cargo_args.push(format!("-j{}", count));
         }
 
-        if let Some(zthreads) = std::env::var("RUSTC_PERF_ZTHREADS")
+        let mut rustc_args: Vec<String> = self
+            .config
+            .cargo_rustc_opts
+            .clone()
+            .unwrap_or_default()
+            .split_whitespace()
+            .map(String::from)
+            .collect();
+
+        if let Some(zthreads) = std::env::var("ZTHREADS")
             .ok()
             .and_then(|v| v.parse::<usize>().ok())
         {
-            cargo_args.push(format!("-Zthreads {}", zthreads))
+            rustc_args.push(format!("-Zthreads={}", zthreads));
         }
 
         CargoProcess {
@@ -213,14 +222,7 @@ impl Benchmark {
                 .clone()
                 .unwrap_or_else(|| String::from("Cargo.toml")),
             cargo_args,
-            rustc_args: self
-                .config
-                .cargo_rustc_opts
-                .clone()
-                .unwrap_or_default()
-                .split_whitespace()
-                .map(String::from)
-                .collect(),
+            rustc_args,
             touch_file: self.config.touch_file.clone(),
             jobserver: None,
         }
@@ -234,7 +236,6 @@ impl Benchmark {
         scenarios: &[Scenario],
         toolchain: &Toolchain,
         iterations: Option<usize>,
-        zthreads: usize
     ) -> anyhow::Result<()> {
         if self.config.disabled {
             eprintln!("Skipping {}: disabled", self.name);
@@ -299,9 +300,6 @@ impl Benchmark {
             let mut threads = Vec::with_capacity(profile_dirs.len());
             for (profile, prep_dir) in &profile_dirs {
                 let server = server.clone();
-                if zthreads > 0 {
-                    
-                }
                 let thread = s.spawn::<_, anyhow::Result<()>>(move || {
                     wait_for_future(
                         self.mk_cargo_process(toolchain, prep_dir.path(), *profile)
