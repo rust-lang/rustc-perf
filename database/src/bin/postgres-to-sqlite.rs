@@ -357,66 +357,6 @@ impl Table for RustcCompilation {
     }
 }
 
-struct SelfProfileQuery;
-
-impl Table for SelfProfileQuery {
-    fn name(&self) -> &'static str {
-        "self_profile_query"
-    }
-
-    fn postgres_select_statement(&self, since_weeks_ago: Option<u32>) -> String {
-        let s = "select series, aid, cid, self_time, blocked_time, incremental_load_time, number_of_cache_hits, invocation_count from ".to_string() + self.name();
-        with_filter_clause_maybe(s, ARTIFACT_JOIN_AND_WHERE, since_weeks_ago)
-    }
-
-    fn sqlite_insert_statement(&self) -> &'static str {
-        "insert into self_profile_query (series, aid, cid, self_time, blocked_time, incremental_load_time, number_of_cache_hits, invocation_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-    }
-
-    fn sqlite_execute_insert(&self, statement: &mut rusqlite::Statement, row: tokio_postgres::Row) {
-        statement
-            .execute(params![
-                row.get::<_, i32>(0),
-                row.get::<_, i32>(1),
-                row.get::<_, i32>(2),
-                row.get::<_, Option<i64>>(3),
-                row.get::<_, Option<i64>>(4),
-                row.get::<_, Option<i64>>(5),
-                row.get::<_, Option<i32>>(6),
-                row.get::<_, Option<i32>>(7),
-            ])
-            .unwrap();
-    }
-}
-
-struct SelfProfileQuerySeries;
-
-impl Table for SelfProfileQuerySeries {
-    fn name(&self) -> &'static str {
-        "self_profile_query_series"
-    }
-
-    fn postgres_select_statement(&self, _since_weeks_ago: Option<u32>) -> String {
-        "select id, crate, profile, cache, query from ".to_string() + self.name()
-    }
-
-    fn sqlite_insert_statement(&self) -> &'static str {
-        "insert into self_profile_query_series (id, crate, profile, cache, query) VALUES (?, ?, ?, ?, ?)"
-    }
-
-    fn sqlite_execute_insert(&self, statement: &mut rusqlite::Statement, row: tokio_postgres::Row) {
-        statement
-            .execute(params![
-                row.get::<_, i32>(0),
-                row.get::<_, &str>(1),
-                row.get::<_, &str>(2),
-                row.get::<_, &str>(3),
-                row.get::<_, &str>(4),
-            ])
-            .unwrap();
-    }
-}
-
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     env_logger::init();
@@ -434,8 +374,6 @@ async fn main() -> anyhow::Result<()> {
         &PullRequestBuild,
         &RawSelfProfile,
         &RustcCompilation,
-        &SelfProfileQuerySeries,
-        &SelfProfileQuery,
     ];
 
     let table_names: Vec<_> = tables.iter().map(|table| table.name()).collect();
@@ -494,17 +432,11 @@ async fn main() -> anyhow::Result<()> {
     let postgres = matches.get_one::<String>("postgres-db").unwrap();
     let sqlite = matches.get_one::<String>("sqlite-db").unwrap();
 
-    let mut exclude_tables: std::collections::HashSet<_> = matches
+    let exclude_tables: std::collections::HashSet<_> = matches
         .get_many::<String>("exclude-tables")
         .unwrap_or_default()
         .cloned()
         .collect();
-
-    if matches.get_flag("no-self-profile") {
-        exclude_tables.insert(SelfProfileQuerySeries.name().to_owned());
-        exclude_tables.insert(SelfProfileQuery.name().to_owned());
-        // `RawSelfProfile` is intentionally kept.
-    }
 
     let since_weeks_ago = matches.get_one::<u32>("since-weeks-ago").copied();
 

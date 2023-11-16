@@ -67,17 +67,6 @@ pub trait Connection: Send + Sync {
         profile: Profile,
         scenario: Scenario,
     );
-    #[allow(clippy::too_many_arguments)]
-    async fn record_self_profile_query(
-        &self,
-        collection: CollectionId,
-        artifact: ArtifactIdNumber,
-        benchmark: &str,
-        profile: Profile,
-        scenario: Scenario,
-        query: &str,
-        qd: crate::QueryDatum,
-    );
     async fn record_error(&self, artifact: ArtifactIdNumber, krate: &str, error: &str);
     async fn record_rustc_crate(
         &self,

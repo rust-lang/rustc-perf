@@ -4,7 +4,7 @@ Below is an explanation of the current database schema. This schema is duplicate
 
 ## Overview
 
-In general, the database is used to track three groups of things:
+In general, the database is used to track four groups of things:
 * Performance run statistics (e.g., instruction count) for compile time benchmarks on a per benchmark, profile, and scenario basis.
 * Performance run statistics (e.g., instruction count) for runtime benchmarks on a per benchmark basis.
 * Self profile data gathered with `-Zself-profile`.
@@ -208,31 +208,6 @@ sqlite> select * from runtime_pstat limit 1;
 series      aid         cid         value
 ----------  ----------  ----------  ----------
 1           1           1           24.93
-```
-
-### self_profile_query_series
-
-Describes a parametrization of a self-profile query. Contains a unique combination
-of a benchmark, profile, scenario and a `rustc` self-profile query.
-
-This table exists to avoid duplicating benchmarks, profiles, scenarios etc. many times in the `self_profile_query` table.
-
-```
-sqlite> select * from runtime_pstat limit 1;
-id  crate        profile  cache       query
---  -----        -------  ----------  -----
-1   hello-world  debug    full        hir_crate
-```
-
-### self_profile_query
-
-A measured value of a single `rustc` self-profile query that is unique to a `self_profile_query_series`, `artifact` and a `collection`.
-
-```
-sqlite> select * from runtime_pstat limit 1;
-series  aid    cid  self_time  blocked_time  incremental_load_time  number_of_cache_hits  invocation_count
---      -----  ---  ---------  ------------  ---------------------  --------------------  ----------------
-1       42     58   11.8       10.2          8.4                    224                   408
 ```
 
 ### rustc_compilation

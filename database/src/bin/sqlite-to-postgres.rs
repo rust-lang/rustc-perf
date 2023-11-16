@@ -438,86 +438,6 @@ impl Table for RustcCompilation {
     }
 }
 
-struct SelfProfileQuery;
-
-#[derive(Serialize)]
-struct SelfProfileQueryRow {
-    series: i32,
-    aid: i32,
-    cid: i32,
-    self_time: Nullable<i64>,
-    blocked_time: Nullable<i64>,
-    incremental_load_time: Nullable<i64>,
-    number_of_cache_hits: Nullable<i32>,
-    invocation_count: Nullable<i32>,
-}
-
-impl Table for SelfProfileQuery {
-    fn name() -> &'static str {
-        "self_profile_query"
-    }
-
-    fn sqlite_attributes() -> &'static str {
-        "series, aid, cid, self_time, blocked_time, incremental_load_time, number_of_cache_hits, invocation_count"
-    }
-
-    fn postgres_generated_id_attribute() -> Option<&'static str> {
-        None
-    }
-
-    fn write_postgres_csv_row<W: Write>(writer: &mut csv::Writer<W>, row: &rusqlite::Row) {
-        writer
-            .serialize(SelfProfileQueryRow {
-                series: row.get(0).unwrap(),
-                aid: row.get(1).unwrap(),
-                cid: row.get(2).unwrap(),
-                self_time: row.get(3).unwrap(),
-                blocked_time: row.get(4).unwrap(),
-                incremental_load_time: row.get(5).unwrap(),
-                number_of_cache_hits: row.get(6).unwrap(),
-                invocation_count: row.get(7).unwrap(),
-            })
-            .unwrap();
-    }
-}
-
-struct SelfProfileQuerySeries;
-
-#[derive(Serialize)]
-struct SelfProfileQuerySeriesRow<'a> {
-    id: i32,
-    krate: &'a str,
-    profile: &'a str,
-    cache: &'a str,
-    query: &'a str,
-}
-
-impl Table for SelfProfileQuerySeries {
-    fn name() -> &'static str {
-        "self_profile_query_series"
-    }
-
-    fn sqlite_attributes() -> &'static str {
-        "id, crate, profile, cache, query"
-    }
-
-    fn postgres_generated_id_attribute() -> Option<&'static str> {
-        Some("id")
-    }
-
-    fn write_postgres_csv_row<W: Write>(writer: &mut csv::Writer<W>, row: &rusqlite::Row) {
-        writer
-            .serialize(SelfProfileQuerySeriesRow {
-                id: row.get(0).unwrap(),
-                krate: row.get_ref(1).unwrap().as_str().unwrap(),
-                profile: row.get_ref(2).unwrap().as_str().unwrap(),
-                cache: row.get_ref(3).unwrap().as_str().unwrap(),
-                query: row.get_ref(4).unwrap().as_str().unwrap(),
-            })
-            .unwrap();
-    }
-}
-
 // `Nullable<T>` helps to work around the fact that the `csv` crate (and the CSV
 // format in general) doesn't distinguish between nulls and empty strings, while
 // the Postgres CSV format does.
@@ -639,8 +559,6 @@ async fn main() -> anyhow::Result<()> {
     copy::<PullRequestBuild>(&sqlite_tx, &postgres_tx).await;
     copy::<RawSelfProfile>(&sqlite_tx, &postgres_tx).await;
     copy::<RustcCompilation>(&sqlite_tx, &postgres_tx).await;
-    copy::<SelfProfileQuerySeries>(&sqlite_tx, &postgres_tx).await;
-    copy::<SelfProfileQuery>(&sqlite_tx, &postgres_tx).await;
 
     // This is overly paranoid, but don't commit the Postgres transaction until
     // the rollback of the SQLite transaction succeeds.

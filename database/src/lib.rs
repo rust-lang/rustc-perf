@@ -410,15 +410,6 @@ impl ArtifactId {
 
 intern!(pub struct QueryLabel);
 
-#[derive(PartialEq, Eq, Clone, Debug)]
-pub struct QueryDatum {
-    pub self_time: Duration,
-    pub blocked_time: Duration,
-    pub incremental_load_time: Duration,
-    pub number_of_cache_hits: u32,
-    pub invocation_count: u32,
-}
-
 /// A database row ID for an artifact in the artifact table
 #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct ArtifactIdNumber(pub u32);
