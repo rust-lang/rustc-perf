@@ -1,9 +1,11 @@
 //! This module handles self-profile "rich" APIs (e.g., chrome profiler JSON)
 //! generation from the raw artifacts on demand.
 
+use crate::api::detail_sections::CompilationSection;
 use crate::api::self_profile::ArtifactSize;
 use crate::api::{self_profile, ServerResult};
 use crate::load::SiteCtxt;
+use analyzeme::ProfilingData;
 use anyhow::Context;
 use bytes::Buf;
 use database::ArtifactId;
@@ -197,9 +199,10 @@ impl SelfProfileCache {
 pub struct SelfProfileWithAnalysis {
     pub profile: self_profile::SelfProfile,
     pub profiling_data: analyzeme::AnalysisResults,
+    pub compilation_sections: Vec<CompilationSection>,
 }
 
-pub(crate) async fn download_and_analyze_self_profile(
+async fn download_and_analyze_self_profile(
     ctxt: &SiteCtxt,
     aid: ArtifactId,
     benchmark: &str,
@@ -221,13 +224,99 @@ pub(crate) async fn download_and_analyze_self_profile(
                 .map_err(|e| format!("error extracting self profiling data: {}", e))?,
             Err(e) => return Err(format!("could not fetch raw profile data: {e:?}")),
         };
+
+    let compilation_sections = compute_compilation_sections(&profiling_data);
     let profiling_data = profiling_data.perform_analysis();
     let profile =
         get_self_profile_data(metric, &profiling_data).map_err(|e| format!("{}: {}", aid, e))?;
     Ok(SelfProfileWithAnalysis {
         profile,
         profiling_data,
+        compilation_sections,
     })
+}
+
+/// Tries to categorize the duration of three high-level sections of compilation (frontend,
+/// backend, linker) from the self-profile queries.
+fn compute_compilation_sections(profile: &ProfilingData) -> Vec<CompilationSection> {
+    let mut first_event_start = None;
+    let mut frontend_end = None;
+    let mut backend_start = None;
+    let mut backend_end = None;
+    let mut linker_duration = None;
+
+    for event in profile.iter_full() {
+        if first_event_start.is_none() {
+            first_event_start = event.payload.timestamp().map(|t| t.start());
+        }
+
+        if event.label == "analysis" {
+            // End of "analysis" => end of frontend
+            frontend_end = event.payload.timestamp().map(|t| t.end());
+        } else if event.label == "codegen_crate" {
+            // Start of "codegen_crate" => start of backend
+            backend_start = event.payload.timestamp().map(|t| t.start());
+        } else if event.label == "finish_ongoing_codegen" {
+            // End of "finish_ongoing_codegen" => end of backend
+            backend_end = event.payload.timestamp().map(|t| t.end());
+        } else if event.label == "link_crate" {
+            // The "link" query overlaps codegen, so we want to look at the "link_crate" query
+            // instead.
+            linker_duration = event.duration();
+        }
+    }
+    let mut sections = vec![];
+    if let (Some(start), Some(end)) = (first_event_start, frontend_end) {
+        if let Ok(duration) = end.duration_since(start) {
+            sections.push(CompilationSection {
+                name: "Frontend".to_string(),
+                value: duration.as_nanos() as u64,
+            });
+        }
+    }
+    if let (Some(start), Some(end)) = (backend_start, backend_end) {
+        if let Ok(duration) = end.duration_since(start) {
+            sections.push(CompilationSection {
+                name: "Backend".to_string(),
+                value: duration.as_nanos() as u64,
+            });
+        }
+    }
+    if let Some(duration) = linker_duration {
+        sections.push(CompilationSection {
+            name: "Linker".to_string(),
+            value: duration.as_nanos() as u64,
+        });
+    }
+
+    sections
+}
+
+pub(crate) async fn get_or_download_self_profile(
+    ctxt: &SiteCtxt,
+    aid: ArtifactId,
+    benchmark: &str,
+    profile: &str,
+    scenario: database::Scenario,
+    metric: Option<f64>,
+) -> ServerResult<SelfProfileWithAnalysis> {
+    let key = SelfProfileKey {
+        aid: aid.clone(),
+        benchmark: benchmark.to_string(),
+        profile: profile.to_string(),
+        scenario,
+    };
+    let cache_result = ctxt.self_profile_cache.lock().get(&key);
+    match cache_result {
+        Some(res) => Ok(res),
+        None => {
+            let profile =
+                download_and_analyze_self_profile(ctxt, aid, benchmark, profile, scenario, metric)
+                    .await?;
+            ctxt.self_profile_cache.lock().insert(key, profile.clone());
+            Ok(profile)
+        }
+    }
 }
 
 fn get_self_profile_data(

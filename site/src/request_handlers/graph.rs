@@ -1,21 +1,24 @@
-use collector::Bound;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use collector::Bound;
+
+use crate::api::detail_sections::CompilationSections;
 use crate::api::graphs::GraphKind;
-use crate::api::{detail, graphs, ServerResult};
+use crate::api::{detail_graphs, detail_sections, graphs, ServerResult};
 use crate::db::{self, ArtifactId, Profile, Scenario};
 use crate::interpolate::IsInterpolated;
 use crate::load::SiteCtxt;
 use crate::selector::{CompileBenchmarkQuery, CompileTestCase, Selector, SeriesResponse};
+use crate::self_profile::get_or_download_self_profile;
 
-/// Returns data for a detailed information when comparing a single test result comparison
+/// Returns data for before/after graphs when comparing a single test result comparison
 /// for a compile-time benchmark.
-pub async fn handle_compile_detail(
-    request: detail::Request,
+pub async fn handle_compile_detail_graphs(
+    request: detail_graphs::Request,
     ctxt: Arc<SiteCtxt>,
-) -> ServerResult<detail::Response> {
-    log::info!("handle_compile_detail({:?})", request);
+) -> ServerResult<detail_graphs::Response> {
+    log::info!("handle_compile_detail_graphs({:?})", request);
 
     let artifact_ids = Arc::new(master_artifact_ids_for_range(
         &ctxt,
@@ -23,12 +26,13 @@ pub async fn handle_compile_detail(
         request.end,
     ));
 
+    let scenario = request.scenario.parse()?;
     let interpolated_responses: Vec<_> = ctxt
         .statistic_series(
             CompileBenchmarkQuery::default()
-                .benchmark(Selector::One(request.benchmark))
+                .benchmark(Selector::One(request.benchmark.clone()))
                 .profile(Selector::One(request.profile.parse()?))
-                .scenario(Selector::One(request.scenario.parse()?))
+                .scenario(Selector::One(scenario))
                 .metric(Selector::One(request.stat.parse()?)),
             artifact_ids.clone(),
         )
@@ -48,10 +52,71 @@ pub async fn handle_compile_detail(
     }
     assert!(interpolated_responses.next().is_none());
 
-    Ok(detail::Response {
+    Ok(detail_graphs::Response {
         commits: artifact_ids_to_commits(artifact_ids),
         graphs,
     })
+}
+
+/// Returns data for compilation sections (frontend/backend/linker) when comparing a single test
+/// result comparison for a compile-time benchmark.
+pub async fn handle_compile_detail_sections(
+    request: detail_sections::Request,
+    ctxt: Arc<SiteCtxt>,
+) -> ServerResult<detail_sections::Response> {
+    log::info!("handle_compile_detail_sections({:?})", request);
+
+    let artifact_ids = Arc::new(master_artifact_ids_for_range(
+        &ctxt,
+        request.start,
+        request.end,
+    ));
+
+    let scenario = request.scenario.parse()?;
+
+    async fn calculate_sections(
+        ctxt: &SiteCtxt,
+        aid: Option<&ArtifactId>,
+        benchmark: &str,
+        profile: &str,
+        scenario: Scenario,
+    ) -> Option<CompilationSections> {
+        match aid {
+            Some(aid) => {
+                get_or_download_self_profile(ctxt, aid.clone(), benchmark, profile, scenario, None)
+                    .await
+                    .ok()
+                    .map(|profile| CompilationSections {
+                        sections: profile.compilation_sections,
+                    })
+            }
+            None => None,
+        }
+    }
+
+    // Doc queries are not split into the classic frontend/backend/linker parts.
+    let (before, after) = if request.profile != "doc" {
+        tokio::join!(
+            calculate_sections(
+                &ctxt,
+                artifact_ids.get(0),
+                &request.benchmark,
+                &request.profile,
+                scenario,
+            ),
+            calculate_sections(
+                &ctxt,
+                artifact_ids.get(1),
+                &request.benchmark,
+                &request.profile,
+                scenario,
+            )
+        )
+    } else {
+        (None, None)
+    };
+
+    Ok(detail_sections::Response { before, after })
 }
 
 pub async fn handle_graphs(

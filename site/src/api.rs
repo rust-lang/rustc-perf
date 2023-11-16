@@ -110,7 +110,7 @@ pub mod graphs {
     }
 }
 
-pub mod detail {
+pub mod detail_graphs {
     use crate::api::graphs::{GraphKind, Series};
     use collector::Bound;
     use serde::de::{DeserializeOwned, Error};
@@ -159,10 +159,45 @@ pub mod detail {
         deserializer.deserialize_str(CommaSeparatedVisitor(Default::default()))
     }
 
-    #[derive(Debug, PartialEq, Clone, Serialize)]
+    #[derive(Debug, Serialize)]
     pub struct Response {
         pub commits: Vec<(i64, String)>,
         pub graphs: Vec<Series>,
+    }
+}
+
+pub mod detail_sections {
+    use collector::Bound;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+    pub struct Request {
+        pub start: Bound,
+        pub end: Bound,
+        pub benchmark: String,
+        pub scenario: String,
+        pub profile: String,
+    }
+
+    #[derive(Default, Debug, Clone, Serialize)]
+    pub struct CompilationSection {
+        pub name: String,
+        // It is unspecified if this is duration, fraction or something else. It should only be
+        // evaluated against the total sum of values.
+        pub value: u64,
+    }
+
+    /// Counts how much <resource> (time/instructions) was spent in individual compilation sections
+    /// (e.g. frontend, backend, linking) during the compilation of a single test case.
+    #[derive(Default, Debug, Serialize)]
+    pub struct CompilationSections {
+        pub sections: Vec<CompilationSection>,
+    }
+
+    #[derive(Debug, Serialize)]
+    pub struct Response {
+        pub before: Option<CompilationSections>,
+        pub after: Option<CompilationSections>,
     }
 }
 

@@ -395,11 +395,19 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
                 crate::comparison::handle_triage(input, &ctxt).await,
             ));
         }
-        "/perf/compare-compile-detail" => {
+        "/perf/compare-compile-detail-graphs" => {
             let query = check!(parse_query_string(req.uri()));
             return server
                 .handle_fallible_get_async(&req, &compression, |c| {
-                    request_handlers::handle_compile_detail(query, c)
+                    request_handlers::handle_compile_detail_graphs(query, c)
+                })
+                .await;
+        }
+        "/perf/compare-compile-detail-sections" => {
+            let query = check!(parse_query_string(req.uri()));
+            return server
+                .handle_fallible_get_async(&req, &compression, |c| {
+                    request_handlers::handle_compile_detail_sections(query, c)
                 })
                 .await;
         }
