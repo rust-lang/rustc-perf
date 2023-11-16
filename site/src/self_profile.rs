@@ -7,6 +7,8 @@ use crate::load::SiteCtxt;
 use anyhow::Context;
 use bytes::Buf;
 use database::ArtifactId;
+use lru::LruCache;
+use std::num::NonZeroUsize;
 use std::time::Duration;
 use std::{collections::HashMap, io::Read, time::Instant};
 
@@ -120,6 +122,38 @@ pub(crate) async fn get_self_profile_raw_data(url: &str) -> anyhow::Result<Vec<u
     );
 
     extract(&compressed)
+}
+
+#[derive(Hash, Eq, PartialEq)]
+pub struct SelfProfileKey {
+    pub aid: ArtifactId,
+    pub benchmark: String,
+    pub profile: String,
+    pub scenario: database::Scenario,
+}
+
+/// Stores a cache of N most recently used self profiles.
+/// The profiles are downloaded from S3 and analysed on each request to the detailed compare result
+/// page, but the post-processed results aren't very large in memory (~50 KiB), so it makes sense
+/// to cache them.
+pub struct SelfProfileCache {
+    profiles: LruCache<SelfProfileKey, SelfProfileWithAnalysis>,
+}
+
+impl SelfProfileCache {
+    pub fn new(cache_size: usize) -> Self {
+        Self {
+            profiles: LruCache::new(NonZeroUsize::new(cache_size).unwrap()),
+        }
+    }
+
+    pub fn get(&mut self, key: &SelfProfileKey) -> Option<SelfProfileWithAnalysis> {
+        self.profiles.get(key).cloned()
+    }
+
+    pub fn insert(&mut self, key: SelfProfileKey, profile: SelfProfileWithAnalysis) {
+        self.profiles.put(key, profile);
+    }
 }
 
 #[derive(Clone)]

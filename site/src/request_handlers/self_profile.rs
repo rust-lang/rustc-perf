@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use std::io::Read;
-use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -8,7 +7,6 @@ use bytes::Buf;
 use database::CommitType;
 use headers::{ContentType, Header};
 use hyper::StatusCode;
-use lru::LruCache;
 
 use crate::api::self_profile::ArtifactSizeDelta;
 use crate::api::{self_profile, self_profile_processed, self_profile_raw, ServerResult};
@@ -17,7 +15,8 @@ use crate::db::ArtifactId;
 use crate::load::SiteCtxt;
 use crate::selector::{self};
 use crate::self_profile::{
-    download_and_analyze_self_profile, get_self_profile_raw_data, SelfProfileWithAnalysis,
+    download_and_analyze_self_profile, get_self_profile_raw_data, SelfProfileKey,
+    SelfProfileWithAnalysis,
 };
 use crate::server::{Response, ResponseHeaders};
 
@@ -535,7 +534,35 @@ pub async fn handle_self_profile(
     assert_eq!(cpu_responses.len(), 1, "all selectors are exact");
     let mut cpu_response = cpu_responses.remove(0).series;
 
-    let mut self_profile = download_and_analyze_self_profile(
+    async fn get_from_cache(
+        ctxt: &SiteCtxt,
+        aid: ArtifactId,
+        benchmark: &str,
+        profile: &str,
+        scenario: database::Scenario,
+        metric: Option<f64>,
+    ) -> ServerResult<SelfProfileWithAnalysis> {
+        let key = SelfProfileKey {
+            aid: aid.clone(),
+            benchmark: benchmark.to_string(),
+            profile: profile.to_string(),
+            scenario,
+        };
+        let cache_result = ctxt.self_profile_cache.lock().get(&key);
+        match cache_result {
+            Some(res) => Ok(res),
+            None => {
+                let profile = download_and_analyze_self_profile(
+                    ctxt, aid, benchmark, profile, scenario, metric,
+                )
+                .await?;
+                ctxt.self_profile_cache.lock().insert(key, profile.clone());
+                Ok(profile)
+            }
+        }
+    }
+
+    let mut self_profile = get_from_cache(
         ctxt,
         commits.get(0).unwrap().clone(),
         bench_name,
@@ -546,7 +573,7 @@ pub async fn handle_self_profile(
     .await?;
     let base_self_profile = match commits.get(1) {
         Some(aid) => Some(
-            download_and_analyze_self_profile(
+            get_from_cache(
                 ctxt,
                 aid.clone(),
                 bench_name,
