@@ -1,21 +1,23 @@
 use std::collections::HashSet;
 use std::io::Read;
+use std::num::NonZeroUsize;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use bytes::Buf;
 use database::CommitType;
 use headers::{ContentType, Header};
 use hyper::StatusCode;
+use lru::LruCache;
 
-use crate::api::self_profile::{ArtifactSize, ArtifactSizeDelta};
+use crate::api::self_profile::ArtifactSizeDelta;
 use crate::api::{self_profile, self_profile_processed, self_profile_raw, ServerResult};
 use crate::comparison::Metric;
 use crate::db::ArtifactId;
 use crate::load::SiteCtxt;
 use crate::selector::{self};
 use crate::self_profile::{
-    extract_profiling_data, fetch_raw_self_profile_data, get_self_profile_raw_data,
+    download_and_analyze_self_profile, get_self_profile_raw_data, SelfProfileWithAnalysis,
 };
 use crate::server::{Response, ResponseHeaders};
 
@@ -154,85 +156,12 @@ pub async fn handle_self_profile_processed_download(
     builder.body(hyper::Body::from(output.data)).unwrap()
 }
 
-fn get_self_profile_data(
-    cpu_clock: Option<f64>,
-    profile: &analyzeme::AnalysisResults,
-) -> ServerResult<self_profile::SelfProfile> {
-    let total_time: Duration = profile.query_data.iter().map(|qd| qd.self_time).sum();
-
-    let query_data = profile
-        .query_data
-        .iter()
-        .map(|qd| self_profile::QueryData {
-            label: qd.label.as_str().into(),
-            self_time: qd.self_time.as_nanos() as u64,
-            percent_total_time: ((qd.self_time.as_secs_f64() / total_time.as_secs_f64()) * 100.0)
-                as f32,
-            number_of_cache_misses: qd.number_of_cache_misses as u32,
-            number_of_cache_hits: qd.number_of_cache_hits as u32,
-            invocation_count: qd.invocation_count as u32,
-            blocked_time: qd.blocked_time.as_nanos() as u64,
-            incremental_load_time: qd.incremental_load_time.as_nanos() as u64,
-        })
-        .collect();
-
-    let totals = self_profile::QueryData {
-        label: "Totals".into(),
-        self_time: total_time.as_nanos() as u64,
-        // TODO: check against wall-time from perf stats
-        percent_total_time: cpu_clock
-            .map(|w| ((total_time.as_secs_f64() / w) * 100.0) as f32)
-            // sentinel "we couldn't compute this time"
-            .unwrap_or(-100.0),
-        number_of_cache_misses: profile
-            .query_data
-            .iter()
-            .map(|qd| qd.number_of_cache_misses as u32)
-            .sum(),
-        number_of_cache_hits: profile
-            .query_data
-            .iter()
-            .map(|qd| qd.number_of_cache_hits as u32)
-            .sum(),
-        invocation_count: profile
-            .query_data
-            .iter()
-            .map(|qd| qd.invocation_count as u32)
-            .sum(),
-        blocked_time: profile
-            .query_data
-            .iter()
-            .map(|qd| qd.blocked_time.as_nanos() as u64)
-            .sum(),
-        incremental_load_time: profile
-            .query_data
-            .iter()
-            .map(|qd| qd.incremental_load_time.as_nanos() as u64)
-            .sum(),
-    };
-
-    let artifact_sizes = profile
-        .artifact_sizes
-        .iter()
-        .map(|a| ArtifactSize {
-            label: a.label.as_str().into(),
-            bytes: a.value,
-        })
-        .collect();
-
-    Ok(self_profile::SelfProfile {
-        query_data,
-        totals,
-        artifact_sizes: Some(artifact_sizes),
-    })
-}
-
 // Add query data entries to `profile` for any queries in `base_profile` which are not present in
 // `profile` (i.e. queries not invoked during the compilation that generated `profile`). This is
 // bit of a hack to enable showing rows for these queries in the table on the self-profile page.
 fn add_uninvoked_base_profile_queries(
     profile: &mut self_profile::SelfProfile,
-    base_profile: &Option<self_profile::SelfProfile>,
+    base_profile: Option<&self_profile::SelfProfile>,
 ) {
     let base_profile = match base_profile.as_ref() {
         Some(bp) => bp,
@@ -265,7 +194,7 @@ fn add_uninvoked_base_profile_queries(
 
 fn get_self_profile_delta(
     profile: &self_profile::SelfProfile,
-    base_profile: &Option<self_profile::SelfProfile>,
+    base_profile: Option<&self_profile::SelfProfile>,
     profiling_data: &analyzeme::AnalysisResults,
     base_profiling_data: Option<&analyzeme::AnalysisResults>,
 ) -> Option<self_profile::SelfProfileDelta> {
@@ -606,45 +535,44 @@ pub async fn handle_self_profile(
     assert_eq!(cpu_responses.len(), 1, "all selectors are exact");
     let mut cpu_response = cpu_responses.remove(0).series;
 
-    let mut self_profile_data = Vec::new();
-    let conn = ctxt.conn().await;
-    for commit in commits.iter() {
-        let aids_and_cids = conn
-            .list_self_profile(commit.clone(), bench_name, profile, &body.scenario)
-            .await;
-        if let Some((aid, cid)) = aids_and_cids.first() {
-            match fetch_raw_self_profile_data(*aid, bench_name, profile, scenario, *cid).await {
-                Ok(d) => self_profile_data.push(
-                    extract_profiling_data(d)
-                        .map_err(|e| format!("error extracting self profiling data: {}", e))?,
-                ),
-                Err(e) => return Err(format!("could not fetch raw profile data: {e:?}")),
-            };
-        }
-    }
-    let profiling_data = self_profile_data.remove(0).perform_analysis();
-    let mut profile = get_self_profile_data(cpu_response.next().unwrap().1, &profiling_data)
-        .map_err(|e| format!("{}: {}", body.commit, e))?;
-    let (base_profile, base_raw_data) = if body.base_commit.is_some() {
-        let base_profiling_data = self_profile_data.remove(0).perform_analysis();
-        let profile = get_self_profile_data(cpu_response.next().unwrap().1, &base_profiling_data)
-            .map_err(|e| format!("{}: {}", body.base_commit.as_ref().unwrap(), e))?;
-        (Some(profile), Some(base_profiling_data))
-    } else {
-        (None, None)
+    let mut self_profile = download_and_analyze_self_profile(
+        ctxt,
+        commits.get(0).unwrap().clone(),
+        bench_name,
+        profile,
+        scenario,
+        cpu_response.next().unwrap().1,
+    )
+    .await?;
+    let base_self_profile = match commits.get(1) {
+        Some(aid) => Some(
+            download_and_analyze_self_profile(
+                ctxt,
+                aid.clone(),
+                bench_name,
+                profile,
+                scenario,
+                cpu_response.next().unwrap().1,
+            )
+            .await?,
+        ),
+        None => None,
     };
-
-    add_uninvoked_base_profile_queries(&mut profile, &base_profile);
-    let mut base_profile_delta = get_self_profile_delta(
-        &profile,
-        &base_profile,
-        &profiling_data,
-        base_raw_data.as_ref(),
+    add_uninvoked_base_profile_queries(
+        &mut self_profile.profile,
+        base_self_profile.as_ref().map(|p| &p.profile),
     );
-    sort_self_profile(&mut profile, &mut base_profile_delta, sort_idx);
+
+    let mut base_profile_delta = get_self_profile_delta(
+        &self_profile.profile,
+        base_self_profile.as_ref().map(|p| &p.profile),
+        &self_profile.profiling_data,
+        base_self_profile.as_ref().map(|p| &p.profiling_data),
+    );
+    sort_self_profile(&mut self_profile.profile, &mut base_profile_delta, sort_idx);
 
     Ok(self_profile::Response {
         base_profile_delta,
-        profile,
+        profile: self_profile.profile,
     })
 }
