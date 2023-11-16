@@ -202,7 +202,7 @@ impl Table for Error {
     fn sqlite_execute_insert(&self, statement: &mut rusqlite::Statement, row: tokio_postgres::Row) {
         statement
             .execute(params![
-                row.get::<_, i32>(0),
+                row.get::<_, &str>(0),
                 row.get::<_, i32>(1),
                 row.get::<_, Option<&str>>(2),
             ])
