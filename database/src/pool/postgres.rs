@@ -8,7 +8,7 @@ use chrono::{DateTime, TimeZone, Utc};
 use hashbrown::HashMap;
 use native_tls::{Certificate, TlsConnector};
 use postgres_native_tls::MakeTlsConnector;
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryInto;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -322,9 +322,6 @@ pub struct CachedStatements {
     get_rustc_compilation_by_crate: Statement,
     insert_pstat: Statement,
     insert_rustc: Statement,
-    insert_self_profile_query: Statement,
-    select_self_query_series: Statement,
-    insert_self_query_series: Statement,
     insert_pstat_series: Statement,
     select_pstat_series: Statement,
     get_error: Statement,
@@ -443,24 +440,7 @@ impl PostgresConnection {
                     .prepare("insert into rustc_compilation (aid, cid, crate, duration) VALUES ($1, $2, $3, $4)")
                     .await
                     .unwrap(),
-                insert_self_profile_query: conn
-                    .prepare(
-                        "insert into self_profile_query(
-                            series,
-                            aid,
-                            cid,
-                            self_time,
-                            blocked_time,
-                            incremental_load_time,
-                            number_of_cache_hits,
-                            invocation_count
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-                    )
-                    .await
-                    .unwrap(),
                 get_error: conn.prepare("select benchmark, error from error where aid = $1").await.unwrap(),
-                select_self_query_series: conn.prepare("select id from self_profile_query_series where crate = $1 and profile = $2 and cache = $3 and query = $4").await.unwrap(),
-                insert_self_query_series: conn.prepare("insert into self_profile_query_series (crate, profile, cache, query) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING RETURNING id").await.unwrap(),
                 insert_pstat_series: conn.prepare("insert into pstat_series (crate, profile, cache, statistic) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING RETURNING id").await.unwrap(),
                 select_pstat_series: conn.prepare("select id from pstat_series where crate = $1 and profile = $2 and cache = $3 and statistic = $4").await.unwrap(),
                 collection_id: conn.prepare("insert into collection (perf_commit) VALUES ($1) returning id").await.unwrap(),
@@ -977,64 +957,6 @@ where
         };
 
         ArtifactIdNumber(aid)
-    }
-
-    async fn record_self_profile_query(
-        &self,
-        collection: CollectionId,
-        artifact: ArtifactIdNumber,
-        benchmark: &str,
-        profile: Profile,
-        scenario: Scenario,
-        query: &str,
-        qd: crate::QueryDatum,
-    ) {
-        let profile = profile.to_string();
-        let scenario = scenario.to_string();
-        let sid = self
-            .conn()
-            .query_opt(
-                &self.statements().select_self_query_series,
-                &[&benchmark, &profile, &scenario, &query],
-            )
-            .await
-            .unwrap();
-        let sid: i32 = match sid {
-            Some(id) => id.get(0),
-            None => {
-                self.conn()
-                    .query_one(
-                        &self.statements().insert_self_query_series,
-                        &[&benchmark, &profile, &scenario, &query],
-                    )
-                    .await
-                    .unwrap();
-                self.conn()
-                    .query_one(
-                        &self.statements().select_self_query_series,
-                        &[&benchmark, &profile, &scenario, &query],
-                    )
-                    .await
-                    .unwrap()
-                    .get(0)
-            }
-        };
-        self.conn()
-            .execute(
-                &self.statements().insert_self_profile_query,
-                &[
-                    &{ sid },
-                    &(artifact.0 as i32),
-                    &{ collection.0 },
-                    &i64::try_from(qd.self_time.as_nanos()).unwrap(),
-                    &i64::try_from(qd.blocked_time.as_nanos()).unwrap(),
-                    &i64::try_from(qd.incremental_load_time.as_nanos()).unwrap(),
-                    &(qd.number_of_cache_hits as i32),
-                    &(qd.invocation_count as i32),
-                ],
-            )
-            .await
-            .unwrap();
     }
 
     async fn record_error(&self, artifact: ArtifactIdNumber, krate: &str, error: &str) {

@@ -3,12 +3,11 @@ use crate::{
     ArtifactCollection, ArtifactId, Benchmark, CollectionId, Commit, CommitType, CompileBenchmark,
     Date, Profile,
 };
-use crate::{ArtifactIdNumber, Index, QueryDatum, QueuedCommit};
+use crate::{ArtifactIdNumber, Index, QueuedCommit};
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use hashbrown::HashMap;
 use rusqlite::params;
 use rusqlite::OptionalExtension;
-use std::convert::TryFrom;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Mutex;
@@ -425,10 +424,13 @@ impl SqliteConnection {
 #[async_trait::async_trait]
 impl Connection for SqliteConnection {
     async fn maybe_create_indices(&mut self) {
-        self.raw().execute_batch("
+        self.raw()
+            .execute_batch(
+                "
             create index if not exists pstat_on_series_aid on pstat(series, aid);
-            create index if not exists self_profile_query_on_series_aid on self_profile_query(series, aid);
-        ").unwrap();
+        ",
+            )
+            .unwrap();
     }
 
     async fn transaction(&mut self) -> Box<dyn Transaction + '_> {
@@ -697,56 +699,6 @@ impl Connection for SqliteConnection {
         // self profile files into sqlite database or something like that, not
         // yet clear.
         unimplemented!("recording raw self profile files is not implemented for sqlite")
-    }
-    async fn record_self_profile_query(
-        &self,
-        collection: CollectionId,
-        artifact: ArtifactIdNumber,
-        benchmark: &str,
-        profile: Profile,
-        scenario: crate::Scenario,
-        query: &str,
-        qd: QueryDatum,
-    ) {
-        let profile = profile.to_string();
-        let scenario = scenario.to_string();
-        self.raw_ref().execute("insert or ignore into self_profile_query_series (crate, profile, cache, query) VALUES (?, ?, ?, ?)", params![
-            &benchmark,
-            &profile,
-            &scenario,
-            &query,
-        ]).unwrap();
-        let sid: i32 = self.raw_ref().query_row("select id from self_profile_query_series where crate = ? and profile = ? and cache = ? and query = ?", params![
-            &benchmark,
-            &profile,
-            &scenario,
-            &query,
-        ], |r| r.get(0)).unwrap();
-        self.raw_ref()
-            .prepare_cached(
-                "insert into self_profile_query(
-                    series,
-                    aid,
-                    cid,
-                    self_time,
-                    blocked_time,
-                    incremental_load_time,
-                    number_of_cache_hits,
-                    invocation_count
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            )
-            .unwrap()
-            .execute(params![
-                &sid,
-                &artifact.0,
-                &collection.0,
-                &i64::try_from(qd.self_time.as_nanos()).unwrap(),
-                &i64::try_from(qd.blocked_time.as_nanos()).unwrap(),
-                &i64::try_from(qd.incremental_load_time.as_nanos()).unwrap(),
-                qd.number_of_cache_hits,
-                qd.invocation_count,
-            ])
-            .unwrap();
     }
 
     async fn record_error(&self, artifact: ArtifactIdNumber, krate: &str, error: &str) {

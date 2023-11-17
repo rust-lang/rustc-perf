@@ -134,29 +134,6 @@ impl<'a> BenchProcessor<'a> {
             ));
         }
 
-        if let Some(sp) = &stats.1 {
-            let conn = &*self.conn;
-            let artifact_row_id = self.artifact_row_id;
-            let benchmark = self.benchmark.0.as_str();
-            for qd in &sp.query_data {
-                buf.push(conn.record_self_profile_query(
-                    collection,
-                    artifact_row_id,
-                    benchmark,
-                    profile,
-                    scenario,
-                    qd.label.as_str(),
-                    database::QueryDatum {
-                        self_time: qd.self_time,
-                        blocked_time: qd.blocked_time,
-                        incremental_load_time: qd.incremental_load_time,
-                        number_of_cache_hits: qd.number_of_cache_hits,
-                        invocation_count: qd.invocation_count,
-                    },
-                ));
-            }
-        }
-
         while let Some(()) = buf.next().await {}
     }
 
