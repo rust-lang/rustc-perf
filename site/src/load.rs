@@ -295,7 +295,7 @@ fn parse_published_artifact_tag(line: &str) -> Option<String> {
     if let Some(date) = date {
         if let Some(name) = name {
             // Create beta artifact in the form of beta-YYYY-MM-DD
-            if name == "channel-rust-beta.toml" {
+            if name.starts_with("channel-rust-") && name.ends_with("-beta.toml") {
                 return Some(format!("beta-{date}"));
             } else if let Some(capture) = VERSION_REGEX.captures(name) {
                 if let Some(version) = capture.get(1).map(|c| c.as_str()) {
