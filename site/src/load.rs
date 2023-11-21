@@ -295,8 +295,19 @@ fn parse_published_artifact_tag(line: &str) -> Option<String> {
     if let Some(date) = date {
         if let Some(name) = name {
             // Create beta artifact in the form of beta-YYYY-MM-DD
-            if name.starts_with("channel-rust-") && name.ends_with("-beta.toml") {
+            if name == "channel-rust-beta.toml" {
                 return Some(format!("beta-{date}"));
+            } else if name.contains("beta") {
+                // No other beta releases are recognized as toolchains.
+                //
+                // We also have names like this:
+                //
+                // * channel-rust-1.75-beta.toml
+                // * channel-rust-1.75.0-beta.toml
+                // * channel-rust-1.75.0-beta.1.toml
+                //
+                // Which should get ignored for now, they're not consumable via rustup yet.
+                return None;
             } else if let Some(capture) = VERSION_REGEX.captures(name) {
                 if let Some(version) = capture.get(1).map(|c| c.as_str()) {
                     return Some(version.to_string());
@@ -757,6 +768,36 @@ mod tests {
                 "static.rust-lang.org/dist/2022-08-15/channel-rust-1.63.0.toml"
             ),
             Some("1.63.0".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_published_beta_non_rustup_1() {
+        assert_eq!(
+            parse_published_artifact_tag(
+                "static.rust-lang.org/dist/2023-11-13/channel-rust-1.75-beta.toml"
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn parse_published_beta_non_rustup_2() {
+        assert_eq!(
+            parse_published_artifact_tag(
+                "static.rust-lang.org/dist/2023-11-13/channel-rust-1.75.0-beta.toml"
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn parse_published_beta_non_rustup_3() {
+        assert_eq!(
+            parse_published_artifact_tag(
+                "static.rust-lang.org/dist/2023-11-13/channel-rust-1.75.0-beta.1.toml"
+            ),
+            None
         );
     }
 }
