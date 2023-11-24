@@ -1,11 +1,12 @@
 #![recursion_limit = "1024"]
 
 use anyhow::Context;
-use clap::builder::{PossibleValue, TypedValueParser};
-use clap::{Arg, Parser, ValueEnum};
+use clap::builder::TypedValueParser;
+use clap::{Arg, Parser};
 use collector::api::next_artifact::NextArtifact;
 use collector::codegen::{codegen_diff, CodegenType};
 use collector::compile::benchmark::category::Category;
+use collector::compile::benchmark::codegen_backend::CodegenBackend;
 use collector::compile::benchmark::profile::Profile;
 use collector::compile::benchmark::scenario::Scenario;
 use collector::compile::benchmark::{
@@ -22,6 +23,7 @@ use std::fs::File;
 use std::future::Future;
 use std::io::BufWriter;
 use std::io::Write;
+use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::process::Command;
@@ -82,6 +84,7 @@ struct CompileBenchmarkConfig {
     benchmarks: Vec<Benchmark>,
     profiles: Vec<Profile>,
     scenarios: Vec<Scenario>,
+    backends: Vec<CodegenBackend>,
     iterations: Option<usize>,
     is_self_profile: bool,
     bench_rustc: bool,
@@ -183,6 +186,7 @@ fn profile_compile(
     benchmarks: &[Benchmark],
     profiles: &[Profile],
     scenarios: &[Scenario],
+    backends: &[CodegenBackend],
     errors: &mut BenchmarkErrors,
 ) {
     eprintln!("Profiling {} with {:?}", toolchain.id, profiler);
@@ -201,6 +205,7 @@ fn profile_compile(
                 &mut processor,
                 profiles,
                 scenarios,
+                backends,
                 toolchain,
                 Some(1),
             ));
@@ -230,55 +235,24 @@ fn main() {
     }
 }
 
-#[derive(Debug, Clone)]
-struct ProfileArg(Vec<Profile>);
+/// We need to have a separate wrapper over a Vec<T>, otherwise Clap would incorrectly
+/// assume that `EnumArgParser` parses a single item, rather than a list of items.
+#[derive(Clone, Debug)]
+struct MultiEnumValue<T>(Vec<T>);
 
+/// Parser for enums (like profile or scenario) which can be passed either as a comma-delimited
+/// string or as the "All" string, which selects all variants.
 #[derive(Clone)]
-struct ProfileArgParser;
+struct EnumArgParser<T>(PhantomData<T>);
 
-/// We need to use a TypedValueParser to provide possible values help.
-/// If we just use `FromStr` + `#[arg(possible_values = [...])]`, `clap` will not allow passing
-/// multiple values.
-impl TypedValueParser for ProfileArgParser {
-    type Value = ProfileArg;
-
-    fn parse_ref(
-        &self,
-        cmd: &clap::Command,
-        arg: Option<&Arg>,
-        value: &OsStr,
-    ) -> Result<Self::Value, clap::Error> {
-        if value == "All" {
-            Ok(ProfileArg(Profile::all()))
-        } else {
-            let profiles: Result<Vec<Profile>, _> = value
-                .to_str()
-                .unwrap()
-                .split(',')
-                .map(|item| clap::value_parser!(Profile).parse_ref(cmd, arg, OsStr::new(item)))
-                .collect();
-
-            Ok(ProfileArg(profiles?))
-        }
-    }
-
-    fn possible_values(&self) -> Option<Box<dyn Iterator<Item = PossibleValue> + '_>> {
-        let values = Profile::value_variants()
-            .iter()
-            .filter_map(|item| item.to_possible_value())
-            .chain([PossibleValue::new("All")]);
-        Some(Box::new(values))
+impl<T> Default for EnumArgParser<T> {
+    fn default() -> Self {
+        Self(Default::default())
     }
 }
 
-#[derive(Debug, Clone)]
-struct ScenarioArg(Vec<Scenario>);
-
-#[derive(Clone)]
-struct ScenarioArgParser;
-
-impl TypedValueParser for ScenarioArgParser {
-    type Value = ScenarioArg;
+impl<T: clap::ValueEnum + Sync + Send + 'static> TypedValueParser for EnumArgParser<T> {
+    type Value = MultiEnumValue<T>;
 
     fn parse_ref(
         &self,
@@ -287,25 +261,17 @@ impl TypedValueParser for ScenarioArgParser {
         value: &OsStr,
     ) -> Result<Self::Value, clap::Error> {
         if value == "All" {
-            Ok(ScenarioArg(Scenario::all()))
+            Ok(MultiEnumValue(T::value_variants().to_vec()))
         } else {
-            let scenarios: Result<Vec<Scenario>, _> = value
+            let values: Result<Vec<T>, _> = value
                 .to_str()
                 .unwrap()
                 .split(',')
-                .map(|item| clap::value_parser!(Scenario).parse_ref(cmd, arg, OsStr::new(item)))
+                .map(|item| clap::value_parser!(T).parse_ref(cmd, arg, OsStr::new(item)))
                 .collect();
 
-            Ok(ScenarioArg(scenarios?))
+            Ok(MultiEnumValue(values?))
         }
-    }
-
-    fn possible_values(&self) -> Option<Box<dyn Iterator<Item = PossibleValue> + '_>> {
-        let values = Scenario::value_variants()
-            .iter()
-            .filter_map(|item| item.to_possible_value())
-            .chain([PossibleValue::new("All")]);
-        Some(Box::new(values))
     }
 }
 
@@ -358,20 +324,24 @@ struct CompileTimeOptions {
     #[arg(
         long = "profiles",
         alias = "builds", // the old name, for backward compatibility
-        value_parser = ProfileArgParser,
+        value_parser = EnumArgParser::<Profile>::default(),
         // Don't run rustdoc by default
         default_value = "Check,Debug,Opt",
     )]
-    profiles: ProfileArg,
+    profiles: MultiEnumValue<Profile>,
 
     /// Measure the scenarios in this comma-separated list
     #[arg(
         long = "scenarios",
         alias = "runs", // the old name, for backward compatibility
-        value_parser = ScenarioArgParser,
+        value_parser = EnumArgParser::<Scenario>::default(),
         default_value = "All"
     )]
-    scenarios: ScenarioArg,
+    scenarios: MultiEnumValue<Scenario>,
+
+    /// Measure the codegen backends in this comma-separated list
+    #[arg(long = "backends", value_parser = EnumArgParser::<CodegenBackend>::default(), default_value = "Llvm")]
+    codegen_backends: MultiEnumValue<CodegenBackend>,
 
     /// The path to the local rustdoc to measure
     #[arg(long)]
@@ -785,6 +755,7 @@ fn main_result() -> anyhow::Result<i32> {
             log_db(&db);
             let profiles = opts.profiles.0;
             let scenarios = opts.scenarios.0;
+            let backends = opts.codegen_backends.0;
 
             let pool = database::Pool::open(&db.db);
 
@@ -820,6 +791,7 @@ fn main_result() -> anyhow::Result<i32> {
                 benchmarks,
                 profiles,
                 scenarios,
+                backends,
                 iterations: Some(iterations),
                 is_self_profile: self_profile.self_profile,
                 bench_rustc: bench_rustc.bench_rustc,
@@ -896,8 +868,9 @@ fn main_result() -> anyhow::Result<i32> {
 
                     let compile_config = CompileBenchmarkConfig {
                         benchmarks,
-                        profiles: Profile::all(),
+                        profiles: vec![Profile::Check, Profile::Debug, Profile::Doc, Profile::Opt],
                         scenarios: Scenario::all(),
+                        backends: vec![CodegenBackend::Llvm],
                         iterations: runs.map(|v| v as usize),
                         is_self_profile: self_profile.self_profile,
                         bench_rustc: bench_rustc.bench_rustc,
@@ -965,6 +938,7 @@ fn main_result() -> anyhow::Result<i32> {
 
             let profiles = &opts.profiles.0;
             let scenarios = &opts.scenarios.0;
+            let backends = &opts.codegen_backends.0;
 
             let mut benchmarks = get_compile_benchmarks(
                 &compile_benchmark_dir,
@@ -1003,6 +977,7 @@ fn main_result() -> anyhow::Result<i32> {
                         &benchmarks,
                         profiles,
                         scenarios,
+                        backends,
                         &mut errors,
                     );
                     Ok(id)
@@ -1299,6 +1274,7 @@ fn bench_published_artifact(
             benchmarks: compile_benchmarks,
             profiles,
             scenarios,
+            backends: vec![CodegenBackend::Llvm],
             iterations: Some(3),
             is_self_profile: false,
             bench_rustc: false,
@@ -1406,6 +1382,7 @@ fn bench_compile(
                     processor,
                     &config.profiles,
                     &config.scenarios,
+                    &config.backends,
                     &shared.toolchain,
                     config.iterations,
                 )))

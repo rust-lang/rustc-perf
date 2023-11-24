@@ -21,6 +21,8 @@ The following is a glossary of domain specific terminology. Although benchmarks 
   - `incr-full`: incremental compilation is used, with an empty incremental cache.
   - `incr-unchanged`: incremental compilation is used, with a full incremental cache and no code changes made.
   - `incr-patched`: incremental compilation is used, with a full incremental cache and some code changes made.
+* **backend**: the codegen backend used for compiling Rust code.
+  - `llvm`: the default codegen backend
 * **category**: a high-level group of benchmarks. Currently, there are three categories, primary (mostly real-world crates), secondary (mostly stress tests), and stable (old real-world crates, only used for the dashboard).
 * **artifact type**: describes what kind of artifact does the benchmark build. Either `library` or `binary`.
 

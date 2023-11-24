@@ -1,3 +1,4 @@
+use crate::compile::benchmark::codegen_backend::CodegenBackend;
 use crate::compile::benchmark::profile::Profile;
 use crate::compile::benchmark::scenario::Scenario;
 use crate::compile::benchmark::BenchmarkName;
@@ -77,6 +78,7 @@ impl<'a> BenchProcessor<'a> {
         &mut self,
         scenario: database::Scenario,
         profile: Profile,
+        backend: CodegenBackend,
         stats: (Stats, Option<SelfProfile>, Option<SelfProfileFiles>),
     ) {
         let version = get_rustc_perf_commit();
@@ -90,8 +92,14 @@ impl<'a> BenchProcessor<'a> {
             Profile::Clippy => database::Profile::Clippy,
         };
 
+        let backend = match backend {
+            CodegenBackend::Llvm => database::CodegenBackend::Llvm,
+        };
+
         if let Some(files) = stats.2 {
             if env::var_os("RUSTC_PERF_UPLOAD_TO_S3").is_some() {
+                // FIXME: Record codegen backend in the self profile name
+
                 // We can afford to have the uploads run concurrently with
                 // rustc. Generally speaking, they take up almost no CPU time
                 // (just copying data into the network). Plus, during
@@ -129,6 +137,7 @@ impl<'a> BenchProcessor<'a> {
                 self.benchmark.0.as_str(),
                 profile,
                 scenario,
+                backend,
                 stat,
                 value,
             ));
@@ -187,17 +196,22 @@ impl<'a> Processor for BenchProcessor<'a> {
                     }
 
                     let fut = match data.scenario {
-                        Scenario::Full => {
-                            self.insert_stats(database::Scenario::Empty, data.profile, res)
-                        }
+                        Scenario::Full => self.insert_stats(
+                            database::Scenario::Empty,
+                            data.profile,
+                            data.backend,
+                            res,
+                        ),
                         Scenario::IncrFull => self.insert_stats(
                             database::Scenario::IncrementalEmpty,
                             data.profile,
+                            data.backend,
                             res,
                         ),
                         Scenario::IncrUnchanged => self.insert_stats(
                             database::Scenario::IncrementalFresh,
                             data.profile,
+                            data.backend,
                             res,
                         ),
                         Scenario::IncrPatched => {
@@ -205,6 +219,7 @@ impl<'a> Processor for BenchProcessor<'a> {
                             self.insert_stats(
                                 database::Scenario::IncrementalPatch(patch.name),
                                 data.profile,
+                                data.backend,
                                 res,
                             )
                         }

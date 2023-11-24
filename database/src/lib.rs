@@ -360,6 +360,39 @@ impl PartialOrd for Scenario {
     }
 }
 
+/// The codegen backend used for compilation.
+#[derive(
+    Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+pub enum CodegenBackend {
+    /// The default LLVM backend
+    Llvm,
+}
+
+impl CodegenBackend {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            CodegenBackend::Llvm => "llvm",
+        }
+    }
+}
+
+impl FromStr for CodegenBackend {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s.to_ascii_lowercase().as_str() {
+            "llvm" => CodegenBackend::Llvm,
+            _ => return Err(format!("{} is not a codegen backend", s)),
+        })
+    }
+}
+
+impl fmt::Display for CodegenBackend {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
 /// An identifier for a built version of the compiler
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum ArtifactId {
@@ -427,7 +460,7 @@ pub struct Index {
     artifacts: Indexed<Box<str>>,
     /// Id lookup of compile stat description ids
     /// For legacy reasons called `pstat_series` in the database, and so the name is kept here.
-    pstat_series: Indexed<(Benchmark, Profile, Scenario, Metric)>,
+    pstat_series: Indexed<(Benchmark, Profile, Scenario, CodegenBackend, Metric)>,
     /// Id lookup of runtime stat description ids
     runtime_pstat_series: Indexed<(Benchmark, Metric)>,
 }
@@ -547,6 +580,7 @@ pub enum DbLabel {
         benchmark: Benchmark,
         profile: Profile,
         scenario: Scenario,
+        backend: CodegenBackend,
         metric: Metric,
     },
 }
@@ -564,10 +598,11 @@ impl Lookup for DbLabel {
                 benchmark,
                 profile,
                 scenario,
+                backend,
                 metric,
             } => index
                 .pstat_series
-                .get(&(*benchmark, *profile, *scenario, *metric)),
+                .get(&(*benchmark, *profile, *scenario, *backend, *metric)),
         }
     }
 }
@@ -617,7 +652,7 @@ impl Index {
         self.pstat_series
             .map
             .keys()
-            .map(|(_, _, _, metric)| metric)
+            .map(|(_, _, _, _, metric)| metric)
             .collect::<std::collections::HashSet<_>>()
             .into_iter()
             .map(|s| s.to_string())
@@ -643,7 +678,7 @@ impl Index {
         &self,
     ) -> impl Iterator<
         Item = (
-            &(Benchmark, Profile, Scenario, Metric),
+            &(Benchmark, Profile, Scenario, CodegenBackend, Metric),
             StatisticalDescriptionId,
         ),
     > + '_ {

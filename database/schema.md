@@ -26,15 +26,16 @@ Here is the diagram for compile-time benchmarks:
 │ └────────────┘  └───────────────┘ │└────────────┘ │
 │                                   │               │
 │                                   │               │
-│ ┌───────────────┐  ┌──────────┐   |               │
+│ ┌───────────────┐  ┌──────────┐   │               │
 │ │ pstat_series  │  │ pstat    │   │               │
 │ ├───────────────┤  ├──────────┤   │               │ 
 │ │ id *          │◄┐│ id *     │   │               │
 └─┤ crate         │ └┤ series   │   │               │ 
   │ profile       │  │ aid      ├───┼───────────────┘
-  │ cache         │  │ cid      ├───┘
-  │ statistic     │  │ value    │
-  └───────────────┘  └──────────┘
+  │ scenario      │  │ cid      │   │
+  │ backend       │  │ value    ├───┘
+  │ metric        │  └──────────┘
+  └───────────────┘
 ```
 
 For runtime benchmarks the schema very similar, but there are different table names:
@@ -140,19 +141,20 @@ of a crate, profile, scenario and the metric being collected.
 
 * crate (aka `benchmark`): the benchmarked crate which might be a crate from crates.io or a crate made specifically to stress some part of the compiler.
 * profile: what type of compilation is happening - check build, optimized build (a.k.a. release build), debug build, or doc build.
-* cache (aka `scenario`): describes how much of the incremental cache is full. An empty incremental cache means that the compiler must do a full build.
-* statistic (aka `metric`): the type of metric being collected
+* scenario: describes how much of the incremental cache is full. An empty incremental cache means that the compiler must do a full build.
+* backend: codegen backend used for compilation.
+* metric: the type of metric being collected.
 
 This corresponds to a [`statistic description`](../docs/glossary.md).
 
-There is a separate table for this collection to avoid duplicating crates, prfiles, scenarios etc.
+There is a separate table for this collection to avoid duplicating crates, profiles, scenarios etc.
 many times in the `pstat` table.
 
 ```
 sqlite> select * from pstat_series limit 1;
-id          crate       profile     cache       statistic
-----------  ----------  ----------  ----------  ------------
-1           helloworld  check       full        task-clock:u
+id          crate       profile     scenario    backend  metric
+----------  ----------  ----------  ----------  -------  ------------
+1           helloworld  check       full        llvm     task-clock:u
 ```
 
 ### pstat
