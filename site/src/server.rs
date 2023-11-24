@@ -375,11 +375,11 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
                 crate::comparison::handle_triage(input, &ctxt).await,
             ));
         }
-        "/perf/graph" => {
+        "/perf/compare-compile-detail" => {
             let query = check!(parse_query_string(req.uri()));
             return server
                 .handle_fallible_get_async(&req, &compression, |c| {
-                    request_handlers::handle_graph(query, c)
+                    request_handlers::handle_compile_detail(query, c)
                 })
                 .await;
         }

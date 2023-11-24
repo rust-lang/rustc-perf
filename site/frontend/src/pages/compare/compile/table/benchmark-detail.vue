@@ -5,15 +5,15 @@ import {
   CompileBenchmarkMetadata,
   CompileTestCase,
 } from "../common";
-import {computed, onMounted, Ref, ref} from "vue";
+import {capitalize, computed, onMounted, Ref, ref} from "vue";
 import Tooltip from "../../tooltip.vue";
 import {ArtifactDescription} from "../../types";
 import {daysBetweenDates, getFutureDate, getPastDate} from "./utils";
 import {GraphRenderOpts, renderPlots} from "../../../../graph/render";
-import {GRAPH_RESOLVER} from "../../../../graph/resolver";
-import {GraphKind} from "../../../../graph/data";
+import {GraphData, GraphKind, GraphsSelector} from "../../../../graph/data";
 import uPlot from "uplot";
 import CachegrindCmd from "../../../../components/cachegrind-cmd.vue";
+import {COMPILE_DETAIL_RESOLVER} from "./detail-resolver";
 
 const props = defineProps<{
   testCase: CompileTestCase;
@@ -98,16 +98,6 @@ function drawCurrentDate(opts: GraphRenderOpts, date: Date) {
 
 // Render both relative and absolute graphs
 async function renderGraphs() {
-  // We want to be able to see noise "blips" vs. a previous artifact.
-  // The "percent relative from previous commit" graph should be the best to
-  // see these kinds of changes.
-  renderGraph("percentrelative" as GraphKind, relativeChartElement);
-  // We also want to see whether a change maintained its value or whether it was noise and has since
-  // returned to steady state. Here, an absolute graph ("raw") is best.
-  renderGraph("raw" as GraphKind, absoluteChartElement);
-}
-
-async function renderGraph(kind: GraphKind, chartRef: Ref<HTMLElement | null>) {
   const {start, end, date} = graphRange.value;
   const selector = {
     benchmark: props.testCase.benchmark,
@@ -116,9 +106,68 @@ async function renderGraph(kind: GraphKind, chartRef: Ref<HTMLElement | null>) {
     stat: props.metric,
     start,
     end,
-    kind,
+    kinds: ["percentrelative", "raw"] as GraphKind[],
   };
-  const graphData = await GRAPH_RESOLVER.loadGraph(selector);
+  const detail = await COMPILE_DETAIL_RESOLVER.loadDetail(selector);
+  if (detail.commits.length === 0) {
+    return;
+  }
+
+  function buildGraph(
+    index: number,
+    kind: GraphKind
+  ): [GraphData, GraphsSelector] {
+    const data = {
+      commits: detail.commits,
+      benchmarks: {
+        [selector.benchmark]: {
+          // The server returns profiles capitalized, so we need to match that
+          // here, so that the graph code can find the expected profile.
+          [capitalize(selector.profile)]: {
+            [selector.scenario]: detail.graphs[index],
+          },
+        },
+      },
+    };
+    const graphSelector = {
+      benchmark: selector.benchmark,
+      profile: selector.profile,
+      scenario: selector.scenario,
+      stat: selector.stat,
+      start: selector.start,
+      end: selector.end,
+      kind,
+    };
+
+    return [data, graphSelector];
+  }
+
+  const [percentRelativeData, percentRelativeSelector] = buildGraph(
+    0,
+    "percentrelative"
+  );
+  const [rawData, rawSelector] = buildGraph(1, "raw");
+
+  // We want to be able to see noise "blips" vs. a previous artifact.
+  // The "percent relative from previous commit" graph should be the best to
+  // see these kinds of changes.
+  renderGraph(
+    percentRelativeData,
+    percentRelativeSelector,
+    date,
+    relativeChartElement
+  );
+  // We also want to see whether a change maintained its value or whether it was noise and has since
+  // returned to steady state. Here, an absolute graph ("raw") is best.
+  renderGraph(rawData, rawSelector, date, absoluteChartElement);
+}
+
+async function renderGraph(
+  graphData: GraphData,
+  selector: GraphsSelector,
+  date: Date | null,
+  chartRef: Ref<HTMLElement | null>
+) {
   const opts: GraphRenderOpts = {
     width: Math.min(window.innerWidth - 40, 465),
     renderTitle: false,

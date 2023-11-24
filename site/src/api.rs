@@ -110,6 +110,62 @@ pub mod graphs {
     }
 }
 
+pub mod detail {
+    use crate::api::graphs::{GraphKind, Series};
+    use collector::Bound;
+    use serde::de::{DeserializeOwned, Error};
+    use serde::{Deserialize, Deserializer, Serialize};
+    use std::fmt::Formatter;
+    use std::marker::PhantomData;
+
+    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+    pub struct Request {
+        pub start: Bound,
+        pub end: Bound,
+        pub stat: String,
+        pub benchmark: String,
+        pub scenario: String,
+        pub profile: String,
+        #[serde(deserialize_with = "vec_from_comma_separated")]
+        pub kinds: Vec<GraphKind>,
+    }
+
+    // Deserializes a comma separated list of GraphKind values
+    fn vec_from_comma_separated<'de, T: DeserializeOwned, D>(
+        deserializer: D,
+    ) -> Result<Vec<T>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct CommaSeparatedVisitor<T>(PhantomData<T>);
+
+        impl<'de, T: DeserializeOwned> serde::de::Visitor<'de> for CommaSeparatedVisitor<T> {
+            type Value = Vec<T>;
+
+            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+                formatter.write_str("comma separated list of GraphKind values")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                v.split(',')
+                    .map(|v| T::deserialize(serde::de::value::StrDeserializer::new(v)))
+                    .collect::<Result<Vec<T>, _>>()
+            }
+        }
+
+        deserializer.deserialize_str(CommaSeparatedVisitor(Default::default()))
+    }
+
+    #[derive(Debug, PartialEq, Clone, Serialize)]
+    pub struct Response {
+        pub commits: Vec<(i64, String)>,
+        pub graphs: Vec<Series>,
+    }
+}
+
 pub mod bootstrap {
     use collector::Bound;
     use hashbrown::HashMap;

@@ -18,6 +18,7 @@ export interface Series {
 
 // Graph data received from the server
 export interface GraphData {
-  commits: [[number, string]];
+  commits: Array<[number, string]>;
+  // benchmark -> profile -> scenario -> series
   benchmarks: Dict<Dict<Dict<Series>>>;
 }
