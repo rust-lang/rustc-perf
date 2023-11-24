@@ -8,10 +8,12 @@ use arc_swap::{ArcSwap, Guard};
 use chrono::{Duration, Utc};
 use lazy_static::lazy_static;
 use log::error;
+use parking_lot::Mutex;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use crate::db;
+use crate::self_profile::SelfProfileCache;
 use collector::compile::benchmark::category::Category;
 use collector::{Bound, MasterCommit};
 use database::Pool;
@@ -116,6 +118,9 @@ impl MasterCommitCache {
     }
 }
 
+// How many analyzed self profiles should be stored in memory
+const CACHED_SELF_PROFILE_COUNT: usize = 1000;
+
 /// Site context object that contains global data
 pub struct SiteCtxt {
     /// Site configuration
@@ -126,6 +131,8 @@ pub struct SiteCtxt {
     pub index: ArcSwap<crate::db::Index>,
     /// Cached master-branch Rust commits
     pub master_commits: Arc<ArcSwap<MasterCommitCache>>, // outer Arc enables mutation in background task
+    /// Cache for self profile data
+    pub self_profile_cache: Mutex<SelfProfileCache>,
     /// Database connection pool
     pub pool: Pool,
 }
@@ -174,6 +181,7 @@ impl SiteCtxt {
             master_commits: Arc::new(ArcSwap::new(Arc::new(master_commits))),
             pool,
             landing_page: ArcSwap::new(Arc::new(None)),
+            self_profile_cache: Mutex::new(SelfProfileCache::new(CACHED_SELF_PROFILE_COUNT)),
         })
     }
 
