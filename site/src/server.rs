@@ -207,6 +207,26 @@ impl Server {
         queue_try_commits.set(missing_commits.iter().filter(|(c, _)| c.is_try()).count() as i64);
         r.register(Box::new(queue_try_commits)).unwrap();
 
+        // Stores cache hits and misses of the self profile cache
+        {
+            let cache = ctxt.self_profile_cache.lock();
+            let self_profile_stats = cache.get_stats();
+            let self_profile_cache_hits = prometheus::IntGauge::new(
+                "rustc_perf_queue_self_profile_cache_hits",
+                "self profile cache hits",
+            )
+            .unwrap();
+            self_profile_cache_hits.set(self_profile_stats.get_hits() as i64);
+            r.register(Box::new(self_profile_cache_hits)).unwrap();
+
+            let self_profile_cache_misses = prometheus::IntGauge::new(
+                "rustc_perf_queue_self_profile_cache_misses",
+                "self profile cache misses",
+            )
+            .unwrap();
+            self_profile_cache_misses.set(self_profile_stats.get_misses() as i64);
+            r.register(Box::new(self_profile_cache_misses)).unwrap();
+        }
         if let Some(last_commit) = idx.commits().last().cloned() {
             let conn = ctxt.conn().await;
             let steps = conn.in_progress_steps(&ArtifactId::from(last_commit)).await;

@@ -132,23 +132,60 @@ pub struct SelfProfileKey {
     pub scenario: database::Scenario,
 }
 
+#[derive(Default)]
+pub struct SelfProfileCacheStats {
+    hits: u64,
+    misses: u64,
+}
+
+impl SelfProfileCacheStats {
+    pub fn get_hits(&self) -> u64 {
+        self.hits
+    }
+    pub fn get_misses(&self) -> u64 {
+        self.misses
+    }
+
+    fn hit(&mut self) {
+        self.hits += 1;
+    }
+    fn miss(&mut self) {
+        self.misses += 1;
+    }
+}
+
 /// Stores a cache of N most recently used self profiles.
 /// The profiles are downloaded from S3 and analysed on each request to the detailed compare result
 /// page, but the post-processed results aren't very large in memory (~50 KiB), so it makes sense
 /// to cache them.
 pub struct SelfProfileCache {
     profiles: LruCache<SelfProfileKey, SelfProfileWithAnalysis>,
+    stats: SelfProfileCacheStats,
 }
 
 impl SelfProfileCache {
     pub fn new(cache_size: usize) -> Self {
         Self {
             profiles: LruCache::new(NonZeroUsize::new(cache_size).unwrap()),
+            stats: Default::default(),
         }
     }
 
+    pub fn get_stats(&self) -> &SelfProfileCacheStats {
+        &self.stats
+    }
+
     pub fn get(&mut self, key: &SelfProfileKey) -> Option<SelfProfileWithAnalysis> {
-        self.profiles.get(key).cloned()
+        match self.profiles.get(key) {
+            Some(value) => {
+                self.stats.hit();
+                Some(value.clone())
+            }
+            None => {
+                self.stats.miss();
+                None
+            }
+        }
     }
 
     pub fn insert(&mut self, key: SelfProfileKey, profile: SelfProfileWithAnalysis) {
