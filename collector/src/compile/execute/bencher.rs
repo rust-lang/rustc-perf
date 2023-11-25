@@ -94,6 +94,7 @@ impl<'a> BenchProcessor<'a> {
 
         let backend = match backend {
             CodegenBackend::Llvm => database::CodegenBackend::Llvm,
+            CodegenBackend::Cranelift => database::CodegenBackend::Cranelift,
         };
 
         if let Some(files) = stats.2 {
