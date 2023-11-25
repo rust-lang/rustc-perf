@@ -198,12 +198,13 @@ impl<'a> CargoProcess<'a> {
     // really.
     pub async fn run_rustc(&mut self, needs_final: bool) -> anyhow::Result<()> {
         log::info!(
-            "run_rustc with incremental={}, profile={:?}, scenario={:?}, patch={:?}, backend={:?}",
+            "run_rustc with incremental={}, profile={:?}, scenario={:?}, patch={:?}, backend={:?}, phase={}",
             self.incremental,
             self.profile,
             self.processor_etc.as_ref().map(|v| v.1),
             self.processor_etc.as_ref().and_then(|v| v.3),
-            self.backend
+            self.backend,
+            if needs_final { "benchmark" } else { "dependencies" }
         );
 
         loop {

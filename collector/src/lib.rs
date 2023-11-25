@@ -16,7 +16,7 @@ use crate::compile::benchmark::{Benchmark, BenchmarkName};
 use crate::runtime::{BenchmarkGroup, BenchmarkSuite};
 use database::{ArtifactId, ArtifactIdNumber, Connection};
 use process::Stdio;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Deserialize)]
 pub struct DeltaTime(#[serde(with = "round_float")] pub f64);
@@ -228,12 +228,14 @@ pub async fn async_command_output(
 ) -> anyhow::Result<process::Output> {
     use anyhow::Context;
 
+    let start = Instant::now();
     let child = cmd
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .with_context(|| format!("failed to spawn process for cmd: {:?}", cmd))?;
     let output = child.wait_with_output().await?;
+    log::trace!("command {cmd:?} took {} ms", start.elapsed().as_millis());
 
     if !output.status.success() {
         return Err(anyhow::anyhow!(
