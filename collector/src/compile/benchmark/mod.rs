@@ -330,6 +330,7 @@ impl Benchmark {
             preparation_start.elapsed().as_secs()
         );
 
+        let benchmark_start = std::time::Instant::now();
         for &backend in backends {
             for (profile, prep_dir) in &profile_dirs {
                 let profile = *profile;
@@ -414,6 +415,11 @@ impl Benchmark {
                 }
             }
         }
+        log::trace!(
+            "benchmarking {} took {} seconds",
+            self.name,
+            benchmark_start.elapsed().as_secs()
+        );
 
         Ok(())
     }
