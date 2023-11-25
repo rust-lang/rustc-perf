@@ -71,14 +71,6 @@ function populate_data(data, state: Selector) {
       window.location.origin + processed_url(commit, bench, run, "crox");
     return encodeURIComponent(crox_url);
   };
-  let speedscope_link = (commit, bench, run) => {
-    let benchmark_name = `${bench} run ${run}`;
-    let crox_url = processed_crox_url(commit, bench, run);
-    let speedscope_url = `https://www.speedscope.app/#profileURL=${crox_url}&title=${encodeURIComponent(
-      benchmark_name
-    )}`;
-    return `<a href="${speedscope_url}">speedscope.app</a>`;
-  };
   let firefox_profiler_link = (commit, bench, run) => {
     let crox_url = processed_crox_url(commit, bench, run);
     let ff_url = `https://profiler.firefox.com/from-url/${crox_url}/marker-chart/?v=5`;
@@ -99,16 +91,11 @@ function populate_data(data, state: Selector) {
                       state,
                       "codegen-schedule"
                     )}
-                    (${speedscope_link(
+                    (${firefox_profiler_link(
                       state.base_commit,
                       state.benchmark,
                       state.scenario
-                    )},
-                     ${firefox_profiler_link(
-                       state.base_commit,
-                       state.benchmark,
-                       state.scenario
-                     )})
+                    )})
                     results for ${state.base_commit.substring(
                       0,
                       10
@@ -120,16 +107,11 @@ function populate_data(data, state: Selector) {
                 ${processed_link(state.commit, state, "flamegraph")},
                 ${processed_link(state.commit, state, "crox")},
                 ${processed_link(state.commit, state, "codegen-schedule")}
-                (${speedscope_link(
+                (${firefox_profiler_link(
                   state.commit,
                   state.benchmark,
                   state.scenario
-                )},
-                 ${firefox_profiler_link(
-                   state.commit,
-                   state.benchmark,
-                   state.scenario
-                 )})
+                )})
                 results for ${state.commit.substring(0, 10)} (new commit)`;
   // TODO: use the Cachegrind Vue components once this page is refactored to Vue
   let profile = (b) =>
