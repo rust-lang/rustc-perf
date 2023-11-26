@@ -1,7 +1,8 @@
 import {createUrlWithAppendedParams, getUrlParams} from "../utils/navigation";
 import {postMsgpack} from "../utils/requests";
 import {SELF_PROFILE_DATA_URL} from "../urls";
-import {processedSelfProfileUrl} from "../self-profile";
+import {croxTraceUrl, processedSelfProfileUrl} from "../self-profile";
+import {openTraceInPerfetto} from "../perfetto";
 
 function to_seconds(time) {
   return time / 1000000000;
@@ -64,6 +65,18 @@ function populate_data(data, state: Selector) {
     let url = processedSelfProfileUrl(commit, benchmark, scenario, ty);
     return `<a href="${url}">${ty}</a>`;
   };
+  // FIXME: remove this hack and use the PerfettoLink component once this page is
+  // converted to Vue.
+  let perfetto_profiler_link = (id, commit, bench, run) => {
+    let link = croxTraceUrl(commit, bench, run);
+    let traceTitle = `${bench}-${run} (${commit})`;
+    document.addEventListener("click", (event) => {
+      if ((event.target as HTMLElement).id === id) {
+        openTraceInPerfetto(link, traceTitle);
+      }
+    });
+    return `<a href="#" id="${id}">Perfetto</a>`;
+  };
   let firefox_profiler_link = (commit, bench, run) => {
     let crox_url = encodeURIComponent(croxTraceUrl(commit, bench, run));
     let ff_url = `https://profiler.firefox.com/from-url/${crox_url}/marker-chart/?v=5`;
@@ -84,11 +97,16 @@ function populate_data(data, state: Selector) {
                       state,
                       "codegen-schedule"
                     )}
-                    (${firefox_profiler_link(
+                    (${perfetto_profiler_link(
+                      "perfetto-before",
                       state.base_commit,
                       state.benchmark,
                       state.scenario
-                    )})
+                    )}, ${firefox_profiler_link(
+      state.base_commit,
+      state.benchmark,
+      state.scenario
+    )})
                     results for ${state.base_commit.substring(
                       0,
                       10
@@ -100,11 +118,16 @@ function populate_data(data, state: Selector) {
                 ${processed_link(state.commit, state, "flamegraph")},
                 ${processed_link(state.commit, state, "crox")},
                 ${processed_link(state.commit, state, "codegen-schedule")}
-                (${firefox_profiler_link(
+                (${perfetto_profiler_link(
+                  "perfetto-after",
                   state.commit,
                   state.benchmark,
                   state.scenario
-                )})
+                )}, ${firefox_profiler_link(
+    state.commit,
+    state.benchmark,
+    state.scenario
+  )})
                 results for ${state.commit.substring(0, 10)} (new commit)`;
   // TODO: use the Cachegrind Vue components once this page is refactored to Vue
   let profile = (b) =>
