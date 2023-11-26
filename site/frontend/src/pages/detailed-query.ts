@@ -1,6 +1,7 @@
 import {createUrlWithAppendedParams, getUrlParams} from "../utils/navigation";
 import {postMsgpack} from "../utils/requests";
 import {SELF_PROFILE_DATA_URL} from "../urls";
+import {processedSelfProfileUrl} from "../self-profile";
 
 function to_seconds(time) {
   return time / 1000000000;
@@ -59,20 +60,12 @@ function populate_data(data, state: Selector) {
     let url = `/perf/download-raw-self-profile?commit=${commit}&benchmark=${bench}&scenario=${run}`;
     return `<a href="${url}">raw</a>`;
   };
-  let processed_url = (commit, bench, run, ty) => {
-    return `/perf/processed-self-profile?commit=${commit}&benchmark=${bench}&scenario=${run}&type=${ty}`;
-  };
   let processed_link = (commit, {benchmark, scenario}, ty) => {
-    let url = processed_url(commit, benchmark, scenario, ty);
+    let url = processedSelfProfileUrl(commit, benchmark, scenario, ty);
     return `<a href="${url}">${ty}</a>`;
   };
-  let processed_crox_url = (commit, bench, run) => {
-    let crox_url =
-      window.location.origin + processed_url(commit, bench, run, "crox");
-    return encodeURIComponent(crox_url);
-  };
   let firefox_profiler_link = (commit, bench, run) => {
-    let crox_url = processed_crox_url(commit, bench, run);
+    let crox_url = encodeURIComponent(croxTraceUrl(commit, bench, run));
     let ff_url = `https://profiler.firefox.com/from-url/${crox_url}/marker-chart/?v=5`;
     return `<a href="${ff_url}">Firefox profiler</a>`;
   };
