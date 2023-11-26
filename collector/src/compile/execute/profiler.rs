@@ -298,15 +298,23 @@ impl<'a> Processor for ProfileProcessor<'a> {
                     let tmp_eprintln_file = filepath(data.cwd, "eprintln");
                     let eprintln_file = filepath(self.output_dir, &out_file("eprintln"));
 
+                    #[allow(dead_code)]
+                    #[derive(serde::Deserialize)]
+                    struct RustcMessage<'a> {
+                        #[serde(rename = "$message_type")]
+                        message_type: &'a str,
+                    }
+
                     let mut final_file = io::BufWriter::new(std::fs::File::create(&eprintln_file)?);
                     for line in io::BufReader::new(std::fs::File::open(&tmp_eprintln_file)?).lines()
                     {
                         let line = line?;
+
                         // rustc under Cargo currently ~always emits artifact
                         // messages -- which we don't want in final
-                        // eprintln output. These messages generally look like:
-                        // {"artifact":"/tmp/.tmpjIe45J/...","emit":"dep-info"}
-                        if line.starts_with(r#"{"artifact":"#) {
+                        // eprintln output. These messages contain a $message_type tag since
+                        // https://github.com/rust-lang/rust/pull/115691.
+                        if serde_json::from_str::<RustcMessage>(&line).is_ok() {
                             continue;
                         }
 
