@@ -414,6 +414,7 @@ pub mod self_profile {
     pub struct QueryData {
         pub label: QueryLabel,
         // Nanoseconds
+        pub time: u64,
         pub self_time: u64,
         pub percent_total_time: f32,
         pub number_of_cache_misses: u32,

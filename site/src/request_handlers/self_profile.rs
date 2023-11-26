@@ -177,6 +177,7 @@ fn add_uninvoked_base_profile_queries(
         if !profile_queries.contains(qd.label.as_str()) {
             let uninvoked_query_data = self_profile::QueryData {
                 label: qd.label,
+                time: 0,
                 self_time: 0,
                 percent_total_time: 0.0,
                 number_of_cache_misses: 0,

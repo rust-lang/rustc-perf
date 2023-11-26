@@ -234,16 +234,17 @@ fn get_self_profile_data(
     cpu_clock: Option<f64>,
     profile: &analyzeme::AnalysisResults,
 ) -> ServerResult<self_profile::SelfProfile> {
-    let total_time: Duration = profile.query_data.iter().map(|qd| qd.self_time).sum();
+    let total_self_time: Duration = profile.query_data.iter().map(|qd| qd.self_time).sum();
 
     let query_data = profile
         .query_data
         .iter()
         .map(|qd| self_profile::QueryData {
             label: qd.label.as_str().into(),
+            time: qd.time.as_nanos() as u64,
             self_time: qd.self_time.as_nanos() as u64,
-            percent_total_time: ((qd.self_time.as_secs_f64() / total_time.as_secs_f64()) * 100.0)
-                as f32,
+            percent_total_time: ((qd.self_time.as_secs_f64() / total_self_time.as_secs_f64())
+                * 100.0) as f32,
             number_of_cache_misses: qd.number_of_cache_misses as u32,
             number_of_cache_hits: qd.number_of_cache_hits as u32,
             invocation_count: qd.invocation_count as u32,
@@ -254,10 +255,11 @@ fn get_self_profile_data(
 
     let totals = self_profile::QueryData {
         label: "Totals".into(),
-        self_time: total_time.as_nanos() as u64,
+        time: profile.total_time.as_nanos() as u64,
+        self_time: total_self_time.as_nanos() as u64,
         // TODO: check against wall-time from perf stats
         percent_total_time: cpu_clock
-            .map(|w| ((total_time.as_secs_f64() / w) * 100.0) as f32)
+            .map(|w| ((total_self_time.as_secs_f64() / w) * 100.0) as f32)
             // sentinel "we couldn't compute this time"
             .unwrap_or(-100.0),
         number_of_cache_misses: profile
