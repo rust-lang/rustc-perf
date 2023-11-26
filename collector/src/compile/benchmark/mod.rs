@@ -325,9 +325,9 @@ impl Benchmark {
             Ok(())
         })?;
         log::trace!(
-            "preparing {} took {} seconds",
+            "preparing {} took {:.3} seconds",
             self.name,
-            preparation_start.elapsed().as_secs()
+            preparation_start.elapsed().as_secs_f64()
         );
 
         let benchmark_start = std::time::Instant::now();
@@ -416,9 +416,9 @@ impl Benchmark {
             }
         }
         log::trace!(
-            "benchmarking {} took {} seconds",
+            "benchmarking {} took {:.3} seconds",
             self.name,
-            benchmark_start.elapsed().as_secs()
+            benchmark_start.elapsed().as_secs_f64()
         );
 
         Ok(())
