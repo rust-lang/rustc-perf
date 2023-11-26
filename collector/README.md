@@ -155,6 +155,8 @@ The following options alter the behaviour of the `bench_local` subcommand.
 `RUST_LOG=debug` can be specified to enable verbose logging, which is useful
 for debugging `collector` itself.
 
+`ZTHREADS=<number of threads>` can be used for builds with `parallel-compiler = true` in the build's `config.toml`. This will set up that number as a flag when compiling the benchmarks.
+
 ### How to compare different versions on your own machine
 
 Often you'll want to compare two different compiler versions. For example, you
