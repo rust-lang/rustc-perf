@@ -336,12 +336,12 @@ onMounted(() => renderGraphs());
           </li>
           <li>
             <a :href="detailedQueryLink(props.baseArtifact)" target="_blank">
-              Rustc self-profile: baseline commit
+              Self-profile (before)
             </a>
           </li>
           <li>
             <a :href="detailedQueryLink(props.artifact)" target="_blank">
-              Rustc self-profile: benchmarked commit
+              Self-profile (after)
             </a>
           </li>
           <li>
