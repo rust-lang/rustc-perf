@@ -152,6 +152,7 @@ pub async fn handle_compare(
             benchmark: comparison.benchmark.to_string(),
             profile: comparison.profile.to_string(),
             scenario: comparison.scenario.to_string(),
+            backend: comparison.backend.to_string(),
             comparison: comparison.comparison.into(),
         })
         .collect();
