@@ -16,6 +16,15 @@ fn determinism_env(cmd: &mut Command) {
     // what the actual change between two artifacts is.
     cmd.env("RUSTC_FORCE_INCR_COMP_ARTIFACT_HEADER", "rustc-perf");
     cmd.env("RUSTC_FORCE_RUSTC_VERSION", "rustc-perf");
+
+    // There is another similar source of hashing noise. Cargo queries the version of rustc
+    // using `rustc -vV`, and then hashes part of the output, and passes it to `rustc` using
+    // `-Cmetadata`. This means that two different versions of rustc might have a different metadata
+    // value, and thus different hash value.
+    // However, for rustc-perf, this is mostly a non-issue, because for nightly releases, cargo
+    // currently only hashes the host (which should stay the same, for the time being), and the part
+    // of the rustc version after -, which should be "nightly" for all try builds and also master
+    // commits.
 }
 
 fn run_with_determinism_env(mut cmd: Command) {
@@ -33,6 +42,7 @@ fn main() {
     let name = args_os.next().unwrap().into_string().unwrap();
 
     let mut args = args_os.collect::<Vec<_>>();
+
     let rustc = env::var_os("RUSTC_REAL").unwrap();
     let actually_rustdoc = name.ends_with("rustdoc-fake");
     let actually_clippy = name.ends_with("clippy-fake");
