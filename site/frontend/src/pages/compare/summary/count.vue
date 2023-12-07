@@ -7,6 +7,6 @@ const props = defineProps<{
 
 <template>
   <span :title="cases + ' test case(s), ' + benchmarks + ' unique benchmark(s)'"
-    >{{ cases }} ({{ benchmarks }})</span
+    >{{ props.cases }} ({{ props.benchmarks }})</span
   >
 </template>

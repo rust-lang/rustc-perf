@@ -210,7 +210,7 @@ function wheelZoomPlugin(opts) {
               });
             }
 
-            function onup(e) {
+            function onup(_e) {
               document.removeEventListener("mousemove", onmove);
               document.removeEventListener("mouseup", onup);
             }
@@ -294,7 +294,7 @@ function genPlotOpts({
     },
     scales: {
       y: {
-        range: (self, dataMin, dataMax) =>
+        range: (_self, dataMin, dataMax) =>
           uPlot.rangeNum(absoluteMode ? 0 : dataMin, dataMax, 0.2, true),
       },
     },
@@ -307,7 +307,7 @@ function genPlotOpts({
       {
         label: yAxisLabel,
         space: 24,
-        values: (self, splits) => {
+        values: (_self, splits) => {
           return splits.map((v) => {
             return v >= 1e12
               ? v / 1e12 + "T"
@@ -328,7 +328,7 @@ function genPlotOpts({
           drawAxes: [
             (u) => {
               let {ctx} = u;
-              let {left, top, width, height} = u.bbox;
+              let {top, height} = u.bbox;
 
               const interpolatedColorWithAlpha = "#fcb0f15f";
 
@@ -355,7 +355,7 @@ function genPlotOpts({
         },
       },
       tooltipPlugin({
-        onclick(u, seriesIdx, dataIdx) {
+        onclick(_u, _seriesIdx, dataIdx) {
           let thisCommit = commits[dataIdx][1];
           let prevCommit = (commits[dataIdx - 1] || [null, null])[1];
           window.open(

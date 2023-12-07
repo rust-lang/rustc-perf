@@ -3,7 +3,6 @@ import {
   createUrlWithAppendedParams,
   navigateToUrlParams,
 } from "../../utils/navigation";
-import {BenchmarkInfo} from "../../api";
 import {MetricDescription} from "./metrics";
 
 const props = defineProps<{
