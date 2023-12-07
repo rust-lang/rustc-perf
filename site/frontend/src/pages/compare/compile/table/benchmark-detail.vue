@@ -14,8 +14,6 @@ import {GraphData, GraphKind, GraphsSelector} from "../../../../graph/data";
 import uPlot from "uplot";
 import CachegrindCmd from "../../../../components/cachegrind-cmd.vue";
 import {COMPILE_DETAIL_RESOLVER} from "./detail-resolver";
-import {openTraceInPerfetto} from "../../../../perfetto";
-import {croxTraceUrl} from "../../../../self-profile";
 import PerfettoLink from "../../../../components/perfetto-link.vue";
 
 const props = defineProps<{
@@ -266,27 +264,6 @@ function changeProfileCommand(event: Event) {
   profileCommand.value = target.value as ProfileCommand;
 }
 
-const traceLinkBefore = computed(() => {
-  return croxTraceUrl(
-    props.artifact.commit,
-    `${props.testCase.benchmark}-${props.testCase.profile.toLowerCase()}`,
-    props.testCase.scenario
-  );
-});
-const traceLinkAfter = computed(() => {
-  return croxTraceUrl(
-    props.baseArtifact.commit,
-    `${props.testCase.benchmark}-${props.testCase.profile.toLowerCase()}`,
-    props.testCase.scenario
-  );
-});
-const traceLinkTitleBefore = computed(() => {
-  return `${props.testCase.benchmark}-${props.testCase.profile}-${props.testCase.scenario} (${props.baseArtifact.commit})`;
-});
-const traceLinkTitleAfter = computed(() => {
-  return `${props.testCase.benchmark}-${props.testCase.profile}-${props.testCase.scenario} (${props.artifact.commit})`;
-});
-
 onMounted(() => renderGraphs());
 </script>
 
@@ -351,36 +328,32 @@ onMounted(() => renderGraphs());
             </a>
           </li>
           <li>
+            Before:
+            <a :href="detailedQueryLink(props.baseArtifact)" target="_blank">
+              self-profile</a
+            >,
+            <PerfettoLink
+              :artifact="props.baseArtifact"
+              :test-case="props.testCase"
+              >query trace</PerfettoLink
+            >
+          </li>
+          <li>
+            After:
+            <a :href="detailedQueryLink(props.artifact)" target="_blank"
+              >self-profile</a
+            >,
+            <PerfettoLink :artifact="props.artifact" :test-case="props.testCase"
+              >query trace</PerfettoLink
+            >
+          </li>
+          <li>
             <a
               :href="graphLink(props.artifact, props.metric, props.testCase)"
               target="_blank"
             >
               History graph
             </a>
-          </li>
-          <li>
-            <a :href="detailedQueryLink(props.baseArtifact)" target="_blank">
-              Self-profile (before)
-            </a>
-          </li>
-          <li>
-            <PerfettoLink
-              :artifact="props.baseArtifact"
-              label="Query trace (before)"
-              :test-case="props.testCase"
-            />
-          </li>
-          <li>
-            <a :href="detailedQueryLink(props.artifact)" target="_blank">
-              Self-profile (after)
-            </a>
-          </li>
-          <li>
-            <PerfettoLink
-              :artifact="props.artifact"
-              label="Query trace (after)"
-              :test-case="props.testCase"
-            />
           </li>
           <li>
             <a :href="benchmarkLink(testCase.benchmark)" target="_blank">

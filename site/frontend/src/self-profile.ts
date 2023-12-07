@@ -1,10 +1,11 @@
-// Returns the URL to a processed Crox format of a self-profile query.
-export function croxTraceUrl(
+// Returns the URL to a measureme self-profile data, processed into the
+// Chrome profiler format.
+export function chromeProfileUrl(
   commit: string,
   benchmarkAndProfile: string,
   scenario: string
 ): string {
-  const relativeUrl = processedSelfProfileUrl(
+  const relativeUrl = processedSelfProfileRelativeUrl(
     commit,
     benchmarkAndProfile,
     scenario,
@@ -13,7 +14,7 @@ export function croxTraceUrl(
   return window.location.origin + relativeUrl;
 }
 
-export function processedSelfProfileUrl(
+export function processedSelfProfileRelativeUrl(
   commit: string,
   benchmarkAndProfile: string,
   scenario: string,
