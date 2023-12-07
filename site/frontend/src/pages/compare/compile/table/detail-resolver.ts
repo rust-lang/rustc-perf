@@ -1,6 +1,9 @@
 import {GraphKind, Series} from "../../../../graph/data";
 import {getJson} from "../../../../utils/requests";
-import {COMPARE_COMPILE_DETAIL_GRAPHS_DATA_URL} from "../../../../urls";
+import {
+  COMPARE_COMPILE_DETAIL_GRAPHS_DATA_URL,
+  COMPARE_COMPILE_DETAIL_SECTIONS_DATA_URL,
+} from "../../../../urls";
 import {CachedDataLoader} from "./utils";
 
 export interface CompileDetailGraphsSelector {
@@ -18,6 +21,30 @@ export interface CompileDetailGraphs {
   commits: Array<[number, string]>;
   // One Series for each GraphKind in the CompileDetailSelector
   graphs: Series[];
+  sections_before: CompilationSections | null;
+  sections_after: CompilationSections | null;
+}
+
+export interface CompileDetailSectionsSelector {
+  start: string;
+  end: string;
+  benchmark: string;
+  scenario: string;
+  profile: string;
+}
+
+export interface CompileDetailSections {
+  before: CompilationSections | null;
+  after: CompilationSections | null;
+}
+
+export interface CompilationSection {
+  name: string;
+  value: number;
+}
+
+export interface CompilationSections {
+  sections: CompilationSection[];
 }
 
 /**
@@ -36,10 +63,10 @@ export const COMPILE_DETAIL_GRAPHS_RESOLVER: CachedDataLoader<
 > = new CachedDataLoader(
   (key: CompileDetailGraphsSelector) =>
     `${key.benchmark};${key.profile};${key.scenario};${key.start};${key.end};${key.stat};${key.kinds}`,
-  loadDetail
+  loadGraphsDetail
 );
 
-async function loadDetail(
+async function loadGraphsDetail(
   selector: CompileDetailGraphsSelector
 ): Promise<CompileDetailGraphs> {
   const params = {
@@ -53,6 +80,32 @@ async function loadDetail(
   };
   return await getJson<CompileDetailGraphs>(
     COMPARE_COMPILE_DETAIL_GRAPHS_DATA_URL,
+    params
+  );
+}
+
+// The same thing, but for sections
+export const COMPILE_DETAIL_SECTIONS_RESOLVER: CachedDataLoader<
+  CompileDetailSectionsSelector,
+  CompileDetailSections
+> = new CachedDataLoader(
+  (key: CompileDetailGraphsSelector) =>
+    `${key.benchmark};${key.profile};${key.scenario};${key.start};${key.end}`,
+  loadSectionsDetail
+);
+
+async function loadSectionsDetail(
+  selector: CompileDetailSectionsSelector
+): Promise<CompileDetailSections> {
+  const params = {
+    start: selector.start,
+    end: selector.end,
+    benchmark: selector.benchmark,
+    scenario: selector.scenario,
+    profile: selector.profile,
+  };
+  return await getJson<CompileDetailSections>(
+    COMPARE_COMPILE_DETAIL_SECTIONS_DATA_URL,
     params
   );
 }
