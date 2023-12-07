@@ -1,6 +1,11 @@
 import {createUrlWithAppendedParams, getUrlParams} from "../utils/navigation";
 import {postMsgpack} from "../utils/requests";
 import {SELF_PROFILE_DATA_URL} from "../urls";
+import {
+  chromeProfileUrl,
+  processedSelfProfileRelativeUrl,
+} from "../self-profile";
+import {openTraceInPerfetto} from "../perfetto";
 
 function to_seconds(time) {
   return time / 1000000000;
@@ -41,6 +46,106 @@ function fmt_delta(to, delta, is_integral_delta) {
   )} ≈ ${delta.toFixed(3)}">${text}</span>`;
 }
 
+function raw_self_profile_link(
+  commit: string,
+  benchmark: string,
+  scenario: string
+): string {
+  const url = `/perf/download-raw-self-profile?commit=${commit}&benchmark=${benchmark}&scenario=${scenario}`;
+  return `<a href="${url}">raw</a>`;
+}
+
+function processed_link(
+  commit: string,
+  benchmark: string,
+  scenario: string,
+  type: string
+): string {
+  const url = processedSelfProfileRelativeUrl(
+    commit,
+    benchmark,
+    scenario,
+    type
+  );
+  return `<a href="${url}">${type}</a>`;
+}
+
+// FIXME: remove this hack and use the PerfettoLink component once this page is
+// converted to Vue.
+function perfetto_profiler_link(
+  id: string,
+  commit: string,
+  benchmark: string,
+  scenario: string
+): string {
+  let link = chromeProfileUrl(commit, benchmark, scenario);
+  let traceTitle = `${benchmark}-${scenario} (${commit})`;
+  document.addEventListener("click", (event) => {
+    if ((event.target as HTMLElement).id === id) {
+      openTraceInPerfetto(link, traceTitle);
+    }
+  });
+  return `<a href="#" id="${id}">Perfetto</a>`;
+}
+
+function firefox_profiler_link(
+  commit: string,
+  benchmark: string,
+  scenario: string
+): string {
+  let crox_url = encodeURIComponent(
+    chromeProfileUrl(commit, benchmark, scenario)
+  );
+  let ff_url = `https://profiler.firefox.com/from-url/${crox_url}/marker-chart/?v=5`;
+  return `<a href="${ff_url}">Firefox profiler</a>`;
+}
+
+function createDownloadLinks(
+  state: Selector,
+  commit: string,
+  label: string
+): string {
+  const raw = raw_self_profile_link(
+    state.commit,
+    state.benchmark,
+    state.scenario
+  );
+  const flamegraph_link = processed_link(
+    commit,
+    state.benchmark,
+    state.scenario,
+    "flamegraph"
+  );
+  const crox_link = processed_link(
+    commit,
+    state.benchmark,
+    state.scenario,
+    "crox"
+  );
+  const codegen = processed_link(
+    commit,
+    state.benchmark,
+    state.scenario,
+    "codegen-schedule"
+  );
+  const perfetto = perfetto_profiler_link(
+    `perfetto-${label}`,
+    commit,
+    state.benchmark,
+    state.scenario
+  );
+  const firefox = firefox_profiler_link(
+    state.base_commit,
+    state.benchmark,
+    state.scenario
+  );
+
+  return `Download/view ${raw}, ${flamegraph_link}, ${crox_link}, ${codegen} (${perfetto}, ${firefox}) results for ${commit.substring(
+    0,
+    10
+  )} (${label} commit)`;
+}
+
 function populate_data(data, state: Selector) {
   let txt = `${state.commit.substring(0, 10)}: Self profile results for ${
     state.benchmark
@@ -55,65 +160,15 @@ function populate_data(data, state: Selector) {
     txt += `<br><a href="${self_href}">query info for just this commit</a>`;
   }
   document.querySelector("#title").innerHTML = txt;
-  let dl_link = (commit, bench, run) => {
-    let url = `/perf/download-raw-self-profile?commit=${commit}&benchmark=${bench}&scenario=${run}`;
-    return `<a href="${url}">raw</a>`;
-  };
-  let processed_url = (commit, bench, run, ty) => {
-    return `/perf/processed-self-profile?commit=${commit}&benchmark=${bench}&scenario=${run}&type=${ty}`;
-  };
-  let processed_link = (commit, {benchmark, scenario}, ty) => {
-    let url = processed_url(commit, benchmark, scenario, ty);
-    return `<a href="${url}">${ty}</a>`;
-  };
-  let processed_crox_url = (commit, bench, run) => {
-    let crox_url =
-      window.location.origin + processed_url(commit, bench, run, "crox");
-    return encodeURIComponent(crox_url);
-  };
-  let firefox_profiler_link = (commit, bench, run) => {
-    let crox_url = processed_crox_url(commit, bench, run);
-    let ff_url = `https://profiler.firefox.com/from-url/${crox_url}/marker-chart/?v=5`;
-    return `<a href="${ff_url}">Firefox profiler</a>`;
-  };
+
   txt = "";
   if (state.base_commit) {
-    txt += `Download/view
-                    ${dl_link(
-                      state.base_commit,
-                      state.benchmark,
-                      state.scenario
-                    )},
-                    ${processed_link(state.base_commit, state, "flamegraph")},
-                    ${processed_link(state.base_commit, state, "crox")},
-                    ${processed_link(
-                      state.base_commit,
-                      state,
-                      "codegen-schedule"
-                    )}
-                    (${firefox_profiler_link(
-                      state.base_commit,
-                      state.benchmark,
-                      state.scenario
-                    )})
-                    results for ${state.base_commit.substring(
-                      0,
-                      10
-                    )} (base commit)`;
+    txt += createDownloadLinks(state, state.base_commit, "base");
     txt += "<br>";
   }
-  txt += `Download/view
-                ${dl_link(state.commit, state.benchmark, state.scenario)},
-                ${processed_link(state.commit, state, "flamegraph")},
-                ${processed_link(state.commit, state, "crox")},
-                ${processed_link(state.commit, state, "codegen-schedule")}
-                (${firefox_profiler_link(
-                  state.commit,
-                  state.benchmark,
-                  state.scenario
-                )})
-                results for ${state.commit.substring(0, 10)} (new commit)`;
-  // TODO: use the Cachegrind Vue components once this page is refactored to Vue
+  txt += createDownloadLinks(state, state.commit, "new");
+
+  // FIXME: use the Cachegrind Vue components once this page is refactored to Vue
   let profile = (b) =>
     b.endsWith("-opt")
       ? "Opt"

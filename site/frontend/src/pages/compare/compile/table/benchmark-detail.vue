@@ -14,6 +14,7 @@ import {GraphData, GraphKind, GraphsSelector} from "../../../../graph/data";
 import uPlot from "uplot";
 import CachegrindCmd from "../../../../components/cachegrind-cmd.vue";
 import {COMPILE_DETAIL_RESOLVER} from "./detail-resolver";
+import PerfettoLink from "../../../../components/perfetto-link.vue";
 
 const props = defineProps<{
   testCase: CompileTestCase;
@@ -327,21 +328,31 @@ onMounted(() => renderGraphs());
             </a>
           </li>
           <li>
+            Before:
+            <a :href="detailedQueryLink(props.baseArtifact)" target="_blank">
+              self-profile</a
+            >,
+            <PerfettoLink
+              :artifact="props.baseArtifact"
+              :test-case="props.testCase"
+              >query trace</PerfettoLink
+            >
+          </li>
+          <li>
+            After:
+            <a :href="detailedQueryLink(props.artifact)" target="_blank"
+              >self-profile</a
+            >,
+            <PerfettoLink :artifact="props.artifact" :test-case="props.testCase"
+              >query trace</PerfettoLink
+            >
+          </li>
+          <li>
             <a
               :href="graphLink(props.artifact, props.metric, props.testCase)"
               target="_blank"
             >
               History graph
-            </a>
-          </li>
-          <li>
-            <a :href="detailedQueryLink(props.baseArtifact)" target="_blank">
-              Rustc self-profile: baseline commit
-            </a>
-          </li>
-          <li>
-            <a :href="detailedQueryLink(props.artifact)" target="_blank">
-              Rustc self-profile: benchmarked commit
             </a>
           </li>
           <li>
