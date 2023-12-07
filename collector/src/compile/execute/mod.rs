@@ -155,6 +155,11 @@ impl<'a> CargoProcess<'a> {
             // env vars set, but it doesn't hurt to have them.
             .env("RUSTC", &*FAKE_RUSTC)
             .env("RUSTC_REAL", &self.toolchain.components.rustc)
+            // If the collector is being run with e.g. `cargo run --bin collector`,
+            // then the CARGO environment variable will be incorrectly propagated to nested cargo
+            // invocations (e.g. in the `cargo llvm-lines` profiler). This environment variable
+            // makes sure that we override the path to Cargo with the specified cargo component.
+            .env("CARGO", &self.toolchain.components.cargo)
             // We separately pass -Cincremental to the leaf crate --
             // CARGO_INCREMENTAL is cached separately for both the leaf crate
             // and any in-tree dependencies, and we don't want that; it wastes
