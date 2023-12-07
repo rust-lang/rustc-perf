@@ -212,7 +212,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Install profilers
-        run: cargo install --version 0.4.12 cargo-llvm-lines
+        run: cargo install --version 0.4.36 cargo-llvm-lines
 
       # Bytehound is currently broken, removing it to keep CI green.
       #- name: Install Bytehound
