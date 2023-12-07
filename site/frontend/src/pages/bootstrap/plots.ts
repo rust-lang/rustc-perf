@@ -140,14 +140,14 @@ function genPlotOpts({
       {
         label: yAxisLabel,
         space: 24,
-        values: (self, splits) => {
+        values: (_self, splits) => {
           return splits.map((v) => v / 1e9 + " sec");
         },
       },
     ],
     plugins: [
       tooltipPlugin({
-        onclick(u, seriesIdx, dataIdx) {
+        onclick(_u, _seriesIdx, dataIdx) {
           let thisCommit = commits[dataIdx][1];
           let prevCommit = (commits[dataIdx - 1] || [null, null])[1];
           window.open(`/compare.html?start=${prevCommit}&end=${thisCommit}`);

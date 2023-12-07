@@ -2,7 +2,7 @@
 import {getJson} from "../../utils/requests";
 import {STATUS_DATA_URL} from "../../urls";
 import {withLoading} from "../../utils/loading";
-import {computed, ref, Ref, watch} from "vue";
+import {computed, ref, Ref} from "vue";
 import {
   Artifact,
   BenchmarkError,
@@ -16,10 +16,8 @@ import {
   differenceInSeconds,
   format,
   fromUnixTime,
-  sub,
   subSeconds,
 } from "date-fns";
-import {CompileTestCase} from "../compare/compile/common";
 import {useExpandedStore} from "./expansion";
 
 async function loadStatus(loading: Ref<boolean>) {

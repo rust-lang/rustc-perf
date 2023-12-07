@@ -7,7 +7,6 @@ import {CompileBenchmarkMap, CompileTestCase} from "../common";
 import {computed} from "vue";
 import {useExpandedStore} from "./expansion";
 import BenchmarkDetail from "./benchmark-detail.vue";
-import {getPastDate} from "./utils";
 
 const props = defineProps<{
   id: string;

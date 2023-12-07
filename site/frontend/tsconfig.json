@@ -7,6 +7,8 @@
     "rootDir": "src",
     "esModuleInterop": true,
     "jsx": "preserve",
-    "jsxFactory": "h"
+    "jsxFactory": "h",
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
   }
 }
