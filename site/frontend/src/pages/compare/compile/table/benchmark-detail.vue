@@ -13,7 +13,7 @@ import {GraphRenderOpts, renderPlots} from "../../../../graph/render";
 import {GraphData, GraphKind, GraphsSelector} from "../../../../graph/data";
 import uPlot from "uplot";
 import CachegrindCmd from "../../../../components/cachegrind-cmd.vue";
-import {COMPILE_DETAIL_RESOLVER} from "./detail-resolver";
+import {COMPILE_DETAIL_GRAPHS_RESOLVER} from "./detail-resolver";
 import PerfettoLink from "../../../../components/perfetto-link.vue";
 
 const props = defineProps<{
@@ -109,8 +109,8 @@ async function renderGraphs() {
     end,
     kinds: ["percentrelative", "raw"] as GraphKind[],
   };
-  const detail = await COMPILE_DETAIL_RESOLVER.loadDetail(selector);
-  if (detail.commits.length === 0) {
+  const graphsDetail = await COMPILE_DETAIL_GRAPHS_RESOLVER.load(selector);
+  if (graphsDetail.commits.length === 0) {
     return;
   }
 
@@ -119,13 +119,13 @@ async function renderGraphs() {
     kind: GraphKind
   ): [GraphData, GraphsSelector] {
     const data = {
-      commits: detail.commits,
+      commits: graphsDetail.commits,
       benchmarks: {
         [selector.benchmark]: {
           // The server returns profiles capitalized, so we need to match that
           // here, so that the graph code can find the expected profile.
           [capitalize(selector.profile)]: {
-            [selector.scenario]: detail.graphs[index],
+            [selector.scenario]: graphsDetail.graphs[index],
           },
         },
       },

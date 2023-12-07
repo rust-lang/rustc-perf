@@ -29,3 +29,24 @@ function format_ymd(date: Date): string {
 export function daysBetweenDates(a: Date, b: Date): number {
   return Math.floor((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
 }
+
+/**
+ * Provides a cache for `Output` items that can be loaded asynchronously, given a certain `Key`.
+ * If a value has already been loaded for the same key, it will be resolved from the cache.
+ */
+export class CachedDataLoader<Key, Output> {
+  private cache: Dict<Output> = {};
+
+  constructor(
+    private key_to_hash: (key: Key) => string,
+    private load_fn: (key: Key) => Promise<Output>
+  ) {}
+
+  public async load(key: Key): Promise<Output> {
+    const hash = this.key_to_hash(key);
+    if (!this.cache.hasOwnProperty(hash)) {
+      this.cache[hash] = await this.load_fn(key);
+    }
+    return this.cache[hash];
+  }
+}
