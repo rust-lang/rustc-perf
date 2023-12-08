@@ -13,7 +13,15 @@ import {GraphRenderOpts, renderPlots} from "../../../../graph/render";
 import {GraphData, GraphKind, GraphsSelector} from "../../../../graph/data";
 import uPlot from "uplot";
 import CachegrindCmd from "../../../../components/cachegrind-cmd.vue";
-import {COMPILE_DETAIL_RESOLVER} from "./detail-resolver";
+import {
+  COMPILE_DETAIL_GRAPHS_RESOLVER,
+  COMPILE_DETAIL_SECTIONS_RESOLVER,
+  CompileDetailGraphs,
+  CompileDetailGraphsSelector,
+  CompileDetailSections,
+  CompileDetailSectionsSelector,
+} from "./detail-resolver";
+import CompileSectionsChart from "./sections-chart.vue";
 import PerfettoLink from "../../../../components/perfetto-link.vue";
 
 const props = defineProps<{
@@ -97,10 +105,9 @@ function drawCurrentDate(opts: GraphRenderOpts, date: Date) {
   };
 }
 
-// Render both relative and absolute graphs
-async function renderGraphs() {
-  const {start, end, date} = graphRange.value;
-  const selector = {
+function createGraphsSelector(): CompileDetailGraphsSelector {
+  const {start, end} = graphRange.value;
+  return {
     benchmark: props.testCase.benchmark,
     profile: props.testCase.profile,
     scenario: props.testCase.scenario,
@@ -109,7 +116,30 @@ async function renderGraphs() {
     end,
     kinds: ["percentrelative", "raw"] as GraphKind[],
   };
-  const detail = await COMPILE_DETAIL_RESOLVER.loadDetail(selector);
+}
+
+async function loadGraphs(): Promise<CompileDetailGraphs> {
+  return await COMPILE_DETAIL_GRAPHS_RESOLVER.load(createGraphsSelector());
+}
+
+function createSectionsSelector(): CompileDetailSectionsSelector {
+  return {
+    benchmark: props.testCase.benchmark,
+    profile: props.testCase.profile,
+    scenario: props.testCase.scenario,
+    start: props.baseArtifact.commit,
+    end: props.artifact.commit,
+  };
+}
+
+async function loadSections(): Promise<CompileDetailSections> {
+  return await COMPILE_DETAIL_SECTIONS_RESOLVER.load(createSectionsSelector());
+}
+
+// Render both relative and absolute graphs
+async function renderGraphs(detail: CompileDetailGraphs) {
+  const selector = createGraphsSelector();
+  const date = graphRange.value.date;
   if (detail.commits.length === 0) {
     return;
   }
@@ -264,7 +294,15 @@ function changeProfileCommand(event: Event) {
   profileCommand.value = target.value as ProfileCommand;
 }
 
-onMounted(() => renderGraphs());
+const sectionsDetail: Ref<CompileDetailSections | null> = ref(null);
+onMounted(() => {
+  loadGraphs().then((d) => {
+    renderGraphs(d);
+  });
+  loadSections().then((d) => {
+    sectionsDetail.value = d;
+  });
+});
 </script>
 
 <template>
@@ -297,7 +335,7 @@ onMounted(() => renderGraphs());
             <tr v-if="(metadata?.iterations ?? null) !== null">
               <td>
                 Iterations
-                <Tooltip> How many times is the benchmark executed? </Tooltip>
+                <Tooltip> How many times is the benchmark executed?</Tooltip>
               </td>
               <td>{{ metadata.iterations }}</td>
             </tr>
@@ -389,6 +427,32 @@ onMounted(() => renderGraphs());
           </div>
         </div>
         <div ref="relativeChartElement"></div>
+      </div>
+    </div>
+    <div class="columns">
+      <div class="rows grow">
+        <div class="title bold">
+          Sections
+          <Tooltip
+            >Percentual duration of individual compilation sections. This is a
+            rough estimate that might not necessarily contain all of the
+            individual parts of the compilation. The sections are calculated
+            based on the results of self-profile queries and they are measured
+            based on wall-time.
+          </Tooltip>
+        </div>
+        <div>
+          <CompileSectionsChart
+            v-if="
+              (sectionsDetail?.before ?? null) !== null &&
+              (sectionsDetail?.after ?? null) !== null
+            "
+            :before="sectionsDetail.before"
+            :after="sectionsDetail.after"
+          />
+          <span v-else-if="sectionsDetail === null">Loading…</span>
+          <span v-else>Not available</span>
+        </div>
       </div>
     </div>
     <div class="command">
