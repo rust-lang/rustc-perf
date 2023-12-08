@@ -667,6 +667,7 @@ fn main_result() -> anyhow::Result<i32> {
             let get_suite = |rustc: &str, id: &str| {
                 let toolchain = get_local_toolchain(
                     &[Profile::Opt],
+                    &[CodegenBackend::Llvm],
                     rustc,
                     ToolchainConfig::default(),
                     id,
@@ -723,6 +724,7 @@ fn main_result() -> anyhow::Result<i32> {
             let get_toolchain = |rustc: &str, id: &str| {
                 let toolchain = get_local_toolchain(
                     &[Profile::Opt],
+                    &[CodegenBackend::Llvm],
                     rustc,
                     ToolchainConfig::default(),
                     id,
@@ -761,6 +763,7 @@ fn main_result() -> anyhow::Result<i32> {
 
             let toolchain = get_local_toolchain(
                 &profiles,
+                &backends,
                 &local.rustc,
                 *ToolchainConfig::default()
                     .rustdoc(opts.rustdoc.as_deref())
@@ -960,6 +963,7 @@ fn main_result() -> anyhow::Result<i32> {
                 |rustc: &str, suffix: &str| -> anyhow::Result<String> {
                     let toolchain = get_local_toolchain(
                         profiles,
+                        &[CodegenBackend::Llvm],
                         rustc,
                         *ToolchainConfig::default()
                             .rustdoc(opts.rustdoc.as_deref())
@@ -1085,6 +1089,7 @@ fn get_local_toolchain_for_runtime_benchmarks(
 ) -> anyhow::Result<Toolchain> {
     get_local_toolchain(
         &[Profile::Opt],
+        &[CodegenBackend::Llvm],
         &local.rustc,
         *ToolchainConfig::default()
             .cargo(local.cargo.as_deref())

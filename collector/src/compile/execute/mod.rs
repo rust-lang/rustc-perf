@@ -267,6 +267,14 @@ impl<'a> CargoProcess<'a> {
                 cmd.arg("-Ztimings");
             }
             cmd.arg("--");
+
+            match self.backend {
+                CodegenBackend::Llvm => {}
+                CodegenBackend::Cranelift => {
+                    cmd.arg("-Zcodegen-backend=cranelift");
+                }
+            }
+
             // --wrap-rustc-with is not a valid rustc flag. But rustc-fake
             // recognizes it, strips it (and its argument) out, and uses it as an
             // indicator that the rustc invocation should be profiled. This works

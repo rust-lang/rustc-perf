@@ -51,6 +51,7 @@ export const defaultCompileFilter: CompileBenchmarkFilter = {
 };
 
 export type Profile = "check" | "debug" | "opt" | "doc";
+export type CodegenBackend = "llvm" | "cranelift";
 export type Category = "primary" | "secondary";
 
 export type CompileBenchmarkMap = Dict<CompileBenchmarkMetadata>;
@@ -74,6 +75,7 @@ export interface CompileBenchmarkComparison {
   benchmark: string;
   profile: Profile;
   scenario: string;
+  backend: CodegenBackend;
   comparison: StatComparison;
 }
 
@@ -81,6 +83,7 @@ export interface CompileTestCase {
   benchmark: string;
   profile: Profile;
   scenario: string;
+  backend: CodegenBackend;
   category: Category;
 }
 
@@ -156,6 +159,7 @@ export function computeCompileComparisonsWithNonRelevant(
           benchmark: c.benchmark,
           profile: c.profile,
           scenario: c.scenario,
+          backend: c.backend,
           category: (benchmarkMap[c.benchmark] || {}).category || "secondary",
         };
         return calculateComparison(c.comparison, testCase);

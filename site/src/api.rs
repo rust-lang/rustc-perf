@@ -271,6 +271,7 @@ pub mod comparison {
         pub benchmark: String,
         pub profile: String,
         pub scenario: String,
+        pub backend: String,
         pub comparison: StatComparison,
     }
 

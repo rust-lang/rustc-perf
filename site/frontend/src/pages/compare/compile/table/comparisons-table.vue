@@ -55,6 +55,7 @@ const {toggleExpanded, isExpanded} = useExpandedStore();
           <th>Benchmark</th>
           <th>Profile</th>
           <th>Scenario</th>
+          <th>Backend</th>
           <th>% Change</th>
           <th class="narrow">
             Significance Threshold
@@ -98,6 +99,7 @@ const {toggleExpanded, isExpanded} = useExpandedStore();
               {{ comparison.testCase.profile }}
             </td>
             <td>{{ comparison.testCase.scenario }}</td>
+            <td>{{ comparison.testCase.backend }}</td>
             <td>
               <div class="numeric-aligned">
                 <span v-bind:class="percentClass(comparison.percent)">

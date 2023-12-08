@@ -1,3 +1,4 @@
+use crate::compile::benchmark::codegen_backend::CodegenBackend;
 use crate::compile::benchmark::profile::Profile;
 use anyhow::{anyhow, Context};
 use log::debug;
@@ -330,6 +331,7 @@ impl<'a> ToolchainConfig<'a> {
 ///   for the nightly Cargo via `rustup`.
 pub fn get_local_toolchain(
     profiles: &[Profile],
+    codegen_backends: &[CodegenBackend],
     rustc: &str,
     toolchain_config: ToolchainConfig<'_>,
     id_suffix: &str,
@@ -357,8 +359,18 @@ pub fn get_local_toolchain(
                 anyhow::bail!("rustup-toolchain-install-master is not installed but must be");
             }
 
-            if !Command::new("rustup-toolchain-install-master")
-                .arg(toolchain)
+            let mut additional_components = vec![];
+            if codegen_backends.contains(&CodegenBackend::Cranelift) {
+                additional_components.push("rustc-codegen-cranelift");
+            }
+
+            let mut cmd = Command::new("rustup-toolchain-install-master");
+            cmd.arg(toolchain);
+            for component in additional_components {
+                cmd.arg("-c").arg(component);
+            }
+
+            if !cmd
                 .status()
                 .context("failed to run `rustup-toolchain-install-master`")?
                 .success()

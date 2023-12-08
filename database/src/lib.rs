@@ -367,12 +367,15 @@ impl PartialOrd for Scenario {
 pub enum CodegenBackend {
     /// The default LLVM backend
     Llvm,
+    /// Cranelift codegen backend
+    Cranelift,
 }
 
 impl CodegenBackend {
     pub fn as_str(self) -> &'static str {
         match self {
             CodegenBackend::Llvm => "llvm",
+            CodegenBackend::Cranelift => "cranelift",
         }
     }
 }
@@ -382,6 +385,7 @@ impl FromStr for CodegenBackend {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s.to_ascii_lowercase().as_str() {
             "llvm" => CodegenBackend::Llvm,
+            "cranelift" => CodegenBackend::Cranelift,
             _ => return Err(format!("{} is not a codegen backend", s)),
         })
     }

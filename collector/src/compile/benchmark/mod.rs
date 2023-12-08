@@ -263,10 +263,12 @@ impl Benchmark {
         }
 
         eprintln!("Preparing {}", self.name);
-        let profile_dirs = profiles
-            .iter()
-            .map(|profile| Ok((*profile, self.make_temp_dir(&self.path)?)))
-            .collect::<anyhow::Result<Vec<_>>>()?;
+        let mut target_dirs: Vec<((CodegenBackend, Profile), TempDir)> = vec![];
+        for backend in backends {
+            for profile in &profiles {
+                target_dirs.push(((*backend, *profile), self.make_temp_dir(&self.path)?));
+            }
+        }
 
         // In parallel (but with a limit to the number of CPUs), prepare all
         // profiles. This is done in parallel vs. sequentially because:
@@ -290,22 +292,22 @@ impl Benchmark {
         // to do this in Cargo today. We would also ideally build in the same
         // target directory, but that's also not possible, as Cargo takes a
         // target-directory global lock during compilation.
+        //
+        // To avoid potential problems with recompilations, artifacts compiled by
+        // different codegen backends are stored in separate directories.
         let preparation_start = std::time::Instant::now();
         std::thread::scope::<_, anyhow::Result<()>>(|s| {
             let server = jobserver::Client::new(num_cpus::get()).context("jobserver::new")?;
-            let mut threads = Vec::with_capacity(profile_dirs.len());
-            for (profile, prep_dir) in &profile_dirs {
+            let mut threads = Vec::with_capacity(target_dirs.len());
+            for ((backend, profile), prep_dir) in &target_dirs {
                 let server = server.clone();
                 let thread = s.spawn::<_, anyhow::Result<()>>(move || {
                     wait_for_future(async move {
-                        // Prepare all backend artifacts into the same target directory
-                        for backend in backends {
-                            let server = server.clone();
-                            self.mk_cargo_process(toolchain, prep_dir.path(), *profile, *backend)
-                                .jobserver(server)
-                                .run_rustc(false)
-                                .await?;
-                        }
+                        let server = server.clone();
+                        self.mk_cargo_process(toolchain, prep_dir.path(), *profile, *backend)
+                            .jobserver(server)
+                            .run_rustc(false)
+                            .await?;
                         Ok::<(), anyhow::Error>(())
                     })?;
                     Ok(())
@@ -331,88 +333,82 @@ impl Benchmark {
         );
 
         let benchmark_start = std::time::Instant::now();
-        for &backend in backends {
-            for (profile, prep_dir) in &profile_dirs {
-                let profile = *profile;
-                eprintln!(
-                    "Running {}: {:?} + {:?} + {:?}",
-                    self.name, profile, scenarios, backend
-                );
+        for ((backend, profile), prep_dir) in &target_dirs {
+            let backend = *backend;
+            let profile = *profile;
+            eprintln!(
+                "Running {}: {:?} + {:?} + {:?}",
+                self.name, profile, scenarios, backend
+            );
 
-                // We want at least two runs for all benchmarks (since we run
-                // self-profile separately).
-                processor.start_first_collection();
-                for i in 0..std::cmp::max(iterations, 2) {
-                    if i == 1 {
-                        let different = processor.finished_first_collection();
-                        if iterations == 1 && !different {
-                            // Don't run twice if this processor doesn't need it and
-                            // we've only been asked to run once.
-                            break;
-                        }
+            // We want at least two runs for all benchmarks (since we run
+            // self-profile separately).
+            processor.start_first_collection();
+            for i in 0..std::cmp::max(iterations, 2) {
+                if i == 1 {
+                    let different = processor.finished_first_collection();
+                    if iterations == 1 && !different {
+                        // Don't run twice if this processor doesn't need it and
+                        // we've only been asked to run once.
+                        break;
                     }
-                    log::debug!("Benchmark iteration {}/{}", i + 1, iterations);
-                    // Don't delete the directory on error.
-                    let timing_dir = ManuallyDrop::new(self.make_temp_dir(prep_dir.path())?);
-                    let cwd = timing_dir.path();
+                }
+                log::debug!("Benchmark iteration {}/{}", i + 1, iterations);
+                // Don't delete the directory on error.
+                let timing_dir = ManuallyDrop::new(self.make_temp_dir(prep_dir.path())?);
+                let cwd = timing_dir.path();
 
-                    // A full non-incremental build.
-                    if scenarios.contains(&Scenario::Full) {
+                // A full non-incremental build.
+                if scenarios.contains(&Scenario::Full) {
+                    self.mk_cargo_process(toolchain, cwd, profile, backend)
+                        .processor(processor, Scenario::Full, "Full", None)
+                        .run_rustc(true)
+                        .await?;
+                }
+
+                // Rustdoc does not support incremental compilation
+                if profile != Profile::Doc {
+                    // An incremental  from scratch (slowest incremental case).
+                    // This is required for any subsequent incremental builds.
+                    if scenarios.iter().any(|s| s.is_incr()) {
                         self.mk_cargo_process(toolchain, cwd, profile, backend)
-                            .processor(processor, Scenario::Full, "Full", None)
+                            .incremental(true)
+                            .processor(processor, Scenario::IncrFull, "IncrFull", None)
                             .run_rustc(true)
                             .await?;
                     }
 
-                    // Rustdoc does not support incremental compilation
-                    if profile != Profile::Doc {
-                        // An incremental  from scratch (slowest incremental case).
-                        // This is required for any subsequent incremental builds.
-                        if scenarios.iter().any(|s| s.is_incr()) {
-                            self.mk_cargo_process(toolchain, cwd, profile, backend)
-                                .incremental(true)
-                                .processor(processor, Scenario::IncrFull, "IncrFull", None)
-                                .run_rustc(true)
-                                .await?;
-                        }
+                    // An incremental build with no changes (fastest incremental case).
+                    if scenarios.contains(&Scenario::IncrUnchanged) {
+                        self.mk_cargo_process(toolchain, cwd, profile, backend)
+                            .incremental(true)
+                            .processor(processor, Scenario::IncrUnchanged, "IncrUnchanged", None)
+                            .run_rustc(true)
+                            .await?;
+                    }
 
-                        // An incremental build with no changes (fastest incremental case).
-                        if scenarios.contains(&Scenario::IncrUnchanged) {
+                    if scenarios.contains(&Scenario::IncrPatched) {
+                        for (i, patch) in self.patches.iter().enumerate() {
+                            log::debug!("applying patch {}", patch.name);
+                            patch.apply(cwd).map_err(|s| anyhow::anyhow!("{}", s))?;
+
+                            // An incremental build with some changes (realistic
+                            // incremental case).
+                            let scenario_str = format!("IncrPatched{}", i);
                             self.mk_cargo_process(toolchain, cwd, profile, backend)
                                 .incremental(true)
                                 .processor(
                                     processor,
-                                    Scenario::IncrUnchanged,
-                                    "IncrUnchanged",
-                                    None,
+                                    Scenario::IncrPatched,
+                                    &scenario_str,
+                                    Some(patch),
                                 )
                                 .run_rustc(true)
                                 .await?;
                         }
-
-                        if scenarios.contains(&Scenario::IncrPatched) {
-                            for (i, patch) in self.patches.iter().enumerate() {
-                                log::debug!("applying patch {}", patch.name);
-                                patch.apply(cwd).map_err(|s| anyhow::anyhow!("{}", s))?;
-
-                                // An incremental build with some changes (realistic
-                                // incremental case).
-                                let scenario_str = format!("IncrPatched{}", i);
-                                self.mk_cargo_process(toolchain, cwd, profile, backend)
-                                    .incremental(true)
-                                    .processor(
-                                        processor,
-                                        Scenario::IncrPatched,
-                                        &scenario_str,
-                                        Some(patch),
-                                    )
-                                    .run_rustc(true)
-                                    .await?;
-                            }
-                        }
                     }
-                    drop(ManuallyDrop::into_inner(timing_dir));
                 }
+                drop(ManuallyDrop::into_inner(timing_dir));
             }
         }
         log::trace!(
