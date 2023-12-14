@@ -148,6 +148,9 @@ The following options alter the behaviour of the `bench_local` subcommand.
   `IncrUnchanged`, `IncrPatched`, and `All`. The default is `All`. Note that
   `IncrFull` is always run if either of `IncrUnchanged` or `IncrPatched` are
   run (even if not requested).
+- `--backends <BACKENDS>`: the codegen backends to be benchmarked. The possible
+  choices are one or more (comma-separated) of `Llvm`, `Cranelift`. The default
+  is `Llvm`.
 - `--self-profile`: use rustc's `-Zself-profile` option to produce
   query/function tables in the output. The `measureme` tool must be installed
   for this to work.
@@ -474,6 +477,7 @@ The following options alter the behaviour of the `profile_local` subcommand.
   diff files will also be produced.
 - `--rustdoc <RUSTDOC>` as for `bench_local`.
 - `--scenarios <SCENARIOS>`: as for `bench_local`.
+- `--backends <BACKENDS>`: as for `bench_local`.
 - `--jobs <JOB-COUNT>`: execute `<JOB-COUNT>` benchmarks in parallel. This is only allowed for certain
 profilers whose results are not affected by system noise (e.g. `callgrind` or `eprintln`).
 
