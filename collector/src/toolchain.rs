@@ -31,10 +31,10 @@ impl Sysroot {
             triple: triple.to_owned(),
         };
 
-        download.get_and_extract(ModuleVariant::Rustc)?;
-        download.get_and_extract(ModuleVariant::Std)?;
-        download.get_and_extract(ModuleVariant::Cargo)?;
-        download.get_and_extract(ModuleVariant::RustSrc)?;
+        download.get_and_extract(Component::Rustc)?;
+        download.get_and_extract(Component::Std)?;
+        download.get_and_extract(Component::Cargo)?;
+        download.get_and_extract(Component::RustSrc)?;
 
         let sysroot = download.into_sysroot()?;
 
@@ -70,29 +70,28 @@ struct SysrootDownload {
 
 const BASE_URL: &str = "https://ci-artifacts.rust-lang.org/rustc-builds";
 
-// FIXME(eddyb) rename to just `Component`.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-enum ModuleVariant {
+enum Component {
     Cargo,
     Rustc,
     Std,
     RustSrc,
 }
 
-impl fmt::Display for ModuleVariant {
+impl fmt::Display for Component {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
-            ModuleVariant::Cargo => write!(f, "cargo"),
-            ModuleVariant::Rustc => write!(f, "rustc"),
-            ModuleVariant::Std => write!(f, "rust-std"),
-            ModuleVariant::RustSrc => write!(f, "rust-src"),
+            Component::Cargo => write!(f, "cargo"),
+            Component::Rustc => write!(f, "rustc"),
+            Component::Std => write!(f, "rust-std"),
+            Component::RustSrc => write!(f, "rust-src"),
         }
     }
 }
 
-impl ModuleVariant {
+impl Component {
     fn url(&self, channel: &str, sysroot: &SysrootDownload, triple: &str) -> String {
-        let suffix = if *self == ModuleVariant::RustSrc {
+        let suffix = if *self == Component::RustSrc {
             String::new()
         } else {
             format!("-{}", triple)
@@ -137,15 +136,15 @@ impl SysrootDownload {
         })
     }
 
-    fn get_and_extract(&self, variant: ModuleVariant) -> anyhow::Result<()> {
+    fn get_and_extract(&self, component: Component) -> anyhow::Result<()> {
         let archive_path = self.directory.join(format!(
             "{}-{}-{}.tar.xz",
-            self.rust_sha, self.triple, variant,
+            self.rust_sha, self.triple, component,
         ));
         if archive_path.exists() {
             let reader = BufReader::new(File::open(&archive_path)?);
             let decompress = XzDecoder::new(reader);
-            let extract = self.extract(variant, decompress);
+            let extract = self.extract(component, decompress);
             match extract {
                 Ok(()) => return Ok(()),
                 Err(err) => {
@@ -158,9 +157,9 @@ impl SysrootDownload {
         // We usually have nightlies but we want to avoid breaking down if we
         // accidentally end up with a beta or stable commit.
         let urls = [
-            variant.url("nightly", self, &self.triple),
-            variant.url("beta", self, &self.triple),
-            variant.url("stable", self, &self.triple),
+            component.url("nightly", self, &self.triple),
+            component.url("beta", self, &self.triple),
+            component.url("stable", self, &self.triple),
         ];
         for url in &urls {
             log::debug!("requesting: {}", url);
@@ -168,7 +167,7 @@ impl SysrootDownload {
             log::debug!("{}", resp.status());
             if resp.status().is_success() {
                 let reader = XzDecoder::new(BufReader::new(resp));
-                match self.extract(variant, reader) {
+                match self.extract(component, reader) {
                     Ok(()) => return Ok(()),
                     Err(err) => {
                         log::warn!("extracting {} failed: {:?}", url, err);
@@ -181,17 +180,17 @@ impl SysrootDownload {
             "unable to download sha {} triple {} module {} from any of {:?}",
             self.rust_sha,
             self.triple,
-            variant,
+            component,
             urls
         ))
     }
 
-    fn extract<T: Read>(&self, variant: ModuleVariant, reader: T) -> anyhow::Result<()> {
+    fn extract<T: Read>(&self, component: Component, reader: T) -> anyhow::Result<()> {
         let mut archive = Archive::new(reader);
-        let prefix = if variant == ModuleVariant::Std {
+        let prefix = if component == Component::Std {
             format!("rust-std-{}", self.triple)
         } else {
-            variant.to_string()
+            component.to_string()
         };
 
         let unpack_into = self.directory.join(&self.rust_sha);
