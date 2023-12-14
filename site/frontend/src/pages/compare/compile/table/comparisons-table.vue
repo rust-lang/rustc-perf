@@ -23,8 +23,9 @@ function prettifyRawNumber(number: number): string {
   return number.toLocaleString();
 }
 
+// Modify this when changing the number of columns in the table!
 const columnCount = computed(() => {
-  const base = 7;
+  const base = 8;
   if (props.showRawData) {
     return base + 2;
   }
