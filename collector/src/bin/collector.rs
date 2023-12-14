@@ -1231,7 +1231,7 @@ fn run_benchmarks(
     let end = start.elapsed();
     rt.block_on(connection.record_duration(collector.artifact_row_id, end));
 
-    compile_result.or(runtime_result)
+    compile_result.and(runtime_result)
 }
 
 /// Perform benchmarks on a published artifact.
