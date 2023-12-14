@@ -214,7 +214,8 @@ const {toggleExpanded, isExpanded} = useExpandedStore();
     align-items: center;
     text-align: right;
 
-    & > div {
+    & > div,
+    & > span {
       width: 70px;
     }
   }
