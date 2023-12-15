@@ -20,7 +20,11 @@ pub struct Sysroot {
 }
 
 impl Sysroot {
-    pub fn install(sha: String, triple: &str) -> anyhow::Result<Self> {
+    pub fn install(
+        sha: String,
+        triple: &str,
+        backends: Vec<CodegenBackend>,
+    ) -> anyhow::Result<Self> {
         let unpack_into = "cache";
 
         fs::create_dir_all(unpack_into)?;
@@ -35,6 +39,9 @@ impl Sysroot {
         download.get_and_extract(Component::Std)?;
         download.get_and_extract(Component::Cargo)?;
         download.get_and_extract(Component::RustSrc)?;
+        if backends.contains(&CodegenBackend::Cranelift) {
+            download.get_and_extract(Component::Cranelift)?;
+        }
 
         let sysroot = download.into_sysroot()?;
 
@@ -76,6 +83,7 @@ enum Component {
     Rustc,
     Std,
     RustSrc,
+    Cranelift,
 }
 
 impl fmt::Display for Component {
@@ -85,6 +93,7 @@ impl fmt::Display for Component {
             Component::Rustc => write!(f, "rustc"),
             Component::Std => write!(f, "rust-std"),
             Component::RustSrc => write!(f, "rust-src"),
+            Component::Cranelift => write!(f, "rustc-codegen-cranelift"),
         }
     }
 }
@@ -187,10 +196,10 @@ impl SysrootDownload {
 
     fn extract<T: Read>(&self, component: Component, reader: T) -> anyhow::Result<()> {
         let mut archive = Archive::new(reader);
-        let prefix = if component == Component::Std {
-            format!("rust-std-{}", self.triple)
-        } else {
-            component.to_string()
+        let prefix = match component {
+            Component::Std => format!("rust-std-{}", self.triple),
+            Component::Cranelift => format!("{component}-preview"),
+            _ => component.to_string(),
         };
 
         let unpack_into = self.directory.join(&self.rust_sha);
