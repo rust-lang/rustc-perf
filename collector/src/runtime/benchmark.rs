@@ -1,17 +1,19 @@
-use crate::runtime_group_step_name;
-use crate::toolchain::Toolchain;
-use crate::utils::fs::EnsureImmutableFile;
-use anyhow::Context;
-use benchlib::benchmark::passes_filter;
-use cargo_metadata::Message;
 use core::option::Option;
 use core::option::Option::Some;
 use core::result::Result::Ok;
 use std::collections::HashMap;
-use std::io::BufReader;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::Command;
+
+use anyhow::Context;
 use tempfile::TempDir;
+
+use benchlib::benchmark::passes_filter;
+
+use crate::cargo::CargoArtifactIter;
+use crate::runtime_group_step_name;
+use crate::toolchain::Toolchain;
+use crate::utils::fs::EnsureImmutableFile;
 
 /// Directory containing runtime benchmarks.
 /// We measure how long does it take to execute these crates, which is a proxy of the quality
@@ -217,8 +219,8 @@ pub fn prepare_runtime_benchmark_suite(
             .with_context(|| {
                 anyhow::anyhow!("Cannot start compilation of {}", benchmark_crate.name)
             })
-            .and_then(|process| {
-                parse_benchmark_group(process, &benchmark_crate.name).with_context(|| {
+            .and_then(|iter| {
+                parse_benchmark_group(iter, &benchmark_crate.name).with_context(|| {
                     anyhow::anyhow!("Cannot compile runtime benchmark {}", benchmark_crate.name)
                 })
             });
@@ -226,7 +228,7 @@ pub fn prepare_runtime_benchmark_suite(
             Ok(group) => groups.push(group),
             Err(error) => {
                 log::error!(
-                    "Cannot compile runtime benchmark group `{}`",
+                    "Cannot compile runtime benchmark group `{}` {error:?}",
                     benchmark_crate.name
                 );
                 failed_to_compile.insert(
@@ -276,66 +278,47 @@ fn check_duplicates(groups: &[BenchmarkGroup]) -> anyhow::Result<()> {
 /// Locates the benchmark binary of a runtime benchmark crate compiled by cargo, and then executes it
 /// to find out what benchmarks do they contain.
 fn parse_benchmark_group(
-    mut cargo_process: Child,
+    mut cargo_iter: CargoArtifactIter,
     group_name: &str,
 ) -> anyhow::Result<BenchmarkGroup> {
     let mut group: Option<BenchmarkGroup> = None;
 
-    let stream = BufReader::new(cargo_process.stdout.take().unwrap());
-    let mut messages = String::new();
-    for message in Message::parse_stream(stream) {
-        let message = message?;
-        match message {
-            Message::CompilerArtifact(artifact) => {
-                if let Some(ref executable) = artifact.executable {
-                    // Found a binary compiled by a runtime benchmark crate.
-                    // Execute it so that we find all the benchmarks it contains.
-                    if artifact.target.kind.iter().any(|k| k == "bin") {
-                        if group.is_some() {
-                            return Err(anyhow::anyhow!("Runtime benchmark group `{group_name}` has produced multiple binaries"));
-                        }
-
-                        let path = executable.as_std_path().to_path_buf();
-                        let benchmarks = gather_benchmarks(&path).map_err(|err| {
-                            anyhow::anyhow!(
-                                "Cannot gather benchmarks from `{}`: {err:?}",
-                                path.display()
-                            )
-                        })?;
-                        log::info!("Compiled {}", path.display());
-
-                        group = Some(BenchmarkGroup {
-                            binary: path,
-                            name: group_name.to_string(),
-                            benchmark_names: benchmarks,
-                        });
-                    }
+    for artifact in &mut cargo_iter {
+        let artifact = artifact?;
+        if let Some(ref executable) = artifact.executable {
+            // Found a binary compiled by a runtime benchmark crate.
+            // Execute it so that we find all the benchmarks it contains.
+            if artifact.target.kind.iter().any(|k| k == "bin") {
+                if group.is_some() {
+                    return Err(anyhow::anyhow!(
+                        "Runtime benchmark group `{group_name}` has produced multiple binaries"
+                    ));
                 }
+
+                let path = executable.as_std_path().to_path_buf();
+                let benchmarks = gather_benchmarks(&path).map_err(|err| {
+                    anyhow::anyhow!(
+                        "Cannot gather benchmarks from `{}`: {err:?}",
+                        path.display()
+                    )
+                })?;
+                log::info!("Compiled {}", path.display());
+
+                group = Some(BenchmarkGroup {
+                    binary: path,
+                    name: group_name.to_string(),
+                    benchmark_names: benchmarks,
+                });
             }
-            Message::TextLine(line) => {
-                println!("{line}")
-            }
-            Message::CompilerMessage(msg) => {
-                let message = msg.message.rendered.unwrap_or(msg.message.message);
-                messages.push_str(&message);
-                print!("{message}");
-            }
-            _ => {}
         }
     }
-
-    let output = cargo_process.wait()?;
-    if !output.success() {
-        Err(anyhow::anyhow!(
-            "Failed to compile runtime benchmark, exit code {}\n{messages}",
-            output.code().unwrap_or(1),
-        ))
-    } else {
-        let group = group.ok_or_else(|| {
-            anyhow::anyhow!("Runtime benchmark group `{group_name}` has not produced any binary")
-        })?;
-        Ok(group)
-    }
+    cargo_iter
+        .finish()
+        .with_context(|| format!("Failed to compile runtime benchmark `{group_name}`"))?;
+    let group = group.ok_or_else(|| {
+        anyhow::anyhow!("Runtime benchmark group `{group_name}` has not produced any binary")
+    })?;
+    Ok(group)
 }
 
 /// Starts the compilation of a single runtime benchmark crate.
@@ -345,18 +328,13 @@ fn start_cargo_build(
     benchmark_dir: &Path,
     target_dir: Option<&Path>,
     opts: &RuntimeCompilationOpts,
-) -> anyhow::Result<Child> {
+) -> anyhow::Result<CargoArtifactIter> {
     let mut command = Command::new(&toolchain.components.cargo);
     command
         .env("RUSTC", &toolchain.components.rustc)
         .arg("build")
         .arg("--release")
-        .arg("--message-format")
-        .arg("json-diagnostic-short")
-        .current_dir(benchmark_dir)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null());
+        .current_dir(benchmark_dir);
 
     if let Some(ref debug_info) = opts.debug_info {
         command.env("CARGO_PROFILE_RELEASE_DEBUG", debug_info);
@@ -371,10 +349,8 @@ fn start_cargo_build(
     #[cfg(feature = "precise-cachegrind")]
     command.arg("--features").arg("benchlib/precise-cachegrind");
 
-    let child = command
-        .spawn()
-        .map_err(|error| anyhow::anyhow!("Failed to start cargo: {:?}", error))?;
-    Ok(child)
+    CargoArtifactIter::from_cargo_cmd(command)
+        .map_err(|error| anyhow::anyhow!("Failed to start cargo: {:?}", error))
 }
 
 /// Uses a command from `benchlib` to find the benchmark names from the given
