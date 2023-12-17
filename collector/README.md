@@ -508,6 +508,26 @@ versions of `rustc` for individual functions of a single runtime benchmark group
 
 Codegen diff is currently only implemented for runtime benchmarks.
 
+## Binary size statistics
+You can use the `binary_stats` command to display size statistics (section and symbol sizes) of
+binary artifacts (executables, libraries) of selected compile benchmarks.
+
+```
+./target/release/collector binary_stats `<rustc>` --include <benchmark name> \
+    [--profile <Debug|Opt>] \
+    [--backend <Llvm|Cranelift>]
+```
+
+You can also compare (diff) the size statistics between two compilers:
+```
+./target/release/collector binary_stats `<rustc>` --include <benchmark name> --rustc2 <rustc2>
+```
+or between two codegen backends:
+```
+./target/release/collector binary_stats `<rustc>` --include <benchmark name> --rustc2 <rustc>
+    --backend <Llvm|Cranelift> --backend2 <Llvm|Cranelift>
+```
+
 ## How `rustc` wrapping works
 When a crate is benchmarked or profiled, the real `rustc` is replaced with the `rustc-fake` binary,
 which parses commands passed from the `collector` and invokes the actual profiling or benchmarking
