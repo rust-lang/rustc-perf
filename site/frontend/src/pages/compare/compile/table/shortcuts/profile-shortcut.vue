@@ -39,7 +39,7 @@ const profileBaselineCommit = computed(() => {
 
 <template>
   <div class="title">
-    Local profiling command
+    Command for profiling locally
     <Tooltip>
       Execute this command in a checkout of
       <a href="https://github.com/rust-lang/rustc-perf">rustc-perf</a>, after a
