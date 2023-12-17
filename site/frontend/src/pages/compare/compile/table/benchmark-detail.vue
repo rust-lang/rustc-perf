@@ -12,7 +12,6 @@ import {daysBetweenDates, getFutureDate, getPastDate} from "./utils";
 import {GraphRenderOpts, renderPlots} from "../../../../graph/render";
 import {GraphData, GraphKind, GraphsSelector} from "../../../../graph/data";
 import uPlot from "uplot";
-import CachegrindCmd from "../../../../components/cachegrind-cmd.vue";
 import {
   COMPILE_DETAIL_GRAPHS_RESOLVER,
   COMPILE_DETAIL_SECTIONS_RESOLVER,
@@ -23,6 +22,7 @@ import {
 } from "./detail-resolver";
 import CompileSectionsChart from "./sections-chart.vue";
 import PerfettoLink from "../../../../components/perfetto-link.vue";
+import ProfileShortcut from "./shortcuts/profile-shortcut.vue";
 
 const props = defineProps<{
   testCase: CompileTestCase;
@@ -269,31 +269,6 @@ const relativeChartElement: Ref<HTMLElement | null> = ref(null);
 const absoluteChartElement: Ref<HTMLElement | null> = ref(null);
 const graphRange = computed(() => getGraphRange(props.artifact));
 
-enum ProfileCommand {
-  Before = "before",
-  After = "after",
-  Diff = "diff",
-}
-
-const profileCommand: Ref<ProfileCommand> = ref(ProfileCommand.Diff);
-const profileCommit = computed(() => {
-  if (profileCommand.value === ProfileCommand.Before) {
-    return props.baseArtifact.commit;
-  }
-  return props.artifact.commit;
-});
-const profileBaselineCommit = computed(() => {
-  if (profileCommand.value === ProfileCommand.Diff) {
-    return props.baseArtifact.commit;
-  }
-  return undefined;
-});
-
-function changeProfileCommand(event: Event) {
-  const target = event.target as HTMLSelectElement;
-  profileCommand.value = target.value as ProfileCommand;
-}
-
 const sectionsDetail: Ref<CompileDetailSections | null> = ref(null);
 onMounted(() => {
   loadGraphs().then((d) => {
@@ -455,40 +430,11 @@ onMounted(() => {
         </div>
       </div>
     </div>
-    <div class="command">
-      <div class="title bold">
-        Local profiling command<Tooltip>
-          Execute this command in a checkout of
-          <a href="https://github.com/rust-lang/rustc-perf">rustc-perf</a>,
-          after a `cargo build --release`, to generate a Cachegrind profile.
-        </Tooltip>
-      </div>
-
-      <select @change="changeProfileCommand">
-        <option
-          :value="ProfileCommand.Diff"
-          :selected="profileCommand === ProfileCommand.Diff"
-        >
-          Diff
-        </option>
-        <option
-          :value="ProfileCommand.Before"
-          :selected="profileCommand === ProfileCommand.Before"
-        >
-          Baseline commit
-        </option>
-        <option
-          :value="ProfileCommand.After"
-          :selected="profileCommand === ProfileCommand.After"
-        >
-          Benchmarked commit
-        </option>
-      </select>
-
-      <CachegrindCmd
-        :commit="profileCommit"
-        :baseline-commit="profileBaselineCommit"
-        :test-case="testCase"
+    <div class="shortcut">
+      <ProfileShortcut
+        :artifact="props.artifact"
+        :base-artifact="props.baseArtifact"
+        :test-case="props.testCase"
       />
     </div>
   </div>
@@ -521,7 +467,7 @@ onMounted(() => {
     align-items: center;
   }
 }
-.command {
+.shortcut {
   margin-top: 15px;
   text-align: left;
 }

@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import {CompileTestCase, Profile} from "../pages/compare/compile/common";
+/**
+ * This component displays a rustc-perf command for profiling a compile benchmark with Cachegrind.
+ * */
+import {CompileTestCase, Profile} from "../../common";
 import {computed} from "vue";
 
 const props = defineProps<{
