@@ -23,6 +23,7 @@ import {
 import CompileSectionsChart from "./sections-chart.vue";
 import PerfettoLink from "../../../../components/perfetto-link.vue";
 import ProfileShortcut from "./shortcuts/profile-shortcut.vue";
+import BinarySizeShortcut from "./shortcuts/binary-size-shortcut.vue";
 
 const props = defineProps<{
   testCase: CompileTestCase;
@@ -31,6 +32,8 @@ const props = defineProps<{
   baseArtifact: ArtifactDescription;
   benchmarkMap: CompileBenchmarkMap;
 }>();
+
+const BINARY_SIZE_METRIC: string = "size:linked_artifact";
 
 type GraphRange = {
   start: string;
@@ -348,8 +351,8 @@ onMounted(() => {
             <PerfettoLink
               :artifact="props.baseArtifact"
               :test-case="props.testCase"
-              >query trace</PerfettoLink
-            >
+              >query trace
+            </PerfettoLink>
           </li>
           <li>
             After:
@@ -357,8 +360,8 @@ onMounted(() => {
               >self-profile</a
             >,
             <PerfettoLink :artifact="props.artifact" :test-case="props.testCase"
-              >query trace</PerfettoLink
-            >
+              >query trace
+            </PerfettoLink>
           </li>
           <li>
             <a
@@ -431,7 +434,16 @@ onMounted(() => {
       </div>
     </div>
     <div class="shortcut">
+      <template v-if="props.metric === BINARY_SIZE_METRIC">
+        <BinarySizeShortcut
+          v-if="testCase.profile === 'debug' || testCase.profile === 'opt'"
+          :artifact="props.artifact"
+          :base-artifact="props.baseArtifact"
+          :test-case="props.testCase"
+        />
+      </template>
       <ProfileShortcut
+        v-else
         :artifact="props.artifact"
         :base-artifact="props.baseArtifact"
         :test-case="props.testCase"
@@ -455,9 +467,11 @@ onMounted(() => {
     flex-wrap: nowrap;
   }
 }
+
 .graphs {
   margin-top: 15px;
 }
+
 .rows {
   display: flex;
   flex-direction: column;
@@ -467,6 +481,7 @@ onMounted(() => {
     align-items: center;
   }
 }
+
 .shortcut {
   margin-top: 15px;
   text-align: left;

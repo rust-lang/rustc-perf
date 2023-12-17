@@ -1,4 +1,11 @@
 <script setup lang="ts">
+/**
+ * This component displays a select box that allows users to choose between three variants
+ * of the `CachegrindCmd` component with a local `rustc-perf` profiling command.
+ * Users can choose either to profile the baseline commit, the new commit, or to profile both
+ * and display a diff.
+ **/
+
 import {computed, ref, Ref} from "vue";
 import {CompileTestCase} from "../../common";
 import {ArtifactDescription} from "../../../types";

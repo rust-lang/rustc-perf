@@ -1,9 +1,11 @@
 <script setup lang="ts">
 /**
  * This component displays a rustc-perf command for profiling a compile benchmark with Cachegrind.
- * */
-import {CompileTestCase, Profile} from "../../common";
+ **/
+
+import {CompileTestCase} from "../../common";
 import {computed} from "vue";
+import {normalizeProfile} from "./utils";
 
 const props = defineProps<{
   commit: string;
@@ -19,18 +21,6 @@ const firstCommit = computed(() => {
   }
 });
 
-function normalizeProfile(profile: Profile): string {
-  if (profile === "opt") {
-    return "Opt";
-  } else if (profile === "debug") {
-    return "Debug";
-  } else if (profile === "check") {
-    return "Check";
-  } else if (profile === "doc") {
-    return "Doc";
-  }
-  return "<invalid profile>";
-}
 function normalizeScenario(scenario: string): string {
   if (scenario === "full") {
     return "Full";
@@ -58,6 +48,7 @@ function normalizeScenario(scenario: string): string {
 pre {
   background-color: #eeeeee;
 }
+
 code {
   user-select: all;
 }
