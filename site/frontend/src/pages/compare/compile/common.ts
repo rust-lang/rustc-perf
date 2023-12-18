@@ -14,6 +14,10 @@ export type CompileBenchmarkFilter = {
     incrUnchanged: boolean;
     incrPatched: boolean;
   };
+  backend: {
+    llvm: boolean;
+    cranelift: boolean;
+  };
   category: {
     primary: boolean;
     secondary: boolean;
@@ -39,6 +43,10 @@ export const defaultCompileFilter: CompileBenchmarkFilter = {
     incrFull: true,
     incrUnchanged: true,
     incrPatched: true,
+  },
+  backend: {
+    llvm: true,
+    cranelift: true,
   },
   category: {
     primary: true,
@@ -121,6 +129,17 @@ export function computeCompileComparisonsWithNonRelevant(
     }
   }
 
+  function backendFilter(backend: string): boolean {
+    if (backend === "llvm") {
+      return filter.backend.llvm;
+    } else if (backend === "cranelift") {
+      return filter.backend.cranelift;
+    } else {
+      // Unknown, but by default we should show things
+      return true;
+    }
+  }
+
   function artifactFilter(metadata: CompileBenchmarkMetadata | null): boolean {
     if (metadata?.binary === null) return true;
 
@@ -139,13 +158,14 @@ export function computeCompileComparisonsWithNonRelevant(
   }
 
   function shouldShowTestCase(comparison: TestCaseComparison<CompileTestCase>) {
-    const name = `${comparison.testCase.benchmark} ${comparison.testCase.profile} ${comparison.testCase.scenario}`;
+    const name = `${comparison.testCase.benchmark} ${comparison.testCase.profile} ${comparison.testCase.scenario} ${comparison.testCase.backend}`;
     const nameFilter = filter.name && filter.name.trim();
     const nameFiltered = !nameFilter || name.includes(nameFilter);
 
     return (
       profileFilter(comparison.testCase.profile) &&
       scenarioFilter(comparison.testCase.scenario) &&
+      backendFilter(comparison.testCase.backend) &&
       categoryFilter(comparison.testCase.category) &&
       artifactFilter(benchmarkMap[comparison.testCase.benchmark] ?? null) &&
       nameFiltered

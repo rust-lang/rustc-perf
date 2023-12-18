@@ -65,6 +65,18 @@ function loadFilterFromUrl(
         defaultFilter.scenario.incrPatched
       ),
     },
+    backend: {
+      llvm: getBoolOrDefault(
+        urlParams,
+        "backend-llvm",
+        defaultFilter.backend.llvm
+      ),
+      cranelift: getBoolOrDefault(
+        urlParams,
+        "backend-clif",
+        defaultFilter.backend.cranelift
+      ),
+    },
     category: {
       primary: getBoolOrDefault(
         urlParams,
@@ -137,6 +149,12 @@ function storeFilterToUrl(
     "incrPatched",
     filter.scenario.incrPatched,
     defaultFilter.scenario.incrPatched
+  );
+  storeOrReset("backend-llvm", filter.backend.llvm, defaultFilter.backend.llvm);
+  storeOrReset(
+    "backend-clif",
+    filter.backend.cranelift,
+    defaultFilter.backend.cranelift
   );
   storeOrReset(
     "primary",

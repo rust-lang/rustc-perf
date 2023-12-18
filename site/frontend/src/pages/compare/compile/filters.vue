@@ -62,7 +62,7 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
                     id="profile-check"
                     v-model="filter.profile.check"
                   />
-                  <span class="cache-label">check</span>
+                  <span class="label">check</span>
                 </label>
                 <Tooltip>Check build that does not generate any code.</Tooltip>
               </li>
@@ -73,7 +73,7 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
                     id="profile-debug"
                     v-model="filter.profile.debug"
                   />
-                  <span class="cache-label">debug</span>
+                  <span class="label">debug</span>
                 </label>
                 <Tooltip>Debug build that produces unoptimized code.</Tooltip>
               </li>
@@ -84,7 +84,7 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
                     id="profile-opt"
                     v-model="filter.profile.opt"
                   />
-                  <span class="cache-label">opt</span>
+                  <span class="label">opt</span>
                 </label>
                 <Tooltip
                   >Release build that produces as optimized code as possible.
@@ -97,7 +97,7 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
                     id="profile-doc"
                     v-model="filter.profile.doc"
                   />
-                  <span class="cache-label">doc</span>
+                  <span class="label">doc</span>
                 </label>
                 <Tooltip
                   >Documentation build that produces HTML documentation site
@@ -124,7 +124,7 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
                     id="build-full"
                     v-model="filter.scenario.full"
                   />
-                  <span class="cache-label">full</span>
+                  <span class="label">full</span>
                 </label>
                 <Tooltip
                   >A non-incremental full build starting with empty cache.
@@ -137,7 +137,7 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
                     id="build-incremental-full"
                     v-model="filter.scenario.incrFull"
                   />
-                  <span class="cache-label">incr-full</span>
+                  <span class="label">incr-full</span>
                 </label>
                 <Tooltip
                   >An incremental build starting with empty cache.
@@ -150,7 +150,7 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
                     id="build-incremental-unchanged"
                     v-model="filter.scenario.incrUnchanged"
                   />
-                  <span class="cache-label">incr-unchanged</span>
+                  <span class="label">incr-unchanged</span>
                 </label>
                 <Tooltip
                   >An incremental build starting with complete cache, and
@@ -165,13 +165,43 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
                     id="build-incremental-patched"
                     v-model="filter.scenario.incrPatched"
                   />
-                  <span class="cache-label">incr-patched</span>
+                  <span class="label">incr-patched</span>
                 </label>
                 <Tooltip
                   >An incremental build starting with complete cache, and an
                   altered source directory. The typical variant of this is
                   "println" which represents the addition of a `println!` macro
                   somewhere in the source code.
+                </Tooltip>
+              </li>
+            </ul>
+          </div>
+          <div class="section section-list-wrapper">
+            <div class="section-heading">
+              <div style="width: 160px">
+                <span>Backends</span>
+                <Tooltip
+                  >The different codegen backends used to generate executable
+                  code.
+                </Tooltip>
+              </div>
+            </div>
+            <ul class="states-list">
+              <li>
+                <label>
+                  <input type="checkbox" v-model="filter.backend.llvm" />
+                  <span class="label">LLVM</span>
+                </label>
+                <Tooltip>The default LLVM backend. </Tooltip>
+              </li>
+              <li>
+                <label>
+                  <input type="checkbox" v-model="filter.backend.cranelift" />
+                  <span class="label">Cranelift</span>
+                </label>
+                <Tooltip
+                  >Alternative Cranelift backend, used primarily for faster
+                  debug builds.
                 </Tooltip>
               </li>
             </ul>
@@ -190,14 +220,14 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
               <li>
                 <label>
                   <input type="checkbox" v-model="filter.category.primary" />
-                  <span class="cache-label">primary</span>
+                  <span class="label">primary</span>
                 </label>
                 <Tooltip>Real-world benchmarks.</Tooltip>
               </li>
               <li>
                 <label>
                   <input type="checkbox" v-model="filter.category.secondary" />
-                  <span class="cache-label">secondary</span>
+                  <span class="label">secondary</span>
                 </label>
                 <Tooltip>Artificial benchmarks and stress-tests.</Tooltip>
               </li>
@@ -217,13 +247,13 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
               <li>
                 <label>
                   <input type="checkbox" v-model="filter.artifact.binary" />
-                  <span class="cache-label">binary</span>
+                  <span class="label">binary</span>
                 </label>
               </li>
               <li>
                 <label>
                   <input type="checkbox" v-model="filter.artifact.library" />
-                  <span class="cache-label">library</span>
+                  <span class="label">library</span>
                 </label>
               </li>
             </ul>
@@ -313,7 +343,7 @@ const opened = createPersistedRef(PREF_FILTERS_OPENED);
   margin-right: 15px;
 }
 
-.cache-label {
+.label {
   font-weight: bold;
 }
 </style>
