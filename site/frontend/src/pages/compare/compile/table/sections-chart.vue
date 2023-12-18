@@ -7,15 +7,16 @@ const props = defineProps<{
   after: CompilationSections;
 }>();
 
-const maxTotalDuration = computed(() => {
-  const before = calculateTotalSectionsDuration(props.before);
-  const after = calculateTotalSectionsDuration(props.after);
-  return Math.max(before, after);
-});
-
 function calculateTotalSectionsDuration(sections: CompilationSections): number {
   return sections.sections.reduce((accum, section) => accum + section.value, 0);
 }
+
+const beforeTotalWidth = computed(() => {
+  return calculateTotalSectionsDuration(props.before);
+});
+const afterTotalWidth = computed(() => {
+  return calculateTotalSectionsDuration(props.after);
+});
 
 const SECTIONS_PALETTE = [
   "#7768AE",
@@ -29,8 +30,8 @@ function getSectionColor(index: number): string {
   return SECTIONS_PALETTE[index % SECTIONS_PALETTE.length];
 }
 
-function calculate_width(value: number): string {
-  const fraction = value / maxTotalDuration.value;
+function calculate_width(value: number, totalDuration: number): string {
+  const fraction = value / totalDuration;
   return `${(fraction * 100).toFixed(2)}%`;
 }
 
@@ -87,7 +88,10 @@ function deactivate() {
             @mouseenter="activate(section.name)"
             @mouseleave="deactivate"
             :style="{
-              width: calculate_width(section.value),
+              width: calculate_width(
+                section.value,
+                rowIndex == 0 ? beforeTotalWidth : afterTotalWidth
+              ),
               backgroundColor: getSectionColor(index),
             }"
           >
@@ -147,7 +151,6 @@ function deactivate() {
     width: calc(100% - 60px);
     display: flex;
     flex-direction: row;
-    border-right: 1px dashed #333333;
 
     .section {
       height: 30px;
