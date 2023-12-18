@@ -407,8 +407,8 @@ onMounted(() => {
         <div ref="relativeChartElement"></div>
       </div>
     </div>
-    <div class="columns">
-      <div class="rows grow">
+    <div class="columns" v-if="props.metric !== BINARY_SIZE_METRIC">
+      <div class="rows center-items grow">
         <div class="title bold">
           Sections
           <Tooltip
@@ -418,6 +418,10 @@ onMounted(() => {
             based on the results of self-profile queries and they are measured
             based on wall-time.
           </Tooltip>
+        </div>
+        <div style="font-size: 0.8em">
+          Note that the data for this chart is calculated from wall-time (it is
+          metric agnostic)!
         </div>
         <div>
           <CompileSectionsChart
