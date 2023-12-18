@@ -54,12 +54,16 @@ const chartRows: ComputedRef<Array<[string, CompilationSections]>> = computed(
   ]
 );
 const legendItems: ComputedRef<
-  Array<{section: CompilationSection; color: string}>
+  Array<{section: CompilationSection; label: string; color: string}>
 > = computed(() => {
   const items = [];
   for (const section of props.before.sections) {
     items.push({
       section,
+      label: `${section.name} (${formatPercent(
+        props.before,
+        section.name
+      )} -> ${formatPercent(props.after, section.name)})`,
       color: getSectionColor(items.length),
     });
   }
@@ -122,7 +126,7 @@ function deactivate() {
           :class="{color: true, active: activeSection === item.section.name}"
           :style="{backgroundColor: item.color}"
         ></div>
-        <div class="name">{{ item.section.name }}</div>
+        <div class="name">{{ item.label }}</div>
       </div>
     </div>
   </div>
