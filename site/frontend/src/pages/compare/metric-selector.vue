@@ -51,6 +51,7 @@ function changeMetric(e: Event) {
 .wrapper {
   display: flex;
   flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
   margin: 10px 0;
 

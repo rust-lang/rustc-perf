@@ -23,8 +23,9 @@ function prettifyRawNumber(number: number): string {
   return number.toLocaleString();
 }
 
+// Modify this when changing the number of columns in the table!
 const columnCount = computed(() => {
-  const base = 7;
+  const base = 8;
   if (props.showRawData) {
     return base + 2;
   }
@@ -214,7 +215,8 @@ const {toggleExpanded, isExpanded} = useExpandedStore();
     align-items: center;
     text-align: right;
 
-    & > div {
+    & > div,
+    & > span {
       width: 70px;
     }
   }
