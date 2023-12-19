@@ -76,12 +76,14 @@ dependencies = [
 
 [[package]]
 name = "analyzeme"
-version = "10.1.1"
-source = "git+https://github.com/rust-lang/measureme?branch=master#8f1b8321b28e49139a86f07ce44dc88ef61b38d5"
+version = "11.0.0"
+source = "git+https://github.com/rust-lang/measureme?branch=stable#f2914503011098feb1bc9205c75dfb53203f9d9c"
 dependencies = [
  "analyzeme 9.2.0",
- "decodeme",
- "measureme 10.1.1",
+ "decodeme 10.1.2",
+ "decodeme 11.0.0",
+ "measureme 10.1.2",
+ "measureme 11.0.0",
  "memchr",
  "rustc-hash",
  "serde",
@@ -649,10 +651,22 @@ dependencies = [
 
 [[package]]
 name = "decodeme"
-version = "10.1.1"
-source = "git+https://github.com/rust-lang/measureme?branch=master#8f1b8321b28e49139a86f07ce44dc88ef61b38d5"
+version = "10.1.2"
+source = "git+https://github.com/rust-lang/measureme?tag=10.1.2#f9f84d1a79c46e9927926c177c33eb3ea3c72979"
 dependencies = [
- "measureme 10.1.1",
+ "measureme 10.1.2",
+ "memchr",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "decodeme"
+version = "11.0.0"
+source = "git+https://github.com/rust-lang/measureme?branch=stable#f2914503011098feb1bc9205c75dfb53203f9d9c"
+dependencies = [
+ "measureme 11.0.0",
  "memchr",
  "rustc-hash",
  "serde",
@@ -1478,12 +1492,25 @@ dependencies = [
 
 [[package]]
 name = "measureme"
-version = "10.1.1"
-source = "git+https://github.com/rust-lang/measureme?branch=master#8f1b8321b28e49139a86f07ce44dc88ef61b38d5"
+version = "10.1.2"
+source = "git+https://github.com/rust-lang/measureme?tag=10.1.2#f9f84d1a79c46e9927926c177c33eb3ea3c72979"
 dependencies = [
  "log",
  "memmap2",
- "parking_lot 0.11.2",
+ "parking_lot 0.12.1",
+ "perf-event-open-sys 3.0.0",
+ "rustc-hash",
+ "smallvec",
+]
+
+[[package]]
+name = "measureme"
+version = "11.0.0"
+source = "git+https://github.com/rust-lang/measureme?branch=stable#f2914503011098feb1bc9205c75dfb53203f9d9c"
+dependencies = [
+ "log",
+ "memmap2",
+ "parking_lot 0.12.1",
  "perf-event-open-sys 3.0.0",
  "rustc-hash",
  "smallvec",
@@ -2514,7 +2541,7 @@ checksum = "7bd3e3206899af3f8b12af284fafc038cc1dc2b41d1b89dd17297221c5d225de"
 name = "site"
 version = "0.1.0"
 dependencies = [
- "analyzeme 10.1.1",
+ "analyzeme 11.0.0",
  "anyhow",
  "arc-swap",
  "async-trait",
