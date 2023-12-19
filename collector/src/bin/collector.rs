@@ -575,7 +575,11 @@ enum Commands {
     },
 
     /// Installs the next commit for perf.rust-lang.org
-    InstallNext,
+    InstallNext {
+        /// Install additional components to enable benchmarking of the given backends.
+        #[arg(long = "backends", value_parser = EnumArgParser::<CodegenBackend>::default(), default_value = "Llvm")]
+        codegen_backends: MultiEnumValue<CodegenBackend>,
+    },
 
     /// Download a crate into collector/benchmarks.
     Download(DownloadCommand),
@@ -979,8 +983,12 @@ fn main_result() -> anyhow::Result<i32> {
                     runs,
                 } => {
                     let sha = commit.sha.to_string();
-                    let sysroot = Sysroot::install(sha.clone(), &target_triple)
-                        .with_context(|| format!("failed to install sysroot for {:?}", commit))?;
+                    let sysroot = Sysroot::install(
+                        sha.clone(),
+                        &target_triple,
+                        vec![CodegenBackend::Llvm],
+                    )
+                    .with_context(|| format!("failed to install sysroot for {:?}", commit))?;
 
                     let mut benchmarks = get_compile_benchmarks(
                         &compile_benchmark_dir,
@@ -1155,7 +1163,7 @@ fn main_result() -> anyhow::Result<i32> {
             Ok(0)
         }
 
-        Commands::InstallNext => {
+        Commands::InstallNext { codegen_backends } => {
             let last_sha = Command::new("git")
                 .arg("ls-remote")
                 .arg("https://github.com/rust-lang/rust.git")
@@ -1165,7 +1173,7 @@ fn main_result() -> anyhow::Result<i32> {
             let last_sha = String::from_utf8(last_sha.stdout).expect("utf8");
             let last_sha = last_sha.split_whitespace().next().expect(&last_sha);
             let commit = get_commit_or_fake_it(last_sha).expect("success");
-            let mut sysroot = Sysroot::install(commit.sha, &target_triple)?;
+            let mut sysroot = Sysroot::install(commit.sha, &target_triple, codegen_backends.0)?;
             sysroot.preserve(); // don't delete it
 
             // Print the directory containing the toolchain.
