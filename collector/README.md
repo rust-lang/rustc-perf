@@ -123,7 +123,9 @@ The following options alter the behaviour of the `bench_local` subcommand.
 - `--exclude <EXCLUDE>`: this is used to run a subset of the benchmarks. The
   argument is a comma-separated list of benchmark prefixes. When this option is
   specified, a benchmark is excluded from the run if its name matches one of
-  the given prefixes.
+  the given prefixes. You can also specify `primary`, `secondary` and `stable`
+  to filter on the category of benchmarks. `rust-timer` does not run `stable`
+  benchmarks on PRs.
 - `--exclude-suffix <EXCLUDE>`: this is used to run a subset of the benchmarks. The
   argument is a comma-separated list of benchmark suffixes. When this option is
   specified, a benchmark is excluded from the run if its name matches one of
@@ -134,7 +136,9 @@ The following options alter the behaviour of the `bench_local` subcommand.
 - `--include <INCLUDE>`: the inverse of `--exclude`. The argument is a
   comma-separated list of benchmark prefixes. When this option is specified, a
   benchmark is included in the run only if its name matches one of the given
-  prefixes.
+  prefixes. You can also specify `primary`, `secondary` and `stable` to filter
+  on the category of benchmarks. `rust-timer` only runs `--include primary,secondary`
+  on PRs.
 - `--profiles <PROFILES>`: the profiles to be benchmarked. The possible choices
   are one or more (comma-separated) of `Check`, `Debug`, `Doc`, `Opt`, and
   `All`. The default is `Check,Debug,Opt`.

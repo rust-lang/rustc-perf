@@ -899,13 +899,12 @@ fn main_result() -> anyhow::Result<i32> {
                 target_triple,
             )?;
 
-            let mut benchmarks = get_compile_benchmarks(
+            let benchmarks = get_compile_benchmarks(
                 &compile_benchmark_dir,
                 local.include.as_deref(),
                 local.exclude.as_deref(),
                 local.exclude_suffix.as_deref(),
             )?;
-            benchmarks.retain(|b| b.category().is_primary_or_secondary());
 
             let artifact_id = ArtifactId::Tag(toolchain.id.clone());
             let mut conn = rt.block_on(pool.connection());

@@ -468,28 +468,57 @@ pub fn get_compile_benchmarks(
     let mut excludes = to_hashmap(exclude);
     let mut exclude_suffixes = to_hashmap(exclude_suffix);
 
+    let mut include_primaries = false;
+    let mut include_secondaries = false;
+    let mut include_stables = false;
+    if let Some(includes) = includes.as_mut() {
+        include_primaries = includes.remove(&"primary").is_some();
+        include_secondaries = includes.remove(&"secondary").is_some();
+        include_stables = includes.remove(&"stable").is_some();
+    }
+    let mut exclude_primaries = false;
+    let mut exclude_secondaries = false;
+    let mut exclude_stables = false;
+    if let Some(excludes) = excludes.as_mut() {
+        exclude_primaries = excludes.remove(&"primary").is_some();
+        exclude_secondaries = excludes.remove(&"secondary").is_some();
+        exclude_stables = excludes.remove(&"stable").is_some();
+    }
+
     for (path, name) in paths {
         let mut skip = false;
+        let b = Benchmark::new(name, path)?;
 
         let name_matches_prefix = |prefixes: &mut HashMap<&str, usize>| {
-            substring_matches(prefixes, |prefix| name.starts_with(prefix))
+            substring_matches(prefixes, |prefix| b.name.0.starts_with(prefix))
         };
 
+        if include.is_none() && exclude.is_none() && b.category() == Category::Stable {
+            // Common case: don't run the stable benchmarks.
+            continue;
+        }
+
         if let Some(includes) = includes.as_mut() {
-            skip |= !name_matches_prefix(includes);
+            skip |= !(name_matches_prefix(includes)
+                || (include_primaries && b.category() == Category::Primary)
+                || (include_secondaries && b.category() == Category::Secondary)
+                || (include_stables && b.category() == Category::Stable));
         }
         if let Some(excludes) = excludes.as_mut() {
-            skip |= name_matches_prefix(excludes);
+            skip |= name_matches_prefix(excludes)
+                || (exclude_primaries && b.category() == Category::Primary)
+                || (exclude_secondaries && b.category() == Category::Secondary)
+                || (exclude_stables && b.category() == Category::Stable);
         }
         if let Some(exclude_suffixes) = exclude_suffixes.as_mut() {
-            skip |= substring_matches(exclude_suffixes, |suffix| name.ends_with(suffix));
+            skip |= substring_matches(exclude_suffixes, |suffix| b.name.0.ends_with(suffix));
         }
         if skip {
             continue;
         }
 
-        debug!("benchmark `{}`- registered", name);
-        benchmarks.push(Benchmark::new(name, path)?);
+        debug!("benchmark `{}`- registered", b.name);
+        benchmarks.push(b);
     }
 
     // All prefixes/suffixes must be used at least once. This is to catch typos.
