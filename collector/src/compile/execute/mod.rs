@@ -650,7 +650,6 @@ impl Stats {
 
 #[derive(serde::Deserialize, Clone)]
 pub struct SelfProfile {
-    pub query_data: Vec<QueryData>,
     pub artifact_sizes: Vec<ArtifactSize>,
 }
 
@@ -659,14 +658,4 @@ pub struct ArtifactSize {
     pub label: QueryLabel,
     #[serde(rename = "value")]
     pub size: u64,
-}
-
-#[derive(serde::Deserialize, Clone)]
-pub struct QueryData {
-    pub label: QueryLabel,
-    pub self_time: Duration,
-    pub number_of_cache_hits: u32,
-    pub invocation_count: u32,
-    pub blocked_time: Duration,
-    pub incremental_load_time: Duration,
 }
