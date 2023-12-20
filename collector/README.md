@@ -135,6 +135,9 @@ The following options alter the behaviour of the `bench_local` subcommand.
   comma-separated list of benchmark prefixes. When this option is specified, a
   benchmark is included in the run only if its name matches one of the given
   prefixes.
+- `--category <CATEGORIES>`: benchmark categories that should be included. The
+  possible choices are one or more (comma-separated) of `Primary`, `Secondary`,
+  `Stable`, and `All`. The default is `Primary,Secondary`.
 - `--profiles <PROFILES>`: the profiles to be benchmarked. The possible choices
   are one or more (comma-separated) of `Check`, `Debug`, `Doc`, `Opt`, and
   `All`. The default is `Check,Debug,Opt`.

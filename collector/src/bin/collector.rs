@@ -322,6 +322,10 @@ struct LocalOptions {
     /// Include only benchmarks matching a prefix in this comma-separated list
     #[arg(long)]
     include: Option<String>,
+
+    /// Include only benchmarks belonging to the given categories.
+    #[arg(long, value_parser = EnumArgParser::<Category>::default(), default_value = "Primary,Secondary")]
+    category: MultiEnumValue<Category>,
 }
 
 #[derive(Debug, clap::Args)]
@@ -605,7 +609,7 @@ struct DownloadCommand {
     force: bool,
 
     /// What category does the benchmark belong to
-    #[arg(long, short('c'), value_enum, global = true, default_value = "primary")]
+    #[arg(long, short('c'), value_enum, global = true, default_value = "Primary")]
     category: Category,
 
     /// What artifact type (library or binary) does the benchmark build.
@@ -909,7 +913,7 @@ fn main_result() -> anyhow::Result<i32> {
                 local.exclude.as_deref(),
                 local.exclude_suffix.as_deref(),
             )?;
-            benchmarks.retain(|b| b.category().is_primary_or_secondary());
+            benchmarks.retain(|b| local.category.0.contains(&b.category()));
 
             let artifact_id = ArtifactId::Tag(toolchain.id.clone());
             let mut conn = rt.block_on(pool.connection());
@@ -1082,7 +1086,7 @@ fn main_result() -> anyhow::Result<i32> {
                 local.exclude.as_deref(),
                 local.exclude_suffix.as_deref(),
             )?;
-            benchmarks.retain(|b| b.category().is_primary_or_secondary());
+            benchmarks.retain(|b| local.category.0.contains(&b.category()));
 
             let mut errors = BenchmarkErrors::new();
 

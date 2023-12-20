@@ -3,6 +3,7 @@ use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "kebab-case")]
+#[value(rename_all = "PascalCase")]
 pub enum Category {
     Primary,
     Secondary,
