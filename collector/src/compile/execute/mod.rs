@@ -485,14 +485,7 @@ enum DeserializeStatError {
 }
 
 enum SelfProfileFiles {
-    Seven {
-        string_data: PathBuf,
-        string_index: PathBuf,
-        events: PathBuf,
-    },
-    Eight {
-        file: PathBuf,
-    },
+    Eight { file: PathBuf },
 }
 
 fn process_stat_output(

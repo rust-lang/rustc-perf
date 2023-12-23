@@ -282,44 +282,6 @@ impl SelfProfileS3Upload {
             .context("create temporary file")
             .unwrap();
         let filename = match files {
-            SelfProfileFiles::Seven {
-                string_index,
-                string_data,
-                events,
-            } => {
-                let tarball = snap::write::FrameEncoder::new(Vec::new());
-                let mut builder = tar::Builder::new(tarball);
-                builder.mode(tar::HeaderMode::Deterministic);
-
-                let append_file = |builder: &mut tar::Builder<_>,
-                                   file: &Path,
-                                   name: &str|
-                 -> anyhow::Result<()> {
-                    if file.exists() {
-                        // Silently ignore missing files, the new self-profile
-                        // experiment with one file has a different structure.
-                        builder.append_path_with_name(file, name)?;
-                    }
-                    Ok(())
-                };
-
-                append_file(&mut builder, &string_index, "self-profile.string_index")
-                    .expect("append string index");
-                append_file(&mut builder, &string_data, "self-profile.string_data")
-                    .expect("append string data");
-                append_file(&mut builder, &events, "self-profile.events").expect("append events");
-                builder.finish().expect("complete tarball");
-                std::fs::write(
-                    upload.path(),
-                    builder
-                        .into_inner()
-                        .expect("get")
-                        .into_inner()
-                        .expect("snap success"),
-                )
-                .expect("wrote tarball");
-                format!("self-profile-{}.tar.sz", collection)
-            }
             SelfProfileFiles::Eight { file } => {
                 let data = std::fs::read(file).expect("read profile data");
                 let mut data = snap::read::FrameEncoder::new(&data[..]);
