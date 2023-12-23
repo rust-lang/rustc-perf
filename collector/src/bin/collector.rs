@@ -1593,12 +1593,6 @@ fn bench_compile(
         shared.artifact_id, shared.toolchain.triple
     );
 
-    if config.is_self_profile {
-        if let Err(e) = check_measureme_installed() {
-            panic!("{}Or omit --self-profile` to opt out\n", e);
-        }
-    }
-
     let bench_rustc = config.bench_rustc;
 
     let start = Instant::now();
