@@ -19,7 +19,6 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::process::{self, Command};
 use std::str;
-use std::time::Duration;
 
 pub mod bencher;
 mod etw_parser;
@@ -499,25 +498,15 @@ fn process_stat_output(
     let stdout = String::from_utf8(output.stdout.clone()).expect("utf8 output");
     let mut stats = Stats::new();
 
-    let mut profile: Option<SelfProfile> = None;
-    let mut dir: Option<PathBuf> = None;
-    let mut prefix: Option<String> = None;
-    let mut file: Option<PathBuf> = None;
+    let mut self_profile_dir: Option<PathBuf> = None;
+    let mut self_profile_crate: Option<String> = None;
     for line in stdout.lines() {
-        if let Some(stripped) = line.strip_prefix("!self-profile-output:") {
-            profile = Some(serde_json::from_str(stripped).unwrap());
-            continue;
-        }
         if let Some(stripped) = line.strip_prefix("!self-profile-dir:") {
-            dir = Some(PathBuf::from(stripped));
+            self_profile_dir = Some(PathBuf::from(stripped));
             continue;
         }
-        if let Some(stripped) = line.strip_prefix("!self-profile-prefix:") {
-            prefix = Some(String::from(stripped));
-            continue;
-        }
-        if let Some(stripped) = line.strip_prefix("!self-profile-file:") {
-            file = Some(PathBuf::from(stripped));
+        if let Some(stripped) = line.strip_prefix("!self-profile-crate:") {
+            self_profile_crate = Some(String::from(stripped));
             continue;
         }
         if let Some(counter_file) = line.strip_prefix("!counters-file:") {
@@ -581,39 +570,13 @@ fn process_stat_output(
         );
     }
 
-    let files = if let (Some(prefix), Some(dir)) = (prefix, dir) {
-        let mut string_index = PathBuf::new();
-        let mut string_data = PathBuf::new();
-        let mut events = PathBuf::new();
-        for entry in fs::read_dir(&dir).unwrap() {
-            let filename = entry.unwrap().file_name();
-            let filename_str = filename.to_str().unwrap();
-            let path = dir.join(filename_str);
-            if filename_str.ends_with(".events") {
-                assert!(filename_str.contains(&prefix), "{:?}", path);
-                events = path;
-            } else if filename_str.ends_with(".string_data") {
-                assert!(filename_str.contains(&prefix), "{:?}", path);
-                string_data = path;
-            } else if filename_str.ends_with(".string_index") {
-                assert!(filename_str.contains(&prefix), "{:?}", path);
-                string_index = path;
-            }
-        }
-
-        Some(SelfProfileFiles::Seven {
-            string_index,
-            string_data,
-            events,
-        })
-    } else {
-        file.map(|file| SelfProfileFiles::Eight { file })
-    };
-
     if stats.is_empty() {
         return Err(DeserializeStatError::NoOutput(output));
     }
-
+    let (profile, files) = match (self_profile_dir, self_profile_crate) {
+        (Some(dir), Some(krate)) => parse_self_profile(dir, krate),
+        _ => (None, None),
+    };
     Ok((stats, profile, files))
 }
 
@@ -658,4 +621,110 @@ pub struct ArtifactSize {
     pub label: QueryLabel,
     #[serde(rename = "value")]
     pub size: u64,
+}
+
+fn parse_self_profile(
+    dir: PathBuf,
+    crate_name: String,
+) -> (Option<SelfProfile>, Option<SelfProfileFiles>) {
+    // First, find the mm_profdata file prefix, or a single file containing the self-profile
+    // results.
+    let mut prefix = None;
+    let mut full_path = None;
+    // We don't know the pid of rustc, and can't easily get it -- we only know the
+    // `perf` pid. So just blindly look in the directory to hopefully find it.
+    for entry in fs::read_dir(&dir).unwrap() {
+        let entry = entry.unwrap();
+        if entry
+            .file_name()
+            .to_str()
+            .map_or(false, |s| s.starts_with(&crate_name))
+        {
+            if entry.file_name().to_str().unwrap().ends_with("mm_profdata") {
+                full_path = Some(entry.path());
+                break;
+            }
+            let file = entry.file_name().to_str().unwrap().to_owned();
+            let new_prefix = Some(file[..file.find('.').unwrap()].to_owned());
+            assert!(
+                prefix.is_none() || prefix == new_prefix,
+                "prefix={:?}, new_prefix={:?}",
+                prefix,
+                new_prefix
+            );
+            prefix = new_prefix;
+        }
+    }
+    let (profile, files) = if let Some(profile_path) = full_path {
+        // measureme 0.8 has a single file
+        let filename = profile_path.file_name().unwrap().to_str().unwrap();
+        let json = run_summarize("summarize", &dir, filename)
+            .unwrap_or_else(|e1| match run_summarize("summarize-9.0", &dir, filename) {
+            Ok(s) => s,
+            Err(e2) => {
+                panic!("failed to run summarize and summarize-9.0. Errors:\nsummarize: {:?}\nsummarize-9.0: {:?}", e1, e2);
+            }
+        });
+        let profile: SelfProfile = serde_json::from_str(&json).unwrap();
+        (profile, SelfProfileFiles::Eight { file: profile_path })
+    } else {
+        let Some(prefix) = prefix else {
+            return (None, None);
+        };
+
+        let mut string_index = PathBuf::new();
+        let mut string_data = PathBuf::new();
+        let mut events = PathBuf::new();
+        for entry in fs::read_dir(&dir).unwrap() {
+            let filename = entry.unwrap().file_name();
+            let filename_str = filename.to_str().unwrap();
+            let path = dir.join(filename_str);
+            if filename_str.ends_with(".events") {
+                assert!(filename_str.contains(&prefix), "{:?}", path);
+                events = path;
+            } else if filename_str.ends_with(".string_data") {
+                assert!(filename_str.contains(&prefix), "{:?}", path);
+                string_data = path;
+            } else if filename_str.ends_with(".string_index") {
+                assert!(filename_str.contains(&prefix), "{:?}", path);
+                string_index = path;
+            }
+        }
+
+        let files = SelfProfileFiles::Seven {
+            string_index,
+            string_data,
+            events,
+        };
+
+        let json = run_summarize("summarize", &dir, &prefix)
+            .or_else(|_| run_summarize("summarize-0.7", &dir, &prefix))
+            .expect("able to run summarize or summarize-0.7");
+        let profile: SelfProfile = serde_json::from_str(&json).unwrap();
+        (profile, files)
+    };
+    (Some(profile), Some(files))
+}
+
+fn run_summarize(name: &str, prof_out_dir: &Path, prefix: &str) -> anyhow::Result<String> {
+    let mut cmd = Command::new(name);
+    cmd.current_dir(prof_out_dir);
+    cmd.arg("summarize").arg("--json");
+    cmd.arg(prefix);
+    let status = cmd
+        .status()
+        .with_context(|| format!("Command::new({}).status() failed", name))?;
+    if !status.success() {
+        anyhow::bail!(
+            "failed to run {} in {:?} with prefix {:?}",
+            name,
+            prof_out_dir,
+            prefix
+        )
+    }
+    let json = prof_out_dir.join(format!(
+        "{}.json",
+        prefix.strip_suffix(".mm_profdata").unwrap_or(prefix)
+    ));
+    fs::read_to_string(&json).with_context(|| format!("failed to read {:?}", json))
 }

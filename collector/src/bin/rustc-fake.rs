@@ -1,8 +1,6 @@
-use anyhow::Context;
 use std::env;
 use std::ffi::OsString;
 use std::fs;
-use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
 use std::time::{Duration, Instant};
@@ -436,55 +434,8 @@ fn process_self_profile_output(prof_out_dir: PathBuf, args: &[OsString]) {
         .find(|args| args[0] == "--crate-name")
         .and_then(|args| args[1].to_str())
         .expect("rustc to be invoked with crate name");
-    let mut prefix = None;
-    let mut full_path = None;
-    // We don't know the pid of rustc, and can't easily get it -- we only know the
-    // `perf` pid. So just blindly look in the directory to hopefully find it.
-    for entry in fs::read_dir(&prof_out_dir).unwrap() {
-        let entry = entry.unwrap();
-        if entry
-            .file_name()
-            .to_str()
-            .map_or(false, |s| s.starts_with(crate_name))
-        {
-            if entry.file_name().to_str().unwrap().ends_with("mm_profdata") {
-                full_path = Some(entry.path());
-                break;
-            }
-            let file = entry.file_name().to_str().unwrap().to_owned();
-            let new_prefix = Some(file[..file.find('.').unwrap()].to_owned());
-            assert!(
-                prefix.is_none() || prefix == new_prefix,
-                "prefix={:?}, new_prefix={:?}",
-                prefix,
-                new_prefix
-            );
-            prefix = new_prefix;
-        }
-    }
-    if let Some(profile_data) = full_path {
-        // measureme 0.8 has a single file
-        println!("!self-profile-file:{}", profile_data.to_str().unwrap());
-        let filename = profile_data.file_name().unwrap().to_str().unwrap();
-        let json = match run_summarize("summarize", &prof_out_dir, filename) {
-            Ok(s) => s,
-            Err(e1) => match run_summarize("summarize-9.0", &prof_out_dir, filename) {
-                Ok(s) => s,
-                Err(e2) => {
-                    panic!("failed to run summarize and summarize-9.0. Errors:\nsummarize: {:?}\nsummarize-9.0: {:?}", e1, e2);
-                }
-            },
-        };
-        println!("!self-profile-output:{}", json);
-    } else {
-        let prefix = prefix.unwrap_or_else(|| panic!("found prefix {:?}", prof_out_dir));
-        let json = run_summarize("summarize", &prof_out_dir, &prefix)
-            .or_else(|_| run_summarize("summarize-0.7", &prof_out_dir, &prefix))
-            .expect("able to run summarize or summarize-0.7");
-        println!("!self-profile-dir:{}", prof_out_dir.to_str().unwrap());
-        println!("!self-profile-prefix:{}", prefix);
-        println!("!self-profile-output:{}", json);
-    }
+    println!("!self-profile-dir:{}", prof_out_dir.to_str().unwrap());
+    println!("!self-profile-crate:{}", crate_name);
 }
 
 #[cfg(windows)]
@@ -530,29 +481,6 @@ fn print_time(dur: Duration) {
         dur.as_secs(),
         dur.subsec_nanos()
     );
-}
-
-fn run_summarize(name: &str, prof_out_dir: &Path, prefix: &str) -> anyhow::Result<String> {
-    let mut cmd = Command::new(name);
-    cmd.current_dir(prof_out_dir);
-    cmd.arg("summarize").arg("--json");
-    cmd.arg(prefix);
-    let status = cmd
-        .status()
-        .with_context(|| format!("Command::new({}).status() failed", name))?;
-    if !status.success() {
-        anyhow::bail!(
-            "failed to run {} in {:?} with prefix {:?}",
-            name,
-            prof_out_dir,
-            prefix
-        )
-    }
-    let json = prof_out_dir.join(format!(
-        "{}.json",
-        prefix.strip_suffix(".mm_profdata").unwrap_or(prefix)
-    ));
-    fs::read_to_string(&json).with_context(|| format!("failed to read {:?}", json))
 }
 
 #[cfg(windows)]
