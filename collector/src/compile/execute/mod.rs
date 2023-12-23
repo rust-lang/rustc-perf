@@ -8,13 +8,14 @@ use crate::compile::benchmark::BenchmarkName;
 use crate::toolchain::Toolchain;
 use crate::utils::fs::EnsureImmutableFile;
 use crate::{async_command_output, command_output, utils};
+use analyzeme::ArtifactSize;
 use anyhow::Context;
 use bencher::Bencher;
-use database::QueryLabel;
 use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::future::Future;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::process::{self, Command};
@@ -467,7 +468,7 @@ fn store_artifact_sizes_into_stats(stats: &mut Stats, profile: &SelfProfile) {
     for artifact in profile.artifact_sizes.iter() {
         stats
             .stats
-            .insert(format!("size:{}", artifact.label), artifact.size as f64);
+            .insert(format!("size:{}", artifact.label), artifact.value as f64);
     }
 }
 
@@ -479,6 +480,8 @@ enum DeserializeStatError {
     ParseError(String, #[source] ::std::num::ParseFloatError),
     #[error("could not process xperf data")]
     XperfError(#[from] anyhow::Error),
+    #[error("io error")]
+    IOError(#[from] std::io::Error),
 }
 
 enum SelfProfileFiles {
@@ -574,7 +577,7 @@ fn process_stat_output(
         return Err(DeserializeStatError::NoOutput(output));
     }
     let (profile, files) = match (self_profile_dir, self_profile_crate) {
-        (Some(dir), Some(krate)) => parse_self_profile(dir, krate),
+        (Some(dir), Some(krate)) => parse_self_profile(dir, krate)?,
         _ => (None, None),
     };
     Ok((stats, profile, files))
@@ -616,115 +619,41 @@ pub struct SelfProfile {
     pub artifact_sizes: Vec<ArtifactSize>,
 }
 
-#[derive(serde::Deserialize, Clone)]
-pub struct ArtifactSize {
-    pub label: QueryLabel,
-    #[serde(rename = "value")]
-    pub size: u64,
-}
-
 fn parse_self_profile(
     dir: PathBuf,
     crate_name: String,
-) -> (Option<SelfProfile>, Option<SelfProfileFiles>) {
-    // First, find the mm_profdata file prefix, or a single file containing the self-profile
-    // results.
-    let mut prefix = None;
+) -> std::io::Result<(Option<SelfProfile>, Option<SelfProfileFiles>)> {
+    // First, find the `.mm_profdata` file with the self-profile data.
     let mut full_path = None;
     // We don't know the pid of rustc, and can't easily get it -- we only know the
     // `perf` pid. So just blindly look in the directory to hopefully find it.
-    for entry in fs::read_dir(&dir).unwrap() {
-        let entry = entry.unwrap();
-        if entry
-            .file_name()
-            .to_str()
-            .map_or(false, |s| s.starts_with(&crate_name))
-        {
-            if entry.file_name().to_str().unwrap().ends_with("mm_profdata") {
-                full_path = Some(entry.path());
-                break;
-            }
-            let file = entry.file_name().to_str().unwrap().to_owned();
-            let new_prefix = Some(file[..file.find('.').unwrap()].to_owned());
-            assert!(
-                prefix.is_none() || prefix == new_prefix,
-                "prefix={:?}, new_prefix={:?}",
-                prefix,
-                new_prefix
-            );
-            prefix = new_prefix;
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        if entry.file_name().to_str().map_or(false, |s| {
+            s.starts_with(&crate_name) && s.ends_with("mm_profdata")
+        }) {
+            full_path = Some(entry.path());
+            break;
         }
     }
     let (profile, files) = if let Some(profile_path) = full_path {
-        // measureme 0.8 has a single file
-        let filename = profile_path.file_name().unwrap().to_str().unwrap();
-        let json = run_summarize("summarize", &dir, filename)
-            .unwrap_or_else(|e1| match run_summarize("summarize-9.0", &dir, filename) {
-            Ok(s) => s,
-            Err(e2) => {
-                panic!("failed to run summarize and summarize-9.0. Errors:\nsummarize: {:?}\nsummarize-9.0: {:?}", e1, e2);
-            }
-        });
-        let profile: SelfProfile = serde_json::from_str(&json).unwrap();
-        (profile, SelfProfileFiles::Eight { file: profile_path })
+        // measureme 0.8+ uses a single file
+        let data = fs::read(&profile_path)?;
+        let results = analyzeme::ProfilingData::from_paged_buffer(data, None)
+            .map_err(|error| {
+                eprintln!("Cannot read self-profile data: {error:?}");
+                std::io::Error::new(ErrorKind::InvalidData, error)
+            })?
+            .perform_analysis();
+        let profile = SelfProfile {
+            artifact_sizes: results.artifact_sizes,
+        };
+        let files = SelfProfileFiles::Eight { file: profile_path };
+        (Some(profile), Some(files))
     } else {
-        let Some(prefix) = prefix else {
-            return (None, None);
-        };
-
-        let mut string_index = PathBuf::new();
-        let mut string_data = PathBuf::new();
-        let mut events = PathBuf::new();
-        for entry in fs::read_dir(&dir).unwrap() {
-            let filename = entry.unwrap().file_name();
-            let filename_str = filename.to_str().unwrap();
-            let path = dir.join(filename_str);
-            if filename_str.ends_with(".events") {
-                assert!(filename_str.contains(&prefix), "{:?}", path);
-                events = path;
-            } else if filename_str.ends_with(".string_data") {
-                assert!(filename_str.contains(&prefix), "{:?}", path);
-                string_data = path;
-            } else if filename_str.ends_with(".string_index") {
-                assert!(filename_str.contains(&prefix), "{:?}", path);
-                string_index = path;
-            }
-        }
-
-        let files = SelfProfileFiles::Seven {
-            string_index,
-            string_data,
-            events,
-        };
-
-        let json = run_summarize("summarize", &dir, &prefix)
-            .or_else(|_| run_summarize("summarize-0.7", &dir, &prefix))
-            .expect("able to run summarize or summarize-0.7");
-        let profile: SelfProfile = serde_json::from_str(&json).unwrap();
-        (profile, files)
+        // The old "3 files format" is not supported by analyzeme anymore, so we don't handle it
+        // here.
+        (None, None)
     };
-    (Some(profile), Some(files))
-}
-
-fn run_summarize(name: &str, prof_out_dir: &Path, prefix: &str) -> anyhow::Result<String> {
-    let mut cmd = Command::new(name);
-    cmd.current_dir(prof_out_dir);
-    cmd.arg("summarize").arg("--json");
-    cmd.arg(prefix);
-    let status = cmd
-        .status()
-        .with_context(|| format!("Command::new({}).status() failed", name))?;
-    if !status.success() {
-        anyhow::bail!(
-            "failed to run {} in {:?} with prefix {:?}",
-            name,
-            prof_out_dir,
-            prefix
-        )
-    }
-    let json = prof_out_dir.join(format!(
-        "{}.json",
-        prefix.strip_suffix(".mm_profdata").unwrap_or(prefix)
-    ));
-    fs::read_to_string(&json).with_context(|| format!("failed to read {:?}", json))
+    Ok((profile, files))
 }

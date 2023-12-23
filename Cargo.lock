@@ -356,6 +356,7 @@ dependencies = [
 name = "collector"
 version = "0.1.0"
 dependencies = [
+ "analyzeme 11.0.0",
  "anyhow",
  "benchlib",
  "cargo_metadata",

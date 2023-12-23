@@ -16,7 +16,7 @@ use futures::{future, StreamExt};
 use std::collections::VecDeque;
 use std::future::Future;
 use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::pin::Pin;
 use std::process::Command;
 use std::{env, process};
@@ -214,7 +214,8 @@ impl<'a> Processor for BenchProcessor<'a> {
                 }
                 Err(
                     e @ (DeserializeStatError::ParseError { .. }
-                    | DeserializeStatError::XperfError(..)),
+                    | DeserializeStatError::XperfError(..)
+                    | DeserializeStatError::IOError(..)),
                 ) => {
                     panic!("process_perf_stat_output failed: {:?}", e);
                 }
