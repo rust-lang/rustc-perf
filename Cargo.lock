@@ -1164,7 +1164,6 @@ dependencies = [
  "env_logger",
  "hashbrown 0.13.2",
  "tokio",
- "tokio-postgres",
 ]
 
 [[package]]
