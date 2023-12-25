@@ -1890,7 +1890,7 @@ dependencies = [
  "clap",
  "database",
  "env_logger",
- "futures",
+ "futures-util",
  "rusqlite",
  "tokio",
  "tokio-postgres",
