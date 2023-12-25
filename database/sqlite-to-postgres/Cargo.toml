@@ -12,7 +12,7 @@ clap = { version = "4.1", features = ["cargo"] }
 csv = "1"
 database = { path = "../../database" }
 env_logger = "0.10"
-futures = "0.3.5"
+futures-util = "0.3.5"
 rusqlite = { version = "0.28", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 tokio = { version = "1.6", features = ["sync", "macros"] }

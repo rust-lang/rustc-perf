@@ -2531,7 +2531,7 @@ dependencies = [
  "csv",
  "database",
  "env_logger",
- "futures",
+ "futures-util",
  "rusqlite",
  "serde",
  "tokio",
