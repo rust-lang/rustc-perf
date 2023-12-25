@@ -1888,6 +1888,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "postgres-to-sqlite"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "clap",
+ "database",
+ "env_logger",
+ "futures",
+ "rusqlite",
+ "tokio",
+ "tokio-postgres",
+]
+
+[[package]]
 name = "postgres-types"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"

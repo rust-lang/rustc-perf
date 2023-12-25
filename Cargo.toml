@@ -5,6 +5,7 @@ members = [
     "site",
     "database",
     "database/import-sqlite",
+    "database/postgres-to-sqlite",
     "intern",
 ]
 exclude = ["rust/src"]
