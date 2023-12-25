@@ -16,4 +16,4 @@ futures-util = "0.3.5"
 rusqlite = { version = "0.28", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 tokio = { version = "1.6", features = ["sync", "macros"] }
-tokio-postgres = { version = "0.7", features = ["with-serde_json-1", "with-chrono-0_4", "runtime"] }
+tokio-postgres = { version = "0.7", features = ["with-chrono-0_4", "runtime"] }
