@@ -564,12 +564,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "bytes",
  "chrono",
- "clap",
- "csv",
- "env_logger",
- "futures",
  "hashbrown 0.13.2",
  "intern",
  "lazy_static",
@@ -579,7 +574,6 @@ dependencies = [
  "reqwest",
  "rusqlite",
  "serde",
- "serde_json",
  "tokio",
  "tokio-postgres",
 ]
