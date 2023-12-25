@@ -1162,6 +1162,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "import-sqlite"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "database",
+ "env_logger",
+ "hashbrown 0.13.2",
+ "tokio",
+ "tokio-postgres",
+]
+
+[[package]]
 name = "indexmap"
 version = "1.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -1,5 +1,12 @@
 [workspace]
-members = ["collector", "collector/benchlib", "site", "database", "intern"]
+members = [
+    "collector",
+    "collector/benchlib",
+    "site",
+    "database",
+    "database/import-sqlite",
+    "intern",
+]
 exclude = ["rust/src"]
 resolver = "2"
 

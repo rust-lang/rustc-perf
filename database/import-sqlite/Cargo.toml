@@ -1,0 +1,13 @@
+[package]
+authors = ["The Rust Compiler Team"]
+name = "import-sqlite"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+chrono = { version = "0.4", features = ["serde"] }
+database = { path = "../../database" }
+env_logger = "0.10"
+hashbrown = { version = "0.13", features = ["serde"] }
+tokio = { version = "1.6", features = ["sync", "macros"] }
+tokio-postgres = { version = "0.7", features = ["with-serde_json-1", "with-chrono-0_4", "runtime"] }
