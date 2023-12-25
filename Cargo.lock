@@ -2527,6 +2527,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
 
 [[package]]
+name = "sqlite-to-postgres"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "chrono",
+ "clap",
+ "csv",
+ "database",
+ "env_logger",
+ "futures",
+ "rusqlite",
+ "serde",
+ "tokio",
+ "tokio-postgres",
+]
+
+[[package]]
 name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

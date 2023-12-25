@@ -6,6 +6,7 @@ members = [
     "database",
     "database/import-sqlite",
     "database/postgres-to-sqlite",
+    "database/sqlite-to-postgres",
     "intern",
 ]
 exclude = ["rust/src"]
