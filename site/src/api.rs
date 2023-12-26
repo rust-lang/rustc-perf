@@ -569,6 +569,7 @@ pub mod github {
 }
 
 pub mod triage {
+    use crate::comparison::Metric;
     use collector::Bound;
     use serde::{Deserialize, Serialize};
 
@@ -577,6 +578,8 @@ pub mod triage {
         pub start: Bound,
         #[serde(default)]
         pub end: Bound,
+        #[serde(default)]
+        pub metric: Option<Metric>,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -30,6 +30,11 @@ Use the API endpoint to automate building the file:
 % curl "https://perf.rust-lang.org/perf/triage?start=$PARENT" > YYYY-MM-DD.md
 ```
 
+You can also analyze binary size regressions/improvements using the following command:
+```
+% curl "https://perf.rust-lang.org/perf/triage?start=$PARENT&metric=size:linked-artifact" > binary-size.md
+```
+
 ## Analysis
 
 The following is a list of items you should look for when interpreting performance results. 
