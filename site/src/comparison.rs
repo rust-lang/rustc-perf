@@ -59,7 +59,7 @@ pub async fn handle_triage(
     let mut before = start.clone();
 
     let mut num_comparisons = 0;
-    let metric = Metric::InstructionsUser;
+    let metric = body.metric.unwrap_or(Metric::InstructionsUser);
     let benchmark_map = ctxt.get_benchmark_category_map().await;
 
     let end = loop {
@@ -85,7 +85,7 @@ pub async fn handle_triage(
         );
 
         // handle results of comparison
-        populate_report(&comparison, &benchmark_map, &mut report).await;
+        populate_report(&comparison, &benchmark_map, metric, &mut report).await;
 
         // If we already know this is the last iteration, we can stop
         if comparison.b.artifact == end_artifact {
@@ -207,6 +207,7 @@ pub async fn handle_compare(
 async fn populate_report(
     comparison: &ArtifactComparison,
     benchmark_map: &HashMap<Benchmark, Category>,
+    metric: Metric,
     report: &mut HashMap<Direction, Vec<String>>,
 ) {
     let (primary, secondary) = comparison
@@ -218,7 +219,14 @@ async fn populate_report(
         return;
     }
 
-    let include_in_triage = deserves_attention_icount(&primary, &secondary);
+    let include_in_triage = match metric {
+        Metric::InstructionsUser => deserves_attention_icount(&primary, &secondary),
+        _ => primary
+            .largest_change()
+            .or_else(|| secondary.largest_change())
+            .map(|c| c.magnitude() >= Magnitude::Small)
+            .unwrap_or(false),
+    };
 
     if include_in_triage {
         let entry = report.entry(direction).or_default();
