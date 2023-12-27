@@ -535,7 +535,6 @@ dependencies = [
  "reqwest",
  "rusqlite",
  "serde",
- "serde_json",
  "tokio",
  "tokio-postgres",
 ]
@@ -1787,8 +1786,6 @@ dependencies = [
  "chrono",
  "fallible-iterator",
  "postgres-protocol",
- "serde",
- "serde_json",
 ]
 
 [[package]]
