@@ -416,7 +416,7 @@ impl Benchmark {
             self.name,
             benchmark_start.elapsed().as_secs_f64()
         );
-
+        processor.postprocess_results().await;
         Ok(())
     }
 }
