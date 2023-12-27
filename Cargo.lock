@@ -525,7 +525,7 @@ dependencies = [
  "clap",
  "csv",
  "env_logger",
- "futures",
+ "futures-util",
  "hashbrown",
  "intern",
  "lazy_static",

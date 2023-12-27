@@ -6,7 +6,7 @@
 use bytes::{BufMut, Bytes, BytesMut};
 use chrono::{DateTime, TimeZone, Utc};
 use database::pool::{postgres, sqlite, ConnectionManager};
-use futures::sink::SinkExt;
+use futures_util::sink::SinkExt;
 use serde::{Serialize, Serializer};
 use std::convert::{TryFrom, TryInto};
 use std::io::Write;
