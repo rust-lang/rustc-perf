@@ -196,36 +196,17 @@ impl<'a> Processor for BenchProcessor<'a> {
                         }
                     }
 
-                    let fut = match data.scenario {
-                        Scenario::Full => self.insert_stats(
-                            database::Scenario::Empty,
-                            data.profile,
-                            data.backend,
-                            res,
-                        ),
-                        Scenario::IncrFull => self.insert_stats(
-                            database::Scenario::IncrementalEmpty,
-                            data.profile,
-                            data.backend,
-                            res,
-                        ),
-                        Scenario::IncrUnchanged => self.insert_stats(
-                            database::Scenario::IncrementalFresh,
-                            data.profile,
-                            data.backend,
-                            res,
-                        ),
+                    let scenario = match data.scenario {
+                        Scenario::Full => database::Scenario::Empty,
+                        Scenario::IncrFull => database::Scenario::IncrementalEmpty,
+                        Scenario::IncrUnchanged => database::Scenario::IncrementalFresh,
                         Scenario::IncrPatched => {
                             let patch = data.patch.unwrap();
-                            self.insert_stats(
-                                database::Scenario::IncrementalPatch(patch.name),
-                                data.profile,
-                                data.backend,
-                                res,
-                            )
+                            database::Scenario::IncrementalPatch(patch.name)
                         }
                     };
-                    fut.await;
+                    self.insert_stats(scenario, data.profile, data.backend, res)
+                        .await;
                     Ok(Retry::No)
                 }
                 Err(DeserializeStatError::NoOutput(output)) => {
