@@ -6,7 +6,7 @@
 use chrono::{DateTime, Utc};
 use clap::{builder::PossibleValuesParser, ArgAction};
 use database::pool::{postgres, sqlite, ConnectionManager};
-use futures_util::StreamExt;
+use futures::StreamExt;
 use rusqlite::params;
 use std::time::Instant;
 
