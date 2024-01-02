@@ -8,6 +8,7 @@ usage.
 - Mark-Simulacrum
 - rylev
 - pnkfelix
+- kobzol
 
 Monday evening to Tuesday afternoon in North America is a good time to do it 
 because This Week in Rust (see below) is usually published on Wednesday, US time, 
@@ -48,6 +49,7 @@ are actually not regressions and have only been labeled as such due to noise.
 Look for significant changes (regressions or improvements) in the following:
 - instruction count
 - max rss
+- binary size
 
 When working with graphs: 
 - Click and drag a region of a graph to zoom in on it. This is useful when data
@@ -59,12 +61,11 @@ To view the code changes:
   open the page of commits in the merge.
 
 Understanding the comparison page:
-- Each benchmark is listed with the min, max and the avg percentage change 
+- Each benchmark is listed with the percentage change 
   (red indicates regressions, green indicates improvements) across the various 
   benchmarks run (e.g., full, incremental-full, incremental-unchanged, etc.).
-- Clicking on a specific benchmark will show the results for each of the various
-  benchmarks. Clicking on the percentages will open a more specific detail view 
-  of timing for queries run during compilation.
+- Clicking on a specific benchmark run will show a detailed view of the results, including
+  history chart and links to self-profile query timings.
 
 ### Interpreting results
 
@@ -78,30 +79,27 @@ For help understanding how to interpret results, consult the [comparison analysi
 ### Ping PR Author/Reviewer 
 
 Single PR in Merge:
-- Add a comment to the PR pointing to the "compare" page (unless someone else
-  has already done that).
 - In the case of a regression, ask the author for a response. If it's a big
   regression, consider requesting the author revert their changes. It may 
-  be worth looking through the comments to see if any perf CI runs were done, 
-  and whether the regression was expected.
+  be worth looking through the comments to see if the regression was expected.
 
 Difficult cases: the merge was a rollup of multiple PRs.
-- Look through the PRs and try to determine which was the cause. Often you
-  can easily tell that one or more PRs could not have caused the change, e.g.
-  because they made trivial changes, documentation-only changes, etc.
-- If there are still PRs left over, look at the 'detailed-query' page on perf.rlo: often, there is a single timing pass that improved significantly, and the name may give you a hint. You can find the page by expanding the dropdown for the build with the greatest change, then clicking on the percent change.
-- If you can't narrow it down to a single PR, in the rollup PR ask all the
-  authors who might be responsible.
-- Once you have narrowed it down to a single PR, treat it like an easy case,
-  above.
+- Look through the PRs and try to determine which was the cause. You can start
+  a perf. run for a single PR merged in the rollup using the "unrolled build"
+  table (see e.g. [here](https://github.com/rust-lang/rust/pull/119313#issuecomment-1869441617)) with
+  the `@rust-timer build $SHA` command.
+- Often you can easily tell that one or more PRs could not have caused the change, e.g.
+  because they made trivial changes, documentation-only changes, etc., so start with the
+  perf. runs for the most "suspicious" PRs.
+- Once you have narrowed it down to a single PR, treat it like a single PR case, see above.
 - You might want to remind the author to use "@bors rollup=never" for PRs
   that are likely to affect performance.
-- Add an entry to the triage log, as for the easy cases.
+- Add an entry to the triage log, as for the single PR cases.
 
 ### Add analysis and follow-ups to report
 
-- For each entry in the report, include useful details, such as the size of the regression/improvement, and any promises of follow-up action 
-  from authors in the case of a regression.
+- For each entry in the report, include useful details, such as the size of the regression/improvement,
+  and any promises of follow-up action from authors in the case of a regression.
 
 ### This Week in Rust 
 
@@ -109,6 +107,6 @@ Once finished, file a PR adding a link to the log entry in [This Week in
 Rust](https://github.com/emberian/this-week-in-rust/).
 - See the previous This Week in Rust edition for how the log entry should be formatted.
 
-If you have any questions, the `t-compiler/performance` stream on Zulip is the
-best place to ask.
-
+After you have finished the triage, also post a short summary to the
+[`t-compiler/performance`](https://rust-lang.zulipchat.com/#narrow/stream/247081-t-compiler.2Fperformance)
+stream on Zulip. If you have any questions, you can ask around in that stream.
