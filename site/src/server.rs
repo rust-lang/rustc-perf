@@ -639,7 +639,11 @@ async fn handle_fs_path(req: &Request, path: &str) -> Option<http::Response<hype
         Some("svg") => response = response.header("Content-Type", "image/svg+xml"),
         Some("css") => response = response.header("Content-Type", "text/css"),
         Some("js") => response = response.header("Content-Type", "application/javascript"),
-        _ => (),
+        _ => {
+            if path.is_empty() || path == "/" {
+                response = response.header_typed(ContentType::html());
+            }
+        }
     }
 
     Some(response.body(hyper::Body::from(source)).unwrap())
