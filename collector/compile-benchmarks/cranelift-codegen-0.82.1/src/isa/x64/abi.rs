@@ -1,7 +1,7 @@
 //! Implementation of the standard x64 ABI.
 
 use crate::ir::types::*;
-use crate::ir::{self, types, ExternalName, LibCall, MemFlags, Opcode, TrapCode, Type};
+use crate::ir::{self, types, ExternalName, LibCall, MemFlags, Opcode, TrapCode};
 use crate::isa;
 use crate::isa::{unwind::UnwindInst, x64::inst::*, CallConv};
 use crate::machinst::abi_impl::*;

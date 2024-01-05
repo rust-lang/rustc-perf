@@ -23,7 +23,7 @@ use std::{char, str, mem};
 use std::default::Default;
 use std::io::Write;
 
-use futf::{self, Codepoint, Meaning};
+use futf::{Codepoint, Meaning};
 
 use util::unsafe_slice;
 
@@ -33,7 +33,6 @@ use util::unsafe_slice;
 /// a new format.
 pub mod imp {
     use std::{iter, slice, mem};
-    use std::default::Default;
 
     /// Describes how to fix up encodings when concatenating.
     ///

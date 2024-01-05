@@ -8,7 +8,6 @@ use std::cell::Cell;
 
 pub use super::MachLabel;
 pub use crate::ir::{ExternalName, FuncRef, GlobalValue, SigRef};
-pub use crate::isa::unwind::UnwindInst;
 pub use crate::machinst::RelocDistance;
 
 pub type Unit = ();

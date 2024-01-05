@@ -72,10 +72,7 @@
 use crate::entity::SecondaryMap;
 use crate::fx::{FxHashMap, FxHashSet};
 use crate::ir::{Block, Function, Inst, Opcode};
-use crate::machinst::lower::visit_block_succs;
 use crate::machinst::*;
-
-use smallvec::SmallVec;
 
 /// Mapping from CLIF BBs to VCode BBs.
 #[derive(Debug)]

@@ -1,7 +1,6 @@
 use proc_macro2::{Ident, TokenStream};
 use quote::format_ident;
 
-use syn;
 use try;
 
 pub fn wrap_in_const(

@@ -1,5 +1,4 @@
 use std::iter::Peekable;
-use std::ops::FnMut;
 
 use ansi_term::{Colour, Style};
 use ansi_term::Colour::*;

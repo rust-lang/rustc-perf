@@ -8,13 +8,13 @@ use std::borrow::Cow;
 use std::collections::{BTreeSet, HashSet};
 use std::iter;
 use std::ops::Deref;
-use std::cmp::{PartialOrd, Ord, Ordering};
-use syn::{self, AngleBracketedParameterData, Body, DeriveInput, Field, Ident};
+use std::cmp::Ordering;
+use syn::{AngleBracketedParameterData, Body, DeriveInput, Field, Ident};
 use syn::{ImplGenerics, Path, PathParameters, PathSegment, PolyTraitRef};
 use syn::{QSelf, TraitBoundModifier, Ty, TyGenerics, TyParam, TyParamBound};
 use syn::{TypeBinding, Variant, WhereBoundPredicate, WherePredicate};
 use syn::visit::{self, Visitor};
-use synstructure::{self, BindOpts, BindStyle, BindingInfo};
+use synstructure::{BindOpts, BindStyle, BindingInfo};
 
 pub struct WhereClause<'input, 'path> {
     pub inner: syn::WhereClause,

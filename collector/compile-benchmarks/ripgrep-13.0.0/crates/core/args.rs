@@ -8,7 +8,6 @@ use std::process;
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use clap;
 use grep::cli;
 use grep::matcher::LineTerminator;
 #[cfg(feature = "pcre2")]
@@ -30,9 +29,6 @@ use grep::searcher::{
 use ignore::overrides::{Override, OverrideBuilder};
 use ignore::types::{FileTypeDef, Types, TypesBuilder};
 use ignore::{Walk, WalkBuilder, WalkParallel};
-use log;
-use num_cpus;
-use regex;
 use termcolor::{BufferWriter, ColorChoice, WriteColor};
 
 use crate::app;

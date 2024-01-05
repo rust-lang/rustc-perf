@@ -193,10 +193,9 @@ use crate::lookahead;
     not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "wasi"))),
     feature = "proc-macro"
 ))]
-use crate::proc_macro;
 use crate::punctuated::Punctuated;
 use crate::token::Token;
-use proc_macro2::{self, Delimiter, Group, Literal, Punct, Span, TokenStream, TokenTree};
+use proc_macro2::{Delimiter, Group, Literal, Punct, Span, TokenStream, TokenTree};
 use std::cell::Cell;
 use std::fmt::{self, Debug, Display};
 #[cfg(feature = "extra-traits")]

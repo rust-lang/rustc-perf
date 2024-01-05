@@ -15,7 +15,7 @@ use crate::util::{
 use crate::CargoResult;
 use anyhow::bail;
 use cargo_util::paths;
-use clap::{self, SubCommand};
+use clap::SubCommand;
 use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
 

@@ -4,7 +4,6 @@
 
 //! A placeholder encoding that returns encoder/decoder error for every case.
 
-use std::convert::Into;
 use types::*;
 
 /// An encoding that returns encoder/decoder error for every case.

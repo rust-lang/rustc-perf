@@ -4378,7 +4378,7 @@ To change `help`s short, call `cmd.arg(Arg::new(\"help\")...)`.",
         debug!("App::_build_bin_names");
 
         if !self.is_set(AppSettings::BinNameBuilt) {
-            for mut sc in &mut self.subcommands {
+            for sc in &mut self.subcommands {
                 debug!("App::_build_bin_names:iter: bin_name set...");
 
                 if sc.bin_name.is_none() {

@@ -592,7 +592,7 @@ ast_struct! {
 pub mod parsing {
     use super::*;
     use crate::ext::IdentExt;
-    use crate::parse::{Parse, ParseStream, Result};
+    use crate::parse::{Parse, ParseStream};
 
     #[cfg_attr(doc_cfg, doc(cfg(feature = "parsing")))]
     impl Parse for Generics {

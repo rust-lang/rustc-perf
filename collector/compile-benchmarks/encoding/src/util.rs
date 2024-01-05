@@ -6,8 +6,6 @@
 
 use std::{str, char, mem};
 use std::marker::PhantomData;
-use std::convert::Into;
-use std::default::Default;
 use types;
 
 /// Unchecked conversion to `char`.

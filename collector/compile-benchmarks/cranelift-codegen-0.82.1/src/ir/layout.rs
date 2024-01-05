@@ -10,7 +10,6 @@ use crate::ir::{Block, Inst};
 use crate::packed_option::PackedOption;
 use crate::timing;
 use core::cmp;
-use core::iter::{IntoIterator, Iterator};
 
 /// The `Layout` struct determines the layout of blocks and instructions in a function. It does not
 /// contain definitions of instructions or blocks, but depends on `Inst` and `Block` entity references

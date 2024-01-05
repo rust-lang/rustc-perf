@@ -17,25 +17,22 @@
 //! See the main module comment in `mod.rs` for more details on the VCode-based
 //! backend pipeline.
 
-use crate::ir::{self, types, Constant, ConstantData, SourceLoc};
+use crate::ir::{self, types, Constant, ConstantData};
 use crate::machinst::*;
 use crate::settings;
 use crate::timing;
 use regalloc::Function as RegallocFunction;
 use regalloc::Set as RegallocSet;
 use regalloc::{
-    BlockIx, InstIx, PrettyPrint, Range, RegAllocResult, RegClass, RegUsageCollector,
-    RegUsageMapper, SpillSlot, StackmapRequestInfo,
+    BlockIx, InstIx, PrettyPrint, Range, RegAllocResult, StackmapRequestInfo,
 };
 
-use alloc::boxed::Box;
-use alloc::{borrow::Cow, vec::Vec};
-use cranelift_entity::{entity_impl, Keys, PrimaryMap};
+use alloc::borrow::Cow;
+use cranelift_entity::{entity_impl, Keys};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
 use std::iter;
-use std::string::String;
 
 /// Index referring to an instruction in VCode.
 pub type InsnIndex = u32;

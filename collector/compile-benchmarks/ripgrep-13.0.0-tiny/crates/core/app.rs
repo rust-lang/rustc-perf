@@ -9,7 +9,7 @@
 // is where we read clap's configuration from the end user's arguments and turn
 // it into a ripgrep-specific configuration type that is not coupled with clap.
 
-use clap::{self, crate_authors, crate_version, App, AppSettings};
+use clap::{crate_authors, crate_version, App, AppSettings};
 use lazy_static::lazy_static;
 
 const ABOUT: &str = "

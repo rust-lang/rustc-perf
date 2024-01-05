@@ -8,7 +8,6 @@
 // except according to those terms.
 
 use std::io::{self, Write};
-use std::default::Default;
 
 use string_cache::{Atom, QualName};
 

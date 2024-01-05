@@ -738,7 +738,7 @@ pub fn Lit(marker: lookahead::TokenMarker) -> Lit {
 pub mod parsing {
     use super::*;
     use crate::buffer::Cursor;
-    use crate::parse::{Parse, ParseStream, Result};
+    use crate::parse::ParseStream;
     use proc_macro2::Punct;
 
     #[cfg_attr(doc_cfg, doc(cfg(feature = "parsing")))]
@@ -894,7 +894,6 @@ pub mod parsing {
 #[cfg(feature = "printing")]
 mod printing {
     use super::*;
-    use proc_macro2::TokenStream;
     use quote::{ToTokens, TokenStreamExt};
 
     #[cfg_attr(doc_cfg, doc(cfg(feature = "printing")))]

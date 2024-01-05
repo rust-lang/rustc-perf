@@ -335,7 +335,6 @@ ast_enum! {
 #[cfg(feature = "parsing")]
 pub mod parsing {
     use super::*;
-    use synom::Synom;
     use synom::tokens::*;
 
     impl Synom for Ty {

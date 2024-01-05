@@ -1,4 +1,3 @@
-use backend::Backend;
 use expression::{Expression, SelectableExpression};
 use query_builder::*;
 use query_source::QuerySource;

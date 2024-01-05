@@ -6,7 +6,6 @@ use std::borrow::Cow;
 use std::error::Error;
 use std::path::Path;
 use std::io::{BufRead, self};
-use std::iter::{Iterator};
 
 use color::{ColorType, Rgb};
 use image::{

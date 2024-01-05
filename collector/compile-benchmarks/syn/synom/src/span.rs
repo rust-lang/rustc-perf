@@ -1,7 +1,5 @@
 use std::hash::{Hash, Hasher};
 
-use proc_macro2;
-
 #[derive(Clone, Copy, Default, Debug)]
 pub struct Span(pub proc_macro2::Span);
 

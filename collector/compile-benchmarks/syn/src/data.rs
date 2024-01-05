@@ -107,9 +107,6 @@ ast_enum_of_structs! {
 #[cfg(feature = "parsing")]
 pub mod parsing {
     use super::*;
-
-    use synom::Synom;
-    use synom::tokens;
     use synom::tokens::*;
 
     impl Field {

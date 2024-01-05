@@ -15,7 +15,6 @@
 use std::ascii::AsciiExt;
 use std::cell::RefCell;
 use std::collections::HashSet;
-use std::default::Default;
 use std::borrow::Cow;
 use std::io::{self, Write};
 use std::mem;

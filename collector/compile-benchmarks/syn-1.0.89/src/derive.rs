@@ -90,7 +90,7 @@ ast_struct! {
 #[cfg(feature = "parsing")]
 pub mod parsing {
     use super::*;
-    use crate::parse::{Parse, ParseStream, Result};
+    use crate::parse::{Parse, ParseStream};
 
     #[cfg_attr(doc_cfg, doc(cfg(feature = "parsing")))]
     impl Parse for DeriveInput {

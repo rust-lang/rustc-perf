@@ -4,9 +4,7 @@
 
 use animate::{AnimationVariantAttrs, AnimationFieldAttrs};
 use cg;
-use quote;
-use syn;
-use synstructure::{self, BindStyle};
+use synstructure::BindStyle;
 
 pub fn derive(input: syn::DeriveInput) -> quote::Tokens {
     let name = &input.ident;

@@ -4,8 +4,6 @@
 
 //! Legacy traditional Chinese encodings.
 
-use std::convert::Into;
-use std::default::Default;
 use util::StrCharIndex;
 use index_tradchinese as index;
 use types::*;

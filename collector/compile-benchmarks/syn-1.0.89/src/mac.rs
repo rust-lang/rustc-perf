@@ -5,7 +5,7 @@ use proc_macro2::TokenStream;
 use proc_macro2::{Delimiter, Group, Span, TokenTree};
 
 #[cfg(feature = "parsing")]
-use crate::parse::{Parse, ParseStream, Parser, Result};
+use crate::parse::{Parse, ParseStream, Parser};
 
 ast_struct! {
     /// A macro invocation: `println!("{}", mac)`.
@@ -172,7 +172,6 @@ pub fn parse_delimiter(input: ParseStream) -> Result<(MacroDelimiter, TokenStrea
 #[cfg(feature = "parsing")]
 pub mod parsing {
     use super::*;
-    use crate::parse::{Parse, ParseStream, Result};
 
     #[cfg_attr(doc_cfg, doc(cfg(feature = "parsing")))]
     impl Parse for Macro {
@@ -195,7 +194,6 @@ pub mod parsing {
 #[cfg(feature = "printing")]
 mod printing {
     use super::*;
-    use proc_macro2::TokenStream;
     use quote::ToTokens;
 
     #[cfg_attr(doc_cfg, doc(cfg(feature = "printing")))]

@@ -124,16 +124,13 @@
 //!   - Return v0 in memory at `[P+16]`.
 
 use super::abi::*;
-use crate::binemit::StackMap;
 use crate::ir::types::*;
-use crate::ir::{ArgumentExtension, ArgumentPurpose, StackSlot};
+use crate::ir::{ArgumentExtension, ArgumentPurpose};
 use crate::machinst::*;
 use crate::settings;
-use crate::CodegenResult;
 use crate::{ir, isa};
-use alloc::vec::Vec;
-use regalloc::{RealReg, Reg, RegClass, Set, SpillSlot, Writable};
-use smallvec::{smallvec, SmallVec};
+use regalloc::Set;
+use smallvec::smallvec;
 use std::convert::TryFrom;
 use std::marker::PhantomData;
 use std::mem;

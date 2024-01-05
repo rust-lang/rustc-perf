@@ -1,6 +1,4 @@
-use backend::Backend;
 use query_builder::*;
-use result::QueryResult;
 
 #[derive(Debug, Clone, Copy, QueryId)]
 pub struct NoDistinctClause;

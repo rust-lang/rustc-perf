@@ -7,7 +7,7 @@ use crate::util::{network, Config, IntoUrl, MetricsCounter, Progress};
 use anyhow::{anyhow, Context as _};
 use cargo_util::{paths, ProcessBuilder};
 use curl::easy::List;
-use git2::{self, ErrorClass, ObjectType};
+use git2::{ErrorClass, ObjectType};
 use log::{debug, info};
 use serde::ser;
 use serde::Serialize;

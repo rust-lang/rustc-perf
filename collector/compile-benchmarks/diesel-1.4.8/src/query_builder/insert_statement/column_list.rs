@@ -1,7 +1,5 @@
-use backend::Backend;
 use query_builder::*;
 use query_source::Column;
-use result::QueryResult;
 
 /// Represents the column list for use in an insert statement.
 ///

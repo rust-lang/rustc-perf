@@ -47,7 +47,6 @@ ast_enum_of_structs! {
 pub mod parsing {
     use super::*;
 
-    use synom::Synom;
     use synom::tokens::*;
 
     impl Synom for DeriveInput {
@@ -166,7 +165,6 @@ pub mod parsing {
 mod printing {
     use super::*;
     use attr::FilterAttrs;
-    use data::VariantData;
     use quote::{Tokens, ToTokens};
 
     impl ToTokens for DeriveInput {

@@ -35,9 +35,6 @@ use errors::*;
 
 mod errors {
     use std::io;
-
-    use tungstenite;
-    use serde_json;
     use futures::Future;
 
     error_chain! {

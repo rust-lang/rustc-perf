@@ -16,7 +16,6 @@ use query_builder::select_clause::*;
 use query_builder::update_statement::*;
 use query_builder::where_clause::*;
 use query_builder::{AsQuery, Query, QueryFragment, SelectQuery, SelectStatement};
-use query_dsl::boxed_dsl::BoxedDsl;
 use query_dsl::methods::*;
 use query_dsl::*;
 use query_source::joins::{Join, JoinOn, JoinTo};

@@ -19,11 +19,9 @@
 //!
 //! We do a standard forward dataflow analysis to compute this info.
 
-use crate::ir::ValueLabel;
 use crate::machinst::*;
-use crate::value_label::{LabelValueLoc, ValueLabelsRanges, ValueLocRange};
+use crate::value_label::{LabelValueLoc, ValueLocRange};
 use log::trace;
-use regalloc::{Reg, RegUsageCollector};
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 

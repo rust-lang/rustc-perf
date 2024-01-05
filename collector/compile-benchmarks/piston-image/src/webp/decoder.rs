@@ -1,6 +1,5 @@
 use std::io;
 use std::io::Read;
-use std::default::Default;
 use byteorder::{ReadBytesExt, LittleEndian};
 
 use image;

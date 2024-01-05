@@ -14,7 +14,7 @@ use crate::lookups::{
     compatibility_fully_decomposed, composition_table,
 };
 
-use core::{char, ops::FnMut};
+use core::char;
 
 /// Compute canonical Unicode decomposition for character.
 /// See [Unicode Standard Annex #15](http://www.unicode.org/reports/tr15/)

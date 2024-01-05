@@ -1,6 +1,5 @@
 use std::marker::PhantomData;
 
-use backend::Backend;
 use dsl::AsExprOf;
 use expression::subselect::ValidSubselect;
 use expression::*;
@@ -17,7 +16,6 @@ use query_dsl::methods::*;
 use query_dsl::*;
 use query_source::joins::*;
 use query_source::{QuerySource, Table};
-use result::QueryResult;
 use sql_types::{BigInt, Bool, NotNull, Nullable};
 
 #[allow(missing_debug_implementations)]

@@ -25,7 +25,6 @@
 //! UTF-8, the universal encoding.
 
 use std::{str, mem};
-use std::convert::Into;
 use types::*;
 
 /**

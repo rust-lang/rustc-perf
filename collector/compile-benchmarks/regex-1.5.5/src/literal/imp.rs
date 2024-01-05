@@ -1,6 +1,6 @@
 use std::mem;
 
-use aho_corasick::{self, packed, AhoCorasick, AhoCorasickBuilder};
+use aho_corasick::{packed, AhoCorasick, AhoCorasickBuilder};
 use memchr::{memchr, memchr2, memchr3, memmem};
 use regex_syntax::hir::literal::{Literal, Literals};
 

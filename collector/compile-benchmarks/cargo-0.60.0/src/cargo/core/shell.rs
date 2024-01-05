@@ -2,7 +2,7 @@ use std::fmt;
 use std::io::prelude::*;
 
 use termcolor::Color::{Cyan, Green, Red, Yellow};
-use termcolor::{self, Color, ColorSpec, StandardStream, WriteColor};
+use termcolor::{Color, ColorSpec, StandardStream, WriteColor};
 
 use crate::util::errors::CargoResult;
 

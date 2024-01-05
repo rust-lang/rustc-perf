@@ -9,7 +9,7 @@ use anyhow::{anyhow, bail, Context as _};
 use cargo_platform::Platform;
 use cargo_util::paths;
 use log::{debug, trace};
-use semver::{self, VersionReq};
+use semver::VersionReq;
 use serde::de;
 use serde::ser;
 use serde::{Deserialize, Serialize};

@@ -10,8 +10,6 @@
 
 use std::fmt;
 
-use syntax;
-
 /// An error that occurred during parsing or compiling a regular expression.
 #[derive(Debug)]
 pub enum Error {

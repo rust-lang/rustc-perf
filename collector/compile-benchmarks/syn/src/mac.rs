@@ -134,9 +134,9 @@ impl fmt::Debug for TokenTree {
 pub mod parsing {
     use super::*;
 
-    use proc_macro2::{TokenNode, TokenTree};
+    use proc_macro2::TokenTree;
     use synom::tokens::*;
-    use synom::{Synom, PResult, Cursor, parse_error};
+    use synom::{PResult, Cursor, parse_error};
 
     impl Synom for Mac {
         named!(parse -> Self, do_parse!(

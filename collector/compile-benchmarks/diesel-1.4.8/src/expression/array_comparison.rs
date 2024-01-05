@@ -1,4 +1,3 @@
-use backend::Backend;
 use expression::subselect::Subselect;
 use expression::*;
 use query_builder::*;
@@ -96,7 +95,6 @@ where
 impl_selectable_expression!(In<T, U>);
 impl_selectable_expression!(NotIn<T, U>);
 
-use query_builder::{BoxedSelectStatement, SelectStatement};
 
 pub trait AsInExpression<T> {
     type InExpression: MaybeEmpty + Expression<SqlType = T>;

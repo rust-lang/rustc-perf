@@ -1,7 +1,7 @@
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
-use proc_macro2::{self, Literal, TokenNode, Term};
+use proc_macro2::{Literal, TokenNode, Term};
 
 use {Span, TokenTree};
 

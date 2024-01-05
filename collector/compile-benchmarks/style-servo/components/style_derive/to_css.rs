@@ -5,7 +5,6 @@
 use cg;
 use quote::Tokens;
 use syn::DeriveInput;
-use synstructure;
 
 pub fn derive(input: DeriveInput) -> Tokens {
     let name = &input.ident;

@@ -188,7 +188,7 @@ impl<DB: Backend> ToSql<sql_types::Binary, DB> for [u8] {
     }
 }
 
-use std::borrow::{Cow, ToOwned};
+use std::borrow::Cow;
 use std::fmt;
 impl<'a, T: ?Sized, ST, DB> ToSql<ST, DB> for Cow<'a, T>
 where

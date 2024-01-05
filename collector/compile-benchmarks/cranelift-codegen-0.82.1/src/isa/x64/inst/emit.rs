@@ -1,7 +1,5 @@
-use crate::binemit::{Addend, Reloc};
 use crate::ir::immediates::{Ieee32, Ieee64};
 use crate::ir::LibCall;
-use crate::ir::TrapCode;
 use crate::isa::x64::encoding::evex::{EvexInstruction, EvexVectorLength};
 use crate::isa::x64::encoding::rex::{
     emit_simm, emit_std_enc_enc, emit_std_enc_mem, emit_std_reg_mem, emit_std_reg_reg, int_reg_enc,
@@ -10,9 +8,7 @@ use crate::isa::x64::encoding::rex::{
 };
 use crate::isa::x64::inst::args::*;
 use crate::isa::x64::inst::*;
-use crate::machinst::{inst_common, MachBuffer, MachInstEmit, MachLabel};
 use core::convert::TryInto;
-use regalloc::{Reg, Writable};
 
 /// A small helper to generate a signed conversion instruction.
 fn emit_signed_cvt(

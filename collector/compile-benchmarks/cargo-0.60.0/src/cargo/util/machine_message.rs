@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use serde::ser;
 use serde::Serialize;
-use serde_json::{self, json, value::RawValue};
+use serde_json::{json, value::RawValue};
 
 use crate::core::{compiler::CompileMode, PackageId, Target};
 

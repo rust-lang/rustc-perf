@@ -4,8 +4,6 @@
 
 //! Legacy Korean encodings based on KS X 1001.
 
-use std::convert::Into;
-use std::default::Default;
 use util::StrCharIndex;
 use index_korean as index;
 use types::*;

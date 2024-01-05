@@ -4,7 +4,6 @@
 
 //! UTF-16.
 
-use std::convert::Into;
 use util::as_char;
 use types::*;
 

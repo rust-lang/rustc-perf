@@ -1,4 +1,4 @@
-use super::{HasTable, Identifiable};
+use super::HasTable;
 use dsl::{Eq, EqAny, Filter, FindBy};
 use expression::array_comparison::AsInExpression;
 use expression::AsExpression;

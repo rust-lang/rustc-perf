@@ -51,7 +51,6 @@ mod imp {
     use winapi::um::handleapi::*;
     use winapi::um::jobapi2::*;
     use winapi::um::processthreadsapi::*;
-    use winapi::um::winnt::HANDLE;
     use winapi::um::winnt::*;
 
     pub struct Setup {

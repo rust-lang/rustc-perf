@@ -613,8 +613,8 @@ mod simplify {
     use crate::ir::{
         dfg::ValueDef,
         immediates,
-        instructions::{Opcode, ValueList},
-        types::{B8, I16, I32, I8},
+        instructions::ValueList,
+        types::{B8, I16, I8},
     };
     use std::marker::PhantomData;
 

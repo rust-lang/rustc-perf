@@ -648,7 +648,7 @@ pub mod parsing {
 
     #[cfg(feature = "full")]
     use proc_macro2::{TokenStream, TokenNode, Delimiter, Term};
-    use synom::{PResult, Cursor, Synom};
+    use synom::{PResult, Cursor};
     #[cfg(feature = "full")]
     use synom::parse_error;
     use synom::tokens::*;

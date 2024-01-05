@@ -4,7 +4,6 @@
 
 //! Common codec implementation for single-byte encodings.
 
-use std::convert::Into;
 use util::{as_char, StrCharIndex};
 use types::*;
 

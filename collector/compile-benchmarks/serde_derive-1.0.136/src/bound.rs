@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 
-use syn;
 use syn::punctuated::{Pair, Punctuated};
 
 use internals::ast::{Container, Data};

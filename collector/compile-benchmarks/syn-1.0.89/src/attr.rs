@@ -5,7 +5,7 @@ use std::iter;
 use std::slice;
 
 #[cfg(feature = "parsing")]
-use crate::parse::{Parse, ParseBuffer, ParseStream, Parser, Result};
+use crate::parse::{Parse, ParseBuffer, ParseStream, Parser};
 #[cfg(feature = "parsing")]
 use crate::punctuated::Pair;
 
@@ -498,7 +498,6 @@ impl<'a> FilterAttrs<'a> for &'a [Attribute] {
 pub mod parsing {
     use super::*;
     use crate::ext::IdentExt;
-    use crate::parse::{Parse, ParseStream, Result};
 
     pub fn parse_inner(input: ParseStream, attrs: &mut Vec<Attribute>) -> Result<()> {
         while input.peek(Token![#]) && input.peek2(Token![!]) {
@@ -624,7 +623,6 @@ pub mod parsing {
 #[cfg(feature = "printing")]
 mod printing {
     use super::*;
-    use proc_macro2::TokenStream;
     use quote::ToTokens;
 
     #[cfg_attr(doc_cfg, doc(cfg(feature = "printing")))]

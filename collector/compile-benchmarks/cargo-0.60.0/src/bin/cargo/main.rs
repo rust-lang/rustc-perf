@@ -5,8 +5,7 @@
 
 use cargo::core::shell::Shell;
 use cargo::util::toml::StringOrVec;
-use cargo::util::CliError;
-use cargo::util::{self, closest_msg, command_prelude, CargoResult, CliResult, Config};
+use cargo::util::{self, closest_msg, command_prelude, CargoResult};
 use cargo_util::{ProcessBuilder, ProcessError};
 use std::collections::BTreeMap;
 use std::env;

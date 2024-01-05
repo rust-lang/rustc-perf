@@ -1,7 +1,6 @@
 use std::path::Path;
 
-use ignore::{self, DirEntry};
-use log;
+use ignore::DirEntry;
 
 /// A configuration for describing how subjects should be built.
 #[derive(Clone, Debug)]

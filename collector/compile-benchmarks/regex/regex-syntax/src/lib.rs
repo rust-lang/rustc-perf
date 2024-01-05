@@ -73,7 +73,6 @@ use std::ascii;
 use std::char;
 use std::cmp::{Ordering, max, min};
 use std::fmt;
-use std::iter::IntoIterator;
 use std::ops::Deref;
 use std::result;
 use std::slice;

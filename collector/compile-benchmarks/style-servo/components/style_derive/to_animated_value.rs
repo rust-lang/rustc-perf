@@ -3,8 +3,6 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use cg;
-use quote;
-use syn;
 use synstructure::BindStyle;
 
 pub fn derive(input: syn::DeriveInput) -> quote::Tokens {

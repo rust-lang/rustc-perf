@@ -4,7 +4,6 @@ use std::path::Path;
 use std::fs::File;
 use std::iter;
 use std::ascii::AsciiExt;
-use num_iter;
 
 #[cfg(feature = "ppm")]
 use ppm;

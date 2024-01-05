@@ -1,4 +1,3 @@
-use backend::Backend;
 use expression::*;
 use query_builder::*;
 use query_source::Table;

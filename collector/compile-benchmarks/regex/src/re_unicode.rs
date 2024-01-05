@@ -15,8 +15,6 @@ use std::ops::Index;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use syntax;
-
 use error::Error;
 use exec::{Exec, ExecNoSyncStr};
 use re_builder::unicode::RegexBuilder;

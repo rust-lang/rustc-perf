@@ -8,7 +8,6 @@ use std::io::{Read, Write};
 use std::path::Path;
 use std::vec;
 use std::iter;
-use syn;
 
 pub fn expand(from: &Path, to: &Path) {
     let mut source = String::new();

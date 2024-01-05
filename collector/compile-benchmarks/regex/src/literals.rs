@@ -12,7 +12,6 @@ use std::mem;
 
 use aho_corasick::{Automaton, AcAutomaton, FullAcAutomaton};
 use memchr::{memchr, memchr2, memchr3};
-use syntax;
 
 use freqs::BYTE_FREQUENCIES;
 

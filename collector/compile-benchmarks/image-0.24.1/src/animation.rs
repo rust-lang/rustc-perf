@@ -1,4 +1,3 @@
-use std::iter::Iterator;
 use std::time::Duration;
 
 use num_rational::Ratio;

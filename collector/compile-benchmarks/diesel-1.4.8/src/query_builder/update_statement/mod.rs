@@ -4,7 +4,6 @@ pub mod target;
 pub use self::changeset::AsChangeset;
 pub use self::target::{IntoUpdateTarget, UpdateTarget};
 
-use backend::Backend;
 use dsl::{Filter, IntoBoxed};
 use expression::{AppearsOnTable, Expression, NonAggregate, SelectableExpression};
 use query_builder::returning_clause::*;
@@ -14,7 +13,6 @@ use query_dsl::methods::{BoxedDsl, FilterDsl};
 use query_dsl::RunQueryDsl;
 use query_source::Table;
 use result::Error::QueryBuilderError;
-use result::QueryResult;
 
 /// The type returned by [`update`](../fn.update.html). The only thing you can do
 /// with this type is call `set` on it.

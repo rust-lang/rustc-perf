@@ -30,7 +30,6 @@ extern crate quote;
 #[doc(hidden)]
 pub use proc_macro2::{TokenTree, TokenStream};
 
-use std::convert::From;
 use std::error::Error;
 use std::fmt;
 

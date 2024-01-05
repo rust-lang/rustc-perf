@@ -14,8 +14,6 @@ use std::fmt;
 use std::ops;
 use std::u32;
 
-use syntax;
-
 use literals::LiteralSearcher;
 use prog::InstEmptyLook;
 use utf8::{decode_utf8, decode_last_utf8};

@@ -5,7 +5,6 @@ use scoped_threadpool::Pool;
 use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::io::{self, BufRead, Cursor, Read, Seek};
-use std::iter::Iterator;
 use std::marker::PhantomData;
 use std::num::{ParseFloatError, ParseIntError};
 use std::path::Path;

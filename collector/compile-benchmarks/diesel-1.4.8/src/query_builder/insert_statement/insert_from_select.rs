@@ -1,4 +1,3 @@
-use backend::Backend;
 use expression::{Expression, NonAggregate, SelectableExpression};
 use insertable::*;
 use query_builder::*;

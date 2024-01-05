@@ -1,6 +1,6 @@
 use proc_macro2::{Span, TokenStream};
 use syn::spanned::Spanned;
-use syn::{self, Ident, Index, Member};
+use syn::{Ident, Index, Member};
 
 use bound;
 use dummy;

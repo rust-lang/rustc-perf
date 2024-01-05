@@ -1,10 +1,8 @@
 use super::*;
-use backend::Backend;
 use dsl::Or;
 use expression::operators::And;
 use expression::*;
 use expression_methods::*;
-use result::QueryResult;
 use sql_types::Bool;
 
 /// Add `Predicate` to the current `WHERE` clause, joining with `AND` if

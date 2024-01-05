@@ -10,7 +10,6 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use bstr::{io::BufReadExt, ByteSlice};
-use log;
 
 use crate::Result;
 

@@ -1,7 +1,6 @@
 use anyhow::anyhow;
 use cargo::core::{features, CliUnstable};
-use cargo::{self, drop_print, drop_println, CliResult, Config};
-use clap::{AppSettings, Arg, ArgMatches};
+use cargo::{drop_print, drop_println};
 use itertools::Itertools;
 use std::collections::HashMap;
 use std::fmt::Write;

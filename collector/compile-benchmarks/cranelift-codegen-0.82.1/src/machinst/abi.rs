@@ -1,12 +1,10 @@
 //! ABI definitions.
 
-use crate::binemit::StackMap;
-use crate::ir::{Signature, StackSlot};
+use crate::ir::Signature;
 use crate::isa::CallConv;
 use crate::machinst::*;
 use crate::settings;
-use regalloc::{Reg, Set, SpillSlot, Writable};
-use smallvec::SmallVec;
+use regalloc::Set;
 
 /// A small vector of instructions (with some reasonable size); appropriate for
 /// a small fixed sequence implementing one operation.

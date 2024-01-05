@@ -1,7 +1,6 @@
 use std::marker::PhantomData;
 
 use super::*;
-use backend::Backend;
 use query_builder::*;
 use result::QueryResult;
 use serialize::ToSql;

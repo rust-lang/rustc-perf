@@ -2,7 +2,7 @@ use std::error::Error;
 
 use associations::BelongsTo;
 use backend::Backend;
-use deserialize::{self, FromSqlRow, Queryable, QueryableByName};
+use deserialize::{self, FromSqlRow};
 use expression::{
     AppearsOnTable, AsExpression, AsExpressionList, Expression, NonAggregate, SelectableExpression,
 };

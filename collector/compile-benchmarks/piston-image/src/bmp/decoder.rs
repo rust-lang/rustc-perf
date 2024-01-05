@@ -1,5 +1,5 @@
 use std::io::{Read, Seek, SeekFrom};
-use std::iter::{Iterator, repeat, Rev};
+use std::iter::{repeat, Rev};
 use std::slice::ChunksMut;
 use byteorder::{ReadBytesExt, LittleEndian};
 

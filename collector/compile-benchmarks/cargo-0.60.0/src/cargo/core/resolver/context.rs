@@ -10,9 +10,6 @@ use log::debug;
 use std::collections::HashMap;
 use std::num::NonZeroU64;
 
-pub use super::encode::Metadata;
-pub use super::encode::{EncodableDependency, EncodablePackageId, EncodableResolve};
-pub use super::resolve::Resolve;
 
 // A `Context` is basically a bunch of local resolution information which is
 // kept around for all `BacktrackFrame` instances. As a result, this runs the

@@ -3,7 +3,7 @@ use delimited::Delimited;
 
 use std::iter;
 
-use proc_macro2::{self, Delimiter, TokenNode, Spacing};
+use proc_macro2::{Delimiter, TokenNode, Spacing};
 
 ast_struct! {
     /// Doc-comments are promoted to attributes that have `is_sugared_doc` = true
@@ -294,7 +294,7 @@ pub mod parsing {
     use super::*;
     use synom::{PResult, Cursor, parse_error};
     use synom::tokens::*;
-    use proc_macro2::{TokenNode, Spacing, TokenTree};
+    use proc_macro2::TokenTree;
 
     fn eq() -> TokenTree {
         TokenTree {

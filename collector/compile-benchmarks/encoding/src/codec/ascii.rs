@@ -5,7 +5,6 @@
 //! 7-bit ASCII encoding.
 
 use std::mem;
-use std::convert::Into;
 use types::*;
 
 /**

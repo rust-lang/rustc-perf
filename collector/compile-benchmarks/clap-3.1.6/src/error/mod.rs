@@ -4,7 +4,6 @@
 // Std
 use std::{
     borrow::Cow,
-    convert::From,
     error,
     fmt::{self, Debug, Display, Formatter},
     io::{self, BufRead},

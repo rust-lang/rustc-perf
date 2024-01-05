@@ -43,7 +43,6 @@ use std::any::TypeId;
 use std::error::Error as StdError;
 use std::fmt;
 use std::io;
-use std::marker::Unpin;
 
 use bytes::Bytes;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};

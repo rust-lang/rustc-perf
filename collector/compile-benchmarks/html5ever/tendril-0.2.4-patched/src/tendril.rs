@@ -13,7 +13,6 @@ use std::cell::Cell;
 use std::ops::{Deref, DerefMut};
 use std::iter::FromIterator;
 use std::io::Write;
-use std::default::Default;
 use std::cmp::Ordering;
 use std::fmt as strfmt;
 

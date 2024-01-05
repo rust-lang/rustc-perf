@@ -8,7 +8,6 @@ use std::any::*;
 use std::marker::PhantomData;
 
 use super::returning_clause::*;
-use backend::Backend;
 use expression::operators::Eq;
 use expression::{Expression, NonAggregate, SelectableExpression};
 use insertable::*;
@@ -19,7 +18,6 @@ use query_builder::*;
 use query_dsl::methods::ExecuteDsl;
 use query_dsl::RunQueryDsl;
 use query_source::{Column, Table};
-use result::QueryResult;
 #[cfg(feature = "sqlite")]
 use sqlite::{Sqlite, SqliteConnection};
 

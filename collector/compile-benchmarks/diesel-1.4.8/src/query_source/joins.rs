@@ -1,11 +1,9 @@
-use super::{AppearsInFromClause, Plus, QuerySource};
+use super::{AppearsInFromClause, Plus};
 use backend::Backend;
 use expression::grouped::Grouped;
 use expression::nullable::Nullable;
-use expression::SelectableExpression;
 use prelude::*;
 use query_builder::*;
-use result::QueryResult;
 use sql_types::Bool;
 use util::TupleAppend;
 

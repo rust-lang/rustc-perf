@@ -338,8 +338,7 @@ ast_enum! {
 pub mod parsing {
     use super::*;
     use crate::ext::IdentExt;
-    use crate::parse::{Parse, ParseStream, Result};
-    use crate::path;
+    use crate::parse::{Parse, ParseStream};
     use proc_macro2::{Punct, Spacing, TokenTree};
 
     #[cfg_attr(doc_cfg, doc(cfg(feature = "parsing")))]
@@ -1076,7 +1075,6 @@ mod printing {
     use super::*;
     use crate::attr::FilterAttrs;
     use crate::print::TokensOrDefault;
-    use proc_macro2::TokenStream;
     use quote::{ToTokens, TokenStreamExt};
 
     #[cfg_attr(doc_cfg, doc(cfg(feature = "printing")))]
