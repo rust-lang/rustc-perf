@@ -5,7 +5,7 @@ use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 fn determinism_env(cmd: &mut Command) {
     // Since rust-lang/rust#89836, rustc stable crate IDs include a hash of the
@@ -35,6 +35,20 @@ fn run_with_determinism_env(mut cmd: Command) {
         "command did not complete successfully: {:?}",
         cmd
     );
+}
+
+// We want each rustc execution to have a separate self-profile directory,
+// to avoid overwriting the results. PID of this process and timestamp should
+// hopefully be unique enough.
+fn create_self_profile_dir() -> PathBuf {
+    let pid = std::process::id();
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
+    let name = format!("self-profile-output-{pid}-{timestamp}");
+
+    std::env::current_dir().unwrap().join(name)
 }
 
 fn main() {
@@ -104,7 +118,7 @@ fn main() {
                     .arg(&tool)
                     .args(&args);
 
-                let prof_out_dir = std::env::current_dir().unwrap().join("self-profile-output");
+                let prof_out_dir = create_self_profile_dir();
                 if wrapper == "PerfStatSelfProfile" {
                     cmd.arg(&format!(
                         "-Zself-profile={}",
@@ -175,7 +189,7 @@ fn main() {
                 let mut tool = Command::new(tool);
                 tool.args(&args);
 
-                let prof_out_dir = std::env::current_dir().unwrap().join("self-profile-output");
+                let prof_out_dir = create_self_profile_dir();
                 if wrapper == "XperfStatSelfProfile" {
                     tool.arg(&format!(
                         "-Zself-profile={}",
