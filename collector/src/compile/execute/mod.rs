@@ -15,7 +15,6 @@ use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::future::Future;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::process::{self, Command};
@@ -431,6 +430,11 @@ pub trait Processor {
         output: process::Output,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<Retry>> + 'a>>;
 
+    /// Postprocess results gathered during previous collection(s).
+    fn postprocess_results<'a>(&'a mut self) -> Pin<Box<dyn Future<Output = ()> + 'a>> {
+        Box::pin(async {})
+    }
+
     /// Provided to permit switching on more expensive profiling if it's needed
     /// for the "first" run for any given benchmark (we reuse the processor),
     /// e.g. disabling -Zself-profile.
@@ -443,94 +447,6 @@ pub trait Processor {
     /// iteration.
     fn finished_first_collection(&mut self) -> bool {
         false
-    }
-}
-
-struct Upload(std::process::Child, tempfile::NamedTempFile);
-
-impl Upload {
-    fn new(prefix: PathBuf, collection: database::CollectionId, files: SelfProfileFiles) -> Upload {
-        // Files are placed at
-        //  * self-profile/<artifact id>/<benchmark>/<profile>/<scenario>
-        //    /self-profile-<collection-id>.{extension}
-        let upload = tempfile::NamedTempFile::new()
-            .context("create temporary file")
-            .unwrap();
-        let filename = match files {
-            SelfProfileFiles::Seven {
-                string_index,
-                string_data,
-                events,
-            } => {
-                let tarball = snap::write::FrameEncoder::new(Vec::new());
-                let mut builder = tar::Builder::new(tarball);
-                builder.mode(tar::HeaderMode::Deterministic);
-
-                let append_file = |builder: &mut tar::Builder<_>,
-                                   file: &Path,
-                                   name: &str|
-                 -> anyhow::Result<()> {
-                    if file.exists() {
-                        // Silently ignore missing files, the new self-profile
-                        // experiment with one file has a different structure.
-                        builder.append_path_with_name(file, name)?;
-                    }
-                    Ok(())
-                };
-
-                append_file(&mut builder, &string_index, "self-profile.string_index")
-                    .expect("append string index");
-                append_file(&mut builder, &string_data, "self-profile.string_data")
-                    .expect("append string data");
-                append_file(&mut builder, &events, "self-profile.events").expect("append events");
-                builder.finish().expect("complete tarball");
-                std::fs::write(
-                    upload.path(),
-                    builder
-                        .into_inner()
-                        .expect("get")
-                        .into_inner()
-                        .expect("snap success"),
-                )
-                .expect("wrote tarball");
-                format!("self-profile-{}.tar.sz", collection)
-            }
-            SelfProfileFiles::Eight { file } => {
-                let data = std::fs::read(file).expect("read profile data");
-                let mut data = snap::read::FrameEncoder::new(&data[..]);
-                let mut compressed = Vec::new();
-                data.read_to_end(&mut compressed).expect("compressed");
-                std::fs::write(upload.path(), &compressed).expect("write compressed profile data");
-
-                format!("self-profile-{}.mm_profdata.sz", collection)
-            }
-        };
-
-        let child = Command::new("aws")
-            .arg("s3")
-            .arg("cp")
-            .arg("--storage-class")
-            .arg("INTELLIGENT_TIERING")
-            .arg("--only-show-errors")
-            .arg(upload.path())
-            .arg(&format!(
-                "s3://rustc-perf/{}",
-                &prefix.join(filename).to_str().unwrap()
-            ))
-            .spawn()
-            .expect("spawn aws");
-
-        Upload(child, upload)
-    }
-
-    fn wait(mut self) {
-        let start = std::time::Instant::now();
-        let status = self.0.wait().expect("waiting for child");
-        if !status.success() {
-            panic!("S3 upload failed: {:?}", status);
-        }
-
-        log::trace!("uploaded to S3, additional wait: {:?}", start.elapsed());
     }
 }
 
