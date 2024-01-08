@@ -332,6 +332,11 @@ impl Benchmark {
             preparation_start.elapsed().as_secs_f64()
         );
 
+        // We need to hold on to the directories to keep the files alive until
+        // the processor post-processes them. We also store them in `ManuallyDrop`
+        // so that they are not deleted when an error occurs.
+        let mut timing_dirs: Vec<ManuallyDrop<TempDir>> = vec![];
+
         let benchmark_start = std::time::Instant::now();
         for ((backend, profile), prep_dir) in &target_dirs {
             let backend = *backend;
@@ -408,7 +413,7 @@ impl Benchmark {
                         }
                     }
                 }
-                drop(ManuallyDrop::into_inner(timing_dir));
+                timing_dirs.push(timing_dir);
             }
         }
         log::trace!(
@@ -417,6 +422,12 @@ impl Benchmark {
             benchmark_start.elapsed().as_secs_f64()
         );
         processor.postprocess_results().await;
+
+        // Now we can release the directories
+        for dir in timing_dirs {
+            drop(ManuallyDrop::into_inner(dir));
+        }
+
         Ok(())
     }
 }
