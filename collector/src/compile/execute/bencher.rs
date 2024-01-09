@@ -87,22 +87,12 @@ impl<'a> BenchProcessor<'a> {
 
     async fn insert_stats(
         &mut self,
+        collection: CollectionId,
         scenario: database::Scenario,
-        profile: Profile,
+        profile: database::Profile,
         backend: CodegenBackend,
         stats: Stats,
-    ) -> (CollectionId, database::Profile) {
-        let version = get_rustc_perf_commit();
-
-        let collection = self.conn.collection_id(&version).await;
-        let profile = match profile {
-            Profile::Check => database::Profile::Check,
-            Profile::Debug => database::Profile::Debug,
-            Profile::Doc => database::Profile::Doc,
-            Profile::Opt => database::Profile::Opt,
-            Profile::Clippy => database::Profile::Clippy,
-        };
-
+    ) {
         let backend = match backend {
             CodegenBackend::Llvm => database::CodegenBackend::Llvm,
             CodegenBackend::Cranelift => database::CodegenBackend::Cranelift,
@@ -123,7 +113,6 @@ impl<'a> BenchProcessor<'a> {
         }
 
         while let Some(()) = buf.next().await {}
-        (collection, profile)
     }
 
     pub async fn measure_rustc(&mut self, toolchain: &Toolchain) -> anyhow::Result<()> {
@@ -184,17 +173,30 @@ impl<'a> Processor for BenchProcessor<'a> {
                             database::Scenario::IncrementalPatch(patch.name)
                         }
                     };
-                    let (collection_id, profile) = self
-                        .insert_stats(scenario, data.profile, data.backend, res.0)
-                        .await;
+                    let profile = match data.profile {
+                        Profile::Check => database::Profile::Check,
+                        Profile::Debug => database::Profile::Debug,
+                        Profile::Doc => database::Profile::Doc,
+                        Profile::Opt => database::Profile::Opt,
+                        Profile::Clippy => database::Profile::Clippy,
+                    };
 
+                    let version = get_rustc_perf_commit();
+                    let collection = self.conn.collection_id(&version).await;
+
+                    // If the gathered metrics were produced with self profile enabled, then they
+                    // are not realistic. Do not store the metrics into the DB for self-profile
+                    // runs to avoid unnecessary DB storage.
                     if let Some(files) = res.2 {
                         self.self_profiles.push(RecordedSelfProfile {
-                            collection: collection_id,
+                            collection,
                             scenario,
                             profile,
                             files,
                         });
+                    } else {
+                        self.insert_stats(collection, scenario, profile, data.backend, res.0)
+                            .await;
                     }
 
                     Ok(Retry::No)
