@@ -8,18 +8,18 @@ use crate::compile::benchmark::BenchmarkName;
 use crate::toolchain::Toolchain;
 use crate::utils::fs::EnsureImmutableFile;
 use crate::{async_command_output, command_output, utils};
+use analyzeme::ArtifactSize;
 use anyhow::Context;
 use bencher::Bencher;
-use database::QueryLabel;
 use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::future::Future;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::process::{self, Command};
 use std::str;
-use std::time::Duration;
 
 pub mod bencher;
 mod etw_parser;
@@ -468,7 +468,7 @@ fn store_artifact_sizes_into_stats(stats: &mut Stats, profile: &SelfProfile) {
     for artifact in profile.artifact_sizes.iter() {
         stats
             .stats
-            .insert(format!("size:{}", artifact.label), artifact.size as f64);
+            .insert(format!("size:{}", artifact.label), artifact.value as f64);
     }
 }
 
@@ -480,17 +480,12 @@ enum DeserializeStatError {
     ParseError(String, #[source] ::std::num::ParseFloatError),
     #[error("could not process xperf data")]
     XperfError(#[from] anyhow::Error),
+    #[error("io error")]
+    IOError(#[from] std::io::Error),
 }
 
 enum SelfProfileFiles {
-    Seven {
-        string_data: PathBuf,
-        string_index: PathBuf,
-        events: PathBuf,
-    },
-    Eight {
-        file: PathBuf,
-    },
+    Eight { file: PathBuf },
 }
 
 fn process_stat_output(
@@ -499,25 +494,15 @@ fn process_stat_output(
     let stdout = String::from_utf8(output.stdout.clone()).expect("utf8 output");
     let mut stats = Stats::new();
 
-    let mut profile: Option<SelfProfile> = None;
-    let mut dir: Option<PathBuf> = None;
-    let mut prefix: Option<String> = None;
-    let mut file: Option<PathBuf> = None;
+    let mut self_profile_dir: Option<PathBuf> = None;
+    let mut self_profile_crate: Option<String> = None;
     for line in stdout.lines() {
-        if let Some(stripped) = line.strip_prefix("!self-profile-output:") {
-            profile = Some(serde_json::from_str(stripped).unwrap());
-            continue;
-        }
         if let Some(stripped) = line.strip_prefix("!self-profile-dir:") {
-            dir = Some(PathBuf::from(stripped));
+            self_profile_dir = Some(PathBuf::from(stripped));
             continue;
         }
-        if let Some(stripped) = line.strip_prefix("!self-profile-prefix:") {
-            prefix = Some(String::from(stripped));
-            continue;
-        }
-        if let Some(stripped) = line.strip_prefix("!self-profile-file:") {
-            file = Some(PathBuf::from(stripped));
+        if let Some(stripped) = line.strip_prefix("!self-profile-crate:") {
+            self_profile_crate = Some(String::from(stripped));
             continue;
         }
         if let Some(counter_file) = line.strip_prefix("!counters-file:") {
@@ -581,39 +566,13 @@ fn process_stat_output(
         );
     }
 
-    let files = if let (Some(prefix), Some(dir)) = (prefix, dir) {
-        let mut string_index = PathBuf::new();
-        let mut string_data = PathBuf::new();
-        let mut events = PathBuf::new();
-        for entry in fs::read_dir(&dir).unwrap() {
-            let filename = entry.unwrap().file_name();
-            let filename_str = filename.to_str().unwrap();
-            let path = dir.join(filename_str);
-            if filename_str.ends_with(".events") {
-                assert!(filename_str.contains(&prefix), "{:?}", path);
-                events = path;
-            } else if filename_str.ends_with(".string_data") {
-                assert!(filename_str.contains(&prefix), "{:?}", path);
-                string_data = path;
-            } else if filename_str.ends_with(".string_index") {
-                assert!(filename_str.contains(&prefix), "{:?}", path);
-                string_index = path;
-            }
-        }
-
-        Some(SelfProfileFiles::Seven {
-            string_index,
-            string_data,
-            events,
-        })
-    } else {
-        file.map(|file| SelfProfileFiles::Eight { file })
-    };
-
     if stats.is_empty() {
         return Err(DeserializeStatError::NoOutput(output));
     }
-
+    let (profile, files) = match (self_profile_dir, self_profile_crate) {
+        (Some(dir), Some(krate)) => parse_self_profile(dir, krate)?,
+        _ => (None, None),
+    };
     Ok((stats, profile, files))
 }
 
@@ -650,23 +609,44 @@ impl Stats {
 
 #[derive(serde::Deserialize, Clone)]
 pub struct SelfProfile {
-    pub query_data: Vec<QueryData>,
     pub artifact_sizes: Vec<ArtifactSize>,
 }
 
-#[derive(serde::Deserialize, Clone)]
-pub struct ArtifactSize {
-    pub label: QueryLabel,
-    #[serde(rename = "value")]
-    pub size: u64,
-}
-
-#[derive(serde::Deserialize, Clone)]
-pub struct QueryData {
-    pub label: QueryLabel,
-    pub self_time: Duration,
-    pub number_of_cache_hits: u32,
-    pub invocation_count: u32,
-    pub blocked_time: Duration,
-    pub incremental_load_time: Duration,
+fn parse_self_profile(
+    dir: PathBuf,
+    crate_name: String,
+) -> std::io::Result<(Option<SelfProfile>, Option<SelfProfileFiles>)> {
+    // First, find the `.mm_profdata` file with the self-profile data.
+    let mut full_path = None;
+    // We don't know the pid of rustc, and can't easily get it -- we only know the
+    // `perf` pid. So just blindly look in the directory to hopefully find it.
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        if entry.file_name().to_str().map_or(false, |s| {
+            s.starts_with(&crate_name) && s.ends_with("mm_profdata")
+        }) {
+            full_path = Some(entry.path());
+            break;
+        }
+    }
+    let (profile, files) = if let Some(profile_path) = full_path {
+        // measureme 0.8+ uses a single file
+        let data = fs::read(&profile_path)?;
+        let results = analyzeme::ProfilingData::from_paged_buffer(data, None)
+            .map_err(|error| {
+                eprintln!("Cannot read self-profile data: {error:?}");
+                std::io::Error::new(ErrorKind::InvalidData, error)
+            })?
+            .perform_analysis();
+        let profile = SelfProfile {
+            artifact_sizes: results.artifact_sizes,
+        };
+        let files = SelfProfileFiles::Eight { file: profile_path };
+        (Some(profile), Some(files))
+    } else {
+        // The old "3 files format" is not supported by analyzeme anymore, so we don't handle it
+        // here.
+        (None, None)
+    };
+    Ok((profile, files))
 }

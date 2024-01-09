@@ -155,8 +155,7 @@ The following options alter the behaviour of the `bench_local` subcommand.
   choices are one or more (comma-separated) of `Llvm`, `Cranelift`. The default
   is `Llvm`.
 - `--self-profile`: use rustc's `-Zself-profile` option to produce
-  query/function tables in the output. The `measureme` tool must be installed
-  for this to work.
+  query/function tables in the output.
 
 `RUST_LOG=debug` can be specified to enable verbose logging, which is useful
 for debugging `collector` itself.

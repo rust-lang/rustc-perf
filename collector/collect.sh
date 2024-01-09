@@ -19,9 +19,6 @@ while : ; do
         rustup update
         cargo +nightly build --release -p collector
 
-        # Install measureme tooling
-        cargo install --git https://github.com/rust-lang/measureme --branch stable flamegraph crox summarize
-
         target/release/collector bench_next $SITE_URL --self-profile --bench-rustc --db $DATABASE
         STATUS=$?
         echo finished run at `date` with exit code $STATUS
