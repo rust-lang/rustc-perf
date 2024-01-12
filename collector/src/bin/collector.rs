@@ -957,84 +957,99 @@ fn main_result() -> anyhow::Result<i32> {
                 return Ok(0);
             };
 
-            let pool = database::Pool::open(&db.db);
-            let mut rt = build_async_runtime();
+            let res = std::panic::catch_unwind(|| {
+                let pool = database::Pool::open(&db.db);
+                let mut rt = build_async_runtime();
 
-            let res = match next {
-                NextArtifact::Release(tag) => {
-                    let toolchain = create_toolchain_from_published_version(&tag, &target_triple)?;
-                    bench_published_artifact(
-                        rt.block_on(pool.connection()),
-                        &mut rt,
-                        toolchain,
-                        &benchmark_dirs,
-                    )
+                match next {
+                    NextArtifact::Release(tag) => {
+                        let toolchain =
+                            create_toolchain_from_published_version(&tag, &target_triple)?;
+                        bench_published_artifact(
+                            rt.block_on(pool.connection()),
+                            &mut rt,
+                            toolchain,
+                            &benchmark_dirs,
+                        )
+                    }
+                    NextArtifact::Commit {
+                        commit,
+                        include,
+                        exclude,
+                        runs,
+                    } => {
+                        let sha = commit.sha.to_string();
+                        let sysroot = Sysroot::install(
+                            sha.clone(),
+                            &target_triple,
+                            vec![CodegenBackend::Llvm],
+                        )
+                        .with_context(|| format!("failed to install sysroot for {:?}", commit))?;
+
+                        let mut benchmarks = get_compile_benchmarks(
+                            &compile_benchmark_dir,
+                            include.as_deref(),
+                            exclude.as_deref(),
+                            None,
+                        )?;
+                        benchmarks.retain(|b| b.category().is_primary_or_secondary());
+
+                        let artifact_id = ArtifactId::Commit(commit);
+                        let mut conn = rt.block_on(pool.connection());
+                        let toolchain = Toolchain::from_sysroot(&sysroot, sha);
+
+                        let compile_config = CompileBenchmarkConfig {
+                            benchmarks,
+                            profiles: vec![
+                                Profile::Check,
+                                Profile::Debug,
+                                Profile::Doc,
+                                Profile::Opt,
+                            ],
+                            scenarios: Scenario::all(),
+                            backends: vec![CodegenBackend::Llvm],
+                            iterations: runs.map(|v| v as usize),
+                            is_self_profile: self_profile.self_profile,
+                            bench_rustc: bench_rustc.bench_rustc,
+                        };
+                        let runtime_suite = rt.block_on(load_runtime_benchmarks(
+                            conn.as_mut(),
+                            &runtime_benchmark_dir,
+                            CargoIsolationMode::Isolated,
+                            None,
+                            &toolchain,
+                            &artifact_id,
+                        ))?;
+
+                        let runtime_config = RuntimeBenchmarkConfig {
+                            runtime_suite,
+                            filter: BenchmarkFilter::keep_all(),
+                            iterations: DEFAULT_RUNTIME_ITERATIONS,
+                        };
+                        let shared = SharedBenchmarkConfig {
+                            artifact_id,
+                            toolchain,
+                        };
+
+                        run_benchmarks(
+                            &mut rt,
+                            conn,
+                            shared,
+                            Some(compile_config),
+                            Some(runtime_config),
+                        )
+                    }
                 }
-                NextArtifact::Commit {
-                    commit,
-                    include,
-                    exclude,
-                    runs,
-                } => {
-                    let sha = commit.sha.to_string();
-                    let sysroot = Sysroot::install(
-                        sha.clone(),
-                        &target_triple,
-                        vec![CodegenBackend::Llvm],
-                    )
-                    .with_context(|| format!("failed to install sysroot for {:?}", commit))?;
-
-                    let mut benchmarks = get_compile_benchmarks(
-                        &compile_benchmark_dir,
-                        include.as_deref(),
-                        exclude.as_deref(),
-                        None,
-                    )?;
-                    benchmarks.retain(|b| b.category().is_primary_or_secondary());
-
-                    let artifact_id = ArtifactId::Commit(commit);
-                    let mut conn = rt.block_on(pool.connection());
-                    let toolchain = Toolchain::from_sysroot(&sysroot, sha);
-
-                    let compile_config = CompileBenchmarkConfig {
-                        benchmarks,
-                        profiles: vec![Profile::Check, Profile::Debug, Profile::Doc, Profile::Opt],
-                        scenarios: Scenario::all(),
-                        backends: vec![CodegenBackend::Llvm],
-                        iterations: runs.map(|v| v as usize),
-                        is_self_profile: self_profile.self_profile,
-                        bench_rustc: bench_rustc.bench_rustc,
-                    };
-                    let runtime_suite = rt.block_on(load_runtime_benchmarks(
-                        conn.as_mut(),
-                        &runtime_benchmark_dir,
-                        CargoIsolationMode::Isolated,
-                        None,
-                        &toolchain,
-                        &artifact_id,
-                    ))?;
-
-                    let runtime_config = RuntimeBenchmarkConfig {
-                        runtime_suite,
-                        filter: BenchmarkFilter::keep_all(),
-                        iterations: DEFAULT_RUNTIME_ITERATIONS,
-                    };
-                    let shared = SharedBenchmarkConfig {
-                        artifact_id,
-                        toolchain,
-                    };
-
-                    run_benchmarks(
-                        &mut rt,
-                        conn,
-                        shared,
-                        Some(compile_config),
-                        Some(runtime_config),
-                    )
-                }
-            };
+            });
+            // We need to send a message to this endpoint even if the collector panics
             client.post(format!("{}/perf/onpush", site_url)).send()?;
-            res?;
+
+            match res {
+                Ok(res) => res?,
+                Err(error) => {
+                    log::error!("The collector has crashed\n{error:?}");
+                }
+            }
             Ok(0)
         }
 
