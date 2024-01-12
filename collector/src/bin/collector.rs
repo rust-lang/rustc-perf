@@ -645,15 +645,6 @@ fn main_result() -> anyhow::Result<i32> {
         runtime: &runtime_benchmark_dir,
     };
 
-    let mut builder = tokio::runtime::Builder::new_multi_thread();
-    // We want to minimize noise from the runtime
-    builder
-        .worker_threads(1)
-        .max_blocking_threads(1)
-        .enable_time()
-        .enable_io();
-    let mut rt = builder.build().expect("built runtime");
-
     // XXX: This doesn't necessarily work for all archs
     let target_triple = format!("{}-unknown-linux-gnu", std::env::consts::ARCH);
 
@@ -765,6 +756,7 @@ fn main_result() -> anyhow::Result<i32> {
                 CargoIsolationMode::Isolated
             };
 
+            let mut rt = build_async_runtime();
             let mut conn = rt.block_on(pool.connection());
             let artifact_id = ArtifactId::Tag(toolchain.id.clone());
             rt.block_on(purge_old_data(conn.as_mut(), &artifact_id, purge.purge));
@@ -916,6 +908,7 @@ fn main_result() -> anyhow::Result<i32> {
             benchmarks.retain(|b| local.category.0.contains(&b.category()));
 
             let artifact_id = ArtifactId::Tag(toolchain.id.clone());
+            let mut rt = build_async_runtime();
             let mut conn = rt.block_on(pool.connection());
             rt.block_on(purge_old_data(conn.as_mut(), &artifact_id, purge.purge));
 
@@ -965,6 +958,7 @@ fn main_result() -> anyhow::Result<i32> {
             };
 
             let pool = database::Pool::open(&db.db);
+            let mut rt = build_async_runtime();
 
             let res = match next {
                 NextArtifact::Release(tag) => {
@@ -1047,6 +1041,7 @@ fn main_result() -> anyhow::Result<i32> {
         Commands::BenchPublished { toolchain, db } => {
             log_db(&db);
             let pool = database::Pool::open(&db.db);
+            let mut rt = build_async_runtime();
             let conn = rt.block_on(pool.connection());
             let toolchain = create_toolchain_from_published_version(&toolchain, &target_triple)?;
             bench_published_artifact(conn, &mut rt, toolchain, &benchmark_dirs)?;
@@ -1204,6 +1199,7 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
         }
         Commands::PurgeArtifact { name, db } => {
             let pool = Pool::open(&db.db);
+            let rt = build_async_runtime();
             let conn = rt.block_on(pool.connection());
             rt.block_on(conn.purge_artifact(&ArtifactId::Tag(name.clone())));
 
@@ -1211,6 +1207,17 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
             Ok(0)
         }
     }
+}
+
+fn build_async_runtime() -> Runtime {
+    let mut builder = tokio::runtime::Builder::new_multi_thread();
+    // We want to minimize noise from the runtime
+    builder
+        .worker_threads(1)
+        .max_blocking_threads(1)
+        .enable_time()
+        .enable_io();
+    builder.build().expect("built runtime")
 }
 
 fn print_binary_stats(
