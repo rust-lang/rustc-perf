@@ -966,19 +966,15 @@ fn main_result() -> anyhow::Result<i32> {
 
             let pool = database::Pool::open(&db.db);
 
-            match next {
+            let res = match next {
                 NextArtifact::Release(tag) => {
                     let toolchain = create_toolchain_from_published_version(&tag, &target_triple)?;
-                    let res = bench_published_artifact(
+                    bench_published_artifact(
                         rt.block_on(pool.connection()),
                         &mut rt,
                         toolchain,
                         &benchmark_dirs,
-                    );
-
-                    client.post(format!("{}/perf/onpush", site_url)).send()?;
-
-                    res?;
+                    )
                 }
                 NextArtifact::Commit {
                     commit,
@@ -1034,20 +1030,17 @@ fn main_result() -> anyhow::Result<i32> {
                         toolchain,
                     };
 
-                    let res = run_benchmarks(
+                    run_benchmarks(
                         &mut rt,
                         conn,
                         shared,
                         Some(compile_config),
                         Some(runtime_config),
-                    );
-
-                    client.post(format!("{}/perf/onpush", site_url)).send()?;
-
-                    res?;
+                    )
                 }
-            }
-
+            };
+            client.post(format!("{}/perf/onpush", site_url)).send()?;
+            res?;
             Ok(0)
         }
 
