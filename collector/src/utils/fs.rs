@@ -43,8 +43,6 @@ pub fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> anyhow::Result<
 
 /// Touch a file, resetting its modification time.
 pub fn touch(path: &Path) -> anyhow::Result<()> {
-    log::trace!("touching file {:?}", path);
-
     filetime::set_file_mtime(path, filetime::FileTime::now())
         .with_context(|| format!("touching file {:?}", path))?;
 
