@@ -181,10 +181,12 @@ const timeline: Ref<TimelineEntry[]> = computed(() => {
     .filter(([_, reason]) => !reason.hasOwnProperty("InProgress"))
     .reverse();
   let queued_before = queued.length - 1;
+  const currentRunEnd =
+    current?.expected_end ?? addSeconds(new Date(), currentTimeLeft);
   for (const [commit, reason] of queued) {
     const expected_end = addSeconds(
-      current?.expected_end ?? new Date(),
-      currentTimeLeft + queued_before * expectedRunDuration
+      currentRunEnd,
+      queued_before * expectedRunDuration
     );
 
     let kind = commit.type;
