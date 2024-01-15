@@ -186,7 +186,7 @@ const timeline: Ref<TimelineEntry[]> = computed(() => {
   for (const [commit, reason] of queued) {
     const expected_end = addSeconds(
       currentRunEnd,
-      queued_before * expectedRunDuration
+      queued_before * expectedRunDuration + expectedRunDuration
     );
 
     let kind = commit.type;
