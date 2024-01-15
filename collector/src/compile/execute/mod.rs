@@ -464,7 +464,7 @@ fn store_documentation_size_into_stats(stats: &mut Stats, doc_dir: &Path) {
     }
 }
 
-fn store_artifact_sizes_into_stats(stats: &mut Stats, profile: &SelfProfile) {
+fn store_artifact_sizes_into_stats(stats: &mut Stats, profile: &LoadedSelfProfile) {
     for artifact in profile.artifact_sizes.iter() {
         stats
             .stats
@@ -484,13 +484,9 @@ enum DeserializeStatError {
     IOError(#[from] std::io::Error),
 }
 
-enum SelfProfileFiles {
-    Eight { file: PathBuf },
-}
-
 fn process_stat_output(
     output: process::Output,
-) -> Result<(Stats, Option<SelfProfile>, Option<SelfProfileFiles>), DeserializeStatError> {
+) -> Result<(Stats, Option<LoadedSelfProfile>), DeserializeStatError> {
     let stdout = String::from_utf8(output.stdout.clone()).expect("utf8 output");
     let mut stats = Stats::new();
 
@@ -569,11 +565,11 @@ fn process_stat_output(
     if stats.is_empty() {
         return Err(DeserializeStatError::NoOutput(output));
     }
-    let (profile, files) = match (self_profile_dir, self_profile_crate) {
+    let profile = match (self_profile_dir, self_profile_crate) {
         (Some(dir), Some(krate)) => parse_self_profile(dir, krate)?,
-        _ => (None, None),
+        _ => None,
     };
-    Ok((stats, profile, files))
+    Ok((stats, profile))
 }
 
 #[derive(Clone)]
@@ -608,14 +604,16 @@ impl Stats {
 }
 
 #[derive(serde::Deserialize, Clone)]
-pub struct SelfProfile {
+pub struct LoadedSelfProfile {
     pub artifact_sizes: Vec<ArtifactSize>,
+    // Data of the profile loaded into memory
+    pub raw_profile_data: Vec<u8>,
 }
 
 fn parse_self_profile(
     dir: PathBuf,
     crate_name: String,
-) -> std::io::Result<(Option<SelfProfile>, Option<SelfProfileFiles>)> {
+) -> std::io::Result<Option<LoadedSelfProfile>> {
     // First, find the `.mm_profdata` file with the self-profile data.
     let mut full_path = None;
     // We don't know the pid of rustc, and can't easily get it -- we only know the
@@ -629,24 +627,24 @@ fn parse_self_profile(
             break;
         }
     }
-    let (profile, files) = if let Some(profile_path) = full_path {
+    let profile = if let Some(profile_path) = full_path {
         // measureme 0.8+ uses a single file
-        let data = fs::read(&profile_path)?;
-        let results = analyzeme::ProfilingData::from_paged_buffer(data, None)
+        let raw_profile_data = fs::read(&profile_path)?;
+        let results = analyzeme::ProfilingData::from_paged_buffer(raw_profile_data.clone(), None)
             .map_err(|error| {
                 eprintln!("Cannot read self-profile data: {error:?}");
                 std::io::Error::new(ErrorKind::InvalidData, error)
             })?
             .perform_analysis();
-        let profile = SelfProfile {
+        let profile = LoadedSelfProfile {
             artifact_sizes: results.artifact_sizes,
+            raw_profile_data,
         };
-        let files = SelfProfileFiles::Eight { file: profile_path };
-        (Some(profile), Some(files))
+        Some(profile)
     } else {
         // The old "3 files format" is not supported by analyzeme anymore, so we don't handle it
         // here.
-        (None, None)
+        None
     };
-    Ok((profile, files))
+    Ok(profile)
 }

@@ -4,7 +4,7 @@ use crate::compile::benchmark::scenario::Scenario;
 use crate::compile::benchmark::BenchmarkName;
 use crate::compile::execute;
 use crate::compile::execute::{
-    rustc, DeserializeStatError, PerfTool, ProcessOutputData, Processor, Retry, SelfProfileFiles,
+    rustc, DeserializeStatError, LoadedSelfProfile, PerfTool, ProcessOutputData, Processor, Retry,
     Stats,
 };
 use crate::toolchain::Toolchain;
@@ -25,7 +25,7 @@ pub struct RecordedSelfProfile {
     collection: CollectionId,
     scenario: database::Scenario,
     profile: database::Profile,
-    files: SelfProfileFiles,
+    self_profile: LoadedSelfProfile,
 }
 
 // Tools usable with the benchmarking subcommands.
@@ -187,12 +187,12 @@ impl<'a> Processor for BenchProcessor<'a> {
                     // If the gathered metrics were produced with self profile enabled, then they
                     // are not realistic. Do not store the metrics into the DB for self-profile
                     // runs to avoid unnecessary DB storage.
-                    if let Some(files) = res.2 {
+                    if let Some(self_profile) = res.1 {
                         self.self_profiles.push(RecordedSelfProfile {
                             collection,
                             scenario,
                             profile,
-                            files,
+                            self_profile,
                         });
                     } else {
                         self.insert_stats(collection, scenario, profile, data.backend, res.0)
@@ -256,8 +256,11 @@ impl<'a> Processor for BenchProcessor<'a> {
                         .join(self.benchmark.0.as_str())
                         .join(profile.profile.to_string())
                         .join(profile.scenario.to_id());
-                    let upload =
-                        SelfProfileS3Upload::new(prefix, profile.collection, profile.files);
+                    let upload = SelfProfileS3Upload::new(
+                        prefix,
+                        profile.collection,
+                        &profile.self_profile.raw_profile_data,
+                    );
                     uploads.push_back(upload);
                 }
                 for upload in uploads {
@@ -275,7 +278,7 @@ impl SelfProfileS3Upload {
     fn new(
         prefix: PathBuf,
         collection: database::CollectionId,
-        files: SelfProfileFiles,
+        profile_data: &[u8],
     ) -> SelfProfileS3Upload {
         // Files are placed at
         //  * self-profile/<artifact id>/<benchmark>/<profile>/<scenario>
@@ -283,17 +286,12 @@ impl SelfProfileS3Upload {
         let upload = tempfile::NamedTempFile::new()
             .context("create temporary file")
             .unwrap();
-        let filename = match files {
-            SelfProfileFiles::Eight { file } => {
-                let data = std::fs::read(file).expect("read profile data");
-                let mut data = snap::read::FrameEncoder::new(&data[..]);
-                let mut compressed = Vec::new();
-                data.read_to_end(&mut compressed).expect("compressed");
-                std::fs::write(upload.path(), &compressed).expect("write compressed profile data");
+        let mut data = snap::read::FrameEncoder::new(profile_data);
+        let mut compressed = Vec::new();
+        data.read_to_end(&mut compressed).expect("compressed");
+        std::fs::write(upload.path(), &compressed).expect("write compressed profile data");
 
-                format!("self-profile-{}.mm_profdata.sz", collection)
-            }
-        };
+        let filename = format!("self-profile-{}.mm_profdata.sz", collection);
 
         let child = Command::new("aws")
             .arg("s3")
