@@ -184,9 +184,6 @@ impl<'a> Processor for BenchProcessor<'a> {
                     let version = get_rustc_perf_commit();
                     let collection = self.conn.collection_id(&version).await;
 
-                    // If the gathered metrics were produced with self profile enabled, then they
-                    // are not realistic. Do not store the metrics into the DB for self-profile
-                    // runs to avoid unnecessary DB storage.
                     if let Some(files) = res.2 {
                         self.self_profiles.push(RecordedSelfProfile {
                             collection,
@@ -194,10 +191,16 @@ impl<'a> Processor for BenchProcessor<'a> {
                             profile,
                             files,
                         });
-                    } else {
-                        self.insert_stats(collection, scenario, profile, data.backend, res.0)
-                            .await;
+
+                        // If the gathered metrics were produced with self profile enabled, then they
+                        // are not realistic. Do not store the metrics that are affected by
+                        // self-profiling into the DB for self-profile runs to avoid unnecessary
+                        // DB storage.
+                        res.0.stats.retain(|key, _| key.starts_with("size:"));
                     }
+
+                    self.insert_stats(collection, scenario, profile, data.backend, res.0)
+                        .await;
 
                     Ok(Retry::No)
                 }
