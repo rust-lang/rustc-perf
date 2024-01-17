@@ -1,11 +1,6 @@
 <script setup lang="ts">
 import {ArtifactDescription} from "../types";
-import {
-  diffClass,
-  formatPercentChange,
-  formatSize,
-  isValidValue,
-} from "../shared";
+import {diffClass, formatPercentChange, formatSize} from "../shared";
 import Tooltip from "../tooltip.vue";
 
 const props = defineProps<{
@@ -13,16 +8,37 @@ const props = defineProps<{
   b: ArtifactDescription;
 }>();
 
+interface ComponentSize {
+  name: string;
+  before: number;
+  after: number;
+}
+
+const allComponents: ComponentSize[] = [
+  ...new Set([
+    ...Object.keys(props.a.component_sizes),
+    ...Object.keys(props.b.component_sizes),
+  ]),
+].map((name) => {
+  const before = props.a.component_sizes[name] ?? 0;
+  const after = props.b.component_sizes[name] ?? 0;
+  return {
+    name,
+    before,
+    after,
+  };
+});
+
 // Sort binaries first, libraries later. Then within each category, sort alphabetically.
-const components = Object.keys(props.a.component_sizes).sort((a, b) => {
-  const aLib = a.startsWith("lib");
-  const bLib = b.startsWith("lib");
+const components = allComponents.sort((a, b) => {
+  const aLib = isLibrary(a.name);
+  const bLib = isLibrary(b.name);
   if (aLib && !bLib) {
     return 1;
   } else if (!aLib && bLib) {
     return -1;
   } else {
-    return a.localeCompare(b);
+    return a.name.localeCompare(b.name);
   }
 });
 
@@ -37,27 +53,25 @@ function formatName(component: string): string {
   return component;
 }
 
-function formatValue(value: number | undefined): string {
-  if (!isValidValue(value)) {
+function formatValue(value: number): string {
+  if (value === 0) {
     return "-";
   }
   return formatSize(value);
 }
 
-function formatChangeTitle(
-  a: number | undefined,
-  b: number | undefined
-): string {
-  if (!isValidValue(a) || !isValidValue(b)) {
-    return "";
-  }
+function formatChangeTitle(a: number, b: number): string {
   return (b - a).toLocaleString();
 }
 
-function formatChange(a: number | undefined, b: number | undefined): string {
-  if (!isValidValue(a) || !isValidValue(b)) {
-    return "-";
+function formatTitle(value: number): string {
+  if (value === 0) {
+    return "Missing value";
   }
+  return value.toLocaleString();
+}
+
+function formatChange(a: number, b: number): string {
   const diff = b - a;
   const formatted = formatSize(Math.abs(diff));
   if (diff < 0) {
@@ -66,8 +80,8 @@ function formatChange(a: number | undefined, b: number | undefined): string {
   return formatted;
 }
 
-function getClass(a: number | undefined, b: number | undefined): string {
-  if (!isValidValue(a) || !isValidValue(b) || a == b) {
+function getClass(a: number, b: number): string {
+  if (a === b) {
     return "";
   }
   return diffClass(b - a);
@@ -111,68 +125,33 @@ function generateTitle(component: string): string {
       <tbody>
         <tr v-for="component in components">
           <td class="component">
-            {{ formatName(component) }}
-            <Tooltip>{{ generateTitle(component) }}</Tooltip>
+            {{ formatName(component.name) }}
+            <Tooltip>{{ generateTitle(component.name) }}</Tooltip>
           </td>
           <td>
-            {{ isLibrary(component) ? "Library" : "Binary" }}
+            {{ isLibrary(component.name) ? "Library" : "Binary" }}
           </td>
           <td>
-            <div
-              class="aligned"
-              :title="a.component_sizes[component].toLocaleString()"
-            >
-              {{ formatValue(a.component_sizes[component]) }}
+            <div class="aligned" :title="formatTitle(component.before)">
+              {{ formatValue(component.before) }}
             </div>
           </td>
           <td>
-            <div
-              class="aligned"
-              :title="b.component_sizes[component].toLocaleString()"
-            >
-              {{ formatValue(b.component_sizes[component]) }}
+            <div class="aligned" :title="formatTitle(component.after)">
+              {{ formatValue(component.after) }}
             </div>
           </td>
-          <td
-            :class="
-              getClass(
-                a.component_sizes[component],
-                b.component_sizes[component]
-              )
-            "
-          >
+          <td :class="getClass(component.before, component.after)">
             <div
               class="aligned"
-              :title="
-                formatChangeTitle(
-                  a.component_sizes[component],
-                  b.component_sizes[component]
-                )
-              "
+              :title="formatChangeTitle(component.before, component.after)"
             >
-              {{
-                formatChange(
-                  a.component_sizes[component],
-                  b.component_sizes[component]
-                )
-              }}
+              {{ formatChange(component.before, component.after) }}
             </div>
           </td>
-          <td
-            :class="
-              getClass(
-                a.component_sizes[component],
-                b.component_sizes[component]
-              )
-            "
-          >
+          <td :class="getClass(component.before, component.after)">
             <div class="aligned">
-              {{
-                formatPercentChange(
-                  a.component_sizes[component],
-                  b.component_sizes[component]
-                )
-              }}
+              {{ formatPercentChange(component.before, component.after) }}
             </div>
           </td>
         </tr>
