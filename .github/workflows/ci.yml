@@ -360,22 +360,24 @@ jobs:
 
       - name: Gather data
         run: |
-          cargo run --bin collector bench_local `which rustc` --include syn --id version1 --db postgresql://postgres:postgres@127.0.0.1:5432/postgres
-          cargo run --bin collector bench_local `rustup +nightly which rustc` --include syn --id version2 --db postgresql://postgres:postgres@127.0.0.1:5432/postgres
+          cargo run --bin collector bench_local `which rustc` --include syn --id version1 \
+            --self-profile \
+            --db postgresql://postgres:postgres@127.0.0.1:5432/postgres
+          cargo run --bin collector bench_local `rustup +nightly which rustc` --include syn --id version2 \
+            --self-profile \
+            --db postgresql://postgres:postgres@127.0.0.1:5432/postgres
 
       - name: Build site
         run: cargo build --bin site
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+
+      - name: Install Python dependencies
+        run: python3 -m pip install msgpack requests
 
       # Check that data from the /get endpoint can be successfully queried.
       - name: Query compare page data
         run: |
           DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/postgres cargo run --bin site &
-          curl http://localhost:2346/perf/get \
-            -H 'Content-Type:application/json' \
-            -d '{"start": "version1", "end": "version2", "stat": "instructions:u" }' \
-            --output out.msgpack \
-            --retry-connrefused \
-            --connect-timeout 5 \
-            --max-time 10 \
-            --retry 3 \
-            --retry-delay 5
+          python3 ci/check-site.py version1 version2
