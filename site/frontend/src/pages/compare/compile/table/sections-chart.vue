@@ -135,6 +135,7 @@ function deactivate() {
 <style scoped lang="scss">
 .wrapper {
   display: flex;
+  align-items: center;
 }
 .chart {
   display: flex;
