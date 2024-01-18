@@ -35,13 +35,24 @@ function calculate_width(value: number, totalDuration: number): string {
   return `${(fraction * 100).toFixed(2)}%`;
 }
 
+function getSectionByName(
+  sections: CompilationSections,
+  name: string
+): CompilationSection | null {
+  const values = sections.sections.filter((s) => s.name === name);
+  if (values.length === 0) {
+    return null;
+  }
+  return values[0];
+}
+
 function formatPercent(
   sections: CompilationSections,
   sectionName: string
 ): string {
-  const values = sections.sections.filter((s) => s.name === sectionName);
-  if (values.length === 0) return "??";
-  const value = values[0].value;
+  const section = getSectionByName(sections, sectionName);
+  if (section === null) return "??";
+  const value = section.value;
   const total = calculateTotalSectionsDuration(sections);
   const percent = (value / total) * 100;
   return `${percent.toFixed(2)}%`;
@@ -107,8 +118,19 @@ function deactivate() {
                 <b>{{ section.name }}</b>
               </div>
               <div>
-                {{ formatPercent(props.before, section.name) }} ->
-                {{ formatPercent(props.after, section.name) }}
+                <div>
+                  {{ formatPercent(props.before, section.name) }} ->
+                  {{ formatPercent(props.after, section.name) }}
+                </div>
+                <div>
+                  {{
+                    getSectionByName(props.before, section.name)?.value ?? "??"
+                  }}
+                  ->
+                  {{
+                    getSectionByName(props.after, section.name)?.value ?? "??"
+                  }}
+                </div>
               </div>
             </div>
           </div>
