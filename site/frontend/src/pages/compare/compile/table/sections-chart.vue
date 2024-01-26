@@ -18,6 +18,10 @@ const afterTotalWidth = computed(() => {
   return calculateTotalSectionsDuration(props.after);
 });
 
+const maxTotalWidth = computed(() => {
+  return Math.max(beforeTotalWidth.value, afterTotalWidth.value);
+});
+
 const SECTIONS_PALETTE = [
   "#7768AE",
   "#FFCf96",
@@ -35,16 +39,31 @@ function calculate_width(value: number, totalDuration: number): string {
   return `${(fraction * 100).toFixed(2)}%`;
 }
 
+function getSectionByName(
+  sections: CompilationSections,
+  name: string
+): CompilationSection | null {
+  const values = sections.sections.filter((s) => s.name === name);
+  if (values.length === 0) {
+    return null;
+  }
+  return values[0];
+}
+
 function formatPercent(
   sections: CompilationSections,
   sectionName: string
 ): string {
-  const values = sections.sections.filter((s) => s.name === sectionName);
-  if (values.length === 0) return "??";
-  const value = values[0].value;
+  const section = getSectionByName(sections, sectionName);
+  if (section === null) return "??";
+  const value = section.value;
   const total = calculateTotalSectionsDuration(sections);
   const percent = (value / total) * 100;
   return `${percent.toFixed(2)}%`;
+}
+
+function getRowWidth(): number {
+  return maxTotalWidth.value;
 }
 
 const chartRows: ComputedRef<Array<[string, CompilationSections]>> = computed(
@@ -54,16 +73,27 @@ const chartRows: ComputedRef<Array<[string, CompilationSections]>> = computed(
   ]
 );
 const legendItems: ComputedRef<
-  Array<{section: CompilationSection; label: string; color: string}>
+  Array<{
+    section: CompilationSection;
+    color: string;
+    beforePercent: string;
+    beforeAbsolute: string;
+    afterPercent: string;
+    afterAbsolute: string;
+  }>
 > = computed(() => {
   const items = [];
   for (const section of props.before.sections) {
     items.push({
       section,
-      label: `${section.name} (${formatPercent(
-        props.before,
-        section.name
-      )} -> ${formatPercent(props.after, section.name)})`,
+      beforePercent: formatPercent(props.before, section.name),
+      beforeAbsolute:
+        getSectionByName(props.before, section.name)?.value?.toLocaleString() ??
+        "??",
+      afterPercent: formatPercent(props.after, section.name),
+      afterAbsolute:
+        getSectionByName(props.after, section.name)?.value?.toLocaleString() ??
+        "??",
       color: getSectionColor(items.length),
     });
   }
@@ -81,52 +111,81 @@ function deactivate() {
 </script>
 
 <template>
-  <div class="wrapper">
-    <div class="chart-wrapper">
-      <div class="chart" v-for="([label, sections], rowIndex) in chartRows">
-        <span class="label">{{ label }}</span>
-        <div class="section-wrapper">
-          <div
-            v-for="(section, index) in sections.sections"
-            :class="{section: true, active: activeSection === section.name}"
-            @mouseenter="activate(section.name)"
-            @mouseleave="deactivate"
-            :style="{
-              width: calculate_width(
-                section.value,
-                rowIndex == 0 ? beforeTotalWidth : afterTotalWidth
-              ),
-              backgroundColor: getSectionColor(index),
-            }"
-          >
+  <div>
+    <div class="wrapper">
+      <div class="chart-wrapper">
+        <div class="chart" v-for="([label, sections], rowIndex) in chartRows">
+          <span class="label">{{ label }}</span>
+          <div class="section-wrapper">
             <div
-              class="description"
-              v-if="rowIndex == 1 && activeSection === section.name"
+              v-for="(section, index) in sections.sections"
+              :class="{section: true, active: activeSection === section.name}"
+              @mouseenter="activate(section.name)"
+              @mouseleave="deactivate"
+              :style="{
+                width: calculate_width(section.value, getRowWidth()),
+                backgroundColor: getSectionColor(index),
+              }"
             >
-              <div>
-                <b>{{ section.name }}</b>
-              </div>
-              <div>
-                {{ formatPercent(props.before, section.name) }} ->
-                {{ formatPercent(props.after, section.name) }}
+              <div
+                class="description"
+                v-if="rowIndex == 1 && activeSection === section.name"
+              >
+                <div>
+                  <b>{{ section.name }}</b>
+                </div>
+                <div>
+                  <div>
+                    {{ formatPercent(props.before, section.name) }} ->
+                    {{ formatPercent(props.after, section.name) }}
+                  </div>
+                  <div>
+                    {{
+                      getSectionByName(
+                        props.before,
+                        section.name
+                      )?.value?.toLocaleString() ?? "??"
+                    }}
+                    ->
+                    {{
+                      getSectionByName(
+                        props.after,
+                        section.name
+                      )?.value.toLocaleString() ?? "??"
+                    }}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
-    <div class="legend">
-      <div
-        class="item"
-        v-for="item in legendItems"
-        @mouseenter="activate(item.section.name)"
-        @mouseleave="deactivate"
-      >
-        <div
-          :class="{color: true, active: activeSection === item.section.name}"
-          :style="{backgroundColor: item.color}"
-        ></div>
-        <div class="name">{{ item.label }}</div>
+      <div class="legend">
+        <table>
+          <thead>
+            <tr>
+              <th></th>
+              <th>Section</th>
+              <th>Relative change</th>
+              <th>Absolute change</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="item in legendItems"
+              @mouseenter="activate(item.section.name)"
+              @mouseleave="deactivate"
+              :class="{active: activeSection === item.section.name}"
+            >
+              <td>
+                <div class="color" :style="{backgroundColor: item.color}"></div>
+              </td>
+              <td class="name">{{ item.section.name }}</td>
+              <td>{{ item.beforePercent }} -> {{ item.afterPercent }}</td>
+              <td>{{ item.beforeAbsolute }} -> {{ item.afterAbsolute }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -135,11 +194,12 @@ function deactivate() {
 <style scoped lang="scss">
 .wrapper {
   display: flex;
+  align-items: center;
 }
 .chart {
   display: flex;
   justify-content: flex-end;
-  width: 600px;
+  width: 500px;
 
   &:first-child {
     margin-bottom: 10px;
@@ -173,10 +233,6 @@ function deactivate() {
   }
 }
 
-.active {
-  box-shadow: inset 0 0 1px 2px #000;
-}
-
 .section:first-child {
   border-radius: 5px 0 0 5px;
 }
@@ -187,17 +243,26 @@ function deactivate() {
 .legend {
   margin-left: 40px;
 
-  .item {
-    display: flex;
-    margin-bottom: 5px;
-
-    .color {
-      width: 15px;
-      height: 15px;
-    }
-    .name {
-      margin-left: 5px;
+  table {
+    td,
+    th {
+      padding: 5px;
     }
   }
+  .color {
+    width: 15px;
+    height: 15px;
+  }
+  .active {
+    font-weight: bold;
+  }
+  .name {
+    margin-left: 5px;
+  }
+}
+
+.active .color,
+.active.section {
+  box-shadow: inset 0 0 1px 2px #000;
 }
 </style>
