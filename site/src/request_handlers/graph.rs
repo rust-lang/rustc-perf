@@ -66,32 +66,34 @@ pub async fn handle_compile_detail_sections(
 ) -> ServerResult<detail_sections::Response> {
     log::info!("handle_compile_detail_sections({:?})", request);
 
-    let artifact_ids = Arc::new(master_artifact_ids_for_range(
-        &ctxt,
-        request.start,
-        request.end,
-    ));
+    let start_artifact = ctxt
+        .artifact_id_for_bound(request.start.clone(), true)
+        .ok_or(format!(
+            "could not find start commit for bound {:?}",
+            request.start
+        ))?;
+    let end_artifact = ctxt
+        .artifact_id_for_bound(request.end.clone(), false)
+        .ok_or(format!(
+            "could not find end commit for bound {:?}",
+            request.end
+        ))?;
 
     let scenario = request.scenario.parse()?;
 
     async fn calculate_sections(
         ctxt: &SiteCtxt,
-        aid: Option<&ArtifactId>,
+        aid: ArtifactId,
         benchmark: &str,
         profile: &str,
         scenario: Scenario,
     ) -> Option<CompilationSections> {
-        match aid {
-            Some(aid) => {
-                get_or_download_self_profile(ctxt, aid.clone(), benchmark, profile, scenario, None)
-                    .await
-                    .ok()
-                    .map(|profile| CompilationSections {
-                        sections: profile.compilation_sections,
-                    })
-            }
-            None => None,
-        }
+        get_or_download_self_profile(ctxt, aid, benchmark, profile, scenario, None)
+            .await
+            .ok()
+            .map(|profile| CompilationSections {
+                sections: profile.compilation_sections,
+            })
     }
 
     // Doc queries are not split into the classic frontend/backend/linker parts.
@@ -99,14 +101,14 @@ pub async fn handle_compile_detail_sections(
         tokio::join!(
             calculate_sections(
                 &ctxt,
-                artifact_ids.get(0),
+                start_artifact,
                 &request.benchmark,
                 &request.profile,
                 scenario,
             ),
             calculate_sections(
                 &ctxt,
-                artifact_ids.get(1),
+                end_artifact,
                 &request.benchmark,
                 &request.profile,
                 scenario,
