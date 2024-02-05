@@ -272,7 +272,11 @@ impl<'a> Processor for BenchProcessor<'a> {
 }
 
 /// Uploads self-profile results to S3
-struct SelfProfileS3Upload(std::process::Child, tempfile::NamedTempFile);
+struct SelfProfileS3Upload(
+    std::process::Child,
+    // This field is used only for its Drop impl
+    #[allow(unused)] tempfile::NamedTempFile,
+);
 
 impl SelfProfileS3Upload {
     fn new(
