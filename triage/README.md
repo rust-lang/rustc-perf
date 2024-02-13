@@ -33,7 +33,7 @@ Use the API endpoint to automate building the file:
 
 You can also analyze binary size regressions/improvements using the following command:
 ```
-% curl "https://perf.rust-lang.org/perf/triage?start=$PARENT&metric=size:linked-artifact" > binary-size.md
+% curl "https://perf.rust-lang.org/perf/triage?start=$PARENT&metric=size:linked_artifact" > binary-size.md
 ```
 
 ## Analysis
