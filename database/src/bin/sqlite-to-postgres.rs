@@ -218,8 +218,8 @@ struct Error;
 
 #[derive(Serialize)]
 struct ErrorRow<'a> {
-    benchmark: &'a str,
     aid: i32,
+    benchmark: &'a str,
     error: Nullable<&'a str>,
 }
 
@@ -229,7 +229,7 @@ impl Table for Error {
     }
 
     fn sqlite_attributes() -> &'static str {
-        "benchmark, aid, error"
+        "aid, benchmark, error"
     }
 
     fn postgres_generated_id_attribute() -> Option<&'static str> {
@@ -239,8 +239,8 @@ impl Table for Error {
     fn write_postgres_csv_row<W: Write>(writer: &mut csv::Writer<W>, row: &rusqlite::Row) {
         writer
             .serialize(ErrorRow {
-                benchmark: row.get_ref(0).unwrap().as_str().unwrap(),
-                aid: row.get(1).unwrap(),
+                aid: row.get(0).unwrap(),
+                benchmark: row.get_ref(1).unwrap().as_str().unwrap(),
                 error: row.get_ref(2).unwrap().try_into().unwrap(),
             })
             .unwrap();
@@ -333,6 +333,7 @@ struct PullRequestBuildRow<'a> {
     include: Nullable<&'a str>,
     exclude: Nullable<&'a str>,
     runs: Nullable<i32>,
+    commit_date: Nullable<DateTime<Utc>>,
 }
 
 impl Table for PullRequestBuild {
@@ -341,7 +342,7 @@ impl Table for PullRequestBuild {
     }
 
     fn sqlite_attributes() -> &'static str {
-        "bors_sha, pr, parent_sha, complete, requested, include, exclude, runs"
+        "bors_sha, pr, parent_sha, complete, requested, include, exclude, runs, commit_date"
     }
 
     fn postgres_generated_id_attribute() -> Option<&'static str> {
@@ -350,6 +351,7 @@ impl Table for PullRequestBuild {
 
     fn write_postgres_csv_row<W: Write>(writer: &mut csv::Writer<W>, row: &rusqlite::Row) {
         let requested: Option<i64> = row.get(4).unwrap();
+        let commit_date: Option<i64> = row.get(8).unwrap();
 
         writer
             .serialize(PullRequestBuildRow {
@@ -363,6 +365,9 @@ impl Table for PullRequestBuild {
                 include: row.get_ref(5).unwrap().try_into().unwrap(),
                 exclude: row.get_ref(6).unwrap().try_into().unwrap(),
                 runs: row.get(7).unwrap(),
+                commit_date: Nullable(
+                    commit_date.map(|seconds| Utc.timestamp_opt(seconds, 0).unwrap()),
+                ),
             })
             .unwrap();
     }
