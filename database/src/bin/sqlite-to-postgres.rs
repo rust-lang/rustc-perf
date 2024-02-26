@@ -554,6 +554,13 @@ async fn main() -> anyhow::Result<()> {
     // if everything succeeds. The transaction is not being used for isolation.
     let postgres_tx = postgres.transaction().await?;
 
+    // Disabling table triggers before copying data and then re-enabling them afterwards can
+    // yield a significant speedup.
+    // Note: Disabling or enabling internally generated constraint triggers requires superuser
+    // privileges. [See PostgreSQL documentation](
+    // https://www.postgresql.org/docs/current/sql-altertable.html#SQL-ALTERTABLE-DESC-DISABLE-ENABLE-TRIGGER)
+    let tables = get_tables(&postgres_tx).await;
+    disable_table_triggers(&postgres_tx, &tables).await;
     // Order matters to the extent necessary to satisfy foreign key constraints.
     copy::<Artifact>(&sqlite_tx, &postgres_tx).await;
     copy::<ArtifactCollectionDuration>(&sqlite_tx, &postgres_tx).await;
@@ -566,6 +573,7 @@ async fn main() -> anyhow::Result<()> {
     copy::<PullRequestBuild>(&sqlite_tx, &postgres_tx).await;
     copy::<RawSelfProfile>(&sqlite_tx, &postgres_tx).await;
     copy::<RustcCompilation>(&sqlite_tx, &postgres_tx).await;
+    enable_table_triggers(&postgres_tx, &tables).await;
 
     // This is overly paranoid, but don't commit the Postgres transaction until
     // the rollback of the SQLite transaction succeeds.
@@ -697,4 +705,37 @@ async fn copy<T: Table>(
 
 fn postgres_csv_writer<W: Write>(w: W) -> csv::Writer<W> {
     csv::WriterBuilder::new().has_headers(false).from_writer(w)
+}
+
+async fn get_tables(postgres: &tokio_postgres::Transaction<'_>) -> Vec<String> {
+    postgres
+        .query(
+            "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public'",
+            &[],
+        )
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|row| row.get(0))
+        .collect()
+}
+
+async fn disable_table_triggers(postgres: &tokio_postgres::Transaction<'_>, tables: &[String]) {
+    for table in tables {
+        postgres
+            .execute(&format!("ALTER TABLE {} DISABLE TRIGGER ALL", table), &[])
+            .await
+            .unwrap();
+    }
+    eprintln!("Disabled table triggers");
+}
+
+async fn enable_table_triggers(postgres: &tokio_postgres::Transaction<'_>, tables: &[String]) {
+    for table in tables {
+        postgres
+            .execute(&format!("ALTER TABLE {} ENABLE TRIGGER ALL", table), &[])
+            .await
+            .unwrap();
+    }
+    eprintln!("Enabled table triggers");
 }
