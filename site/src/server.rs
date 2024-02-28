@@ -16,7 +16,6 @@ use hyper::StatusCode;
 use log::{debug, error, info};
 use parking_lot::{Mutex, RwLock};
 use ring::hmac;
-use rmp_serde;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use uuid::Uuid;

@@ -9,7 +9,6 @@ use database::pool::{postgres, sqlite, ConnectionManager};
 use futures_util::sink::SinkExt;
 use hashbrown::HashMap;
 use serde::{Serialize, Serializer};
-use std::convert::{TryFrom, TryInto};
 use std::io::Write;
 use std::time::Instant;
 
