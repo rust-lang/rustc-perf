@@ -492,7 +492,7 @@ export function renderPlots(
         cacheStates[Object.keys(cacheStates)[0]].interpolated_indices;
 
       let plotOpts = genPlotOpts({
-        width: 380,
+        width,
         height: 300,
         yAxisLabel,
         series: seriesOpts,
