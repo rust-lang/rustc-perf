@@ -68,7 +68,7 @@ async function loadGraphData(selector: GraphsSelector, loading: Ref<boolean>) {
   // Then draw the plots.
   await nextTick();
 
-  const width = Math.floor(window.innerWidth / 4) - 40;
+  const width = Math.max(Math.floor(window.innerWidth / 4) - 40, 380);
   const opts = {width};
 
   // If we select a smaller subset of benchmarks, then just show them.
