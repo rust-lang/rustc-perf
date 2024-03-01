@@ -283,16 +283,20 @@ impl ToolchainComponents {
         for entry in fs::read_dir(dir).context("Cannot read lib dir to find components")? {
             let entry = entry?;
             let path = entry.path();
-            if path.is_file() && path.extension() == Some(OsStr::new("so")) {
+            if path.is_file() {
                 if let Some(filename) = path.file_name().and_then(|s| s.to_str()) {
+                    // libLLVM.so can have a weird suffix, like libLLVM.so.<suffix>, so we don't
+                    // check its .so suffix directly.
                     if filename.starts_with("libLLVM") {
                         self.lib_llvm = Some(path);
-                    } else if filename.starts_with("librustc_driver") {
-                        self.lib_rustc = Some(path);
-                    } else if filename.starts_with("libstd") {
-                        self.lib_std = Some(path);
-                    } else if filename.starts_with("libtest") {
-                        self.lib_test = Some(path);
+                    } else if path.extension() == Some(OsStr::new("so")) {
+                        if filename.starts_with("librustc_driver") {
+                            self.lib_rustc = Some(path);
+                        } else if filename.starts_with("libstd") {
+                            self.lib_std = Some(path);
+                        } else if filename.starts_with("libtest") {
+                            self.lib_test = Some(path);
+                        }
                     }
                 }
             }
