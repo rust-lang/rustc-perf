@@ -454,12 +454,11 @@ fn sort_queue(
         let level_len = partition_in_place(unordered_queue[finished..].iter_mut(), |(_, mr)| {
             mr.parent_sha().map_or(true, |parent| done.contains(parent))
         });
-        assert!(
-            level_len != 0,
-            "at least one commit is ready done={:#?}, {:?}",
-            done,
-            &unordered_queue[finished..]
-        );
+
+        if level_len == 0 {
+            return vec![];
+        }
+
         let level = &mut unordered_queue[finished..][..level_len];
         level.sort_unstable_by_key(|(c, mr)| {
             (
