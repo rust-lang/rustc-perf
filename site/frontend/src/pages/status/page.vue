@@ -498,5 +498,7 @@ loadStatus(loading);
 .error {
   padding: 10px;
   background-color: #f7f7f7;
+  max-width: 100%;
+  white-space: pre-wrap;
 }
 </style>
