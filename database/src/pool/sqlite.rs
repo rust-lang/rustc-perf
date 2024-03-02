@@ -1096,7 +1096,7 @@ impl Connection for SqliteConnection {
                 "
                 select
                     step,
-                    end_time is not null,
+                    end is not null,
                     coalesce(end, strftime('%s', 'now')) - start,
                     (select end - start
                         from collector_progress as cp
