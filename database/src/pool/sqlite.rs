@@ -1096,7 +1096,7 @@ impl Connection for SqliteConnection {
                 "
                 select
                     step,
-                    end_time is not null,
+                    end is not null,
                     coalesce(end, strftime('%s', 'now')) - start,
                     (select end - start
                         from collector_progress as cp
@@ -1114,8 +1114,8 @@ impl Connection for SqliteConnection {
                 Ok(crate::Step {
                     name: row.get(0)?,
                     is_done: row.get(1)?,
-                    duration: Duration::from_secs(row.get::<_, i64>(2)? as u64),
-                    expected: Duration::from_secs(row.get::<_, i64>(3)? as u64),
+                    duration: Duration::from_secs(row.get::<_, i64>(2).unwrap_or_default() as u64),
+                    expected: Duration::from_secs(row.get::<_, i64>(3).unwrap_or_default() as u64),
                 })
             })
             .unwrap()
