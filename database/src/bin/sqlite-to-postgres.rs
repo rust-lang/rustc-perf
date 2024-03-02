@@ -7,6 +7,7 @@ use bytes::{BufMut, Bytes, BytesMut};
 use chrono::{DateTime, TimeZone, Utc};
 use database::pool::{postgres, sqlite, ConnectionManager};
 use futures_util::sink::SinkExt;
+use hashbrown::HashMap;
 use serde::{Serialize, Serializer};
 use std::convert::{TryFrom, TryInto};
 use std::io::Write;
@@ -20,6 +21,9 @@ trait Table {
 
     /// Comma-separated list of table's attribute names in SQLite.
     fn sqlite_attributes() -> &'static str;
+
+    /// Comma-separated list of table's attribute names in Postgres.
+    fn postgres_attributes() -> &'static str;
 
     /// Name of `generated always as identity` attribute in Postgres,
     /// if applicable.
@@ -53,6 +57,10 @@ impl Table for Artifact {
     }
 
     fn sqlite_attributes() -> &'static str {
+        "id, name, date, type"
+    }
+
+    fn postgres_attributes() -> &'static str {
         "id, name, date, type"
     }
 
@@ -92,6 +100,10 @@ impl Table for ArtifactCollectionDuration {
         "aid, date_recorded, duration"
     }
 
+    fn postgres_attributes() -> &'static str {
+        "aid, date_recorded, duration"
+    }
+
     fn postgres_generated_id_attribute() -> Option<&'static str> {
         None
     }
@@ -128,6 +140,10 @@ impl Table for Benchmark {
         "name, stabilized, category"
     }
 
+    fn postgres_attributes() -> &'static str {
+        "name, stabilized, category"
+    }
+
     fn postgres_generated_id_attribute() -> Option<&'static str> {
         None
     }
@@ -157,6 +173,10 @@ impl Table for Collection {
     }
 
     fn sqlite_attributes() -> &'static str {
+        "id, perf_commit"
+    }
+
+    fn postgres_attributes() -> &'static str {
         "id, perf_commit"
     }
 
@@ -191,6 +211,10 @@ impl Table for CollectorProgress {
 
     fn sqlite_attributes() -> &'static str {
         "aid, step, start, end"
+    }
+
+    fn postgres_attributes() -> &'static str {
+        "aid, step, start_time, end_time"
     }
 
     fn postgres_generated_id_attribute() -> Option<&'static str> {
@@ -232,6 +256,10 @@ impl Table for Error {
         "aid, benchmark, error"
     }
 
+    fn postgres_attributes() -> &'static str {
+        "aid, benchmark, error"
+    }
+
     fn postgres_generated_id_attribute() -> Option<&'static str> {
         None
     }
@@ -263,6 +291,10 @@ impl Table for Pstat {
     }
 
     fn sqlite_attributes() -> &'static str {
+        "series, aid, cid, value"
+    }
+
+    fn postgres_attributes() -> &'static str {
         "series, aid, cid, value"
     }
 
@@ -300,6 +332,10 @@ impl Table for PstatSeries {
     }
 
     fn sqlite_attributes() -> &'static str {
+        "id, crate, profile, scenario, backend, metric"
+    }
+
+    fn postgres_attributes() -> &'static str {
         "id, crate, profile, scenario, backend, metric"
     }
 
@@ -342,6 +378,10 @@ impl Table for PullRequestBuild {
     }
 
     fn sqlite_attributes() -> &'static str {
+        "bors_sha, pr, parent_sha, complete, requested, include, exclude, runs, commit_date"
+    }
+
+    fn postgres_attributes() -> &'static str {
         "bors_sha, pr, parent_sha, complete, requested, include, exclude, runs, commit_date"
     }
 
@@ -393,6 +433,10 @@ impl Table for RawSelfProfile {
         "aid, cid, crate, profile, cache"
     }
 
+    fn postgres_attributes() -> &'static str {
+        "aid, cid, crate, profile, cache"
+    }
+
     fn postgres_generated_id_attribute() -> Option<&'static str> {
         None
     }
@@ -426,6 +470,10 @@ impl Table for RustcCompilation {
     }
 
     fn sqlite_attributes() -> &'static str {
+        "aid, cid, crate, duration"
+    }
+
+    fn postgres_attributes() -> &'static str {
         "aid, cid, crate, duration"
     }
 
@@ -597,10 +645,24 @@ async fn copy<T: Table>(
     // unlikely that we will ever execute SQL built from external strings.
     let table = T::name();
 
+    let postgres_columns = postgres
+        .query(
+            r#"SELECT column_name FROM information_schema.columns
+               WHERE table_schema = 'public' AND table_name = $1
+               ORDER BY ordinal_position"#,
+            &[&table],
+        )
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|row| row.get(0))
+        .collect::<Vec<String>>();
+    let attributes = mapping_pg_columns_to_attributes::<T>(&postgres_columns);
+
     let copy = postgres
         .prepare(&format!(
-            r#"copy {} from stdin (encoding utf8, format csv, null '{}')"#,
-            table, NULL_STRING,
+            r#"copy {} ({}) from stdin (encoding utf8, format csv, null '{}')"#,
+            table, attributes, NULL_STRING,
         ))
         .await
         .unwrap();
@@ -705,6 +767,46 @@ async fn copy<T: Table>(
 
 fn postgres_csv_writer<W: Write>(w: W) -> csv::Writer<W> {
     csv::WriterBuilder::new().has_headers(false).from_writer(w)
+}
+
+/// # Panics
+/// Panics if the number of `sqlite_attributes` and `postgres_attributes` is mismatched or
+/// a corresponding attribute for the column is not found.
+fn mapping_pg_columns_to_attributes<T: Table>(postgres_columns: &[impl AsRef<str>]) -> String {
+    // We assume that the attributes between SQLite and Postgres have equal lengths.
+    // Additionally, the attribute names of Postgres should exactly match the column names in the
+    // database. We then attempt to reorder the attributes to mitigate the ordering difference
+    // between versions.
+    let sl = T::sqlite_attributes()
+        .split(',')
+        .map(str::trim)
+        .collect::<Vec<_>>();
+    let pg = T::postgres_attributes()
+        .split(',')
+        .map(str::trim)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        sl.len(),
+        pg.len(),
+        "The number of attributes in SQLite and Postgres is mismatched."
+    );
+    let map = pg
+        .iter()
+        .enumerate()
+        .map(|(i, p)| (p, i))
+        .collect::<HashMap<_, _>>();
+    let mut out_attrs = vec![""; pg.len()];
+    for col in postgres_columns.iter().map(AsRef::as_ref) {
+        let idx = map.get(&col).unwrap_or_else(|| {
+            panic!(
+                "Failed to find a corresponding attribute for column {} in table {}.",
+                col,
+                T::name()
+            )
+        });
+        out_attrs[*idx] = col;
+    }
+    out_attrs.join(", ")
 }
 
 async fn get_tables(postgres: &tokio_postgres::Transaction<'_>) -> Vec<String> {
