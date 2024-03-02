@@ -460,6 +460,11 @@ loadStatus(loading);
   display: flex;
   flex-wrap: wrap;
   column-gap: 100px;
+
+  & > * {
+    max-width: 640px;
+    width: 100%;
+  }
 }
 .current {
   .benchmark {
