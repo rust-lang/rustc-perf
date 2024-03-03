@@ -428,6 +428,9 @@ loadStatus(loading);
 
 <style scoped lang="scss">
 .timeline {
+  max-width: 100%;
+  width: fit-content;
+
   table {
     border-collapse: collapse;
     font-size: 1.1em;
@@ -455,18 +458,24 @@ loadStatus(loading);
       font-weight: bold;
     }
   }
-}
-.wrapper {
-  display: flex;
-  flex-wrap: wrap;
-  column-gap: 100px;
 
-  & > * {
-    max-width: 640px;
+  @media screen and (min-width: 1440px) {
     width: 100%;
   }
 }
+.wrapper {
+  display: grid;
+  column-gap: 100px;
+  grid-template-columns: 1fr;
+
+  @media screen and (min-width: 1440px) {
+    grid-template-columns: 4fr 6fr;
+  }
+}
 .current {
+  max-width: 100%;
+  width: fit-content;
+
   .benchmark {
     margin-bottom: 10px;
     font-size: 1.2em;
@@ -500,5 +509,6 @@ loadStatus(loading);
   background-color: #f7f7f7;
   max-width: 100%;
   white-space: pre-wrap;
+  word-break: break-word;
 }
 </style>
