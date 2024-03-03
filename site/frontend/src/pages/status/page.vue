@@ -428,6 +428,9 @@ loadStatus(loading);
 
 <style scoped lang="scss">
 .timeline {
+  max-width: 100%;
+  width: fit-content;
+
   table {
     border-collapse: collapse;
     font-size: 1.1em;
@@ -455,13 +458,24 @@ loadStatus(loading);
       font-weight: bold;
     }
   }
+
+  @media screen and (min-width: 1440px) {
+    width: 100%;
+  }
 }
 .wrapper {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   column-gap: 100px;
+  grid-template-columns: 1fr;
+
+  @media screen and (min-width: 1440px) {
+    grid-template-columns: 4fr 6fr;
+  }
 }
 .current {
+  max-width: 100%;
+  width: fit-content;
+
   .benchmark {
     margin-bottom: 10px;
     font-size: 1.2em;
@@ -493,5 +507,8 @@ loadStatus(loading);
 .error {
   padding: 10px;
   background-color: #f7f7f7;
+  max-width: 100%;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 </style>
