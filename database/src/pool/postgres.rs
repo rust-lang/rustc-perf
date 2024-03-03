@@ -8,7 +8,6 @@ use chrono::{DateTime, TimeZone, Utc};
 use hashbrown::HashMap;
 use native_tls::{Certificate, TlsConnector};
 use postgres_native_tls::MakeTlsConnector;
-use std::convert::TryInto;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;

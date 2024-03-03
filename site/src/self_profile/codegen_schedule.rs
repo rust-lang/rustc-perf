@@ -2,7 +2,6 @@ use analyzeme::ProfilingData;
 use anyhow::Context;
 use hashbrown::HashMap;
 use serde::Serializer;
-use std::convert::TryInto;
 use std::time::Duration;
 
 #[derive(serde::Deserialize, Debug)]
