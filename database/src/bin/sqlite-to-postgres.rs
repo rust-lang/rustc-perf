@@ -492,7 +492,6 @@ impl Table for RustcCompilation {
     }
 }
 
-
 struct RuntimePstat;
 
 #[derive(Serialize)]
