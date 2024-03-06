@@ -569,6 +569,43 @@ impl Table for RuntimePstatSeries {
     }
 }
 
+struct ArtifactSize;
+
+#[derive(Serialize)]
+struct ArtifactSizeRow<'a> {
+    aid: i32,
+    component: &'a str,
+    size: i32,
+}
+
+impl Table for ArtifactSize {
+    fn name() -> &'static str {
+        "artifact_size"
+    }
+
+    fn sqlite_attributes() -> &'static str {
+        "aid, component, size"
+    }
+
+    fn postgres_attributes() -> &'static str {
+        "aid, component, size"
+    }
+
+    fn postgres_generated_id_attribute() -> Option<&'static str> {
+        None
+    }
+
+    fn write_postgres_csv_row<W: Write>(writer: &mut csv::Writer<W>, row: &rusqlite::Row) {
+        writer
+            .serialize(ArtifactSizeRow {
+                aid: row.get(0).unwrap(),
+                component: row.get_ref(1).unwrap().as_str().unwrap(),
+                size: row.get(2).unwrap(),
+            })
+            .unwrap();
+    }
+}
+
 // `Nullable<T>` helps to work around the fact that the `csv` crate (and the CSV
 // format in general) doesn't distinguish between nulls and empty strings, while
 // the Postgres CSV format does.
@@ -699,6 +736,7 @@ async fn main() -> anyhow::Result<()> {
     copy::<RustcCompilation>(&sqlite_tx, &postgres_tx).await;
     copy::<RuntimePstatSeries>(&sqlite_tx, &postgres_tx).await;
     copy::<RuntimePstat>(&sqlite_tx, &postgres_tx).await;
+    copy::<ArtifactSize>(&sqlite_tx, &postgres_tx).await;
     enable_table_triggers(&postgres_tx, &tables).await;
 
     // This is overly paranoid, but don't commit the Postgres transaction until
