@@ -338,6 +338,16 @@ pub struct RuntimeBenchmarkQuery {
 }
 
 impl RuntimeBenchmarkQuery {
+    pub fn benchmark(mut self, selector: Selector<String>) -> Self {
+        self.benchmark = selector;
+        self
+    }
+
+    pub fn metric(mut self, selector: Selector<Metric>) -> Self {
+        self.metric = selector.map(|v| v.as_str().into());
+        self
+    }
+
     pub fn all_for_metric(metric: Metric) -> Self {
         Self {
             benchmark: Selector::All,

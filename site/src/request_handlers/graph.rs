@@ -9,7 +9,9 @@ use crate::api::{detail_graphs, detail_sections, graphs, runtime_detail_graphs, 
 use crate::db::{self, ArtifactId, Profile, Scenario};
 use crate::interpolate::IsInterpolated;
 use crate::load::SiteCtxt;
-use crate::selector::{CompileBenchmarkQuery, CompileTestCase, Selector, SeriesResponse};
+use crate::selector::{
+    CompileBenchmarkQuery, CompileTestCase, RuntimeBenchmarkQuery, Selector, SeriesResponse,
+};
 use crate::self_profile::get_or_download_self_profile;
 
 /// Returns data for before/after graphs when comparing a single test result comparison
@@ -133,13 +135,10 @@ pub async fn handle_runtime_detail_graphs(
         request.end,
     ));
 
-    let scenario = request.scenario.parse()?;
     let interpolated_responses: Vec<_> = ctxt
         .statistic_series(
-            CompileBenchmarkQuery::default()
+            RuntimeBenchmarkQuery::default()
                 .benchmark(Selector::One(request.benchmark.clone()))
-                .profile(Selector::One(request.profile.parse()?))
-                .scenario(Selector::One(scenario))
                 .metric(Selector::One(request.stat.parse()?)),
             artifact_ids.clone(),
         )

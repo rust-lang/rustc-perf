@@ -215,8 +215,6 @@ pub mod runtime_detail_graphs {
         pub end: Bound,
         pub stat: String,
         pub benchmark: String,
-        pub scenario: String,
-        pub profile: String,
         #[serde(deserialize_with = "vec_from_comma_separated")]
         pub kinds: Vec<GraphKind>,
     }
