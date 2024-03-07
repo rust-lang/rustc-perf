@@ -280,27 +280,46 @@ impl ToolchainComponents {
 
     /// Finds known library components in the given `dir` and stores them in `self`.
     fn fill_libraries(&mut self, dir: &Path) -> anyhow::Result<()> {
-        for entry in fs::read_dir(dir).context("Cannot read lib dir to find components")? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.is_file() {
-                if let Some(filename) = path.file_name().and_then(|s| s.to_str()) {
-                    // libLLVM.so can have a weird suffix, like libLLVM.so.<suffix>, so we don't
-                    // check its .so suffix directly.
-                    if filename.starts_with("libLLVM") {
-                        self.lib_llvm = Some(path);
-                    } else if path.extension() == Some(OsStr::new("so")) {
-                        if filename.starts_with("librustc_driver") {
-                            self.lib_rustc = Some(path);
-                        } else if filename.starts_with("libstd") {
-                            self.lib_std = Some(path);
-                        } else if filename.starts_with("libtest") {
-                            self.lib_test = Some(path);
-                        }
-                    }
+        let files: Vec<(PathBuf, String)> = fs::read_dir(dir)
+            .context("Cannot read lib dir to find components")?
+            .map(|entry| Ok(entry?))
+            .collect::<anyhow::Result<Vec<_>>>()?
+            .into_iter()
+            .filter(|entry| entry.path().is_file())
+            .filter_map(|entry| {
+                entry
+                    .path()
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .map(|s| (entry.path(), s.to_string()))
+            })
+            .collect();
+
+        for (path, filename) in &files {
+            if path.extension() == Some(OsStr::new("so")) {
+                if filename.starts_with("librustc_driver") {
+                    self.lib_rustc = Some(path.clone());
+                } else if filename.starts_with("libstd") {
+                    self.lib_std = Some(path.clone());
+                } else if filename.starts_with("libtest") {
+                    self.lib_test = Some(path.clone());
                 }
             }
         }
+
+        // In older toolchains, the LLVM library is stored as libLLVM-<version>.so
+        // In newer ones, this file is only a linker shim that actually redirects to
+        // libLLVM.so.<version>.
+        // So we need to check if we have the new name, and use it.
+        // If not, we want to look up the original name.
+        let new_llvm = files
+            .iter()
+            .find(|(_, filename)| filename.starts_with("libLLVM.so"));
+        let old_llvm = files.iter().find(|(path, filename)| {
+            path.extension() == Some(OsStr::new("so")) && filename.starts_with("libLLVM")
+        });
+        self.lib_llvm = new_llvm.or(old_llvm).map(|(path, _)| path.clone());
+
         Ok(())
     }
 }
