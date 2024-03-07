@@ -75,7 +75,8 @@ pub async fn unroll_rollup(
                         format!("{}…", m.split_at(59).0)
                     }
                 })
-                .unwrap_or_else(|| format!("#{}", c.original_pr_number));
+                .unwrap_or_else(|| format!("#{}", c.original_pr_number))
+                .replace('|', "\\|");
             writeln!(
                 &mut string,
                 "|#{pr}|{message}|{commit}|",
