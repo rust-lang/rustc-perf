@@ -358,6 +358,87 @@ impl Table for RustcCompilation {
     }
 }
 
+struct RuntimePstat;
+
+impl Table for RuntimePstat {
+    fn name(&self) -> &'static str {
+        "runtime_pstat"
+    }
+
+    fn postgres_select_statement(&self, since_weeks_ago: Option<u32>) -> String {
+        let s = "select series, aid, cid, value from ".to_string() + self.name();
+        with_filter_clause_maybe(s, ARTIFACT_JOIN_AND_WHERE, since_weeks_ago)
+    }
+
+    fn sqlite_insert_statement(&self) -> &'static str {
+        "insert into runtime_pstat (series, aid, cid, value) VALUES (?, ?, ?, ?)"
+    }
+
+    fn sqlite_execute_insert(&self, statement: &mut rusqlite::Statement, row: tokio_postgres::Row) {
+        statement
+            .execute(params![
+                row.get::<_, i32>(0),
+                row.get::<_, i32>(1),
+                row.get::<_, i32>(2),
+                row.get::<_, f64>(3),
+            ])
+            .unwrap();
+    }
+}
+
+struct RuntimePstatSeries;
+
+impl Table for RuntimePstatSeries {
+    fn name(&self) -> &'static str {
+        "runtime_pstat_series"
+    }
+
+    fn postgres_select_statement(&self, _since_weeks_ago: Option<u32>) -> String {
+        "select id, benchmark, metric from ".to_string() + self.name()
+    }
+
+    fn sqlite_insert_statement(&self) -> &'static str {
+        "insert into runtime_pstat_series (id, benchmark, metric) VALUES (?, ?, ?)"
+    }
+
+    fn sqlite_execute_insert(&self, statement: &mut rusqlite::Statement, row: tokio_postgres::Row) {
+        statement
+            .execute(params![
+                row.get::<_, i32>(0),
+                row.get::<_, &str>(1),
+                row.get::<_, &str>(2),
+            ])
+            .unwrap();
+    }
+}
+
+struct ArtifactSize;
+
+impl Table for ArtifactSize {
+    fn name(&self) -> &'static str {
+        "artifact_size"
+    }
+
+    fn postgres_select_statement(&self, since_weeks_ago: Option<u32>) -> String {
+        let s = "select aid, component, size from ".to_string() + self.name();
+        with_filter_clause_maybe(s, ARTIFACT_JOIN_AND_WHERE, since_weeks_ago)
+    }
+
+    fn sqlite_insert_statement(&self) -> &'static str {
+        "insert into artifact_size (aid, component, size) VALUES (?, ?, ?)"
+    }
+
+    fn sqlite_execute_insert(&self, statement: &mut rusqlite::Statement, row: tokio_postgres::Row) {
+        statement
+            .execute(params![
+                row.get::<_, i32>(0),
+                row.get::<_, &str>(1),
+                row.get::<_, i32>(2),
+            ])
+            .unwrap();
+    }
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     env_logger::init();
@@ -375,6 +456,9 @@ async fn main() -> anyhow::Result<()> {
         &PullRequestBuild,
         &RawSelfProfile,
         &RustcCompilation,
+        &RuntimePstatSeries,
+        &RuntimePstat,
+        &ArtifactSize,
     ];
 
     let table_names: Vec<_> = tables.iter().map(|table| table.name()).collect();
