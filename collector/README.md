@@ -91,9 +91,9 @@ The following arguments are mandatory.
   `+f7bb8e3677ba4277914e85a3060e5d69151aed44` in which case `rustup` will be
   used to obtain the toolchain, downloading it if necessary. The commit SHA
   of the toolchain does not need to be in the `rustc` `master` branch, it can be e.g.
-  the result of a `try` CI run. You will need to have
-  [`rustup-toolchain-install-master`](https://github.com/kennytm/rustup-toolchain-install-master)
-  installed in order for this to work.
+  the result of a `try` CI run.
+
+    > If you want to specify a toolchain with a commit SHA, you will need to have [`rustup-toolchain-install-master`](https://github.com/kennytm/rustup-toolchain-install-master) installed.
 
 The identifier under which the results will be put into the database varies.
 - If the `--id` option is specified, that identifer will be used.
