@@ -93,7 +93,7 @@ The following arguments are mandatory.
   of the toolchain does not need to be in the `rustc` `master` branch, it can be e.g.
   the result of a `try` CI run.
 
-    > If you want to specify a toolchain with a commit SHA, You will need to have [`rustup-toolchain-install-master`](https://github.com/kennytm/rustup-toolchain-install-master) installed.
+    > If you want to specify a toolchain with a commit SHA, you will need to have [`rustup-toolchain-install-master`](https://github.com/kennytm/rustup-toolchain-install-master) installed.
 
 The identifier under which the results will be put into the database varies.
 - If the `--id` option is specified, that identifer will be used.
