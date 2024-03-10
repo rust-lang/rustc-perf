@@ -1300,6 +1300,30 @@ fn print_binary_stats(
         }
     }
     rows.sort_by_cached_key(|row| Reverse((row.diff.abs(), row.before, row.name.clone())));
+
+    // Combine all unchanged rows into one.
+    if use_diff {
+        let mut unchanged_count = 0;
+        let mut total_unchanged = 0;
+        rows.retain(|row| {
+            if row.diff == 0 {
+                unchanged_count += 1;
+                total_unchanged += row.before;
+                false
+            } else {
+                true
+            }
+        });
+        if total_unchanged > 0 {
+            rows.push(Row {
+                name: format!("<{unchanged_count} unchanged rows>"),
+                before: total_unchanged,
+                after: total_unchanged,
+                diff: 0,
+            });
+        }
+    }
+
     rows.push(Row {
         name: "Total".to_string(),
         before: total_before,
