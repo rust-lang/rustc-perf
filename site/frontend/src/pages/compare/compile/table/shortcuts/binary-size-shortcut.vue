@@ -31,7 +31,8 @@ function normalizeBackend(backend: string): string {
     <Tooltip>
       Execute this command in a checkout of
       <a href="https://github.com/rust-lang/rustc-perf">rustc-perf</a>, after a
-      `cargo build --release`, to compare binary sizes.
+      `cargo build --release`, to compare binary section sizes. Add `--symbols`
+      to include a diff of symbol sizes.
     </Tooltip>
   </div>
 
