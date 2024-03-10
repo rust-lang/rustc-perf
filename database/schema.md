@@ -217,7 +217,7 @@ series      aid         cid         value
 Records the duration of compiling a `rustc` crate for a given artifact and collection.
 
 ```
-sqlite> select * from runtime_pstat limit 1;
+sqlite> select * from rustc_compilation limit 1;
 aid  cid  crate                duration
 ---  ---  ----------           --------
 1    42   rustc_mir_transform  28.096
