@@ -8,7 +8,7 @@ import {
 import {capitalize, computed, onMounted, Ref, ref} from "vue";
 import Tooltip from "../../tooltip.vue";
 import {ArtifactDescription} from "../../types";
-import {daysBetweenDates, getFutureDate, getPastDate} from "./utils";
+import {daysBetweenDates, getFutureDate, getPastDate, formatDate} from "./utils";
 import {GraphRenderOpts, renderPlots} from "../../../../graph/render";
 import {GraphData, GraphKind, GraphsSelector} from "../../../../graph/data";
 import uPlot from "uplot";
@@ -55,7 +55,7 @@ function getGraphRange(artifact: ArtifactDescription): GraphRange {
   // the last `DAY_RANGE` days.
   if (artifact.type === "try") {
     return {
-      start: getPastDate(date, DAY_RANGE),
+      start: formatDate(getPastDate(date, DAY_RANGE)),
       end: artifact.commit,
       date: null,
     };
@@ -66,7 +66,7 @@ function getGraphRange(artifact: ArtifactDescription): GraphRange {
     // Calculate the end of the range, which is commit date + half of the
     // amount of days we want to show. If this date is in the future,
     // the server will clip the result at the current date.
-    const end = getFutureDate(date, DAY_RANGE / 2);
+    const end = formatDate(getFutureDate(date, DAY_RANGE / 2));
 
     // Calculate how many days there have been from the commit date
     const daysInFuture = Math.min(
@@ -78,7 +78,7 @@ function getGraphRange(artifact: ArtifactDescription): GraphRange {
     // the days that will be clipped by the server.
     const daysInPast = DAY_RANGE - daysInFuture;
 
-    const start = getPastDate(date, daysInPast);
+    const start = formatDate(getPastDate(date, daysInPast));
     return {
       start,
       end,
