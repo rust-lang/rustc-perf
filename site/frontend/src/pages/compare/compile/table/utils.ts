@@ -1,22 +1,25 @@
 /**
  * Returns a date that is the given days in the past from the passed `date`.
  */
-export function getPastDate(date: Date, days: number): string {
+export function getPastDate(date: Date, days: number): Date {
   const past = new Date(date.getTime());
   past.setUTCDate(date.getUTCDate() - days);
-  return format_ymd(past);
+  return past;
 }
 
 /**
  * Returns a date that is the given days in the future from the passed `date`.
  */
-export function getFutureDate(date: Date, days: number): string {
+export function getFutureDate(date: Date, days: number): Date {
   const future = new Date(date.getTime());
   future.setUTCDate(date.getUTCDate() + days);
-  return format_ymd(future);
+  return future;
 }
 
-function format_ymd(date: Date): string {
+/**
+ * Returns a formated date string
+ */
+export function formatDate(date: Date): string {
   const year = date.getUTCFullYear();
   const month = (date.getUTCMonth() + 1).toString().padStart(2, "0");
   const day = date.getUTCDate().toString().padStart(2, "0");
