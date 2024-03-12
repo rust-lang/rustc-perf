@@ -8,7 +8,12 @@ import {
 import {capitalize, computed, onMounted, Ref, ref} from "vue";
 import Tooltip from "../../tooltip.vue";
 import {ArtifactDescription} from "../../types";
-import {daysBetweenDates, getFutureDate, getPastDate, formatDate} from "./utils";
+import {
+  daysBetweenDates,
+  getFutureDate,
+  getPastDate,
+  formatDate,
+} from "./utils";
 import {GraphRenderOpts, renderPlots} from "../../../../graph/render";
 import {GraphData, GraphKind, GraphsSelector} from "../../../../graph/data";
 import uPlot from "uplot";
@@ -48,41 +53,44 @@ const DAY_RANGE = 30;
  * Calculates the start and end range for a history graph for this benchmark
  * and artifact.
  */
-function getGraphRange(artifact: ArtifactDescription): GraphRange {
-  const date = new Date(artifact.date);
-
+function getGraphRange(
+  artifact: ArtifactDescription,
+  baseArtifact: ArtifactDescription
+): GraphRange {
   // If this is a try commit, we don't know its future, so always we just display
   // the last `DAY_RANGE` days.
   if (artifact.type === "try") {
+    const date = new Date(artifact.date);
     return {
       start: formatDate(getPastDate(date, DAY_RANGE)),
       end: artifact.commit,
       date: null,
     };
   } else {
-    // If this is a master commit, then we try to display `dayRange` days
+    let [start_date, end_date] = [baseArtifact, artifact].map(
+      (c) => new Date(c.date)
+    );
+    // If this is a master commit, we attempt to display more than the full history for commit
+    // ranges. If the commit range is not larger than the `dayRange`, the display will likely be
     // "centered" around the commit date.
 
     // Calculate the end of the range, which is commit date + half of the
     // amount of days we want to show. If this date is in the future,
     // the server will clip the result at the current date.
-    const end = formatDate(getFutureDate(date, DAY_RANGE / 2));
+    const end = formatDate(getFutureDate(end_date, DAY_RANGE / 2));
 
-    // Calculate how many days there have been from the commit date
-    const daysInFuture = Math.min(
-      DAY_RANGE / 2,
-      daysBetweenDates(date, new Date())
+    // Calculate the start of the range, which is the earlier date between
+    // the base artifact date and the commit date - half of the amount of days
+    // we want to show.
+    const centered_start = getPastDate(end_date, DAY_RANGE / 2);
+    const start = formatDate(
+      start_date < centered_start ? start_date : centered_start
     );
 
-    // Calculate how many days we should go into the past, taking into account
-    // the days that will be clipped by the server.
-    const daysInPast = DAY_RANGE - daysInFuture;
-
-    const start = formatDate(getPastDate(date, daysInPast));
     return {
       start,
       end,
-      date,
+      date: end_date,
     };
   }
 }
@@ -270,7 +278,9 @@ const cargoProfile = computed((): CargoProfileMetadata => {
 
 const relativeChartElement: Ref<HTMLElement | null> = ref(null);
 const absoluteChartElement: Ref<HTMLElement | null> = ref(null);
-const graphRange = computed(() => getGraphRange(props.artifact));
+const graphRange = computed(() =>
+  getGraphRange(props.artifact, props.baseArtifact)
+);
 
 const sectionsDetail: Ref<CompileDetailSections | null> = ref(null);
 onMounted(() => {
