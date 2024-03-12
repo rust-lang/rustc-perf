@@ -74,15 +74,20 @@ function getGraphRange(
     // ranges. If the commit range is not larger than the `dayRange`, the display will likely be
     // "centered" around the commit date.
 
-    // Calculate the end of the range, which is commit date + half of the
-    // amount of days we want to show. If this date is in the future,
-    // the server will clip the result at the current date.
-    const end = formatDate(getFutureDate(end_date, DAY_RANGE / 2));
+    // Calculate the end of the range, which is the earlier date between
+    // current date and the commit date + half of the amount of days we
+    // want to show.
+    let centered_end = getFutureDate(end_date, DAY_RANGE / 2);
+    const today = new Date().setUTCHours(0, 0, 0, 0);
+    if (centered_end.getTime() > today) {
+      centered_end = new Date(today);
+    }
+    const end = formatDate(centered_end);
 
     // Calculate the start of the range, which is the earlier date between
-    // the base artifact date and the commit date - half of the amount of days
+    // the base artifact date and the calculated end date - the amount of days
     // we want to show.
-    const centered_start = getPastDate(end_date, DAY_RANGE / 2);
+    const centered_start = getPastDate(centered_end, DAY_RANGE);
     const start = formatDate(
       start_date < centered_start ? start_date : centered_start
     );
