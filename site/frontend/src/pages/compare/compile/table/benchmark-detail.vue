@@ -258,7 +258,7 @@ function graphLink(
   testCase: CompileTestCase
 ): string {
   // Move to `30 days ago` to display history of the test case
-  const start = getPastDate(new Date(commit.date), 30);
+  const start = formatDate(getPastDate(new Date(commit.date), 30));
   const end = commit.commit;
   const {benchmark, profile, scenario} = testCase;
   return `/index.html?start=${start}&end=${end}&benchmark=${benchmark}&profile=${profile}&scenario=${scenario}&stat=${metric}`;
