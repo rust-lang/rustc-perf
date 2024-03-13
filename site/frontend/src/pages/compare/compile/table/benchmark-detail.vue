@@ -227,7 +227,9 @@ async function renderGraph(
 
 function getGraphTitle() {
   const {start, end, date} = graphRange.value;
-  const days = daysBetweenDates(new Date(start), new Date(end));
+  const days = date
+    ? daysBetweenDates(new Date(start), new Date(end))
+    : DAY_RANGE;
   const msg = `${days} day history`;
   if (date !== null) {
     return `${msg} (${start} → ${end})`;
