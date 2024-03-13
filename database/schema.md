@@ -128,7 +128,7 @@ Category is either `primary` (real-world benchmark) or `secondary` (stress test)
 Stable benchmarks have `category` set to `primary` and `stabilized` set to `1`.
 
 ```
-sqlite> select * from runtime_benchmark limit 1;
+sqlite> select * from benchmark limit 1;
 name        stabilized  category
 ----------  ----------  ----------
 helloworld  0           primary
