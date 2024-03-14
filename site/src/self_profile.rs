@@ -240,7 +240,6 @@ async fn download_and_analyze_self_profile(
 /// backend, linker) from the self-profile queries.
 fn compute_compilation_sections(profile: &ProfilingData) -> Vec<CompilationSection> {
     let mut first_event_start = None;
-    let mut frontend_end = None;
     let mut backend_start = None;
     let mut backend_end = None;
     let mut linker_duration = None;
@@ -250,10 +249,7 @@ fn compute_compilation_sections(profile: &ProfilingData) -> Vec<CompilationSecti
             first_event_start = event.payload.timestamp().map(|t| t.start());
         }
 
-        if event.label == "analysis" {
-            // End of "analysis" => end of frontend
-            frontend_end = event.payload.timestamp().map(|t| t.end());
-        } else if event.label == "codegen_crate" {
+        if event.label == "codegen_crate" {
             // Start of "codegen_crate" => start of backend
             backend_start = event.payload.timestamp().map(|t| t.start());
         } else if event.label == "finish_ongoing_codegen" {
@@ -266,7 +262,9 @@ fn compute_compilation_sections(profile: &ProfilingData) -> Vec<CompilationSecti
         }
     }
     let mut sections = vec![];
-    if let (Some(start), Some(end)) = (first_event_start, frontend_end) {
+    // We consider "frontend" to be everything from the start of the compilation (the first event)
+    // to the start of the backend part.
+    if let (Some(start), Some(end)) = (first_event_start, backend_start) {
         if let Ok(duration) = end.duration_since(start) {
             sections.push(CompilationSection {
                 name: "Frontend".to_string(),
