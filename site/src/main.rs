@@ -42,7 +42,9 @@ async fn main() {
                 "Loading complete; {} commits and {} artifacts",
                 commits, artifacts,
             );
-            eprintln!("View the results in a web browser at 'http://localhost:{}/compare.html'", port);
+            eprintln!(
+                "View the results in a web browser at 'http://localhost:{port}/compare.html'"
+            );
             // Spawn off a task to post the results of any commit results that we
             // are now aware of.
             site::github::post_finished(&res).await;
