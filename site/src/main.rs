@@ -24,6 +24,10 @@ async fn main() {
             eprintln!("Defaulting to loading from `results.db`");
             String::from("results.db")
         });
+    let port = env::var("PORT")
+        .ok()
+        .and_then(|x| x.parse().ok())
+        .unwrap_or(2346);
     let fut = tokio::task::spawn_blocking(move || {
         tokio::task::spawn(async move {
             let res = Arc::new(load::SiteCtxt::from_db_url(&db_url).await.unwrap());
@@ -38,17 +42,15 @@ async fn main() {
                 "Loading complete; {} commits and {} artifacts",
                 commits, artifacts,
             );
-            eprintln!("View the results in a web browser at 'http://localhost:2346/compare.html'");
+            eprintln!(
+                "View the results in a web browser at 'http://localhost:{port}/compare.html'"
+            );
             // Spawn off a task to post the results of any commit results that we
             // are now aware of.
             site::github::post_finished(&res).await;
         })
     })
     .fuse();
-    let port = env::var("PORT")
-        .ok()
-        .and_then(|x| x.parse().ok())
-        .unwrap_or(2346);
     println!("Starting server with port={:?}", port);
 
     let server = site::server::start(ctxt, port).fuse();
