@@ -112,7 +112,6 @@ const runtimeSummary: Ref<SummaryGroup | null> = ref(null);
 
 const loading = ref(false);
 
-const info = await loadBenchmarkInfo();
 const selector = loadSelectorFromUrl(urlParams);
 
 const initialTab: Tab = loadTabFromUrl(urlParams) ?? Tab.CompileTime;
@@ -138,6 +137,7 @@ function changeTab(newTab: Tab) {
 
 const data: Ref<CompareResponse | null> = ref(null);
 loadCompareData(selector, loading);
+let info = await loadBenchmarkInfo();
 </script>
 
 <template>
