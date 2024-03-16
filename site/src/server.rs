@@ -27,7 +27,7 @@ pub use crate::api::{
 use crate::db::{self, ArtifactId};
 use crate::load::{Config, SiteCtxt};
 use crate::request_handlers;
-use crate::resources::ResourceResolver;
+use crate::resources::{Payload, ResourceResolver};
 
 pub type Request = http::Request<hyper::Body>;
 pub type Response = http::Response<hyper::Body>;
@@ -357,7 +357,7 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
         None
     };
 
-    if let Some(response) = handle_fs_path(&req, path).await {
+    if let Some(response) = handle_fs_path(&req, path, allow_compression).await {
         return Ok(response);
     }
 
@@ -594,7 +594,11 @@ lazy_static::lazy_static! {
 }
 
 /// Handle the case where the path is to a static file
-async fn handle_fs_path(req: &Request, path: &str) -> Option<http::Response<hyper::Body>> {
+async fn handle_fs_path(
+    req: &Request,
+    path: &str,
+    use_compression: bool,
+) -> Option<http::Response<hyper::Body>> {
     if path.contains("./") | path.contains("../") {
         return Some(not_found());
     }
@@ -627,7 +631,16 @@ async fn handle_fs_path(req: &Request, path: &str) -> Option<http::Response<hype
         | "/detailed-query.html"
         | "/help.html"
         | "/status.html" => resolve_template(relative_path).await,
-        _ => TEMPLATES.get_static_asset(relative_path)?,
+        _ => match TEMPLATES.get_static_asset(relative_path, use_compression)? {
+            Payload::Compressed(data) => {
+                response = response.header(
+                    hyper::header::CONTENT_ENCODING,
+                    hyper::header::HeaderValue::from_static("br"),
+                );
+                data
+            }
+            Payload::Uncompressed(data) => data,
+        },
     };
 
     let p = Path::new(&path);
