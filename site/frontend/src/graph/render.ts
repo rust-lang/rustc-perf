@@ -356,8 +356,11 @@ function genPlotOpts({
       },
       tooltipPlugin({
         onclick(_u, _seriesIdx, dataIdx) {
+          // No earlier data to show
+          if (dataIdx == 0) return;
+
           let thisCommit = commits[dataIdx][1];
-          let prevCommit = (commits[dataIdx - 1] || [null, null])[1];
+          let prevCommit = commits[dataIdx - 1][1];
           window.open(
             `/compare.html?start=${prevCommit}&end=${thisCommit}&stat=${stat}`
           );
