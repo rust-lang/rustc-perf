@@ -17,6 +17,7 @@ struct StaticAssets;
 #[derive(RustEmbed)]
 #[folder = "frontend/dist"]
 #[include = "*.js"]
+#[include = "*.br"]
 #[include = "*.css"]
 struct StaticCompiledAssets;
 
@@ -25,6 +26,11 @@ struct StaticCompiledAssets;
 #[folder = "frontend/templates/"]
 #[include = "*.html"]
 struct TemplateAssets;
+
+pub enum Payload {
+    Compressed(Vec<u8>),
+    Uncompressed(Vec<u8>),
+}
 
 pub struct ResourceResolver {
     tera: RwLock<Tera>,
@@ -39,10 +45,19 @@ impl ResourceResolver {
         })
     }
 
-    pub fn get_static_asset(&self, path: &str) -> Option<Vec<u8>> {
+    pub fn get_static_asset(&self, path: &str, use_compression: bool) -> Option<Payload> {
+        if use_compression {
+            let compressed_path = path.to_owned() + ".br";
+            let data =
+                StaticCompiledAssets::get(compressed_path.as_str()).map(|file| file.data.to_vec());
+            if let Some(data) = data {
+                return Some(Payload::Compressed(data));
+            }
+        }
+
         StaticCompiledAssets::get(path)
             .or_else(|| StaticAssets::get(path))
-            .map(|file| file.data.to_vec())
+            .map(|file| Payload::Uncompressed(file.data.to_vec()))
     }
 
     pub async fn get_template(&self, path: &str) -> anyhow::Result<Vec<u8>> {
