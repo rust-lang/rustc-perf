@@ -242,6 +242,7 @@ fn compute_compilation_sections(profile: &ProfilingData) -> Vec<CompilationSecti
     let mut first_event_start = None;
     let mut backend_start = None;
     let mut backend_end = None;
+    let mut rust_codegen = None;
     let mut linker_duration = None;
 
     for event in profile.iter_full() {
@@ -249,7 +250,11 @@ fn compute_compilation_sections(profile: &ProfilingData) -> Vec<CompilationSecti
             first_event_start = event.payload.timestamp().map(|t| t.start());
         }
 
-        if event.label == "codegen_crate" {
+        if event.label == "collect_and_partition_mono_items" {
+            // We mark this query as "Rust codegen", where monomorphization and MIR-to-backend
+            // conversion happens.
+            rust_codegen = event.payload.timestamp().map(|t| (t.start(), t.end()));
+        } else if event.label == "codegen_crate" {
             // Start of "codegen_crate" => start of backend
             backend_start = event.payload.timestamp().map(|t| t.start());
         } else if event.label == "finish_ongoing_codegen" {
@@ -261,7 +266,9 @@ fn compute_compilation_sections(profile: &ProfilingData) -> Vec<CompilationSecti
             linker_duration = event.duration();
         }
     }
+
     let mut sections = vec![];
+
     // We consider "frontend" to be everything from the start of the compilation (the first event)
     // to the start of the backend part.
     if let (Some(start), Some(end)) = (first_event_start, backend_start) {
@@ -272,6 +279,19 @@ fn compute_compilation_sections(profile: &ProfilingData) -> Vec<CompilationSecti
             });
         }
     }
+
+    // If we encountered "Rust codegen", then we add it as a section, and move forward the start
+    // of the actual codegen (e.g. LLVM).
+    if let Some((start, end)) = rust_codegen {
+        if let Ok(duration) = end.duration_since(start) {
+            sections.push(CompilationSection {
+                name: "Rust codegen".to_string(),
+                value: duration.as_nanos() as u64,
+            });
+        }
+        backend_start = Some(end);
+    }
+
     if let (Some(start), Some(end)) = (backend_start, backend_end) {
         if let Ok(duration) = end.duration_since(start) {
             sections.push(CompilationSection {
