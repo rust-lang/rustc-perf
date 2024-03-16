@@ -598,3 +598,50 @@ fn get_lib_dir_from_rustc(rustc: &Path) -> anyhow::Result<PathBuf> {
 
     Ok(Path::new(sysroot_path.as_ref().trim()).join("lib"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fill_libraries() {
+        let mut components = ToolchainComponents::default();
+
+        // create mock dir and libraries
+        let temp_dir: tempfile::TempDir = tempfile::tempdir().unwrap();
+        let lib_rustc_path = create_temp_lib_path("librustc_driver.so", &temp_dir);
+        let lib_std_path = create_temp_lib_path("libstd.so", &temp_dir);
+        let lib_test_path = create_temp_lib_path("libtest.so", &temp_dir);
+        let lib_new_llvm_path =
+            create_temp_lib_path("libLLVM.so.18.1-rust-1.78.0-nightly", &temp_dir);
+
+        components.fill_libraries(temp_dir.path()).unwrap();
+
+        assert_eq!(components.lib_rustc, Some(lib_rustc_path));
+        assert_eq!(components.lib_std, Some(lib_std_path));
+        assert_eq!(components.lib_test, Some(lib_test_path));
+        assert_eq!(components.lib_llvm, Some(lib_new_llvm_path));
+    }
+
+    #[test]
+    fn fill_old_llvm_library() {
+        let mut components = ToolchainComponents::default();
+        let lib_old_llvm = "libLLVM-17-rust-1.76.0-stable.so";
+
+        // create mock dir and libraries
+        let temp_dir: tempfile::TempDir = tempfile::tempdir().unwrap();
+        let lib_old_llvm_path = create_temp_lib_path(lib_old_llvm, &temp_dir);
+
+        components.fill_libraries(temp_dir.path()).unwrap();
+
+        assert_eq!(components.lib_llvm, Some(lib_old_llvm_path));
+    }
+
+    fn create_temp_lib_path(lib_name: &str, temp_dir: &tempfile::TempDir) -> PathBuf {
+        let lib_path = temp_dir.path().join(lib_name);
+        // create mock file
+        File::create(&lib_path).unwrap();
+
+        lib_path
+    }
+}
