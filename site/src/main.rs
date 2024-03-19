@@ -38,10 +38,7 @@ async fn main() {
                 eprintln!("Loading complete but no data identified; exiting.");
                 std::process::exit(1);
             }
-            eprintln!(
-                "Loading complete; {} commits and {} artifacts",
-                commits, artifacts,
-            );
+            eprintln!("Loading complete; found {} artifacts", commits + artifacts);
             eprintln!(
                 "View the results in a web browser at 'http://localhost:{port}/compare.html'"
             );
