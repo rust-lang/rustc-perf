@@ -39,7 +39,6 @@ Here is the diagram for compile-time benchmarks:
 ```
 
 For runtime benchmarks the schema very similar, but there are different table names:
-- `benchmark` => `runtime_benchmark`
 - `pstat` => `runtime_pstat`
 - `pstat_series` => `runtime_pstat_series`
   - There are different attributes here, `benchmark` and `metric`.
@@ -169,19 +168,6 @@ sqlite> select * from pstat limit 1;
 series      aid         cid         value
 ----------  ----------  ----------  ----------
 1           1           1           24.93
-```
-
-### runtime_benchmark
-
-The different types of runtime benchmarks that are run.
-
-The table currently stores only the name of the benchmark.
-
-```
-sqlite> select * from runtime_benchmark limit 1;
-name
----------
-nbody-10k
 ```
 
 ### runtime_pstat_series
