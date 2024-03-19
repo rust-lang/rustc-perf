@@ -521,7 +521,7 @@ impl Table for RuntimePstat {
 
     fn write_postgres_csv_row<W: Write>(writer: &mut csv::Writer<W>, row: &rusqlite::Row) {
         writer
-            .serialize(PstatRow {
+            .serialize(RuntimePstatRow {
                 series: row.get(0).unwrap(),
                 aid: row.get(1).unwrap(),
                 cid: row.get(2).unwrap(),
