@@ -156,7 +156,7 @@ impl Entry {
         let bo = decoder.byte_order();
         match (self.type_, self.count) {
             // TODO check if this could give wrong results
-            // at a different endianess of file/computer.
+            // at a different endianness of file/computer.
             (Type::BYTE, 1) => Ok(Unsigned(self.offset[0] as u32)),
             (Type::SHORT, 1) => Ok(Unsigned(try!(self.r(bo).read_u16()) as u32)),
             (Type::SHORT, 2) => {

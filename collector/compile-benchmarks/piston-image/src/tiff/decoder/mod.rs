@@ -156,9 +156,9 @@ impl<R: Read + Seek> TIFFDecoder<R> {
     }
 
     fn read_header(&mut self) -> ImageResult<()> {
-        let mut endianess = Vec::with_capacity(2);
-        try!(self.reader.by_ref().take(2).read_to_end(&mut endianess));
-        match &*endianess {
+        let mut endianness = Vec::with_capacity(2);
+        try!(self.reader.by_ref().take(2).read_to_end(&mut endianness));
+        match &*endianness {
             b"II" => {
                 self.byte_order = ByteOrder::LittleEndian;
                 self.reader.byte_order = ByteOrder::LittleEndian; },

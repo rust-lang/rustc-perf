@@ -791,7 +791,7 @@ pub trait ImageEncoder {
     /// This function takes a slice of bytes of the pixel data of the image
     /// and encodes them. Unlike particular format encoders inherent impl encode
     /// methods where endianness is not specified, here image data bytes should
-    /// always be in native endian. The implementor will reorder the endianess
+    /// always be in native endian. The implementor will reorder the endianness
     /// as necessary for the target encoding format.
     ///
     /// See also `ImageDecoder::read_image` which reads byte buffers into
