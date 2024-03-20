@@ -10,7 +10,7 @@ async fn read_the_textfile(file_path: &str) -> io::Result<usize> {
     let mut total_characters = 0;
     for line in reader.lines() {
         let line = line?;
-        total_characters += line.len();
+        total_characters += line.expect("invalid character").chars().count();
     }
 
     Ok(total_characters)
