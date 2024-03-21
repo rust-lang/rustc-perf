@@ -149,7 +149,7 @@ loadGraphData(selector, loading);
       style="margin-top: 50px; border-top: 1px solid #ccc"
     >
       <div style="padding: 20px 0">
-        <strong>Benchmarks for artifact sizes</strong>
+        <strong>Benchmarks optimized for small binary size</strong>
       </div>
       <div id="size-charts"></div>
     </div>
