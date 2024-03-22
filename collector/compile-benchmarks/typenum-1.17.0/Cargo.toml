@@ -18,7 +18,6 @@ authors = [
     "Paho Lurie-Gregg <paho@paholg.com>",
     "Andre Bogus <bogusandre@gmail.com>",
 ]
-build = "build/main.rs"
 description = """
 Typenum is a Rust library for type-level numbers evaluated at
     compile time. It currently supports bits, unsigned integers, and signed
@@ -61,3 +60,5 @@ i128 = []
 no_std = []
 scale_info = ["scale-info/derive"]
 strict = []
+
+[workspace]
