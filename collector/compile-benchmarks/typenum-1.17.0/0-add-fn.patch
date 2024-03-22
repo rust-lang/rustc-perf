@@ -1,0 +1,9 @@
+diff --git a/src/lib.rs b/src/lib.rs
+index 7a40b2a0..1992946c 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -196,3 +196,4 @@ mod sealed {
+     impl Sealed for ATerm {}
+     impl<V, A> Sealed for TArr<V, A> {}
+ }
++fn foo() { let a = 5; }
