@@ -10,6 +10,7 @@ This directory contains code for the `rustc-perf` website frontend.
     ```console
     $ npm run watch
     ```
+    > If you want to develop locally, it's recommended to use `npm run watch` + `cargo run --bin site` (without the `--release` flag). This setup enables hot reloading of your code on the website.
 - Production build - build optimized and minimized files.
     ```console
     $ npm run build
