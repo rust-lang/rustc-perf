@@ -1,9 +1,0 @@
-O Rust, thou art a masterpiece divine,
-In the kingdom of languages, you brightly shine.
-With borrow checkers and lifetimes in hand,
-You lead us forward, across the digital land.
-
-So let us raise a toast to Rust, our guide,
-In its shelter, our dreams shall abide.
-For in its embrace, we find our worth,
-Rust, the language, the pride of Earth.
