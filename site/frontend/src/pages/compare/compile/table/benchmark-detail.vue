@@ -130,7 +130,7 @@ function createGraphsSelector(): CompileDetailGraphsSelector {
     stat: props.metric,
     start,
     end,
-    kinds: ["percentrelative", "raw"] as GraphKind[],
+    kinds: ["percentrelative", "percentfromfirst"] as GraphKind[],
   };
 }
 
@@ -193,7 +193,10 @@ async function renderGraphs(detail: CompileDetailGraphs) {
     0,
     "percentrelative"
   );
-  const [rawData, rawSelector] = buildGraph(1, "raw");
+  const [percentFromFirstData, percentFromFirstSelector] = buildGraph(
+    1,
+    "percentfromfirst"
+  );
 
   // We want to be able to see noise "blips" vs. a previous artifact.
   // The "percent relative from previous commit" graph should be the best to
@@ -202,11 +205,18 @@ async function renderGraphs(detail: CompileDetailGraphs) {
     percentRelativeData,
     percentRelativeSelector,
     date,
-    relativeChartElement
+    relativeToPreviousChartElement
   );
   // We also want to see whether a change maintained its value or whether it was noise and has since
-  // returned to steady state. Here, an absolute graph ("raw") is best.
-  renderGraph(rawData, rawSelector, date, absoluteChartElement);
+  // returned to steady state. Here, an absolute graph ("raw") would be best, however small changes
+  // are hard to observe in it. Therefore, we use "percent from first commit" graph instead, which
+  // is essentialy a "zoomed-in" version of the raw graph.
+  renderGraph(
+    percentFromFirstData,
+    percentFromFirstSelector,
+    date,
+    relativeToFirstChartElement
+  );
 }
 
 async function renderGraph(
@@ -284,8 +294,8 @@ const cargoProfile = computed((): CargoProfileMetadata => {
   }
 });
 
-const relativeChartElement: Ref<HTMLElement | null> = ref(null);
-const absoluteChartElement: Ref<HTMLElement | null> = ref(null);
+const relativeToPreviousChartElement: Ref<HTMLElement | null> = ref(null);
+const relativeToFirstChartElement: Ref<HTMLElement | null> = ref(null);
 const graphRange = computed(() =>
   getGraphRange(props.artifact, props.baseArtifact)
 );
@@ -402,14 +412,15 @@ onMounted(() => {
         <div class="title">
           <div class="bold">{{ getGraphTitle() }}</div>
           <div style="font-size: 0.8em">
-            Plot of the absolute values of the current metric
+            Each plotted value is relative to the first commit of the commit
+            range
           </div>
           <div style="font-size: 0.8em">
             The shaded region shows values that are more recent than the
             benchmarked commit
           </div>
         </div>
-        <div ref="absoluteChartElement"></div>
+        <div ref="relativeToFirstChartElement"></div>
       </div>
       <div class="rows center-items grow">
         <div class="title">
@@ -422,7 +433,7 @@ onMounted(() => {
             benchmarked commit
           </div>
         </div>
-        <div ref="relativeChartElement"></div>
+        <div ref="relativeToPreviousChartElement"></div>
       </div>
     </div>
     <div class="columns" v-if="props.metric !== BINARY_SIZE_METRIC">
