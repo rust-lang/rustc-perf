@@ -53,6 +53,8 @@ They mostly consist of real-world crates.
   built with `--features=stm32f410` to have faster benchmarking times.
 - **syn-1.0.89**: A library for parsing Rust code. An important part of the Rust
   ecosystem.
+- **typenum-1.17.0**: A library that encodes integer computation within the trait system. Serves as
+  a stress test for the trait solver, but at the same time it is also a very popular crate.
 - **unicode-normalization-0.1.19**: Unicode character composition and decomposition
   utilities. Uses huge `match` statements that stress the compiler in unusual
   ways.
