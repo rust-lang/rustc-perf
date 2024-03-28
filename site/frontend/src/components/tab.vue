@@ -9,7 +9,7 @@ const props = defineProps<{
 <template>
   <div class="tab" :title="props.extraInfo" :class="{selected: props.selected}">
     <div class="title">{{ props.title }}</div>
-    <div class="summary table-wrapper">
+    <div class="summary">
       <slot name="summary"></slot>
     </div>
   </div>
@@ -59,17 +59,6 @@ const props = defineProps<{
 .selected {
   border-style: solid;
   border-color: black;
-}
-
-.table-wrapper {
-  table {
-    width: 100%;
-    table-layout: auto;
-  }
-
-  th {
-    font-weight: normal;
-  }
 }
 
 .summary {

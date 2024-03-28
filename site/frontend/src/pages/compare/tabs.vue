@@ -43,27 +43,29 @@ function SummaryTable({summary}: {summary: SummaryGroup}) {
   const valid = summary.all.count > 0;
   if (valid) {
     return (
-      <table>
-        <thead>
-          <tr>
-            <th>Range</th>
-            <th>Mean</th>
-          </tr>
-        </thead>
-        <thead>
-          <tr>
-            <td>
-              <SummaryRange range={summary.all.range} />
-            </td>
-            <td>
-              <SummaryPercentValue
-                class={percentClass(summary.all.average)}
-                value={summary.all.average}
-              />
-            </td>
-          </tr>
-        </thead>
-      </table>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Range</th>
+              <th>Mean</th>
+            </tr>
+          </thead>
+          <thead>
+            <tr>
+              <td>
+                <SummaryRange range={summary.all.range} />
+              </td>
+              <td>
+                <SummaryPercentValue
+                  class={percentClass(summary.all.average)}
+                  value={summary.all.average}
+                />
+              </td>
+            </tr>
+          </thead>
+        </table>
+      </div>
     );
   }
   return <div>No results</div>;
