@@ -139,15 +139,14 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
         </div>
       </template>
     </TabComponent>
-    <div
-      class="tab"
-      title="Artifact size: sizes of individual components of the two artifacts."
+    <TabComponent
+      :extra-info="'Artifact size: sizes of individual components of the two artifacts.'"
+      :title="'Artifact size'"
       v-if="sizesAvailable"
-      :class="{selected: activeTab === Tab.ArtifactSize}"
+      :selected="activeTab === Tab.ArtifactSize"
       @click="changeTab(Tab.ArtifactSize)"
     >
-      <div class="title">Artifact size</div>
-      <div class="summary">
+      <template v-slot:summary>
         <div>
           {{ formatArtifactSize(totalSizeA) }} ->
           {{ formatArtifactSize(totalSizeB) }}
@@ -161,8 +160,8 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
             formatPercentChange(totalSizeA, totalSizeB)
           }})
         </div>
-      </div>
-    </div>
+      </template>
+    </TabComponent>
   </div>
 </template>
 
