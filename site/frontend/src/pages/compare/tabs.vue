@@ -10,6 +10,7 @@ import {
 import {SummaryGroup} from "./data";
 import SummaryPercentValue from "./summary/percent-value.vue";
 import SummaryRange from "./summary/range.vue";
+import TabComponent from "../../components/tab.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -95,17 +96,16 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
 
 <template>
   <div class="wrapper">
-    <div
-      class="tab"
-      title="Compilation time benchmarks: measure how long does it take to compile various crates using the compared rustc."
-      :class="{selected: activeTab === Tab.CompileTime}"
+    <TabComponent
+      :extra-info="'Compilation time benchmarks: measure how long does it take to compile various crates using the compared rustc.'"
+      :title="'Compile-time'"
+      :selected="activeTab === Tab.CompileTime"
       @click="changeTab(Tab.CompileTime)"
     >
-      <div class="title">Compile-time</div>
-      <div class="summary table-wrapper">
+      <template v-slot:summary>
         <SummaryTable :summary="compileTimeSummary" />
-      </div>
-    </div>
+      </template>
+    </TabComponent>
     <div
       class="tab"
       title="Runtime benchmarks: measure how long does it take to execute (i.e. how fast are) programs compiled by the compared rustc."
