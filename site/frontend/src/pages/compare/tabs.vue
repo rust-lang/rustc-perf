@@ -118,14 +118,13 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
         <SummaryTable :summary="runtimeSummary" />
       </template>
     </TabComponent>
-    <div
-      class="tab"
-      title="Bootstrap duration: measures how long does it take to compile rustc by itself."
-      :class="{selected: activeTab === Tab.Bootstrap}"
+    <TabComponent
+      :extra-info="'Bootstrap duration: measures how long does it take to compile rustc by itself.'"
+      :title="'Bootstrap'"
+      :selected="activeTab === Tab.Bootstrap"
       @click="changeTab(Tab.Bootstrap)"
     >
-      <div class="title">Bootstrap</div>
-      <div class="summary">
+      <template v-slot:summary>
         <div>
           {{ formatBootstrap(bootstrapA) }} ->
           {{ formatBootstrap(bootstrapB) }}
@@ -138,8 +137,8 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
             (((bootstrapB - bootstrapA) / bootstrapA) * 100).toFixed(3)
           }}%)
         </div>
-      </div>
-    </div>
+      </template>
+    </TabComponent>
     <div
       class="tab"
       title="Artifact size: sizes of individual components of the two artifacts."
