@@ -106,17 +106,16 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
         <SummaryTable :summary="compileTimeSummary" />
       </template>
     </TabComponent>
-    <div
-      class="tab"
-      title="Runtime benchmarks: measure how long does it take to execute (i.e. how fast are) programs compiled by the compared rustc."
-      :class="{selected: activeTab === Tab.Runtime}"
+    <TabComponent
+      :extra-info="'Runtime benchmarks: measure how long does it take to execute (i.e. how fast are) programs compiled by the compared rustc.'"
+      :title="'Runtime'"
+      :selected="activeTab === Tab.Runtime"
       @click="changeTab(Tab.Runtime)"
     >
-      <div class="title">Runtime</div>
-      <div class="summary table-wrapper">
+      <template v-slot:summary>
         <SummaryTable :summary="runtimeSummary" />
-      </div>
-    </div>
+      </template>
+    </TabComponent>
     <div
       class="tab"
       title="Bootstrap duration: measures how long does it take to compile rustc by itself."
