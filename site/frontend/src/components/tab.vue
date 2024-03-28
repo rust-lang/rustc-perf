@@ -1,13 +1,13 @@
 <script setup lang="ts">
 const props = defineProps<{
-  extraInfo: string;
+  tooltip: string;
   title: string;
   selected: boolean;
 }>();
 </script>
 
 <template>
-  <div class="tab" :title="props.extraInfo" :class="{selected: props.selected}">
+  <div class="tab" :title="props.tooltip" :class="{selected: props.selected}">
     <div class="title">{{ props.title }}</div>
     <div class="summary">
       <slot name="summary"></slot>

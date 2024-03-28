@@ -99,7 +99,7 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
 <template>
   <div class="wrapper">
     <TabComponent
-      :extra-info="'Compilation time benchmarks: measure how long does it take to compile various crates using the compared rustc.'"
+      :tooltip="'Compilation time benchmarks: measure how long does it take to compile various crates using the compared rustc.'"
       :title="'Compile-time'"
       :selected="activeTab === Tab.CompileTime"
       @click="changeTab(Tab.CompileTime)"
@@ -109,7 +109,7 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
       </template>
     </TabComponent>
     <TabComponent
-      :extra-info="'Runtime benchmarks: measure how long does it take to execute (i.e. how fast are) programs compiled by the compared rustc.'"
+      :tooltip="'Runtime benchmarks: measure how long does it take to execute (i.e. how fast are) programs compiled by the compared rustc.'"
       :title="'Runtime'"
       :selected="activeTab === Tab.Runtime"
       @click="changeTab(Tab.Runtime)"
@@ -119,7 +119,7 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
       </template>
     </TabComponent>
     <TabComponent
-      :extra-info="'Bootstrap duration: measures how long does it take to compile rustc by itself.'"
+      :tooltip="'Bootstrap duration: measures how long does it take to compile rustc by itself.'"
       :title="'Bootstrap'"
       :selected="activeTab === Tab.Bootstrap"
       @click="changeTab(Tab.Bootstrap)"
@@ -140,7 +140,7 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
       </template>
     </TabComponent>
     <TabComponent
-      :extra-info="'Artifact size: sizes of individual components of the two artifacts.'"
+      :tooltip="'Artifact size: sizes of individual components of the two artifacts.'"
       :title="'Artifact size'"
       v-if="sizesAvailable"
       :selected="activeTab === Tab.ArtifactSize"
