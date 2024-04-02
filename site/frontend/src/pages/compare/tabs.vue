@@ -10,6 +10,7 @@ import {
 import {SummaryGroup} from "./data";
 import SummaryPercentValue from "./summary/percent-value.vue";
 import SummaryRange from "./summary/range.vue";
+import TabComponent from "../../components/tab.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -42,27 +43,29 @@ function SummaryTable({summary}: {summary: SummaryGroup}) {
   const valid = summary.all.count > 0;
   if (valid) {
     return (
-      <table>
-        <thead>
-          <tr>
-            <th>Range</th>
-            <th>Mean</th>
-          </tr>
-        </thead>
-        <thead>
-          <tr>
-            <td>
-              <SummaryRange range={summary.all.range} />
-            </td>
-            <td>
-              <SummaryPercentValue
-                class={percentClass(summary.all.average)}
-                value={summary.all.average}
-              />
-            </td>
-          </tr>
-        </thead>
-      </table>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Range</th>
+              <th>Mean</th>
+            </tr>
+          </thead>
+          <thead>
+            <tr>
+              <td>
+                <SummaryRange range={summary.all.range} />
+              </td>
+              <td>
+                <SummaryPercentValue
+                  class={percentClass(summary.all.average)}
+                  value={summary.all.average}
+                />
+              </td>
+            </tr>
+          </thead>
+        </table>
+      </div>
     );
   }
   return <div>No results</div>;
@@ -95,36 +98,33 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
 
 <template>
   <div class="wrapper">
-    <div
-      class="tab"
-      title="Compilation time benchmarks: measure how long does it take to compile various crates using the compared rustc."
-      :class="{selected: activeTab === Tab.CompileTime}"
+    <TabComponent
+      tooltip="Compilation time benchmarks: measure how long does it take to compile various crates using the compared rustc."
+      title="Compile-time"
+      :selected="activeTab === Tab.CompileTime"
       @click="changeTab(Tab.CompileTime)"
     >
-      <div class="title">Compile-time</div>
-      <div class="summary table-wrapper">
+      <template v-slot:summary>
         <SummaryTable :summary="compileTimeSummary" />
-      </div>
-    </div>
-    <div
-      class="tab"
-      title="Runtime benchmarks: measure how long does it take to execute (i.e. how fast are) programs compiled by the compared rustc."
-      :class="{selected: activeTab === Tab.Runtime}"
+      </template>
+    </TabComponent>
+    <TabComponent
+      tooltip="Runtime benchmarks: measure how long does it take to execute (i.e. how fast are) programs compiled by the compared rustc."
+      title="Runtime"
+      :selected="activeTab === Tab.Runtime"
       @click="changeTab(Tab.Runtime)"
     >
-      <div class="title">Runtime</div>
-      <div class="summary table-wrapper">
+      <template v-slot:summary>
         <SummaryTable :summary="runtimeSummary" />
-      </div>
-    </div>
-    <div
-      class="tab"
-      title="Bootstrap duration: measures how long does it take to compile rustc by itself."
-      :class="{selected: activeTab === Tab.Bootstrap}"
+      </template>
+    </TabComponent>
+    <TabComponent
+      tooltip="Bootstrap duration: measures how long does it take to compile rustc by itself."
+      title="Bootstrap"
+      :selected="activeTab === Tab.Bootstrap"
       @click="changeTab(Tab.Bootstrap)"
     >
-      <div class="title">Bootstrap</div>
-      <div class="summary">
+      <template v-slot:summary>
         <div>
           {{ formatBootstrap(bootstrapA) }} ->
           {{ formatBootstrap(bootstrapB) }}
@@ -137,17 +137,16 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
             (((bootstrapB - bootstrapA) / bootstrapA) * 100).toFixed(3)
           }}%)
         </div>
-      </div>
-    </div>
-    <div
-      class="tab"
-      title="Artifact size: sizes of individual components of the two artifacts."
+      </template>
+    </TabComponent>
+    <TabComponent
+      tooltip="Artifact size: sizes of individual components of the two artifacts."
+      title="Artifact size"
       v-if="sizesAvailable"
-      :class="{selected: activeTab === Tab.ArtifactSize}"
+      :selected="activeTab === Tab.ArtifactSize"
       @click="changeTab(Tab.ArtifactSize)"
     >
-      <div class="title">Artifact size</div>
-      <div class="summary">
+      <template v-slot:summary>
         <div>
           {{ formatArtifactSize(totalSizeA) }} ->
           {{ formatArtifactSize(totalSizeB) }}
@@ -161,8 +160,8 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
             formatPercentChange(totalSizeA, totalSizeB)
           }})
         </div>
-      </div>
-    </div>
+      </template>
+    </TabComponent>
   </div>
 </template>
 
@@ -180,51 +179,6 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
   }
 }
 
-.tab {
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  min-width: 200px;
-  min-height: 60px;
-  padding: 5px;
-  text-align: center;
-  border: 2px dotted #cccccc;
-  border-radius: 5px;
-  cursor: pointer;
-
-  &:hover {
-    @extend .selected;
-  }
-
-  @media (min-width: 600px) {
-    &:not(:first-child) {
-      margin-left: 30px;
-    }
-
-    &:not(:last-child) {
-      :after {
-        content: "";
-        position: absolute;
-        right: -17px;
-        border-right: 1px solid black;
-        top: 20%;
-        bottom: 20%;
-      }
-    }
-  }
-}
-
-.title {
-  font-weight: bold;
-  font-size: 1.1em;
-  margin-bottom: 5px;
-}
-
-.selected {
-  border-style: solid;
-  border-color: black;
-}
-
 .table-wrapper {
   table {
     width: 100%;
@@ -234,13 +188,5 @@ const activeTab: Ref<Tab> = ref(props.initialTab);
   th {
     font-weight: normal;
   }
-}
-
-.summary {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  font-size: 0.9em;
-  flex-grow: 1;
 }
 </style>
