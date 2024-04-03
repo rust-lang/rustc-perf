@@ -475,7 +475,7 @@ pub fn get_compile_benchmarks(
     let mut excludes = to_hashmap(exclude);
     let mut exclude_suffixes = to_hashmap(exclude_suffix);
 
-    for (path, name) in paths {
+    for (path, name) in paths.clone() {
         let mut skip = false;
 
         let name_matches_prefix = |prefixes: &mut HashMap<&str, usize>| {
@@ -508,9 +508,11 @@ pub fn get_compile_benchmarks(
                 .collect();
             if !unused.is_empty() {
                 bail!(
-                    "Warning: one or more unused --{} entries: {:?}",
+                    r#"Warning: one or more unused --{} entries: {:?} found.
+Expected zero or more entries or substrings from list: {:?}."#,
                     option,
-                    unused
+                    unused,
+                    &paths.iter().map(|(_, name)| name).collect::<Vec<_>>(),
                 );
             }
         }
