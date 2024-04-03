@@ -440,9 +440,9 @@ pub fn compile_benchmark_dir() -> PathBuf {
 
 pub fn get_compile_benchmarks(
     benchmark_dir: &Path,
-    include: Option<&str>,
-    exclude: Option<&str>,
-    exclude_suffix: Option<&str>,
+    include: &[String],
+    exclude: &[String],
+    exclude_suffix: &[String],
 ) -> anyhow::Result<Vec<Benchmark>> {
     let mut benchmarks = Vec::new();
 
@@ -467,12 +467,8 @@ pub fn get_compile_benchmarks(
 
     // For each --include/--exclude entry, we count how many times it's used,
     // to enable `check_for_unused` below.
-    fn to_hashmap(xyz: Option<&str>) -> Option<HashMap<&str, usize>> {
-        xyz.map(|list| {
-            list.split(',')
-                .map(|x| (x, 0))
-                .collect::<HashMap<&str, usize>>()
-        })
+    fn to_hashmap(xyz: &[String]) -> HashMap<&str, usize> {
+        xyz.iter().map(|x| (x.as_ref(), 0)).collect()
     }
 
     let mut includes = to_hashmap(include);
@@ -486,14 +482,14 @@ pub fn get_compile_benchmarks(
             substring_matches(prefixes, |prefix| name.starts_with(prefix))
         };
 
-        if let Some(includes) = includes.as_mut() {
-            skip |= !name_matches_prefix(includes);
+        if !includes.is_empty() {
+            skip |= !name_matches_prefix(&mut includes);
         }
-        if let Some(excludes) = excludes.as_mut() {
-            skip |= name_matches_prefix(excludes);
+        if !excludes.is_empty() {
+            skip |= name_matches_prefix(&mut excludes);
         }
-        if let Some(exclude_suffixes) = exclude_suffixes.as_mut() {
-            skip |= substring_matches(exclude_suffixes, |suffix| name.ends_with(suffix));
+        if !exclude_suffixes.is_empty() {
+            skip |= substring_matches(&mut exclude_suffixes, |suffix| name.ends_with(suffix));
         }
         if skip {
             continue;
@@ -504,8 +500,8 @@ pub fn get_compile_benchmarks(
     }
 
     // All prefixes/suffixes must be used at least once. This is to catch typos.
-    let check_for_unused = |option, substrings: Option<HashMap<&str, usize>>| {
-        if let Some(substrings) = substrings {
+    let check_for_unused = |option, substrings: HashMap<&str, usize>| {
+        if !substrings.is_empty() {
             let unused: Vec<_> = substrings
                 .into_iter()
                 .filter_map(|(i, n)| if n == 0 { Some(i) } else { None })
@@ -560,13 +556,9 @@ mod tests {
         // Check that we can deserialize all perf-config.json files in the compile benchmark
         // directory.
         let root = env!("CARGO_MANIFEST_DIR");
-        let benchmarks = get_compile_benchmarks(
-            &Path::new(root).join("compile-benchmarks"),
-            None,
-            None,
-            None,
-        )
-        .unwrap();
+        let benchmarks =
+            get_compile_benchmarks(&Path::new(root).join("compile-benchmarks"), &[], &[], &[])
+                .unwrap();
         assert!(!benchmarks.is_empty());
     }
 }

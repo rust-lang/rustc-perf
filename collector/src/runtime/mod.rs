@@ -211,11 +211,11 @@ fn execute_runtime_benchmark_binary(
     command.arg("--iterations");
     command.arg(&iterations.to_string());
 
-    if let Some(ref exclude) = filter.exclude {
-        command.args(["--exclude", exclude]);
+    if !filter.exclude.is_empty() {
+        command.args(["--exclude", &filter.exclude.join(",")]);
     }
-    if let Some(ref include) = filter.include {
-        command.args(["--include", include]);
+    if !filter.include.is_empty() {
+        command.args(["--include", &filter.include.join(",")]);
     }
 
     let output = run_command_with_output(&mut command)?;
