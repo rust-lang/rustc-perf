@@ -17,12 +17,12 @@ pub struct BenchmarkArgs {
     pub iterations: u32,
 
     /// Exclude all benchmarks matching a prefix in this comma-separated list
-    #[arg(long)]
-    pub exclude: Option<String>,
+    #[arg(long, value_delimiter = ',')]
+    pub exclude: Vec<String>,
 
     /// Include only benchmarks matching a prefix in this comma-separated list
-    #[arg(long)]
-    pub include: Option<String>,
+    #[arg(long, value_delimiter = ',')]
+    pub include: Vec<String>,
 }
 
 #[derive(clap::Parser, Debug)]

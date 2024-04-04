@@ -83,9 +83,7 @@ impl<'a> BenchmarkGroup<'a> {
         let mut items: Vec<(&'static str, BenchmarkProfileFns)> = self
             .benchmarks
             .into_iter()
-            .filter(|(name, _)| {
-                passes_filter(name, args.exclude.as_deref(), args.include.as_deref())
-            })
+            .filter(|(name, _)| passes_filter(name, &args.exclude, &args.include))
             .collect();
         items.sort_unstable_by_key(|item| item.0);
 
@@ -144,16 +142,21 @@ impl<'a> BenchmarkGroup<'a> {
 
 /// Tests if the name of the benchmark passes through the include and exclude filters.
 /// Both filters can contain multiple comma-separated prefixes.
-pub fn passes_filter(name: &str, exclude: Option<&str>, include: Option<&str>) -> bool {
+pub fn passes_filter(name: &str, exclude: &[String], include: &[String]) -> bool {
     match (exclude, include) {
-        (Some(exclude), Some(include)) => {
-            let included = include.split(',').any(|filter| name.starts_with(filter));
-            let excluded = exclude.split(',').any(|filter| name.starts_with(filter));
+        (exclude, include) if !exclude.is_empty() && !include.is_empty() => {
+            let included = include.iter().any(|filter| name.starts_with(filter));
+            let excluded = exclude.iter().any(|filter| name.starts_with(filter));
             included && !excluded
         }
-        (None, Some(include)) => include.split(',').any(|filter| name.starts_with(filter)),
-        (Some(exclude), None) => !exclude.split(',').any(|filter| name.starts_with(filter)),
-        (None, None) => true,
+        ([], include) if !include.is_empty() => {
+            include.iter().any(|filter| name.starts_with(filter))
+        }
+        (exclude, []) if !exclude.is_empty() => {
+            !exclude.iter().any(|filter| name.starts_with(filter))
+        }
+        ([], []) => true,
+        (_, _) => unreachable!(),
     }
 }
 
@@ -172,34 +175,58 @@ mod tests {
 
     #[test]
     fn test_passes_filter_no_filter() {
-        assert!(passes_filter("foo", None, None));
+        assert!(passes_filter("foo", &[], &[]));
     }
 
     #[test]
     fn test_passes_filter_include() {
-        assert!(!passes_filter("foo", None, Some("bar")));
-        assert!(!passes_filter("foo", None, Some("foobar")));
+        assert!(!passes_filter("foo", &[], &["bar".to_string()]));
+        assert!(!passes_filter("foo", &[], &["foobar".to_string()]));
 
-        assert!(passes_filter("foo", None, Some("f")));
-        assert!(passes_filter("foo", None, Some("foo")));
-        assert!(passes_filter("foo", None, Some("bar,baz,foo")));
+        assert!(passes_filter("foo", &[], &["f".to_string()]));
+        assert!(passes_filter("foo", &[], &["foo".to_string()]));
+        assert!(passes_filter(
+            "foo",
+            &[],
+            &["bar".to_string(), "baz".to_string(), "foo".to_string()]
+        ));
     }
 
     #[test]
     fn test_passes_filter_exclude() {
-        assert!(passes_filter("foo", Some("bar"), None));
-        assert!(passes_filter("foo", Some("foobar"), None));
+        assert!(passes_filter("foo", &["bar".to_string()], &[]));
+        assert!(passes_filter("foo", &["foobar".to_string()], &[]));
 
-        assert!(!passes_filter("foo", Some("f"), None));
-        assert!(!passes_filter("foo", Some("foo"), None));
-        assert!(!passes_filter("foo", Some("bar,baz,foo"), None));
+        assert!(!passes_filter("foo", &["f".to_string()], &[]));
+        assert!(!passes_filter("foo", &["foo".to_string()], &[]));
+        assert!(!passes_filter(
+            "foo",
+            &["bar".to_string(), "baz".to_string(), "foo".to_string()],
+            &[]
+        ));
     }
 
     #[test]
     fn test_passes_filter_include_exclude() {
-        assert!(!passes_filter("foo", Some("bar"), Some("baz")));
-        assert!(passes_filter("foo", Some("bar"), Some("foo")));
-        assert!(!passes_filter("foo", Some("foo"), Some("bar")));
-        assert!(!passes_filter("foo", Some("foo"), Some("foo")));
+        assert!(!passes_filter(
+            "foo",
+            &["bar".to_string()],
+            &["baz".to_string()]
+        ));
+        assert!(passes_filter(
+            "foo",
+            &["bar".to_string()],
+            &["foo".to_string()]
+        ));
+        assert!(!passes_filter(
+            "foo",
+            &["foo".to_string()],
+            &["bar".to_string()]
+        ));
+        assert!(!passes_filter(
+            "foo",
+            &["foo".to_string()],
+            &["foo".to_string()]
+        ));
     }
 }

@@ -54,13 +54,10 @@ impl BenchmarkSuite {
             groups: groups
                 .into_iter()
                 .filter(|group| {
-                    group.benchmark_names.iter().any(|benchmark| {
-                        passes_filter(
-                            benchmark,
-                            filter.exclude.as_deref(),
-                            filter.include.as_deref(),
-                        )
-                    })
+                    group
+                        .benchmark_names
+                        .iter()
+                        .any(|benchmark| passes_filter(benchmark, &filter.exclude, &filter.include))
                 })
                 .collect(),
             _tmp_artifacts_dir,
@@ -69,13 +66,7 @@ impl BenchmarkSuite {
 
     pub fn filtered_benchmark_count(&self, filter: &BenchmarkFilter) -> u64 {
         self.benchmark_names()
-            .filter(|benchmark| {
-                passes_filter(
-                    benchmark,
-                    filter.exclude.as_deref(),
-                    filter.include.as_deref(),
-                )
-            })
+            .filter(|benchmark| passes_filter(benchmark, &filter.exclude, &filter.include))
             .count() as u64
     }
 
@@ -96,19 +87,19 @@ impl BenchmarkSuite {
 }
 
 pub struct BenchmarkFilter {
-    pub exclude: Option<String>,
-    pub include: Option<String>,
+    pub exclude: Vec<String>,
+    pub include: Vec<String>,
 }
 
 impl BenchmarkFilter {
     pub fn keep_all() -> Self {
         Self {
-            exclude: None,
-            include: None,
+            exclude: vec![],
+            include: vec![],
         }
     }
 
-    pub fn new(exclude: Option<String>, include: Option<String>) -> Self {
+    pub fn new(exclude: Vec<String>, include: Vec<String>) -> Self {
         Self { exclude, include }
     }
 }

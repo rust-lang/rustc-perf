@@ -312,16 +312,16 @@ struct LocalOptions {
     cargo: Option<PathBuf>,
 
     /// Exclude all benchmarks matching a prefix in this comma-separated list
-    #[arg(long)]
-    exclude: Option<String>,
+    #[arg(long, value_delimiter = ',')]
+    exclude: Vec<String>,
 
     /// Exclude all benchmarks matching a suffix in this comma-separated list
-    #[arg(long)]
-    exclude_suffix: Option<String>,
+    #[arg(long, value_delimiter = ',')]
+    exclude_suffix: Vec<String>,
 
     /// Include only benchmarks matching a prefix in this comma-separated list
-    #[arg(long)]
-    include: Option<String>,
+    #[arg(long, value_delimiter = ',')]
+    include: Vec<String>,
 
     /// Include only benchmarks belonging to the given categories.
     #[arg(long, value_parser = EnumArgParser::<Category>::default(), default_value = "Primary,Secondary")]
@@ -689,9 +689,9 @@ fn main_result() -> anyhow::Result<i32> {
             };
             let benchmarks = get_compile_benchmarks(
                 &compile_benchmark_dir,
-                local.include.as_deref(),
-                local.exclude.as_deref(),
-                local.exclude_suffix.as_deref(),
+                &local.include,
+                &local.exclude,
+                &local.exclude_suffix,
             )?;
             for benchmark in benchmarks {
                 println!("Stats for benchmark `{}`", benchmark.name);
@@ -901,9 +901,9 @@ fn main_result() -> anyhow::Result<i32> {
 
             let mut benchmarks = get_compile_benchmarks(
                 &compile_benchmark_dir,
-                local.include.as_deref(),
-                local.exclude.as_deref(),
-                local.exclude_suffix.as_deref(),
+                &local.include,
+                &local.exclude,
+                &local.exclude_suffix,
             )?;
             benchmarks.retain(|b| local.category.0.contains(&b.category()));
 
@@ -978,6 +978,16 @@ fn main_result() -> anyhow::Result<i32> {
                         exclude,
                         runs,
                     } => {
+                        // FIXME: remove this when/if NextArtifact::Commit's include/exclude
+                        // changed from Option<String> to Vec<String>
+                        // to not to manually parse args
+                        let split_args = |l: Option<String>| -> Vec<String> {
+                            if let Some(l) = l {
+                                l.split(',').map(|arg| arg.trim().to_owned()).collect()
+                            } else {
+                                vec![]
+                            }
+                        };
                         let sha = commit.sha.to_string();
                         let sysroot = Sysroot::install(
                             sha.clone(),
@@ -988,9 +998,9 @@ fn main_result() -> anyhow::Result<i32> {
 
                         let mut benchmarks = get_compile_benchmarks(
                             &compile_benchmark_dir,
-                            include.as_deref(),
-                            exclude.as_deref(),
-                            None,
+                            &split_args(include),
+                            &split_args(exclude),
+                            &[],
                         )?;
                         benchmarks.retain(|b| b.category().is_primary_or_secondary());
 
@@ -1085,9 +1095,9 @@ fn main_result() -> anyhow::Result<i32> {
 
             let mut benchmarks = get_compile_benchmarks(
                 &compile_benchmark_dir,
-                local.include.as_deref(),
-                local.exclude.as_deref(),
-                local.exclude_suffix.as_deref(),
+                &local.include,
+                &local.exclude,
+                &local.exclude_suffix,
             )?;
             benchmarks.retain(|b| local.category.0.contains(&b.category()));
 
@@ -1569,7 +1579,7 @@ fn bench_published_artifact(
     };
 
     // Exclude benchmarks that don't work with a stable compiler.
-    let mut compile_benchmarks = get_compile_benchmarks(dirs.compile, None, None, None)?;
+    let mut compile_benchmarks = get_compile_benchmarks(dirs.compile, &[], &[], &[])?;
     compile_benchmarks.retain(|b| b.category().is_stable());
 
     let runtime_suite = rt.block_on(load_runtime_benchmarks(
