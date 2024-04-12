@@ -18,7 +18,7 @@ async fn line_char_count(line: &str) -> usize {
 }
 
 async fn async_operation() -> usize {
-    let sherlock_text = String::from_utf8(decompress_file(TEXT_SHERLOCK)).expect("Invalid UTF-8");
+    let sherlock_text = (String::from_utf8(decompress_file(TEXT_SHERLOCK)).expect("Invalid UTF-8")).repeat(20);
     let total_char = total_char_count(sherlock_text).await;
     total_char
 }
