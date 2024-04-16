@@ -1575,6 +1575,13 @@ async fn generate_report(
     let first_commit_prefix = first_commit.chars().take(8).collect::<String>();
     let last_commit_prefix = last_commit.chars().take(8).collect::<String>();
 
+    let rollup_count = regressions
+        .iter()
+        .chain(improvements.iter())
+        .chain(mixed.iter())
+        .filter(|s| s.contains("Rollup of"))
+        .count();
+
     format!(
         r#####"# {date} Triage Log
 
@@ -1585,7 +1592,7 @@ Revision range: [{first_commit_prefix}..{last_commit_prefix}](https://perf.rust-
 
 {summary}
 
-{num_regressions} Regression{regressions_suffix}, {num_improvements} Improvement{improvements_suffix}, {num_mixed} Mixed; ??? of them in rollups
+{num_regressions} Regression{regressions_suffix}, {num_improvements} Improvement{improvements_suffix}, {num_mixed} Mixed; {rollup_count} of them in rollups
 {num_comparisons} artifact comparisons made in total
 
 #### Regressions
