@@ -1564,6 +1564,12 @@ async fn generate_report(
             e
         ),
     };
+    let num_regressions = regressions.len();
+    let regressions_suffix = if num_regressions == 1 { "" } else { "s" };
+
+    let num_improvements = improvements.len();
+    let improvements_suffix = if num_improvements == 1 { "" } else { "s" };
+
     format!(
         r#####"# {date} Triage Log
 
@@ -1574,7 +1580,7 @@ Revision range: [{first_commit}..{last_commit}](https://perf.rust-lang.org/?star
 
 {summary}
 
-{num_regressions} Regressions, {num_improvements} Improvements, {num_mixed} Mixed; ??? of them in rollups
+{num_regressions} Regression{regressions_suffix}, {num_improvements} Improvement{improvements_suffix}, {num_mixed} Mixed; ??? of them in rollups
 {num_comparisons} artifact comparisons made in total
 
 #### Regressions
@@ -1602,8 +1608,6 @@ TODO: Nags
         first_commit = start,
         last_commit = end,
         num_comparisons = num_comparisons,
-        num_regressions = regressions.len(),
-        num_improvements = improvements.len(),
         num_mixed = mixed.len(),
         regressions = regressions.join("\n\n"),
         improvements = improvements.join("\n\n"),
