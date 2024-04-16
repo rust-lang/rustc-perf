@@ -1564,17 +1564,35 @@ async fn generate_report(
             e
         ),
     };
+    let num_regressions = regressions.len();
+    let regressions_suffix = if num_regressions == 1 { "" } else { "s" };
+
+    let num_improvements = improvements.len();
+    let improvements_suffix = if num_improvements == 1 { "" } else { "s" };
+
+    let first_commit = start;
+    let last_commit = end;
+    let first_commit_prefix = first_commit.chars().take(8).collect::<String>();
+    let last_commit_prefix = last_commit.chars().take(8).collect::<String>();
+
+    let rollup_count = regressions
+        .iter()
+        .chain(improvements.iter())
+        .chain(mixed.iter())
+        .filter(|s| s.contains("Rollup of"))
+        .count();
+
     format!(
         r#####"# {date} Triage Log
 
 TODO: Summary
 
 Triage done by **@???**.
-Revision range: [{first_commit}..{last_commit}](https://perf.rust-lang.org/?start={first_commit}&end={last_commit}&absolute=false&stat=instructions%3Au)
+Revision range: [{first_commit_prefix}..{last_commit_prefix}](https://perf.rust-lang.org/?start={first_commit}&end={last_commit}&absolute=false&stat=instructions%3Au)
 
 {summary}
 
-{num_regressions} Regressions, {num_improvements} Improvements, {num_mixed} Mixed; ??? of them in rollups
+{num_regressions} Regression{regressions_suffix}, {num_improvements} Improvement{improvements_suffix}, {num_mixed} Mixed; {rollup_count} of them in rollups
 {num_comparisons} artifact comparisons made in total
 
 #### Regressions
@@ -1599,11 +1617,7 @@ TODO: Nags
 
 "#####,
         date = chrono::Utc::now().format("%Y-%m-%d"),
-        first_commit = start,
-        last_commit = end,
         num_comparisons = num_comparisons,
-        num_regressions = regressions.len(),
-        num_improvements = improvements.len(),
         num_mixed = mixed.len(),
         regressions = regressions.join("\n\n"),
         improvements = improvements.join("\n\n"),
