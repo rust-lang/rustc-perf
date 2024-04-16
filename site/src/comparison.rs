@@ -1570,13 +1570,18 @@ async fn generate_report(
     let num_improvements = improvements.len();
     let improvements_suffix = if num_improvements == 1 { "" } else { "s" };
 
+    let first_commit = start;
+    let last_commit = end;
+    let first_commit_prefix = first_commit.chars().take(8).collect::<String>();
+    let last_commit_prefix = last_commit.chars().take(8).collect::<String>();
+
     format!(
         r#####"# {date} Triage Log
 
 TODO: Summary
 
 Triage done by **@???**.
-Revision range: [{first_commit}..{last_commit}](https://perf.rust-lang.org/?start={first_commit}&end={last_commit}&absolute=false&stat=instructions%3Au)
+Revision range: [{first_commit_prefix}..{last_commit_prefix}](https://perf.rust-lang.org/?start={first_commit}&end={last_commit}&absolute=false&stat=instructions%3Au)
 
 {summary}
 
@@ -1605,8 +1610,6 @@ TODO: Nags
 
 "#####,
         date = chrono::Utc::now().format("%Y-%m-%d"),
-        first_commit = start,
-        last_commit = end,
         num_comparisons = num_comparisons,
         num_mixed = mixed.len(),
         regressions = regressions.join("\n\n"),
