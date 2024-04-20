@@ -2,6 +2,7 @@
 //! names and sizes.
 
 use std::collections::{HashMap, VecDeque};
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
@@ -23,6 +24,17 @@ pub struct ArtifactStats {
 }
 
 impl ArtifactStats {
+    /// Try to auto-detect the artifact type from the given path.
+    /// If auto-detection fails, tries to load the artifact as a dynamic object.
+    pub fn from_path(path: &Path) -> anyhow::Result<Self> {
+        if path.extension() == Some(OsStr::new("a")) || path.extension() == Some(OsStr::new("rlib"))
+        {
+            Self::from_rlib(path)
+        } else {
+            Self::from_dynamic_object(path)
+        }
+    }
+
     /// Loads size statistics from an ELF file (either an executable or a shared library).
     pub fn from_dynamic_object(path: &Path) -> anyhow::Result<Self> {
         let data = std::fs::read(path)

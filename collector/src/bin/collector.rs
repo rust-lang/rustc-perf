@@ -26,7 +26,9 @@ use tabled::settings::{Alignment, Border, Color, Modify};
 use tokio::runtime::Runtime;
 
 use collector::api::next_artifact::NextArtifact;
-use collector::artifact_stats::{compile_and_get_stats, ArtifactWithStats, CargoProfile};
+use collector::artifact_stats::{
+    compile_and_get_stats, ArtifactStats, ArtifactWithStats, CargoProfile,
+};
 use collector::codegen::{codegen_diff, CodegenType};
 use collector::compile::benchmark::category::Category;
 use collector::compile::benchmark::codegen_backend::CodegenBackend;
@@ -431,12 +433,25 @@ struct BinaryStatsCompile {
     codegen_backend2: Option<CodegenBackend>,
 }
 
+#[derive(Debug, clap::Args)]
+#[command(rename_all = "snake_case")]
+struct BinaryStatsLocal {
+    /// Binary artifact to examine.
+    artifact: PathBuf,
+
+    /// Optional second artifact to compare with the first one.
+    artifact2: Option<PathBuf>,
+}
+
 #[derive(Debug, clap::Subcommand)]
 #[command(rename_all = "snake_case")]
 enum BinaryStatsMode {
     /// Show size statistics for the selected compile benchmark(s).
     /// Optionally compares sizes between two compiler toolchains, if `--rustc2` is provided.
     Compile(BinaryStatsCompile),
+    /// Show size statistics for the selected binary artifact on disk.
+    /// Optionally compares sizes with a second provided artifact, if `--artifact2` is provided.
+    Local(BinaryStatsLocal),
 }
 
 // For each subcommand we list the mandatory arguments in the required
@@ -666,6 +681,9 @@ fn main_result() -> anyhow::Result<i32> {
             match mode {
                 BinaryStatsMode::Compile(args) => {
                     binary_stats_compile(args, symbols, &target_triple)?;
+                }
+                BinaryStatsMode::Local(args) => {
+                    binary_stats_local(args, symbols)?;
                 }
             }
 
@@ -1166,6 +1184,29 @@ Make sure to modify `{dir}/perf-config.json` if the category/artifact don't matc
             Ok(0)
         }
     }
+}
+
+fn binary_stats_local(args: BinaryStatsLocal, symbols: bool) -> anyhow::Result<()> {
+    let stats = ArtifactStats::from_path(&args.artifact)
+        .with_context(|| format!("Cannot load artifact from {}", args.artifact.display()))?;
+    let stats2 = args
+        .artifact2
+        .as_ref()
+        .map(|path| {
+            ArtifactStats::from_path(&path)
+                .with_context(|| format!("Cannot load artifact from {}", path.display()))
+        })
+        .transpose()?;
+    print_binary_stats(
+        "Sections",
+        stats.sections,
+        stats2.as_ref().map(|s| s.sections.clone()),
+    );
+    if symbols {
+        print_binary_stats("Symbols", stats.symbols, stats2.map(|s| s.symbols));
+    }
+
+    Ok(())
 }
 
 fn binary_stats_compile(
