@@ -975,7 +975,7 @@ impl ArtifactDescription {
         let bootstrap_total = bootstrap
             .values()
             .filter_map(|v| {
-                v.get(0)
+                v.first()
                     .copied()
                     .unwrap_or_default()
                     .map(|v| v.as_nanos() as u64)

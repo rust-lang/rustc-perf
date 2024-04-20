@@ -573,7 +573,7 @@ where
                 .into_owned()
                 .collect()
         })
-        .unwrap_or_else(HashMap::new);
+        .unwrap_or_default();
 
     match serde_json::from_str(&serde_json::to_string(&params).unwrap()) {
         Ok(d) => Ok(d),

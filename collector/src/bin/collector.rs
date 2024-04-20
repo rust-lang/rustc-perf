@@ -1193,7 +1193,7 @@ fn binary_stats_local(args: BinaryStatsLocal, symbols: bool) -> anyhow::Result<(
         .artifact2
         .as_ref()
         .map(|path| {
-            ArtifactStats::from_path(&path)
+            ArtifactStats::from_path(path)
                 .with_context(|| format!("Cannot load artifact from {}", path.display()))
         })
         .transpose()?;

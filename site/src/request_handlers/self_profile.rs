@@ -534,7 +534,7 @@ pub async fn handle_self_profile(
 
     let mut self_profile = get_or_download_self_profile(
         ctxt,
-        commits.get(0).unwrap().clone(),
+        commits.first().unwrap().clone(),
         bench_name,
         profile,
         scenario,
