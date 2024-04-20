@@ -117,7 +117,7 @@ impl<'a> Processor for ProfileProcessor<'a> {
                         fs::remove_dir_all(&zsp_dir)?;
                     }
 
-                    utils::fs::rename(&tmp_zsp_dir, &zsp_dir)?;
+                    utils::fs::rename(tmp_zsp_dir, &zsp_dir)?;
 
                     // Rename the data files. There should be exactly three.
                     let mut num_files = 0;
@@ -305,8 +305,8 @@ impl<'a> Processor for ProfileProcessor<'a> {
                         message_type: &'a str,
                     }
 
-                    let mut final_file = io::BufWriter::new(std::fs::File::create(&eprintln_file)?);
-                    for line in io::BufReader::new(std::fs::File::open(&tmp_eprintln_file)?).lines()
+                    let mut final_file = io::BufWriter::new(std::fs::File::create(eprintln_file)?);
+                    for line in io::BufReader::new(std::fs::File::open(tmp_eprintln_file)?).lines()
                     {
                         let line = line?;
 
@@ -327,11 +327,11 @@ impl<'a> Processor for ProfileProcessor<'a> {
                 // dir, giving it a new name in the process.
                 Profiler::MonoItems => {
                     let tmp_file = filepath(data.cwd, "mono-items");
-                    let out_dir = self.output_dir.join(&out_file("mono-items"));
+                    let out_dir = self.output_dir.join(out_file("mono-items"));
                     let _ = fs::create_dir_all(&out_dir);
                     let result_file = filepath(&out_dir, "raw");
 
-                    fs::copy(&tmp_file, &result_file)?;
+                    fs::copy(&tmp_file, result_file)?;
 
                     let mut by_cgu: HashMap<&str, Vec<(&str, &str)>> = HashMap::new();
                     let mono_items = std::fs::read_to_string(&tmp_file)?;
