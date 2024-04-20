@@ -450,7 +450,7 @@ enum BinaryStatsMode {
     /// Optionally compares sizes between two compiler toolchains, if `--rustc2` is provided.
     Compile(BinaryStatsCompile),
     /// Show size statistics for the selected binary artifact on disk.
-    /// Optionally compares sizes with a second provided artifact, if `--artifact2` is provided.
+    /// Optionally compares sizes with a second provided artifact.
     Local(BinaryStatsLocal),
 }
 
