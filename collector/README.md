@@ -518,19 +518,19 @@ Codegen diff is currently only implemented for runtime benchmarks.
 You can use the `binary_stats` command to display size statistics (section and symbol sizes) of
 binary artifacts (executables, libraries) of selected compile benchmarks.
 
-```
-./target/release/collector binary_stats `<rustc>` --include <benchmark name> \
+```bash
+./target/release/collector binary_stats compile `<rustc>` --include <benchmark name> \
     [--profile <Debug|Opt>] \
     [--backend <Llvm|Cranelift>]
 ```
 
 You can also compare (diff) the size statistics between two compilers:
-```
-./target/release/collector binary_stats `<rustc>` --include <benchmark name> --rustc2 <rustc2>
+```bash
+./target/release/collector binary_stats compile `<rustc>` --include <benchmark name> --rustc2 <rustc2>
 ```
 or between two codegen backends:
-```
-./target/release/collector binary_stats `<rustc>` --include <benchmark name> --rustc2 <rustc>
+```bash
+./target/release/collector binary_stats compile `<rustc>` --include <benchmark name> --rustc2 <rustc>
     --backend <Llvm|Cranelift> --backend2 <Llvm|Cranelift>
 ```
 
