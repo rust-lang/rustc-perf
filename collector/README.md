@@ -534,9 +534,9 @@ binary artifacts (executables, libraries). You can compare the binary statistics
   ./target/release/collector binary_stats compile `<rustc>` --include <benchmark name> --rustc2 <rustc>
       --backend <Llvm|Cranelift> --backend2 <Llvm|Cranelift>
   ```
-- Arbitrary binary artifacts on disk:
+- Arbitrary binary/library on disk:
   ```bash
-  ./target/release/collector binary_stats local `<artifact-path>` [<artifact-to-compare-to>]
+  ./target/release/collector binary_stats local `<binary/library path>` [<another binary/library path to compare to>]
   ```
 
 ## How `rustc` wrapping works
