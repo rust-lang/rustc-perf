@@ -14,6 +14,10 @@ jobs:
   test_and_deploy:
     name: Test and deploy
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20.x]
+
     steps:
       - name: Checkout the source code
         uses: actions/checkout@v2
@@ -30,6 +34,17 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: linux
+      
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Build frontend for testing
+        run: |
+          npm ci
+          npm run build
+        working-directory: ./site/frontend
 
       - name: Run unit tests
         run: cargo test --all
