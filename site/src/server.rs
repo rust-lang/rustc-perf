@@ -836,5 +836,20 @@ mod tests {
             .unwrap();
         assert_eq!(response.headers(), expected_response.headers());
         assert_eq!(hyper::body::to_bytes(response.into_body()).await.unwrap(), hyper::body::to_bytes(expected_response.into_body()).await.unwrap());
+
+        // Test case 2: Path is "/compare.html"
+        let req = Request::default();
+        let path = "/compare.html";
+        let use_compression = false;
+        let response = handle_fs_path(&req, path, use_compression).await.unwrap();
+        let expected_body = TEMPLATES.get_template("compare.html").await.unwrap();
+        let expected_response = http::Response::builder()
+            .header_typed(ETag::from_str(&format!(r#""{}""#, *VERSION_UUID)).unwrap())
+            .header(CACHE_CONTROL, "max-age=60, stale-while-revalidate=86400")
+            .header_typed(ContentType::html())
+            .body(hyper::Body::from(expected_body))
+            .unwrap();
+        assert_eq!(response.headers(), expected_response.headers());
+        assert_eq!(hyper::body::to_bytes(response.into_body()).await.unwrap(), hyper::body::to_bytes(expected_response.into_body()).await.unwrap());
     }
 }
