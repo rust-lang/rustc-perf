@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 {% block head %}
-<link rel="stylesheet" href="styles/uPlot.min.css">
+<link rel="stylesheet" href="../../node_modules/uplot/dist/uPlot.min.css">
 
 <style>
     body {
@@ -71,7 +71,7 @@
     }
 </style>
 
-<link rel="stylesheet" type="text/css" href="scripts/compare.css">
+<!-- <link rel="stylesheet" type="text/css" href="scripts/compare.css"> -->
 {% endblock %}
 {% block content %}
 {% raw %}
@@ -79,5 +79,5 @@
 {% endraw %}
 {% endblock %}
 {% block script %}
-<script src="scripts/compare.js"></script>
+<script type="module" src="../pages/compare.ts"></script>
 {% endblock %}

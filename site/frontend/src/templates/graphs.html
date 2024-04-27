@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 {% block head %}
-<link rel="stylesheet" href="styles/uPlot.min.css">
+<link rel="stylesheet" href="../../node_modules/uplot/dist/uPlot.min.css">
 <style>
     .uplot {
         display: inline-block;
@@ -43,10 +43,12 @@
         margin: 0;
     }
 </style>
+<!-- <link rel="stylesheet" type="text/css" href="graphs.css"> -->
+
 {% endblock %}
 {% block content %}
 <div id="app"></div>
 {% endblock %}
 {% block script %}
-<script src="scripts/bootstrap.js"></script>
+<script type="module" src="../pages/graphs.ts"></script>
 {% endblock %}

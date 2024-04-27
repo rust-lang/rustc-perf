@@ -30,32 +30,32 @@
   },
   "targets": {
     "dashboard": {
-      "source": "src/pages/dashboard.ts",
-      "distDir": "dist/scripts"
+      "source": "src/templates/dashboard.html",
+      "distDir": "dist/"
     },
     "status": {
-      "source": "src/pages/status.ts",
-      "distDir": "dist/scripts"
+      "source": "src/templates/status.html",
+      "distDir": "dist/"
     },
     "bootstrap": {
-      "source": "src/pages/bootstrap.ts",
-      "distDir": "dist/scripts"
+      "source": "src/templates/bootstrap.html",
+      "distDir": "dist/"
     },
     "graphs": {
-      "source": "src/pages/graphs.ts",
-      "distDir": "dist/scripts"
+      "source": "src/templates/graphs.html",
+      "distDir": "dist/"
     },
     "compare": {
-      "source": "src/pages/compare.ts",
-      "distDir": "dist/scripts"
+      "source": "src/templates/compare.html",
+      "distDir": "dist/"
     },
     "detailed-query": {
-      "source": "src/pages/detailed-query.ts",
-      "distDir": "dist/scripts"
+      "source": "src/templates/detailed-query.html",
+      "distDir": "dist/"
     },
-    "uplot": {
-      "source": "node_modules/uplot/dist/uPlot.min.css",
-      "distDir": "dist/styles"
+    "layout": {
+      "source": "src/templates/layout.html",
+      "distDir": "dist/"
     }
   },
   "browserslist": "> 0.5%, last 3 years, not dead",
