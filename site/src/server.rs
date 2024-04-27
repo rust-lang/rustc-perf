@@ -624,15 +624,12 @@ async fn handle_fs_path(
     }
 
     async fn resolve_template(path: &str) -> Vec<u8> {
-        TEMPLATES
-            .get_template(&format!("pages/{}", path))
-            .await
-            .unwrap()
+        TEMPLATES.get_template(&path).await.unwrap()
     }
 
     let relative_path = path.trim_start_matches('/');
     let source = match path {
-        "" | "/" | "/index.html" => resolve_template("graphs.html").await,
+        "" | "/" | "/index.html" | "/graphs.html" => resolve_template("graphs.html").await,
         "/bootstrap.html"
         | "/compare.html"
         | "/dashboard.html"
