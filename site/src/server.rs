@@ -835,7 +835,12 @@ mod tests {
             .body(hyper::Body::from(expected_body))
             .unwrap();
         assert_eq!(response.headers(), expected_response.headers());
-        assert_eq!(hyper::body::to_bytes(response.into_body()).await.unwrap(), hyper::body::to_bytes(expected_response.into_body()).await.unwrap());
+        assert_eq!(
+            hyper::body::to_bytes(response.into_body()).await.unwrap(),
+            hyper::body::to_bytes(expected_response.into_body())
+                .await
+                .unwrap()
+        );
 
         // Test case 2: Path is "/compare.html"
         let req = Request::default();
@@ -850,6 +855,11 @@ mod tests {
             .body(hyper::Body::from(expected_body))
             .unwrap();
         assert_eq!(response.headers(), expected_response.headers());
-        assert_eq!(hyper::body::to_bytes(response.into_body()).await.unwrap(), hyper::body::to_bytes(expected_response.into_body()).await.unwrap());
+        assert_eq!(
+            hyper::body::to_bytes(response.into_body()).await.unwrap(),
+            hyper::body::to_bytes(expected_response.into_body())
+                .await
+                .unwrap()
+        );
     }
 }
