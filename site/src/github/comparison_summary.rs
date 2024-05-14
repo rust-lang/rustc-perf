@@ -324,8 +324,25 @@ fn write_metric_summary(
                 write_summary_table(&primary, &secondary, false, message);
             }
             DefaultMetricVisibility::Hidden => {
+                let format_summary =
+                    |buffer: &mut Vec<String>, label: &str, summary: &ArtifactComparisonSummary| {
+                        if summary.is_relevant() {
+                            buffer.push(format!(
+                                "{label} {:.1}%",
+                                summary.arithmetic_mean_of_changes()
+                            ));
+                        }
+                    };
+
+                // At this point, we know that at least one of primary or secondary are relevant
+                let mut results = vec![];
+                format_summary(&mut results, "primary", &primary);
+                format_summary(&mut results, "secondary", &secondary);
+
+                let summary = format!("Results ({})", results.join(", "));
+
                 // `<details>` means it is hidden, requiring a click to reveal.
-                message.push_str("<details>\n<summary>Results</summary>\n\n");
+                message.push_str(&format!("<details>\n<summary>{summary}</summary>\n\n"));
                 message.push_str(
                     "This is a less reliable metric that may be of interest but was not \
                 used to determine the overall result at the top of this comment.\n\n",
