@@ -309,6 +309,13 @@ onMounted(() => {
     sectionsDetail.value = d;
   });
 });
+
+const catapultUrl = (artifact: ArtifactDescription) =>
+  computed(() => {
+    const {commit} = artifact;
+    const {benchmark, profile, scenario} = props.testCase;
+    return `/perf/self-profile-viewer?commit=${commit}&benchmark=${benchmark}-${profile.toLowerCase()}&scenario=${scenario}&type=crox`;
+  });
 </script>
 
 <template>
@@ -379,8 +386,9 @@ onMounted(() => {
             <PerfettoLink
               :artifact="props.baseArtifact"
               :test-case="props.testCase"
-              >query trace
-            </PerfettoLink>
+              >query trace </PerfettoLink
+            >,
+            <a :href="catapultUrl(props.baseArtifact).value">catapult</a>
           </li>
           <li>
             After:
@@ -388,8 +396,9 @@ onMounted(() => {
               >self-profile</a
             >,
             <PerfettoLink :artifact="props.artifact" :test-case="props.testCase"
-              >query trace
-            </PerfettoLink>
+              >query trace </PerfettoLink
+            >,
+            <a :href="catapultUrl(props.artifact).value">catapult</a>
           </li>
           <li>
             <a
