@@ -1,12 +1,16 @@
 use std::collections::HashSet;
 use std::io::Read;
+use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Instant;
 
 use bytes::Buf;
 use database::CommitType;
 use headers::{ContentType, Header};
-use hyper::StatusCode;
+use hyper::{body, StatusCode};
+use tokio::fs::File;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::process::Command;
 
 use crate::api::self_profile::ArtifactSizeDelta;
 use crate::api::{self_profile, self_profile_processed, self_profile_raw, ServerResult};
@@ -16,6 +20,40 @@ use crate::load::SiteCtxt;
 use crate::selector::{self};
 use crate::self_profile::{get_or_download_self_profile, get_self_profile_raw_data};
 use crate::server::{Response, ResponseHeaders};
+
+pub async fn handle_self_profile_viewer(
+    body: self_profile_processed::Request,
+    ctxt: &SiteCtxt,
+) -> http::Response<hyper::Body> {
+    log::info!("handle_self_profile_viewer({:?})", body);
+
+    let resp_body = handle_self_profile_processed_download(body, ctxt)
+        .await
+        .into_body();
+
+    let mut json = File::create("trace.json").await.unwrap();
+    json.write_all(&body::to_bytes(resp_body).await.unwrap())
+        .await
+        .unwrap();
+
+    let mut cmd = Command::new("python3")
+        .args(["./catapult/tracing/bin/trace2html", "trace.json"])
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("failed to run trace2html");
+
+    cmd.wait().await.unwrap();
+
+    let builder = http::Response::builder()
+        .header_typed(ContentType::html())
+        .status(StatusCode::OK);
+
+    let mut html_buf = Vec::new();
+    let mut html = File::open("trace.html").await.unwrap();
+    html.read_to_end(&mut html_buf).await.unwrap();
+
+    builder.body(hyper::Body::from(html_buf)).unwrap()
+}
 
 pub async fn handle_self_profile_processed_download(
     body: self_profile_processed::Request,
