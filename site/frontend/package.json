@@ -14,7 +14,6 @@
     "@babel/types": "^7.21.4",
     "@parcel/compressor-brotli": "^2.8.3",
     "@parcel/transformer-vue": "^2.8.3",
-    "@types/highcharts": "^7.0.0",
     "@types/msgpack-lite": "^0.1.8",
     "prettier": "2.8.8",
     "typescript": "^5.0.2",
@@ -22,7 +21,7 @@
   },
   "dependencies": {
     "date-fns": "^2.30.0",
-    "highcharts": "6.0.7",
+    "highcharts": "^11.4.1",
     "msgpack-lite": "^0.1.26",
     "parcel": "^2.8.3",
     "sass": "^1.59.3",
