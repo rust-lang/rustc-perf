@@ -445,6 +445,10 @@ onMounted(() => {
     <div class="columns">
       <div class="rows center-items grow">
         <div class="title bold">Catapult</div>
+        <CatapultIframe
+          :artifact="props.baseArtifact"
+          :testCase="props.testCase"
+        />
         <CatapultIframe :artifact="props.artifact" :testCase="props.testCase" />
       </div>
     </div>
