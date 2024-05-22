@@ -29,6 +29,8 @@ import CompileSectionsChart from "./sections-chart.vue";
 import PerfettoLink from "../../../../components/perfetto-link.vue";
 import ProfileShortcut from "./shortcuts/profile-shortcut.vue";
 import BinarySizeShortcut from "./shortcuts/binary-size-shortcut.vue";
+import {catapultUrl} from "../../../../self-profile";
+import CatapultIframe from "../../../../components/catapult-iframe.vue";
 
 const props = defineProps<{
   testCase: CompileTestCase;
@@ -309,13 +311,6 @@ onMounted(() => {
     sectionsDetail.value = d;
   });
 });
-
-const catapultUrl = (artifact: ArtifactDescription) =>
-  computed(() => {
-    const {commit} = artifact;
-    const {benchmark, profile, scenario} = props.testCase;
-    return `/perf/self-profile-viewer?commit=${commit}&benchmark=${benchmark}-${profile.toLowerCase()}&scenario=${scenario}&type=crox`;
-  });
 </script>
 
 <template>
@@ -388,7 +383,9 @@ const catapultUrl = (artifact: ArtifactDescription) =>
               :test-case="props.testCase"
               >query trace </PerfettoLink
             >,
-            <a :href="catapultUrl(props.baseArtifact).value">catapult</a>
+            <a :href="catapultUrl(props.baseArtifact, props.testCase)"
+              >catapult</a
+            >
           </li>
           <li>
             After:
@@ -398,7 +395,7 @@ const catapultUrl = (artifact: ArtifactDescription) =>
             <PerfettoLink :artifact="props.artifact" :test-case="props.testCase"
               >query trace </PerfettoLink
             >,
-            <a :href="catapultUrl(props.artifact).value">catapult</a>
+            <a :href="catapultUrl(props.artifact, props.testCase)">catapult</a>
           </li>
           <li>
             <a
@@ -444,6 +441,10 @@ const catapultUrl = (artifact: ArtifactDescription) =>
         </div>
         <div ref="relativeToPreviousChartElement"></div>
       </div>
+    </div>
+    <div class="columns">
+      <p>Catapult</p>
+      <CatapultIframe :artifact="props.artifact" :testCase="props.testCase" />
     </div>
     <div class="columns" v-if="props.metric !== BINARY_SIZE_METRIC">
       <div class="rows center-items grow">
