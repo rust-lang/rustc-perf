@@ -29,10 +29,13 @@ function render(
   versions: [string]
 ) {
   let articles = {check: "a", debug: "a", opt: "an", doc: "a"};
-  new Highcharts.chart(document.getElementById(element), {
+
+  Highcharts.chart({
     chart: {
-      zoomType: "xy",
-      renderTo: document.getElementById(element),
+      renderTo: element,
+      zooming: {
+        type: "xy",
+      },
       type: "line",
     },
     title: {
@@ -48,21 +51,25 @@ function render(
     },
     series: [
       {
+        type: "line",
         name: "full",
         animation: false,
         data: data.clean_averages,
       },
       {
+        type: "line",
         name: "incremental full",
         animation: false,
         data: data.base_incr_averages,
       },
       {
+        type: "line",
         name: "incremental unchanged",
         animation: false,
         data: data.clean_incr_averages,
       },
       {
+        type: "line",
         name: "incremental patched: println",
         animation: false,
         data: data.println_incr_averages,
