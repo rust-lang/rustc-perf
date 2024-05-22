@@ -47,6 +47,7 @@ pub async fn handle_self_profile_viewer(
         .expect("failed to run trace2html");
 
     cmd.wait().await.unwrap();
+    json.close().unwrap();
 
     let mut builder = http::Response::builder()
         .header_typed(ContentType::html())
@@ -60,6 +61,7 @@ pub async fn handle_self_profile_viewer(
 
     let mut html_buf = Vec::new();
     html.read_to_end(&mut html_buf).unwrap();
+    html.close().unwrap();
 
     builder.body(hyper::Body::from(html_buf)).unwrap()
 }
