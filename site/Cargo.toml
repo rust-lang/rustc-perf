@@ -54,6 +54,7 @@ rust-embed = { version = "6.6.0", features = [
 humansize = "2"
 lru = "0.12.0"
 ruzstd = "0.6.0"
+tempfile = "3.10.1"
 
 [target.'cfg(unix)'.dependencies]
 jemallocator = "0.5"

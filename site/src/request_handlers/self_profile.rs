@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Instant;
@@ -8,8 +8,6 @@ use bytes::Buf;
 use database::CommitType;
 use headers::{ContentType, Header};
 use hyper::{body, StatusCode};
-use tokio::fs::File;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
 
 use crate::api::self_profile::ArtifactSizeDelta;
@@ -31,13 +29,19 @@ pub async fn handle_self_profile_viewer(
         .await
         .into_body();
 
-    let mut json = File::create("trace.json").await.unwrap();
+    let mut json = tempfile::NamedTempFile::new().unwrap();
     json.write_all(&body::to_bytes(resp_body).await.unwrap())
-        .await
         .unwrap();
 
+    let mut html = tempfile::NamedTempFile::new().unwrap();
+
     let mut cmd = Command::new("python3")
-        .args(["./catapult/tracing/bin/trace2html", "trace.json"])
+        .args([
+            "./catapult/tracing/bin/trace2html",
+            json.path().to_str().unwrap(),
+            "--output",
+            html.path().to_str().unwrap(),
+        ])
         .stdout(Stdio::piped())
         .spawn()
         .expect("failed to run trace2html");
@@ -55,8 +59,7 @@ pub async fn handle_self_profile_viewer(
     );
 
     let mut html_buf = Vec::new();
-    let mut html = File::open("trace.html").await.unwrap();
-    html.read_to_end(&mut html_buf).await.unwrap();
+    html.read_to_end(&mut html_buf).unwrap();
 
     builder.body(hyper::Body::from(html_buf)).unwrap()
 }

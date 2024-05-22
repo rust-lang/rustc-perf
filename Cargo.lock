@@ -2385,6 +2385,7 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "snap",
+ "tempfile",
  "tera",
  "thiserror",
  "tokio",
