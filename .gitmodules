@@ -1,0 +1,3 @@
+[submodule "site/catapult"]
+	path = site/catapult
+	url = https://chromium.googlesource.com/catapult
