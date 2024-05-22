@@ -443,8 +443,10 @@ onMounted(() => {
       </div>
     </div>
     <div class="columns">
-      <p>Catapult</p>
-      <CatapultIframe :artifact="props.artifact" :testCase="props.testCase" />
+      <div class="rows center-items grow">
+        <div class="title bold">Catapult</div>
+        <CatapultIframe :artifact="props.artifact" :testCase="props.testCase" />
+      </div>
     </div>
     <div class="columns" v-if="props.metric !== BINARY_SIZE_METRIC">
       <div class="rows center-items grow">
