@@ -44,9 +44,15 @@ pub async fn handle_self_profile_viewer(
 
     cmd.wait().await.unwrap();
 
-    let builder = http::Response::builder()
+    let mut builder = http::Response::builder()
         .header_typed(ContentType::html())
         .status(StatusCode::OK);
+
+    builder.headers_mut().unwrap().insert(
+        hyper::header::CONTENT_SECURITY_POLICY,
+        hyper::header::HeaderValue::from_maybe_shared("frame-ancestors 'self'")
+            .expect("valid header"),
+    );
 
     let mut html_buf = Vec::new();
     let mut html = File::open("trace.html").await.unwrap();
