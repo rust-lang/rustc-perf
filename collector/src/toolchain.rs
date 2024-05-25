@@ -253,6 +253,7 @@ pub struct ToolchainComponents {
     pub rustdoc: Option<PathBuf>,
     pub clippy: Option<PathBuf>,
     pub cargo: PathBuf,
+    pub cargo_configs: Vec<String>,
     pub lib_rustc: Option<PathBuf>,
     pub lib_std: Option<PathBuf>,
     pub lib_test: Option<PathBuf>,
@@ -329,6 +330,8 @@ pub struct ToolchainConfig<'a> {
     rustdoc: Option<&'a Path>,
     clippy: Option<&'a Path>,
     cargo: Option<&'a Path>,
+    /// For `cargo --config <value>`.
+    cargo_configs: &'a [String],
     id: Option<&'a str>,
 }
 
@@ -343,8 +346,9 @@ impl<'a> ToolchainConfig<'a> {
         self
     }
 
-    pub fn cargo(&mut self, cargo: Option<&'a Path>) -> &mut Self {
+    pub fn cargo(&mut self, cargo: Option<&'a Path>, configs: &'a [String]) -> &mut Self {
         self.cargo = cargo;
+        self.cargo_configs = configs;
         self
     }
 
@@ -520,13 +524,13 @@ pub fn get_local_toolchain(
         debug!("found cargo: {:?}", &cargo);
         cargo
     };
-
     let lib_dir = get_lib_dir_from_rustc(&rustc).context("Cannot find libdir for rustc")?;
 
+    let mut components =
+        ToolchainComponents::from_binaries_and_libdir(rustc, rustdoc, clippy, cargo, &lib_dir)?;
+    components.cargo_configs = toolchain_config.cargo_configs.to_vec();
     Ok(Toolchain {
-        components: ToolchainComponents::from_binaries_and_libdir(
-            rustc, rustdoc, clippy, cargo, &lib_dir,
-        )?,
+        components,
         id,
         triple: target_triple,
     })

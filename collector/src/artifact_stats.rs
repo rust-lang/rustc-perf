@@ -164,6 +164,9 @@ pub fn compile_and_get_stats(
 
     let mut cmd = Command::new(&toolchain.components.cargo);
     cmd.arg("build").arg("--target-dir").arg(tempdir.path());
+    for config in &toolchain.components.cargo_configs {
+        cmd.arg("--config").arg(config);
+    }
     match profile {
         CargoProfile::Debug => {}
         CargoProfile::Release => {

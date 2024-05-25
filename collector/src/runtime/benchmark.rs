@@ -337,6 +337,10 @@ fn start_cargo_build(
     #[cfg(feature = "precise-cachegrind")]
     command.arg("--features").arg("benchlib/precise-cachegrind");
 
+    for config in &toolchain.components.cargo_configs {
+        command.arg("--config").arg(config);
+    }
+
     CargoArtifactIter::from_cargo_cmd(command)
         .map_err(|error| anyhow::anyhow!("Failed to start cargo: {:?}", error))
 }

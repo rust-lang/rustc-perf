@@ -313,6 +313,10 @@ struct LocalOptions {
     #[arg(long)]
     cargo: Option<PathBuf>,
 
+    /// Arguments passed to `cargo --config <value>`.
+    #[arg(long)]
+    cargo_config: Vec<String>,
+
     /// Exclude all benchmarks matching a prefix in this comma-separated list
     #[arg(long, value_delimiter = ',')]
     exclude: Vec<String>,
@@ -845,7 +849,7 @@ fn main_result() -> anyhow::Result<i32> {
                 *ToolchainConfig::default()
                     .rustdoc(opts.rustdoc.as_deref())
                     .clippy(opts.clippy.as_deref())
-                    .cargo(local.cargo.as_deref())
+                    .cargo(local.cargo.as_deref(), local.cargo_config.as_slice())
                     .id(local.id.as_deref()),
                 "",
                 target_triple,
@@ -1070,7 +1074,7 @@ fn main_result() -> anyhow::Result<i32> {
                         *ToolchainConfig::default()
                             .rustdoc(opts.rustdoc.as_deref())
                             .clippy(opts.clippy.as_deref())
-                            .cargo(local.cargo.as_deref())
+                            .cargo(local.cargo.as_deref(), local.cargo_config.as_slice())
                             .id(local.id.as_deref()),
                         suffix,
                         target_triple.clone(),
@@ -1228,7 +1232,7 @@ fn binary_stats_compile(
         &[codegen_backend],
         &local.rustc,
         *ToolchainConfig::default()
-            .cargo(local.cargo.as_deref())
+            .cargo(local.cargo.as_deref(), local.cargo_config.as_slice())
             .id(local.id.as_deref()),
         "",
         target_triple.to_string(),
@@ -1240,7 +1244,7 @@ fn binary_stats_compile(
                 &[codegen_backend2],
                 &rustc,
                 *ToolchainConfig::default()
-                    .cargo(local.cargo.as_deref())
+                    .cargo(local.cargo.as_deref(), local.cargo_config.as_slice())
                     .id(local.id.as_deref()),
                 "",
                 target_triple.to_string(),
@@ -1484,7 +1488,7 @@ fn get_local_toolchain_for_runtime_benchmarks(
         &[CodegenBackend::Llvm],
         &local.rustc,
         *ToolchainConfig::default()
-            .cargo(local.cargo.as_deref())
+            .cargo(local.cargo.as_deref(), local.cargo_config.as_slice())
             .id(local.id.as_deref()),
         "",
         target_triple.to_string(),
