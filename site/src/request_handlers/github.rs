@@ -104,7 +104,9 @@ async fn handle_rust_timer(
     issue: github::Issue,
 ) -> ServerResult<github::Response> {
     if comment.author_association != github::Association::Owner
-        && !get_authorized_users().await?.contains(&comment.user.id)
+        && !get_authorized_users()
+            .await?
+            .contains(&(comment.user.id as _))
     {
         main_client
             .post_comment(
@@ -177,17 +179,28 @@ fn build_captures(comment_body: &str) -> impl Iterator<Item = (&str, regex::Capt
         })
 }
 
-pub async fn get_authorized_users() -> Result<Vec<usize>, String> {
-    let url = format!("{}/permissions/perf.json", ::rust_team_data::v1::BASE_URL);
+/// Gets GitHub user IDs authorized to use rust-timer.
+///
+/// This data is fetched from the team V1 API. See:
+///
+/// * [V1 API base URL](https://github.com/rust-lang/team/blob/28eb994c7334d84cbbfeda221af8555a9bac7a47/rust_team_data/src/v1.rs#L4)
+/// * [`/permission/perf.json` endpoint](https://github.com/rust-lang/team/blob/28eb994c7334d84cbbfeda221af8555a9bac7a47/src/static_api.rs#L320-L328)
+pub async fn get_authorized_users() -> Result<Vec<u64>, String> {
+    #[derive(serde::Deserialize)]
+    struct Permission {
+        github_ids: Vec<u64>,
+    }
+
+    let url = "https://team-api.infra.rust-lang.org/v1/permissions/perf.json";
     let client = reqwest::Client::new();
     client
-        .get(&url)
+        .get(url)
         .send()
         .await
         .map_err(|err| format!("failed to fetch authorized users: {}", err))?
         .error_for_status()
         .map_err(|err| format!("failed to fetch authorized users: {}", err))?
-        .json::<rust_team_data::v1::Permission>()
+        .json::<Permission>()
         .await
         .map_err(|err| format!("failed to fetch authorized users: {}", err))
         .map(|perms| perms.github_ids)

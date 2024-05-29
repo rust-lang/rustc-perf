@@ -1109,7 +1109,6 @@ checksum = "d530e1a18b1cb4c484e6e34556a0d948706958449fca0cab753d649f2bce3d1f"
 dependencies = [
  "equivalent",
  "hashbrown",
- "serde",
 ]
 
 [[package]]
@@ -2088,15 +2087,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rust_team_data"
-version = "1.0.0"
-source = "git+https://github.com/rust-lang/team#89bb40d3dca1bd9a6c6dbc1b8cb2ddc1fcc932ad"
-dependencies = [
- "indexmap",
- "serde",
-]
-
-[[package]]
 name = "rustc-demangle"
 version = "0.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2346,7 +2336,6 @@ dependencies = [
  "ring",
  "rmp-serde",
  "rust-embed",
- "rust_team_data",
  "ruzstd 0.6.0",
  "semver",
  "serde",
