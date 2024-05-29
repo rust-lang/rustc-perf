@@ -115,6 +115,10 @@ The following options alter the behaviour of the `bench_local` subcommand.
   by `rustup` will be used. This is usually fine, though in rare cases it may
   cause local results to not exactly match production results, because Cargo
   sometimes begins passing (or stops passing) various flags to rustc.
+- `--cargo-config <CONFIG>`: a Cargo configuration value or a path to a Cargo
+  configuration file. This flag can be specified multiple times, and will be
+  passed to the Cargo executable as the value of the flag
+  [`--config`](https://doc.rust-lang.org/nightly/cargo/commands/cargo.html#option-cargo---config).
 - `--db <DATABASE>`: a path (relative or absolute) to a sqlite database file in
   which the timing data will be placed. It will be created if it does not
   already exist. The default is `results.db`. Alternatively, the collector
@@ -195,7 +199,7 @@ and discover all benchmarks within them. If you only want to run benchmark(s) fr
 you can use this to speed up the runtime benchmarking or profiling commands.
 
 The `bench_runtime_local` command also shares some options with the `bench_local` command, notably
-`--id`, `--db`, `--cargo`, `--include`, `--exclude` and `--iterations`. 
+`--id`, `--db`, `--cargo`, `--cargo-config`, `--include`, `--exclude` and `--iterations`. 
 
 ### How to view the measurements on your own machine
 
@@ -465,6 +469,7 @@ fashion to the one chosen for `bench_local`.
 
 The following options alter the behaviour of the `profile_local` subcommand.
 - `--cargo <CARGO>`: as for `bench_local`.
+- `--cargo-config <CONFIG>`: as for `bench_local`.
 - `--exclude <EXCLUDE>`: as for `bench_local`.
 - `--id <ID>`: an identifer that will form part of the output filenames.
 - `--include <INCLUDE>`: as for `bench_local`.
