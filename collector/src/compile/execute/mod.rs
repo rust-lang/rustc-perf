@@ -180,6 +180,10 @@ impl<'a> CargoProcess<'a> {
         if let Some(c) = &self.toolchain.components.clippy {
             cmd.env("CLIPPY", &*FAKE_CLIPPY).env("CLIPPY_REAL", c);
         }
+
+        for config in &self.toolchain.components.cargo_configs {
+            cmd.arg("--config").arg(config);
+        }
         cmd
     }
 
