@@ -177,7 +177,7 @@ fn build_captures(comment_body: &str) -> impl Iterator<Item = (&str, regex::Capt
         })
 }
 
-pub async fn get_authorized_users() -> Result<Vec<usize>, String> {
+pub async fn get_authorized_users() -> Result<Vec<u64>, String> {
     let url = format!("{}/permissions/perf.json", ::rust_team_data::v1::BASE_URL);
     let client = reqwest::Client::new();
     client

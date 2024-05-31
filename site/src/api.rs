@@ -507,7 +507,7 @@ pub mod github {
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     pub struct User {
-        pub id: usize,
+        pub id: u64,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
