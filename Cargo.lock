@@ -53,34 +53,6 @@ checksum = "0942ffc6dcaadf03badf6e6a2d0228460359d5e34b57ccdc720b7382dfbd5ec5"
 
 [[package]]
 name = "analyzeme"
-version = "9.2.0"
-source = "git+https://github.com/rust-lang/measureme?tag=9.2.0#9f51cde2e5dd3ef0392f0f6a7201f4946502ef41"
-dependencies = [
- "byteorder",
- "measureme 9.2.0",
- "memchr",
- "rustc-hash",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "analyzeme"
-version = "11.0.0"
-source = "git+https://github.com/rust-lang/measureme?branch=stable#f2914503011098feb1bc9205c75dfb53203f9d9c"
-dependencies = [
- "analyzeme 9.2.0",
- "decodeme 10.1.2",
- "decodeme 11.0.0",
- "measureme 10.1.2",
- "measureme 11.0.0",
- "memchr",
- "rustc-hash",
- "serde",
-]
-
-[[package]]
-name = "analyzeme"
 version = "12.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "20feead6e1e9722cb326230127d5ca89fe5c4609cb0dd047c3b58c81a26cfd18"
@@ -371,7 +343,7 @@ dependencies = [
 name = "collector"
 version = "0.1.0"
 dependencies = [
- "analyzeme 12.0.0",
+ "analyzeme",
  "anyhow",
  "benchlib",
  "cargo_metadata",
@@ -557,35 +529,11 @@ dependencies = [
 
 [[package]]
 name = "decodeme"
-version = "10.1.2"
-source = "git+https://github.com/rust-lang/measureme?tag=10.1.2#f9f84d1a79c46e9927926c177c33eb3ea3c72979"
-dependencies = [
- "measureme 10.1.2",
- "memchr",
- "rustc-hash",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "decodeme"
 version = "10.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8907b810935b1fc70e90f415d88e5e3fb1fc0d17058c7da49d5e294eab89decf"
 dependencies = [
  "measureme 10.1.3",
- "memchr",
- "rustc-hash",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "decodeme"
-version = "11.0.0"
-source = "git+https://github.com/rust-lang/measureme?branch=stable#f2914503011098feb1bc9205c75dfb53203f9d9c"
-dependencies = [
- "measureme 11.0.0",
  "memchr",
  "rustc-hash",
  "serde",
@@ -1187,7 +1135,7 @@ dependencies = [
  "bumpalo",
  "hashbrown",
  "lazy_static",
- "parking_lot 0.12.1",
+ "parking_lot",
  "serde",
  "serde_derive",
 ]
@@ -1370,52 +1318,13 @@ dependencies = [
 
 [[package]]
 name = "measureme"
-version = "9.2.0"
-source = "git+https://github.com/rust-lang/measureme?tag=9.2.0#9f51cde2e5dd3ef0392f0f6a7201f4946502ef41"
-dependencies = [
- "log",
- "memmap2",
- "parking_lot 0.11.2",
- "perf-event-open-sys 1.0.1",
- "rustc-hash",
- "smallvec",
-]
-
-[[package]]
-name = "measureme"
-version = "10.1.2"
-source = "git+https://github.com/rust-lang/measureme?tag=10.1.2#f9f84d1a79c46e9927926c177c33eb3ea3c72979"
-dependencies = [
- "log",
- "memmap2",
- "parking_lot 0.12.1",
- "perf-event-open-sys 3.0.0",
- "rustc-hash",
- "smallvec",
-]
-
-[[package]]
-name = "measureme"
 version = "10.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4f0c6afa424b30bee598dc5e8116cd01359bc57919cb10ac38cf9e0914f16c0b"
 dependencies = [
  "log",
  "memmap2",
- "parking_lot 0.12.1",
- "perf-event-open-sys 3.0.0",
- "rustc-hash",
- "smallvec",
-]
-
-[[package]]
-name = "measureme"
-version = "11.0.0"
-source = "git+https://github.com/rust-lang/measureme?branch=stable#f2914503011098feb1bc9205c75dfb53203f9d9c"
-dependencies = [
- "log",
- "memmap2",
- "parking_lot 0.12.1",
+ "parking_lot",
  "perf-event-open-sys 3.0.0",
  "rustc-hash",
  "smallvec",
@@ -1429,7 +1338,7 @@ checksum = "3ed2d26a61b68ba37bf203340b6b6addf4da2c2e7cfb0cff700792088d69ebc9"
 dependencies = [
  "log",
  "memmap2",
- "parking_lot 0.12.1",
+ "parking_lot",
  "perf-event-open-sys 3.0.0",
  "rustc-hash",
  "smallvec",
@@ -1640,37 +1549,12 @@ dependencies = [
 
 [[package]]
 name = "parking_lot"
-version = "0.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d17b78036a60663b797adeaee46f5c9dfebb86948d1255007a1d6be0271ff99"
-dependencies = [
- "instant",
- "lock_api",
- "parking_lot_core 0.8.6",
-]
-
-[[package]]
-name = "parking_lot"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3742b2c103b9f06bc9fff0a37ff4912935851bee6d36f3c02bcc755bcfec228f"
 dependencies = [
  "lock_api",
- "parking_lot_core 0.9.7",
-]
-
-[[package]]
-name = "parking_lot_core"
-version = "0.8.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "60a2cfe6f0ad2bfc16aefa463b497d5c7a5ecd44a23efa72aa342d90177356dc"
-dependencies = [
- "cfg-if",
- "instant",
- "libc",
- "redox_syscall",
- "smallvec",
- "winapi",
+ "parking_lot_core",
 ]
 
 [[package]]
@@ -1706,15 +1590,6 @@ checksum = "b4d6393d9238342159080d79b78cb59c67399a8e7ecfa5d410bd614169e4e823"
 dependencies = [
  "libc",
  "perf-event-open-sys 4.0.0",
-]
-
-[[package]]
-name = "perf-event-open-sys"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce9bedf5da2c234fdf2391ede2b90fabf585355f33100689bc364a3ea558561a"
-dependencies = [
- "libc",
 ]
 
 [[package]]
@@ -1907,7 +1782,7 @@ dependencies = [
  "fnv",
  "lazy_static",
  "memchr",
- "parking_lot 0.12.1",
+ "parking_lot",
  "protobuf",
  "thiserror",
 ]
@@ -2383,7 +2258,7 @@ checksum = "7bd3e3206899af3f8b12af284fafc038cc1dc2b41d1b89dd17297221c5d225de"
 name = "site"
 version = "0.1.0"
 dependencies = [
- "analyzeme 11.0.0",
+ "analyzeme",
  "anyhow",
  "arc-swap",
  "async-trait",
@@ -2408,7 +2283,7 @@ dependencies = [
  "log",
  "lru",
  "mime",
- "parking_lot 0.12.1",
+ "parking_lot",
  "prometheus",
  "regex",
  "reqwest",
@@ -2711,7 +2586,7 @@ dependencies = [
  "futures-channel",
  "futures-util",
  "log",
- "parking_lot 0.12.1",
+ "parking_lot",
  "percent-encoding",
  "phf",
  "pin-project-lite",

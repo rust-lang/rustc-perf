@@ -37,7 +37,7 @@ async-trait = "0.1"
 database = { path = "../database" }
 bytes = "1.0"
 url = "2"
-analyzeme = { git = "https://github.com/rust-lang/measureme", branch = "stable" }
+analyzeme = "12.0.0"
 inferno = { version = "0.11", default-features = false }
 mime = "0.3"
 prometheus = "0.13"
