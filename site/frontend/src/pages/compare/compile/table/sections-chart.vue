@@ -66,6 +66,18 @@ function getRowWidth(): number {
   return maxTotalWidth.value;
 }
 
+function getTitle(section_name: string): string {
+  if (section_name === "Frontend") {
+    return "Lexing, parsing, macro expansion, borrow checking, type checking, trait solving, ...";
+  } else if (section_name === "Backend") {
+    return "Monomorphization, MIR-to-IR conversion, backend (LLVM/Cranelift/...) code generation";
+  } else if (section_name === "Linker") {
+    return "Linking of the final artifact (with bfd/lld/...)";
+  } else {
+    return "";
+  }
+}
+
 const chartRows: ComputedRef<Array<[string, CompilationSections]>> = computed(
   () => [
     ["Before", props.before],
@@ -105,6 +117,7 @@ const activeSection: Ref<string | null> = ref(null);
 function activate(section: string) {
   activeSection.value = section;
 }
+
 function deactivate() {
   activeSection.value = null;
 }
@@ -176,6 +189,7 @@ function deactivate() {
               @mouseenter="activate(item.section.name)"
               @mouseleave="deactivate"
               :class="{active: activeSection === item.section.name}"
+              :title="getTitle(item.section.name)"
             >
               <td>
                 <div class="color" :style="{backgroundColor: item.color}"></div>
@@ -196,6 +210,7 @@ function deactivate() {
   display: flex;
   align-items: center;
 }
+
 .chart {
   display: flex;
   justify-content: flex-end;
@@ -240,6 +255,7 @@ function deactivate() {
 .section:last-child {
   border-radius: 0 5px 5px 0;
 }
+
 .legend {
   margin-left: 40px;
 
@@ -249,13 +265,16 @@ function deactivate() {
       padding: 5px;
     }
   }
+
   .color {
     width: 15px;
     height: 15px;
   }
+
   .active {
     font-weight: bold;
   }
+
   .name {
     margin-left: 5px;
   }
