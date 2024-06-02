@@ -434,6 +434,11 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
             let req = check!(parse_query_string(req.uri()));
             return Ok(request_handlers::handle_self_profile_processed_download(req, &ctxt).await);
         }
+        "/perf/self-profile-viewer" => {
+            let ctxt: Arc<SiteCtxt> = server.ctxt.read().as_ref().unwrap().clone();
+            let req = check!(parse_query_string(req.uri()));
+            return Ok(request_handlers::handle_self_profile_viewer(req, &ctxt).await);
+        }
         _ if req.method() == http::Method::GET => return Ok(not_found()),
         _ => {}
     }

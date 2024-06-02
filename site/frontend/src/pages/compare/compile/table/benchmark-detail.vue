@@ -29,6 +29,8 @@ import CompileSectionsChart from "./sections-chart.vue";
 import PerfettoLink from "../../../../components/perfetto-link.vue";
 import ProfileShortcut from "./shortcuts/profile-shortcut.vue";
 import BinarySizeShortcut from "./shortcuts/binary-size-shortcut.vue";
+import {catapultUrl} from "../../../../self-profile";
+import CatapultIframe from "../../../../components/catapult-iframe.vue";
 
 const props = defineProps<{
   testCase: CompileTestCase;
@@ -379,8 +381,11 @@ onMounted(() => {
             <PerfettoLink
               :artifact="props.baseArtifact"
               :test-case="props.testCase"
-              >query trace
-            </PerfettoLink>
+              >query trace </PerfettoLink
+            >,
+            <a :href="catapultUrl(props.baseArtifact, props.testCase)"
+              >catapult</a
+            >
           </li>
           <li>
             After:
@@ -388,8 +393,9 @@ onMounted(() => {
               >self-profile</a
             >,
             <PerfettoLink :artifact="props.artifact" :test-case="props.testCase"
-              >query trace
-            </PerfettoLink>
+              >query trace </PerfettoLink
+            >,
+            <a :href="catapultUrl(props.artifact, props.testCase)">catapult</a>
           </li>
           <li>
             <a
@@ -434,6 +440,16 @@ onMounted(() => {
           </div>
         </div>
         <div ref="relativeToPreviousChartElement"></div>
+      </div>
+    </div>
+    <div class="columns">
+      <div class="rows center-items grow">
+        <div class="title bold">Catapult</div>
+        <CatapultIframe
+          :artifact="props.baseArtifact"
+          :testCase="props.testCase"
+        />
+        <CatapultIframe :artifact="props.artifact" :testCase="props.testCase" />
       </div>
     </div>
     <div class="columns" v-if="props.metric !== BINARY_SIZE_METRIC">

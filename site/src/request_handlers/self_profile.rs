@@ -1,12 +1,14 @@
 use std::collections::HashSet;
-use std::io::Read;
+use std::io::{Read, Write};
+use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Instant;
 
 use bytes::Buf;
 use database::CommitType;
 use headers::{ContentType, Header};
-use hyper::StatusCode;
+use hyper::{body, StatusCode};
+use tokio::process::Command;
 
 use crate::api::self_profile::ArtifactSizeDelta;
 use crate::api::{self_profile, self_profile_processed, self_profile_raw, ServerResult};
@@ -16,6 +18,53 @@ use crate::load::SiteCtxt;
 use crate::selector::{self};
 use crate::self_profile::{get_or_download_self_profile, get_self_profile_raw_data};
 use crate::server::{Response, ResponseHeaders};
+
+pub async fn handle_self_profile_viewer(
+    body: self_profile_processed::Request,
+    ctxt: &SiteCtxt,
+) -> http::Response<hyper::Body> {
+    log::info!("handle_self_profile_viewer({:?})", body);
+
+    let resp_body = handle_self_profile_processed_download(body, ctxt)
+        .await
+        .into_body();
+
+    let mut json = tempfile::NamedTempFile::new().unwrap();
+    json.write_all(&body::to_bytes(resp_body).await.unwrap())
+        .unwrap();
+
+    let mut html = tempfile::NamedTempFile::new().unwrap();
+
+    let mut cmd = Command::new("python3")
+        .args([
+            "./catapult/tracing/bin/trace2html",
+            json.path().to_str().unwrap(),
+            "--output",
+            html.path().to_str().unwrap(),
+        ])
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("failed to run trace2html");
+
+    cmd.wait().await.unwrap();
+    json.close().unwrap();
+
+    let mut builder = http::Response::builder()
+        .header_typed(ContentType::html())
+        .status(StatusCode::OK);
+
+    builder.headers_mut().unwrap().insert(
+        hyper::header::CONTENT_SECURITY_POLICY,
+        hyper::header::HeaderValue::from_maybe_shared("frame-ancestors 'self'")
+            .expect("valid header"),
+    );
+
+    let mut html_buf = Vec::new();
+    html.read_to_end(&mut html_buf).unwrap();
+    html.close().unwrap();
+
+    builder.body(hyper::Body::from(html_buf)).unwrap()
+}
 
 pub async fn handle_self_profile_processed_download(
     body: self_profile_processed::Request,
