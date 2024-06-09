@@ -1,5 +1,6 @@
 import {BenchmarkFilter, StatComparison} from "../types";
 import {calculateComparison, TestCaseComparison} from "../data";
+import {benchmarkNameMatchesFilter} from "../shared";
 
 export interface RuntimeTestCase {
   benchmark: string;
@@ -22,10 +23,13 @@ export function computeRuntimeComparisonsWithNonRelevant(
   filter: RuntimeBenchmarkFilter,
   comparisons: RuntimeBenchmarkComparison[]
 ): TestCaseComparison<RuntimeTestCase>[] {
-  function shouldShowTestCase(comparison: TestCaseComparison<RuntimeTestCase>) {
-    const name = comparison.testCase.benchmark;
-    const nameFilter = filter.name && filter.name.trim();
-    return !nameFilter || name.includes(nameFilter);
+  function shouldShowTestCase(
+    comparison: TestCaseComparison<RuntimeTestCase>
+  ): boolean {
+    return benchmarkNameMatchesFilter(
+      comparison.testCase.benchmark,
+      filter.name
+    );
   }
 
   let filteredComparisons = comparisons

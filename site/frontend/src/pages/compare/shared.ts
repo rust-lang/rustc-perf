@@ -78,3 +78,18 @@ export function getBoolOrDefault(
   }
   return defaultValue;
 }
+
+export function benchmarkNameMatchesFilter(
+  benchmarkName: string,
+  filterName: string | null
+): boolean {
+  if (!filterName) return true;
+  const trimmedFilterName = filterName.trim();
+  // Use `includes()` when a regex is not valid.
+  try {
+    const filterRegex = new RegExp(trimmedFilterName);
+    return filterRegex.test(benchmarkName);
+  } catch (e) {
+    return benchmarkName.includes(trimmedFilterName);
+  }
+}

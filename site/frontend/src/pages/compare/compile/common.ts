@@ -1,5 +1,6 @@
 import {BenchmarkFilter, CompareResponse, StatComparison} from "../types";
 import {calculateComparison, TestCaseComparison} from "../data";
+import {benchmarkNameMatchesFilter} from "../shared";
 
 export type CompileBenchmarkFilter = {
   profile: {
@@ -158,17 +159,13 @@ export function computeCompileComparisonsWithNonRelevant(
   }
 
   function shouldShowTestCase(comparison: TestCaseComparison<CompileTestCase>) {
-    const name = `${comparison.testCase.benchmark} ${comparison.testCase.profile} ${comparison.testCase.scenario} ${comparison.testCase.backend}`;
-    const nameFilter = filter.name && filter.name.trim();
-    const nameFiltered = !nameFilter || name.includes(nameFilter);
-
     return (
       profileFilter(comparison.testCase.profile) &&
       scenarioFilter(comparison.testCase.scenario) &&
       backendFilter(comparison.testCase.backend) &&
       categoryFilter(comparison.testCase.category) &&
       artifactFilter(benchmarkMap[comparison.testCase.benchmark] ?? null) &&
-      nameFiltered
+      benchmarkNameMatchesFilter(comparison.testCase.benchmark, filter.name)
     );
   }
 
