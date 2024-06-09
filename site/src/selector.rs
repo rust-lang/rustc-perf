@@ -25,6 +25,7 @@ use crate::db::{ArtifactId, Profile, Scenario};
 use crate::interpolate::Interpolate;
 use crate::load::SiteCtxt;
 
+use chrono::Duration;
 use collector::Bound;
 use database::{Benchmark, CodegenBackend, Commit, Connection, Index, Lookup};
 
@@ -45,7 +46,13 @@ pub fn artifact_id_for_bound(data: &Index, bound: Bound, is_left: bool) -> Optio
     let commit = if is_left {
         commits
             .iter()
-            .find(|commit| bound.left_match(commit))
+            .find(|commit| {
+                bound.left_match(commit)
+                    || (matches!(bound, Bound::None)
+                        && commit.is_master()
+                        && (commits.last().unwrap().date.0.date_naive() - Duration::days(30)
+                            <= commit.date.0.date_naive()))
+            })
             .cloned()
     } else {
         commits
