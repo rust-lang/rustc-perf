@@ -127,7 +127,7 @@ const unit = computed(() => {
                 >
               </td>
             </template>
-            <template v-slot:collapsed>
+            <template v-slot:expanded>
               <td :colspan="columnCount">
                 <BenchmarkDetailGraph
                   :baseArtifact="commitA"

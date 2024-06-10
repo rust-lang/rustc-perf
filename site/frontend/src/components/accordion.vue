@@ -1,36 +1,28 @@
-<script lang="ts">
-import {defineComponent} from "vue";
-import {useExpandedStore} from "./expansion";
+<script setup lang="ts">
+import {computed} from "vue";
+import {useExpandedStore} from "../utils/expansion";
 
-export default defineComponent({
-  props: {
-    id: {
-      type: String,
-      required: true,
-    },
-  },
-  setup() {
-    const {toggleExpanded, isExpanded} = useExpandedStore();
-    return {
-      toggleExpanded,
-      isExpanded,
-    };
-  },
-});
+const props = defineProps<{
+  id: string;
+}>();
+
+const {toggleExpanded, isExpanded} = useExpandedStore();
+
+const expanded = computed(() => isExpanded(props.id));
 </script>
 
 <template>
   <tr
-    @click="toggleExpanded(id)"
-    :class="{toggle: true, toggled: isExpanded(id)}"
+    @click="toggleExpanded(props.id)"
+    :class="{toggle: true, toggled: expanded}"
   >
     <td class="toggle-arrow">
-      {{ isExpanded(id) ? "▼" : "▶" }}
+      {{ expanded ? "▼" : "▶" }}
     </td>
     <slot name="default" />
   </tr>
-  <tr v-if="isExpanded(id)">
-    <slot name="collapsed" />
+  <tr v-if="expanded">
+    <slot name="expanded" />
   </tr>
 </template>
 

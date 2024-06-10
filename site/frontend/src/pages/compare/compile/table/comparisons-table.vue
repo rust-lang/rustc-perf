@@ -136,7 +136,7 @@ const unit = computed(() => {
                 </abbr>
               </td>
             </template>
-            <template v-slot:collapsed>
+            <template v-slot:expanded>
               <td :colspan="columnCount">
                 <BenchmarkDetail
                   :test-case="comparison.testCase"
