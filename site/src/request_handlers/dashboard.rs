@@ -82,22 +82,25 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
         static ref STABLE_BENCHMARKS: Vec<String> = get_stable_benchmark_names();
     }
 
-    let query = selector::CompileBenchmarkQuery::default()
+    let compile_benchmark_query = selector::CompileBenchmarkQuery::default()
+        .benchmark(selector::Selector::Subset(STABLE_BENCHMARKS.clone()))
+        .metric(selector::Selector::One(Metric::WallTime));
+    let runtime_benchmark_query = selector::RuntimeBenchmarkQuery::default()
         .benchmark(selector::Selector::Subset(STABLE_BENCHMARKS.clone()))
         .metric(selector::Selector::One(Metric::WallTime));
 
     let summary_scenarios = ctxt.summary_scenarios();
+    let aids = &artifact_ids;
     let by_profile = ByProfile::new::<String, _, _>(|profile| {
         let summary_scenarios = &summary_scenarios;
         let ctxt = &ctxt;
-        let query = &query;
-        let aids = &artifact_ids;
+        let compile_benchmark_query = &compile_benchmark_query;
         async move {
             let mut cases = dashboard::Cases::default();
             for scenario in summary_scenarios.iter() {
                 let responses = ctxt
                     .statistic_series(
-                        query
+                        compile_benchmark_query
                             .clone()
                             .profile(selector::Selector::One(profile))
                             .scenario(selector::Selector::One(*scenario)),
@@ -130,6 +133,19 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
     .await
     .unwrap();
 
+    let runtime_benchmark_query = &runtime_benchmark_query;
+    let responses = ctxt
+        .statistic_series(runtime_benchmark_query.clone(), aids.clone())
+        .await?;
+    let points = db::average(
+        responses
+            .into_iter()
+            .map(|sr| sr.interpolate().series)
+            .collect::<Vec<_>>(),
+    )
+    .map(|((_id, point), _interpolated)| (point.expect("interpolated") * 100.0).round() / 100.0)
+    .collect::<Vec<_>>();
+
     Ok(dashboard::Response {
         versions: artifact_ids
             .iter()
@@ -142,6 +158,7 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
         debug: by_profile.debug,
         opt: by_profile.opt,
         doc: by_profile.doc,
+        runtime: points,
     })
 }
 
