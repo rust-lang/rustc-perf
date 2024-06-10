@@ -4,17 +4,31 @@ import Tooltip from "../tooltip.vue";
 import {percentClass} from "../shared";
 import {RuntimeTestCase} from "./common";
 import {computed} from "vue";
+import Accordion from "../../../components/accordion.vue";
+import {testCaseKey} from "./common";
+import {ArtifactDescription} from "../types";
+import BenchmarkDetailGraph from "./benchmark-detail-graph.vue";
 
 const props = defineProps<{
   comparisons: TestCaseComparison<RuntimeTestCase>[];
   hasNonRelevant: boolean;
   showRawData: boolean;
   metric: string;
+  commitA: ArtifactDescription;
+  commitB: ArtifactDescription;
 }>();
 
 function prettifyRawNumber(number: number): string {
   return number.toLocaleString();
 }
+
+const columnCount = computed(() => {
+  const base = 5;
+  if (props.showRawData) {
+    return base + 2;
+  }
+  return base;
+});
 
 const unit = computed(() => {
   // The DB stored wall-time data in nanoseconds for runtime benchmarks, so it is
@@ -66,52 +80,64 @@ const unit = computed(() => {
       </thead>
       <tbody>
         <template v-for="comparison in comparisons">
-          <tr>
-            <td>
-              {{ comparison.testCase.benchmark }}
-            </td>
-            <td>
-              <div class="numeric-aligned">
-                <div>
-                  <span v-bind:class="percentClass(comparison.percent)">
-                    {{ comparison.percent.toFixed(2) }}%
-                  </span>
+          <Accordion :id="testCaseKey(comparison.testCase)">
+            <template v-slot:default>
+              <td>
+                {{ comparison.testCase.benchmark }}
+              </td>
+              <td>
+                <div class="numeric-aligned">
+                  <div>
+                    <span v-bind:class="percentClass(comparison.percent)">
+                      {{ comparison.percent.toFixed(2) }}%
+                    </span>
+                  </div>
                 </div>
-              </div>
-            </td>
-            <td>
-              <div class="numeric-aligned">
-                <div>
-                  {{
-                    comparison.significanceThreshold
-                      ? comparison.significanceThreshold.toFixed(2) + "%"
-                      : "-"
-                  }}
+              </td>
+              <td>
+                <div class="numeric-aligned">
+                  <div>
+                    {{
+                      comparison.significanceThreshold
+                        ? comparison.significanceThreshold.toFixed(2) + "%"
+                        : "-"
+                    }}
+                  </div>
                 </div>
-              </div>
-            </td>
-            <td>
-              <div class="numeric-aligned">
-                <div>
-                  {{
-                    comparison.significanceFactor
-                      ? comparison.significanceFactor.toFixed(2) + "x"
-                      : "-"
-                  }}
+              </td>
+              <td>
+                <div class="numeric-aligned">
+                  <div>
+                    {{
+                      comparison.significanceFactor
+                        ? comparison.significanceFactor.toFixed(2) + "x"
+                        : "-"
+                    }}
+                  </div>
                 </div>
-              </div>
-            </td>
-            <td v-if="showRawData" class="numeric">
-              <abbr :title="comparison.datumA.toString()"
-                >{{ prettifyRawNumber(comparison.datumA) }}{{ unit }}</abbr
-              >
-            </td>
-            <td v-if="showRawData" class="numeric">
-              <abbr :title="comparison.datumB.toString()"
-                >{{ prettifyRawNumber(comparison.datumB) }}{{ unit }}</abbr
-              >
-            </td>
-          </tr>
+              </td>
+              <td v-if="showRawData" class="numeric">
+                <abbr :title="comparison.datumA.toString()"
+                  >{{ prettifyRawNumber(comparison.datumA) }}{{ unit }}</abbr
+                >
+              </td>
+              <td v-if="showRawData" class="numeric">
+                <abbr :title="comparison.datumB.toString()"
+                  >{{ prettifyRawNumber(comparison.datumB) }}{{ unit }}</abbr
+                >
+              </td>
+            </template>
+            <template v-slot:expanded>
+              <td :colspan="columnCount">
+                <BenchmarkDetailGraph
+                  :baseArtifact="commitA"
+                  :artifact="commitB"
+                  :metric="metric"
+                  :testCase="comparison.testCase"
+                />
+              </td>
+            </template>
+          </Accordion>
         </template>
       </tbody>
     </table>
@@ -122,6 +148,7 @@ const unit = computed(() => {
 .benches {
   font-size: medium;
   table-layout: fixed;
+  border-collapse: collapse;
 
   td,
   th {
@@ -170,5 +197,34 @@ const unit = computed(() => {
 
 .bench-table {
   margin-top: 10px;
+}
+
+.columns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin: 10px 0;
+
+  .grow {
+    flex-grow: 1;
+  }
+
+  &.graphs {
+    flex-wrap: nowrap;
+  }
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  &.center-items {
+    align-items: center;
+  }
+}
+
+.graphs {
+  margin-top: 15px;
 }
 </style>

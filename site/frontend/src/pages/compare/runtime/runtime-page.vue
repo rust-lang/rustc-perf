@@ -125,6 +125,8 @@ const filteredSummary = computed(() => computeSummary(comparisons.value));
     :has-non-relevant="allComparisons.length > 0"
     :show-raw-data="filter.showRawData"
     :metric="selector.stat"
+    :commitA="data.a"
+    :commitB="data.b"
   />
 </template>
 

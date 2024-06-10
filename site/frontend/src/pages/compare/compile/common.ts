@@ -204,3 +204,7 @@ export function createCompileBenchmarkMap(
   }
   return benchmarks;
 }
+
+export function testCaseKey(testCase: CompileTestCase): string {
+  return `${testCase.benchmark};${testCase.profile};${testCase.scenario};${testCase.category}`;
+}

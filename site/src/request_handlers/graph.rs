@@ -5,11 +5,13 @@ use collector::Bound;
 
 use crate::api::detail_sections::CompilationSections;
 use crate::api::graphs::GraphKind;
-use crate::api::{detail_graphs, detail_sections, graphs, ServerResult};
+use crate::api::{detail_graphs, detail_sections, graphs, runtime_detail_graphs, ServerResult};
 use crate::db::{self, ArtifactId, Profile, Scenario};
 use crate::interpolate::IsInterpolated;
 use crate::load::SiteCtxt;
-use crate::selector::{CompileBenchmarkQuery, CompileTestCase, Selector, SeriesResponse};
+use crate::selector::{
+    CompileBenchmarkQuery, CompileTestCase, RuntimeBenchmarkQuery, Selector, SeriesResponse,
+};
 use crate::self_profile::get_or_download_self_profile;
 
 /// Returns data for before/after graphs when comparing a single test result comparison
@@ -119,6 +121,47 @@ pub async fn handle_compile_detail_sections(
     };
 
     Ok(detail_sections::Response { before, after })
+}
+
+pub async fn handle_runtime_detail_graphs(
+    request: runtime_detail_graphs::Request,
+    ctxt: Arc<SiteCtxt>,
+) -> ServerResult<runtime_detail_graphs::Response> {
+    log::info!("handle_runtime_detail_graphs({:?})", request);
+
+    let artifact_ids = Arc::new(master_artifact_ids_for_range(
+        &ctxt,
+        request.start,
+        request.end,
+    ));
+
+    let interpolated_responses: Vec<_> = ctxt
+        .statistic_series(
+            RuntimeBenchmarkQuery::default()
+                .benchmark(Selector::One(request.benchmark.clone()))
+                .metric(Selector::One(request.stat.parse()?)),
+            artifact_ids.clone(),
+        )
+        .await?
+        .into_iter()
+        .map(|sr| sr.interpolate().map(|series| series.collect::<Vec<_>>()))
+        .collect();
+
+    let mut graphs = Vec::new();
+
+    let mut interpolated_responses = interpolated_responses.into_iter();
+    if let Some(response) = interpolated_responses.next() {
+        let series = response.series.into_iter().collect::<Vec<_>>();
+        for kind in request.kinds {
+            graphs.push(graph_series(series.clone().into_iter(), kind));
+        }
+    }
+    assert!(interpolated_responses.next().is_none());
+
+    Ok(runtime_detail_graphs::Response {
+        commits: artifact_ids_to_commits(artifact_ids),
+        graphs,
+    })
 }
 
 pub async fn handle_graphs(

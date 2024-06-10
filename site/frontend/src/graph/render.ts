@@ -1,5 +1,5 @@
 import uPlot, {TypedArray} from "uplot";
-import {GraphData, GraphsSelector} from "./data";
+import {CompileGraphData, GraphsSelector, RuntimeGraphData} from "./data";
 
 const commonCacheStateColors = {
   full: "#7cb5ec",
@@ -374,7 +374,7 @@ function genPlotOpts({
   };
 }
 
-function normalizeData(data: GraphData) {
+function normalizeData(data: CompileGraphData) {
   function optInterpolated(profile) {
     for (const scenario in profile) {
       profile[scenario].interpolated_indices = new Set(
@@ -409,7 +409,7 @@ export type GraphRenderOpts = {
 // Renders the plots data with the given parameters from the `selector` into
 // the passed DOM element.
 export function renderPlots(
-  data: GraphData,
+  data: CompileGraphData,
   selector: GraphsSelector,
   plotElement: HTMLElement,
   opts: GraphRenderOpts
@@ -420,41 +420,50 @@ export function renderPlots(
 
   normalizeData(data);
 
-  const names = Object.keys(data.benchmarks).sort();
+  const benchNames = Object.keys(data.benchmarks).sort();
 
-  for (const benchName of names) {
-    let benchKinds = data.benchmarks[benchName];
+  for (const benchName of benchNames) {
+    let profiles = data.benchmarks[benchName];
 
     let i = 0;
 
-    for (let benchKind in benchKinds) {
-      let cacheStates = benchKinds[benchKind];
-      let cacheStateNames = Object.keys(cacheStates);
-      cacheStateNames.sort();
+    for (let profile in profiles) {
+      let scenarios = profiles[profile];
+      let scenarioNames = Object.keys(scenarios);
+      scenarioNames.sort();
 
       let yAxis = selector.stat;
       let yAxisUnit = null;
-      if (selector.stat == "instructions:u") {
-        yAxis = "CPU instructions";
-        yAxisUnit = "count";
-      } else if (selector.stat == "cycles:u") {
-        yAxis = "CPU cycles";
-        yAxisUnit = "count";
-      } else if (selector.stat == "cpu-clock") {
-        yAxis = "CPU clock";
-        yAxisUnit = "seconds";
-      } else if (selector.stat == "task-clock") {
-        yAxis = "Task clock";
-        yAxisUnit = "seconds";
-      } else if (selector.stat == "wall-time") {
-        yAxis = "Wall time";
-        yAxisUnit = "seconds";
-      } else if (selector.stat == "max-rss") {
-        yAxis = "Maximum resident set size";
-        yAxisUnit = "kB";
-      } else if (selector.stat == "faults") {
-        yAxis = "Faults";
-        yAxisUnit = "count";
+
+      switch (selector.stat) {
+        case "instructions:u":
+          yAxis = "CPU instructions";
+          yAxisUnit = "count";
+          break;
+        case "cycles:u":
+          yAxis = "CPU cycles";
+          yAxisUnit = "count";
+          break;
+        case "cpu-clock":
+          yAxis = "CPU clock";
+          yAxisUnit = "seconds";
+          break;
+        case "task-clock":
+          yAxis = "Task clock";
+          yAxisUnit = "seconds";
+          break;
+        case "wall-time":
+          yAxis = "Wall time";
+          yAxisUnit = "seconds";
+          break;
+        case "max-rss":
+          yAxis = "Maximum resident set size";
+          yAxisUnit = "kB";
+          break;
+        case "faults":
+          yAxis = "Faults";
+          yAxisUnit = "count";
+          break;
       }
 
       if (selector.kind == "raw" && benchName == "Summary") {
@@ -476,23 +485,22 @@ export function renderPlots(
 
       let otherColorIdx = 0;
 
-      for (let cacheState of cacheStateNames) {
-        let yVals = cacheStates[cacheState].points;
+      for (let scenarioName of scenarioNames) {
+        let yVals = scenarios[scenarioName].points;
         let color =
-          commonCacheStateColors[cacheState] ||
+          commonCacheStateColors[scenarioName] ||
           otherCacheStateColors[otherColorIdx++];
 
         plotData.push(yVals);
 
         seriesOpts.push({
-          label: cacheState,
+          label: scenarioName,
           width: devicePixelRatio,
           stroke: color,
         });
       }
 
-      let indices =
-        cacheStates[Object.keys(cacheStates)[0]].interpolated_indices;
+      let indices = scenarios[Object.keys(scenarios)[0]].interpolated_indices;
 
       let plotOpts = genPlotOpts({
         width,
@@ -501,19 +509,124 @@ export function renderPlots(
         series: seriesOpts,
         commits: data.commits,
         stat: selector.stat,
-        isInterpolated(dataIdx) {
+        isInterpolated(dataIdx: number) {
           return indices.has(dataIdx);
         },
         absoluteMode: selector.kind == "raw",
         hooks,
       });
       if (renderTitle) {
-        plotOpts["title"] = `${benchName}-${benchKind}`;
+        plotOpts["title"] = `${benchName}-${profile}`;
       }
 
       new uPlot(plotOpts, plotData as any as TypedArray[], plotElement);
 
       i++;
     }
+  }
+}
+
+export function renderRuntimePlots(
+  data: RuntimeGraphData,
+  selector: GraphsSelector,
+  plotElement: HTMLElement,
+  opts: GraphRenderOpts
+) {
+  const renderTitle = opts.renderTitle ?? true;
+  const hooks = opts.hooks ?? {};
+  const width = opts.width;
+
+  const benchNames = Object.keys(data.benchmarks).sort();
+
+  for (const benchName of benchNames) {
+    const benchmark = data.benchmarks[benchName];
+    let i = 0;
+
+    let yAxis = selector.stat;
+    let yAxisUnit = null;
+
+    switch (selector.stat) {
+      case "instructions:u":
+        yAxis = "CPU instructions";
+        yAxisUnit = "count";
+        break;
+      case "cycles:u":
+        yAxis = "CPU cycles";
+        yAxisUnit = "count";
+        break;
+      case "cpu-clock":
+        yAxis = "CPU clock";
+        yAxisUnit = "seconds";
+        break;
+      case "task-clock":
+        yAxis = "Task clock";
+        yAxisUnit = "seconds";
+        break;
+      case "wall-time":
+        yAxis = "Wall time";
+        yAxisUnit = "seconds";
+        break;
+      case "max-rss":
+        yAxis = "Maximum resident set size";
+        yAxisUnit = "kB";
+        break;
+      case "faults":
+        yAxis = "Faults";
+        yAxisUnit = "count";
+        break;
+    }
+
+    if (selector.kind == "raw" && benchName == "Summary") {
+      yAxisUnit = "relative";
+    } else if (selector.kind == "percentfromfirst") {
+      yAxisUnit = "% change from first";
+    } else if (selector.kind == "percentrelative") {
+      yAxisUnit = "% change from previous";
+    }
+
+    yAxis = yAxisUnit ? `${yAxis} (${yAxisUnit})` : yAxis;
+    let yAxisLabel = i == 0 ? yAxis : null;
+
+    let seriesOpts = [{}];
+
+    let xVals = data.commits.map((c) => c[0]);
+
+    let plotData = [xVals];
+
+    let otherColorIdx = 0;
+
+    let yVals = benchmark.points;
+    let color = otherCacheStateColors[otherColorIdx++];
+
+    plotData.push(yVals);
+
+    seriesOpts.push({
+      label: benchName,
+      width: devicePixelRatio,
+      stroke: color,
+    });
+
+    let indices = new Set(benchmark.interpolated_indices);
+
+    let plotOpts = genPlotOpts({
+      width,
+      height: 300,
+      yAxisLabel,
+      series: seriesOpts,
+      commits: data.commits,
+      stat: selector.stat,
+      isInterpolated(dataIdx: number) {
+        return indices.has(dataIdx);
+      },
+      absoluteMode: selector.kind == "raw",
+      hooks,
+    });
+    if (renderTitle) {
+      plotOpts["title"] = `${benchName}`;
+    }
+
+    new uPlot(plotOpts, plotData as any as TypedArray[], plotElement);
+
+    i++;
   }
 }

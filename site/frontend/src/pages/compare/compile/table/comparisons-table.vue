@@ -5,8 +5,9 @@ import {ArtifactDescription} from "../../types";
 import {percentClass} from "../../shared";
 import {CompileBenchmarkMap, CompileTestCase} from "../common";
 import {computed} from "vue";
-import {useExpandedStore} from "./expansion";
+import {testCaseKey} from "../common";
 import BenchmarkDetail from "./benchmark-detail.vue";
+import Accordion from "../../../../components/accordion.vue";
 
 const props = defineProps<{
   id: string;
@@ -40,7 +41,6 @@ const unit = computed(() => {
     return null;
   }
 });
-const {toggleExpanded, isExpanded} = useExpandedStore();
 </script>
 
 <template>
@@ -86,72 +86,68 @@ const {toggleExpanded, isExpanded} = useExpandedStore();
       </thead>
       <tbody>
         <template v-for="comparison in comparisons">
-          <tr
-            @click="toggleExpanded(comparison.testCase)"
-            :class="{toggle: true, toggled: isExpanded(comparison.testCase)}"
-          >
-            <td class="toggle-arrow">
-              {{ isExpanded(comparison.testCase) ? "▼" : "▶" }}
-            </td>
-            <td>
-              {{ comparison.testCase.benchmark }}
-            </td>
-            <td>
-              {{ comparison.testCase.profile }}
-            </td>
-            <td>{{ comparison.testCase.scenario }}</td>
-            <td>{{ comparison.testCase.backend }}</td>
-            <td>
-              <div class="numeric-aligned">
-                <span v-bind:class="percentClass(comparison.percent)">
-                  {{ comparison.percent.toFixed(2) }}%
-                </span>
-              </div>
-            </td>
-            <td class="narrow">
-              <div class="numeric-aligned">
-                <div>
-                  {{
-                    comparison.significanceThreshold
-                      ? comparison.significanceThreshold.toFixed(2) + "%"
-                      : "-"
-                  }}
+          <Accordion :id="testCaseKey(comparison.testCase)">
+            <template v-slot:default>
+              <td>
+                {{ comparison.testCase.benchmark }}
+              </td>
+              <td>
+                {{ comparison.testCase.profile }}
+              </td>
+              <td>{{ comparison.testCase.scenario }}</td>
+              <td>{{ comparison.testCase.backend }}</td>
+              <td>
+                <div class="numeric-aligned">
+                  <span v-bind:class="percentClass(comparison.percent)">
+                    {{ comparison.percent.toFixed(2) }}%
+                  </span>
                 </div>
-              </div>
-            </td>
-            <td class="narrow">
-              <div class="numeric-aligned">
-                <div>
-                  {{
-                    comparison.significanceFactor
-                      ? comparison.significanceFactor.toFixed(2) + "x"
-                      : "-"
-                  }}
+              </td>
+              <td class="narrow">
+                <div class="numeric-aligned">
+                  <div>
+                    {{
+                      comparison.significanceThreshold
+                        ? comparison.significanceThreshold.toFixed(2) + "%"
+                        : "-"
+                    }}
+                  </div>
                 </div>
-              </div>
-            </td>
-            <td v-if="showRawData" class="numeric">
-              <abbr :title="comparison.datumA.toString()">
-                {{ prettifyRawNumber(comparison.datumA) }}{{ unit }}
-              </abbr>
-            </td>
-            <td v-if="showRawData" class="numeric">
-              <abbr :title="comparison.datumB.toString()">
-                {{ prettifyRawNumber(comparison.datumB) }}{{ unit }}
-              </abbr>
-            </td>
-          </tr>
-          <tr v-if="isExpanded(comparison.testCase)">
-            <td :colspan="columnCount">
-              <BenchmarkDetail
-                :test-case="comparison.testCase"
-                :base-artifact="commitA"
-                :artifact="commitB"
-                :metric="stat"
-                :benchmark-map="benchmarkMap"
-              />
-            </td>
-          </tr>
+              </td>
+              <td class="narrow">
+                <div class="numeric-aligned">
+                  <div>
+                    {{
+                      comparison.significanceFactor
+                        ? comparison.significanceFactor.toFixed(2) + "x"
+                        : "-"
+                    }}
+                  </div>
+                </div>
+              </td>
+              <td v-if="showRawData" class="numeric">
+                <abbr :title="comparison.datumA.toString()">
+                  {{ prettifyRawNumber(comparison.datumA) }}{{ unit }}
+                </abbr>
+              </td>
+              <td v-if="showRawData" class="numeric">
+                <abbr :title="comparison.datumB.toString()">
+                  {{ prettifyRawNumber(comparison.datumB) }}{{ unit }}
+                </abbr>
+              </td>
+            </template>
+            <template v-slot:expanded>
+              <td :colspan="columnCount">
+                <BenchmarkDetail
+                  :test-case="comparison.testCase"
+                  :base-artifact="commitA"
+                  :artifact="commitB"
+                  :metric="stat"
+                  :benchmark-map="benchmarkMap"
+                />
+              </td>
+            </template>
+          </Accordion>
         </template>
       </tbody>
     </table>
@@ -190,20 +186,8 @@ const {toggleExpanded, isExpanded} = useExpandedStore();
   th {
     text-align: center;
 
-    &.toggle-arrow {
-      padding-right: 5px;
-    }
     &.narrow {
       max-width: 100px;
-    }
-  }
-
-  .toggle {
-    cursor: pointer;
-
-    &:hover,
-    &.toggled {
-      background-color: #d6d3d35c;
     }
   }
 }

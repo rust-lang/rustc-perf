@@ -1,8 +1,10 @@
-import {GraphData, GraphsSelector} from "./data";
+import {CompileGraphData, GraphsSelector} from "./data";
 import {getJson} from "../utils/requests";
 import {GRAPH_DATA_URL} from "../urls";
 
-export async function loadGraphs(selector: GraphsSelector): Promise<GraphData> {
+export async function loadGraphs(
+  selector: GraphsSelector
+): Promise<CompileGraphData> {
   const params = {
     start: selector.start,
     end: selector.end,
@@ -12,5 +14,5 @@ export async function loadGraphs(selector: GraphsSelector): Promise<GraphData> {
     scenario: selector.scenario,
     profile: selector.profile,
   };
-  return await getJson<GraphData>(GRAPH_DATA_URL, params);
+  return await getJson<CompileGraphData>(GRAPH_DATA_URL, params);
 }

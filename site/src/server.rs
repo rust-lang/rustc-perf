@@ -410,6 +410,14 @@ async fn serve_req(server: Server, req: Request) -> Result<Response, ServerError
                 })
                 .await;
         }
+        "/perf/compare-runtime-detail-graphs" => {
+            let query = check!(parse_query_string(req.uri()));
+            return server
+                .handle_fallible_get_async(&req, &compression, |c| {
+                    request_handlers::handle_runtime_detail_graphs(query, c)
+                })
+                .await;
+        }
         "/perf/graphs" => {
             let query = check!(parse_query_string(req.uri()));
             return server
