@@ -53,3 +53,7 @@ export function computeRuntimeComparisonsWithNonRelevant(
 
   return filteredComparisons;
 }
+
+export function testCaseKey(testCase: RuntimeTestCase): string {
+  return `${testCase.benchmark}`;
+}

@@ -167,8 +167,10 @@ const unit = computed(() => {
   }
 }
 
-.benches tbody {
-  padding-top: 10px;
+.benches tbody::before {
+  content: "";
+  display: block;
+  height: 10px;
 }
 
 .benches tbody:first-child th {

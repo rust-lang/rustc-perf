@@ -4,6 +4,8 @@ import Tooltip from "../tooltip.vue";
 import {percentClass} from "../shared";
 import {RuntimeTestCase} from "./common";
 import {computed} from "vue";
+import Accordion from "../../../components/accordion.vue";
+import {testCaseKey} from "./common";
 
 const props = defineProps<{
   comparisons: TestCaseComparison<RuntimeTestCase>[];
@@ -66,52 +68,55 @@ const unit = computed(() => {
       </thead>
       <tbody>
         <template v-for="comparison in comparisons">
-          <tr>
-            <td>
-              {{ comparison.testCase.benchmark }}
-            </td>
-            <td>
-              <div class="numeric-aligned">
-                <div>
-                  <span v-bind:class="percentClass(comparison.percent)">
-                    {{ comparison.percent.toFixed(2) }}%
-                  </span>
+          <Accordion :id="testCaseKey(comparison.testCase)">
+            <template v-slot:default>
+              <td>
+                {{ comparison.testCase.benchmark }}
+              </td>
+              <td>
+                <div class="numeric-aligned">
+                  <div>
+                    <span v-bind:class="percentClass(comparison.percent)">
+                      {{ comparison.percent.toFixed(2) }}%
+                    </span>
+                  </div>
                 </div>
-              </div>
-            </td>
-            <td>
-              <div class="numeric-aligned">
-                <div>
-                  {{
-                    comparison.significanceThreshold
-                      ? comparison.significanceThreshold.toFixed(2) + "%"
-                      : "-"
-                  }}
+              </td>
+              <td>
+                <div class="numeric-aligned">
+                  <div>
+                    {{
+                      comparison.significanceThreshold
+                        ? comparison.significanceThreshold.toFixed(2) + "%"
+                        : "-"
+                    }}
+                  </div>
                 </div>
-              </div>
-            </td>
-            <td>
-              <div class="numeric-aligned">
-                <div>
-                  {{
-                    comparison.significanceFactor
-                      ? comparison.significanceFactor.toFixed(2) + "x"
-                      : "-"
-                  }}
+              </td>
+              <td>
+                <div class="numeric-aligned">
+                  <div>
+                    {{
+                      comparison.significanceFactor
+                        ? comparison.significanceFactor.toFixed(2) + "x"
+                        : "-"
+                    }}
+                  </div>
                 </div>
-              </div>
-            </td>
-            <td v-if="showRawData" class="numeric">
-              <abbr :title="comparison.datumA.toString()"
-                >{{ prettifyRawNumber(comparison.datumA) }}{{ unit }}</abbr
-              >
-            </td>
-            <td v-if="showRawData" class="numeric">
-              <abbr :title="comparison.datumB.toString()"
-                >{{ prettifyRawNumber(comparison.datumB) }}{{ unit }}</abbr
-              >
-            </td>
-          </tr>
+              </td>
+              <td v-if="showRawData" class="numeric">
+                <abbr :title="comparison.datumA.toString()"
+                  >{{ prettifyRawNumber(comparison.datumA) }}{{ unit }}</abbr
+                >
+              </td>
+              <td v-if="showRawData" class="numeric">
+                <abbr :title="comparison.datumB.toString()"
+                  >{{ prettifyRawNumber(comparison.datumB) }}{{ unit }}</abbr
+                >
+              </td>
+            </template>
+            <template v-slot:collapsed> </template>
+          </Accordion>
         </template>
       </tbody>
     </table>
@@ -122,6 +127,7 @@ const unit = computed(() => {
 .benches {
   font-size: medium;
   table-layout: fixed;
+  border-collapse: collapse;
 
   td,
   th {
