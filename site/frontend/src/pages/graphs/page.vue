@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {nextTick, Ref, ref} from "vue";
 import {withLoading} from "../../utils/loading";
-import {GraphData, GraphKind, GraphsSelector} from "../../graph/data";
+import {CompileGraphData, GraphKind, GraphsSelector} from "../../graph/data";
 import DataSelector, {SelectionParams} from "./data-selector.vue";
 import {
   createUrlWithAppendedParams,
@@ -33,9 +33,9 @@ function loadSelectorFromUrl(urlParams: Dict<string>): GraphsSelector {
 }
 
 function filterBenchmarks(
-  data: GraphData,
+  data: CompileGraphData,
   filter: (key: string) => boolean
-): GraphData {
+): CompileGraphData {
   const benchmarks = Object.fromEntries(
     Object.entries(data.benchmarks).filter(([key, _]) => filter(key))
   );
@@ -59,7 +59,7 @@ function hasSpecificSelection(selector: GraphsSelector): boolean {
 }
 
 async function loadGraphData(selector: GraphsSelector, loading: Ref<boolean>) {
-  const graphData: GraphData = await withLoading(
+  const graphData: CompileGraphData = await withLoading(
     loading,
     async () => await loadGraphs(selector)
   );

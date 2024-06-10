@@ -1,28 +1,24 @@
 <script setup lang="ts">
-import {computed, onMounted, capitalize, Ref, ref} from "vue";
-import {
-  COMPILE_DETAIL_GRAPHS_RESOLVER,
-  CompileDetailGraphs,
-  CompileDetailGraphsSelector,
-} from "./detail-resolver";
-import {
-  CompileGraphData,
-  GraphKind,
-  GraphsSelector,
-} from "../../../../graph/data";
-import {CompileTestCase} from "../common";
-import {GraphRenderOpts, renderPlots} from "../../../../graph/render";
+import {computed, onMounted, Ref, ref} from "vue";
+import {GraphKind, GraphsSelector, RuntimeGraphData} from "../../../graph/data";
+import {GraphRenderOpts, renderRuntimePlots} from "../../../graph/render";
 import uPlot from "uplot";
 import {
   daysBetweenDates,
   formatDate,
   getFutureDate,
   getPastDate,
-} from "./utils";
-import {ArtifactDescription} from "../../types";
+} from "../compile/table/utils";
+import {ArtifactDescription} from "../types";
+import {RuntimeTestCase} from "./common";
+import {
+  RUNTIME_DETAIL_GRAPHS_RESOLVER,
+  RuntimeDetailGraphs,
+  RuntimeDetailGraphsSelector,
+} from "./runtime-detail-resolver";
 
 const props = defineProps<{
-  testCase: CompileTestCase;
+  testCase: RuntimeTestCase;
   metric: string;
   artifact: ArtifactDescription;
   baseArtifact: ArtifactDescription;
@@ -31,13 +27,11 @@ const props = defineProps<{
 // How many days are shown in the graph
 const DAY_RANGE = 30;
 
-function createGraphsSelector(): CompileDetailGraphsSelector {
+function createGraphsSelector(): RuntimeDetailGraphsSelector {
   const {start, end} = graphRange.value;
 
   return {
     benchmark: props.testCase.benchmark,
-    profile: props.testCase.profile,
-    scenario: props.testCase.scenario,
     stat: props.metric,
     start,
     end,
@@ -46,7 +40,7 @@ function createGraphsSelector(): CompileDetailGraphsSelector {
 }
 
 // Render both relative and absolute graphs
-async function renderGraphs(detail: CompileDetailGraphs) {
+async function renderGraphs(detail: RuntimeDetailGraphs) {
   const selector = createGraphsSelector();
   const date = graphRange.value.date;
   if (detail.commits.length === 0) {
@@ -56,26 +50,21 @@ async function renderGraphs(detail: CompileDetailGraphs) {
   function buildGraph(
     index: number,
     kind: GraphKind
-  ): [CompileGraphData, GraphsSelector] {
-    const data: CompileGraphData = {
+  ): [RuntimeGraphData, GraphsSelector] {
+    const data: RuntimeGraphData = {
       commits: detail.commits,
       benchmarks: {
-        [selector.benchmark]: {
-          // The server returns profiles capitalized, so we need to match that
-          // here, so that the graph code can find the expected profile.
-          [capitalize(selector.profile)]: {
-            [selector.scenario]: detail.graphs[index],
-          },
-        },
+        [selector.benchmark]: detail.graphs[index],
       },
     };
+
     const graphSelector = {
       benchmark: selector.benchmark,
-      profile: selector.profile,
-      scenario: selector.scenario,
       stat: selector.stat,
       start: selector.start,
       end: selector.end,
+      profile: null,
+      scenario: null,
       kind,
     };
 
@@ -113,7 +102,7 @@ async function renderGraphs(detail: CompileDetailGraphs) {
 }
 
 async function renderGraph(
-  graphData: CompileGraphData,
+  graphData: RuntimeGraphData,
   selector: GraphsSelector,
   date: Date | null,
   chartRef: Ref<HTMLElement | null>
@@ -125,11 +114,12 @@ async function renderGraph(
   if (date !== null) {
     drawCurrentDate(opts, date);
   }
-  renderPlots(graphData, selector, chartRef.value, opts);
+
+  renderRuntimePlots(graphData, selector, chartRef.value, opts);
 }
 
-async function loadGraphs(): Promise<CompileDetailGraphs> {
-  return await COMPILE_DETAIL_GRAPHS_RESOLVER.load(createGraphsSelector());
+async function loadGraphs(): Promise<RuntimeDetailGraphs> {
+  return await RUNTIME_DETAIL_GRAPHS_RESOLVER.load(createGraphsSelector());
 }
 
 function getGraphTitle() {
