@@ -2298,7 +2298,6 @@ dependencies = [
  "serde_json",
  "snap",
  "tera",
- "thiserror",
  "tokio",
  "toml",
  "url",
