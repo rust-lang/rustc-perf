@@ -102,16 +102,44 @@ impl ArtifactStats {
     }
 }
 
-/// Tries to match hashes produces by rustc in mangled symbol names.
-static RUSTC_HASH_REGEX: OnceLock<Regex> = OnceLock::new();
-
 /// Demangle the symbol and remove rustc mangling hashes.
+///
+/// Normalizes the following things, in the following order:
+/// - Demangles the symbol.
+/// - Removes `.cold` and `.warm` from the end of the symbol, to merge cold and hot parts of a function
+/// into the same symbol.
+/// - Removes rustc hashes from the symbol, e.g. `foo::[abcdef]` -> `foo::[]` or
+/// `foo::abcd` -> `foo`.
+/// - Removes suffixes after a dot from the symbol, e.g. `anon.abcdef.123` -> `anon` or
+/// `foo.llvm.123` -> `foo`.
+///
+/// These modifications should remove things added by LLVM in the LTO/PGO phase.
+/// See more information here: https://rust-lang.github.io/rfcs/2603-rust-symbol-name-mangling-v0.html#vendor-specific-suffix
 fn normalize_symbol_name(symbol: &str) -> String {
-    let regex =
-        RUSTC_HASH_REGEX.get_or_init(|| Regex::new(r"(::)?\b[a-z0-9]{15,17}\b(\.\d+)?").unwrap());
+    /// Tries to match hashes in brackets produced by rustc in mangled symbol names.
+    static RUSTC_BRACKET_HASH_REGEX: OnceLock<Regex> = OnceLock::new();
+    /// Tries to match hashes without brackets after :: produced by rustc in mangled symbol names.
+    static RUSTC_HASH_REGEX: OnceLock<Regex> = OnceLock::new();
+    /// Tries to match suffixes after a dot.
+    static DOT_SUFFIX_REGEX: OnceLock<Regex> = OnceLock::new();
 
-    let symbol = rustc_demangle::demangle(symbol).to_string();
-    regex.replace_all(&symbol, "").to_string()
+    let bracket_hash_regex =
+        RUSTC_BRACKET_HASH_REGEX.get_or_init(|| Regex::new(r"\[[a-z0-9]{13,17}\]").unwrap());
+    let hash_regex = RUSTC_HASH_REGEX.get_or_init(|| Regex::new(r"::[a-z0-9]{15,17}$").unwrap());
+    let dot_suffix_regex = DOT_SUFFIX_REGEX.get_or_init(|| Regex::new(r"\.[a-z0-9]+\b").unwrap());
+
+    let mut symbol = rustc_demangle::demangle(symbol).to_string();
+
+    if let Some(stripped) = symbol.strip_suffix(".cold") {
+        symbol = stripped.to_string();
+    }
+    if let Some(stripped) = symbol.strip_suffix(".warm") {
+        symbol = stripped.to_string();
+    }
+    let symbol = bracket_hash_regex.replace_all(&symbol, "");
+    let symbol = hash_regex.replace_all(&symbol, "");
+    let symbol = dot_suffix_regex.replace_all(&symbol, "");
+    symbol.to_string()
 }
 
 /// Simple heuristic that tries to normalize section names.
@@ -228,4 +256,81 @@ pub fn compile_and_get_stats(
     }
 
     Ok(archives)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rustc_demangle::demangle;
+
+    #[test]
+    fn normalize_remove_cold_annotation() {
+        // Check that .cold at the end is removed
+        check(
+            "_RNvNtNtNtCs1WKcaCLTok2_16rustc_query_impl10query_impl23specialization_graph_of14get_query_incr26___rust_end_short_backtrace.cold",
+            "rustc_query_impl[16af0aa4f1d40934]::query_impl::specialization_graph_of::get_query_incr::__rust_end_short_backtrace.cold",
+            "rustc_query_impl::query_impl::specialization_graph_of::get_query_incr::__rust_end_short_backtrace",
+        );
+    }
+
+    #[test]
+    fn normalize_remove_numeric_suffix() {
+        // Check that numeric suffix at the end is removed.
+        // In this case, it is removed by demangling itself.
+        check(
+            "_RNvMs3_NtNtCs6gyBaxODSsO_12regex_syntax3ast5parseINtB5_7ParserIQNtB5_6ParserE19parse_with_commentsB9_.llvm.5849848722809994645",
+            "<regex_syntax[48ff133cf18e629c]::ast::parse::ParserI<&mut regex_syntax[48ff133cf18e629c]::ast::parse::Parser>>::parse_with_comments",
+            "<regex_syntax::ast::parse::ParserI<&mut regex_syntax::ast::parse::Parser>>::parse_with_comments",
+        );
+    }
+
+    #[test]
+    fn normalize_remove_numeric_suffix_with_cold() {
+        // Check that a combination of the .cold suffix and a numeric suffix is removed.
+        check(
+            "_RNvMs_NtNtCs60zRYs2wPJS_11rustc_parse6parser2tyNtB6_6Parser15parse_ty_common.llvm.13047176952295404880.cold",
+            "<rustc_parse[45fe911b13bda40a]::parser::Parser>::parse_ty_common.llvm.13047176952295404880.cold",
+            "<rustc_parse::parser::Parser>::parse_ty_common",
+        );
+    }
+
+    #[test]
+    fn normalize_hash_at_end() {
+        // Check that hashes at the end of the symbol are removed.
+        check(
+            "anon.58936091071a36b1b82cf536b463328b.3488",
+            "anon.58936091071a36b1b82cf536b463328b.3488",
+            "anon",
+        );
+    }
+
+    #[test]
+    fn normalize_short_hash() {
+        // Check that short hashes in brackets are removed.
+        check(
+            "_RNvNtCsifRNxopDi_20rustc_builtin_macros6format16make_format_args",
+            "rustc_builtin_macros[e293f6447c7da]::format::make_format_args",
+            "rustc_builtin_macros::format::make_format_args",
+        );
+    }
+
+    #[test]
+    fn normalize_hash_without_brackets() {
+        // Check that hashes without brackets are removed.
+        check(
+            "_ZN10proc_macro5quote5quote28_$u7b$$u7b$closure$u7d$$u7d$17h90045007b0e69fc9E",
+            "proc_macro::quote::quote::{{closure}}::h90045007b0e69fc9",
+            "proc_macro::quote::quote::{{closure}}",
+        );
+    }
+
+    /// Checks the result of symbol normalization.
+    /// The function receives the mangled symbol, and expects the correct demangled
+    /// symbol and normalized symbol. The demangled version is passed mostly just to make
+    /// the test more readable.
+    fn check(symbol: &str, expect_demangled: &str, expect_normalized: &str) {
+        let demangled = demangle(symbol).to_string();
+        assert_eq!(demangled, expect_demangled);
+        assert_eq!(normalize_symbol_name(symbol), expect_normalized.to_string());
+    }
 }
