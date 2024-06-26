@@ -23,7 +23,7 @@ use humansize::{format_size, BINARY};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use tabled::builder::Builder;
 use tabled::settings::object::{Columns, Rows};
-use tabled::settings::{Alignment, Border, Color, Modify};
+use tabled::settings::{Alignment, Border, Color, Modify, Width};
 use tokio::runtime::Runtime;
 
 use collector::api::next_artifact::NextArtifact;
@@ -1486,6 +1486,7 @@ fn print_binary_stats(
         }
     }
 
+    table.with(Modify::new(Columns::first()).with(Width::wrap(80)));
     table.with(Modify::new(Columns::new(1..)).with(Alignment::right()));
     table.with(tabled::settings::Style::sharp());
     table.with(
