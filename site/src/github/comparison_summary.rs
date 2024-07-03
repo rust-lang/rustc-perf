@@ -183,7 +183,10 @@ async fn summarize_run(
             .map(|benchmark| format!("- {benchmark}"))
             .collect::<Vec<_>>()
             .join("\n");
-        format!("\n**Warning ⚠**: The following benchmark(s) failed to build:\n{benchmarks}\n")
+        let alert_row = ":exclamation: ".repeat(5);
+        format!(
+            "\n{alert_row}\n**Warning :warning:**: The following benchmark(s) failed to build:\n{benchmarks}\n{alert_row}\n"
+        )
     } else {
         String::new()
     };
