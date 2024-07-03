@@ -1,6 +1,8 @@
 The MIT License (MIT)
 
-Copyright (c) 2015 Nick Cameron
+Copyright (c) 2015-present Mark Simulacrum, Nick Cameron and rustc-perf contributors
+
+Note that this license doesn't apply to code under the collector/compile-benchmarks directory.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
