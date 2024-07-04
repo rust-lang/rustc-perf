@@ -176,7 +176,8 @@ async fn summarize_run(
     let inst_comparison =
         calculate_metric_comparison(ctxt, &commit, Metric::InstructionsUser).await?;
 
-    let errors = if !inst_comparison.newly_failed_benchmarks.is_empty() {
+    let has_broken_benchmarks = !inst_comparison.newly_failed_benchmarks.is_empty();
+    let errors = if has_broken_benchmarks {
         let benchmarks = inst_comparison
             .newly_failed_benchmarks
             .keys()
@@ -209,7 +210,9 @@ async fn summarize_run(
         &mut message,
         "### Overall result: {}{}\n",
         overall_result,
-        if is_regression {
+        if has_broken_benchmarks {
+            " - BENCHMARK(S) FAILED"
+        } else if is_regression {
             " - ACTION NEEDED"
         } else {
             " - no action needed"
