@@ -866,7 +866,7 @@ impl RustDocFingerprint {
             Ok(rustdoc_data) => rustdoc_data,
             // If the fingerprint does not exist, do not clear out the doc
             // directories. Otherwise this ran into problems where projects
-            // like rustbuild were creating the doc directory before running
+            // like bootstrap were creating the doc directory before running
             // `cargo doc` in a way that deleting it would break it.
             Err(_) => return write_fingerprint(),
         };

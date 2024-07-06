@@ -80,7 +80,7 @@
 //!
 //! [^3]: See below for details on mtime tracking.
 //!
-//! [^4]: `__CARGO_DEFAULT_LIB_METADATA` is set by rustbuild to embed the
+//! [^4]: `__CARGO_DEFAULT_LIB_METADATA` is set by bootstrap to embed the
 //!        release channel (bootstrap/stable/beta/nightly) in libstd.
 //!
 //! [^5]: Config settings that are not otherwise captured anywhere else.

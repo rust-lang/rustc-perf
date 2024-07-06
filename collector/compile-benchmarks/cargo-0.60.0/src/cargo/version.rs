@@ -9,7 +9,7 @@ pub struct CommitInfo {
     pub commit_date: String,
 }
 
-/// Information provided by the outer build system (rustbuild aka bootstrap).
+/// Information provided by the outer build system (bootstrap).
 pub struct CfgInfo {
     /// Information about the Git repository we may have been built from.
     pub commit_info: Option<CommitInfo>,
@@ -22,7 +22,7 @@ pub struct VersionInfo {
     /// Cargo's version, such as "1.57.0", "1.58.0-beta.1", "1.59.0-nightly", etc.
     pub version: String,
     /// Information that's only available when we were built with
-    /// rustbuild, rather than Cargo itself.
+    /// bootstrap, rather than Cargo itself.
     pub cfg_info: Option<CfgInfo>,
 }
 
@@ -47,9 +47,9 @@ pub fn version() -> VersionInfo {
         };
     }
 
-    // This is the version set in rustbuild, which we use to match rustc.
+    // This is the version set in bootstrap, which we use to match rustc.
     let version = option_env_str!("CFG_RELEASE").unwrap_or_else(|| {
-        // If cargo is not being built by rustbuild, then we just use the
+        // If cargo is not being built by bootstrap, then we just use the
         // version from cargo's own `Cargo.toml`.
         //
         // There are two versions at play here:
