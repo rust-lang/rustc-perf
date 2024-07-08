@@ -185,8 +185,9 @@ async fn summarize_run(
             .collect::<Vec<_>>()
             .join("\n");
         let alert_row = ":exclamation: ".repeat(5);
+        // second \n before `alert_row` needed or markdown will render this as appended to last li
         format!(
-            "\n{alert_row}\n**Warning :warning:**: The following benchmark(s) failed to build:\n{benchmarks}\n{alert_row}\n"
+            "\n{alert_row}\n**Warning :warning:**: The following benchmark(s) failed to build:\n{benchmarks}\n\n{alert_row}\n"
         )
     } else {
         String::new()
