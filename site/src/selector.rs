@@ -86,6 +86,7 @@ pub fn range_subset(data: Vec<Commit>, range: RangeInclusive<Bound>) -> Vec<Comm
     }
 }
 
+#[derive(Debug)]
 struct ArtifactIdIter {
     ids: Arc<Vec<ArtifactId>>,
     idx: usize,
@@ -424,6 +425,7 @@ impl SiteCtxt {
     }
 }
 
+#[derive(Debug)]
 pub struct StatisticSeries {
     artifact_ids: ArtifactIdIter,
     points: std::vec::IntoIter<Option<f64>>,

@@ -85,9 +85,6 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
     let compile_benchmark_query = selector::CompileBenchmarkQuery::default()
         .benchmark(selector::Selector::Subset(STABLE_BENCHMARKS.clone()))
         .metric(selector::Selector::One(Metric::WallTime));
-    let runtime_benchmark_query = selector::RuntimeBenchmarkQuery::default()
-        .benchmark(selector::Selector::Subset(STABLE_BENCHMARKS.clone()))
-        .metric(selector::Selector::One(Metric::WallTime));
 
     let summary_scenarios = ctxt.summary_scenarios();
     let aids = &artifact_ids;
@@ -133,7 +130,10 @@ pub async fn handle_dashboard(ctxt: Arc<SiteCtxt>) -> ServerResult<dashboard::Re
     .await
     .unwrap();
 
-    let runtime_benchmark_query = &runtime_benchmark_query;
+    let runtime_benchmark_query = selector::RuntimeBenchmarkQuery::default()
+        .benchmark(selector::Selector::All)
+        .metric(selector::Selector::One(Metric::WallTime));
+
     let responses = ctxt
         .statistic_series(runtime_benchmark_query.clone(), aids.clone())
         .await?;
